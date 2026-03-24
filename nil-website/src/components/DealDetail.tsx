@@ -30,10 +30,11 @@ import {
   readSlabMetadata,
   writeCachedFile,
   writeManifestRoot,
+  writeSlabGenerationAtomically,
   writeSlabMetadata,
 } from '../lib/storage/OpfsAdapter'
 import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal'
-import { inferWitnessCountFromOpfs, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
+import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
@@ -42,8 +43,13 @@ import { toHexFromBase64OrHex } from '../domain/hex'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
+import { providerListFiles } from '../api/providerClient'
+import { bootstrapAppendBaseFromNetwork } from '../lib/upload/bootstrapAppendBase'
+import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration'
 
 let wasmReadyPromise: Promise<void> | null = null
+const MDU_SIZE_BYTES = 8 * 1024 * 1024
+const BLOB_SIZE_BYTES = 128 * 1024
 
 function toU8(value: Uint8Array | number[] | null | undefined): Uint8Array {
   if (!value) return new Uint8Array()
@@ -54,6 +60,24 @@ function bytesTo0xHex(bytes: Uint8Array): string {
   let out = '0x'
   for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, '0')
   return out
+}
+
+function encodeToMdu(rawData: Uint8Array): Uint8Array {
+  const mdu = new Uint8Array(MDU_SIZE_BYTES)
+  const scalarBytes = 32
+  const scalarPayloadBytes = 31
+
+  let readOffset = 0
+  let writeOffset = 0
+  while (readOffset < rawData.length && writeOffset < MDU_SIZE_BYTES) {
+    const chunkLen = Math.min(scalarPayloadBytes, rawData.length - readOffset)
+    const chunk = rawData.subarray(readOffset, readOffset + chunkLen)
+    const pad = scalarBytes - chunkLen
+    mdu.set(chunk, writeOffset + pad)
+    readOffset += chunkLen
+    writeOffset += scalarBytes
+  }
+  return mdu
 }
 
 function formatBytes(bytes: number): string {
@@ -177,6 +201,13 @@ interface FileActivity {
 interface LocalCacheFreshnessResult {
   usable: boolean
   status: 'fresh' | 'stale' | 'unknown'
+  reason: string
+  localManifestRoot: string
+  chainManifestRoot: string
+}
+
+interface DealIndexRequirement {
+  status: 'ready' | 'needs_sync_missing' | 'needs_sync_stale' | 'syncing' | 'sync_failed'
   reason: string
   localManifestRoot: string
   chainManifestRoot: string
@@ -846,6 +877,13 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const [loadingSlab, setLoadingSlab] = useState(false)
   const [files, setFiles] = useState<NilfsFileEntry[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
+  const [dealIndexRequirement, setDealIndexRequirement] = useState<DealIndexRequirement>({
+    status: 'ready',
+    reason: '',
+    localManifestRoot: '',
+    chainManifestRoot: '',
+  })
+  const [dealIndexSyncMessage, setDealIndexSyncMessage] = useState<string>('')
   const [browserCachedByPath, setBrowserCachedByPath] = useState<Record<string, boolean>>({})
   const [busyFilePath, setBusyFilePath] = useState<string | null>(null)
   const [openMenuFilePath, setOpenMenuFilePath] = useState<string | null>(null)
@@ -896,7 +934,6 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   const gatewayDownloadBases = useMemo(() => localGatewayBaseCandidates(appConfig.gatewayBase), [])
   const {
     slab: fetchSlabLayout,
-    listFiles: listFilesTransport,
     manifestInfo: manifestInfoTransport,
     mduKzg: mduKzgTransport,
     lastTrace,
@@ -1338,6 +1375,25 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     return base
   }, [])
 
+  const inspectLocalDealIndexRequirement = useCallback(async (dealId: string, chainManifestRoot: string): Promise<DealIndexRequirement> => {
+    const freshness = await reconcileLocalMduCache(String(dealId), chainManifestRoot)
+    const mdu0 = await readMdu(String(dealId), 0).catch(() => null)
+    if (freshness.usable && mdu0 && mdu0.byteLength > 0) {
+      return {
+        status: 'ready',
+        reason: freshness.reason,
+        localManifestRoot: freshness.localManifestRoot,
+        chainManifestRoot: freshness.chainManifestRoot,
+      }
+    }
+    return {
+      status: freshness.status === 'stale' ? 'needs_sync_stale' : 'needs_sync_missing',
+      reason: freshness.reason || (mdu0 ? 'missing_local_index_manifest' : 'missing_local_index_mdu0'),
+      localManifestRoot: freshness.localManifestRoot,
+      chainManifestRoot: freshness.chainManifestRoot,
+    }
+  }, [reconcileLocalMduCache])
+
   const fetchSlab = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingSlab(true)
     try {
@@ -1450,40 +1506,26 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
-      const directBase = resolveProviderHttpBase()
-      const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget() : undefined
-      const result = await listFilesTransport({
-        manifestRoot: cid,
-        dealId,
-        owner,
-        directBase,
-        p2pTarget,
-      })
-      const list = result.data
-      if (list.length > 0) {
-        setFiles(list)
+      const requirement = await inspectLocalDealIndexRequirement(String(dealId), cid)
+      setDealIndexRequirement(requirement)
+      if (requirement.status !== 'ready') {
+        setFiles(null)
         return
       }
-
-      const cacheFreshness = await reconcileLocalMduCache(String(dealId), cid)
-      if (!cacheFreshness.usable) {
-        setFiles(list)
-        return
-      }
-
-      const mdu0 = await readMdu(String(dealId), 0)
-      if (!mdu0) {
-        setFiles(list)
-        return
-      }
-      setFiles(parseNilfsFilesFromMdu0(mdu0))
+      await fetchLocalFiles(dealId)
     } catch (e) {
       console.error('Failed to fetch NilFS file list', e)
-      await fetchLocalFiles(dealId)
+      setDealIndexRequirement((prev) => ({
+        ...prev,
+        status: 'sync_failed',
+        reason: e instanceof Error ? e.message : String(e),
+        chainManifestRoot: normalizeManifestRoot(cid),
+      }))
+      setFiles(null)
     } finally {
       setLoadingFiles(false)
     }
-  }, [fetchLocalFiles, resolveProviderHttpBase, resolveProviderP2pTarget, listFilesTransport, reconcileLocalMduCache])
+  }, [fetchLocalFiles, inspectLocalDealIndexRequirement])
 
   const fetchManifestInfo = useCallback(async (cid: string, dealId?: string, owner?: string) => {
     setLoadingManifestInfo(true)
@@ -1564,6 +1606,176 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       setLoadingManifestInfo(false)
     }
   }, [manifestInfoTransport, resolveProviderHttpBase, resolveProviderP2pTarget, reconcileLocalMduCache])
+
+  const syncDealIndexFromProviders = useCallback(async () => {
+    const manifestRoot = normalizeManifestRoot(String(deal.cid || ''))
+    const dealId = String(deal.id)
+    const owner = String(nilAddress || deal.owner || '').trim()
+    const providerBase = resolveProviderHttpBase()
+    const rsK = serviceHint.rsK ?? 8
+    const rsM = serviceHint.rsM ?? 4
+
+    if (!manifestRoot) {
+      setDealIndexRequirement({
+        status: 'sync_failed',
+        reason: 'deal has no committed manifest root',
+        localManifestRoot: '',
+        chainManifestRoot: '',
+      })
+      return
+    }
+    if (!owner) {
+      setDealIndexRequirement({
+        status: 'sync_failed',
+        reason: 'deal owner is required for provider sync',
+        localManifestRoot: '',
+        chainManifestRoot: manifestRoot,
+      })
+      return
+    }
+
+    setDealIndexRequirement((prev) => ({
+      ...prev,
+      status: 'syncing',
+      reason: prev.reason || 'syncing_from_providers',
+      chainManifestRoot: manifestRoot,
+    }))
+    setDealIndexSyncMessage('Fetching committed file index from providers…')
+    setFileActionError(null)
+
+    try {
+      await ensureWasmReady()
+      const remoteFiles = await providerListFiles(providerBase, manifestRoot, { dealId, owner })
+      if (!remoteFiles.length) {
+        throw new Error('providers returned no committed NilFS files for this deal')
+      }
+
+      const commitmentsPerMdu = (rsK + rsM) * (64 / rsK)
+      setDealIndexSyncMessage('Reconstructing committed NilFS generation locally…')
+      const bootstrapped = await bootstrapAppendBaseFromNetwork({
+        rawMduCapacity: RAW_MDU_CAPACITY,
+        commitmentsPerMdu,
+        listFiles: async () => remoteFiles,
+        fetchFileBytes: async (file) => {
+          const result = await fetchFile({
+            dealId,
+            manifestRoot,
+            owner,
+            filePath: file.path,
+            serviceBase: providerBase,
+            rangeStart: 0,
+            rangeLen: 0,
+            fileStartOffset: Number(file.start_offset || 0),
+            fileSizeBytes: Number(file.size_bytes || 0),
+            mduSizeBytes: MDU_SIZE_BYTES,
+            blobSizeBytes: BLOB_SIZE_BYTES,
+            decodeNilce: false,
+            routePreference: 'prefer_direct_sp',
+            sponsoredAuth,
+          })
+          if (!result) {
+            throw new Error(`provider retrieval returned no data for ${file.path}`)
+          }
+          try {
+            return new Uint8Array(await result.blob.arrayBuffer())
+          } finally {
+            URL.revokeObjectURL(result.url)
+          }
+        },
+        initMdu0Builder: (userCount, leafCount) => workerClient.initMdu0Builder(userCount, leafCount),
+        appendFileToMdu0: (filePath, sizeBytes, startOffset, flags) =>
+          workerClient.appendFileToMdu0(filePath, sizeBytes, startOffset, flags),
+        getMdu0Bytes: () => workerClient.getMdu0Bytes(),
+        encodeToMdu,
+      })
+      if (!bootstrapped) {
+        throw new Error('provider sync did not produce a local NilFS index')
+      }
+
+      setDealIndexSyncMessage('Verifying manifest root and writing browser slab cache…')
+      await deleteDealDirectory(dealId)
+      const materialized = await materializeBootstrapGeneration({
+        baseMdu0Bytes: bootstrapped.baseMdu0Bytes,
+        existingUserMdus: bootstrapped.existingUserMdus,
+        expectedManifestRoot: manifestRoot,
+        rsK,
+        rsM,
+        rawMduCapacity: RAW_MDU_CAPACITY,
+        encodeToMdu,
+        loadMdu0Builder: (data, maxUserMdus, commitmentsPerMdu) =>
+          workerClient.loadMdu0Builder(data, maxUserMdus, commitmentsPerMdu),
+        setMdu0Root: (index, root) => workerClient.setMdu0Root(index, root),
+        getMdu0Bytes: () => workerClient.getMdu0Bytes(),
+        expandMduRs: (data, k, m) => workerClient.expandMduRs(data, k, m),
+        expandPayloadRs: (data, k, m) => workerClient.expandPayloadRs(data, k, m),
+        shardFile: (data) => workerClient.shardFile(data),
+        computeManifest: (roots) => workerClient.computeManifest(roots),
+      })
+
+      await writeSlabGenerationAtomically(dealId, {
+        manifestRoot: materialized.manifestRoot,
+        manifestBlob: materialized.manifestBlob,
+        mdus: [
+          { index: 0, data: materialized.mdu0Bytes },
+          ...materialized.witnessMdus.map((mdu) => ({ index: mdu.index, data: mdu.data })),
+          ...materialized.userMdus.map((mdu) => ({
+            index: 1 + materialized.witnessCount + mdu.index,
+            data: mdu.data,
+          })),
+        ],
+        shards: materialized.shardSets.flatMap((set) =>
+          set.shards.map((shard, slot) => ({
+            mduIndex: 1 + materialized.witnessCount + set.index,
+            slot,
+            data: shard.data,
+            fullSize: shard.fullSize,
+          })),
+        ),
+        metadata: {
+          schema_version: 1,
+          generation_id: `deal-sync-${materialized.manifestRoot.replace(/^0x/i, '').slice(0, 16)}`,
+          deal_id: dealId,
+          manifest_root: materialized.manifestRoot,
+          owner,
+          redundancy: { k: rsK, m: rsM, n: rsK + rsM },
+          source: 'browser_deal_explorer_sync',
+          created_at: new Date().toISOString(),
+          last_validated_at: new Date().toISOString(),
+          witness_mdus: materialized.witnessCount,
+          user_mdus: bootstrapped.existingUserCount,
+          total_mdus: 1 + materialized.witnessCount + bootstrapped.existingUserCount,
+          file_records: bootstrapped.files.map((file) => ({
+            path: file.path,
+            start_offset: Number(file.start_offset || 0),
+            size_bytes: Number(file.size_bytes || 0),
+            flags: Number(file.flags || 0),
+          })),
+        },
+      })
+
+      setDealIndexRequirement({
+        status: 'ready',
+        reason: 'synced_from_providers',
+        localManifestRoot: materialized.manifestRoot,
+        chainManifestRoot: manifestRoot,
+      })
+      setDealIndexSyncMessage('Committed deal index synced locally.')
+      await fetchLocalFiles(dealId)
+      await fetchSlab(manifestRoot, dealId, owner)
+      await fetchManifestInfo(manifestRoot, dealId, owner)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setDealIndexRequirement({
+        status: 'sync_failed',
+        reason: msg,
+        localManifestRoot: '',
+        chainManifestRoot: manifestRoot,
+      })
+      setDealIndexSyncMessage('')
+      setFileActionError(msg)
+      setFiles(null)
+    }
+  }, [deal.cid, deal.id, deal.owner, fetchFile, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress, resolveProviderHttpBase, serviceHint.rsK, serviceHint.rsM, sponsoredAuth])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -1691,6 +1903,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
   useEffect(() => {
     if (deal.cid && deal.cid !== '') {
       const owner = nilAddress || deal.owner
+      setDealIndexSyncMessage('')
       void fetchSlab(deal.cid, deal.id, owner)
       void fetchFiles(deal.cid, deal.id, owner)
       void fetchManifestInfo(deal.cid, deal.id, owner)
@@ -1705,10 +1918,23 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
       setGatewaySlabStatus('unknown')
       setBrowserCachedByPath({})
       setManifestInfo(null)
+      setDealIndexRequirement({
+        status: 'ready',
+        reason: '',
+        localManifestRoot: '',
+        chainManifestRoot: '',
+      })
+      setDealIndexSyncMessage('')
     }
     setFileActionError(null)
     void fetchHeat(deal.id)
   }, [deal.cid, deal.id, deal.owner, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, nilAddress])
+
+  const requiresDealIndexSync =
+    dealIndexRequirement.status === 'needs_sync_missing' ||
+    dealIndexRequirement.status === 'needs_sync_stale' ||
+    dealIndexRequirement.status === 'syncing' ||
+    dealIndexRequirement.status === 'sync_failed'
 
   return (
     <div
@@ -2020,6 +2246,59 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
 
                       {loadingFiles ? (
                         <div className="nil-tab-panel text-xs text-muted-foreground">Loading file table…</div>
+                      ) : requiresDealIndexSync ? (
+                        <div
+                          className="nil-tab-panel space-y-4 border-primary/30 bg-primary/5"
+                          data-testid="deal-index-sync-panel"
+                          data-sync-status={dealIndexRequirement.status}
+                        >
+                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div className="space-y-2">
+                              <div className="text-sm font-semibold text-foreground">Deal Index Required</div>
+                              <div className="text-xs text-muted-foreground max-w-2xl">
+                                This browser does not have the committed NilFS index for this deal. Sync the committed slab
+                                from providers before viewing files, using default browser downloads, or relying on local deal state.
+                              </div>
+                              <div className="nil-detail-meta uppercase tracking-widest">
+                                State:{' '}
+                                <span className="text-foreground font-bold">
+                                  {dealIndexRequirement.status === 'needs_sync_stale'
+                                    ? 'STALE LOCAL INDEX'
+                                    : dealIndexRequirement.status === 'syncing'
+                                      ? 'SYNCING'
+                                      : dealIndexRequirement.status === 'sync_failed'
+                                        ? 'SYNC FAILED'
+                                        : 'LOCAL INDEX MISSING'}
+                                </span>
+                              </div>
+                              {dealIndexRequirement.chainManifestRoot ? (
+                                <div className="text-[10px] font-mono-data text-primary break-all" data-testid="deal-index-sync-root">
+                                  Chain root: {dealIndexRequirement.chainManifestRoot}
+                                </div>
+                              ) : null}
+                              {dealIndexRequirement.reason ? (
+                                <div className="text-[10px] text-muted-foreground" data-testid="deal-index-sync-reason">
+                                  Reason: {dealIndexRequirement.reason}
+                                </div>
+                              ) : null}
+                              {dealIndexSyncMessage ? (
+                                <div className="text-[10px] text-foreground" data-testid="deal-index-sync-message">
+                                  {dealIndexSyncMessage}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => void syncDealIndexFromProviders()}
+                                disabled={dealIndexRequirement.status === 'syncing'}
+                                data-testid="deal-index-sync-button"
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 text-[10px] font-bold uppercase tracking-wider rounded-none transition-colors disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
+                              >
+                                {dealIndexRequirement.status === 'syncing' ? 'Syncing…' : 'Sync Deal From Providers'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       ) : files && files.length > 0 ? (
                         <div className="nil-tab-panel space-y-2" data-testid="deal-detail-file-list">
                           {files.map((f) => (
@@ -2057,7 +2336,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                           ))}
                         </div>
                       ) : (
-                        <div className="nil-tab-panel text-xs text-muted-foreground italic">No files found for this manifest root.</div>
+                        <div className="nil-tab-panel text-xs text-muted-foreground italic">No files found in the committed NilFS generation.</div>
                       )}
                     </div>
                   )}

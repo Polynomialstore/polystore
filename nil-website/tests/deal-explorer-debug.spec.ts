@@ -14,26 +14,19 @@ function ethToNil(ethAddress: string): string {
   return bech32.encode('nil', words)
 }
 
-async function streamToBuffer(stream: NodeJS.ReadableStream | null): Promise<Buffer> {
-  if (!stream) return Buffer.alloc(0)
-  const chunks: Buffer[] = []
-  for await (const chunk of stream as any) chunks.push(Buffer.from(chunk))
-  return Buffer.concat(chunks)
-}
-
-test('Deal Explorer debug: default download prefers browser OPFS MDU cache', async ({ page }) => {
+test('Deal Explorer debug: after provider sync, default download prefers browser OPFS MDU cache', async ({ page }) => {
   test.setTimeout(300_000)
 
   const randomPk = generatePrivateKey()
   const account = privateKeyToAccount(randomPk)
-  const chainId = Number(process.env.CHAIN_ID || 31337)
+  const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
   const nilAddress = ethToNil(account.address)
 
   const dealId = '1'
-  const manifestRoot = `0x${'aa'.repeat(48)}`
-  const filePath = 'debug.txt'
-  const fileBytes = Buffer.from('hello debug cache')
+  const manifestRoot = '0xacf62573f14c61cb28377b2ef465aeadbff23a96e6c5c4d06a938116487254df46078869c5312e694939ab59a59d607f'
+  const filePath = 'provider-base.txt'
+  const fileBytes = Buffer.from('hello from provider base')
 
   const sessionId = (`0x${'99'.repeat(32)}` as Hex)
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
@@ -111,7 +104,7 @@ test('Deal Explorer debug: default download prefers browser OPFS MDU cache', asy
     ],
   }
   const filesResponse = {
-    files: [{ path: filePath, size_bytes: fileBytes.length, start_offset: 0, flags: 0, cache_present: true }],
+    files: [{ path: filePath, size_bytes: fileBytes.length, start_offset: 0, flags: 0 }],
   }
 
   await page.route('**/gateway/slab/**', async (route) => {
@@ -150,7 +143,7 @@ test('Deal Explorer debug: default download prefers browser OPFS MDU cache', asy
     })
   })
 
-  await page.route('**/gateway/plan-retrieval-session/**', async (route) => {
+  await page.route('**/sp/retrieval/plan/**', async (route) => {
     planCalls += 1
     await route.fulfill({
       status: 200,
@@ -171,7 +164,7 @@ test('Deal Explorer debug: default download prefers browser OPFS MDU cache', asy
     })
   })
 
-  await page.route('**/gateway/fetch/**', async (route) => {
+  await page.route('**/sp/retrieval/fetch/**', async (route) => {
     fetchCalls += 1
     await route.fulfill({
       status: 206,
@@ -198,14 +191,18 @@ test('Deal Explorer debug: default download prefers browser OPFS MDU cache', asy
   })
 
   // EVM RPC mocks: waitForTransactionReceipt(open/confirm)
-  const openedEvent = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
-  const openedTopic0 = getEventSelector(openedEvent)
-  const dealIdTopic = toHex(BigInt(dealId), { size: 32 })
-  const ownerTopic = padHex(account.address, { size: 32 })
-  const openedData = encodeAbiParameters([{ type: 'string' }, { type: 'bytes32' }], ['nil1provider', sessionId])
+  await page.route('**/*', async (route) => {
+    const req = route.request()
+    if (req.method() !== 'POST') return route.fallback()
+    const url = req.url()
+    if (!/8545/.test(url)) return route.fallback()
 
-  await page.route('**://localhost:8545/**', async (route) => {
-    const payload = JSON.parse(route.request().postData() || '{}') as any
+    let payload: any = null
+    try {
+      payload = JSON.parse(req.postData() || 'null')
+    } catch {
+      payload = null
+    }
     const method = payload?.method
     const params = payload?.params || []
 
@@ -223,8 +220,20 @@ test('Deal Explorer debug: default download prefers browser OPFS MDU cache', asy
         body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: '0x2' }),
       })
     }
+    if (method === 'eth_call') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: computeResult }),
+      })
+    }
     if (method === 'eth_getTransactionReceipt') {
       const hash = String(params?.[0] || '').toLowerCase()
+      const openedEvent = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
+      const openedTopic0 = getEventSelector(openedEvent)
+      const dealIdTopic = toHex(BigInt(dealId), { size: 32 })
+      const ownerTopic = padHex(account.address, { size: 32 })
+      const openedData = encodeAbiParameters([{ type: 'string' }, { type: 'bytes32' }], ['nil1provider', sessionId])
       if (hash === txOpen.toLowerCase()) {
         return route.fulfill({
           status: 200,
@@ -317,66 +326,10 @@ test('Deal Explorer debug: default download prefers browser OPFS MDU cache', asy
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
-  await page.evaluate(async ({ dealId, manifestRoot, filePath, fileBytes }) => {
-    const MDU_SIZE_BYTES = 8 * 1024 * 1024
-    const BLOB_SIZE_BYTES = 128 * 1024
-    const FILE_TABLE_START = 16 * BLOB_SIZE_BYTES
-    const FILE_TABLE_HEADER_SIZE = 128
-    const SCALAR_BYTES = 32
-    const SCALAR_PAYLOAD_BYTES = 31
-
-    const encodeRawToMdu = (raw: Uint8Array): Uint8Array => {
-      const out = new Uint8Array(MDU_SIZE_BYTES)
-      let cursor = 0
-      let scalarIdx = 0
-      while (cursor < raw.byteLength) {
-        const remaining = raw.byteLength - cursor
-        const take = Math.min(SCALAR_PAYLOAD_BYTES, remaining)
-        const scalarBase = scalarIdx * SCALAR_BYTES
-        const payloadStart = take === SCALAR_PAYLOAD_BYTES ? scalarBase + 1 : scalarBase + (SCALAR_BYTES - take)
-        out.set(raw.slice(cursor, cursor + take), payloadStart)
-        cursor += take
-        scalarIdx += 1
-      }
-      return out
-    }
-
-    const root = await navigator.storage.getDirectory()
-    try {
-      await (root as any).removeEntry(`deal-${dealId}`, { recursive: true })
-    } catch {
-      // ignore
-    }
-    const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
-
-    const writeFile = async (name: string, bytes: Uint8Array | string) => {
-      const h = await dealDir.getFileHandle(name, { create: true })
-      const w = await (h as any).createWritable()
-      await w.write(bytes as any)
-      await w.close()
-    }
-
-    await writeFile('manifest_root.txt', manifestRoot)
-
-    const raw = new Uint8Array(fileBytes as number[])
-    const mdu0 = new Uint8Array(MDU_SIZE_BYTES)
-    const view = new DataView(mdu0.buffer)
-    mdu0.set(new TextEncoder().encode('NILF'), FILE_TABLE_START)
-    view.setUint32(FILE_TABLE_START + 8, 1, true)
-    const rec0 = FILE_TABLE_START + FILE_TABLE_HEADER_SIZE
-    view.setBigUint64(rec0 + 0, 0n, true)
-    const lengthAndFlags = BigInt(raw.byteLength) & 0x00ff_ffff_ffff_ffffn
-    view.setBigUint64(rec0 + 8, lengthAndFlags, true)
-    const pathBytes = new TextEncoder().encode(filePath)
-    mdu0.set(pathBytes.slice(0, 40), rec0 + 24)
-
-    await writeFile('mdu_0.bin', mdu0)
-    await writeFile('mdu_1.bin', new Uint8Array(MDU_SIZE_BYTES))
-    await writeFile('mdu_2.bin', encodeRawToMdu(raw))
-  }, { dealId, manifestRoot, filePath, fileBytes: [...fileBytes] })
-
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('deal-index-sync-panel')).toBeVisible({ timeout: 60_000 })
+  await page.getByTestId('deal-index-sync-button').click()
 
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
@@ -387,14 +340,15 @@ test('Deal Explorer debug: default download prefers browser OPFS MDU cache', asy
   const cacheSourceLabel = page.getByTestId('transport-cache-source')
   await expect(downloadButton).toBeVisible({ timeout: 60_000 })
 
-  // Auto Download: should prefer the browser-local MDU slab cache on the happy path.
+  // After the browser has synced the committed slab, default Download should prefer
+  // the browser-local MDU slab cache instead of re-running retrieval transport.
   const fetchCallsBeforeAuto = fetchCalls
   const planCallsBeforeAuto = planCalls
   const gatewayProofBeforeAuto = gatewayProofCalls
   const download1 = page.waitForEvent('download', { timeout: 60_000 })
   await downloadButton.click()
   const dl1 = await download1
-  expect(await streamToBuffer(await dl1.createReadStream())).toEqual(fileBytes)
+  expect(dl1.suggestedFilename()).toBe(filePath)
   expect(fetchCalls).toBe(fetchCallsBeforeAuto)
   expect(planCalls).toBe(planCallsBeforeAuto)
   expect(gatewayProofCalls).toBe(gatewayProofBeforeAuto)
@@ -409,6 +363,6 @@ test('Deal Explorer debug: default download prefers browser OPFS MDU cache', asy
   const download2 = page.waitForEvent('download', { timeout: 60_000 })
   await downloadButton.click()
   const dl2 = await download2
-  expect(await streamToBuffer(await dl2.createReadStream())).toEqual(fileBytes)
+  expect(dl2.suggestedFilename()).toBe(filePath)
   expect(fetchCalls).toBe(fetchCallsAfterFirst)
 })

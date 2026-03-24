@@ -5,7 +5,7 @@ import { bech32 } from 'bech32'
 import { encodeAbiParameters, encodeFunctionResult, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
 
-const path = process.env.E2E_PATH || '/#/dashboard'
+const routePath = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
 
 function ethToNil(ethAddress: string): string {
@@ -14,26 +14,19 @@ function ethToNil(ethAddress: string): string {
   return bech32.encode('nil', words)
 }
 
-async function streamToBuffer(stream: NodeJS.ReadableStream | null): Promise<Buffer> {
-  if (!stream) return Buffer.alloc(0)
-  const chunks: Buffer[] = []
-  for await (const chunk of stream as any) chunks.push(Buffer.from(chunk))
-  return Buffer.concat(chunks)
-}
-
-test('Deal Explorer: SP download uses SP base when gateway slab missing', async ({ page }) => {
+test('Deal Explorer: missing local index requires provider sync before file view', async ({ page }) => {
   test.setTimeout(180_000)
 
   const randomPk = generatePrivateKey()
   const account = privateKeyToAccount(randomPk)
-  const chainId = Number(process.env.CHAIN_ID || 31337)
+  const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
   const nilAddress = ethToNil(account.address)
 
   const dealId = '1'
-  const manifestRoot = `0x${'aa'.repeat(48)}`
   const filePath = 'provider-base.txt'
   const fileBytes = Buffer.from('hello from provider base')
+  const manifestRoot = '0xacf62573f14c61cb28377b2ef465aeadbff23a96e6c5c4d06a938116487254df46078869c5312e694939ab59a59d607f'
 
   const sessionId = (`0x${'99'.repeat(32)}` as Hex)
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
@@ -45,8 +38,6 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
   })
 
   let spFetchCalls = 0
-  let gatewayProofCalls = 0
-  let spProofCalls = 0
 
   await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
     await route.fulfill({
@@ -91,8 +82,7 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
     })
   })
 
-  // File list: shown even if gateway slab is missing.
-  await page.route('**/gateway/list-files/**', async (route) => {
+  await page.route('**/sp/retrieval/list-files/**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -112,70 +102,80 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
       body: JSON.stringify({ error: 'slab not found on disk' }),
     })
   })
-
-  // Plan-retrieval-session must go to the SP base (8082), not the gateway base (8080).
-  await page.route('**/gateway/plan-retrieval-session/**', async (route) => {
-    const url = route.request().url()
-    if (url.includes(':8080/')) {
-      return route.fulfill({
-        status: 404,
-        contentType: 'application/json',
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'slab not found on disk' }),
-      })
-    }
-    if (url.includes(':8082/')) {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({
-          deal_id: Number(dealId),
-          owner: nilAddress,
-          provider: 'nil1provider',
-          manifest_root: manifestRoot,
-          file_path: filePath,
-          range_start: 0,
-          range_len: fileBytes.length,
-          start_mdu_index: 2,
-          start_blob_index: 0,
-          blob_count: 1,
-        }),
-      })
-    }
-    return route.fulfill({ status: 500, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'unexpected plan url' })
+  await page.route('**/sp/retrieval/slab/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        manifest_root: manifestRoot,
+        mdu_size_bytes: 8 * 1024 * 1024,
+        blob_size_bytes: 128 * 1024,
+        total_mdus: 3,
+        witness_mdus: 1,
+        user_mdus: 1,
+        file_records: 1,
+        file_count: 1,
+        total_size_bytes: fileBytes.length,
+        segments: [
+          { kind: 'mdu0', start_index: 0, count: 1, size_bytes: 8 * 1024 * 1024 },
+          { kind: 'witness', start_index: 1, count: 1, size_bytes: 8 * 1024 * 1024 },
+          { kind: 'user', start_index: 2, count: 1, size_bytes: 8 * 1024 * 1024 },
+        ],
+      }),
+    })
+  })
+  await page.route('**/gateway/manifest-info/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        manifest_root: manifestRoot,
+        manifest_blob_hex: `0x${'00'.repeat(48)}`,
+        total_mdus: 3,
+        witness_mdus: 1,
+        user_mdus: 1,
+        roots: [],
+      }),
+    })
   })
 
-  await page.route('**/gateway/fetch/**', async (route) => {
-    const url = route.request().url()
-    if (url.includes(':8080/')) {
-      return route.fulfill({
-        status: 404,
-        contentType: 'application/json',
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'slab not found on disk' }),
-      })
-    }
-    if (url.includes(':8082/')) {
-      spFetchCalls += 1
-      return route.fulfill({
-        status: 206,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Expose-Headers': 'X-Nil-Provider',
-          'Content-Type': 'application/octet-stream',
-          'X-Nil-Provider': 'nil1provider',
-        },
-        body: fileBytes,
-      })
-    }
-    return route.fulfill({ status: 500, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'unexpected fetch url' })
+  await page.route('**/sp/retrieval/plan/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        deal_id: Number(dealId),
+        owner: nilAddress,
+        provider: 'nil1provider',
+        manifest_root: manifestRoot,
+        file_path: filePath,
+        range_start: 0,
+        range_len: fileBytes.length,
+        start_mdu_index: 2,
+        start_blob_index: 0,
+        blob_count: 1,
+      }),
+    })
+  })
+
+  await page.route('**/sp/retrieval/fetch/**', async (route) => {
+    spFetchCalls += 1
+    await route.fulfill({
+      status: 206,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'X-Nil-Provider',
+        'Content-Type': 'application/octet-stream',
+        'X-Nil-Provider': 'nil1provider',
+      },
+      body: fileBytes,
+    })
   })
 
   await page.route('**/gateway/session-proof**', async (route) => {
-    const url = route.request().url()
-    if (url.includes(':8080/')) gatewayProofCalls += 1
-    if (url.includes(':8082/')) spProofCalls += 1
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -198,6 +198,28 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
       payload = null
     }
     const method = payload?.method
+
+    if (method === 'eth_chainId') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: chainIdHex }),
+      })
+    }
+    if (method === 'eth_blockNumber') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: '0x2' }),
+      })
+    }
+    if (method === 'eth_call') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: computeResult }),
+      })
+    }
 
     if (method === 'eth_getTransactionReceipt') {
       const [hash] = payload?.params ?? []
@@ -290,7 +312,7 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
     announceProvider()
   }, { address: account.address, chainIdHex, txOpen, txConfirm, computeResult })
 
-  await page.goto(path)
+  await page.goto(routePath)
 
   if (!(await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible())) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
@@ -299,16 +321,15 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
 
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('deal-index-sync-panel')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('deal-index-sync-panel')).toContainText('Deal Index Required')
+  await expect(page.getByTestId('deal-detail-file-list')).toHaveCount(0)
 
-  // Trigger SP download (wallet interactive).
-  const downloadButton = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
-  await expect(downloadButton).toBeVisible({ timeout: 60_000 })
-  const download = page.waitForEvent('download', { timeout: 60_000 })
-  await downloadButton.click()
-  const dl = await download
-  expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
+  await page.getByTestId('deal-index-sync-button').click()
+  await expect(page.getByTestId('deal-index-sync-panel')).toHaveAttribute('data-sync-status', 'syncing')
+  await expect(page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0)
 
   expect(spFetchCalls).toBeGreaterThan(0)
-  expect(gatewayProofCalls).toBeGreaterThan(0)
-  expect(spProofCalls).toBe(0)
+  await expect(page.getByTestId('deal-detail-file-list')).toContainText(filePath)
 })

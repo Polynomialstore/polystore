@@ -14,14 +14,7 @@ function ethToNil(ethAddress: string): string {
   return bech32.encode('nil', words)
 }
 
-async function streamToBuffer(stream: NodeJS.ReadableStream | null): Promise<Buffer> {
-  if (!stream) return Buffer.alloc(0)
-  const chunks: Buffer[] = []
-  for await (const chunk of stream as any) chunks.push(Buffer.from(chunk))
-  return Buffer.concat(chunks)
-}
-
-test('Deal Explorer: browser Download ignores stale browser cache and uses network', async ({ page }) => {
+test('Deal Explorer: stale browser cache does not bypass required provider sync', async ({ page }) => {
   test.setTimeout(180_000)
 
   const randomPk = generatePrivateKey()
@@ -433,14 +426,10 @@ test('Deal Explorer: browser Download ignores stale browser cache and uses netwo
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
 
-  const downloadButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
-  const cacheSourceLabel = page.getByTestId('transport-cache-source')
-  await expect(downloadButton).toBeVisible({ timeout: 60_000 })
-  const download = page.waitForEvent('download', { timeout: 60_000 })
-  await downloadButton.click()
-  const dl = await download
-  expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
-  expect(listFilesCalls).toBeGreaterThan(0)
-  expect(fetchCalls).toBeGreaterThan(0)
-  await expect(cacheSourceLabel).not.toContainText(/browser_cached_file/i)
+  await expect(page.getByTestId('deal-index-sync-panel')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('deal-index-sync-panel')).toContainText('Deal Index Required')
+  await expect(page.getByTestId('deal-index-sync-panel')).toContainText(/stale|missing/i)
+  await expect(page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)).toHaveCount(0)
+  expect(listFilesCalls).toBe(0)
+  expect(fetchCalls).toBe(0)
 })
