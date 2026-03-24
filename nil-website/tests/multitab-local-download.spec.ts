@@ -21,6 +21,59 @@ async function streamToBuffer(stream: NodeJS.ReadableStream | null): Promise<Buf
   return Buffer.concat(chunks)
 }
 
+async function completeUploadAndCommit(page: import('@playwright/test').Page, timeout = 180_000): Promise<void> {
+  const uploadBtn = page.getByTestId('mdu-upload')
+  const commitBtn = page.getByTestId('mdu-commit')
+  const deadline = Date.now() + timeout
+
+  while (Date.now() < deadline) {
+    const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+    if (panelState === 'success') return
+
+    const commitText = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+    if (/Committed!/i.test(commitText)) return
+
+    const commitReady = (await commitBtn.count().catch(() => 0)) > 0 && (await commitBtn.isEnabled().catch(() => false))
+    if (commitReady) {
+      await commitBtn.click()
+      await expect
+        .poll(async () => {
+          const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+          if (state === 'success') return true
+          const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+          return /Committed!/i.test(text)
+        }, { timeout })
+        .toBe(true)
+      return
+    }
+
+    const uploadReady = (await uploadBtn.count().catch(() => 0)) > 0
+      && (await uploadBtn.isVisible().catch(() => false))
+      && (await uploadBtn.isEnabled().catch(() => false))
+    if (uploadReady) {
+      await uploadBtn.click({ force: true })
+      await expect
+        .poll(async () => {
+          if (await commitBtn.isEnabled().catch(() => false)) return true
+          const text = ((await uploadBtn.textContent().catch(() => '')) || '').trim()
+          return /Upload Complete/i.test(text)
+        }, { timeout })
+        .toBe(true)
+    }
+
+    await page.waitForTimeout(500)
+  }
+
+  await expect
+    .poll(async () => {
+      const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+      if (state === 'success') return true
+      const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+      return /Committed!/i.test(text)
+    }, { timeout })
+    .toBe(true)
+}
+
 test('Thick Client: committed slab is visible and downloadable across tabs (no gateway slab)', async ({ page, context }) => {
   test.setTimeout(300_000)
 
@@ -34,6 +87,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   const dealId = '1'
   const filePath = 'multitab.txt'
   const fileBytes = Buffer.from('hello from multitab')
+  const providerAddrs = ['nil1providera', 'nil1providerb', 'nil1providerc']
 
   let committedRoot = ''
   let gatewayPlanCalls = 0
@@ -51,6 +105,10 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
 
   await page.route('**/sp/upload_manifest', async (route) => {
     manifestUploadCalls += 1
+    return route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
+  })
+
+  await page.route('**/sp/upload_shard', async (route) => {
     return route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
 
@@ -125,9 +183,29 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
             size: '0',
             escrow_balance: '1000000',
             end_block: '1000',
-            providers: ['nil1provider'],
+            providers: providerAddrs,
+            service_hint: 'General:rs=2+1',
           },
         ],
+      }),
+    })
+  })
+
+  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        deal: {
+          id: dealId,
+          owner: nilAddress,
+          manifest_root: committedRoot ? Buffer.from(committedRoot.slice(2), 'hex').toString('base64') : '',
+          size: committedRoot ? String(24 * 1024 * 1024) : '0',
+          escrow_balance: '1000000',
+          end_block: '1000',
+          providers: providerAddrs,
+          service_hint: 'General:rs=2+1',
+        },
       }),
     })
   })
@@ -139,8 +217,16 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
       body: JSON.stringify({
         providers: [
           {
-            address: 'nil1provider',
+            address: providerAddrs[0],
             endpoints: ['/ip4/127.0.0.1/tcp/8082/http'],
+          },
+          {
+            address: providerAddrs[1],
+            endpoints: ['/ip4/127.0.0.1/tcp/8083/http'],
+          },
+          {
+            address: providerAddrs[2],
+            endpoints: ['/ip4/127.0.0.1/tcp/8084/http'],
           },
         ],
       }),
@@ -217,18 +303,12 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     mimeType: 'text/plain',
     buffer: fileBytes,
   })
-  await expect(page.getByText('Client-side expansion complete')).toBeVisible({ timeout: 60_000 })
-
-  const uploadBtn = page.getByRole('button', { name: /Upload \d+ MDUs to SP/ })
-  await expect(uploadBtn).toBeEnabled()
-  await uploadBtn.click()
-  await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('mdu-upload-card')).not.toHaveAttribute('data-panel-state', 'idle', { timeout: 60_000 })
+  await completeUploadAndCommit(page)
   await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
-
-  const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
-  await commitBtn.click()
-  await expect(page.getByRole('button', { name: 'Committed!' })).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'success', { timeout: 60_000 })
+  await expect(page.getByTestId('mdu-commit')).toContainText(/Committed!/i, { timeout: 60_000 })
+  await expect(page.getByText('Upload another file')).toBeVisible({ timeout: 60_000 })
   await expect.poll(() => committedRoot, { timeout: 30_000 }).toMatch(/^0x[0-9a-f]{96}$/i)
 
   // Second tab: chain reports committed CID, but gateway slab endpoints fail.
@@ -274,9 +354,29 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
             end_block: '1000',
-            providers: ['nil1provider'],
+            providers: providerAddrs,
+            service_hint: 'General:rs=2+1',
           },
         ],
+      }),
+    })
+  })
+
+  await page2.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        deal: {
+          id: dealId,
+          owner: nilAddress,
+          manifest_root: committedRoot ? Buffer.from(committedRoot.slice(2), 'hex').toString('base64') : '',
+          size: String(24 * 1024 * 1024),
+          escrow_balance: '1000000',
+          end_block: '1000',
+          providers: providerAddrs,
+          service_hint: 'General:rs=2+1',
+        },
       }),
     })
   })
@@ -288,8 +388,16 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
       body: JSON.stringify({
         providers: [
           {
-            address: 'nil1provider',
+            address: providerAddrs[0],
             endpoints: ['/ip4/127.0.0.1/tcp/8082/http'],
+          },
+          {
+            address: providerAddrs[1],
+            endpoints: ['/ip4/127.0.0.1/tcp/8083/http'],
+          },
+          {
+            address: providerAddrs[2],
+            endpoints: ['/ip4/127.0.0.1/tcp/8084/http'],
           },
         ],
       }),
@@ -375,6 +483,9 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   const fileRow = page2.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
 
+  const actionsMenu = page2.locator(`[data-testid="deal-detail-actions-menu"][data-file-path="${filePath}"]`)
+  await expect(actionsMenu).toBeVisible({ timeout: 60_000 })
+  await actionsMenu.click({ force: true })
   const downloadButton = page2.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`)
   await expect(downloadButton).toBeVisible({ timeout: 60_000 })
   await downloadButton.scrollIntoViewIfNeeded()

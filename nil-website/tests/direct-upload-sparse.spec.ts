@@ -238,7 +238,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
     buffer: crypto.randomBytes(192 * 1024),
   })
 
-  await expect(page.getByText('Client-side expansion complete')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('mdu-upload-card')).not.toHaveAttribute('data-panel-state', 'idle', { timeout: 60_000 })
   await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 30_000 })
 
   expect(mduUploads.length).toBeGreaterThan(0)

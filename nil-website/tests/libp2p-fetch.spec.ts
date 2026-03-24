@@ -99,6 +99,9 @@ test.describe('libp2p fetch', () => {
     await expect(dealRow).toBeVisible({ timeout: 180_000 })
     await dealRow.click()
 
+    const actionsMenu = page.locator(`[data-testid="deal-detail-actions-menu"][data-file-path="${filePath}"]`)
+    await expect(actionsMenu).toBeVisible({ timeout: 180_000 })
+    await actionsMenu.click({ force: true })
     const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
 

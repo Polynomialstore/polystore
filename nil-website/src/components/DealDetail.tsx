@@ -741,55 +741,10 @@ function FileRow({
         >
           {isBusy ? 'BUSY' : 'Download'}
         </button>
-        <div className="hidden xl:flex items-center gap-1">
-          <button
-            onClick={handleGatewayCacheDownload}
-            disabled={isAnyDownloading || isBusy || !manifestRoot}
-            data-testid="deal-detail-download-gateway"
-            data-file-path={file.path}
-            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
-          >
-            Gateway
-          </button>
-          <button
-            onClick={handleOnchainRetrieval}
-            disabled={isAnyDownloading || isBusy || !manifestRoot}
-            data-testid="deal-detail-download-sp"
-            data-file-path={file.path}
-            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
-          >
-            Provider
-          </button>
-          <button
-            onClick={handleAssembleMdus}
-            disabled={isAnyDownloading || isBusy || !manifestRoot}
-            data-testid="deal-detail-download-browser-slab"
-            data-file-path={file.path}
-            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
-          >
-            Browser MDU
-          </button>
-          <button
-            onClick={handleBrowserCacheDownload}
-            disabled={isAnyDownloading || isBusy || !browserCached}
-            data-testid="deal-detail-download-browser-cache"
-            data-file-path={file.path}
-            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
-          >
-            Browser Cache
-          </button>
-          <button
-            onClick={handlePurgeCache}
-            disabled={isAnyDownloading || isBusy || !browserCached}
-            data-testid="deal-detail-clear-browser-cache"
-            data-file-path={file.path}
-            className="border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
-          >
-            Clear
-          </button>
-        </div>
         <button
           onClick={onToggleMenu}
+          data-testid="deal-detail-actions-menu"
+          data-file-path={file.path}
           className={`p-1 hover:bg-secondary border transition-colors rounded-none ${isOpen ? 'border-primary/50 bg-secondary' : 'border-transparent'}`}
         >
           <MoreVertical className="w-4 h-4 text-muted-foreground" />
@@ -804,31 +759,39 @@ function FileRow({
               <button
                 onClick={handleOnchainRetrieval}
                 disabled={isAnyDownloading || isBusy || !manifestRoot}
+                data-testid="deal-detail-download-sp"
+                data-file-path={file.path}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
               >
                 <Zap className="w-3.5 h-3.5" />
-                On-chain Retrieval
+                Provider
               </button>
               <button
                 onClick={handleGatewayCacheDownload}
                 disabled={isAnyDownloading || isBusy || !manifestRoot}
+                data-testid="deal-detail-download-gateway"
+                data-file-path={file.path}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
               >
                 <Server className="w-3.5 h-3.5" />
-                Gateway Cache
+                Gateway
               </button>
               <button
                 onClick={handleAssembleMdus}
                 disabled={isAnyDownloading || isBusy || !manifestRoot}
+                data-testid="deal-detail-download-browser-slab"
+                data-file-path={file.path}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
               >
                 <Database className="w-3.5 h-3.5" />
-                Assemble MDUs
+                Browser MDU
               </button>
               <div className="h-px bg-border/40 my-1" />
               <button
                 onClick={handleBrowserCacheDownload}
                 disabled={isAnyDownloading || isBusy || !browserCached}
+                data-testid="deal-detail-download-browser-cache"
+                data-file-path={file.path}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
               >
                 <Cpu className="w-3.5 h-3.5" />
@@ -837,10 +800,12 @@ function FileRow({
               <button
                 onClick={handlePurgeCache}
                 disabled={isAnyDownloading || isBusy || !browserCached}
+                data-testid="deal-detail-clear-browser-cache"
+                data-file-path={file.path}
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors text-left disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Purge Cache
+                Clear
               </button>
             </div>
           </>

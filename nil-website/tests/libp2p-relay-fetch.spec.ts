@@ -109,9 +109,19 @@ test.describe('libp2p fetch (relay)', () => {
     }
 
     const commitBtn = page.getByTestId('mdu-commit')
-    await expect(commitBtn).toBeVisible({ timeout: 180_000 })
-    await expect(commitBtn).toBeEnabled({ timeout: 180_000 })
-    await commitBtn.click()
+    await expect
+      .poll(async () => {
+        const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+        if (panelState === 'success') return true
+        const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+        if (/Committed!/i.test(text)) return true
+        const ready = await commitBtn.isEnabled().catch(() => false)
+        if (ready) {
+          await commitBtn.click()
+        }
+        return false
+      }, { timeout: 180_000 })
+      .toBe(true)
 
     await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
@@ -122,6 +132,9 @@ test.describe('libp2p fetch (relay)', () => {
 
     const downloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
+    const actionsMenu = page.locator(`[data-testid="deal-detail-actions-menu"][data-file-path="${filePath}"]`)
+    await expect(actionsMenu).toBeVisible({ timeout: 60_000 })
+    await actionsMenu.click({ force: true })
     const clearBrowserCacheBtn = page.locator(
       `[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`,
     )

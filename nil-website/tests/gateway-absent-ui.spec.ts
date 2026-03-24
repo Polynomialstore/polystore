@@ -9,8 +9,25 @@ async function completeUploadAndCommit(page: Parameters<typeof test>[0]['page'],
   const deadline = Date.now() + timeout
 
   while (Date.now() < deadline) {
+    const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+    if (panelState === 'success') return
+
+    const commitText = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+    if (/Committed!/i.test(commitText)) return
+
     const commitReady = (await commitBtn.count().catch(() => 0)) > 0 && (await commitBtn.isEnabled().catch(() => false))
-    if (commitReady) break
+    if (commitReady) {
+      await commitBtn.click()
+      await expect
+        .poll(async () => {
+          const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+          if (state === 'success') return true
+          const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+          return /Committed!/i.test(text)
+        }, { timeout: 180_000 })
+        .toBe(true)
+      return
+    }
 
     const uploadReady = (await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false)) && (await uploadBtn.isEnabled().catch(() => false))
     if (uploadReady) {
@@ -27,9 +44,14 @@ async function completeUploadAndCommit(page: Parameters<typeof test>[0]['page'],
     await page.waitForTimeout(500)
   }
 
-  await expect(commitBtn).toBeEnabled({ timeout: Math.max(30_000, Math.floor(timeout / 3)) })
-  await commitBtn.click()
-  await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+  await expect
+    .poll(async () => {
+      const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+      if (state === 'success') return true
+      const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+      return /Committed!/i.test(text)
+    }, { timeout: 180_000 })
+    .toBe(true)
 }
 
 test.describe('gateway absent', () => {
@@ -134,7 +156,10 @@ test.describe('gateway absent', () => {
     await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
 
-    const activity = page.locator('div').filter({ hasText: 'System Activity' }).first()
+    const activityToggle = page.getByTestId('mdu-system-activity-toggle')
+    await expect(activityToggle).toBeVisible({ timeout: 60_000 })
+    await activityToggle.click()
+    const activity = page.getByTestId('mdu-system-activity')
     await expect(activity).toContainText(/starting upload to Storage Providers/i, { timeout: 60_000 })
     await expect(activity).toContainText(/Gateway mirror skipped \(disabled\)/i, { timeout: 60_000 })
   })

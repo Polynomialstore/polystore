@@ -33,12 +33,33 @@ async function ensureWalletFunded(page: Page, timeout: number): Promise<void> {
 async function waitForUploadControls(uploadBtn: Locator, commitBtn: Locator, timeout = 300_000): Promise<void> {
   await expect
     .poll(async () => {
+      const cardCount = await uploadBtn.page().getByTestId('mdu-upload-card').count().catch(() => 0)
       const uploadCount = await uploadBtn.count().catch(() => 0)
       const commitCount = await commitBtn.count().catch(() => 0)
-      return uploadCount + commitCount
+      return cardCount + uploadCount + commitCount
     }, { timeout })
     .toBeGreaterThan(0)
     .catch(() => undefined)
+}
+
+async function openFileActionMenuItem(page: Page, filePath: string, testId: string): Promise<Locator> {
+  const menuButton = page.locator(`[data-testid="deal-detail-actions-menu"][data-file-path="${filePath}"]`)
+  await expect(menuButton).toBeVisible({ timeout: 60_000 })
+  await menuButton.click({ force: true })
+  const item = page.locator(`[data-testid="${testId}"][data-file-path="${filePath}"]`)
+  await expect(item).toBeVisible({ timeout: 30_000 })
+  return item
+}
+
+async function openSystemActivity(page: Page): Promise<Locator> {
+  const toggle = page.getByTestId('mdu-system-activity-toggle')
+  await expect(toggle).toBeVisible({ timeout: 30_000 })
+  const panel = page.getByTestId('mdu-system-activity')
+  if (!(await panel.isVisible().catch(() => false))) {
+    await toggle.click()
+  }
+  await expect(panel).toBeVisible({ timeout: 30_000 })
+  return panel
 }
 
 async function readDownloadedBytes(download: Awaited<ReturnType<Page['waitForEvent']>>): Promise<Buffer> {
@@ -155,9 +176,26 @@ async function completeUploadAndCommit(uploadBtn: Locator, commitBtn: Locator, t
 
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
+    const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+    if (panelState === 'success') return
+
+    const commitText = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+    if (/Committed!/i.test(commitText)) return
+
     const commitCount = await commitBtn.count().catch(() => 0)
     const commitEnabled = commitCount > 0 && (await commitBtn.isEnabled().catch(() => false))
-    if (commitEnabled) break
+    if (commitEnabled) {
+      await commitBtn.click()
+      await expect
+        .poll(async () => {
+          const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+          if (state === 'success') return true
+          const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+          return /Committed!/i.test(text)
+        }, { timeout: 180_000 })
+        .toBe(true)
+      return
+    }
 
     const uploadCount = await uploadBtn.count().catch(() => 0)
     const uploadVisible = uploadCount > 0 && (await uploadBtn.isVisible().catch(() => false))
@@ -176,9 +214,14 @@ async function completeUploadAndCommit(uploadBtn: Locator, commitBtn: Locator, t
     await page.waitForTimeout(500)
   }
 
-  await expect(commitBtn).toBeEnabled({ timeout: 60_000 })
-  await commitBtn.click()
-  await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+  await expect
+    .poll(async () => {
+      const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+      if (state === 'success') return true
+      const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+      return /Committed!/i.test(text)
+    }, { timeout: 180_000 })
+    .toBe(true)
   await page.waitForTimeout(150)
 }
 
@@ -433,14 +476,14 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const fileRow = await waitForDealFileRow(page, dealId, filePath, mode2FastPrimaryWaitMs)
 
     const autoDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
-    const gatewayDownloadBtn = page.locator(`[data-testid="deal-detail-download-gateway"][data-file-path="${filePath}"]`)
-    const providerDownloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
-    const browserSlabBtn = page.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`)
     const routeEl = page.getByTestId('transport-route')
 
     await expect(autoDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
 
     if (isMode2Fast) {
+      const gatewayDownloadBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-gateway')
+      const providerDownloadBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-sp')
+      const browserSlabBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-browser-slab')
       await expect(gatewayDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
       await expect(providerDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
       await expect(browserSlabBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
@@ -452,8 +495,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       return
     }
 
-    const browserCacheBtn = page.locator(`[data-testid="deal-detail-download-browser-cache"][data-file-path="${filePath}"]`)
-    const clearBrowserCacheBtn = page.locator(`[data-testid="deal-detail-clear-browser-cache"][data-file-path="${filePath}"]`)
+    const gatewayDownloadBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-gateway')
+    const providerDownloadBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-sp')
 
     await expect(gatewayDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
     await expect(providerDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
@@ -768,7 +811,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       await uploadBtn.click()
       await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: mode2FastUploadWaitMs })
     }
-    const activity = page.locator('div').filter({ hasText: 'System Activity:' }).first()
+    const activity = await openSystemActivity(page)
     await expect(activity).toContainText(/falling back to in-browser mode 2 sharding \+ stripe upload/i, {
       timeout: mode2FastUploadWaitMs,
     })
@@ -790,9 +833,14 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     expect(sparseManifestUploads.length).toBeGreaterThan(0)
     expect(sparseShardUploads.length).toBeGreaterThan(0)
     expect(Math.max(...sparseMduUploads.map((upload) => upload.bodyLen))).toBeLessThan(2 * 1024 * 1024)
-    await expect(commitBtn).toBeEnabled({ timeout: mode2FastUploadWaitMs })
-    await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: mode2FastPrimaryWaitMs })
+    await expect
+      .poll(async () => {
+        const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+        if (panelState === 'success') return true
+        const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+        return /Committed!/i.test(text)
+      }, { timeout: mode2FastPrimaryWaitMs })
+      .toBe(true)
     blockGatewayUpload = false
 
     await newDealRow.first().scrollIntoViewIfNeeded().catch(() => undefined)
@@ -800,7 +848,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 60_000 })
 
     const fileRow = await waitForFileRowInAnyDeal(page, filePath, mode2FastUploadWaitMs)
-    const browserSlabBtn = page.locator(`[data-testid="deal-detail-download-browser-slab"][data-file-path="${filePath}"]`)
+    const browserSlabBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-browser-slab')
     await expect(browserSlabBtn).toBeVisible({ timeout: 60_000 })
 
     let slabBytes = await readDownloadBytesMaybe(page, browserSlabBtn, mode2FastMaybeDownloadMs)
@@ -816,6 +864,10 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     expect(slabBytes.equals(fileBytes)).toBe(true)
     expect(unsignedMissingRangeRequests, 'unsigned /gateway/fetch requests without Range (fallback slab test)').toEqual([])
     await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes', { timeout: 60_000 })
+    const browserCacheBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-browser-cache')
+    const clearBrowserCacheBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-clear-browser-cache')
+    await expect(browserCacheBtn).toBeEnabled({ timeout: 60_000 })
+    await expect(clearBrowserCacheBtn).toBeEnabled({ timeout: 60_000 })
   })
 
   test('mode2 append keeps prior files', async ({ page }) => {
@@ -1083,7 +1135,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await expect.poll(() => fileBGatewayAttemptCount, { timeout: 300_000 }).toBeGreaterThanOrEqual(1)
 
-    const activity = page.locator('div').filter({ hasText: 'System Activity:' }).first()
+    const activity = await openSystemActivity(page)
     await expect(activity).toContainText('Gateway is missing prior slab state; attempting browser-to-gateway rehydrate from OPFS', {
       timeout: 300_000,
     })
@@ -1097,9 +1149,14 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     })
     console.log('[rehydrate-e2e] detected successful rehydrate logs')
 
-    await expect(commitBtn).toBeEnabled({ timeout: 300_000 })
-    await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    await expect
+      .poll(async () => {
+        const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+        if (panelState === 'success') return true
+        const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+        return /Committed!/i.test(text)
+      }, { timeout: 180_000 })
+      .toBe(true)
     console.log('[rehydrate-e2e] fileB committed')
     console.log(
       `[rehydrate-e2e] completed successfully (gatewayUploads=${gatewayUploadPostCount}, mirrorCalls=${

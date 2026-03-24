@@ -155,8 +155,11 @@ test.describe('mode2 sparse live', () => {
     const commitBtn = page.getByTestId('mdu-commit')
     await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 180_000 })
 
-    const statusPanel = page.getByTestId('mdu-status-panel')
-    await expect(statusPanel).toContainText(/falling back to in-browser mode 2 sharding \+ stripe upload/i, {
+    const activityToggle = page.getByTestId('mdu-system-activity-toggle')
+    await expect(activityToggle).toBeVisible({ timeout: 60_000 })
+    await activityToggle.click()
+    const activity = page.getByTestId('mdu-system-activity')
+    await expect(activity).toContainText(/falling back to in-browser mode 2 sharding \+ stripe upload/i, {
       timeout: 60_000,
     })
 
@@ -183,8 +186,18 @@ test.describe('mode2 sparse live', () => {
     expect(peakActiveUploads).toBeGreaterThan(1)
     expect(Math.max(...sparseMduUploads.map((upload) => upload.bodyLen))).toBeLessThan(3 * 1024 * 1024)
 
-    await expect(commitBtn).toBeEnabled({ timeout: 120_000 })
-    await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    await expect
+      .poll(async () => {
+        const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+        if (panelState === 'success') return true
+        const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+        if (/Committed!/i.test(text)) return true
+        const ready = await commitBtn.isEnabled().catch(() => false)
+        if (ready) {
+          await commitBtn.click()
+        }
+        return false
+      }, { timeout: 180_000 })
+      .toBe(true)
   })
 })

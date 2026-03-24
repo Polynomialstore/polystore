@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import crypto from 'node:crypto'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
-import { encodeFunctionResult, type Hex } from 'viem'
+import { decodeFunctionData, encodeFunctionResult, type Hex } from 'viem'
 
 import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
 
@@ -13,6 +13,22 @@ function ethToNil(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
+}
+
+function synthesizeMode2SlotWindow(fullMdu: Buffer, k: number, startBlobIndex: number, blobCount: number): Buffer {
+  const rows = 64 / k
+  const slot = Math.floor(startBlobIndex / rows)
+  const rowStart = startBlobIndex % rows
+  const out = Buffer.alloc(blobCount * 131072)
+  for (let i = 0; i < blobCount; i += 1) {
+    const row = rowStart + i
+    const blobIndex = row * k + slot
+    const srcStart = blobIndex * 131072
+    const srcEnd = srcStart + 131072
+    const dstStart = i * 131072
+    fullMdu.subarray(srcStart, srcEnd).copy(out, dstStart)
+  }
+  return out
 }
 
 async function readActiveManifestRoot(page: import('@playwright/test').Page, dealId: string): Promise<string> {
@@ -68,8 +84,13 @@ async function readActiveSlabMetadata(
 async function readActiveMdu(page: import('@playwright/test').Page, dealId: string, mduIndex: number): Promise<Buffer> {
   const bytes = await page.evaluate(async ({ targetDealId, targetMduIndex }) => {
     const mod = await import('/src/lib/storage/OpfsAdapter.ts')
+    const sparseMod = await import('/src/lib/upload/sparseArtifacts.ts')
     const data = await mod.readMdu(targetDealId, targetMduIndex)
-    return Array.from(data ?? [])
+    const expanded =
+      data && data.byteLength > 0 && data.byteLength < 8 * 1024 * 1024
+        ? sparseMod.expandSparseBytes(data, 8 * 1024 * 1024)
+        : data
+    return Array.from(expanded ?? [])
   }, { targetDealId: dealId, targetMduIndex: mduIndex })
   return Buffer.from(bytes)
 }
@@ -101,6 +122,8 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   const chainIdHex = `0x${chainId.toString(16)}`
   const nilAddress = ethToNil(account.address)
 
+  const txHashFor = (n: number): Hex => (`0x${n.toString(16).padStart(64, '4')}` as Hex)
+
   const dealId = '1'
   const fileA = { name: 'bootstrap-a.bin', buffer: crypto.randomBytes(48 * 1024) }
   const fileB = { name: 'bootstrap-b.bin', buffer: crypto.randomBytes(40 * 1024) }
@@ -117,7 +140,6 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   const uploadedShardIndices: number[] = []
 
   const sessionIds = [(`0x${'99'.repeat(32)}` as Hex), (`0x${'88'.repeat(32)}` as Hex)]
-  let computeSessionCallCount = 0
   let capturedMdu0: Buffer | null = null
   let capturedUserMdu: Buffer | null = null
   let capturedUserMduIndex = 2
@@ -202,6 +224,8 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     const url = new URL(request.url())
     const manifestRoot = decodeURIComponent(url.pathname.split('/').slice(-2, -1)[0] || '')
     const index = Number(url.pathname.split('/').pop() || '-1')
+    const startBlobIndex = Number(url.searchParams.get('start_blob_index') || request.headers()['x-nil-start-blob-index'] || '0')
+    const blobCount = Number(url.searchParams.get('blob_count') || request.headers()['x-nil-blob-count'] || '64')
     if (!dealCid || manifestRoot.toLowerCase() !== dealCid.toLowerCase()) {
       await route.fulfill({
         status: 404,
@@ -213,7 +237,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     }
     retrievalMduCalls += 1
     if (index === 0 && capturedMdu0) {
-      expect(sessionId).toBe(sessionIds[0])
+      expect(sessionId).toMatch(/^0x[0-9a-f]{64}$/i)
       await route.fulfill({
         status: 200,
         headers: {
@@ -221,12 +245,12 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
           'Content-Type': 'application/octet-stream',
           'X-Nil-Mdu-Index': '0',
         },
-        body: capturedMdu0,
+        body: synthesizeMode2SlotWindow(capturedMdu0, 2, startBlobIndex, blobCount),
       })
       return
     }
     if (index === capturedUserMduIndex && capturedUserMdu) {
-      expect(sessionId).toBe(sessionIds[1])
+      expect(sessionId).toMatch(/^0x[0-9a-f]{64}$/i)
       await route.fulfill({
         status: 200,
         headers: {
@@ -234,7 +258,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
           'Content-Type': 'application/octet-stream',
           'X-Nil-Mdu-Index': String(index),
         },
-        body: capturedUserMdu,
+        body: synthesizeMode2SlotWindow(capturedUserMdu, 2, startBlobIndex, blobCount),
       })
       return
     }
@@ -267,11 +291,29 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
       })
     }
     if (method === 'eth_call') {
-      computeSessionCallCount += 1
+      let requestCount = 1
+      try {
+        const callData = String(payload?.params?.[0]?.data || '')
+        const decoded = decodeFunctionData({
+          abi: NILSTORE_PRECOMPILE_ABI,
+          data: callData as Hex,
+        })
+        if (decoded.functionName === 'computeRetrievalSessionIds') {
+          const requests = Array.isArray(decoded.args?.[0]) ? decoded.args[0] : []
+          requestCount = Math.max(1, requests.length)
+        }
+      } catch {
+        requestCount = 1
+      }
+      const computedSessionIds = Array.from({ length: requestCount }, (_, idx) => {
+        if (sessionIds[idx]) return sessionIds[idx]
+        const byte = Math.max(1, 0x77 - idx).toString(16).padStart(2, '0')
+        return (`0x${byte.repeat(32)}` as Hex)
+      })
       const computeResult = encodeFunctionResult({
         abi: NILSTORE_PRECOMPILE_ABI,
         functionName: 'computeRetrievalSessionIds',
-        result: [['nil1providera'], [sessionIds[Math.min(computeSessionCallCount - 1, sessionIds.length - 1)]]],
+        result: [Array.from({ length: requestCount }, () => 'nil1providera'), computedSessionIds],
       })
       return route.fulfill({
         status: 200,
@@ -280,6 +322,14 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
       })
     }
     if (method === 'eth_getTransactionReceipt') {
+      const hash = String(payload?.params?.[0] || '')
+      if (!/^0x[0-9a-f]{64}$/i.test(hash)) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: null }),
+        })
+      }
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -287,7 +337,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
           jsonrpc: '2.0',
           id: payload?.id ?? 1,
           result: {
-            transactionHash: '0x' + '44'.repeat(32),
+            transactionHash: hash,
             status: '0x1',
             logs: [],
           },
@@ -365,9 +415,10 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     })
   })
 
-  await page.addInitScript(({ address, chainIdHex }) => {
+  await page.addInitScript(({ address, chainIdHex, txHashes }) => {
     const w = window as any
     if (w.ethereum) return
+    let sendCount = 0
     w.ethereum = {
       isMetaMask: true,
       isNilStoreE2E: true,
@@ -381,7 +432,9 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
           case 'eth_accounts': return [address]
           case 'eth_chainId': return chainIdHex
           case 'net_version': return String(parseInt(chainIdHex, 16))
-          case 'eth_sendTransaction': return '0x' + '44'.repeat(32)
+          case 'eth_sendTransaction':
+            sendCount += 1
+            return txHashes[Math.min(sendCount - 1, txHashes.length - 1)]
           default: return null
         }
       },
@@ -396,7 +449,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     }
     window.addEventListener('eip6963:requestProvider', announceProvider)
     announceProvider()
-  }, { address: account.address, chainIdHex })
+  }, { address: account.address, chainIdHex, txHashes: [txHashFor(1), txHashFor(2), txHashFor(3), txHashFor(4), txHashFor(5), txHashFor(6)] })
 
   await page.goto(path)
   await expect.poll(() => gatewayProbeAttempts, { timeout: 60_000 }).toBeGreaterThan(0)
@@ -420,11 +473,25 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     buffer: fileA.buffer,
   })
   await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 60_000 })
-  await expect(commitBtn).toBeEnabled({ timeout: 60_000 })
-  await commitBtn.click()
-  await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 60_000 })
-  await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 60_000 })
+  await expect
+    .poll(async () => {
+      const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+      if (panelState === 'success') return true
+      const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+      return /Committed!/i.test(text)
+    }, { timeout: 60_000 })
+    .toBe(true)
   await expect.poll(() => uploadManifestCalls, { timeout: 60_000 }).toBeGreaterThan(0)
+  await expect
+    .poll(async () => {
+      try {
+        const meta = await readActiveSlabMetadata(page, dealId)
+        return meta.file_records.some((entry) => entry.path === fileA.name)
+      } catch {
+        return false
+      }
+    }, { timeout: 60_000 })
+    .toBe(true)
 
   dealCid = await readActiveManifestRoot(page, dealId)
   const slabMetaAfterFirstCommit = await waitForActiveSlabMetadata(page, dealId)
@@ -456,7 +523,10 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     buffer: fileB.buffer,
   })
 
-  const activity = page.locator('div').filter({ hasText: 'System Activity' }).first()
+  const activityToggle = page.getByTestId('mdu-system-activity-toggle')
+  await expect(activityToggle).toBeVisible({ timeout: 60_000 })
+  await activityToggle.click()
+  const activity = page.getByTestId('mdu-system-activity')
   await expect(activity).toContainText('local slab missing/stale; bootstrapping committed slab from provider retrieval', {
     timeout: 60_000,
   })
@@ -464,10 +534,14 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     timeout: 60_000,
   })
   await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 60_000 })
-  await expect(commitBtn).toBeEnabled({ timeout: 60_000 })
-  await commitBtn.click()
-  await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 60_000 })
-  await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 60_000 })
+  await expect
+    .poll(async () => {
+      const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+      if (panelState === 'success') return true
+      const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+      return /Committed!/i.test(text)
+    }, { timeout: 60_000 })
+    .toBe(true)
 
   expect(retrievalListCalls - listCallsBeforeAppend).toBe(0)
   expect(retrievalPlanCalls - planCallsBeforeAppend).toBe(0)
