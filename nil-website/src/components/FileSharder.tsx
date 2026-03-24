@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { useAccount } from 'wagmi';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { CheckCircle2, Cpu, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { workerClient } from '../lib/worker-client';
@@ -17,14 +17,13 @@ import {
   readShard,
   writeSlabGenerationAtomically,
 } from '../lib/storage/OpfsAdapter';
-import { parseNilfsFilesFromMdu0 } from '../lib/nilfsLocal';
-import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
+import { parseNilfsFilesFromMdu0, parseNilfsRootTableFromMdu0 } from '../lib/nilfsLocal';
+import { decodeRawPrefixFromMdu, inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
-import { providerListFiles } from '../api/providerClient';
+import { providerFetchMduWithSession } from '../api/providerClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
-import { useFetch } from '../hooks/useFetch';
 import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from '../lib/nilce';
 import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode';
 import { postSparseArtifact } from '../lib/upload/sparseTransport';
@@ -39,10 +38,17 @@ import {
 } from '../lib/upload/planner';
 import { createUploadEngine } from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
-import { bootstrapAppendBaseFromNetwork as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
+import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
 import { classifyNilfsCommitError } from '../lib/nilfsCommitError';
+import { waitForTransactionReceipt } from '../lib/evmRpc';
+import {
+  decodeComputeRetrievalSessionIdsResult,
+  encodeComputeRetrievalSessionIdsData,
+  encodeConfirmRetrievalSessionsData,
+  encodeOpenRetrievalSessionsData,
+} from '../lib/nilstorePrecompile';
 
 interface ShardItem {
   id: number;
@@ -239,6 +245,8 @@ function makePreparedManifest(bytes: Uint8Array, fullSize = MANIFEST_BLOB_SIZE_B
 
 export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const { isConnected, address } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient({ chainId: appConfig.chainId });
   const { openConnectModal } = useConnectModal();
   const localGateway = useLocalGateway();
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
@@ -255,6 +263,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [stripeParams, setStripeParams] = useState<{ k: number; m: number } | null>(null)
   const [stripeParamsLoaded, setStripeParamsLoaded] = useState(false)
   const [slotBases, setSlotBases] = useState<string[]>([])
+  const [slotProviders, setSlotProviders] = useState<string[]>([])
   const [mode2Shards, setMode2Shards] = useState<PreparedBrowserShardSet[]>([])
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
@@ -317,7 +326,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
   // Use the direct commit hook
   const { commitContent, isPending: isCommitPending, isConfirming: isCommitConfirming, isSuccess: isCommitSuccess, hash: commitHash, error: commitError } = useDirectCommit();
-  const { fetchFile } = useFetch();
   const uploadEngine = useMemo(
     () =>
       createUploadEngine({
@@ -330,6 +338,63 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   )
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
+
+  const openMduRetrievalSessions = useCallback(
+    async (params: { provider: string; manifestRoot: string; mduIndexes: number[] }): Promise<Map<number, `0x${string}`>> => {
+      if (!publicClient) throw new Error('EVM RPC client unavailable')
+      if (!walletClient) throw new Error('Wallet not connected')
+      const signer = (walletClient.account?.address || address) as `0x${string}` | undefined
+      if (!signer || !String(signer).startsWith('0x')) throw new Error('Connect wallet to open retrieval sessions')
+      const requests = params.mduIndexes.map((mduIndex, idx) => ({
+        dealId: BigInt(dealId),
+        provider: params.provider,
+        manifestRoot: params.manifestRoot as `0x${string}`,
+        startMduIndex: BigInt(mduIndex),
+        startBlobIndex: 0,
+        blobCount: 64n,
+        nonce: BigInt(Date.now() + idx),
+        expiresAt: 0n,
+      }))
+      const computeCall = await publicClient.call({
+        account: signer,
+        to: appConfig.nilstorePrecompile as `0x${string}`,
+        data: encodeComputeRetrievalSessionIdsData(requests),
+      })
+      const computeData = computeCall.data as `0x${string}`
+      if (!computeData || computeData === '0x') throw new Error('computeRetrievalSessionIds returned empty data')
+      const { sessionIds } = decodeComputeRetrievalSessionIdsResult(computeData)
+      if (sessionIds.length !== requests.length) throw new Error('computeRetrievalSessionIds returned unexpected session count')
+      const openTxHash = await walletClient.sendTransaction({
+        account: signer,
+        to: appConfig.nilstorePrecompile as `0x${string}`,
+        data: encodeOpenRetrievalSessionsData(requests),
+        value: 0n,
+        chain: walletClient.chain ?? undefined,
+      })
+      await waitForTransactionReceipt(openTxHash)
+      return new Map(params.mduIndexes.map((mduIndex, idx) => [mduIndex, sessionIds[idx] as `0x${string}`]))
+    },
+    [address, dealId, publicClient, walletClient],
+  )
+
+  const confirmMduRetrievalSessions = useCallback(
+    async (sessionIds: readonly `0x${string}`[]) => {
+      if (sessionIds.length === 0) return
+      if (!publicClient) throw new Error('EVM RPC client unavailable')
+      if (!walletClient) throw new Error('Wallet not connected')
+      const signer = (walletClient.account?.address || address) as `0x${string}` | undefined
+      if (!signer || !String(signer).startsWith('0x')) throw new Error('Connect wallet to confirm retrieval sessions')
+      const txHash = await walletClient.sendTransaction({
+        account: signer,
+        to: appConfig.nilstorePrecompile as `0x${string}`,
+        data: encodeConfirmRetrievalSessionsData(sessionIds),
+        value: 0n,
+        chain: walletClient.chain ?? undefined,
+      })
+      await waitForTransactionReceipt(txHash)
+    },
+    [address, publicClient, walletClient],
+  )
 
   const isMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
   const gatewayMode2Enabled = isMode2 && !appConfig.gatewayDisabled
@@ -373,6 +438,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
         if (!cancelled) {
           setSlotBases(endpoints.map((e) => e.baseUrl))
+          setSlotProviders(endpoints.map((e) => e.provider))
         }
       } catch {
         if (!cancelled) {
@@ -380,6 +446,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           setDealOwner('')
           setStripeParams(null)
           setSlotBases([])
+          setSlotProviders([])
           setStripeParamsLoaded(true)
         }
       }
@@ -806,53 +873,77 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const manifestRoot = normalizeManifestRoot(baseManifestRoot)
     const owner = String(dealOwner || '').trim()
     const providerBase = String(slotBases[0] || appConfig.spBase || '').trim().replace(/\/$/, '')
-    if (!manifestRoot || !owner || !providerBase || !stripeParams) {
+    const provider = String(slotProviders[0] || '').trim()
+    if (!manifestRoot || !owner || !providerBase || !provider || !stripeParams) {
       return null
     }
 
     addLog('> Mode 2 append: local slab missing/stale; bootstrapping committed slab from provider retrieval...')
-    const remoteFiles = await providerListFiles(providerBase, manifestRoot, { dealId, owner })
-    if (!remoteFiles.length) {
+    addLog('> Bootstrap fetch: opening retrieval session for committed mdu_0...')
+    const mdu0Sessions = await openMduRetrievalSessions({
+      provider,
+      manifestRoot,
+      mduIndexes: [0],
+    })
+    const mdu0SessionId = mdu0Sessions.get(0)
+    if (!mdu0SessionId) throw new Error('missing retrieval session for committed mdu_0')
+    const mdu0Bytes = await providerFetchMduWithSession(providerBase, manifestRoot, 0, {
+      dealId,
+      owner,
+      sessionId: mdu0SessionId,
+    })
+    const files = parseNilfsFilesFromMdu0(mdu0Bytes)
+    if (!files.length) {
+      await confirmMduRetrievalSessions(Array.from(mdu0Sessions.values()))
       addLog('> Mode 2 append bootstrap: no committed NilFS files found on provider.')
       return null
     }
-    const commitmentsPerMdu = (stripeParams.k + stripeParams.m) * (64 / stripeParams.k)
-    const bootstrapped = await buildBootstrappedAppendBase({
-      rawMduCapacity: RAW_MDU_CAPACITY,
-      commitmentsPerMdu,
-      listFiles: async () => remoteFiles,
-      fetchFileBytes: async (file) => {
-        const sizeBytes = Number(file.size_bytes || 0)
-        addLog(`> Bootstrap fetch: ${file.path} (${formatBytes(sizeBytes)})...`)
-        const result = await fetchFile({
-          dealId,
+
+    const roots = parseNilfsRootTableFromMdu0(mdu0Bytes)
+    let maxEnd = 0
+    for (const file of files) {
+      const start = Number(file.start_offset || 0)
+      const sizeBytes = Number(file.size_bytes || 0)
+      if (!Number.isFinite(start) || start < 0 || !Number.isFinite(sizeBytes) || sizeBytes <= 0) continue
+      maxEnd = Math.max(maxEnd, start + sizeBytes)
+    }
+    const userCount = maxEnd > 0 ? Math.ceil(maxEnd / RAW_MDU_CAPACITY) : 0
+    if (roots.length < userCount) {
+      throw new Error(`bootstrap root table mismatch: roots=${roots.length} user_mdus=${userCount}`)
+    }
+    const witnessCount = roots.length - userCount
+    const userMduIndexes = Array.from({ length: userCount }, (_, idx) => 1 + witnessCount + idx)
+
+    addLog(`> Bootstrap fetch: fetching ${userMduIndexes.length} committed user MDUs via retrieval sessions...`)
+    const userSessions = userMduIndexes.length > 0
+      ? await openMduRetrievalSessions({
+          provider,
           manifestRoot,
-          owner,
-          filePath: file.path,
-          serviceBase: providerBase,
-          rangeStart: 0,
-          rangeLen: 0,
-          fileStartOffset: Number(file.start_offset || 0),
-          fileSizeBytes: sizeBytes,
-          mduSizeBytes: MDU_SIZE_BYTES,
-          blobSizeBytes: 128 * 1024,
-          decodeNilce: false,
-          routePreference: 'prefer_direct_sp',
+          mduIndexes: userMduIndexes,
         })
-        if (!result) {
-          throw new Error(`bootstrap retrieval returned no data for ${file.path}`)
-        }
-        try {
-          return new Uint8Array(await result.blob.arrayBuffer())
-        } finally {
-          URL.revokeObjectURL(result.url)
-        }
-      },
-      initMdu0Builder: (userCount, leafCount) => workerClient.initMdu0Builder(userCount, leafCount),
-      appendFileToMdu0: (filePath, sizeBytes, startOffset, flags) =>
-        workerClient.appendFileToMdu0(filePath, sizeBytes, startOffset, flags),
-      getMdu0Bytes: () => workerClient.getMdu0Bytes(),
-      encodeToMdu,
+      : new Map<number, `0x${string}`>()
+    const userMdus = await Promise.all(
+      userMduIndexes.map(async (mduIndex, idx) => {
+        const sessionId = userSessions.get(mduIndex)
+        if (!sessionId) throw new Error(`missing retrieval session for committed user MDU #${idx}`)
+        const data = await providerFetchMduWithSession(providerBase, manifestRoot, mduIndex, {
+          dealId,
+          owner,
+          sessionId,
+        })
+        return { index: idx, data }
+      }),
+    )
+    await confirmMduRetrievalSessions([
+      ...Array.from(mdu0Sessions.values()),
+      ...Array.from(userSessions.values()),
+    ])
+
+    const bootstrapped = buildBootstrappedAppendBase({
+      rawMduCapacity: RAW_MDU_CAPACITY,
+      mdu0Bytes,
+      userMdus,
+      decodeRawMdu: decodeRawPrefixFromMdu,
     })
     if (!bootstrapped) {
       addLog('> Mode 2 append bootstrap: no committed NilFS files found on provider.')
@@ -926,7 +1017,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       addLog(`> Mode 2 append bootstrap warning: failed to persist reconstructed slab locally (${msg}).`)
     }
     return bootstrapped
-  }, [addLog, baseManifestRoot, dealId, dealOwner, fetchFile, slotBases, stripeParams]);
+  }, [addLog, baseManifestRoot, confirmMduRetrievalSessions, dealId, dealOwner, openMduRetrievalSessions, slotBases, slotProviders, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;

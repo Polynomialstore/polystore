@@ -1,4 +1,5 @@
 import type { NilfsFileEntry } from '../../domain/nilfs'
+import { parseNilfsFilesFromMdu0 } from '../nilfsLocal'
 
 export interface BootstrappedAppendMdu {
   index: number
@@ -24,6 +25,13 @@ export interface BootstrapAppendBaseInput {
   appendFileToMdu0: (filePath: string, sizeBytes: number, startOffset: number, flags: number) => Promise<unknown>
   getMdu0Bytes: () => Promise<Uint8Array>
   encodeToMdu: (rawMdu: Uint8Array) => Uint8Array
+}
+
+export interface BootstrapAppendBaseFromMdusInput {
+  rawMduCapacity: number
+  mdu0Bytes: Uint8Array
+  userMdus: Array<{ index: number; data: Uint8Array }>
+  decodeRawMdu: (mdu: Uint8Array, rawValidLen: number) => Uint8Array
 }
 
 function toSafeNumber(value: unknown): number {
@@ -110,6 +118,63 @@ export async function bootstrapAppendBaseFromNetwork(
 
   return {
     baseMdu0Bytes,
+    existingUserMdus,
+    existingUserCount: userCount,
+    existingMaxEnd: maxEnd,
+    appendStartOffset: userCount * rawMduCapacity,
+    files,
+  }
+}
+
+export function bootstrapAppendBaseFromMdus(
+  input: BootstrapAppendBaseFromMdusInput,
+): BootstrappedAppendBaseResult | null {
+  const rawMduCapacity = toSafeNumber(input.rawMduCapacity)
+  if (rawMduCapacity <= 0) {
+    throw new Error('rawMduCapacity must be positive')
+  }
+
+  const files = parseNilfsFilesFromMdu0(input.mdu0Bytes)
+    .filter((file) => Number.isFinite(Number(file.start_offset)) && Number(file.start_offset) >= 0)
+    .sort((a, b) => {
+      const startDiff = Number(a.start_offset) - Number(b.start_offset)
+      if (startDiff !== 0) return startDiff
+      return String(a.path).localeCompare(String(b.path))
+    })
+
+  if (!files.length) return null
+
+  let maxEnd = 0
+  for (const file of files) {
+    const start = toSafeNumber(file.start_offset)
+    const size = toSafeNumber(file.size_bytes)
+    if (size <= 0) continue
+    maxEnd = Math.max(maxEnd, start + size)
+  }
+
+  const userCount = maxEnd > 0 ? Math.ceil(maxEnd / rawMduCapacity) : 0
+  if (userCount <= 0) {
+    throw new Error('committed slab has no user MDUs to bootstrap')
+  }
+
+  const sortedUserMdus = [...input.userMdus].sort((a, b) => a.index - b.index)
+  if (sortedUserMdus.length !== userCount) {
+    throw new Error(`bootstrap MDU count mismatch: got ${sortedUserMdus.length}, want ${userCount}`)
+  }
+
+  const existingUserMdus = sortedUserMdus.map(({ index, data }) => {
+    const mduBase = index * rawMduCapacity
+    const rawValidLen = Math.max(0, Math.min(rawMduCapacity, maxEnd - mduBase))
+    const rawData = input.decodeRawMdu(data, rawValidLen)
+    return {
+      index,
+      data,
+      rawData,
+    }
+  })
+
+  return {
+    baseMdu0Bytes: new Uint8Array(input.mdu0Bytes),
     existingUserMdus,
     existingUserCount: userCount,
     existingMaxEnd: maxEnd,

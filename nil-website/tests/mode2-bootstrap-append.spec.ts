@@ -45,7 +45,7 @@ async function clearDealOpfs(page: import('@playwright/test').Page, dealId: stri
 async function readActiveSlabMetadata(
   page: import('@playwright/test').Page,
   dealId: string,
-): Promise<{ manifest_root: string; file_records: Array<{ path: string; size_bytes: number; start_offset: number }> }> {
+): Promise<{ manifest_root: string; witness_mdus?: number; file_records: Array<{ path: string; size_bytes: number; start_offset: number }> }> {
   return page.evaluate(async (targetDealId) => {
     const root = await navigator.storage.getDirectory()
     const dealDir = await root.getDirectoryHandle(`deal-${targetDealId}`, { create: false })
@@ -65,10 +65,19 @@ async function readActiveSlabMetadata(
   }, dealId)
 }
 
+async function readActiveMdu(page: import('@playwright/test').Page, dealId: string, mduIndex: number): Promise<Buffer> {
+  const bytes = await page.evaluate(async ({ targetDealId, targetMduIndex }) => {
+    const mod = await import('/src/lib/storage/OpfsAdapter.ts')
+    const data = await mod.readMdu(targetDealId, targetMduIndex)
+    return Array.from(data ?? [])
+  }, { targetDealId: dealId, targetMduIndex: mduIndex })
+  return Buffer.from(bytes)
+}
+
 async function waitForActiveSlabMetadata(
   page: import('@playwright/test').Page,
   dealId: string,
-): Promise<{ manifest_root: string; file_records: Array<{ path: string; size_bytes: number; start_offset: number }> }> {
+): Promise<{ manifest_root: string; witness_mdus?: number; file_records: Array<{ path: string; size_bytes: number; start_offset: number }> }> {
   await expect
     .poll(async () => {
       try {
@@ -100,17 +109,18 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   let retrievalListCalls = 0
   let retrievalPlanCalls = 0
   let retrievalFetchCalls = 0
+  let retrievalMduCalls = 0
+  let sessionlessMduCalls = 0
   let gatewayProbeAttempts = 0
   let uploadManifestCalls = 0
   const uploadPreviousRoots: string[] = []
   const uploadedShardIndices: number[] = []
 
-  const sessionId = (`0x${'99'.repeat(32)}` as Hex)
-  const computeResult = encodeFunctionResult({
-    abi: NILSTORE_PRECOMPILE_ABI,
-    functionName: 'computeRetrievalSessionIds',
-    result: [['nil1providera'], [sessionId]],
-  })
+  const sessionIds = [(`0x${'99'.repeat(32)}` as Hex), (`0x${'88'.repeat(32)}` as Hex)]
+  let computeSessionCallCount = 0
+  let capturedMdu0: Buffer | null = null
+  let capturedUserMdu: Buffer | null = null
+  let capturedUserMduIndex = 2
 
   await page.route('**/gateway/upload*', async (route) => {
     await route.fulfill({ status: 599, body: 'gateway disabled in bootstrap append e2e' })
@@ -147,67 +157,94 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
 
   await page.route('**/sp/retrieval/list-files/**', async (route) => {
     retrievalListCalls += 1
-    const url = new URL(route.request().url())
-    const manifestRoot = decodeURIComponent(url.pathname.split('/').pop() || '')
-    if (!dealCid || manifestRoot.toLowerCase() !== dealCid.toLowerCase()) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ files: [] }),
-      })
-      return
-    }
     await route.fulfill({
-      status: 200,
+      status: 404,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({
-        files: [
-          {
-            path: fileA.name,
-            size_bytes: fileA.buffer.length,
-            start_offset: 0,
-            flags: 0,
-            cache_present: true,
-          },
-        ],
-      }),
+      body: JSON.stringify({ error: 'list-files endpoint must not be used for append bootstrap' }),
     })
   })
 
   await page.route('**/sp/retrieval/plan/**', async (route) => {
     retrievalPlanCalls += 1
     await route.fulfill({
-      status: 200,
+      status: 404,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({
-        deal_id: Number(dealId),
-        owner: nilAddress,
-        provider: 'nil1providera',
-        manifest_root: dealCid,
-        file_path: fileA.name,
-        range_start: 0,
-        range_len: fileA.buffer.length,
-        start_mdu_index: 2,
-        start_blob_index: 0,
-        blob_count: 1,
-      }),
+      body: JSON.stringify({ error: 'plan endpoint must not be used for append bootstrap' }),
     })
   })
 
   await page.route('**/sp/retrieval/fetch/**', async (route) => {
     retrievalFetchCalls += 1
     await route.fulfill({
-      status: 206,
+      status: 404,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
-        'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1providera',
       },
-      body: fileA.buffer,
+      body: JSON.stringify({ error: 'fetch endpoint must not be used for append bootstrap' }),
+    })
+  })
+
+  await page.route('**/sp/retrieval/mdu/**', async (route) => {
+    const request = route.request()
+    const sessionId = request.headers()['x-nil-session-id']
+    if (!sessionId) {
+      sessionlessMduCalls += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'missing X-Nil-Session-Id' }),
+      })
+      return
+    }
+    const url = new URL(request.url())
+    const manifestRoot = decodeURIComponent(url.pathname.split('/').slice(-2, -1)[0] || '')
+    const index = Number(url.pathname.split('/').pop() || '-1')
+    if (!dealCid || manifestRoot.toLowerCase() !== dealCid.toLowerCase()) {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'mdu not found' }),
+      })
+      return
+    }
+    retrievalMduCalls += 1
+    if (index === 0 && capturedMdu0) {
+      expect(sessionId).toBe(sessionIds[0])
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/octet-stream',
+          'X-Nil-Mdu-Index': '0',
+        },
+        body: capturedMdu0,
+      })
+      return
+    }
+    if (index === capturedUserMduIndex && capturedUserMdu) {
+      expect(sessionId).toBe(sessionIds[1])
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/octet-stream',
+          'X-Nil-Mdu-Index': String(index),
+        },
+        body: capturedUserMdu,
+      })
+      return
+    }
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({ error: 'mdu not found' }),
     })
   })
 
@@ -230,6 +267,12 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
       })
     }
     if (method === 'eth_call') {
+      computeSessionCallCount += 1
+      const computeResult = encodeFunctionResult({
+        abi: NILSTORE_PRECOMPILE_ABI,
+        functionName: 'computeRetrievalSessionIds',
+        result: [['nil1providera'], [sessionIds[Math.min(computeSessionCallCount - 1, sessionIds.length - 1)]]],
+      })
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -384,6 +427,11 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   await expect.poll(() => uploadManifestCalls, { timeout: 60_000 }).toBeGreaterThan(0)
 
   dealCid = await readActiveManifestRoot(page, dealId)
+  const slabMetaAfterFirstCommit = await waitForActiveSlabMetadata(page, dealId)
+  const witnessCountAfterFirstCommit = Number(slabMetaAfterFirstCommit.witness_mdus ?? 1)
+  capturedUserMduIndex = 1 + witnessCountAfterFirstCommit
+  capturedMdu0 = await readActiveMdu(page, dealId, 0)
+  capturedUserMdu = await readActiveMdu(page, dealId, capturedUserMduIndex)
   expect(dealCid).toMatch(/^0x[0-9a-f]{96}$/i)
 
   await clearDealOpfs(page, dealId)
@@ -421,9 +469,11 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 60_000 })
   await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 60_000 })
 
-  expect(retrievalListCalls - listCallsBeforeAppend).toBeGreaterThan(0)
-  expect(retrievalPlanCalls - planCallsBeforeAppend).toBeGreaterThan(0)
-  expect(retrievalFetchCalls - fetchCallsBeforeAppend).toBeGreaterThan(0)
+  expect(retrievalListCalls - listCallsBeforeAppend).toBe(0)
+  expect(retrievalPlanCalls - planCallsBeforeAppend).toBe(0)
+  expect(retrievalFetchCalls - fetchCallsBeforeAppend).toBe(0)
+  expect(retrievalMduCalls).toBeGreaterThan(0)
+  expect(sessionlessMduCalls).toBe(0)
 
   const slabMeta = await waitForActiveSlabMetadata(page, dealId)
   const filePaths = slabMeta.file_records.map((file) => file.path).sort()

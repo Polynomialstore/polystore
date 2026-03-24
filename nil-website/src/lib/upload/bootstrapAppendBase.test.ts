@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { bootstrapAppendBaseFromNetwork } from './bootstrapAppendBase'
+import { bootstrapAppendBaseFromMdus, bootstrapAppendBaseFromNetwork } from './bootstrapAppendBase'
 import type { NilfsFileEntry } from '../../domain/nilfs'
 
 test('bootstrapAppendBaseFromNetwork reconstructs user MDUs and MDU0 state from provider files', async () => {
@@ -126,5 +126,58 @@ test('bootstrapAppendBaseFromNetwork rejects retrieval size mismatches', async (
         encodeToMdu: (rawMdu) => rawMdu,
       }),
     /bootstrap retrieval size mismatch/,
+  )
+})
+
+test('bootstrapAppendBaseFromMdus reconstructs append base from committed user mdus', () => {
+  const rawMduCapacity = 8
+  const mdu0 = new Uint8Array(8 * 1024 * 1024)
+  const BLOB = 128 * 1024
+  mdu0.set(new TextEncoder().encode('NILF'), 16 * BLOB)
+  new DataView(mdu0.buffer).setUint32(16 * BLOB + 8, 1, true)
+  const recordOffset = 16 * BLOB + 128
+  new DataView(mdu0.buffer).setBigUint64(recordOffset, 0n, true)
+  new DataView(mdu0.buffer).setBigUint64(recordOffset + 8, 10n, true)
+  mdu0.set(new TextEncoder().encode('alpha.bin'), recordOffset + 24)
+
+  const result = bootstrapAppendBaseFromMdus({
+    rawMduCapacity,
+    mdu0Bytes: mdu0,
+    userMdus: [
+      { index: 0, data: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]) },
+      { index: 1, data: new Uint8Array([9, 10, 11, 12, 13, 14, 15, 16]) },
+    ],
+    decodeRawMdu: (mdu, rawValidLen) => mdu.slice(0, rawValidLen),
+  })
+
+  assert.ok(result)
+  assert.equal(result.existingUserCount, 2)
+  assert.equal(result.existingMaxEnd, 10)
+  assert.equal(result.appendStartOffset, 16)
+  assert.equal(result.files.length, 1)
+  assert.equal(result.files[0]?.path, 'alpha.bin')
+  assert.deepEqual(Array.from(result.existingUserMdus[0]?.rawData ?? []), [1, 2, 3, 4, 5, 6, 7, 8])
+  assert.deepEqual(Array.from(result.existingUserMdus[1]?.rawData ?? []), [9, 10])
+})
+
+test('bootstrapAppendBaseFromMdus rejects mismatched committed user mdu count', () => {
+  const mdu0 = new Uint8Array(8 * 1024 * 1024)
+  const BLOB = 128 * 1024
+  mdu0.set(new TextEncoder().encode('NILF'), 16 * BLOB)
+  new DataView(mdu0.buffer).setUint32(16 * BLOB + 8, 1, true)
+  const recordOffset = 16 * BLOB + 128
+  new DataView(mdu0.buffer).setBigUint64(recordOffset, 0n, true)
+  new DataView(mdu0.buffer).setBigUint64(recordOffset + 8, 10n, true)
+  mdu0.set(new TextEncoder().encode('alpha.bin'), recordOffset + 24)
+
+  assert.throws(
+    () =>
+      bootstrapAppendBaseFromMdus({
+        rawMduCapacity: 8,
+        mdu0Bytes: mdu0,
+        userMdus: [{ index: 0, data: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]) }],
+        decodeRawMdu: (mdu, rawValidLen) => mdu.slice(0, rawValidLen),
+      }),
+    /bootstrap MDU count mismatch/,
   )
 })

@@ -139,6 +139,12 @@ function decodeRawSliceFromMdu(opts: {
   return out
 }
 
+export function decodeRawPrefixFromMdu(mdu: Uint8Array, rawValidLen: number): Uint8Array {
+  const safeLen = Math.max(0, Math.min(RAW_MDU_CAPACITY, Math.floor(Number(rawValidLen) || 0)))
+  if (safeLen === 0) return new Uint8Array()
+  return decodeRawSliceFromMdu({ mdu, rawStart: 0, rawLen: safeLen, rawValidLen: safeLen })
+}
+
 export async function readNilfsFileFromOpfs(opts: {
   dealId: string
   file: NilfsFileEntry
