@@ -27,3 +27,4 @@ Backend comparison notes:
 | Check | Command / Workload | Result | Notes |
 | --- | --- | --- | --- |
 | Interleaved median: `blst` vs `affine` vs `projective` | `env FILE_BYTES=8126464 CYCLES=3 BASIS_MODES=blst,affine,projective npm --prefix nil-website run perf:prepare-compare` | `blst` wins | median total: `27.26s` (`blst`) vs `53.68s` (`affine`) vs `59.20s` (`projective`) |
+| Interleaved median: user-stage concurrency `4` vs `5` | `env FILE_BYTES=40632320 CYCLES=3 CONCURRENCIES=4,5,6 npm --prefix nil-website run perf:user-stage-concurrency` | `5` workers wins | 5-MDU median user-stage wall: `63.61s` (`4`) vs `54.74s` (`5`); `6` requested also resolves to `5` workers for 5 jobs and measured `48.84s` median on the same run |
