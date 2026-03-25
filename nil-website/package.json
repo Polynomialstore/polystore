@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "test:e2e:sparse-browser": "playwright test tests/direct-upload-sparse.spec.ts",
     "perf:prepare": "tsx scripts/benchmark_prepare.ts",
+    "perf:kzg-compare": "tsx scripts/benchmark_kzg_commit_compare.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
