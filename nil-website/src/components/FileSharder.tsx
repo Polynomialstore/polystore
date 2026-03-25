@@ -165,19 +165,35 @@ type PreparePerfProfile = {
   manifestMs: number
   wallClock: {
     prepareMs: number
+    userStageMs: number
+    witnessConcatMs: number
+    witnessStageMs: number
+    userRootRegistrationMs: number
+    mdu0AppendMs: number
+    mdu0StageMs: number
+    rootsAssembleMs: number
     manifestMs: number
   }
   summary: {
     userSampleCount: number
+    witnessSampleCount: number
+    metaSampleCount: number
     maxUserTotalMs: number
     maxUserCommitMs: number
     maxUserExpandMs: number
     maxUserQueueMs: number
+    maxWitnessTotalMs: number
+    maxWitnessCommitMs: number
+    maxWitnessQueueMs: number
     sumUserTotalMs: number
     sumUserCommitMs: number
     sumUserExpandMs: number
     sumUserQueueMs: number
+    sumWitnessTotalMs: number
+    sumWitnessCommitMs: number
+    sumWitnessQueueMs: number
     slowestUserMduIndex: number | null
+    slowestWitnessMduIndex: number | null
   }
   phases: {
     jsEncodeMs: number
@@ -197,6 +213,13 @@ type PreparePerfProfile = {
     workerRustCommitMsmMs: number
     workerRustCommitCompressMs: number
     workerRustCommitMs: number
+    userStageWallMs: number
+    witnessConcatWallMs: number
+    witnessStageWallMs: number
+    userRootRegistrationWallMs: number
+    mdu0AppendWallMs: number
+    mdu0StageWallMs: number
+    rootsAssembleWallMs: number
     manifestMs: number
     unaccountedMs: number
   }
@@ -229,11 +252,20 @@ function roundPerfMs(value: number | null | undefined): number | null {
 type NilBrowserPerfBundle = {
   browserPerfLog: Array<Record<string, unknown>>
   browserPerfLast: Record<string, unknown> | null
-  prepareSummary: (PreparePerfProfile['summary'] & {
-    prepareWallMs: number
-    manifestMs: number
-  }) | null
+  prepareSummary: NilPrepareSummary | null
   prepareProfile: PreparePerfProfile | null
+}
+
+type NilPrepareSummary = PreparePerfProfile['summary'] & {
+  prepareWallMs: number
+  manifestMs: number
+  userStageWallMs: number
+  witnessConcatWallMs: number
+  witnessStageWallMs: number
+  userRootRegistrationWallMs: number
+  mdu0AppendWallMs: number
+  mdu0StageWallMs: number
+  rootsAssembleWallMs: number
 }
 
 function maxBy(samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number): number {
@@ -2739,6 +2771,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           witness: [],
           meta: [],
         }
+        const userStageStart = performance.now()
         const prepareHardwareConcurrency =
           typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
             ? Math.max(1, Number(navigator.hardwareConcurrency))
@@ -3068,13 +3101,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (useMode2) {
           setMode2Shards(mode2UserShards);
         }
+        const userStageMs = performance.now() - userStageStart
 
+        const witnessConcatStart = performance.now()
         const fullWitnessData = new Uint8Array(witnessDataBlobs.reduce((acc, b) => acc + b.length, 0));
         let offset = 0;
         for (const b of witnessDataBlobs) {
             fullWitnessData.set(b, offset);
             offset += b.length;
         }
+        const witnessConcatMs = performance.now() - witnessConcatStart
 
         const witnessRoots: Uint8Array[] = [];
         const witnessMdus: PreparedBrowserMdu[] = [];
@@ -3083,7 +3119,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (actualWitnessMduCount !== witnessMduCount) {
           throw new Error(`witness_mdu_count mismatch (expected ${witnessMduCount}, got ${actualWitnessMduCount})`);
         }
-        
+
+        const witnessStageStart = performance.now()
         for (let i = 0; i < witnessMduCount; i++) {
             const opStart = performance.now();
             const nonTrivialBlobs = nonTrivialBlobsForPayload(witnessPayloads[i] ?? 0);
@@ -3202,17 +3239,22 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             setShards((prev) => prev.map((s) => (s.id === 1 + i ? { ...s, status: 'expanded' } : s)));
             await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         }
+        const witnessStageMs = performance.now() - witnessStageStart
 
+        const userRootRegistrationStart = performance.now()
         for (let i = 0; i < userRoots.length; i++) {
             await workerClient.setMdu0Root(witnessMduCount + i, userRoots[i]);
         }
+        const userRootRegistrationMs = performance.now() - userRootRegistrationStart
 
         const fileStartOffset = appendMode2 ? uploadPlan.appendStartOffset : 0;
         const recordPath = sanitizeNilfsRecordPath(file.name);
         if (recordPath !== file.name) {
           addLog(`> NilFS path truncated for V1 record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
         }
+        const mdu0AppendStart = performance.now()
         await workerClient.appendFileToMdu0(recordPath, bytes.length, fileStartOffset, fileFlags);
+        const mdu0AppendMs = performance.now() - mdu0AppendStart
 
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();
@@ -3269,6 +3311,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const mdu0Root = toU8(mdu0Result.mdu_root);
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
         const opMs = performance.now() - opStartMdu0;
+        const mdu0StageMs = opMs
         const metaPerfSample: PreparePerfSample = {
           index: 0,
           kind: 'meta',
@@ -3319,6 +3362,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           };
         });
 
+        const rootsAssembleStart = performance.now()
         const allRoots = new Uint8Array(32 * (1 + witnessRoots.length + userRoots.length));
         allRoots.set(mdu0Root, 0);
         let aggOffset = 32;
@@ -3330,6 +3374,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             allRoots.set(r, aggOffset);
             aggOffset += 32;
         }
+        const rootsAssembleMs = performance.now() - rootsAssembleStart
 
         addLog(`> Computing Manifest Root (Aggregation)...`);
         setShardProgress((p) => ({
@@ -3402,19 +3447,39 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           manifestMs,
           wallClock: {
             prepareMs: elapsedMs,
+            userStageMs,
+            witnessConcatMs,
+            witnessStageMs,
+            userRootRegistrationMs,
+            mdu0AppendMs,
+            mdu0StageMs,
+            rootsAssembleMs,
             manifestMs,
           },
           summary: {
             userSampleCount: perfSamples.user.length,
+            witnessSampleCount: perfSamples.witness.length,
+            metaSampleCount: perfSamples.meta.length,
             maxUserTotalMs: maxBy(perfSamples.user, (sample) => sample.totalMs),
             maxUserCommitMs: maxBy(perfSamples.user, (sample) => sample.workerRustCommitMs),
             maxUserExpandMs: maxBy(perfSamples.user, (sample) => sample.workerExpandMs),
             maxUserQueueMs: maxBy(perfSamples.user, (sample) => sample.workerQueueMs),
+            maxWitnessTotalMs: maxBy(perfSamples.witness, (sample) => sample.totalMs),
+            maxWitnessCommitMs: maxBy(perfSamples.witness, (sample) => sample.workerCommitMs),
+            maxWitnessQueueMs: maxBy(perfSamples.witness, (sample) => sample.workerQueueMs),
             sumUserTotalMs: sumBy(perfSamples.user, (sample) => sample.totalMs),
             sumUserCommitMs: sumBy(perfSamples.user, (sample) => sample.workerRustCommitMs),
             sumUserExpandMs: sumBy(perfSamples.user, (sample) => sample.workerExpandMs),
             sumUserQueueMs: sumBy(perfSamples.user, (sample) => sample.workerQueueMs),
+            sumWitnessTotalMs: sumBy(perfSamples.witness, (sample) => sample.totalMs),
+            sumWitnessCommitMs: sumBy(perfSamples.witness, (sample) => sample.workerCommitMs),
+            sumWitnessQueueMs: sumBy(perfSamples.witness, (sample) => sample.workerQueueMs),
             slowestUserMduIndex: slowestUserSample?.index ?? null,
+            slowestWitnessMduIndex:
+              perfSamples.witness.reduce<PreparePerfSample | null>(
+                (best, sample) => (!best || sample.totalMs > best.totalMs ? sample : best),
+                null,
+              )?.index ?? null,
           },
           phases: {
             jsEncodeMs: sumBy(allSamples, (sample) => sample.encodeMs),
@@ -3434,6 +3499,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             workerRustCommitMsmMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmMs),
             workerRustCommitCompressMs: sumBy(allSamples, (sample) => sample.workerRustCommitCompressMs),
             workerRustCommitMs: sumBy(allSamples, (sample) => sample.workerRustCommitMs),
+            userStageWallMs: userStageMs,
+            witnessConcatWallMs: witnessConcatMs,
+            witnessStageWallMs: witnessStageMs,
+            userRootRegistrationWallMs: userRootRegistrationMs,
+            mdu0AppendWallMs: mdu0AppendMs,
+            mdu0StageWallMs: mdu0StageMs,
+            rootsAssembleWallMs: rootsAssembleMs,
             manifestMs,
             unaccountedMs: 0,
           },
@@ -3461,24 +3533,25 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           (
             window as typeof window & {
               __nilPreparePerf?: PreparePerfProfile
-              __nilPrepareSummary?: PreparePerfProfile['summary'] & {
-                prepareWallMs: number
-                manifestMs: number
-              }
+              __nilPrepareSummary?: NilPrepareSummary
               __nilPerfBundle?: NilBrowserPerfBundle
             }
           ).__nilPreparePerf = prepareProfile
           const prepareSummary = {
             prepareWallMs: roundPerfMs(elapsedMs) ?? 0,
             manifestMs: roundPerfMs(manifestMs) ?? 0,
+            userStageWallMs: roundPerfMs(userStageMs) ?? 0,
+            witnessConcatWallMs: roundPerfMs(witnessConcatMs) ?? 0,
+            witnessStageWallMs: roundPerfMs(witnessStageMs) ?? 0,
+            userRootRegistrationWallMs: roundPerfMs(userRootRegistrationMs) ?? 0,
+            mdu0AppendWallMs: roundPerfMs(mdu0AppendMs) ?? 0,
+            mdu0StageWallMs: roundPerfMs(mdu0StageMs) ?? 0,
+            rootsAssembleWallMs: roundPerfMs(rootsAssembleMs) ?? 0,
             ...prepareProfile.summary,
           }
           ;(
             window as typeof window & {
-              __nilPrepareSummary?: PreparePerfProfile['summary'] & {
-                prepareWallMs: number
-                manifestMs: number
-              }
+              __nilPrepareSummary?: NilPrepareSummary
               __nilPerfBundle?: NilBrowserPerfBundle
               __nilBrowserPerfLog?: Array<Record<string, unknown>>
               __nilBrowserPerfLast?: Record<string, unknown>
@@ -3519,13 +3592,26 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           prepareWallMs: roundPerfMs(elapsedMs),
           userConcurrency: prepareProfile.userConcurrency,
           totalUserMdus: totalUserChunks,
+          totalWitnessMdus: witnessMduCount,
+          userStageWallMs: roundPerfMs(userStageMs),
+          witnessConcatWallMs: roundPerfMs(witnessConcatMs),
+          witnessStageWallMs: roundPerfMs(witnessStageMs),
+          userRootRegistrationWallMs: roundPerfMs(userRootRegistrationMs),
+          mdu0AppendWallMs: roundPerfMs(mdu0AppendMs),
+          mdu0StageWallMs: roundPerfMs(mdu0StageMs),
+          rootsAssembleWallMs: roundPerfMs(rootsAssembleMs),
           maxUserTotalMs: roundPerfMs(prepareProfile.summary.maxUserTotalMs),
           maxUserCommitMs: roundPerfMs(prepareProfile.summary.maxUserCommitMs),
           maxUserExpandMs: roundPerfMs(prepareProfile.summary.maxUserExpandMs),
           maxUserQueueMs: roundPerfMs(prepareProfile.summary.maxUserQueueMs),
+          maxWitnessTotalMs: roundPerfMs(prepareProfile.summary.maxWitnessTotalMs),
+          maxWitnessCommitMs: roundPerfMs(prepareProfile.summary.maxWitnessCommitMs),
+          maxWitnessQueueMs: roundPerfMs(prepareProfile.summary.maxWitnessQueueMs),
           sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
           sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
           sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          sumWitnessCommitMs: roundPerfMs(prepareProfile.summary.sumWitnessCommitMs),
+          sumWitnessQueueMs: roundPerfMs(prepareProfile.summary.sumWitnessQueueMs),
           rustCommitDecodeMs: roundPerfMs(prepareProfile.phases.workerRustCommitDecodeMs),
           rustCommitTransformMs: roundPerfMs(prepareProfile.phases.workerRustCommitTransformMs),
           rustCommitMsmScalarPrepMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmScalarPrepMs),
@@ -3537,6 +3623,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           rustCommitBackend,
           rustCommitMsmSubphasesAvailable,
           slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
+          slowestWitnessMduIndex: prepareProfile.summary.slowestWitnessMduIndex,
           manifestMs: roundPerfMs(manifestMs),
           note: 'max* fields are closest to wall-clock critical path; sum* fields are parallel worker totals',
         });
@@ -3549,14 +3636,27 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
           userConcurrency: prepareProfile.userConcurrency,
+          userStageWallMs: roundPerfMs(userStageMs),
+          witnessConcatWallMs: roundPerfMs(witnessConcatMs),
+          witnessStageWallMs: roundPerfMs(witnessStageMs),
+          userRootRegistrationWallMs: roundPerfMs(userRootRegistrationMs),
+          mdu0AppendWallMs: roundPerfMs(mdu0AppendMs),
+          mdu0StageWallMs: roundPerfMs(mdu0StageMs),
+          rootsAssembleWallMs: roundPerfMs(rootsAssembleMs),
           maxUserTotalMs: roundPerfMs(prepareProfile.summary.maxUserTotalMs),
           maxUserCommitMs: roundPerfMs(prepareProfile.summary.maxUserCommitMs),
           maxUserExpandMs: roundPerfMs(prepareProfile.summary.maxUserExpandMs),
           maxUserQueueMs: roundPerfMs(prepareProfile.summary.maxUserQueueMs),
+          maxWitnessTotalMs: roundPerfMs(prepareProfile.summary.maxWitnessTotalMs),
+          maxWitnessCommitMs: roundPerfMs(prepareProfile.summary.maxWitnessCommitMs),
+          maxWitnessQueueMs: roundPerfMs(prepareProfile.summary.maxWitnessQueueMs),
           sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
           sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
           sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          sumWitnessCommitMs: roundPerfMs(prepareProfile.summary.sumWitnessCommitMs),
+          sumWitnessQueueMs: roundPerfMs(prepareProfile.summary.sumWitnessQueueMs),
           slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
+          slowestWitnessMduIndex: prepareProfile.summary.slowestWitnessMduIndex,
           manifestMs: roundPerfMs(manifestMs),
         })
 
