@@ -297,6 +297,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
     })
     console.log('[direct sparse prepare profile]', prepareProfile)
     console.log('[direct sparse prepare profile json]', JSON.stringify(prepareProfile))
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
     return
   }
 

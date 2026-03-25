@@ -1,6 +1,8 @@
 use blake2::{Blake2s256, Digest};
 use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
-use blst::{BLST_ERROR, blst_p1, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
+#[cfg(target_arch = "wasm32")]
+use blst::blst_p1;
+use blst::{BLST_ERROR, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
 #[cfg(not(target_arch = "wasm32"))]
 use blst::MultiPoint;
 #[cfg(target_arch = "wasm32")]
@@ -270,6 +272,50 @@ impl KzgContext {
         } else {
             // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
             // over the evaluations.
+            #[cfg(target_arch = "wasm32")]
+            {
+                let wasm_basis_mode = WASM_MSM_BASIS_MODE.load(Ordering::Relaxed);
+                if wasm_basis_mode == 1 || wasm_basis_mode == 2 {
+                    let decode_start = now_ms();
+                    let evals = bytes_to_scalars(blob_bytes)?;
+                    perf.decode_ms = now_ms() - decode_start;
+
+                    let msm_start = now_ms();
+                    let acc = if wasm_basis_mode == 2 {
+                        msm_pippenger_g1_projective_profiled_wasm(
+                            &self.g1_points_projective,
+                            &evals,
+                            &mut perf,
+                        )
+                    } else {
+                        msm_pippenger_g1_profiled_wasm(&self.g1_points, &evals, &mut perf)
+                    };
+                    perf.msm_ms = now_ms() - msm_start;
+
+                    let compress_start = now_ms();
+                    let commitment = acc.to_affine().to_compressed();
+                    perf.compress_ms = now_ms() - compress_start;
+                    perf.total_ms = now_ms() - total_start;
+                    return Ok((commitment, perf));
+                }
+            }
+
+            #[cfg(any(not(target_arch = "wasm32")))]
+            {
+                let commitment = msm_blst_g1_commitment_from_blob_profiled(
+                    &self.g1_points_blst,
+                    blob_bytes,
+                    &mut perf,
+                )?;
+
+                if perf.decode_ms == 0.0 {
+                    perf.decode_ms = now_ms() - total_start;
+                }
+                perf.total_ms = now_ms() - total_start;
+                return Ok((commitment, perf));
+            }
+
+            #[cfg(target_arch = "wasm32")]
             {
                 let commitment = msm_blst_g1_commitment_from_blob_profiled(
                     &self.g1_points_blst,
@@ -297,6 +343,90 @@ impl KzgContext {
             commitments.push(self.blob_to_commitment(&mdu_bytes[start..end])?);
         }
         Ok(commitments)
+    }
+
+    pub fn commit_blobs_flat(&self, blobs_flat: &[u8]) -> Result<Vec<u8>, KzgError> {
+        self.commit_blobs_flat_impl(blobs_flat, false)
+            .map(|(flat, _)| flat)
+    }
+
+    pub fn commit_blobs_flat_profiled(
+        &self,
+        blobs_flat: &[u8],
+    ) -> Result<(Vec<u8>, BlobToCommitmentPerf), KzgError> {
+        self.commit_blobs_flat_impl(blobs_flat, true)
+    }
+
+    fn commit_blobs_flat_impl(
+        &self,
+        blobs_flat: &[u8],
+        profile: bool,
+    ) -> Result<(Vec<u8>, BlobToCommitmentPerf), KzgError> {
+        if blobs_flat.len() % BLOB_SIZE != 0 {
+            return Err(KzgError::InvalidDataLength);
+        }
+
+        let count = blobs_flat.len() / BLOB_SIZE;
+        let mut flat = Vec::with_capacity(count * 48);
+        let mut perf = BlobToCommitmentPerf::default();
+
+        #[cfg(target_arch = "wasm32")]
+        if !self.g1_points_are_monomial && WASM_MSM_BASIS_MODE.load(Ordering::Relaxed) == 0 {
+            let points = &self.g1_points_blst;
+            let n = points.len().min(BLOB_SIZE / 32);
+            let scratch_words = unsafe {
+                blst_p1s_mult_pippenger_scratch_sizeof(n) / std::mem::size_of::<limb_t>()
+            };
+
+            let batch_result: Result<(), KzgError> = WASM_BLST_SCRATCH.with(|cell| {
+                let mut scratch = cell.borrow_mut();
+                ensure_wasm_blst_scratch_capacity(&mut scratch, n, scratch_words);
+
+                for blob in blobs_flat.chunks_exact(BLOB_SIZE) {
+                    if blob.iter().all(|&byte| byte == 0) {
+                        flat.extend_from_slice(&zero_blob_commitment());
+                        continue;
+                    }
+
+                    let blob_start = if profile { Some(now_ms()) } else { None };
+                    let commitment = msm_blst_g1_commitment_from_blob_with_scratch(
+                        points,
+                        blob,
+                        if profile { Some(&mut perf) } else { None },
+                        &mut scratch,
+                        scratch_words,
+                    )?;
+                    flat.extend_from_slice(&commitment);
+                    if let Some(start_ms) = blob_start {
+                        perf.total_ms += now_ms() - start_ms;
+                    }
+                }
+                Ok(())
+            });
+
+            batch_result?;
+            return Ok((flat, perf));
+        }
+
+        for blob in blobs_flat.chunks_exact(BLOB_SIZE) {
+            if profile {
+                let (commitment, blob_perf) = self.blob_to_commitment_profiled(blob)?;
+                flat.extend_from_slice(&commitment);
+                perf.decode_ms += blob_perf.decode_ms;
+                perf.transform_ms += blob_perf.transform_ms;
+                perf.msm_scalar_prep_ms += blob_perf.msm_scalar_prep_ms;
+                perf.msm_bucket_fill_ms += blob_perf.msm_bucket_fill_ms;
+                perf.msm_reduce_ms += blob_perf.msm_reduce_ms;
+                perf.msm_double_ms += blob_perf.msm_double_ms;
+                perf.msm_ms += blob_perf.msm_ms;
+                perf.compress_ms += blob_perf.compress_ms;
+                perf.total_ms += blob_perf.total_ms;
+            } else {
+                flat.extend_from_slice(&self.blob_to_commitment(blob)?);
+            }
+        }
+
+        Ok((flat, perf))
     }
 
     pub fn create_mdu_merkle_root(
@@ -992,52 +1122,25 @@ fn msm_blst_g1_commitment_from_blob_profiled(
 
     let points = &points[..n];
 
+    #[cfg(not(target_arch = "wasm32"))]
     let decode_start = now_ms();
     #[cfg(target_arch = "wasm32")]
-    let res: blst_p1 = WASM_BLST_SCRATCH.with(|scratch| {
+    let out: KzgCommitment = WASM_BLST_SCRATCH.with(|scratch| {
         let mut scratch = scratch.borrow_mut();
-        let needed_scalar_bytes = n * 32;
-        if scratch.scalar_bytes.len() < needed_scalar_bytes {
-            scratch.scalar_bytes.resize(needed_scalar_bytes, 0);
-        }
-        {
-            let scalar_bytes = &mut scratch.scalar_bytes[..needed_scalar_bytes];
-            for (dst, chunk) in scalar_bytes
-                .chunks_exact_mut(32)
-                .zip(blob_bytes.chunks_exact(32).take(n))
-            {
-                dst.copy_from_slice(chunk);
-                dst.reverse();
-            }
-        }
-        perf.decode_ms += now_ms() - decode_start;
-
         let scratch_words =
             unsafe { blst_p1s_mult_pippenger_scratch_sizeof(n) / std::mem::size_of::<limb_t>() };
-        if scratch.scratch.len() < scratch_words {
-            scratch.scratch.resize(scratch_words, 0);
-        }
-
-        let point_refs = [points.as_ptr(), std::ptr::null()];
-        let scalar_refs = [scratch.scalar_bytes.as_ptr(), std::ptr::null()];
-        let msm_start = now_ms();
-        let mut out = blst_p1::default();
-        unsafe {
-            blst_p1s_mult_pippenger(
-                &mut out,
-                point_refs.as_ptr(),
-                n,
-                scalar_refs.as_ptr(),
-                256,
-                scratch.scratch.as_mut_ptr() as *mut limb_t,
-            );
-        }
-        perf.msm_ms += now_ms() - msm_start;
-        out
-    });
+        ensure_wasm_blst_scratch_capacity(&mut scratch, n, scratch_words);
+        msm_blst_g1_commitment_from_blob_with_scratch(
+            points,
+            blob_bytes,
+            Some(perf),
+            &mut scratch,
+            scratch_words,
+        )
+    })?;
 
     #[cfg(not(target_arch = "wasm32"))]
-    let res: blst_p1 = {
+    let out: KzgCommitment = {
         let mut scalar_bytes = vec![0u8; n * 32];
         for (dst, chunk) in scalar_bytes
             .chunks_exact_mut(32)
@@ -1052,16 +1155,104 @@ fn msm_blst_g1_commitment_from_blob_profiled(
         let msm_start = now_ms();
         let out = points.mult(&scalar_bytes, 256);
         perf.msm_ms += now_ms() - msm_start;
-        out
+        let mut commitment = [0u8; 48];
+        let compress_start = now_ms();
+        unsafe {
+            blst_p1_compress(commitment.as_mut_ptr(), &out);
+        }
+        perf.compress_ms += now_ms() - compress_start;
+        commitment
     };
 
-    let mut out = [0u8; 48];
-    let compress_start = now_ms();
-    unsafe {
-        blst_p1_compress(out.as_mut_ptr(), &res);
-    }
-    perf.compress_ms += now_ms() - compress_start;
     Ok(out)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn ensure_wasm_blst_scratch_capacity(
+    scratch: &mut WasmBlstScratch,
+    n: usize,
+    scratch_words: usize,
+) {
+    let needed_scalar_bytes = n * 32;
+    if scratch.scalar_bytes.len() < needed_scalar_bytes {
+        scratch.scalar_bytes.resize(needed_scalar_bytes, 0);
+    }
+    if scratch.scratch.len() < scratch_words {
+        scratch.scratch.resize(scratch_words, 0);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn reverse_blob_scalars_into(dst: &mut [u8], src: &[u8], n: usize) {
+    debug_assert_eq!(dst.len(), n * 32);
+    debug_assert!(src.len() >= n * 32);
+
+    for (dst_chunk, src_chunk) in dst.chunks_exact_mut(32).zip(src.chunks_exact(32).take(n)) {
+        for i in 0..32 {
+            dst_chunk[i] = src_chunk[31 - i];
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn msm_blst_g1_commitment_from_blob_with_scratch(
+    points: &[blst_p1_affine],
+    blob_bytes: &[u8],
+    mut perf: Option<&mut BlobToCommitmentPerf>,
+    scratch: &mut WasmBlstScratch,
+    scratch_words: usize,
+) -> Result<KzgCommitment, KzgError> {
+    let scalars = blob_bytes.len() / 32;
+    let n = points.len().min(scalars);
+    if n == 0 {
+        return Ok(zero_blob_commitment());
+    }
+
+    let decode_start = perf.as_ref().map(|_| now_ms());
+    let needed_scalar_bytes = n * 32;
+    reverse_blob_scalars_into(
+        &mut scratch.scalar_bytes[..needed_scalar_bytes],
+        blob_bytes,
+        n,
+    );
+    if let Some(start_ms) = decode_start {
+        if let Some(perf_ref) = perf.as_deref_mut() {
+            perf_ref.decode_ms += now_ms() - start_ms;
+        }
+    }
+
+    let point_refs = [points.as_ptr(), std::ptr::null()];
+    let scalar_refs = [scratch.scalar_bytes.as_ptr(), std::ptr::null()];
+    let msm_start = perf.as_ref().map(|_| now_ms());
+    let mut out = blst_p1::default();
+    unsafe {
+        blst_p1s_mult_pippenger(
+            &mut out,
+            point_refs.as_ptr(),
+            n,
+            scalar_refs.as_ptr(),
+            256,
+            scratch.scratch[..scratch_words].as_mut_ptr() as *mut limb_t,
+        );
+    }
+    if let Some(start_ms) = msm_start {
+        if let Some(perf_ref) = perf.as_deref_mut() {
+            perf_ref.msm_ms += now_ms() - start_ms;
+        }
+    }
+
+    let compress_start = perf.as_ref().map(|_| now_ms());
+    let mut commitment = [0u8; 48];
+    unsafe {
+        blst_p1_compress(commitment.as_mut_ptr(), &out);
+    }
+    if let Some(start_ms) = compress_start {
+        if let Some(perf_ref) = perf.as_deref_mut() {
+            perf_ref.compress_ms += now_ms() - start_ms;
+        }
+    }
+
+    Ok(commitment)
 }
 
 #[cfg_attr(not(test), allow(dead_code))]

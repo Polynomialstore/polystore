@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { CheckCircle2, Cpu, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
+import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
 import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
@@ -138,9 +139,15 @@ type PreparePerfSample = {
   workerRustRsMs: number
   workerRustCommitDecodeMs: number
   workerRustCommitTransformMs: number
+  workerRustCommitMsmScalarPrepMs: number
+  workerRustCommitMsmBucketFillMs: number
+  workerRustCommitMsmReduceMs: number
+  workerRustCommitMsmDoubleMs: number
   workerRustCommitMsmMs: number
   workerRustCommitCompressMs: number
   workerRustCommitMs: number
+  workerRustCommitBackend?: string
+  workerRustCommitMsmSubphasesAvailable?: boolean
   totalMs: number
   batchBlobs?: number
   shardCount?: number
@@ -155,7 +162,40 @@ type PreparePerfProfile = {
   totalMdus: number
   totalUserMdus: number
   totalWitnessMdus: number
+  userConcurrency: number
   manifestMs: number
+  wallClock: {
+    prepareMs: number
+    userStageMs: number
+    witnessConcatMs: number
+    witnessStageMs: number
+    userRootRegistrationMs: number
+    mdu0AppendMs: number
+    mdu0StageMs: number
+    rootsAssembleMs: number
+    manifestMs: number
+  }
+  summary: {
+    userSampleCount: number
+    witnessSampleCount: number
+    metaSampleCount: number
+    maxUserTotalMs: number
+    maxUserCommitMs: number
+    maxUserExpandMs: number
+    maxUserQueueMs: number
+    maxWitnessTotalMs: number
+    maxWitnessCommitMs: number
+    maxWitnessQueueMs: number
+    sumUserTotalMs: number
+    sumUserCommitMs: number
+    sumUserExpandMs: number
+    sumUserQueueMs: number
+    sumWitnessTotalMs: number
+    sumWitnessCommitMs: number
+    sumWitnessQueueMs: number
+    slowestUserMduIndex: number | null
+    slowestWitnessMduIndex: number | null
+  }
   phases: {
     jsEncodeMs: number
     jsCopyMs: number
@@ -167,17 +207,70 @@ type PreparePerfProfile = {
     workerRustRsMs: number
     workerRustCommitDecodeMs: number
     workerRustCommitTransformMs: number
+    workerRustCommitMsmScalarPrepMs: number
+    workerRustCommitMsmBucketFillMs: number
+    workerRustCommitMsmReduceMs: number
+    workerRustCommitMsmDoubleMs: number
     workerRustCommitMsmMs: number
     workerRustCommitCompressMs: number
     workerRustCommitMs: number
+    userStageWallMs: number
+    witnessConcatWallMs: number
+    witnessStageWallMs: number
+    userRootRegistrationWallMs: number
+    mdu0AppendWallMs: number
+    mdu0StageWallMs: number
+    rootsAssembleWallMs: number
     manifestMs: number
     unaccountedMs: number
+  }
+  notes: {
+    phasesAreParallelSums: true
+    unaccountedMsIsWallClockRemainder: true
+    rustCommitBackend?: string
+    rustCommitMsmSubphasesAvailable?: boolean
   }
   samples: {
     user: PreparePerfSample[]
     witness: PreparePerfSample[]
     meta: PreparePerfSample[]
   }
+}
+
+type BrowserPerfRun = {
+  id: number
+  fileName: string
+  fileSize: number
+  startedAtMs: number
+  phaseStarts: Record<string, number>
+}
+
+function roundPerfMs(value: number | null | undefined): number | null {
+  if (!Number.isFinite(value ?? NaN)) return null
+  return Math.round(Number(value) * 100) / 100
+}
+
+type NilBrowserPerfBundle = {
+  browserPerfLog: Array<Record<string, unknown>>
+  browserPerfLast: Record<string, unknown> | null
+  prepareSummary: NilPrepareSummary | null
+  prepareProfile: PreparePerfProfile | null
+}
+
+type NilPrepareSummary = PreparePerfProfile['summary'] & {
+  prepareWallMs: number
+  manifestMs: number
+  userStageWallMs: number
+  witnessConcatWallMs: number
+  witnessStageWallMs: number
+  userRootRegistrationWallMs: number
+  mdu0AppendWallMs: number
+  mdu0StageWallMs: number
+  rootsAssembleWallMs: number
+}
+
+function maxBy(samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number): number {
+  return samples.reduce((best, sample) => Math.max(best, pick(sample)), 0)
 }
 
 function createInitialShardProgress(fileBytesTotal = 0): ShardProgressState {
@@ -384,6 +477,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const autoUploadManifestRef = useRef<string | null>(null)
   const autoCommitManifestRef = useRef<string | null>(null)
   const lastStaleCommitMessageRef = useRef<string | null>(null)
+  const browserPerfRunRef = useRef<BrowserPerfRun | null>(null)
+  const browserPerfSeqRef = useRef(1)
   const dealSetupAttemptRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const gatewayUploadProgressRef = useRef<{ phase: string; workDone: number; workTotal: number }>({
@@ -416,6 +511,112 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   )
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
+
+  const browserPerfLog = useCallback(
+    (event: string, extra: Record<string, unknown> = {}) => {
+      const now = performance.now()
+      const run = browserPerfRunRef.current
+      const perfObj =
+        typeof performance !== 'undefined'
+          ? (performance as typeof performance & {
+              memory?: {
+                usedJSHeapSize?: number
+                totalJSHeapSize?: number
+                jsHeapSizeLimit?: number
+              }
+            })
+          : null
+      const memory = perfObj?.memory
+      const payload = {
+        ...extra,
+        event,
+        dealId,
+        runId: run?.id ?? null,
+        fileName: run?.fileName ?? null,
+        fileBytes: run?.fileSize ?? null,
+        sinceRunMs: run ? roundPerfMs(now - run.startedAtMs) : null,
+        heapUsedBytes: roundPerfMs(memory?.usedJSHeapSize),
+        heapTotalBytes: roundPerfMs(memory?.totalJSHeapSize),
+        heapLimitBytes: roundPerfMs(memory?.jsHeapSizeLimit),
+        visibilityState:
+          typeof document !== 'undefined' && typeof document.visibilityState === 'string'
+            ? document.visibilityState
+            : null,
+      }
+      const MAX_BROWSER_PERF_EVENTS = 512
+      if (typeof window !== 'undefined') {
+        const perfWindow = window as typeof window & {
+          __nilBrowserPerfLog?: Array<Record<string, unknown>>
+          __nilBrowserPerfLast?: Record<string, unknown>
+          __nilPerfBundle?: NilBrowserPerfBundle
+        }
+        if (!Array.isArray(perfWindow.__nilBrowserPerfLog)) {
+          perfWindow.__nilBrowserPerfLog = []
+        }
+        perfWindow.__nilBrowserPerfLog.push(payload)
+        if (perfWindow.__nilBrowserPerfLog.length > MAX_BROWSER_PERF_EVENTS) {
+          perfWindow.__nilBrowserPerfLog.splice(0, perfWindow.__nilBrowserPerfLog.length - MAX_BROWSER_PERF_EVENTS)
+        }
+        perfWindow.__nilBrowserPerfLast = payload
+        perfWindow.__nilPerfBundle = {
+          browserPerfLog: perfWindow.__nilBrowserPerfLog,
+          browserPerfLast: perfWindow.__nilBrowserPerfLast ?? null,
+          prepareSummary: perfWindow.__nilPerfBundle?.prepareSummary ?? null,
+          prepareProfile: perfWindow.__nilPerfBundle?.prepareProfile ?? null,
+        }
+      }
+      if (import.meta.env.DEV) {
+        console.log('[browser-perf]', payload)
+      }
+    },
+    [dealId],
+  )
+
+  const browserPerfStartRun = useCallback(
+    (file: File) => {
+      browserPerfRunRef.current = {
+        id: browserPerfSeqRef.current++,
+        fileName: file.name,
+        fileSize: file.size,
+        startedAtMs: performance.now(),
+        phaseStarts: {},
+      }
+      browserPerfLog('run:start', {
+        hardwareConcurrency:
+          typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
+            ? Number(navigator.hardwareConcurrency)
+            : null,
+      })
+    },
+    [browserPerfLog],
+  )
+
+  const browserPerfStartPhase = useCallback(
+    (phase: string, extra: Record<string, unknown> = {}) => {
+      const run = browserPerfRunRef.current
+      if (!run) return
+      run.phaseStarts[phase] = performance.now()
+      browserPerfLog(`${phase}:start`, extra)
+    },
+    [browserPerfLog],
+  )
+
+  const browserPerfEndPhase = useCallback(
+    (phase: string, extra: Record<string, unknown> = {}) => {
+      const run = browserPerfRunRef.current
+      const now = performance.now()
+      const startedAtMs = run?.phaseStarts[phase]
+      const durationMs = startedAtMs !== undefined ? roundPerfMs(now - startedAtMs) : null
+      if (run && startedAtMs !== undefined) {
+        delete run.phaseStarts[phase]
+      }
+      browserPerfLog(`${phase}:end`, {
+        durationMs,
+        ...extra,
+      })
+    },
+    [browserPerfLog],
+  )
 
   const resetUploadPanel = useCallback(() => {
     setProcessing(false)
@@ -613,9 +814,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
     setBaseManifestRoot(currentManifestRoot)
+    browserPerfLog('commit:confirmed', {
+      commitHash,
+      manifestRoot: currentManifestRoot,
+    })
 
     const hasLocalArtifacts = collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0)
     const notifyCommitSuccess = () => {
+      browserPerfLog('run:complete', {
+        manifestRoot: currentManifestRoot,
+        commitHash,
+      })
       onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined)
     }
     if (!hasLocalArtifacts) {
@@ -677,6 +886,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 )
               })
             : []
+        browserPerfStartPhase('persist_local', {
+          manifestRoot: safeRoot,
+          mdus: mdus.length,
+          shards: shardWrites.length,
+        })
         await writeSlabGenerationAtomically(dealId, {
           manifestRoot: safeRoot,
           manifestBlob,
@@ -705,9 +919,20 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
         lastPersistedManifestRootRef.current = safeRoot
         addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.')
+        browserPerfEndPhase('persist_local', {
+          ok: true,
+          manifestRoot: safeRoot,
+          mdus: mdus.length,
+          shards: shardWrites.length,
+        })
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         addLog(`> Failed to save MDUs locally: ${msg}`)
+        browserPerfEndPhase('persist_local', {
+          ok: false,
+          manifestRoot: safeRoot,
+          error: msg,
+        })
       } finally {
         notifyCommitSuccess()
       }
@@ -721,6 +946,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     })
   }, [
     addLog,
+    browserPerfEndPhase,
+    browserPerfLog,
+    browserPerfStartPhase,
     collectedMdus,
     commitHash,
     currentManifestBlob,
@@ -1573,6 +1801,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
       }
 
+      browserPerfStartRun(file)
+      browserPerfStartPhase('read_file', {
+        fileType: file.type || null,
+      })
       lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };
       const startTs = performance.now();
       setShowSystemActivity(false)
@@ -1615,6 +1847,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       const shouldTryGatewayMode2 = useMode2 && isGatewayMode2UploadEnabled({
         gatewayDisabled: !gatewayMode2Enabled,
         gatewayBase: localGateway.url || appConfig.gatewayBase,
+        localGatewayStatus: localGateway.status,
+      })
+      browserPerfLog('flow:selected-path', {
+        useMode2,
+        shouldTryGatewayMode2,
+        gatewayMode2Enabled,
         localGatewayStatus: localGateway.status,
       })
 
@@ -1752,6 +1990,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
           }))
+          browserPerfEndPhase('gateway_ingest', {
+            ok: true,
+            manifestRoot: root,
+            sizeBytes: gatewaySizeBytes,
+            totalMdus: gatewayTotalMdus,
+            totalWitnessMdus: gatewayWitnessMdus,
+            totalUserMdus: gatewayUserMdusFinal,
+          })
           setProcessing(false)
           return true
         }
@@ -2136,6 +2382,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         for (let i = 0; i < gatewayBases.length; i++) {
           const gatewayBase = gatewayBases[i]
           try {
+            browserPerfStartPhase('gateway_ingest', {
+              gatewayBase,
+              attempt: i + 1,
+            })
             const { payload, lastJob } = await runGatewayUpload(
               gatewayBase,
               'Gateway Mode 2: starting upload...',
@@ -2145,10 +2395,20 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             if (finalizeGatewaySuccess(payload, lastJob)) return
             gatewayErrorMessage = 'gateway upload returned no manifest_root'
             gatewayUnreachable = false
+            browserPerfEndPhase('gateway_ingest', {
+              ok: false,
+              gatewayBase,
+              error: gatewayErrorMessage,
+            })
             break
           } catch (e: unknown) {
             let msg = formatGatewayError(e)
             addLog(`> Gateway Mode 2 ingest failed: ${msg}`)
+            browserPerfEndPhase('gateway_ingest', {
+              ok: false,
+              gatewayBase,
+              error: msg,
+            })
 
             const missingLocalState =
               /mode2 append failed/i.test(msg) &&
@@ -2194,6 +2454,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
         if (providerUploadUnavailable && gatewayErrorMessage) {
           const errorMessage = `Storage Provider upload path unavailable: ${gatewayErrorMessage}`
+          browserPerfLog('gateway_ingest:fallback-blocked', {
+            error: errorMessage,
+          })
           setMode2UploadError(errorMessage)
           setShardProgress((p) => ({
             ...p,
@@ -2209,6 +2472,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           if (file.size > gatewayFallbackWasmMaxFileBytes) {
             const sizeLabel = formatBytes(file.size)
             const errorMessage = `Gateway unavailable while processing ${sizeLabel}. In-browser fallback is disabled for large files; please keep the local gateway running, allow local network access for localhost/127.0.0.1, and retry.`
+            browserPerfLog('gateway_ingest:fallback-blocked', {
+              error: errorMessage,
+              fileBytes: file.size,
+            })
             addLog(`> ${errorMessage}`)
             setMode2UploadError(errorMessage)
             setShardProgress((p) => ({
@@ -2223,6 +2490,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
 
           addLog('> Gateway unavailable; falling back to in-browser Mode 2 sharding + stripe upload.')
+          browserPerfLog('gateway_ingest:fallback-browser', {
+            fileBytes: file.size,
+          })
           setMode2UploadError(null)
           setShardProgress((p) => ({
             ...p,
@@ -2247,9 +2517,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
 
       try {
+        browserPerfStartPhase('prepare', {
+          mode: useMode2 ? 'mode2' : 'mode1',
+          path: shouldTryGatewayMode2 ? 'gateway' : 'browser',
+        })
         await ensureWasmReady()
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
+        browserPerfEndPhase('prepare', {
+          ok: false,
+          error: `WASM init failed: ${msg}`,
+        })
         addLog(`Error initializing WASM in worker: ${msg}`)
         setShardProgress((p) => ({
           ...p,
@@ -2263,6 +2541,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
 
       const buffer = await file.arrayBuffer()
+      browserPerfEndPhase('read_file', {
+        ok: true,
+        bufferBytes: buffer.byteLength,
+      })
       console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`)
       let bytes: Uint8Array = new Uint8Array(buffer)
       let logicalSizeBytes = file.size
@@ -2292,7 +2574,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       if (compressUploads && contentEncoding === 'none' && !hasNilceHeader) {
         try {
+          browserPerfStartPhase('nilce_wrap', {
+            inputBytes: bytes.length,
+          })
           const wrapped = await maybeWrapNilceZstd(bytes)
+          browserPerfEndPhase('nilce_wrap', {
+            ok: true,
+            wrapped: wrapped.wrapped,
+            encoding: wrapped.encoding,
+            inputBytes: logicalSizeBytes,
+            outputBytes: wrapped.bytes.length,
+          })
           if (wrapped.wrapped && wrapped.encoding === 'zstd') {
             bytes = wrapped.bytes as Uint8Array
             contentEncoding = 'zstd'
@@ -2304,6 +2596,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e)
+          browserPerfEndPhase('nilce_wrap', {
+            ok: false,
+            error: msg,
+          })
           addLog(`> NilCE compression failed; proceeding without compression (${msg})`)
         }
       }
@@ -2321,6 +2617,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     let existingMaxEnd = 0
 
     if (useMode2) {
+      browserPerfStartPhase('append_bootstrap', {
+        chainManifestRoot: baseManifestRoot || null,
+      })
       const localManifestRoot = normalizeManifestRoot(await readManifestRoot(dealId).catch(() => null))
       const loadLocalAppendBase = async () => {
         const mdu0 = await readMdu(dealId, 0)
@@ -2362,8 +2661,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         existingUserMdus = resolvedAppendBase.existingUserMdus
         existingUserCount = resolvedAppendBase.existingUserCount
         existingMaxEnd = resolvedAppendBase.existingMaxEnd
+        browserPerfEndPhase('append_bootstrap', {
+          ok: true,
+          existingUserCount,
+          existingMaxEnd,
+          localManifestRoot,
+        })
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
+        browserPerfEndPhase('append_bootstrap', {
+          ok: false,
+          error: msg,
+        })
         addLog(`> Mode 2 append bootstrap failed: ${msg}`)
         setShardProgress((p) => ({
           ...p,
@@ -2377,6 +2686,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
     }
 
+    browserPerfStartPhase('plan_upload', {
+      bytes: bytes.length,
+      logicalBytes: logicalSizeBytes,
+    })
     const uploadPlan = buildUploadPlan({
       fileBytes: bytes.length,
       rawMduCapacity: RawMduCapacity,
@@ -2392,6 +2705,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const witnessPayloads = uploadPlan.witnessPayloads
     const userPayloads = uploadPlan.userPayloads
     const workTotal = uploadPlan.workTotal
+    browserPerfEndPhase('plan_upload', {
+      ok: true,
+      totalUserMdus: uploadPlan.totalUserMdus,
+      witnessMduCount: uploadPlan.witnessMduCount,
+      blobsTotal: uploadPlan.blobsTotal,
+      workTotal: uploadPlan.workTotal,
+    })
     addLog(`DEBUG: File bytes: ${bytes.length}, RawMduCapacity: ${RawMduCapacity}, TotalUserMdus: ${totalUserChunks}`);
     console.log('[perf] sharding start', {
       file: file.name,
@@ -2449,6 +2769,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           return Math.max(MIN_BATCH, Math.min(MAX_BATCH, est));
         };
 
+        let lastUiYieldMs = performance.now();
+        const maybeYieldToUi = async (minIntervalMs = 250): Promise<void> => {
+          const now = performance.now();
+          if (now - lastUiYieldMs < minIntervalMs) return;
+          lastUiYieldMs = now;
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        };
+
         const userRoots: Uint8Array[] = [];
         const userMdus: PreparedBrowserMdu[] = [];
         const witnessDataBlobs: Uint8Array[] = [];
@@ -2458,13 +2786,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           witness: [],
           meta: [],
         }
+        const userStageStart = performance.now()
+        const prepareHardwareConcurrency =
+          typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
+            ? Math.max(1, Number(navigator.hardwareConcurrency))
+            : 4
 
         if (useMode2) {
-          const hardwareConcurrency =
-            typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
-              ? Math.max(1, Number(navigator.hardwareConcurrency))
-              : 4
-          const userConcurrency = Math.max(1, Math.min(3, Math.floor((hardwareConcurrency + 1) / 2), totalUserChunks))
+          const userConcurrency = pickExpansionWorkerCount(prepareHardwareConcurrency, totalUserChunks)
           let nextUserIndex = 0
 
           const processMode2UserMdu = async (i: number): Promise<void> => {
@@ -2521,9 +2850,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const workerRustRsMs = Number(result.perf?.rustRsMs ?? 0)
             const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
             const workerRustCommitTransformMs = Number(result.perf?.rustCommitTransformMs ?? 0)
+            const workerRustCommitMsmScalarPrepMs = Number(result.perf?.rustCommitMsmScalarPrepMs ?? 0)
+            const workerRustCommitMsmBucketFillMs = Number(result.perf?.rustCommitMsmBucketFillMs ?? 0)
+            const workerRustCommitMsmReduceMs = Number(result.perf?.rustCommitMsmReduceMs ?? 0)
+            const workerRustCommitMsmDoubleMs = Number(result.perf?.rustCommitMsmDoubleMs ?? 0)
             const workerRustCommitMsmMs = Number(result.perf?.rustCommitMsmMs ?? 0)
             const workerRustCommitCompressMs = Number(result.perf?.rustCommitCompressMs ?? 0)
             const workerRustCommitMs = Number(result.perf?.rustCommitMs ?? 0)
+            const workerRustCommitBackend =
+              typeof result.perf?.rustCommitBackend === 'string' ? result.perf.rustCommitBackend : undefined
+            const workerRustCommitMsmSubphasesAvailable =
+              typeof result.perf?.rustCommitMsmSubphasesAvailable === 'boolean'
+                ? result.perf.rustCommitMsmSubphasesAvailable
+                : undefined
 
             if (!encodedMdu) {
               const encodeStart = performance.now()
@@ -2570,9 +2909,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               workerRustRsMs,
               workerRustCommitDecodeMs,
               workerRustCommitTransformMs,
+              workerRustCommitMsmScalarPrepMs,
+              workerRustCommitMsmBucketFillMs,
+              workerRustCommitMsmReduceMs,
+              workerRustCommitMsmDoubleMs,
               workerRustCommitMsmMs,
               workerRustCommitCompressMs,
               workerRustCommitMs,
+              workerRustCommitBackend,
+              workerRustCommitMsmSubphasesAvailable,
               totalMs: opMs,
               shardCount:
                 result.shards_flat && Number(result.shard_len ?? 0) > 0
@@ -2671,6 +3016,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
               addLog(`> Sharding User MDU #${i}...`);
               const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
+              let lastProgressUiUpdateMs = 0;
               const wasmStart = performance.now();
               const result = await workerClient.shardFileProgressive(chunkCopy, {
                 batchBlobs,
@@ -2678,6 +3024,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   const payload = progress as { kind?: string; done?: number; total?: number };
                   if (payload.kind !== 'blob') return;
                   const done = Number(payload.done ?? 0);
+                  const now = performance.now();
+                  const isFinal = done >= PLANNER_BLOBS_PER_MDU;
+                  if (!isFinal && now - lastProgressUiUpdateMs < 100) return;
+                  lastProgressUiUpdateMs = now;
                   setShardProgress((prev) => {
                     const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
                     const doneNonTrivial = Math.min(done, nonTrivialBlobs);
@@ -2730,6 +3080,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 workerRustRsMs: 0,
                 workerRustCommitDecodeMs: 0,
                 workerRustCommitTransformMs: 0,
+                workerRustCommitMsmScalarPrepMs: 0,
+                workerRustCommitMsmBucketFillMs: 0,
+                workerRustCommitMsmReduceMs: 0,
+                workerRustCommitMsmDoubleMs: 0,
                 workerRustCommitMsmMs: 0,
                 workerRustCommitCompressMs: 0,
                 workerRustCommitMs: 0,
@@ -2760,20 +3114,23 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               setShards((prev) =>
                 prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'expanded' } : s)),
               );
-              await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+              await maybeYieldToUi();
           }
         }
 
         if (useMode2) {
           setMode2Shards(mode2UserShards);
         }
+        const userStageMs = performance.now() - userStageStart
 
+        const witnessConcatStart = performance.now()
         const fullWitnessData = new Uint8Array(witnessDataBlobs.reduce((acc, b) => acc + b.length, 0));
         let offset = 0;
         for (const b of witnessDataBlobs) {
             fullWitnessData.set(b, offset);
             offset += b.length;
         }
+        const witnessConcatMs = performance.now() - witnessConcatStart
 
         const witnessRoots: Uint8Array[] = [];
         const witnessMdus: PreparedBrowserMdu[] = [];
@@ -2782,7 +3139,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (actualWitnessMduCount !== witnessMduCount) {
           throw new Error(`witness_mdu_count mismatch (expected ${witnessMduCount}, got ${actualWitnessMduCount})`);
         }
-        
+
+        const witnessStageStart = performance.now()
         for (let i = 0; i < witnessMduCount; i++) {
             const opStart = performance.now();
             const nonTrivialBlobs = nonTrivialBlobsForPayload(witnessPayloads[i] ?? 0);
@@ -2812,42 +3170,32 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const copyStart = performance.now();
             const chunkCopy = new Uint8Array(witnessMduBytes);
             const copyMs = performance.now() - copyStart;
-            const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
             const wasmStart = performance.now();
-            const result = await workerClient.shardFileProgressive(chunkCopy, {
-              batchBlobs,
-              onProgress: (progress) => {
-                const payload = progress as { kind?: string; done?: number; total?: number };
-                if (payload.kind !== 'blob') return;
-                const done = Number(payload.done ?? 0);
-                setShardProgress((prev) => {
-                  const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
-                  const doneNonTrivial = Math.min(done, nonTrivialBlobs);
-                  const doneTrivial = Math.max(0, done - nonTrivialBlobs);
-                  const workInMdu = doneNonTrivial + doneTrivial * PLANNER_TRIVIAL_BLOB_WEIGHT;
-                  const workDone = workCommitted + Math.min(workTotalThisMdu, workInMdu);
-                  return {
-                    ...prev,
-                    blobsInCurrentMdu: done,
-                    blobsDone,
-                    workDone,
-                    avgWorkMs:
-                      prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
-                  };
-                });
-              },
-            });
+            const result = await workerClient.commitMduProfiled(chunkCopy);
             const wasmMs = performance.now() - wasmStart;
             const workerTotalMs = Number(result.perf?.totalMs ?? 0);
             const workerCommitMs = Number(result.perf?.commitMs ?? 0);
             const workerRootMs = Number(result.perf?.rootMs ?? 0);
             const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
+            const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
+            const workerRustCommitTransformMs = Number(result.perf?.rustCommitTransformMs ?? 0)
+            const workerRustCommitMsmScalarPrepMs = Number(result.perf?.rustCommitMsmScalarPrepMs ?? 0)
+            const workerRustCommitMsmBucketFillMs = Number(result.perf?.rustCommitMsmBucketFillMs ?? 0)
+            const workerRustCommitMsmReduceMs = Number(result.perf?.rustCommitMsmReduceMs ?? 0)
+            const workerRustCommitMsmDoubleMs = Number(result.perf?.rustCommitMsmDoubleMs ?? 0)
+            const workerRustCommitMsmMs = Number(result.perf?.rustCommitMsmMs ?? 0)
+            const workerRustCommitCompressMs = Number(result.perf?.rustCommitCompressMs ?? 0)
+            const workerRustCommitMs = Number(result.perf?.rustCommitMs ?? workerCommitMs)
+            const workerRustCommitBackend =
+              typeof result.perf?.rustCommitBackend === 'string' ? result.perf.rustCommitBackend : undefined
+            const workerRustCommitMsmSubphasesAvailable =
+              typeof result.perf?.rustCommitMsmSubphasesAvailable === 'boolean'
+                ? result.perf.rustCommitMsmSubphasesAvailable
+                : undefined
 
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
             witnessMdus.push(makePreparedMdu(1 + i, witnessMduBytes)); 
-            
-            await workerClient.setMdu0Root(i, rootBytes);
 
             const opMs = performance.now() - opStart;
             const perfSample: PreparePerfSample = {
@@ -2865,13 +3213,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               workerRootMs,
               workerRustEncodeMs: 0,
               workerRustRsMs: 0,
-              workerRustCommitDecodeMs: 0,
-              workerRustCommitTransformMs: 0,
-              workerRustCommitMsmMs: 0,
-              workerRustCommitCompressMs: 0,
-              workerRustCommitMs: 0,
+              workerRustCommitDecodeMs,
+              workerRustCommitTransformMs,
+              workerRustCommitMsmScalarPrepMs,
+              workerRustCommitMsmBucketFillMs,
+              workerRustCommitMsmReduceMs,
+              workerRustCommitMsmDoubleMs,
+              workerRustCommitMsmMs,
+              workerRustCommitCompressMs,
+              workerRustCommitMs,
+              workerRustCommitBackend,
+              workerRustCommitMsmSubphasesAvailable,
               totalMs: opMs,
-              batchBlobs,
             };
             perfSamples.witness.push(perfSample);
             console.log('[perf] witness mdu', {
@@ -2895,11 +3248,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               };
             });
             setShards((prev) => prev.map((s) => (s.id === 1 + i ? { ...s, status: 'expanded' } : s)));
-            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            await maybeYieldToUi();
         }
+        const witnessStageMs = performance.now() - witnessStageStart
 
-        for (let i = 0; i < userRoots.length; i++) {
-            await workerClient.setMdu0Root(witnessMduCount + i, userRoots[i]);
+        const witnessRootsFlat = new Uint8Array(witnessRoots.length * 32)
+        for (let i = 0; i < witnessRoots.length; i += 1) {
+          witnessRootsFlat.set(witnessRoots[i], i * 32)
+        }
+        const userRootsFlat = new Uint8Array(userRoots.length * 32)
+        for (let i = 0; i < userRoots.length; i += 1) {
+          userRootsFlat.set(userRoots[i], i * 32)
         }
 
         const fileStartOffset = appendMode2 ? uploadPlan.appendStartOffset : 0;
@@ -2907,8 +3266,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (recordPath !== file.name) {
           addLog(`> NilFS path truncated for V1 record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
         }
-        await workerClient.appendFileToMdu0(recordPath, bytes.length, fileStartOffset, fileFlags);
-
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();
         const workTotalThisMdu0 = weightedWorkForMdu(1);
@@ -2924,53 +3281,52 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           workDone: workCommitted,
         }));
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'processing' } : s)));
-        const mdu0FetchStart = performance.now();
-        const mdu0Bytes = await workerClient.getMdu0Bytes();
-        const mdu0FetchMs = performance.now() - mdu0FetchStart;
-
-        const mdu0CopyStart = performance.now();
-        const mdu0Copy = new Uint8Array(mdu0Bytes);
-        const mdu0CopyMs = performance.now() - mdu0CopyStart;
-        const mdu0BatchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
-        const wasmStart = performance.now();
-        const mdu0Result = await workerClient.shardFileProgressive(mdu0Copy, {
-          batchBlobs: mdu0BatchBlobs,
-          onProgress: (progress) => {
-            const payload = progress as { kind?: string; done?: number; total?: number };
-            if (payload.kind !== 'blob') return;
-            const done = Number(payload.done ?? 0);
-            setShardProgress((prev) => {
-              const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
-              const doneNonTrivial = Math.min(done, 1);
-              const doneTrivial = Math.max(0, done - 1);
-              const workInMdu = doneNonTrivial + doneTrivial * PLANNER_TRIVIAL_BLOB_WEIGHT;
-              const workDone = workCommitted + Math.min(workTotalThisMdu0, workInMdu);
-              return {
-                ...prev,
-                blobsInCurrentMdu: done,
-                blobsDone,
-                workDone,
-                avgWorkMs:
-                  prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
-              };
-            });
-          },
-        });
-        const wasmMs = performance.now() - wasmStart;
-        const workerTotalMs = Number(mdu0Result.perf?.totalMs ?? 0);
-        const workerCommitMs = Number(mdu0Result.perf?.commitMs ?? 0);
-        const workerRootMs = Number(mdu0Result.perf?.rootMs ?? 0);
+        const mdu0PrepareStart = performance.now()
+        const mdu0PrepareResult = await workerClient.prepareAndCommitMdu0(
+          witnessRootsFlat,
+          witnessMduCount,
+          userRootsFlat,
+          recordPath,
+          bytes.length,
+          fileStartOffset,
+          fileFlags,
+        )
+        const wasmMs = performance.now() - mdu0PrepareStart
+        const userRootRegistrationMs =
+          Number(mdu0PrepareResult.perf?.witnessRootSetMs ?? 0) + Number(mdu0PrepareResult.perf?.userRootSetMs ?? 0)
+        const mdu0AppendMs =
+          Number(mdu0PrepareResult.perf?.appendMs ?? 0) + Number(mdu0PrepareResult.perf?.bytesMs ?? 0)
+        const mdu0Bytes = toU8(mdu0PrepareResult.mdu0_bytes);
+        const workerTotalMs = Number(mdu0PrepareResult.perf?.totalMs ?? 0);
+        const workerCommitMs = Number(mdu0PrepareResult.perf?.commitMs ?? 0);
+        const workerRootMs = Number(mdu0PrepareResult.perf?.rootMs ?? 0);
         const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
-        const mdu0Root = toU8(mdu0Result.mdu_root);
+        const workerRustCommitDecodeMs = Number(mdu0PrepareResult.perf?.rustCommitDecodeMs ?? 0)
+        const workerRustCommitTransformMs = Number(mdu0PrepareResult.perf?.rustCommitTransformMs ?? 0)
+        const workerRustCommitMsmScalarPrepMs = Number(mdu0PrepareResult.perf?.rustCommitMsmScalarPrepMs ?? 0)
+        const workerRustCommitMsmBucketFillMs = Number(mdu0PrepareResult.perf?.rustCommitMsmBucketFillMs ?? 0)
+        const workerRustCommitMsmReduceMs = Number(mdu0PrepareResult.perf?.rustCommitMsmReduceMs ?? 0)
+        const workerRustCommitMsmDoubleMs = Number(mdu0PrepareResult.perf?.rustCommitMsmDoubleMs ?? 0)
+        const workerRustCommitMsmMs = Number(mdu0PrepareResult.perf?.rustCommitMsmMs ?? 0)
+        const workerRustCommitCompressMs = Number(mdu0PrepareResult.perf?.rustCommitCompressMs ?? 0)
+        const workerRustCommitMs = Number(mdu0PrepareResult.perf?.rustCommitMs ?? workerCommitMs)
+        const workerRustCommitBackend =
+          typeof mdu0PrepareResult.perf?.rustCommitBackend === 'string' ? mdu0PrepareResult.perf.rustCommitBackend : undefined
+        const workerRustCommitMsmSubphasesAvailable =
+          typeof mdu0PrepareResult.perf?.rustCommitMsmSubphasesAvailable === 'boolean'
+            ? mdu0PrepareResult.perf.rustCommitMsmSubphasesAvailable
+            : undefined
+        const mdu0Root = toU8(mdu0PrepareResult.mdu_root);
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
         const opMs = performance.now() - opStartMdu0;
+        const mdu0StageMs = opMs
         const metaPerfSample: PreparePerfSample = {
           index: 0,
           kind: 'meta',
           rawBytes: mdu0Bytes.byteLength,
           expansionPath: 'progressive',
           encodeMs: 0,
-          copyMs: mdu0CopyMs,
+          copyMs: 0,
           wasmMs,
           workerTotalMs,
           workerQueueMs,
@@ -2979,17 +3335,22 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           workerRootMs,
           workerRustEncodeMs: 0,
           workerRustRsMs: 0,
-          workerRustCommitDecodeMs: 0,
-          workerRustCommitTransformMs: 0,
-          workerRustCommitMsmMs: 0,
-          workerRustCommitCompressMs: 0,
-          workerRustCommitMs: 0,
+          workerRustCommitDecodeMs,
+          workerRustCommitTransformMs,
+          workerRustCommitMsmScalarPrepMs,
+          workerRustCommitMsmBucketFillMs,
+          workerRustCommitMsmReduceMs,
+          workerRustCommitMsmDoubleMs,
+          workerRustCommitMsmMs,
+          workerRustCommitCompressMs,
+          workerRustCommitMs,
+          workerRustCommitBackend,
+          workerRustCommitMsmSubphasesAvailable,
           totalMs: opMs,
-          batchBlobs: mdu0BatchBlobs,
         }
         perfSamples.meta.push(metaPerfSample)
         console.log('[perf] meta mdu0', {
-          fetchMs: mdu0FetchMs,
+          prepareBuilderMs: Number(mdu0PrepareResult.perf?.prepareBuilderMs ?? 0),
           ...metaPerfSample,
         });
         prevCommitMsPerMdu = opMs;
@@ -3010,6 +3371,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           };
         });
 
+        const rootsAssembleStart = performance.now()
         const allRoots = new Uint8Array(32 * (1 + witnessRoots.length + userRoots.length));
         allRoots.set(mdu0Root, 0);
         let aggOffset = 32;
@@ -3021,6 +3383,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             allRoots.set(r, aggOffset);
             aggOffset += 32;
         }
+        const rootsAssembleMs = performance.now() - rootsAssembleStart
 
         addLog(`> Computing Manifest Root (Aggregation)...`);
         setShardProgress((p) => ({
@@ -3072,6 +3435,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const sumBy = (samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number) =>
           samples.reduce((total, sample) => total + pick(sample), 0)
         const allSamples = [...perfSamples.user, ...perfSamples.witness, ...perfSamples.meta]
+        const rustCommitBackend =
+          perfSamples.user.find((sample) => typeof sample.workerRustCommitBackend === 'string')?.workerRustCommitBackend
+        const rustCommitMsmSubphasesAvailable = perfSamples.user.some(
+          (sample) => sample.workerRustCommitMsmSubphasesAvailable === true,
+        )
+        const slowestUserSample =
+          perfSamples.user.reduce<PreparePerfSample | null>(
+            (best, sample) => (!best || sample.totalMs > best.totalMs ? sample : best),
+            null,
+          ) ?? null
         const prepareProfile: PreparePerfProfile = {
           totalMs: elapsedMs,
           fileBytes: bytes.length,
@@ -3079,7 +3452,44 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalMdus: finalMdus.length,
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
+          userConcurrency: useMode2 ? pickExpansionWorkerCount(prepareHardwareConcurrency, totalUserChunks) : 1,
           manifestMs,
+          wallClock: {
+            prepareMs: elapsedMs,
+            userStageMs,
+            witnessConcatMs,
+            witnessStageMs,
+            userRootRegistrationMs,
+            mdu0AppendMs,
+            mdu0StageMs,
+            rootsAssembleMs,
+            manifestMs,
+          },
+          summary: {
+            userSampleCount: perfSamples.user.length,
+            witnessSampleCount: perfSamples.witness.length,
+            metaSampleCount: perfSamples.meta.length,
+            maxUserTotalMs: maxBy(perfSamples.user, (sample) => sample.totalMs),
+            maxUserCommitMs: maxBy(perfSamples.user, (sample) => sample.workerRustCommitMs),
+            maxUserExpandMs: maxBy(perfSamples.user, (sample) => sample.workerExpandMs),
+            maxUserQueueMs: maxBy(perfSamples.user, (sample) => sample.workerQueueMs),
+            maxWitnessTotalMs: maxBy(perfSamples.witness, (sample) => sample.totalMs),
+            maxWitnessCommitMs: maxBy(perfSamples.witness, (sample) => sample.workerCommitMs),
+            maxWitnessQueueMs: maxBy(perfSamples.witness, (sample) => sample.workerQueueMs),
+            sumUserTotalMs: sumBy(perfSamples.user, (sample) => sample.totalMs),
+            sumUserCommitMs: sumBy(perfSamples.user, (sample) => sample.workerRustCommitMs),
+            sumUserExpandMs: sumBy(perfSamples.user, (sample) => sample.workerExpandMs),
+            sumUserQueueMs: sumBy(perfSamples.user, (sample) => sample.workerQueueMs),
+            sumWitnessTotalMs: sumBy(perfSamples.witness, (sample) => sample.totalMs),
+            sumWitnessCommitMs: sumBy(perfSamples.witness, (sample) => sample.workerCommitMs),
+            sumWitnessQueueMs: sumBy(perfSamples.witness, (sample) => sample.workerQueueMs),
+            slowestUserMduIndex: slowestUserSample?.index ?? null,
+            slowestWitnessMduIndex:
+              perfSamples.witness.reduce<PreparePerfSample | null>(
+                (best, sample) => (!best || sample.totalMs > best.totalMs ? sample : best),
+                null,
+              )?.index ?? null,
+          },
           phases: {
             jsEncodeMs: sumBy(allSamples, (sample) => sample.encodeMs),
             jsCopyMs: sumBy(allSamples, (sample) => sample.copyMs),
@@ -3091,11 +3501,28 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             workerRustRsMs: sumBy(allSamples, (sample) => sample.workerRustRsMs),
             workerRustCommitDecodeMs: sumBy(allSamples, (sample) => sample.workerRustCommitDecodeMs),
             workerRustCommitTransformMs: sumBy(allSamples, (sample) => sample.workerRustCommitTransformMs),
+            workerRustCommitMsmScalarPrepMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmScalarPrepMs),
+            workerRustCommitMsmBucketFillMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmBucketFillMs),
+            workerRustCommitMsmReduceMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmReduceMs),
+            workerRustCommitMsmDoubleMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmDoubleMs),
             workerRustCommitMsmMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmMs),
             workerRustCommitCompressMs: sumBy(allSamples, (sample) => sample.workerRustCommitCompressMs),
             workerRustCommitMs: sumBy(allSamples, (sample) => sample.workerRustCommitMs),
+            userStageWallMs: userStageMs,
+            witnessConcatWallMs: witnessConcatMs,
+            witnessStageWallMs: witnessStageMs,
+            userRootRegistrationWallMs: userRootRegistrationMs,
+            mdu0AppendWallMs: mdu0AppendMs,
+            mdu0StageWallMs: mdu0StageMs,
+            rootsAssembleWallMs: rootsAssembleMs,
             manifestMs,
             unaccountedMs: 0,
+          },
+          notes: {
+            phasesAreParallelSums: true,
+            unaccountedMsIsWallClockRemainder: true,
+            rustCommitBackend,
+            rustCommitMsmSubphasesAvailable,
           },
           samples: perfSamples,
         }
@@ -3112,7 +3539,55 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         )
 
         if (typeof window !== 'undefined') {
-          (window as typeof window & { __nilPreparePerf?: PreparePerfProfile }).__nilPreparePerf = prepareProfile
+          (
+            window as typeof window & {
+              __nilPreparePerf?: PreparePerfProfile
+              __nilPrepareSummary?: NilPrepareSummary
+              __nilPerfBundle?: NilBrowserPerfBundle
+            }
+          ).__nilPreparePerf = prepareProfile
+          const prepareSummary = {
+            prepareWallMs: roundPerfMs(elapsedMs) ?? 0,
+            manifestMs: roundPerfMs(manifestMs) ?? 0,
+            userStageWallMs: roundPerfMs(userStageMs) ?? 0,
+            witnessConcatWallMs: roundPerfMs(witnessConcatMs) ?? 0,
+            witnessStageWallMs: roundPerfMs(witnessStageMs) ?? 0,
+            userRootRegistrationWallMs: roundPerfMs(userRootRegistrationMs) ?? 0,
+            mdu0AppendWallMs: roundPerfMs(mdu0AppendMs) ?? 0,
+            mdu0StageWallMs: roundPerfMs(mdu0StageMs) ?? 0,
+            rootsAssembleWallMs: roundPerfMs(rootsAssembleMs) ?? 0,
+            ...prepareProfile.summary,
+          }
+          ;(
+            window as typeof window & {
+              __nilPrepareSummary?: NilPrepareSummary
+              __nilPerfBundle?: NilBrowserPerfBundle
+              __nilBrowserPerfLog?: Array<Record<string, unknown>>
+              __nilBrowserPerfLast?: Record<string, unknown>
+            }
+          ).__nilPrepareSummary = prepareSummary
+          ;(
+            window as typeof window & {
+              __nilPerfBundle?: NilBrowserPerfBundle
+              __nilBrowserPerfLog?: Array<Record<string, unknown>>
+              __nilBrowserPerfLast?: Record<string, unknown>
+            }
+          ).__nilPerfBundle = {
+            browserPerfLog:
+              (
+                window as typeof window & {
+                  __nilBrowserPerfLog?: Array<Record<string, unknown>>
+                }
+              ).__nilBrowserPerfLog ?? [],
+            browserPerfLast:
+              (
+                window as typeof window & {
+                  __nilBrowserPerfLast?: Record<string, unknown>
+                }
+              ).__nilBrowserPerfLast ?? null,
+            prepareSummary,
+            prepareProfile,
+          }
         }
         console.log('[perf] sharding totals', {
           totalMs: elapsedMs,
@@ -3122,7 +3597,77 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalWitnessMdus: witnessMduCount,
           manifestMs,
         });
+        console.log('[perf] prepare summary', {
+          prepareWallMs: roundPerfMs(elapsedMs),
+          userConcurrency: prepareProfile.userConcurrency,
+          totalUserMdus: totalUserChunks,
+          totalWitnessMdus: witnessMduCount,
+          userStageWallMs: roundPerfMs(userStageMs),
+          witnessConcatWallMs: roundPerfMs(witnessConcatMs),
+          witnessStageWallMs: roundPerfMs(witnessStageMs),
+          userRootRegistrationWallMs: roundPerfMs(userRootRegistrationMs),
+          mdu0AppendWallMs: roundPerfMs(mdu0AppendMs),
+          mdu0StageWallMs: roundPerfMs(mdu0StageMs),
+          rootsAssembleWallMs: roundPerfMs(rootsAssembleMs),
+          maxUserTotalMs: roundPerfMs(prepareProfile.summary.maxUserTotalMs),
+          maxUserCommitMs: roundPerfMs(prepareProfile.summary.maxUserCommitMs),
+          maxUserExpandMs: roundPerfMs(prepareProfile.summary.maxUserExpandMs),
+          maxUserQueueMs: roundPerfMs(prepareProfile.summary.maxUserQueueMs),
+          maxWitnessTotalMs: roundPerfMs(prepareProfile.summary.maxWitnessTotalMs),
+          maxWitnessCommitMs: roundPerfMs(prepareProfile.summary.maxWitnessCommitMs),
+          maxWitnessQueueMs: roundPerfMs(prepareProfile.summary.maxWitnessQueueMs),
+          sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
+          sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
+          sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          sumWitnessCommitMs: roundPerfMs(prepareProfile.summary.sumWitnessCommitMs),
+          sumWitnessQueueMs: roundPerfMs(prepareProfile.summary.sumWitnessQueueMs),
+          rustCommitDecodeMs: roundPerfMs(prepareProfile.phases.workerRustCommitDecodeMs),
+          rustCommitTransformMs: roundPerfMs(prepareProfile.phases.workerRustCommitTransformMs),
+          rustCommitMsmScalarPrepMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmScalarPrepMs),
+          rustCommitMsmBucketFillMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmBucketFillMs),
+          rustCommitMsmReduceMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmReduceMs),
+          rustCommitMsmDoubleMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmDoubleMs),
+          workerRustCommitMsmMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmMs),
+          rustCommitCompressMs: roundPerfMs(prepareProfile.phases.workerRustCommitCompressMs),
+          rustCommitBackend,
+          rustCommitMsmSubphasesAvailable,
+          slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
+          slowestWitnessMduIndex: prepareProfile.summary.slowestWitnessMduIndex,
+          manifestMs: roundPerfMs(manifestMs),
+          note: 'max* fields are closest to wall-clock critical path; sum* fields are parallel worker totals',
+        });
         console.log('[perf] prepare profile', prepareProfile);
+        browserPerfEndPhase('prepare', {
+          ok: true,
+          totalMs: roundPerfMs(elapsedMs),
+          fileBytes: bytes.length,
+          totalMdus: finalMdus.length,
+          totalUserMdus: totalUserChunks,
+          totalWitnessMdus: witnessMduCount,
+          userConcurrency: prepareProfile.userConcurrency,
+          userStageWallMs: roundPerfMs(userStageMs),
+          witnessConcatWallMs: roundPerfMs(witnessConcatMs),
+          witnessStageWallMs: roundPerfMs(witnessStageMs),
+          userRootRegistrationWallMs: roundPerfMs(userRootRegistrationMs),
+          mdu0AppendWallMs: roundPerfMs(mdu0AppendMs),
+          mdu0StageWallMs: roundPerfMs(mdu0StageMs),
+          rootsAssembleWallMs: roundPerfMs(rootsAssembleMs),
+          maxUserTotalMs: roundPerfMs(prepareProfile.summary.maxUserTotalMs),
+          maxUserCommitMs: roundPerfMs(prepareProfile.summary.maxUserCommitMs),
+          maxUserExpandMs: roundPerfMs(prepareProfile.summary.maxUserExpandMs),
+          maxUserQueueMs: roundPerfMs(prepareProfile.summary.maxUserQueueMs),
+          maxWitnessTotalMs: roundPerfMs(prepareProfile.summary.maxWitnessTotalMs),
+          maxWitnessCommitMs: roundPerfMs(prepareProfile.summary.maxWitnessCommitMs),
+          maxWitnessQueueMs: roundPerfMs(prepareProfile.summary.maxWitnessQueueMs),
+          sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
+          sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
+          sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          sumWitnessCommitMs: roundPerfMs(prepareProfile.summary.sumWitnessCommitMs),
+          sumWitnessQueueMs: roundPerfMs(prepareProfile.summary.sumWitnessQueueMs),
+          slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
+          slowestWitnessMduIndex: prepareProfile.summary.slowestWitnessMduIndex,
+          manifestMs: roundPerfMs(manifestMs),
+        })
 
         const mib = logicalSizeBytes / (1024 * 1024);
         const seconds = elapsedMs / 1000;
@@ -3139,6 +3684,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } catch (e: unknown) {
         console.error(e);
         const msg = e instanceof Error ? e.message : String(e);
+        browserPerfLog('run:error', {
+          error: msg,
+        })
         addLog(`Error: ${msg}`);
         setShardProgress((p) => ({
           ...p,
@@ -3152,7 +3700,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded]);
+  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, browserPerfEndPhase, browserPerfLog, browserPerfStartPhase, browserPerfStartRun, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
@@ -3262,6 +3810,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!currentManifestRoot) return false
       if (processing || activeUploading || isUploadComplete) return false
 
+      browserPerfStartPhase('upload', {
+        trigger,
+        mode: isMode2 ? 'mode2' : 'mode1',
+        preparedMdus: collectedMdus.length,
+        stripedMdus: mode2Shards.length,
+      })
       if (trigger === 'auto') {
         addLog('> Expansion complete. Starting upload to Storage Providers...')
       } else {
@@ -3269,6 +3823,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
 
       const ok = isMode2 ? await uploadMode2() : await uploadMdus(collectedMdus)
+      browserPerfEndPhase('upload', {
+        ok,
+        mode: isMode2 ? 'mode2' : 'mode1',
+      })
       if (ok) {
         void mirrorSlabToGateway()
       }
@@ -3277,11 +3835,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     [
       activeUploading,
       addLog,
+      browserPerfEndPhase,
+      browserPerfStartPhase,
       collectedMdus,
       currentManifestRoot,
       isMode2,
       isUploadComplete,
       mirrorSlabToGateway,
+      mode2Shards.length,
       processing,
       uploadMdus,
       uploadMode2,
@@ -3452,6 +4013,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!readyToCommit || !currentManifestRoot) return false
       if (isCommitPending || isCommitConfirming || isAlreadyCommitted) return false
 
+      browserPerfStartPhase('commit', {
+        trigger,
+        manifestRoot: currentManifestRoot,
+      })
       if (trigger === 'auto') {
         addLog('> Upload complete. Starting on-chain commit...')
       } else {
@@ -3469,9 +4034,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalUserMdus: shardProgress.totalUserMdus,
           mdus: collectedMdus,
         })
+        browserPerfEndPhase('commit', {
+          ok: true,
+          manifestRoot: currentManifestRoot,
+        })
         return true
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
+        browserPerfEndPhase('commit', {
+          ok: false,
+          manifestRoot: currentManifestRoot,
+          error: msg,
+        })
         addLog(`Commit failed: ${msg}`)
         return false
       }
@@ -3479,6 +4053,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     [
       addLog,
       baseManifestRoot,
+      browserPerfEndPhase,
+      browserPerfStartPhase,
       collectedMdus,
       currentManifestRoot,
       dealId,

@@ -24,7 +24,7 @@ declare module '/wasm/nil_core.js' {
     compute_mdu_root(witness_bytes: Uint8Array): unknown
     compute_manifest(roots: Uint8Array): unknown
     set_pippenger_window_bits(bits: number): void
-    set_wasm_msm_basis_mode(mode: 'projective' | 'affine'): void
+    set_wasm_msm_basis_mode(mode: 'blst' | 'projective' | 'affine'): void
   }
 
   export class WasmMdu0Builder {

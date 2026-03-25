@@ -2,6 +2,7 @@
 
 // This file provides a simple client API to interact with the gateway.worker.ts
 // It abstracts the message passing and Promise-based communication.
+import { DEFAULT_EXPANSION_HARDWARE_CONCURRENCY, pickExpansionWorkerCount } from './expansionWorkers'
 
 // Instantiate the worker
 const worker = new Worker(new URL('../workers/gateway.worker.ts', import.meta.url), {
@@ -58,8 +59,8 @@ worker.onerror = (error) => {
 function initializeExpansionPool(trustedSetupBytes: Uint8Array): Promise<void> {
   if (expansionWorkersReady) return expansionWorkersReady
 
-  const hc = navigator.hardwareConcurrency ?? 4
-  const desired = Math.max(1, Math.min(3, Math.max(0, Number(hc) - 1) || 1))
+  const hc = navigator.hardwareConcurrency ?? DEFAULT_EXPANSION_HARDWARE_CONCURRENCY
+  const desired = pickExpansionWorkerCount(hc)
   if (desired <= 1) {
     expansionWorkers = []
     expansionWorkersReady = Promise.resolve()
@@ -136,7 +137,7 @@ function sendMessageToWorker(
 }
 
 function sendExpansionMessageToWorker(
-  type: 'expandMduRs' | 'expandPayloadRs',
+  type: 'expandMduRs' | 'expandPayloadRs' | 'commitMduProfiled' | 'computeManifest',
   payload: unknown,
   transferables?: Transferable[],
 ): Promise<unknown> {
@@ -144,8 +145,19 @@ function sendExpansionMessageToWorker(
     return sendMessageToWorker(type, payload, transferables)
   }
 
-  const w = expansionWorkers[expansionRoundRobin % expansionWorkers.length]
-  expansionRoundRobin += 1
+  let bestWorker = expansionWorkers[expansionRoundRobin % expansionWorkers.length]
+  let bestPending = expansionPendingByWorker.get(bestWorker)?.size ?? 0
+  for (let i = 1; i < expansionWorkers.length; i += 1) {
+    const candidate = expansionWorkers[(expansionRoundRobin + i) % expansionWorkers.length]
+    const pending = expansionPendingByWorker.get(candidate)?.size ?? 0
+    if (pending < bestPending) {
+      bestWorker = candidate
+      bestPending = pending
+      if (pending === 0) break
+    }
+  }
+  const w = bestWorker
+  expansionRoundRobin = (expansionWorkers.indexOf(w) + 1) % expansionWorkers.length
   const id = expansionNextMessageId++
   return new Promise((resolve, reject) => {
     expansionPending.set(id, { resolve, reject })
@@ -164,7 +176,54 @@ export interface ExpandedMdu {
       batchCount?: number;
       batchSize?: number;
       blobCount?: number;
+      rustCommitDecodeMs?: number;
+      rustCommitTransformMs?: number;
+      rustCommitMsmScalarPrepMs?: number;
+      rustCommitMsmBucketFillMs?: number;
+      rustCommitMsmReduceMs?: number;
+      rustCommitMsmDoubleMs?: number;
+      rustCommitMsmMs?: number;
+      rustCommitCompressMs?: number;
+      rustCommitMs?: number;
+      rustCommitBackend?: string;
+      rustCommitMsmSubphasesAvailable?: boolean;
     };
+}
+
+export interface PreparedMdu0 {
+  mdu0_bytes: Uint8Array | number[]
+  perf?: {
+    witnessRootSetMs?: number
+    userRootSetMs?: number
+    appendMs?: number
+    bytesMs?: number
+    totalMs?: number
+  }
+}
+
+export interface PreparedCommittedMdu0 extends PreparedMdu0 {
+  mdu_root: Uint8Array | number[]
+  perf?: {
+    witnessRootSetMs?: number
+    userRootSetMs?: number
+    appendMs?: number
+    bytesMs?: number
+    prepareBuilderMs?: number
+    commitMs?: number
+    rootMs?: number
+    totalMs?: number
+    rustCommitDecodeMs?: number
+    rustCommitTransformMs?: number
+    rustCommitMsmScalarPrepMs?: number
+    rustCommitMsmBucketFillMs?: number
+    rustCommitMsmReduceMs?: number
+    rustCommitMsmDoubleMs?: number
+    rustCommitMsmMs?: number
+    rustCommitCompressMs?: number
+    rustCommitMs?: number
+    rustCommitBackend?: string
+    rustCommitMsmSubphasesAvailable?: boolean
+  }
 }
 
 export interface ExpandedStripe {
@@ -183,10 +242,16 @@ export interface ExpandedStripe {
       rustRsMs?: number;
       rustCommitDecodeMs?: number;
       rustCommitTransformMs?: number;
+      rustCommitMsmScalarPrepMs?: number;
+      rustCommitMsmBucketFillMs?: number;
+      rustCommitMsmReduceMs?: number;
+      rustCommitMsmDoubleMs?: number;
       rustCommitMsmMs?: number;
       rustCommitCompressMs?: number;
       rustCommitMs?: number;
       rustTotalMs?: number;
+      rustCommitBackend?: string;
+      rustCommitMsmSubphasesAvailable?: boolean;
       rows?: number;
       shardsTotal?: number;
     };
@@ -232,6 +297,42 @@ export const workerClient = {
     return sendMessageToWorker('setMdu0Root', { index, root }) as Promise<string>;
   },
 
+  async setMdu0RootsBatch(startIndex: number, rootsFlat: Uint8Array): Promise<string> {
+    return sendMessageToWorker('setMdu0RootsBatch', { startIndex, rootsFlat }, [rootsFlat.buffer]) as Promise<string>;
+  },
+
+  async prepareMdu0Bytes(
+    witnessRootsFlat: Uint8Array,
+    userRootStartIndex: number,
+    userRootsFlat: Uint8Array,
+    path: string,
+    size: number,
+    startOffset: number,
+    flags?: number,
+  ): Promise<PreparedMdu0> {
+    return sendMessageToWorker(
+      'prepareMdu0Bytes',
+      { witnessRootsFlat, userRootStartIndex, userRootsFlat, path, size, startOffset, flags },
+      [witnessRootsFlat.buffer, userRootsFlat.buffer],
+    ) as Promise<PreparedMdu0>
+  },
+
+  async prepareAndCommitMdu0(
+    witnessRootsFlat: Uint8Array,
+    userRootStartIndex: number,
+    userRootsFlat: Uint8Array,
+    path: string,
+    size: number,
+    startOffset: number,
+    flags?: number,
+  ): Promise<PreparedCommittedMdu0> {
+    return sendMessageToWorker(
+      'prepareAndCommitMdu0',
+      { witnessRootsFlat, userRootStartIndex, userRootsFlat, path, size, startOffset, flags },
+      [witnessRootsFlat.buffer, userRootsFlat.buffer],
+    ) as Promise<PreparedCommittedMdu0>
+  },
+
   // Get witness count from MDU #0 builder
   async getMdu0WitnessCount(): Promise<number> {
     return sendMessageToWorker('getMdu0WitnessCount', {}) as Promise<number>;
@@ -255,6 +356,10 @@ export const workerClient = {
     ) as Promise<ExpandedMdu>;
   },
 
+  async commitMduProfiled(data: Uint8Array): Promise<ExpandedMdu> {
+    return sendExpansionMessageToWorker('commitMduProfiled', { data }, [data.buffer]) as Promise<ExpandedMdu>;
+  },
+
   async expandMduRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
     return sendExpansionMessageToWorker('expandMduRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
   },
@@ -265,7 +370,10 @@ export const workerClient = {
 
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)
   async computeManifest(roots: Uint8Array): Promise<{ root: Uint8Array; blob: Uint8Array }> {
-    return sendMessageToWorker('computeManifest', { roots }, [roots.buffer]) as Promise<{ root: Uint8Array; blob: Uint8Array }>;
+    return sendExpansionMessageToWorker('computeManifest', { roots }, [roots.buffer]) as Promise<{
+      root: Uint8Array;
+      blob: Uint8Array;
+    }>;
   },
 
   async computeMduRoot(witness: Uint8Array): Promise<Uint8Array> {
