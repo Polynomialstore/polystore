@@ -200,6 +200,10 @@ export interface ExpandedStripe {
       rustRsMs?: number;
       rustCommitDecodeMs?: number;
       rustCommitTransformMs?: number;
+      rustCommitMsmScalarPrepMs?: number;
+      rustCommitMsmBucketFillMs?: number;
+      rustCommitMsmReduceMs?: number;
+      rustCommitMsmDoubleMs?: number;
       rustCommitMsmMs?: number;
       rustCommitCompressMs?: number;
       rustCommitMs?: number;

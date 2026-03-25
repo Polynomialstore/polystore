@@ -138,6 +138,10 @@ type PreparePerfSample = {
   workerRustRsMs: number
   workerRustCommitDecodeMs: number
   workerRustCommitTransformMs: number
+  workerRustCommitMsmScalarPrepMs: number
+  workerRustCommitMsmBucketFillMs: number
+  workerRustCommitMsmReduceMs: number
+  workerRustCommitMsmDoubleMs: number
   workerRustCommitMsmMs: number
   workerRustCommitCompressMs: number
   workerRustCommitMs: number
@@ -184,6 +188,10 @@ type PreparePerfProfile = {
     workerRustRsMs: number
     workerRustCommitDecodeMs: number
     workerRustCommitTransformMs: number
+    workerRustCommitMsmScalarPrepMs: number
+    workerRustCommitMsmBucketFillMs: number
+    workerRustCommitMsmReduceMs: number
+    workerRustCommitMsmDoubleMs: number
     workerRustCommitMsmMs: number
     workerRustCommitCompressMs: number
     workerRustCommitMs: number
@@ -212,6 +220,16 @@ type BrowserPerfRun = {
 function roundPerfMs(value: number | null | undefined): number | null {
   if (!Number.isFinite(value ?? NaN)) return null
   return Math.round(Number(value) * 100) / 100
+}
+
+type NilBrowserPerfBundle = {
+  browserPerfLog: Array<Record<string, unknown>>
+  browserPerfLast: Record<string, unknown> | null
+  prepareSummary: (PreparePerfProfile['summary'] & {
+    prepareWallMs: number
+    manifestMs: number
+  }) | null
+  prepareProfile: PreparePerfProfile | null
 }
 
 function maxBy(samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number): number {
@@ -488,12 +506,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const perfWindow = window as typeof window & {
           __nilBrowserPerfLog?: Array<Record<string, unknown>>
           __nilBrowserPerfLast?: Record<string, unknown>
+          __nilPerfBundle?: NilBrowserPerfBundle
         }
         if (!Array.isArray(perfWindow.__nilBrowserPerfLog)) {
           perfWindow.__nilBrowserPerfLog = []
         }
         perfWindow.__nilBrowserPerfLog.push(payload)
         perfWindow.__nilBrowserPerfLast = payload
+        perfWindow.__nilPerfBundle = {
+          browserPerfLog: perfWindow.__nilBrowserPerfLog,
+          browserPerfLast: perfWindow.__nilBrowserPerfLast ?? null,
+          prepareSummary: perfWindow.__nilPerfBundle?.prepareSummary ?? null,
+          prepareProfile: perfWindow.__nilPerfBundle?.prepareProfile ?? null,
+        }
       }
       console.log('[browser-perf]', payload)
     },
@@ -2769,6 +2794,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const workerRustRsMs = Number(result.perf?.rustRsMs ?? 0)
             const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
             const workerRustCommitTransformMs = Number(result.perf?.rustCommitTransformMs ?? 0)
+            const workerRustCommitMsmScalarPrepMs = Number(result.perf?.rustCommitMsmScalarPrepMs ?? 0)
+            const workerRustCommitMsmBucketFillMs = Number(result.perf?.rustCommitMsmBucketFillMs ?? 0)
+            const workerRustCommitMsmReduceMs = Number(result.perf?.rustCommitMsmReduceMs ?? 0)
+            const workerRustCommitMsmDoubleMs = Number(result.perf?.rustCommitMsmDoubleMs ?? 0)
             const workerRustCommitMsmMs = Number(result.perf?.rustCommitMsmMs ?? 0)
             const workerRustCommitCompressMs = Number(result.perf?.rustCommitCompressMs ?? 0)
             const workerRustCommitMs = Number(result.perf?.rustCommitMs ?? 0)
@@ -2818,6 +2847,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               workerRustRsMs,
               workerRustCommitDecodeMs,
               workerRustCommitTransformMs,
+              workerRustCommitMsmScalarPrepMs,
+              workerRustCommitMsmBucketFillMs,
+              workerRustCommitMsmReduceMs,
+              workerRustCommitMsmDoubleMs,
               workerRustCommitMsmMs,
               workerRustCommitCompressMs,
               workerRustCommitMs,
@@ -2978,6 +3011,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 workerRustRsMs: 0,
                 workerRustCommitDecodeMs: 0,
                 workerRustCommitTransformMs: 0,
+                workerRustCommitMsmScalarPrepMs: 0,
+                workerRustCommitMsmBucketFillMs: 0,
+                workerRustCommitMsmReduceMs: 0,
+                workerRustCommitMsmDoubleMs: 0,
                 workerRustCommitMsmMs: 0,
                 workerRustCommitCompressMs: 0,
                 workerRustCommitMs: 0,
@@ -3115,6 +3152,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               workerRustRsMs: 0,
               workerRustCommitDecodeMs: 0,
               workerRustCommitTransformMs: 0,
+              workerRustCommitMsmScalarPrepMs: 0,
+              workerRustCommitMsmBucketFillMs: 0,
+              workerRustCommitMsmReduceMs: 0,
+              workerRustCommitMsmDoubleMs: 0,
               workerRustCommitMsmMs: 0,
               workerRustCommitCompressMs: 0,
               workerRustCommitMs: 0,
@@ -3229,6 +3270,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           workerRustRsMs: 0,
           workerRustCommitDecodeMs: 0,
           workerRustCommitTransformMs: 0,
+          workerRustCommitMsmScalarPrepMs: 0,
+          workerRustCommitMsmBucketFillMs: 0,
+          workerRustCommitMsmReduceMs: 0,
+          workerRustCommitMsmDoubleMs: 0,
           workerRustCommitMsmMs: 0,
           workerRustCommitCompressMs: 0,
           workerRustCommitMs: 0,
@@ -3361,6 +3406,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             workerRustRsMs: sumBy(allSamples, (sample) => sample.workerRustRsMs),
             workerRustCommitDecodeMs: sumBy(allSamples, (sample) => sample.workerRustCommitDecodeMs),
             workerRustCommitTransformMs: sumBy(allSamples, (sample) => sample.workerRustCommitTransformMs),
+            workerRustCommitMsmScalarPrepMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmScalarPrepMs),
+            workerRustCommitMsmBucketFillMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmBucketFillMs),
+            workerRustCommitMsmReduceMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmReduceMs),
+            workerRustCommitMsmDoubleMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmDoubleMs),
             workerRustCommitMsmMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmMs),
             workerRustCommitCompressMs: sumBy(allSamples, (sample) => sample.workerRustCommitCompressMs),
             workerRustCommitMs: sumBy(allSamples, (sample) => sample.workerRustCommitMs),
@@ -3393,19 +3442,46 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 prepareWallMs: number
                 manifestMs: number
               }
+              __nilPerfBundle?: NilBrowserPerfBundle
             }
           ).__nilPreparePerf = prepareProfile
+          const prepareSummary = {
+            prepareWallMs: roundPerfMs(elapsedMs) ?? 0,
+            manifestMs: roundPerfMs(manifestMs) ?? 0,
+            ...prepareProfile.summary,
+          }
           ;(
             window as typeof window & {
               __nilPrepareSummary?: PreparePerfProfile['summary'] & {
                 prepareWallMs: number
                 manifestMs: number
               }
+              __nilPerfBundle?: NilBrowserPerfBundle
+              __nilBrowserPerfLog?: Array<Record<string, unknown>>
+              __nilBrowserPerfLast?: Record<string, unknown>
             }
-          ).__nilPrepareSummary = {
-            prepareWallMs: roundPerfMs(elapsedMs) ?? 0,
-            manifestMs: roundPerfMs(manifestMs) ?? 0,
-            ...prepareProfile.summary,
+          ).__nilPrepareSummary = prepareSummary
+          ;(
+            window as typeof window & {
+              __nilPerfBundle?: NilBrowserPerfBundle
+              __nilBrowserPerfLog?: Array<Record<string, unknown>>
+              __nilBrowserPerfLast?: Record<string, unknown>
+            }
+          ).__nilPerfBundle = {
+            browserPerfLog:
+              (
+                window as typeof window & {
+                  __nilBrowserPerfLog?: Array<Record<string, unknown>>
+                }
+              ).__nilBrowserPerfLog ?? [],
+            browserPerfLast:
+              (
+                window as typeof window & {
+                  __nilBrowserPerfLast?: Record<string, unknown>
+                }
+              ).__nilBrowserPerfLast ?? null,
+            prepareSummary,
+            prepareProfile,
           }
         }
         console.log('[perf] sharding totals', {
@@ -3427,6 +3503,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
           sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
           sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          rustCommitDecodeMs: roundPerfMs(prepareProfile.phases.workerRustCommitDecodeMs),
+          rustCommitTransformMs: roundPerfMs(prepareProfile.phases.workerRustCommitTransformMs),
+          rustCommitMsmScalarPrepMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmScalarPrepMs),
+          rustCommitMsmBucketFillMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmBucketFillMs),
+          rustCommitMsmReduceMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmReduceMs),
+          rustCommitMsmDoubleMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmDoubleMs),
+          rustCommitMsmMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmMs),
+          rustCommitCompressMs: roundPerfMs(prepareProfile.phases.workerRustCommitCompressMs),
           slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
           manifestMs: roundPerfMs(manifestMs),
           note: 'max* fields are closest to wall-clock critical path; sum* fields are parallel worker totals',

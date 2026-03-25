@@ -130,10 +130,29 @@ self.onmessage = async (event) => {
         }
 
         const commitStart = performance.now()
-        const committedRaw = nilWasmInstance.commit_blobs(shardsFlat) as unknown
+        const committedRaw = nilWasmInstance.commit_blobs_profiled(shardsFlat) as {
+          witness_flat?: Uint8Array | ArrayBufferLike
+          perf?: {
+            decode_ms?: unknown
+            transform_ms?: unknown
+            msm_scalar_prep_ms?: unknown
+            msm_bucket_fill_ms?: unknown
+            msm_reduce_ms?: unknown
+            msm_double_ms?: unknown
+            msm_ms?: unknown
+            compress_ms?: unknown
+            total_ms?: unknown
+            blobs?: unknown
+          }
+        }
         const commitMs = performance.now() - commitStart
+        const witnessRaw = committedRaw?.witness_flat
+        if (!witnessRaw) {
+          throw new Error('commit_blobs_profiled returned no witness bytes')
+        }
         const witnessFlat =
-          committedRaw instanceof Uint8Array ? committedRaw : new Uint8Array(committedRaw as ArrayBufferLike)
+          witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike)
+        const commitPerf = committedRaw?.perf
 
         const rootStart = performance.now()
         const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown
@@ -157,11 +176,15 @@ self.onmessage = async (event) => {
                 shardLen,
                 rustEncodeMs: Number(rustPerf?.encode_ms ?? 0),
                 rustRsMs: Number(rustPerf?.rs_ms ?? 0),
-                rustCommitDecodeMs: 0,
-                rustCommitTransformMs: 0,
-                rustCommitMsmMs: 0,
-                rustCommitCompressMs: 0,
-                rustCommitMs: commitMs,
+                rustCommitDecodeMs: Number(commitPerf?.decode_ms ?? 0),
+                rustCommitTransformMs: Number(commitPerf?.transform_ms ?? 0),
+                rustCommitMsmScalarPrepMs: Number(commitPerf?.msm_scalar_prep_ms ?? 0),
+                rustCommitMsmBucketFillMs: Number(commitPerf?.msm_bucket_fill_ms ?? 0),
+                rustCommitMsmReduceMs: Number(commitPerf?.msm_reduce_ms ?? 0),
+                rustCommitMsmDoubleMs: Number(commitPerf?.msm_double_ms ?? 0),
+                rustCommitMsmMs: Number(commitPerf?.msm_ms ?? 0),
+                rustCommitCompressMs: Number(commitPerf?.compress_ms ?? 0),
+                rustCommitMs: Number(commitPerf?.total_ms ?? commitMs),
                 rustTotalMs: Number(rustPerf?.total_ms ?? 0),
                 rows: Number(rustPerf?.rows ?? 0),
                 shardsTotal: Number(rustPerf?.shards_total ?? 0),
