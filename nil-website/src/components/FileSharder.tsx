@@ -2762,6 +2762,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           return Math.max(MIN_BATCH, Math.min(MAX_BATCH, est));
         };
 
+        let lastUiYieldMs = performance.now();
+        const maybeYieldToUi = async (minIntervalMs = 250): Promise<void> => {
+          const now = performance.now();
+          if (now - lastUiYieldMs < minIntervalMs) return;
+          lastUiYieldMs = now;
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        };
+
         const userRoots: Uint8Array[] = [];
         const userMdus: PreparedBrowserMdu[] = [];
         const witnessDataBlobs: Uint8Array[] = [];
@@ -3099,7 +3107,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               setShards((prev) =>
                 prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'expanded' } : s)),
               );
-              await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+              await maybeYieldToUi();
           }
         }
 
@@ -3233,7 +3241,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               };
             });
             setShards((prev) => prev.map((s) => (s.id === 1 + i ? { ...s, status: 'expanded' } : s)));
-            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            await maybeYieldToUi();
         }
         const witnessStageMs = performance.now() - witnessStageStart
 
