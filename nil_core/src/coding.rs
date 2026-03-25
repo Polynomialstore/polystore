@@ -1,6 +1,5 @@
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext, KzgError, MDU_SIZE};
 use reed_solomon_erasure::galois_8::ReedSolomon;
-use std::time::{Duration, Instant};
 use thiserror::Error;
 
 pub const SHARDS_NUM: usize = 12;
@@ -43,6 +42,20 @@ pub struct ExpandPayloadFlatPerf {
     pub rows: usize,
     pub shards_total: usize,
     pub shard_len: usize,
+}
+
+#[cfg(target_arch = "wasm32")]
+fn now_ms() -> f64 {
+    js_sys::Date::now()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn now_ms() -> f64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0)
 }
 
 fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
@@ -274,10 +287,10 @@ fn expand_payload_flat_impl(
     let r = ReedSolomon::new(data_shards, parity_shards)
         .map_err(|e| CodingError::Rs(format!("{}", e)))?;
 
-    let total_start = Instant::now();
-    let mut encode_dur = Duration::ZERO;
-    let mut rs_dur = Duration::ZERO;
-    let mut commit_dur = Duration::ZERO;
+    let total_start = now_ms();
+    let mut encode_ms = 0.0;
+    let mut rs_ms = 0.0;
+    let mut commit_ms = 0.0;
 
     // RS encode and commit row-by-row to keep the working set small (and avoid an intermediate 8 MiB MDU buffer).
     for row_idx in 0..rows {
@@ -291,7 +304,7 @@ fn expand_payload_flat_impl(
                 .push(unsafe { std::slice::from_raw_parts_mut(base_ptr.add(offset), BLOB_SIZE) });
         }
 
-        let encode_start = Instant::now();
+        let encode_start = now_ms();
         for slot in 0..data_shards {
             let blob_idx = row_idx * data_shards + slot;
             let payload_base = blob_idx * SCALARS_PER_BLOB * SCALAR_PAYLOAD_BYTES;
@@ -300,27 +313,27 @@ fn expand_payload_flat_impl(
         for slot in data_shards..shards_total {
             row_shards[slot].fill(0);
         }
-        encode_dur += encode_start.elapsed();
+        encode_ms += now_ms() - encode_start;
 
-        let rs_start = Instant::now();
+        let rs_start = now_ms();
         r.encode(&mut row_shards)
             .map_err(|e| CodingError::Rs(format!("{}", e)))?;
-        rs_dur += rs_start.elapsed();
+        rs_ms += now_ms() - rs_start;
 
-        let commit_start = Instant::now();
+        let commit_start = now_ms();
         for slot in 0..shards_total {
             let commitment = ctx.blob_to_commitment(row_shards[slot])?;
             let woff = (slot * rows + row_idx) * 48;
             out_witness_flat[woff..woff + 48].copy_from_slice(&commitment);
         }
-        commit_dur += commit_start.elapsed();
+        commit_ms += now_ms() - commit_start;
     }
 
     Ok(ExpandPayloadFlatPerf {
-        encode_ms: encode_dur.as_secs_f64() * 1000.0,
-        rs_ms: rs_dur.as_secs_f64() * 1000.0,
-        commit_ms: commit_dur.as_secs_f64() * 1000.0,
-        total_ms: total_start.elapsed().as_secs_f64() * 1000.0,
+        encode_ms,
+        rs_ms,
+        commit_ms,
+        total_ms: now_ms() - total_start,
         rows,
         shards_total,
         shard_len,
