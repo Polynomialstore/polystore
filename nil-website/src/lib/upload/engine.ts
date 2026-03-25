@@ -137,10 +137,14 @@ function cloneSteps(steps: UploadProgressStep[]): UploadProgressStep[] {
 
 function updateStep(
   steps: UploadProgressStep[],
-  predicate: (step: UploadProgressStep) => boolean,
+  stepIndex: number,
   patch: Partial<UploadProgressStep>,
 ): UploadProgressStep[] {
-  return steps.map((step) => (predicate(step) ? { ...step, ...patch } : step))
+  if (stepIndex < 0 || stepIndex >= steps.length) return steps
+  const current = steps[stepIndex]
+  if (!current) return steps
+  steps[stepIndex] = { ...current, ...patch }
+  return steps
 }
 
 function buildDirectUploadSteps(input: DirectUploadInput): UploadProgressStep[] {
@@ -219,8 +223,21 @@ function emitProgress(steps: UploadProgressStep[], onProgress?: (steps: UploadPr
 }
 
 interface UploadTask {
-  predicate: (step: UploadProgressStep) => boolean
+  stepIndex: number
   request: UploadTransportRequest
+}
+
+function stepKey(kind: SparseArtifactKind, target: string, index?: number, slot?: number): string {
+  return `${kind}|${target}|${index ?? ''}|${slot ?? ''}`
+}
+
+function indexUploadSteps(steps: UploadProgressStep[]): Map<string, number> {
+  const indexed = new Map<string, number>()
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i]
+    indexed.set(stepKey(step.kind, step.target, step.index, step.slot), i)
+  }
+  return indexed
 }
 
 function flattenTaskGroups(groups: UploadTask[][]): UploadTask[] {
@@ -288,7 +305,7 @@ async function runUploadTasks(
           fullSize: task.request.artifact.fullSize,
         })
 
-        steps = emitProgress(updateStep(steps, task.predicate, { status: 'uploading', error: undefined }), onProgress)
+        steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'uploading', error: undefined }), onProgress)
 
         void transport
           .sendArtifact(task.request)
@@ -305,7 +322,7 @@ async function runUploadTasks(
               durationMs: finishedAt - startedAt,
               ok: true,
             })
-            steps = emitProgress(updateStep(steps, task.predicate, { status: 'complete' }), onProgress)
+            steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'complete' }), onProgress)
           })
           .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error)
@@ -323,7 +340,7 @@ async function runUploadTasks(
               ok: false,
               error: message,
             })
-            steps = emitProgress(updateStep(steps, task.predicate, { status: 'error', error: message }), onProgress)
+            steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'error', error: message }), onProgress)
           })
           .finally(() => {
             active -= 1
@@ -377,15 +394,20 @@ export function createUploadEngine(options: UploadEngineOptions) {
   return {
     async uploadDirect(input: DirectUploadInput): Promise<UploadEngineResult> {
       let steps = emitProgress(buildDirectUploadSteps(input), input.onProgress)
+      const stepIndices = indexUploadSteps(steps)
       if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
         const message = 'manifest blob missing (re-shard to regenerate)'
-        steps = emitProgress(updateStep(steps, (step) => step.kind === 'manifest', { status: 'error', error: message }), input.onProgress)
+        const targetLabel = input.target.label || input.target.baseUrl
+        const manifestIndex = stepIndices.get(stepKey('manifest', targetLabel))
+        steps = emitProgress(updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message }), input.onProgress)
         return { ok: false, steps, error: message }
       }
 
+      const targetLabel = input.target.label || input.target.baseUrl
+
       const tasks: UploadTask[] = [
         ...input.mdus.map((mdu) => ({
-          predicate: (step: UploadProgressStep) => step.kind === 'mdu' && step.index === mdu.index,
+          stepIndex: stepIndices.get(stepKey('mdu', targetLabel, mdu.index)) ?? -1,
           request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
@@ -395,7 +417,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           },
         })),
         {
-          predicate: (step: UploadProgressStep) => step.kind === 'manifest',
+          stepIndex: stepIndices.get(stepKey('manifest', targetLabel)) ?? -1,
           request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
@@ -411,9 +433,15 @@ export function createUploadEngine(options: UploadEngineOptions) {
 
     async uploadStriped(input: StripedUploadInput): Promise<UploadEngineResult> {
       let steps = emitProgress(buildStripedUploadSteps(input), input.onProgress)
+      const stepIndices = indexUploadSteps(steps)
       if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
         const message = 'manifest blob missing (re-shard to regenerate)'
-        steps = emitProgress(updateStep(steps, (step) => step.kind === 'manifest', { status: 'error', error: message }), input.onProgress)
+        for (const target of input.metadataTargets) {
+          const targetLabel = target.label || target.baseUrl
+          const manifestIndex = stepIndices.get(stepKey('manifest', targetLabel))
+          steps = updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message })
+        }
+        steps = emitProgress(steps, input.onProgress)
         return { ok: false, steps, error: message }
       }
       const manifestBlob = input.manifestBlob
@@ -424,8 +452,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
         for (const target of input.metadataTargets) {
           const targetLabel = target.label || target.baseUrl
           group.push({
-            predicate: (step: UploadProgressStep) =>
-              step.kind === 'mdu' && step.index === mdu.index && step.target === targetLabel,
+            stepIndex: stepIndices.get(stepKey('mdu', targetLabel, mdu.index)) ?? -1,
             request: {
               dealId: input.dealId,
               manifestRoot: input.manifestRoot,
@@ -441,15 +468,15 @@ export function createUploadEngine(options: UploadEngineOptions) {
         input.metadataTargets.map((target) => {
           const targetLabel = target.label || target.baseUrl
           return {
-          predicate: (step: UploadProgressStep) => step.kind === 'manifest' && step.target === targetLabel,
-          request: {
-            dealId: input.dealId,
-            manifestRoot: input.manifestRoot,
-            previousManifestRoot: input.previousManifestRoot,
-            target,
-            artifact: { kind: 'manifest', bytes: manifestBlob, fullSize: input.manifestBlobFullSize } as const,
-          },
-        } satisfies UploadTask
+            stepIndex: stepIndices.get(stepKey('manifest', targetLabel)) ?? -1,
+            request: {
+              dealId: input.dealId,
+              manifestRoot: input.manifestRoot,
+              previousManifestRoot: input.previousManifestRoot,
+              target,
+              artifact: { kind: 'manifest', bytes: manifestBlob, fullSize: input.manifestBlobFullSize } as const,
+            },
+          } satisfies UploadTask
         }),
       )
 
@@ -464,16 +491,16 @@ export function createUploadEngine(options: UploadEngineOptions) {
             steps = emitProgress(
               updateStep(
                 steps,
-                (step) => step.kind === 'shard' && step.index === shardSet.index && step.slot === slot,
+                stepIndices.get(stepKey('shard', `slot-${slot}`, shardSet.index, slot)) ?? -1,
                 { status: 'error', error: message },
               ),
               input.onProgress,
             )
             return { ok: false, steps, error: message }
           }
+          const targetLabel = target.label || target.baseUrl
           group.push({
-            predicate: (step: UploadProgressStep) =>
-              step.kind === 'shard' && step.index === shardSet.index && step.slot === slot,
+            stepIndex: stepIndices.get(stepKey('shard', targetLabel, shardSet.index, slot)) ?? -1,
             request: {
               dealId: input.dealId,
               manifestRoot: input.manifestRoot,
