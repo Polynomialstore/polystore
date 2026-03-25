@@ -1,0 +1,7 @@
+*
+!.gitignore
+!nil_core.d.ts
+!nil_core.js
+!nil_core_bg.wasm
+!nil_core_bg.wasm.d.ts
+!package.json

@@ -1,0 +1,15 @@
+{
+  "name": "nil_core",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "nil_core_bg.wasm",
+    "nil_core.js",
+    "nil_core.d.ts"
+  ],
+  "main": "nil_core.js",
+  "types": "nil_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

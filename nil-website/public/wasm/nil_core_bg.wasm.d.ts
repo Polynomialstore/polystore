@@ -1,0 +1,32 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_nilwasm_free: (a: number, b: number) => void;
+export const __wbg_wasmmdu0builder_free: (a: number, b: number) => void;
+export const nilwasm_commit_blobs: (a: number, b: number, c: number) => [number, number, number];
+export const nilwasm_commit_blobs_profiled: (a: number, b: number, c: number) => [number, number, number];
+export const nilwasm_commit_mdu: (a: number, b: number, c: number) => [number, number, number];
+export const nilwasm_compute_manifest: (a: number, b: number, c: number) => [number, number, number];
+export const nilwasm_compute_mdu_root: (a: number, b: number, c: number) => [number, number, number];
+export const nilwasm_expand_file: (a: number, b: number, c: number) => [number, number, number];
+export const nilwasm_expand_mdu_rs: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+export const nilwasm_expand_mdu_rs_flat_uncommitted: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+export const nilwasm_expand_payload_rs_flat: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+export const nilwasm_expand_payload_rs_flat_uncommitted: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+export const nilwasm_new: (a: number, b: number) => [number, number, number];
+export const nilwasm_set_pippenger_window_bits: (a: number, b: number) => [number, number];
+export const nilwasm_set_wasm_msm_basis_mode: (a: number, b: number, c: number) => [number, number];
+export const wasmmdu0builder_append_file: (a: number, b: number, c: number, d: bigint, e: bigint) => [number, number];
+export const wasmmdu0builder_append_file_with_flags: (a: number, b: number, c: number, d: bigint, e: bigint, f: number) => [number, number];
+export const wasmmdu0builder_bytes: (a: number) => [number, number];
+export const wasmmdu0builder_get_witness_count: (a: number) => bigint;
+export const wasmmdu0builder_load: (a: number, b: number, c: bigint, d: bigint) => [number, number, number];
+export const wasmmdu0builder_new: (a: bigint) => number;
+export const wasmmdu0builder_new_with_commitments: (a: bigint, b: bigint) => number;
+export const wasmmdu0builder_set_root: (a: number, b: bigint, c: number, d: number) => [number, number];
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;
