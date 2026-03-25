@@ -1,5 +1,6 @@
 use blake2::{Blake2s256, Digest};
 use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
+use blst::{BLST_ERROR, MultiPoint, blst_p1, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
 use ff::{Field, PrimeField};
 use group::Curve;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
@@ -11,9 +12,6 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
 use thiserror::Error;
-
-#[cfg(not(target_arch = "wasm32"))]
-use blst::{BLST_ERROR, MultiPoint, blst_p1, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
 
 pub const MDU_SIZE: usize = 8 * 1024 * 1024;
 pub const SHARD_SIZE: usize = 1 * 1024 * 1024;
@@ -88,8 +86,8 @@ impl rs_merkle::Hasher for Blake2s256Hasher {
 pub struct KzgContext {
     g1_points: Vec<G1Affine>,
     #[cfg(target_arch = "wasm32")]
+    #[allow(dead_code)]
     g1_points_projective: Vec<G1Projective>,
-    #[cfg(not(target_arch = "wasm32"))]
     g1_points_blst: Vec<blst_p1_affine>,
     g2_points: Vec<G2Affine>,
     g1_generator: G1Affine,
@@ -121,7 +119,6 @@ impl KzgContext {
             .map_err(|_| KzgError::Internal("Bad n_g2".into()))?;
 
         let mut g1_points = Vec::with_capacity(n_g1);
-        #[cfg(not(target_arch = "wasm32"))]
         let mut g1_points_blst = Vec::with_capacity(n_g1);
         for _ in 0..n_g1 {
             let line = lines
@@ -138,15 +135,12 @@ impl KzgContext {
                 .ok_or(KzgError::Internal("Bad G1 point".into()))?;
             g1_points.push(p);
 
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                let mut out = blst_p1_affine::default();
-                let err = unsafe { blst_p1_uncompress(&mut out, compressed.as_ptr()) };
-                if err != BLST_ERROR::BLST_SUCCESS {
-                    return Err(KzgError::Internal(format!("Bad G1 point (blst): {err:?}")));
-                }
-                g1_points_blst.push(out);
+            let mut out = blst_p1_affine::default();
+            let err = unsafe { blst_p1_uncompress(&mut out, compressed.as_ptr()) };
+            if err != BLST_ERROR::BLST_SUCCESS {
+                return Err(KzgError::Internal(format!("Bad G1 point (blst): {err:?}")));
             }
+            g1_points_blst.push(out);
         }
 
         let mut g2_points = Vec::with_capacity(n_g2);
@@ -194,7 +188,6 @@ impl KzgContext {
             g1_points,
             #[cfg(target_arch = "wasm32")]
             g1_points_projective,
-            #[cfg(not(target_arch = "wasm32"))]
             g1_points_blst,
             g2_points,
             g1_generator,
@@ -263,7 +256,6 @@ impl KzgContext {
         } else {
             // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
             // over the evaluations.
-            #[cfg(not(target_arch = "wasm32"))]
             {
                 let decode_start = now_ms();
                 let commitment = msm_blst_g1_commitment_from_blob_profiled(
@@ -274,28 +266,6 @@ impl KzgContext {
                 if perf.decode_ms == 0.0 {
                     perf.decode_ms = now_ms() - decode_start;
                 }
-                perf.total_ms = now_ms() - total_start;
-                return Ok((commitment, perf));
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                let decode_start = now_ms();
-                let evals = bytes_to_scalars(blob_bytes)?;
-                perf.decode_ms = now_ms() - decode_start;
-                let msm_start = now_ms();
-                let acc = if WASM_MSM_BASIS_MODE.load(Ordering::Relaxed) == 2 {
-                    msm_pippenger_g1_projective_profiled_wasm(
-                        &self.g1_points_projective,
-                        &evals,
-                        &mut perf,
-                    )
-                } else {
-                    msm_pippenger_g1_profiled_wasm(&self.g1_points, &evals, &mut perf)
-                };
-                perf.msm_ms = now_ms() - msm_start;
-                let compress_start = now_ms();
-                let commitment = acc.to_affine().to_compressed();
-                perf.compress_ms = now_ms() - compress_start;
                 perf.total_ms = now_ms() - total_start;
                 return Ok((commitment, perf));
             }
@@ -744,6 +714,7 @@ fn prepare_buckets(buckets: &mut Vec<G1Projective>, buckets_len: usize) -> &mut 
 }
 
 #[cfg(target_arch = "wasm32")]
+#[allow(dead_code)]
 fn msm_pippenger_g1_profiled_wasm(
     points: &[G1Affine],
     scalars: &[Scalar],
@@ -812,6 +783,7 @@ fn msm_pippenger_g1_profiled_wasm(
 }
 
 #[cfg(target_arch = "wasm32")]
+#[allow(dead_code)]
 fn msm_pippenger_g1_projective_profiled_wasm(
     points: &[G1Projective],
     scalars: &[Scalar],
@@ -979,7 +951,6 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(not(test), allow(dead_code))]
 fn msm_blst_g1_commitment_from_blob(
     points: &[blst_p1_affine],
@@ -992,7 +963,6 @@ fn msm_blst_g1_commitment_from_blob(
     )
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn msm_blst_g1_commitment_from_blob_profiled(
     points: &[blst_p1_affine],
     blob_bytes: &[u8],
