@@ -220,6 +220,20 @@ interface UploadTask {
   request: UploadTransportRequest
 }
 
+function flattenTaskGroups(groups: UploadTask[][]): UploadTask[] {
+  return groups.flatMap((group) => group)
+}
+
+function interleaveTaskGroups(primary: UploadTask[][], secondary: UploadTask[][]): UploadTask[] {
+  const combined: UploadTask[] = []
+  const rounds = Math.max(primary.length, secondary.length)
+  for (let i = 0; i < rounds; i += 1) {
+    if (i < primary.length) combined.push(...primary[i])
+    if (i < secondary.length) combined.push(...secondary[i])
+  }
+  return combined
+}
+
 const DEFAULT_DIRECT_UPLOAD_CONCURRENCY = 4
 const DEFAULT_STRIPED_METADATA_UPLOAD_CONCURRENCY = 6
 const DEFAULT_STRIPED_SHARD_UPLOAD_CONCURRENCY = 6
@@ -399,12 +413,14 @@ export function createUploadEngine(options: UploadEngineOptions) {
         steps = emitProgress(updateStep(steps, (step) => step.kind === 'manifest', { status: 'error', error: message }), input.onProgress)
         return { ok: false, steps, error: message }
       }
+      const manifestBlob = input.manifestBlob
 
-      const metadataTasks: UploadTask[] = []
-      for (const target of input.metadataTargets) {
-        const targetLabel = target.label || target.baseUrl
-        for (const mdu of input.metadataMdus) {
-          metadataTasks.push({
+      const metadataTaskGroups: UploadTask[][] = []
+      for (const mdu of input.metadataMdus) {
+        const group: UploadTask[] = []
+        for (const target of input.metadataTargets) {
+          const targetLabel = target.label || target.baseUrl
+          group.push({
             predicate: (step: UploadProgressStep) =>
               step.kind === 'mdu' && step.index === mdu.index && step.target === targetLabel,
             request: {
@@ -416,31 +432,27 @@ export function createUploadEngine(options: UploadEngineOptions) {
             },
           })
         }
-        metadataTasks.push({
+        metadataTaskGroups.push(group)
+      }
+      metadataTaskGroups.push(
+        input.metadataTargets.map((target) => {
+          const targetLabel = target.label || target.baseUrl
+          return {
           predicate: (step: UploadProgressStep) => step.kind === 'manifest' && step.target === targetLabel,
           request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
             previousManifestRoot: input.previousManifestRoot,
             target,
-            artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize } as const,
+            artifact: { kind: 'manifest', bytes: manifestBlob, fullSize: input.manifestBlobFullSize } as const,
           },
-        })
-      }
-
-      const metadataResult = await runUploadTasks(
-        metadataTasks,
-        steps,
-        input.onProgress,
-        input.onTaskEvent,
-        stripedMetadataConcurrency,
-        ports.transport,
+        } satisfies UploadTask
+        }),
       )
-      steps = metadataResult.steps
-      if (!metadataResult.ok) return metadataResult
 
-      const shardTasks: UploadTask[] = []
+      const shardTaskGroups: UploadTask[][] = []
       for (const shardSet of input.shardSets ?? []) {
+        const group: UploadTask[] = []
         for (let slot = 0; slot < shardSet.shards.length; slot += 1) {
           const shard = shardSet.shards[slot]
           const target = input.shardTargets?.[slot]
@@ -456,7 +468,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
             )
             return { ok: false, steps, error: message }
           }
-          shardTasks.push({
+          group.push({
             predicate: (step: UploadProgressStep) =>
               step.kind === 'shard' && step.index === shardSet.index && step.slot === slot,
             request: {
@@ -468,9 +480,26 @@ export function createUploadEngine(options: UploadEngineOptions) {
             },
           })
         }
+        shardTaskGroups.push(group)
       }
 
-      return runUploadTasks(shardTasks, steps, input.onProgress, input.onTaskEvent, stripedShardConcurrency, ports.transport)
+      const metadataTasks = flattenTaskGroups(metadataTaskGroups)
+      const shardTasks = flattenTaskGroups(shardTaskGroups)
+      const combinedTasks = interleaveTaskGroups(metadataTaskGroups, shardTaskGroups)
+      const combinedConcurrency = Math.max(stripedMetadataConcurrency, stripedShardConcurrency)
+
+      if (combinedTasks.length === metadataTasks.length + shardTasks.length) {
+        return runUploadTasks(combinedTasks, steps, input.onProgress, input.onTaskEvent, combinedConcurrency, ports.transport)
+      }
+
+      return runUploadTasks(
+        [...metadataTasks, ...shardTasks],
+        steps,
+        input.onProgress,
+        input.onTaskEvent,
+        combinedConcurrency,
+        ports.transport,
+      )
     },
 
     async commitPreparedContent(input: PreparedCommitInput): Promise<ChainCommitRequest> {

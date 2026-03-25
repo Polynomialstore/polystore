@@ -58,7 +58,7 @@ test('upload engine: direct upload reports progress and stops on manifest errors
   assert.match(lastSnapshot.join(',') || '', /mdu:complete,manifest:error/)
 })
 
-test('upload engine: striped upload sequences metadata per target before shard uploads', async () => {
+test('upload engine: striped upload interleaves metadata and shard requests', async () => {
   const transport = makeRecordingTransport()
   const engine = createUploadEngine({ transport: transport.transport })
 
@@ -114,18 +114,18 @@ test('upload engine: striped upload sequences metadata per target before shard u
     transport.calls.map((call) => `${call.target.label}:${call.artifact.kind}:${call.artifact.index ?? 'manifest'}:${call.artifact.slot ?? '-'}`),
     [
       'provider-a:mdu:0:-',
-      'provider-a:mdu:1:-',
-      'provider-a:manifest:manifest:-',
       'provider-b:mdu:0:-',
-      'provider-b:mdu:1:-',
-      'provider-b:manifest:manifest:-',
       'provider-a:shard:2:0',
       'provider-b:shard:2:1',
+      'provider-a:mdu:1:-',
+      'provider-b:mdu:1:-',
+      'provider-a:manifest:manifest:-',
+      'provider-b:manifest:manifest:-',
     ],
   )
   assert.equal(transport.calls[0].artifact.fullSize, 8 * 1024 * 1024)
-  assert.equal(transport.calls[2].artifact.fullSize, 128 * 1024)
-  assert.equal(transport.calls[6].artifact.fullSize, 1024)
+  assert.equal(transport.calls[2].artifact.fullSize, 1024)
+  assert.equal(transport.calls[6].artifact.fullSize, 128 * 1024)
   assert.equal(transport.calls[0].previousManifestRoot, '0xbase')
   assert.equal(transport.calls[6].previousManifestRoot, '0xbase')
 })
@@ -176,10 +176,8 @@ test('upload engine: direct upload overlaps artifact requests with bounded concu
 })
 
 test('upload engine: striped upload overlaps metadata and shard requests with bounded concurrency', async () => {
-  let activeMetadata = 0
-  let activeShards = 0
-  let peakMetadata = 0
-  let peakShards = 0
+  let activeTotal = 0
+  let peakTotal = 0
   let completedMetadata = 0
   let shardStartedBeforeMetadataComplete = false
   const totalMetadataTasks = 6
@@ -189,19 +187,14 @@ test('upload engine: striped upload overlaps metadata and shard requests with bo
       const isShard = request.artifact.kind === 'shard'
       if (isShard) {
         if (completedMetadata < totalMetadataTasks) shardStartedBeforeMetadataComplete = true
-        activeShards += 1
-        peakShards = Math.max(peakShards, activeShards)
-      } else {
-        activeMetadata += 1
-        peakMetadata = Math.max(peakMetadata, activeMetadata)
       }
+      activeTotal += 1
+      peakTotal = Math.max(peakTotal, activeTotal)
 
       await new Promise((resolve) => setTimeout(resolve, 40))
 
-      if (isShard) {
-        activeShards -= 1
-      } else {
-        activeMetadata -= 1
+      activeTotal -= 1
+      if (!isShard) {
         completedMetadata += 1
       }
     },
@@ -273,9 +266,8 @@ test('upload engine: striped upload overlaps metadata and shard requests with bo
   })
 
   assert.equal(result.ok, true)
-  assert.equal(shardStartedBeforeMetadataComplete, false)
-  assert.equal(peakMetadata, 2)
-  assert.equal(peakShards, 2)
+  assert.equal(shardStartedBeforeMetadataComplete, true)
+  assert.equal(peakTotal, 2)
 })
 
 test('buildCommitRequest: mode2 derives total mdus from witness + user counts', () => {
