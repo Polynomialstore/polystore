@@ -11,15 +11,12 @@ function shouldRetrySparseUpload(response: Response, sendSize: number, fullSize:
   return sendSize < fullSize && (response.status === 400 || response.status === 411)
 }
 
-function buildBody(bytes: Uint8Array): Blob {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new Blob([bytes as any])
-}
-
 export async function postSparseArtifact(request: SparseUploadRequest): Promise<Response> {
   const fetchImpl = request.fetchImpl ?? fetch
   const sparseArtifact = makeSparseArtifact(request.artifact)
   const fullPayload = request.artifact.bytes
+
+  const toBodyBuffer = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer
 
   const post = async (bodyBytes: Uint8Array, fullSizeHeader?: number): Promise<Response> => {
     const headers: Record<string, string> = {
@@ -35,7 +32,7 @@ export async function postSparseArtifact(request: SparseUploadRequest): Promise<
     return fetchImpl(request.url, {
       method: 'POST',
       headers,
-      body: buildBody(bodyBytes),
+      body: toBodyBuffer(bodyBytes),
     })
   }
 

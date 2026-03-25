@@ -7,8 +7,7 @@ test('postSparseArtifact sends truncated body with X-Nil-Full-Size', async () =>
   const calls: Array<{ headers: Record<string, string>; bytes: Uint8Array }> = []
   const fetchImpl: typeof fetch = async (_url, init) => {
     const headers = init?.headers as Record<string, string>
-    const body = init?.body as Blob
-    const bytes = new Uint8Array(await body.arrayBuffer())
+    const bytes = new Uint8Array(await new Response(init?.body ?? null).arrayBuffer())
     calls.push({ headers, bytes })
     return new Response('ok', { status: 200 })
   }
@@ -34,8 +33,7 @@ test('postSparseArtifact retries once with full payload on sparse rollout reject
   const calls: Array<{ headers: Record<string, string>; bytes: Uint8Array }> = []
   const fetchImpl: typeof fetch = async (_url, init) => {
     const headers = init?.headers as Record<string, string>
-    const body = init?.body as Blob
-    const bytes = new Uint8Array(await body.arrayBuffer())
+    const bytes = new Uint8Array(await new Response(init?.body ?? null).arrayBuffer())
     calls.push({ headers, bytes })
     return calls.length === 1 ? new Response('bad', { status: 400 }) : new Response('ok', { status: 200 })
   }
@@ -62,8 +60,7 @@ test('postSparseArtifact keeps non-empty all-zero payloads sparse', async () => 
   const calls: Array<{ headers: Record<string, string>; bytes: Uint8Array }> = []
   const fetchImpl: typeof fetch = async (_url, init) => {
     const headers = init?.headers as Record<string, string>
-    const body = init?.body as Blob
-    const bytes = new Uint8Array(await body.arrayBuffer())
+    const bytes = new Uint8Array(await new Response(init?.body ?? null).arrayBuffer())
     calls.push({ headers, bytes })
     return new Response('ok', { status: 200 })
   }
@@ -83,4 +80,25 @@ test('postSparseArtifact keeps non-empty all-zero payloads sparse', async () => 
   assert.equal(calls.length, 1)
   assert.equal(calls[0].headers['X-Nil-Full-Size'], '16')
   assert.deepStrictEqual(calls[0].bytes, new Uint8Array([0]))
+})
+
+test('postSparseArtifact sends array-buffer bodies directly', async () => {
+  let body: BodyInit | null | undefined
+  const fetchImpl: typeof fetch = async (_url, init) => {
+    body = init?.body
+    return new Response('ok', { status: 200 })
+  }
+
+  await postSparseArtifact({
+    url: 'http://example.test/sp/upload_mdu',
+    headers: { 'X-Nil-Deal-ID': '1' },
+    artifact: {
+      kind: 'mdu',
+      index: 0,
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    },
+    fetchImpl,
+  })
+
+  assert.ok(body instanceof ArrayBuffer)
 })
