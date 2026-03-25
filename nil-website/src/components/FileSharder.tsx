@@ -81,6 +81,7 @@ interface PreparedBrowserShardSet {
 
 type WorkflowStepState = 'idle' | 'active' | 'done' | 'error'
 type UploadPanelState = 'idle' | 'running' | 'success' | 'error'
+type DealSetupStatus = 'loading' | 'ready' | 'error'
 
 export interface FileSharderProps {
   dealId: string;
@@ -311,6 +312,8 @@ const gatewayUploadPollIntervalMs = 1000
 const gatewayUploadPollTimeoutMs = 2500
 const gatewayUploadHeartbeatStaleMs = 15_000
 const gatewayFallbackWasmMaxFileBytes = Number.POSITIVE_INFINITY
+const dealSetupPollIntervalMs = 1_000
+const dealSetupMaxAttempts = 30
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const MANIFEST_BLOB_SIZE_BYTES = 128 * 1024
 
@@ -348,6 +351,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mirrorError, setMirrorError] = useState<string | null>(null)
   const [stripeParams, setStripeParams] = useState<{ k: number; m: number } | null>(null)
   const [stripeParamsLoaded, setStripeParamsLoaded] = useState(false)
+  const [dealSetupStatus, setDealSetupStatus] = useState<DealSetupStatus>('loading')
+  const [dealSetupMessage, setDealSetupMessage] = useState<string | null>(null)
+  const [dealSetupReloadNonce, setDealSetupReloadNonce] = useState(0)
   const [slotBases, setSlotBases] = useState<string[]>([])
   const [slotProviders, setSlotProviders] = useState<string[]>([])
   const [mode2Shards, setMode2Shards] = useState<PreparedBrowserShardSet[]>([])
@@ -378,6 +384,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const autoUploadManifestRef = useRef<string | null>(null)
   const autoCommitManifestRef = useRef<string | null>(null)
   const lastStaleCommitMessageRef = useRef<string | null>(null)
+  const dealSetupAttemptRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const gatewayUploadProgressRef = useRef<{ phase: string; workDone: number; workTotal: number }>({
     phase: '',
@@ -524,41 +531,71 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     let cancelled = false
     async function loadDeal() {
       setStripeParamsLoaded(false)
+      setDealSetupStatus('loading')
+      setDealSetupMessage(null)
+      dealSetupAttemptRef.current = 0
       if (!dealId) {
         setBaseManifestRoot('')
         setDealOwner('')
         setStripeParams(null)
         setSlotBases([])
+        setSlotProviders([])
+        setDealSetupStatus('ready')
         setStripeParamsLoaded(true)
         return
       }
-      try {
-        const deal = await lcdFetchDeal(appConfig.lcdBase, dealId)
-        const parsed = parseServiceHint(deal?.service_hint)
-        if (!cancelled) {
-          setBaseManifestRoot(String(deal?.cid || '').trim())
-          setDealOwner(String(deal?.owner || '').trim())
-          if (parsed.mode === 'mode2' && parsed.rsK && parsed.rsM) {
-            setStripeParams({ k: parsed.rsK, m: parsed.rsM })
-          } else if (parsed.mode === 'auto') {
-            setStripeParams({ k: appConfig.defaultRsK, m: appConfig.defaultRsM })
-          } else {
-            setStripeParams(null)
+      for (let attempt = 0; attempt < dealSetupMaxAttempts && !cancelled; attempt += 1) {
+        dealSetupAttemptRef.current = attempt + 1
+        try {
+          const deal = await lcdFetchDeal(appConfig.lcdBase, dealId)
+          const parsed = parseServiceHint(deal?.service_hint)
+          const nextStripeParams =
+            parsed.mode === 'mode2' && parsed.rsK && parsed.rsM
+              ? { k: parsed.rsK, m: parsed.rsM }
+              : parsed.mode === 'auto'
+                ? { k: appConfig.defaultRsK, m: appConfig.defaultRsM }
+                : null
+          const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
+          const readyEndpoints = endpoints.filter((endpoint) => String(endpoint.baseUrl || '').trim())
+          const requiredEndpointCount =
+            Array.isArray(deal?.providers) && deal.providers.length > 0
+              ? deal.providers.length
+              : nextStripeParams
+                ? nextStripeParams.k + nextStripeParams.m
+                : 1
+          if (readyEndpoints.length < requiredEndpointCount) {
+            throw new Error(
+              `Waiting for ${String(requiredEndpointCount)} provider endpoints (${String(readyEndpoints.length)} ready).`,
+            )
           }
-          setStripeParamsLoaded(true)
-        }
-        const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
-        if (!cancelled) {
-          setSlotBases(endpoints.map((e) => e.baseUrl))
-          setSlotProviders(endpoints.map((e) => e.provider))
-        }
-      } catch {
-        if (!cancelled) {
+          if (!cancelled) {
+            setBaseManifestRoot(String(deal?.cid || '').trim())
+            setDealOwner(String(deal?.owner || '').trim())
+            setStripeParams(nextStripeParams)
+            setSlotBases(readyEndpoints.map((endpoint) => endpoint.baseUrl))
+            setSlotProviders(readyEndpoints.map((endpoint) => endpoint.provider))
+            setDealSetupStatus('ready')
+            setDealSetupMessage(null)
+            setStripeParamsLoaded(true)
+          }
+          return
+        } catch (error) {
+          if (cancelled) return
+          const message = error instanceof Error ? error.message : String(error || 'Deal setup failed.')
+          setDealSetupMessage(message)
+          if (attempt < dealSetupMaxAttempts - 1) {
+            await new Promise((resolve) => setTimeout(resolve, dealSetupPollIntervalMs))
+            continue
+          }
           setBaseManifestRoot('')
           setDealOwner('')
           setStripeParams(null)
           setSlotBases([])
           setSlotProviders([])
+          setDealSetupStatus('error')
+          setDealSetupMessage(
+            message || 'Deal allocation is still propagating through chain and provider discovery. Retry in a moment.',
+          )
           setStripeParamsLoaded(true)
         }
       }
@@ -567,7 +604,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     return () => {
       cancelled = true
     }
-  }, [dealId]);
+  }, [dealId, dealSetupReloadNonce]);
 
   useEffect(() => {
     if (!isCommitSuccess) return;
@@ -1522,6 +1559,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!isConnected) {
         alert('Connect wallet first');
         return;
+      }
+      if (dealSetupStatus !== 'ready' || !stripeParamsLoaded) {
+        alert('This deal is still finalizing. Wait for deal settings and provider routing to load before uploading.')
+        return
       }
 
       if (persistInFlightRef.current) {
@@ -3111,7 +3152,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, compressUploads, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams]);
+  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
@@ -3268,14 +3309,40 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       detail: string,
     ) => ({ state, title, detail })
 
+    const gatewayMode2Flow = isMode2 && gatewayMode2Enabled && gatewayReachable
     const selected = Boolean(currentFileMeta || processing || hasManifestRoot)
     const uploadDone = isUploadComplete || readyToCommit || isAlreadyCommitted || isCommitPending || isCommitConfirming
+    const expandActiveInGatewayMode =
+      processing &&
+      shardProgress.phase !== 'gateway_uploading' &&
+      shardProgress.phase !== 'done' &&
+      shardProgress.phase !== 'error'
 
     const selectState: WorkflowStepState = hasError && !selected ? 'error' : selected ? 'done' : 'active'
     const expandState: WorkflowStepState =
-      hasError && (processing || hasManifestRoot) ? 'error' : processing ? 'active' : hasManifestRoot ? 'done' : 'idle'
+      hasError && (processing || hasManifestRoot)
+        ? 'error'
+        : gatewayMode2Flow
+          ? expandActiveInGatewayMode
+            ? 'active'
+            : hasManifestRoot || activeUploading || uploadDone
+              ? 'done'
+              : 'idle'
+          : processing
+            ? 'active'
+            : hasManifestRoot
+              ? 'done'
+              : 'idle'
     const uploadState: WorkflowStepState =
-      uploadErrorMessage ? 'error' : activeUploading ? 'active' : uploadDone ? 'done' : hasManifestRoot ? 'active' : 'idle'
+      uploadErrorMessage
+        ? 'error'
+        : activeUploading || shardProgress.phase === 'gateway_uploading'
+          ? 'active'
+          : uploadDone
+            ? 'done'
+            : hasManifestRoot
+              ? 'active'
+              : 'idle'
     const commitState: WorkflowStepState =
       commitError ? 'error' : isAlreadyCommitted ? 'done' : isCommitPending || isCommitConfirming ? 'active' : readyToCommit ? 'active' : 'idle'
 
@@ -3288,12 +3355,22 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       stepState(
         expandState,
         '2. Expand slab',
-        processing ? shardProgress.label || 'Sharding in browser' : hasManifestRoot ? `${shards.length} MDUs prepared` : 'Browser computes slab layout',
+        gatewayMode2Flow
+          ? expandActiveInGatewayMode
+            ? shardProgress.label || 'Gateway ingest and slab expansion'
+            : hasManifestRoot || activeUploading || uploadDone
+              ? 'Gateway ingest complete'
+              : 'Gateway receives the file and computes slab layout'
+          : processing
+            ? shardProgress.label || 'Sharding in browser'
+            : hasManifestRoot
+              ? `${shards.length} MDUs prepared`
+              : 'Browser computes slab layout',
       ),
       stepState(
         uploadState,
         '3. Upload to SPs',
-        activeUploading
+        activeUploading || shardProgress.phase === 'gateway_uploading'
           ? 'Uploading sparse artifacts in parallel'
           : uploadDone
             ? 'Provider upload complete'
@@ -3301,7 +3378,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ? uploadErrorMessage
               : hasManifestRoot
                 ? 'Starts automatically after expansion'
-                : 'Waiting for prepared artifacts',
+                : gatewayMode2Flow
+                  ? 'Starts after gateway ingest completes'
+                  : 'Waiting for prepared artifacts',
       ),
       stepState(
         commitState,
@@ -3319,15 +3398,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     activeUploading,
     commitError,
     currentFileMeta,
+    gatewayMode2Enabled,
+    gatewayReachable,
     hasError,
     hasManifestRoot,
     isAlreadyCommitted,
     isCommitConfirming,
     isCommitPending,
     isUploadComplete,
+    isMode2,
     processing,
     readyToCommit,
     shardProgress.label,
+    shardProgress.phase,
     shards.length,
     uploadErrorMessage,
   ])
@@ -3443,13 +3526,49 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         </button>
       ) : (
         <>
-          {!stripeParamsLoaded ? (
-            <div className="glass-panel industrial-border p-8 text-center">
+          {!stripeParamsLoaded || dealSetupStatus === 'loading' ? (
+            <div
+              className="glass-panel industrial-border p-8 text-center"
+              data-testid="mdu-deal-setup-panel"
+              data-setup-state="loading"
+            >
               <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-none border-2 border-border border-t-primary" />
-              <div className="text-sm font-semibold text-foreground">Loading deal settings…</div>
+              <div className="text-sm font-semibold text-foreground">Finalizing deal allocation…</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                Checking redundancy mode and gateway availability.
+                Waiting for the chain, LCD, and provider routing to agree on this deal before upload starts.
               </div>
+              {dealSetupMessage ? (
+                <div className="mt-3 text-[10px] font-mono-data uppercase tracking-[0.18em] text-muted-foreground">
+                  {dealSetupMessage}
+                </div>
+              ) : null}
+              <div className="mt-2 text-[10px] font-mono-data uppercase tracking-[0.18em] text-muted-foreground">
+                Attempt {String(Math.max(1, dealSetupAttemptRef.current))} / {String(dealSetupMaxAttempts)}
+              </div>
+            </div>
+          ) : dealSetupStatus === 'error' ? (
+            <div
+              className="glass-panel industrial-border p-8 text-center"
+              data-testid="mdu-deal-setup-panel"
+              data-setup-state="error"
+            >
+              <div className="text-sm font-semibold text-destructive">Deal setup is still propagating</div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Upload will stay blocked until this deal is visible through deal detail lookup and provider routing.
+              </div>
+              {dealSetupMessage ? (
+                <div className="mt-3 text-[10px] font-mono-data uppercase tracking-[0.18em] text-muted-foreground">
+                  {dealSetupMessage}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                data-testid="mdu-deal-setup-retry"
+                onClick={() => setDealSetupReloadNonce((value) => value + 1)}
+                className="cta-shadow mt-5 inline-flex items-center justify-center border border-primary bg-primary px-5 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+              >
+                Retry setup
+              </button>
             </div>
           ) : uploadPanelState === 'idle' ? (
             <div
