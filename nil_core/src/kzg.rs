@@ -52,6 +52,10 @@ pub fn set_wasm_msm_basis_mode(mode: usize) {
 pub struct BlobToCommitmentPerf {
     pub decode_ms: f64,
     pub transform_ms: f64,
+    pub msm_scalar_prep_ms: f64,
+    pub msm_bucket_fill_ms: f64,
+    pub msm_reduce_ms: f64,
+    pub msm_double_ms: f64,
     pub msm_ms: f64,
     pub compress_ms: f64,
     pub total_ms: f64,
@@ -280,9 +284,13 @@ impl KzgContext {
                 perf.decode_ms = now_ms() - decode_start;
                 let msm_start = now_ms();
                 let acc = if WASM_MSM_BASIS_MODE.load(Ordering::Relaxed) == 2 {
-                    msm_pippenger_g1_projective(&self.g1_points_projective, &evals)
+                    msm_pippenger_g1_projective_profiled_wasm(
+                        &self.g1_points_projective,
+                        &evals,
+                        &mut perf,
+                    )
                 } else {
-                    msm_pippenger_g1(&self.g1_points, &evals)
+                    msm_pippenger_g1_profiled_wasm(&self.g1_points, &evals, &mut perf)
                 };
                 perf.msm_ms = now_ms() - msm_start;
                 let compress_start = now_ms();
@@ -733,6 +741,142 @@ fn prepare_buckets(buckets: &mut Vec<G1Projective>, buckets_len: usize) -> &mut 
     let buckets = &mut buckets[..buckets_len];
     buckets.fill(G1Projective::identity());
     buckets
+}
+
+#[cfg(target_arch = "wasm32")]
+fn msm_pippenger_g1_profiled_wasm(
+    points: &[G1Affine],
+    scalars: &[Scalar],
+    perf: &mut BlobToCommitmentPerf,
+) -> G1Projective {
+    debug_assert_eq!(points.len(), scalars.len());
+
+    let n = points.len().min(scalars.len());
+    if n == 0 {
+        return G1Projective::identity();
+    }
+    let points = &points[..n];
+    let scalars = &scalars[..n];
+
+    let window_bits = pippenger_window_size(points.len());
+    let buckets_len = 1usize << window_bits;
+    let windows = (256 + window_bits - 1) / window_bits;
+
+    WASM_MSM_AFFINE_SCRATCH.with(|scratch| {
+        let mut scratch = scratch.borrow_mut();
+        let WasmMsmScratch {
+            scalar_bytes: scalar_bytes_buf,
+            buckets: buckets_buf,
+        } = &mut *scratch;
+
+        let scalar_prep_start = now_ms();
+        let scalar_bytes = prepare_scalar_bytes(scalar_bytes_buf, scalars);
+        perf.msm_scalar_prep_ms += now_ms() - scalar_prep_start;
+
+        let mut acc = G1Projective::identity();
+
+        for window_index in (0..windows).rev() {
+            if window_index != windows - 1 {
+                let double_start = now_ms();
+                for _ in 0..window_bits {
+                    acc = acc.double();
+                }
+                perf.msm_double_ms += now_ms() - double_start;
+            }
+
+            let fill_start = now_ms();
+            let buckets = prepare_buckets(buckets_buf, buckets_len);
+
+            let bit_offset = window_index * window_bits;
+            for (i, point) in points.iter().enumerate() {
+                let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
+                if w != 0 && w < buckets_len {
+                    buckets[w] += *point;
+                }
+            }
+            perf.msm_bucket_fill_ms += now_ms() - fill_start;
+
+            let reduce_start = now_ms();
+            let mut running = G1Projective::identity();
+            let mut window_sum = G1Projective::identity();
+            for idx in (1..buckets_len).rev() {
+                running += buckets[idx];
+                window_sum += running;
+            }
+            acc += window_sum;
+            perf.msm_reduce_ms += now_ms() - reduce_start;
+        }
+
+        acc
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn msm_pippenger_g1_projective_profiled_wasm(
+    points: &[G1Projective],
+    scalars: &[Scalar],
+    perf: &mut BlobToCommitmentPerf,
+) -> G1Projective {
+    debug_assert_eq!(points.len(), scalars.len());
+
+    let n = points.len().min(scalars.len());
+    if n == 0 {
+        return G1Projective::identity();
+    }
+    let points = &points[..n];
+    let scalars = &scalars[..n];
+
+    let window_bits = pippenger_window_size(points.len());
+    let buckets_len = 1usize << window_bits;
+    let windows = (256 + window_bits - 1) / window_bits;
+
+    WASM_MSM_PROJECTIVE_SCRATCH.with(|scratch| {
+        let mut scratch = scratch.borrow_mut();
+        let WasmMsmScratch {
+            scalar_bytes: scalar_bytes_buf,
+            buckets: buckets_buf,
+        } = &mut *scratch;
+
+        let scalar_prep_start = now_ms();
+        let scalar_bytes = prepare_scalar_bytes(scalar_bytes_buf, scalars);
+        perf.msm_scalar_prep_ms += now_ms() - scalar_prep_start;
+
+        let mut acc = G1Projective::identity();
+
+        for window_index in (0..windows).rev() {
+            if window_index != windows - 1 {
+                let double_start = now_ms();
+                for _ in 0..window_bits {
+                    acc = acc.double();
+                }
+                perf.msm_double_ms += now_ms() - double_start;
+            }
+
+            let fill_start = now_ms();
+            let buckets = prepare_buckets(buckets_buf, buckets_len);
+
+            let bit_offset = window_index * window_bits;
+            for (i, point) in points.iter().enumerate() {
+                let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
+                if w != 0 && w < buckets_len {
+                    buckets[w] += *point;
+                }
+            }
+            perf.msm_bucket_fill_ms += now_ms() - fill_start;
+
+            let reduce_start = now_ms();
+            let mut running = G1Projective::identity();
+            let mut window_sum = G1Projective::identity();
+            for idx in (1..buckets_len).rev() {
+                running += buckets[idx];
+                window_sum += running;
+            }
+            acc += window_sum;
+            perf.msm_reduce_ms += now_ms() - reduce_start;
+        }
+
+        acc
+    })
 }
 
 fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {

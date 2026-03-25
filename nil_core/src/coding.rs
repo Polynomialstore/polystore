@@ -39,6 +39,10 @@ pub struct ExpandPayloadFlatPerf {
     pub rs_ms: f64,
     pub commit_decode_ms: f64,
     pub commit_transform_ms: f64,
+    pub commit_msm_scalar_prep_ms: f64,
+    pub commit_msm_bucket_fill_ms: f64,
+    pub commit_msm_reduce_ms: f64,
+    pub commit_msm_double_ms: f64,
     pub commit_msm_ms: f64,
     pub commit_compress_ms: f64,
     pub commit_ms: f64,
@@ -371,6 +375,10 @@ fn expand_payload_flat_impl(
     let mut rs_ms = 0.0;
     let mut commit_decode_ms = 0.0;
     let mut commit_transform_ms = 0.0;
+    let mut commit_msm_scalar_prep_ms = 0.0;
+    let mut commit_msm_bucket_fill_ms = 0.0;
+    let mut commit_msm_reduce_ms = 0.0;
+    let mut commit_msm_double_ms = 0.0;
     let mut commit_msm_ms = 0.0;
     let mut commit_compress_ms = 0.0;
     let mut commit_ms = 0.0;
@@ -409,6 +417,10 @@ fn expand_payload_flat_impl(
             out_witness_flat[woff..woff + 48].copy_from_slice(&commitment);
             commit_decode_ms += perf.decode_ms;
             commit_transform_ms += perf.transform_ms;
+            commit_msm_scalar_prep_ms += perf.msm_scalar_prep_ms;
+            commit_msm_bucket_fill_ms += perf.msm_bucket_fill_ms;
+            commit_msm_reduce_ms += perf.msm_reduce_ms;
+            commit_msm_double_ms += perf.msm_double_ms;
             commit_msm_ms += perf.msm_ms;
             commit_compress_ms += perf.compress_ms;
             commit_ms += perf.total_ms;
@@ -420,6 +432,10 @@ fn expand_payload_flat_impl(
         rs_ms,
         commit_decode_ms,
         commit_transform_ms,
+        commit_msm_scalar_prep_ms,
+        commit_msm_bucket_fill_ms,
+        commit_msm_reduce_ms,
+        commit_msm_double_ms,
         commit_msm_ms,
         commit_compress_ms,
         commit_ms,

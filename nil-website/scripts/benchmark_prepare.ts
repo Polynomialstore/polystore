@@ -21,6 +21,10 @@ type ExpandPerf = {
   rs_ms?: number
   commit_decode_ms?: number
   commit_transform_ms?: number
+  commit_msm_scalar_prep_ms?: number
+  commit_msm_bucket_fill_ms?: number
+  commit_msm_reduce_ms?: number
+  commit_msm_double_ms?: number
   commit_msm_ms?: number
   commit_compress_ms?: number
   commit_ms?: number
@@ -348,6 +352,10 @@ function summarizeRuns(name: string, runs: IterationResult[]) {
       rust_rs_ms: run.records.reduce((sum, record) => sum + Number(record.rs_ms ?? 0), 0),
       rust_commit_decode_ms: run.records.reduce((sum, record) => sum + Number(record.commit_decode_ms ?? 0), 0),
       rust_commit_transform_ms: run.records.reduce((sum, record) => sum + Number(record.commit_transform_ms ?? 0), 0),
+      rust_commit_msm_scalar_prep_ms: run.records.reduce((sum, record) => sum + Number(record.commit_msm_scalar_prep_ms ?? 0), 0),
+      rust_commit_msm_bucket_fill_ms: run.records.reduce((sum, record) => sum + Number(record.commit_msm_bucket_fill_ms ?? 0), 0),
+      rust_commit_msm_reduce_ms: run.records.reduce((sum, record) => sum + Number(record.commit_msm_reduce_ms ?? 0), 0),
+      rust_commit_msm_double_ms: run.records.reduce((sum, record) => sum + Number(record.commit_msm_double_ms ?? 0), 0),
       rust_commit_msm_ms: run.records.reduce((sum, record) => sum + Number(record.commit_msm_ms ?? 0), 0),
       rust_commit_compress_ms: run.records.reduce((sum, record) => sum + Number(record.commit_compress_ms ?? 0), 0),
       rust_commit_ms: run.records.reduce((sum, record) => sum + Number(record.commit_ms ?? 0), 0),
@@ -373,6 +381,10 @@ function summarizeRuns(name: string, runs: IterationResult[]) {
         rust_rs_ms: stats(summarizedRuns.map((run) => run.phases.rust_rs_ms)),
         rust_commit_decode_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_decode_ms)),
         rust_commit_transform_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_transform_ms)),
+        rust_commit_msm_scalar_prep_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_msm_scalar_prep_ms)),
+        rust_commit_msm_bucket_fill_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_msm_bucket_fill_ms)),
+        rust_commit_msm_reduce_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_msm_reduce_ms)),
+        rust_commit_msm_double_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_msm_double_ms)),
         rust_commit_msm_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_msm_ms)),
         rust_commit_compress_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_compress_ms)),
         rust_commit_ms: stats(summarizedRuns.map((run) => run.phases.rust_commit_ms)),
