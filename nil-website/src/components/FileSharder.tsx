@@ -44,6 +44,7 @@ import {
 } from '../lib/upload/planner';
 import { createUploadEngine, type UploadTaskEvent } from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
+import { pickUploadParallelism } from '../lib/upload/uploadParallelism';
 import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
@@ -503,6 +504,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     () =>
       createUploadEngine({
         transport: createSparseHttpTransportPort(),
+        parallelism: pickUploadParallelism(
+          typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined,
+        ),
         chainCommitter: {
           commitContent,
         },

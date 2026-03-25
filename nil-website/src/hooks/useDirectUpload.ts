@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { createUploadEngine, type PreparedMdu, type UploadProgressStep } from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
+import { pickUploadParallelism } from '../lib/upload/uploadParallelism';
 
 interface DirectUploadOptions {
   dealId: string;
@@ -32,7 +33,13 @@ export function useDirectUpload(options: DirectUploadOptions): DirectUploadResul
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const uploadEngine = useMemo(
-    () => createUploadEngine({ transport: createSparseHttpTransportPort() }),
+    () =>
+      createUploadEngine({
+        transport: createSparseHttpTransportPort(),
+        parallelism: pickUploadParallelism(
+          typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined,
+        ),
+      }),
     [],
   )
 
