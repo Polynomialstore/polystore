@@ -486,7 +486,10 @@ export function createUploadEngine(options: UploadEngineOptions) {
       const metadataTasks = flattenTaskGroups(metadataTaskGroups)
       const shardTasks = flattenTaskGroups(shardTaskGroups)
       const combinedTasks = interleaveTaskGroups(metadataTaskGroups, shardTaskGroups)
-      const combinedConcurrency = Math.max(stripedMetadataConcurrency, stripedShardConcurrency)
+      const combinedConcurrency =
+        shardTasks.length > 0
+          ? Math.min(combinedTasks.length, stripedMetadataConcurrency + stripedShardConcurrency)
+          : Math.min(combinedTasks.length, stripedMetadataConcurrency)
 
       if (combinedTasks.length === metadataTasks.length + shardTasks.length) {
         return runUploadTasks(combinedTasks, steps, input.onProgress, input.onTaskEvent, combinedConcurrency, ports.transport)

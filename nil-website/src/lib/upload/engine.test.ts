@@ -175,7 +175,7 @@ test('upload engine: direct upload overlaps artifact requests with bounded concu
   assert.ok(elapsedMs < 140, `expected bounded parallel direct upload, got ${elapsedMs}ms`)
 })
 
-test('upload engine: striped upload overlaps metadata and shard requests with bounded concurrency', async () => {
+test('upload engine: striped upload overlaps metadata and shard requests with combined bounded concurrency', async () => {
   let activeTotal = 0
   let peakTotal = 0
   let completedMetadata = 0
@@ -267,7 +267,7 @@ test('upload engine: striped upload overlaps metadata and shard requests with bo
 
   assert.equal(result.ok, true)
   assert.equal(shardStartedBeforeMetadataComplete, true)
-  assert.equal(peakTotal, 2)
+  assert.equal(peakTotal, 4)
 })
 
 test('buildCommitRequest: mode2 derives total mdus from witness + user counts', () => {
