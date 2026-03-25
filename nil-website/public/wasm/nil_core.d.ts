@@ -16,7 +16,9 @@ export class NilWasm {
   set_pippenger_window_bits(bits: number): void;
   expand_mdu_rs_flat_uncommitted(mdu_bytes: Uint8Array, k: number, m: number): any;
   expand_payload_rs_flat_uncommitted(payload_bytes: Uint8Array, k: number, m: number): any;
+  expand_mdu_rs_flat_committed_profiled(mdu_bytes: Uint8Array, k: number, m: number): any;
   constructor(trusted_setup_bytes: Uint8Array);
+  expand_payload_rs_flat_committed_profiled(payload_bytes: Uint8Array, k: number, m: number): any;
 }
 
 export class WasmMdu0Builder {
@@ -45,8 +47,10 @@ export interface InitOutput {
   readonly nilwasm_compute_mdu_root: (a: number, b: number, c: number) => [number, number, number];
   readonly nilwasm_expand_file: (a: number, b: number, c: number) => [number, number, number];
   readonly nilwasm_expand_mdu_rs: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+  readonly nilwasm_expand_mdu_rs_flat_committed_profiled: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
   readonly nilwasm_expand_mdu_rs_flat_uncommitted: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
   readonly nilwasm_expand_payload_rs_flat: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+  readonly nilwasm_expand_payload_rs_flat_committed_profiled: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
   readonly nilwasm_expand_payload_rs_flat_uncommitted: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
   readonly nilwasm_new: (a: number, b: number) => [number, number, number];
   readonly nilwasm_set_pippenger_window_bits: (a: number, b: number) => [number, number];

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
 type BasisMode = 'blst' | 'affine' | 'projective'
+type PipelineMode = 'split' | 'split_unprofiled' | 'combined' | 'fused_batch'
 
 type ResultPayload = {
   id: number
@@ -47,6 +48,13 @@ const rsK = Number(process.env.RS_K || 2)
 const rsM = Number(process.env.RS_M || 1)
 const cycles = Number(process.env.CYCLES || 3)
 const basisMode = (process.env.BASIS_MODE || 'blst') as BasisMode
+const pipelineModes = (process.env.PIPELINE_MODES || process.env.PIPELINE_MODE || 'split')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(
+    (value): value is PipelineMode =>
+      value === 'split' || value === 'split_unprofiled' || value === 'combined' || value === 'fused_batch',
+  )
 const concurrencies = (process.env.CONCURRENCIES || '3,4,5,6')
   .split(',')
   .map((value) => Number(value.trim()))
@@ -60,6 +68,9 @@ if (!['blst', 'affine', 'projective'].includes(basisMode)) {
 }
 if (concurrencies.length === 0) {
   throw new Error('CONCURRENCIES must include at least one positive integer')
+}
+if (pipelineModes.length === 0) {
+  throw new Error('PIPELINE_MODES must include at least one of split,split_unprofiled,combined,fused_batch')
 }
 
 function makeDeterministicPayload(length: number): Uint8Array {
@@ -89,7 +100,7 @@ function chunkPayload(payload: Uint8Array): Uint8Array[] {
   return chunks
 }
 
-async function runUserStageIteration(chunks: Uint8Array[], concurrency: number) {
+async function runUserStageIteration(chunks: Uint8Array[], concurrency: number, pipelineMode: PipelineMode) {
   const workerCount = Math.max(1, Math.min(concurrency, chunks.length))
   const workerFile = new URL('./benchmark_user_stage_worker.ts', import.meta.url)
   const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
@@ -97,7 +108,7 @@ async function runUserStageIteration(chunks: Uint8Array[], concurrency: number) 
 
   const workers = Array.from({ length: workerCount }, () =>
     new Worker(workerFile, {
-      workerData: { basisMode, trustedSetupPath, wasmPath, rsK, rsM },
+      workerData: { basisMode, trustedSetupPath, wasmPath, rsK, rsM, pipelineMode },
       execArgv: process.execArgv,
     }),
   )
@@ -157,6 +168,7 @@ async function runUserStageIteration(chunks: Uint8Array[], concurrency: number) 
 
   const ordered = Array.from(results.values()).sort((a, b) => a.index - b.index)
   return {
+    pipeline_mode: pipelineMode,
     worker_count: workerCount,
     user_stage_wall_ms: performance.now() - start,
     records: ordered,
@@ -180,14 +192,22 @@ async function runUserStageIteration(chunks: Uint8Array[], concurrency: number) 
 
 const payload = makeDeterministicPayload(fileBytes)
 const chunks = chunkPayload(payload)
-const results = new Map<number, { runs: number[]; worker_count: number }>()
+const results = new Map<string, { runs: number[]; worker_count: number; pipeline_mode: PipelineMode; concurrency: number }>()
 
 for (let cycle = 0; cycle < cycles; cycle += 1) {
-  for (const concurrency of concurrencies) {
-    const summary = await runUserStageIteration(chunks, concurrency)
-    const bucket = results.get(concurrency) ?? { runs: [], worker_count: summary.worker_count }
-    bucket.runs.push(summary.user_stage_wall_ms)
-    results.set(concurrency, bucket)
+  for (const pipelineMode of pipelineModes) {
+    for (const concurrency of concurrencies) {
+      const summary = await runUserStageIteration(chunks, concurrency, pipelineMode)
+      const key = `${pipelineMode}:${concurrency}`
+      const bucket = results.get(key) ?? {
+        runs: [],
+        worker_count: summary.worker_count,
+        pipeline_mode: pipelineMode,
+        concurrency,
+      }
+      bucket.runs.push(summary.user_stage_wall_ms)
+      results.set(key, bucket)
+    }
   }
 }
 
@@ -195,12 +215,15 @@ const output = {
   file_bytes: fileBytes,
   total_user_mdus: chunks.length,
   basis_mode: basisMode,
+  pipeline_modes: pipelineModes,
   cycles,
   concurrencies,
   results: Object.fromEntries(
-    [...results.entries()].map(([concurrency, result]) => [
-      concurrency,
+    [...results.entries()].map(([key, result]) => [
+      key,
       {
+        pipeline_mode: result.pipeline_mode,
+        concurrency: result.concurrency,
         worker_count: result.worker_count,
         runs: result.runs,
         stats: readStats(result.runs),

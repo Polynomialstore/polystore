@@ -605,29 +605,24 @@ self.onmessage = async (event) => {
                 if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
                 const { data, k, m } = payload as { data: Uint8Array; k: number; m: number };
                 if (!(data instanceof Uint8Array)) throw new Error('data must be a Uint8Array');
-                const expanded = nilWasmInstance.expand_mdu_rs(data, Number(k), Number(m)) as unknown;
+                const expanded = nilWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m)) as unknown;
                 const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded;
-                const witnessRaw = (parsed as { witness?: unknown[] }).witness ?? [];
-                const shardsRaw = (parsed as { shards?: unknown[] }).shards ?? [];
-
-                const witnessList: Uint8Array[] = witnessRaw.map((w) =>
-                    w instanceof Uint8Array ? w : new Uint8Array(w as ArrayBufferLike),
-                );
-                const shardsList: Uint8Array[] = shardsRaw.map((s) =>
-                    s instanceof Uint8Array ? s : new Uint8Array(s as ArrayBufferLike),
-                );
-
-                const witnessFlat = new Uint8Array(witnessList.length * 48);
-                let offset = 0;
-                for (const w of witnessList) {
-                    witnessFlat.set(w, offset);
-                    offset += w.length;
+                const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat;
+                const rootRaw = (parsed as { mdu_root?: unknown }).mdu_root;
+                const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat;
+                const shardLen = Number((parsed as { shard_len?: unknown }).shard_len ?? 0);
+                if (!Number.isInteger(shardLen) || shardLen <= 0) {
+                    throw new Error('expandMduRs returned an invalid shard length');
                 }
 
-                const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
-                const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
+                const witnessFlat =
+                    witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike);
+                const rootBytes =
+                    rootRaw instanceof Uint8Array ? rootRaw : new Uint8Array(rootRaw as ArrayBufferLike);
+                const shardsFlat =
+                    shardsRaw instanceof Uint8Array ? shardsRaw : new Uint8Array(shardsRaw as ArrayBufferLike);
 
-                result = { witness_flat: witnessFlat, mdu_root: rootBytes, shards: shardsList };
+                result = { witness_flat: witnessFlat, mdu_root: rootBytes, shards_flat: shardsFlat, shard_len: shardLen };
                 break;
             }
             case 'expandPayloadRs': {
@@ -635,9 +630,11 @@ self.onmessage = async (event) => {
                 const { data, k, m } = payload as { data: Uint8Array; k: number; m: number };
                 if (!(data instanceof Uint8Array)) throw new Error('data must be a Uint8Array');
 
-                const expanded = nilWasmInstance.expand_payload_rs_flat_uncommitted(data, Number(k), Number(m)) as unknown;
+                const expanded = nilWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m)) as unknown;
                 const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded;
                 const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat;
+                const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat;
+                const rootRaw = (parsed as { mdu_root?: unknown }).mdu_root;
                 const shardLen = Number((parsed as { shard_len?: unknown }).shard_len ?? 0);
                 if (!Number.isInteger(shardLen) || shardLen <= 0) {
                     throw new Error('expandPayloadRs returned an invalid shard length');
@@ -647,10 +644,10 @@ self.onmessage = async (event) => {
                 if (shardsFlat.byteLength % shardLen !== 0) {
                     throw new Error('expandPayloadRs returned misaligned shard bytes');
                 }
-
-                const witnessFlat = await commitBlobsWithPool(shardsFlat);
-                const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
-                const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
+                const witnessFlat =
+                    witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike);
+                const rootBytes =
+                    rootRaw instanceof Uint8Array ? rootRaw : new Uint8Array(rootRaw as ArrayBufferLike);
 
                 result = { witness_flat: witnessFlat, mdu_root: rootBytes, shards_flat: shardsFlat, shard_len: shardLen };
                 break;

@@ -47,33 +47,38 @@ self.onmessage = async (event) => {
         const { data, k, m } = payload as { data: Uint8Array; k: number; m: number }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
         const opStart = performance.now()
-        const expandStart = performance.now()
-        const expanded = nilWasmInstance.expand_mdu_rs(data, Number(k), Number(m)) as unknown
-        const expandMs = performance.now() - expandStart
+        const expanded = nilWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m)) as unknown
         const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded
-        const witnessRaw = (parsed as { witness?: unknown[] }).witness ?? []
-        const shardsRaw = (parsed as { shards?: unknown[] }).shards ?? []
-
-        const witnessList: Uint8Array[] = witnessRaw.map((w) =>
-          w instanceof Uint8Array ? w : new Uint8Array(w as ArrayBufferLike),
-        )
-        const shardsList: Uint8Array[] = shardsRaw.map((s) =>
-          s instanceof Uint8Array ? s : new Uint8Array(s as ArrayBufferLike),
-        )
-
-        const witnessFlat = new Uint8Array(witnessList.length * 48)
-        let offset = 0
-        for (const w of witnessList) {
-          witnessFlat.set(w, offset)
-          offset += w.length
+        const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat
+        const rootRaw = (parsed as { mdu_root?: unknown }).mdu_root
+        const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat
+        const shardLen = Number((parsed as { shard_len?: unknown }).shard_len ?? 0)
+        const rustPerf = (parsed as {
+          perf?: {
+            encode_ms?: unknown
+            rs_ms?: unknown
+            commit_decode_ms?: unknown
+            commit_transform_ms?: unknown
+            commit_msm_scalar_prep_ms?: unknown
+            commit_msm_bucket_fill_ms?: unknown
+            commit_msm_reduce_ms?: unknown
+            commit_msm_double_ms?: unknown
+            commit_msm_ms?: unknown
+            commit_compress_ms?: unknown
+            commit_ms?: unknown
+            total_ms?: unknown
+            rows?: unknown
+            shards_total?: unknown
+          }
+        }).perf
+        if (!Number.isInteger(shardLen) || shardLen <= 0) {
+          throw new Error('expandMduRs returned an invalid shard length')
         }
 
-        const rootStart = performance.now()
-        const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown
-        const rootMs = performance.now() - rootStart
-        const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike)
-        const transferables: Transferable[] = [witnessFlat.buffer, rootBytes.buffer]
-        for (const shard of shardsList) transferables.push(shard.buffer)
+        const witnessFlat = witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike)
+        const rootBytes = rootRaw instanceof Uint8Array ? rootRaw : new Uint8Array(rootRaw as ArrayBufferLike)
+        const shardsFlat = shardsRaw instanceof Uint8Array ? shardsRaw : new Uint8Array(shardsRaw as ArrayBufferLike)
+        const transferables: Transferable[] = [witnessFlat.buffer, rootBytes.buffer, shardsFlat.buffer]
         ;(self as unknown as Worker).postMessage(
           {
             id,
@@ -81,12 +86,30 @@ self.onmessage = async (event) => {
             payload: {
               witness_flat: witnessFlat,
               mdu_root: rootBytes,
-              shards: shardsList,
+              shards_flat: shardsFlat,
+              shard_len: shardLen,
               perf: {
-                expandMs,
-                rootMs,
+                expandMs: Number(rustPerf?.encode_ms ?? 0) + Number(rustPerf?.rs_ms ?? 0),
+                rootMs: 0,
                 totalMs: performance.now() - opStart,
-                shardCount: shardsList.length,
+                shardCount: Math.floor(shardsFlat.byteLength / shardLen),
+                shardLen,
+                rustEncodeMs: Number(rustPerf?.encode_ms ?? 0),
+                rustRsMs: Number(rustPerf?.rs_ms ?? 0),
+                rustCommitDecodeMs: Number(rustPerf?.commit_decode_ms ?? 0),
+                rustCommitTransformMs: Number(rustPerf?.commit_transform_ms ?? 0),
+                rustCommitMsmScalarPrepMs: Number(rustPerf?.commit_msm_scalar_prep_ms ?? 0),
+                rustCommitMsmBucketFillMs: Number(rustPerf?.commit_msm_bucket_fill_ms ?? 0),
+                rustCommitMsmReduceMs: Number(rustPerf?.commit_msm_reduce_ms ?? 0),
+                rustCommitMsmDoubleMs: Number(rustPerf?.commit_msm_double_ms ?? 0),
+                rustCommitMsmMs: Number(rustPerf?.commit_msm_ms ?? 0),
+                rustCommitCompressMs: Number(rustPerf?.commit_compress_ms ?? 0),
+                rustCommitMs: Number(rustPerf?.commit_ms ?? 0),
+                rustTotalMs: Number(rustPerf?.total_ms ?? 0),
+                rustCommitBackend: 'blst',
+                rustCommitMsmSubphasesAvailable: false,
+                rows: Number(rustPerf?.rows ?? 0),
+                shardsTotal: Number(rustPerf?.shards_total ?? 0),
               },
             },
           },
@@ -100,11 +123,11 @@ self.onmessage = async (event) => {
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
 
         const opStart = performance.now()
-        const expandStart = performance.now()
-        const expanded = nilWasmInstance.expand_payload_rs_flat_uncommitted(data, Number(k), Number(m)) as unknown
-        const expandMs = performance.now() - expandStart
+        const expanded = nilWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m)) as unknown
         const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded
         const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat
+        const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat
+        const rootRaw = (parsed as { mdu_root?: unknown }).mdu_root
         const shardLen = Number((parsed as { shard_len?: unknown }).shard_len ?? 0)
         const rustPerf = (parsed as {
           perf?: {
@@ -112,6 +135,10 @@ self.onmessage = async (event) => {
             rs_ms?: unknown
             commit_decode_ms?: unknown
             commit_transform_ms?: unknown
+            commit_msm_scalar_prep_ms?: unknown
+            commit_msm_bucket_fill_ms?: unknown
+            commit_msm_reduce_ms?: unknown
+            commit_msm_double_ms?: unknown
             commit_msm_ms?: unknown
             commit_compress_ms?: unknown
             commit_ms?: unknown
@@ -128,36 +155,9 @@ self.onmessage = async (event) => {
         if (shardsFlat.byteLength % shardLen !== 0) {
           throw new Error('expandPayloadRs returned misaligned shard bytes')
         }
-
-        const commitStart = performance.now()
-        const committedRaw = nilWasmInstance.commit_blobs_profiled(shardsFlat) as {
-          witness_flat?: Uint8Array | ArrayBufferLike
-          perf?: {
-            decode_ms?: unknown
-            transform_ms?: unknown
-            msm_scalar_prep_ms?: unknown
-            msm_bucket_fill_ms?: unknown
-            msm_reduce_ms?: unknown
-            msm_double_ms?: unknown
-            msm_ms?: unknown
-            compress_ms?: unknown
-            total_ms?: unknown
-            blobs?: unknown
-          }
-        }
-        const commitMs = performance.now() - commitStart
-        const witnessRaw = committedRaw?.witness_flat
-        if (!witnessRaw) {
-          throw new Error('commit_blobs_profiled returned no witness bytes')
-        }
         const witnessFlat =
           witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike)
-        const commitPerf = committedRaw?.perf
-
-        const rootStart = performance.now()
-        const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown
-        const rootMs = performance.now() - rootStart
-        const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike)
+        const rootBytes = rootRaw instanceof Uint8Array ? rootRaw : new Uint8Array(rootRaw as ArrayBufferLike)
         ;(self as unknown as Worker).postMessage(
           {
             id,
@@ -168,23 +168,23 @@ self.onmessage = async (event) => {
               shards_flat: shardsFlat,
               shard_len: shardLen,
               perf: {
-                expandMs,
-                commitMs,
-                rootMs,
+                expandMs: Number(rustPerf?.encode_ms ?? 0) + Number(rustPerf?.rs_ms ?? 0),
+                commitMs: Number(rustPerf?.commit_ms ?? 0),
+                rootMs: 0,
                 totalMs: performance.now() - opStart,
                 shardCount: shardsFlat.byteLength / shardLen,
                 shardLen,
                 rustEncodeMs: Number(rustPerf?.encode_ms ?? 0),
                 rustRsMs: Number(rustPerf?.rs_ms ?? 0),
-                rustCommitDecodeMs: Number(commitPerf?.decode_ms ?? 0),
-                rustCommitTransformMs: Number(commitPerf?.transform_ms ?? 0),
-                rustCommitMsmScalarPrepMs: Number(commitPerf?.msm_scalar_prep_ms ?? 0),
-                rustCommitMsmBucketFillMs: Number(commitPerf?.msm_bucket_fill_ms ?? 0),
-                rustCommitMsmReduceMs: Number(commitPerf?.msm_reduce_ms ?? 0),
-                rustCommitMsmDoubleMs: Number(commitPerf?.msm_double_ms ?? 0),
-                rustCommitMsmMs: Number(commitPerf?.msm_ms ?? 0),
-                rustCommitCompressMs: Number(commitPerf?.compress_ms ?? 0),
-                rustCommitMs: Number(commitPerf?.total_ms ?? commitMs),
+                rustCommitDecodeMs: Number(rustPerf?.commit_decode_ms ?? 0),
+                rustCommitTransformMs: Number(rustPerf?.commit_transform_ms ?? 0),
+                rustCommitMsmScalarPrepMs: Number(rustPerf?.commit_msm_scalar_prep_ms ?? 0),
+                rustCommitMsmBucketFillMs: Number(rustPerf?.commit_msm_bucket_fill_ms ?? 0),
+                rustCommitMsmReduceMs: Number(rustPerf?.commit_msm_reduce_ms ?? 0),
+                rustCommitMsmDoubleMs: Number(rustPerf?.commit_msm_double_ms ?? 0),
+                rustCommitMsmMs: Number(rustPerf?.commit_msm_ms ?? 0),
+                rustCommitCompressMs: Number(rustPerf?.commit_compress_ms ?? 0),
+                rustCommitMs: Number(rustPerf?.commit_ms ?? 0),
                 rustTotalMs: Number(rustPerf?.total_ms ?? 0),
                 rustCommitBackend: 'blst',
                 rustCommitMsmSubphasesAvailable: false,
