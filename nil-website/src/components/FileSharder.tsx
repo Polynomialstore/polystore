@@ -437,6 +437,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     (event: string, extra: Record<string, unknown> = {}) => {
       const now = performance.now()
       const run = browserPerfRunRef.current
+      const perfObj =
+        typeof performance !== 'undefined'
+          ? (performance as typeof performance & {
+              memory?: {
+                usedJSHeapSize?: number
+                totalJSHeapSize?: number
+                jsHeapSizeLimit?: number
+              }
+            })
+          : null
+      const memory = perfObj?.memory
       const payload = {
         event,
         dealId,
@@ -444,6 +455,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         fileName: run?.fileName ?? null,
         fileBytes: run?.fileSize ?? null,
         sinceRunMs: run ? roundPerfMs(now - run.startedAtMs) : null,
+        heapUsedBytes: roundPerfMs(memory?.usedJSHeapSize),
+        heapTotalBytes: roundPerfMs(memory?.totalJSHeapSize),
+        heapLimitBytes: roundPerfMs(memory?.jsHeapSizeLimit),
         ...extra,
       }
       if (typeof window !== 'undefined') {
@@ -1692,6 +1706,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
 
       browserPerfStartRun(file)
+      browserPerfStartPhase('read_file', {
+        fileType: file.type || null,
+      })
       lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };
       const startTs = performance.now();
       setShowSystemActivity(false)
@@ -2428,6 +2445,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
 
       const buffer = await file.arrayBuffer()
+      browserPerfEndPhase('read_file', {
+        ok: true,
+        bufferBytes: buffer.byteLength,
+      })
       console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`)
       let bytes: Uint8Array = new Uint8Array(buffer)
       let logicalSizeBytes = file.size
@@ -2457,7 +2478,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
       if (compressUploads && contentEncoding === 'none' && !hasNilceHeader) {
         try {
+          browserPerfStartPhase('nilce_wrap', {
+            inputBytes: bytes.length,
+          })
           const wrapped = await maybeWrapNilceZstd(bytes)
+          browserPerfEndPhase('nilce_wrap', {
+            ok: true,
+            wrapped: wrapped.wrapped,
+            encoding: wrapped.encoding,
+            inputBytes: logicalSizeBytes,
+            outputBytes: wrapped.bytes.length,
+          })
           if (wrapped.wrapped && wrapped.encoding === 'zstd') {
             bytes = wrapped.bytes as Uint8Array
             contentEncoding = 'zstd'
@@ -2469,6 +2500,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e)
+          browserPerfEndPhase('nilce_wrap', {
+            ok: false,
+            error: msg,
+          })
           addLog(`> NilCE compression failed; proceeding without compression (${msg})`)
         }
       }
@@ -2486,6 +2521,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     let existingMaxEnd = 0
 
     if (useMode2) {
+      browserPerfStartPhase('append_bootstrap', {
+        chainManifestRoot: baseManifestRoot || null,
+      })
       const localManifestRoot = normalizeManifestRoot(await readManifestRoot(dealId).catch(() => null))
       const loadLocalAppendBase = async () => {
         const mdu0 = await readMdu(dealId, 0)
@@ -2527,8 +2565,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         existingUserMdus = resolvedAppendBase.existingUserMdus
         existingUserCount = resolvedAppendBase.existingUserCount
         existingMaxEnd = resolvedAppendBase.existingMaxEnd
+        browserPerfEndPhase('append_bootstrap', {
+          ok: true,
+          existingUserCount,
+          existingMaxEnd,
+          localManifestRoot,
+        })
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
+        browserPerfEndPhase('append_bootstrap', {
+          ok: false,
+          error: msg,
+        })
         addLog(`> Mode 2 append bootstrap failed: ${msg}`)
         setShardProgress((p) => ({
           ...p,
@@ -2542,6 +2590,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
     }
 
+    browserPerfStartPhase('plan_upload', {
+      bytes: bytes.length,
+      logicalBytes: logicalSizeBytes,
+    })
     const uploadPlan = buildUploadPlan({
       fileBytes: bytes.length,
       rawMduCapacity: RawMduCapacity,
@@ -2557,6 +2609,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const witnessPayloads = uploadPlan.witnessPayloads
     const userPayloads = uploadPlan.userPayloads
     const workTotal = uploadPlan.workTotal
+    browserPerfEndPhase('plan_upload', {
+      ok: true,
+      totalUserMdus: uploadPlan.totalUserMdus,
+      witnessMduCount: uploadPlan.witnessMduCount,
+      blobsTotal: uploadPlan.blobsTotal,
+      workTotal: uploadPlan.workTotal,
+    })
     addLog(`DEBUG: File bytes: ${bytes.length}, RawMduCapacity: ${RawMduCapacity}, TotalUserMdus: ${totalUserChunks}`);
     console.log('[perf] sharding start', {
       file: file.name,
