@@ -197,6 +197,75 @@ self.onmessage = async (event) => {
         )
         return
       }
+      case 'commitMduProfiled': {
+        if (!nilWasmInstance) throw new Error('NilWasm not initialized')
+        const { data } = payload as { data: Uint8Array }
+        const BLOBS_PER_MDU = 64
+        if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
+        if (data.byteLength !== 8 * 1024 * 1024) throw new Error('MDU bytes must be exactly 8 MiB')
+
+        const opStart = performance.now()
+        const commitStart = performance.now()
+        const committedRaw = nilWasmInstance.commit_blobs_profiled(data) as {
+          witness_flat?: Uint8Array | ArrayBufferLike
+          perf?: {
+            decode_ms?: unknown
+            transform_ms?: unknown
+            msm_scalar_prep_ms?: unknown
+            msm_bucket_fill_ms?: unknown
+            msm_reduce_ms?: unknown
+            msm_double_ms?: unknown
+            msm_ms?: unknown
+            compress_ms?: unknown
+            total_ms?: unknown
+            blobs?: unknown
+          }
+        }
+        const commitMs = performance.now() - commitStart
+        const witnessRaw = committedRaw?.witness_flat
+        if (!witnessRaw) {
+          throw new Error('commit_blobs_profiled returned no witness bytes')
+        }
+        const witnessFlat =
+          witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike)
+        const commitPerf = committedRaw?.perf
+
+        const rootStart = performance.now()
+        const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown
+        const rootMs = performance.now() - rootStart
+        const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike)
+        ;(self as unknown as Worker).postMessage(
+          {
+            id,
+            type: 'result',
+            payload: {
+              witness_flat: witnessFlat,
+              mdu_root: rootBytes,
+              perf: {
+                commitMs,
+                rootMs,
+                totalMs: performance.now() - opStart,
+                blobCount: BLOBS_PER_MDU,
+                batchCount: 1,
+                batchSize: BLOBS_PER_MDU,
+                rustCommitDecodeMs: Number(commitPerf?.decode_ms ?? 0),
+                rustCommitTransformMs: Number(commitPerf?.transform_ms ?? 0),
+                rustCommitMsmScalarPrepMs: Number(commitPerf?.msm_scalar_prep_ms ?? 0),
+                rustCommitMsmBucketFillMs: Number(commitPerf?.msm_bucket_fill_ms ?? 0),
+                rustCommitMsmReduceMs: Number(commitPerf?.msm_reduce_ms ?? 0),
+                rustCommitMsmDoubleMs: Number(commitPerf?.msm_double_ms ?? 0),
+                rustCommitMsmMs: Number(commitPerf?.msm_ms ?? 0),
+                rustCommitCompressMs: Number(commitPerf?.compress_ms ?? 0),
+                rustCommitMs: Number(commitPerf?.total_ms ?? commitMs),
+                rustCommitBackend: 'blst',
+                rustCommitMsmSubphasesAvailable: false,
+              },
+            },
+          },
+          [witnessFlat.buffer, rootBytes.buffer],
+        )
+        return
+      }
       default:
         throw new Error(`Unknown message type: ${type}`)
     }

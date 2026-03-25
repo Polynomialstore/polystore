@@ -3001,6 +3001,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
               addLog(`> Sharding User MDU #${i}...`);
               const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
+              let lastProgressUiUpdateMs = 0;
               const wasmStart = performance.now();
               const result = await workerClient.shardFileProgressive(chunkCopy, {
                 batchBlobs,
@@ -3008,6 +3009,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   const payload = progress as { kind?: string; done?: number; total?: number };
                   if (payload.kind !== 'blob') return;
                   const done = Number(payload.done ?? 0);
+                  const now = performance.now();
+                  const isFinal = done >= PLANNER_BLOBS_PER_MDU;
+                  if (!isFinal && now - lastProgressUiUpdateMs < 100) return;
+                  lastProgressUiUpdateMs = now;
                   setShardProgress((prev) => {
                     const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
                     const doneNonTrivial = Math.min(done, nonTrivialBlobs);
@@ -3176,8 +3181,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
             witnessMdus.push(makePreparedMdu(1 + i, witnessMduBytes)); 
-            
-            await workerClient.setMdu0Root(i, rootBytes);
 
             const opMs = performance.now() - opStart;
             const perfSample: PreparePerfSample = {

@@ -153,7 +153,7 @@ function sendMessageToWorker(
 }
 
 function sendExpansionMessageToWorker(
-  type: 'expandMduRs' | 'expandPayloadRs',
+  type: 'expandMduRs' | 'expandPayloadRs' | 'commitMduProfiled',
   payload: unknown,
   transferables?: Transferable[],
 ): Promise<unknown> {
@@ -321,7 +321,7 @@ export const workerClient = {
   },
 
   async commitMduProfiled(data: Uint8Array): Promise<ExpandedMdu> {
-    return sendMessageToWorker('commitMduProfiled', { data }, [data.buffer]) as Promise<ExpandedMdu>;
+    return sendExpansionMessageToWorker('commitMduProfiled', { data }, [data.buffer]) as Promise<ExpandedMdu>;
   },
 
   async expandMduRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
