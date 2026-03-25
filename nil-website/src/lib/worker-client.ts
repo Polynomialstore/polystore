@@ -161,8 +161,19 @@ function sendExpansionMessageToWorker(
     return sendMessageToWorker(type, payload, transferables)
   }
 
-  const w = expansionWorkers[expansionRoundRobin % expansionWorkers.length]
-  expansionRoundRobin += 1
+  let bestWorker = expansionWorkers[expansionRoundRobin % expansionWorkers.length]
+  let bestPending = expansionPendingByWorker.get(bestWorker)?.size ?? 0
+  for (let i = 1; i < expansionWorkers.length; i += 1) {
+    const candidate = expansionWorkers[(expansionRoundRobin + i) % expansionWorkers.length]
+    const pending = expansionPendingByWorker.get(candidate)?.size ?? 0
+    if (pending < bestPending) {
+      bestWorker = candidate
+      bestPending = pending
+      if (pending === 0) break
+    }
+  }
+  const w = bestWorker
+  expansionRoundRobin = (expansionWorkers.indexOf(w) + 1) % expansionWorkers.length
   const id = expansionNextMessageId++
   return new Promise((resolve, reject) => {
     expansionPending.set(id, { resolve, reject })
