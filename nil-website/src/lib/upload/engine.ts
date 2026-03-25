@@ -272,6 +272,7 @@ async function runUploadTasks(
   concurrency: number,
   transport: UploadTransportPort,
 ): Promise<UploadEngineResult> {
+  const trackProgress = Boolean(onProgress) && initialSteps.length > 0
   let steps = initialSteps
   let nextIndex = 0
   let active = 0
@@ -305,7 +306,9 @@ async function runUploadTasks(
           fullSize: task.request.artifact.fullSize,
         })
 
-        steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'uploading', error: undefined }), onProgress)
+        if (trackProgress) {
+          steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'uploading', error: undefined }), onProgress)
+        }
 
         void transport
           .sendArtifact(task.request)
@@ -322,7 +325,9 @@ async function runUploadTasks(
               durationMs: finishedAt - startedAt,
               ok: true,
             })
-            steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'complete' }), onProgress)
+            if (trackProgress) {
+              steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'complete' }), onProgress)
+            }
           })
           .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error)
@@ -340,7 +345,9 @@ async function runUploadTasks(
               ok: false,
               error: message,
             })
-            steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'error', error: message }), onProgress)
+            if (trackProgress) {
+              steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'error', error: message }), onProgress)
+            }
           })
           .finally(() => {
             active -= 1
