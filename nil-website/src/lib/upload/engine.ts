@@ -240,20 +240,6 @@ function indexUploadSteps(steps: UploadProgressStep[]): Map<string, number> {
   return indexed
 }
 
-function flattenTaskGroups(groups: UploadTask[][]): UploadTask[] {
-  return groups.flatMap((group) => group)
-}
-
-function interleaveTaskGroups(primary: UploadTask[][], secondary: UploadTask[][]): UploadTask[] {
-  const combined: UploadTask[] = []
-  const rounds = Math.max(primary.length, secondary.length)
-  for (let i = 0; i < rounds; i += 1) {
-    if (i < primary.length) combined.push(...primary[i])
-    if (i < secondary.length) combined.push(...secondary[i])
-  }
-  return combined
-}
-
 const DEFAULT_DIRECT_UPLOAD_CONCURRENCY = 4
 const DEFAULT_STRIPED_METADATA_UPLOAD_CONCURRENCY = 6
 const DEFAULT_STRIPED_SHARD_UPLOAD_CONCURRENCY = 6
@@ -528,26 +514,18 @@ export function createUploadEngine(options: UploadEngineOptions) {
         shardTaskGroups.push(group)
       }
 
-      const metadataTasks = flattenTaskGroups(metadataTaskGroups)
-      const shardTasks = flattenTaskGroups(shardTaskGroups)
-      const combinedTasks = interleaveTaskGroups(metadataTaskGroups, shardTaskGroups)
+      const combinedTasks: UploadTask[] = []
+      const rounds = Math.max(metadataTaskGroups.length, shardTaskGroups.length)
+      for (let i = 0; i < rounds; i += 1) {
+        if (i < metadataTaskGroups.length) combinedTasks.push(...metadataTaskGroups[i])
+        if (i < shardTaskGroups.length) combinedTasks.push(...shardTaskGroups[i])
+      }
       const combinedConcurrency =
-        shardTasks.length > 0
+        shardTaskGroups.length > 0
           ? Math.min(combinedTasks.length, stripedMetadataConcurrency + stripedShardConcurrency)
           : Math.min(combinedTasks.length, stripedMetadataConcurrency)
 
-      if (combinedTasks.length === metadataTasks.length + shardTasks.length) {
-        return runUploadTasks(combinedTasks, steps, input.onProgress, input.onTaskEvent, combinedConcurrency, ports.transport)
-      }
-
-      return runUploadTasks(
-        [...metadataTasks, ...shardTasks],
-        steps,
-        input.onProgress,
-        input.onTaskEvent,
-        combinedConcurrency,
-        ports.transport,
-      )
+      return runUploadTasks(combinedTasks, steps, input.onProgress, input.onTaskEvent, combinedConcurrency, ports.transport)
     },
 
     async commitPreparedContent(input: PreparedCommitInput): Promise<ChainCommitRequest> {
