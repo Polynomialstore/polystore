@@ -206,6 +206,31 @@ export interface PreparedMdu0 {
   }
 }
 
+export interface PreparedCommittedMdu0 extends PreparedMdu0 {
+  mdu_root: Uint8Array | number[]
+  perf?: {
+    witnessRootSetMs?: number
+    userRootSetMs?: number
+    appendMs?: number
+    bytesMs?: number
+    prepareBuilderMs?: number
+    commitMs?: number
+    rootMs?: number
+    totalMs?: number
+    rustCommitDecodeMs?: number
+    rustCommitTransformMs?: number
+    rustCommitMsmScalarPrepMs?: number
+    rustCommitMsmBucketFillMs?: number
+    rustCommitMsmReduceMs?: number
+    rustCommitMsmDoubleMs?: number
+    rustCommitMsmMs?: number
+    rustCommitCompressMs?: number
+    rustCommitMs?: number
+    rustCommitBackend?: string
+    rustCommitMsmSubphasesAvailable?: boolean
+  }
+}
+
 export interface ExpandedStripe {
     witness_flat: Uint8Array | number[];
     mdu_root: Uint8Array | number[];
@@ -295,6 +320,22 @@ export const workerClient = {
       { witnessRootsFlat, userRootStartIndex, userRootsFlat, path, size, startOffset, flags },
       [witnessRootsFlat.buffer, userRootsFlat.buffer],
     ) as Promise<PreparedMdu0>
+  },
+
+  async prepareAndCommitMdu0(
+    witnessRootsFlat: Uint8Array,
+    userRootStartIndex: number,
+    userRootsFlat: Uint8Array,
+    path: string,
+    size: number,
+    startOffset: number,
+    flags?: number,
+  ): Promise<PreparedCommittedMdu0> {
+    return sendMessageToWorker(
+      'prepareAndCommitMdu0',
+      { witnessRootsFlat, userRootStartIndex, userRootsFlat, path, size, startOffset, flags },
+      [witnessRootsFlat.buffer, userRootsFlat.buffer],
+    ) as Promise<PreparedCommittedMdu0>
   },
 
   // Get witness count from MDU #0 builder

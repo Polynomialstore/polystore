@@ -330,6 +330,132 @@ self.onmessage = async (event) => {
                 };
                 break;
             }
+            case 'prepareAndCommitMdu0': {
+                if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
+                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                const {
+                    witnessRootsFlat,
+                    userRootStartIndex,
+                    userRootsFlat,
+                    path,
+                    size,
+                    startOffset,
+                    flags,
+                } = payload as {
+                    witnessRootsFlat?: Uint8Array;
+                    userRootStartIndex: number;
+                    userRootsFlat?: Uint8Array;
+                    path: string;
+                    size: number;
+                    startOffset: number;
+                    flags?: number;
+                };
+                const perf = {
+                    witnessRootSetMs: 0,
+                    userRootSetMs: 0,
+                    appendMs: 0,
+                    bytesMs: 0,
+                    prepareBuilderMs: 0,
+                    commitMs: 0,
+                    rootMs: 0,
+                    totalMs: 0,
+                    rustCommitDecodeMs: 0,
+                    rustCommitTransformMs: 0,
+                    rustCommitMsmScalarPrepMs: 0,
+                    rustCommitMsmBucketFillMs: 0,
+                    rustCommitMsmReduceMs: 0,
+                    rustCommitMsmDoubleMs: 0,
+                    rustCommitMsmMs: 0,
+                    rustCommitCompressMs: 0,
+                    rustCommitMs: 0,
+                    rustCommitBackend: 'blst',
+                    rustCommitMsmSubphasesAvailable: false,
+                };
+                const totalStart = performance.now();
+
+                if (witnessRootsFlat) {
+                    if (!(witnessRootsFlat instanceof Uint8Array)) throw new Error('witnessRootsFlat must be a Uint8Array');
+                    if (witnessRootsFlat.byteLength % 32 !== 0) throw new Error('witnessRootsFlat must be a multiple of 32 bytes');
+                    const start = performance.now();
+                    let rootIndex = 0;
+                    for (let offset = 0; offset < witnessRootsFlat.byteLength; offset += 32, rootIndex += 1) {
+                        mdu0BuilderInstance.set_root(BigInt(rootIndex), witnessRootsFlat.subarray(offset, offset + 32));
+                    }
+                    perf.witnessRootSetMs = performance.now() - start;
+                }
+
+                if (userRootsFlat) {
+                    if (!(userRootsFlat instanceof Uint8Array)) throw new Error('userRootsFlat must be a Uint8Array');
+                    if (userRootsFlat.byteLength % 32 !== 0) throw new Error('userRootsFlat must be a multiple of 32 bytes');
+                    const start = performance.now();
+                    let rootIndex = Number(userRootStartIndex);
+                    for (let offset = 0; offset < userRootsFlat.byteLength; offset += 32, rootIndex += 1) {
+                        mdu0BuilderInstance.set_root(BigInt(rootIndex), userRootsFlat.subarray(offset, offset + 32));
+                    }
+                    perf.userRootSetMs = performance.now() - start;
+                }
+
+                const appendStart = performance.now();
+                const flagValue = typeof flags === 'number' ? flags : 0;
+                if (typeof (mdu0BuilderInstance as WasmMdu0Builder).append_file_with_flags === 'function') {
+                    mdu0BuilderInstance.append_file_with_flags(path, BigInt(size), BigInt(startOffset), flagValue);
+                } else {
+                    mdu0BuilderInstance.append_file(path, BigInt(size), BigInt(startOffset));
+                }
+                perf.appendMs = performance.now() - appendStart;
+
+                const bytesStart = performance.now();
+                const mdu0Bytes = mdu0BuilderInstance.bytes();
+                perf.bytesMs = performance.now() - bytesStart;
+                perf.prepareBuilderMs =
+                    perf.witnessRootSetMs + perf.userRootSetMs + perf.appendMs + perf.bytesMs;
+
+                const commitStart = performance.now();
+                const committedRaw = nilWasmInstance.commit_blobs_profiled(mdu0Bytes) as {
+                    witness_flat?: Uint8Array | ArrayBufferLike;
+                    perf?: {
+                        decode_ms?: unknown;
+                        transform_ms?: unknown;
+                        msm_scalar_prep_ms?: unknown;
+                        msm_bucket_fill_ms?: unknown;
+                        msm_reduce_ms?: unknown;
+                        msm_double_ms?: unknown;
+                        msm_ms?: unknown;
+                        compress_ms?: unknown;
+                        total_ms?: unknown;
+                    };
+                };
+                perf.commitMs = performance.now() - commitStart;
+                const witnessRaw = committedRaw?.witness_flat;
+                if (!witnessRaw) {
+                    throw new Error('commit_blobs_profiled returned no witness bytes');
+                }
+                const witnessFlat =
+                    witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike);
+                const commitPerf = committedRaw?.perf;
+                perf.rustCommitDecodeMs = Number(commitPerf?.decode_ms ?? 0);
+                perf.rustCommitTransformMs = Number(commitPerf?.transform_ms ?? 0);
+                perf.rustCommitMsmScalarPrepMs = Number(commitPerf?.msm_scalar_prep_ms ?? 0);
+                perf.rustCommitMsmBucketFillMs = Number(commitPerf?.msm_bucket_fill_ms ?? 0);
+                perf.rustCommitMsmReduceMs = Number(commitPerf?.msm_reduce_ms ?? 0);
+                perf.rustCommitMsmDoubleMs = Number(commitPerf?.msm_double_ms ?? 0);
+                perf.rustCommitMsmMs = Number(commitPerf?.msm_ms ?? 0);
+                perf.rustCommitCompressMs = Number(commitPerf?.compress_ms ?? 0);
+                perf.rustCommitMs = Number(commitPerf?.total_ms ?? perf.commitMs);
+
+                const rootStart = performance.now();
+                const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
+                perf.rootMs = performance.now() - rootStart;
+                const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
+                perf.totalMs = performance.now() - totalStart;
+
+                result = {
+                    mdu0_bytes: mdu0Bytes,
+                    mdu_root: rootBytes,
+                    perf,
+                };
+                break;
+            }
             case 'getMdu0WitnessCount': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
                 result = mdu0BuilderInstance.get_witness_count();
