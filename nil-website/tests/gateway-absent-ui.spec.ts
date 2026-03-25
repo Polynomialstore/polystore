@@ -153,14 +153,10 @@ test.describe('gateway absent', () => {
 
     await completeUploadAndCommit(page, 180_000)
 
+    await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'success', { timeout: 180_000 })
     await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
-
-    const activityToggle = page.getByTestId('mdu-system-activity-toggle')
-    await expect(activityToggle).toBeVisible({ timeout: 60_000 })
-    await activityToggle.click()
-    const activity = page.getByTestId('mdu-system-activity')
-    await expect(activity).toContainText(/starting upload to Storage Providers/i, { timeout: 60_000 })
-    await expect(activity).toContainText(/Gateway mirror skipped \(disabled\)/i, { timeout: 60_000 })
+    await expect(page.getByRole('button', { name: /Upload another file/i })).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByTestId('mdu-system-activity-toggle')).toHaveCount(0)
   })
 })
