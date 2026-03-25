@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { CheckCircle2, Cpu, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { workerClient } from '../lib/worker-client';
+import { pickExpansionWorkerCount, workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
@@ -155,6 +155,7 @@ type PreparePerfProfile = {
   totalMdus: number
   totalUserMdus: number
   totalWitnessMdus: number
+  userConcurrency: number
   manifestMs: number
   phases: {
     jsEncodeMs: number
@@ -2458,13 +2459,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           witness: [],
           meta: [],
         }
+        const prepareHardwareConcurrency =
+          typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
+            ? Math.max(1, Number(navigator.hardwareConcurrency))
+            : 4
 
         if (useMode2) {
-          const hardwareConcurrency =
-            typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
-              ? Math.max(1, Number(navigator.hardwareConcurrency))
-              : 4
-          const userConcurrency = Math.max(1, Math.min(3, Math.floor((hardwareConcurrency + 1) / 2), totalUserChunks))
+          const userConcurrency = pickExpansionWorkerCount(prepareHardwareConcurrency, totalUserChunks)
           let nextUserIndex = 0
 
           const processMode2UserMdu = async (i: number): Promise<void> => {
@@ -3079,6 +3080,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalMdus: finalMdus.length,
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
+          userConcurrency: useMode2 ? pickExpansionWorkerCount(prepareHardwareConcurrency, totalUserChunks) : 1,
           manifestMs,
           phases: {
             jsEncodeMs: sumBy(allSamples, (sample) => sample.encodeMs),
