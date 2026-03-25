@@ -15,18 +15,7 @@ export async function postSparseArtifact(request: SparseUploadRequest): Promise<
   const fetchImpl = request.fetchImpl ?? fetch
   const sparseArtifact = makeSparseArtifact(request.artifact)
   const fullPayload = request.artifact.bytes
-
-  const toBodyBuffer = (bytes: Uint8Array): ArrayBuffer => {
-    const exactBuffer = bytes.buffer
-    if (
-      exactBuffer instanceof ArrayBuffer &&
-      bytes.byteOffset === 0 &&
-      bytes.byteLength === exactBuffer.byteLength
-    ) {
-      return exactBuffer
-    }
-    return bytes.slice().buffer as ArrayBuffer
-  }
+  const asBodyInit = (bytes: Uint8Array): BodyInit => bytes as unknown as BodyInit
 
   const post = async (bodyBytes: Uint8Array, fullSizeHeader?: number): Promise<Response> => {
     const headers: Record<string, string> = {
@@ -42,7 +31,7 @@ export async function postSparseArtifact(request: SparseUploadRequest): Promise<
     return fetchImpl(request.url, {
       method: 'POST',
       headers,
-      body: toBodyBuffer(bodyBytes),
+      body: asBodyInit(bodyBytes),
     })
   }
 

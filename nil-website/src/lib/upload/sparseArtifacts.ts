@@ -75,8 +75,10 @@ export function makeSparseArtifact(input: SparseArtifactInput): SparseArtifact {
   let bytes: Uint8Array
   if (plan.fullSize === 0) {
     bytes = new Uint8Array(0)
+  } else if (plan.sendSize === input.bytes.byteLength) {
+    bytes = input.bytes
   } else if (input.bytes.byteLength >= plan.sendSize) {
-    bytes = input.bytes.slice(0, plan.sendSize)
+    bytes = input.bytes.subarray(0, plan.sendSize)
   } else if (plan.sendSize === 1 && input.bytes.byteLength === 0) {
     bytes = new Uint8Array(1)
   } else {

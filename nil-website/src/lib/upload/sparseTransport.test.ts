@@ -82,7 +82,7 @@ test('postSparseArtifact keeps non-empty all-zero payloads sparse', async () => 
   assert.deepStrictEqual(calls[0].bytes, new Uint8Array([0]))
 })
 
-test('postSparseArtifact sends direct array-buffer bodies without blob wrapping', async () => {
+test('postSparseArtifact sends direct typed-array bodies without blob wrapping', async () => {
   let body: BodyInit | null | undefined
   const bytes = new Uint8Array([1, 2, 3, 4])
   const fetchImpl: typeof fetch = async (_url, init) => {
@@ -101,6 +101,6 @@ test('postSparseArtifact sends direct array-buffer bodies without blob wrapping'
     fetchImpl,
   })
 
-  assert.ok(body instanceof ArrayBuffer)
-  assert.deepStrictEqual(new Uint8Array(body), bytes)
+  assert.ok(body instanceof Uint8Array)
+  assert.deepStrictEqual(body, bytes)
 })

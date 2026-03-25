@@ -62,6 +62,16 @@ test('makeSparseArtifact: trims payload and preserves artifact identity', () => 
   assert.deepStrictEqual(artifact.bytes, new Uint8Array([7, 7]))
 })
 
+test('makeSparseArtifact: reuses exact full payload without copying', () => {
+  const bytes = new Uint8Array([7, 8, 9])
+  const artifact = makeSparseArtifact({
+    kind: 'manifest',
+    bytes,
+  })
+
+  assert.strictEqual(artifact.bytes, bytes)
+})
+
 test('makeSparseArtifact: canonicalizes all-zero sparse payloads to one zero byte', () => {
   const artifact = makeSparseArtifact({
     kind: 'manifest',
