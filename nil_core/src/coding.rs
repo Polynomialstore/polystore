@@ -48,6 +48,16 @@ pub struct ExpandPayloadFlatPerf {
     pub shard_len: usize,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+pub struct ExpandRsFlatPerf {
+    pub encode_ms: f64,
+    pub rs_ms: f64,
+    pub total_ms: f64,
+    pub rows: usize,
+    pub shards_total: usize,
+    pub shard_len: usize,
+}
+
 #[cfg(target_arch = "wasm32")]
 fn now_ms() -> f64 {
     js_sys::Date::now()
@@ -252,6 +262,71 @@ pub fn expand_mdu_encoded_flat(
     Ok(())
 }
 
+pub fn expand_mdu_encoded_flat_uncommitted(
+    mdu_bytes: &[u8],
+    data_shards: usize,
+    parity_shards: usize,
+    out_shards_flat: &mut [u8],
+) -> Result<ExpandRsFlatPerf, CodingError> {
+    if mdu_bytes.len() != MDU_SIZE {
+        return Err(CodingError::InvalidSize);
+    }
+    if data_shards == 0 || parity_shards == 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+    if BLOBS_PER_MDU % data_shards != 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+
+    let rows = BLOBS_PER_MDU / data_shards;
+    let shards_total = data_shards + parity_shards;
+    let shard_len = rows * BLOB_SIZE;
+    let expected_shards_len = shards_total * shard_len;
+    if out_shards_flat.len() != expected_shards_len {
+        return Err(CodingError::InvalidSize);
+    }
+
+    let r = ReedSolomon::new(data_shards, parity_shards)
+        .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+
+    let total_start = now_ms();
+    let mut rs_ms = 0.0;
+
+    for row_idx in 0..rows {
+        let mut row_shards: Vec<&mut [u8]> = Vec::with_capacity(shards_total);
+        let base_ptr = out_shards_flat.as_mut_ptr();
+        for slot in 0..shards_total {
+            let offset = slot * shard_len + row_idx * BLOB_SIZE;
+            row_shards
+                .push(unsafe { std::slice::from_raw_parts_mut(base_ptr.add(offset), BLOB_SIZE) });
+        }
+
+        for slot in 0..data_shards {
+            let blob_idx = row_idx * data_shards + slot;
+            let start = blob_idx * BLOB_SIZE;
+            let end = start + BLOB_SIZE;
+            row_shards[slot].copy_from_slice(&mdu_bytes[start..end]);
+        }
+        for slot in data_shards..shards_total {
+            row_shards[slot].fill(0);
+        }
+
+        let rs_start = now_ms();
+        r.encode(&mut row_shards)
+            .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+        rs_ms += now_ms() - rs_start;
+    }
+
+    Ok(ExpandRsFlatPerf {
+        encode_ms: 0.0,
+        rs_ms,
+        total_ms: now_ms() - total_start,
+        rows,
+        shards_total,
+        shard_len,
+    })
+}
+
 /// Expands a raw payload (up to `MDU_PAYLOAD_BYTES`) into Mode 2 RS shards and witness commitments,
 /// writing the results into flat output buffers.
 ///
@@ -390,6 +465,74 @@ pub fn expand_payload_flat_profiled(
         out_witness_flat,
         out_shards_flat,
     )
+}
+
+pub fn expand_payload_flat_uncommitted(
+    payload_bytes: &[u8],
+    data_shards: usize,
+    parity_shards: usize,
+    out_shards_flat: &mut [u8],
+) -> Result<ExpandRsFlatPerf, CodingError> {
+    if data_shards == 0 || parity_shards == 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+    if BLOBS_PER_MDU % data_shards != 0 {
+        return Err(CodingError::InvalidRsParams);
+    }
+
+    let payload = payload_bytes
+        .get(..MDU_PAYLOAD_BYTES)
+        .unwrap_or(payload_bytes);
+
+    let rows = BLOBS_PER_MDU / data_shards;
+    let shards_total = data_shards + parity_shards;
+    let shard_len = rows * BLOB_SIZE;
+    let expected_shards_len = shards_total * shard_len;
+    if out_shards_flat.len() != expected_shards_len {
+        return Err(CodingError::InvalidSize);
+    }
+
+    let r = ReedSolomon::new(data_shards, parity_shards)
+        .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+
+    let total_start = now_ms();
+    let mut encode_ms = 0.0;
+    let mut rs_ms = 0.0;
+
+    for row_idx in 0..rows {
+        let mut row_shards: Vec<&mut [u8]> = Vec::with_capacity(shards_total);
+        let base_ptr = out_shards_flat.as_mut_ptr();
+        for slot in 0..shards_total {
+            let offset = slot * shard_len + row_idx * BLOB_SIZE;
+            row_shards
+                .push(unsafe { std::slice::from_raw_parts_mut(base_ptr.add(offset), BLOB_SIZE) });
+        }
+
+        let encode_start = now_ms();
+        for slot in 0..data_shards {
+            let blob_idx = row_idx * data_shards + slot;
+            let payload_base = blob_idx * SCALARS_PER_BLOB * SCALAR_PAYLOAD_BYTES;
+            encode_payload_into_blob(payload, payload_base, row_shards[slot]);
+        }
+        for slot in data_shards..shards_total {
+            row_shards[slot].fill(0);
+        }
+        encode_ms += now_ms() - encode_start;
+
+        let rs_start = now_ms();
+        r.encode(&mut row_shards)
+            .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+        rs_ms += now_ms() - rs_start;
+    }
+
+    Ok(ExpandRsFlatPerf {
+        encode_ms,
+        rs_ms,
+        total_ms: now_ms() - total_start,
+        rows,
+        shards_total,
+        shard_len,
+    })
 }
 
 pub fn reconstruct_mdu_from_shards(
@@ -597,5 +740,57 @@ mod tests {
             .flat_map(|shard| shard.iter().copied())
             .collect();
         assert_eq!(shards_flat, expected_shards_flat);
+    }
+
+    #[test]
+    fn expand_payload_flat_uncommitted_reconstructs_committed_output() {
+        let setup_bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../demos/kzg/trusted_setup.txt"
+        ));
+        let cursor = std::io::Cursor::new(setup_bytes.as_slice());
+        let ctx = KzgContext::load_from_reader(std::io::BufReader::new(cursor)).unwrap();
+
+        let payload_len = 600_000usize;
+        let mut payload = vec![0u8; payload_len];
+        for (i, byte) in payload.iter_mut().enumerate() {
+            *byte = ((i * 29 + 7) % 251) as u8;
+        }
+
+        let rows = BLOBS_PER_MDU / DATA_SHARDS_NUM;
+        let shard_count = DATA_SHARDS_NUM + PARITY_SHARDS_NUM;
+        let shard_len = rows * BLOB_SIZE;
+
+        let mut committed_witness_flat = vec![0u8; shard_count * rows * 48];
+        let mut committed_shards_flat = vec![0u8; shard_count * shard_len];
+        expand_payload_flat(
+            &ctx,
+            &payload,
+            DATA_SHARDS_NUM,
+            PARITY_SHARDS_NUM,
+            &mut committed_witness_flat,
+            &mut committed_shards_flat,
+        )
+        .unwrap();
+
+        let mut uncommitted_shards_flat = vec![0u8; shard_count * shard_len];
+        expand_payload_flat_uncommitted(
+            &payload,
+            DATA_SHARDS_NUM,
+            PARITY_SHARDS_NUM,
+            &mut uncommitted_shards_flat,
+        )
+        .unwrap();
+
+        assert_eq!(uncommitted_shards_flat, committed_shards_flat);
+
+        let mut rebuilt_witness_flat = vec![0u8; shard_count * rows * 48];
+        for (blob_index, blob) in uncommitted_shards_flat.chunks_exact(BLOB_SIZE).enumerate() {
+            let commitment = ctx.blob_to_commitment(blob).unwrap();
+            let start = blob_index * 48;
+            rebuilt_witness_flat[start..start + 48].copy_from_slice(&commitment);
+        }
+
+        assert_eq!(rebuilt_witness_flat, committed_witness_flat);
     }
 }

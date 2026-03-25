@@ -14,10 +14,15 @@ declare module '/wasm/nil_core.js' {
   export class NilWasm {
     constructor(trusted_setup_bytes: Uint8Array)
     expand_file(data: Uint8Array): unknown
+    expand_mdu_rs(data: Uint8Array, k: number, m: number): unknown
+    expand_payload_rs_flat(data: Uint8Array, k: number, m: number): unknown
+    expand_mdu_rs_flat_uncommitted(data: Uint8Array, k: number, m: number): unknown
+    expand_payload_rs_flat_uncommitted(data: Uint8Array, k: number, m: number): unknown
     commit_mdu(mdu_bytes: Uint8Array): unknown
     commit_blobs(blob_bytes: Uint8Array): Uint8Array
     compute_mdu_root(witness_bytes: Uint8Array): unknown
     compute_manifest(roots: Uint8Array): unknown
+    set_pippenger_window_bits(bits: number): void
   }
 
   export class WasmMdu0Builder {

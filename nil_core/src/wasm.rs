@@ -1,7 +1,10 @@
 use crate::builder::Mdu0Builder;
-use crate::coding::{expand_mdu, expand_mdu_encoded, expand_payload_flat_profiled};
+use crate::coding::{
+    expand_mdu, expand_mdu_encoded, expand_mdu_encoded_flat_uncommitted,
+    expand_payload_flat_profiled, expand_payload_flat_uncommitted,
+};
 use crate::kzg::KzgContext;
-use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU};
+use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override};
 use crate::layout::{FileRecordV1, pack_length_and_flags};
 use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
@@ -105,6 +108,130 @@ impl NilWasm {
                 commit_msm_ms: perf.commit_msm_ms,
                 commit_compress_ms: perf.commit_compress_ms,
                 commit_ms: perf.commit_ms,
+                total_ms: perf.total_ms,
+                rows: perf.rows,
+                shards_total: perf.shards_total,
+                shard_len: perf.shard_len,
+            },
+        };
+
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
+    pub fn expand_mdu_rs_flat_uncommitted(
+        &self,
+        mdu_bytes: &[u8],
+        k: u32,
+        m: u32,
+    ) -> Result<JsValue, JsValue> {
+        let data_shards = k as usize;
+        let parity_shards = m as usize;
+        if data_shards == 0 || parity_shards == 0 {
+            return Err(JsValue::from_str("RS parameters must be positive"));
+        }
+        if BLOBS_PER_MDU % data_shards != 0 {
+            return Err(JsValue::from_str("Invalid RS parameters"));
+        }
+
+        let rows = BLOBS_PER_MDU / data_shards;
+        let shard_count = data_shards + parity_shards;
+        let shard_len = rows * BLOB_SIZE;
+        let mut shards_flat = vec![0u8; shard_count * shard_len];
+
+        let perf = expand_mdu_encoded_flat_uncommitted(
+            mdu_bytes,
+            data_shards,
+            parity_shards,
+            &mut shards_flat,
+        )
+        .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+
+        #[derive(serde::Serialize)]
+        struct ExpandRsFlatPerfResult {
+            encode_ms: f64,
+            rs_ms: f64,
+            total_ms: f64,
+            rows: usize,
+            shards_total: usize,
+            shard_len: usize,
+        }
+
+        #[derive(serde::Serialize)]
+        struct ExpandRsFlatResult {
+            shards_flat: Vec<u8>,
+            shard_len: usize,
+            perf: ExpandRsFlatPerfResult,
+        }
+
+        let res = ExpandRsFlatResult {
+            shards_flat,
+            shard_len,
+            perf: ExpandRsFlatPerfResult {
+                encode_ms: perf.encode_ms,
+                rs_ms: perf.rs_ms,
+                total_ms: perf.total_ms,
+                rows: perf.rows,
+                shards_total: perf.shards_total,
+                shard_len: perf.shard_len,
+            },
+        };
+
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
+    pub fn expand_payload_rs_flat_uncommitted(
+        &self,
+        payload_bytes: &[u8],
+        k: u32,
+        m: u32,
+    ) -> Result<JsValue, JsValue> {
+        let data_shards = k as usize;
+        let parity_shards = m as usize;
+        if data_shards == 0 || parity_shards == 0 {
+            return Err(JsValue::from_str("RS parameters must be positive"));
+        }
+        if BLOBS_PER_MDU % data_shards != 0 {
+            return Err(JsValue::from_str("Invalid RS parameters"));
+        }
+
+        let rows = BLOBS_PER_MDU / data_shards;
+        let shard_count = data_shards + parity_shards;
+        let shard_len = rows * BLOB_SIZE;
+        let mut shards_flat = vec![0u8; shard_count * shard_len];
+
+        let perf = expand_payload_flat_uncommitted(
+            payload_bytes,
+            data_shards,
+            parity_shards,
+            &mut shards_flat,
+        )
+        .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+
+        #[derive(serde::Serialize)]
+        struct ExpandRsFlatPerfResult {
+            encode_ms: f64,
+            rs_ms: f64,
+            total_ms: f64,
+            rows: usize,
+            shards_total: usize,
+            shard_len: usize,
+        }
+
+        #[derive(serde::Serialize)]
+        struct ExpandRsFlatResult {
+            shards_flat: Vec<u8>,
+            shard_len: usize,
+            perf: ExpandRsFlatPerfResult,
+        }
+
+        let res = ExpandRsFlatResult {
+            shards_flat,
+            shard_len,
+            perf: ExpandRsFlatPerfResult {
+                encode_ms: perf.encode_ms,
+                rs_ms: perf.rs_ms,
                 total_ms: perf.total_ms,
                 rows: perf.rows,
                 shards_total: perf.shards_total,
@@ -222,6 +349,18 @@ impl NilWasm {
 
         serde_wasm_bindgen::to_value(&root.to_vec())
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
+    pub fn set_pippenger_window_bits(&self, bits: i32) -> Result<(), JsValue> {
+        if bits < 0 {
+            return Err(JsValue::from_str("window bits must be non-negative"));
+        }
+        if bits == 0 {
+            set_pippenger_window_override(None);
+        } else {
+            set_pippenger_window_override(Some(bits as usize));
+        }
+        Ok(())
     }
 }
 

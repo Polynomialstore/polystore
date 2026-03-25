@@ -6,6 +6,7 @@ use rs_merkle::{Hasher, MerkleProof, MerkleTree};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
 use thiserror::Error;
 
@@ -20,6 +21,12 @@ pub const BLOBS_PER_MDU: usize = MDU_SIZE / BLOB_SIZE;
 pub type KzgCommitment = [u8; 48];
 pub type Bytes32 = [u8; 32];
 pub type Bytes48 = [u8; 48];
+
+static PIPPENGER_WINDOW_OVERRIDE: AtomicUsize = AtomicUsize::new(0);
+
+pub fn set_pippenger_window_override(window_bits: Option<usize>) {
+    PIPPENGER_WINDOW_OVERRIDE.store(window_bits.unwrap_or(0), Ordering::Relaxed);
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct BlobToCommitmentPerf {
@@ -640,6 +647,10 @@ fn bit_reverse_permute(values: &mut [Scalar]) {
 }
 
 fn pippenger_window_size(n: usize) -> usize {
+    let override_bits = PIPPENGER_WINDOW_OVERRIDE.load(Ordering::Relaxed);
+    if override_bits > 0 {
+        return override_bits;
+    }
     match n {
         0..=32 => 3,
         33..=64 => 4,
@@ -648,7 +659,7 @@ fn pippenger_window_size(n: usize) -> usize {
         257..=512 => 7,
         513..=1024 => 8,
         1025..=2048 => 9,
-        2049..=4096 => 10,
+        2049..=4096 => 9,
         4097..=8192 => 11,
         _ => 12,
     }
@@ -784,6 +795,7 @@ fn msm_blst_g1_commitment_from_blob_profiled(
     Ok(out)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn msm_pippenger_g1_projective(points: &[G1Projective], scalars: &[Scalar]) -> G1Projective {
     debug_assert_eq!(points.len(), scalars.len());
 

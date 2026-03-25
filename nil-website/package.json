@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "test:e2e:sparse-browser": "playwright test tests/direct-upload-sparse.spec.ts",
     "perf:prepare": "tsx scripts/benchmark_prepare.ts",
+    "perf:msm-windows": "tsx scripts/benchmark_pippenger_windows.ts",
     "perf:kzg-compare": "tsx scripts/benchmark_kzg_commit_compare.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
@@ -41,6 +42,7 @@
     "framer-motion": "^12.23.25",
     "idb": "^8.0.3",
     "it-length-prefixed": "^10.0.1",
+    "kzg-wasm": "^1.0.0",
     "libp2p": "^3.1.2",
     "lucide-react": "^0.555.0",
     "marked": "^12.0.2",
