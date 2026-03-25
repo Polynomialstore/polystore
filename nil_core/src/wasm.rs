@@ -412,6 +412,10 @@ impl NilWasm {
 
     pub fn set_wasm_msm_basis_mode(&self, mode: &str) -> Result<(), JsValue> {
         match mode {
+            "blst" => {
+                set_wasm_msm_basis_mode(0);
+                Ok(())
+            }
             "projective" => {
                 set_wasm_msm_basis_mode(2);
                 Ok(())
@@ -420,7 +424,9 @@ impl NilWasm {
                 set_wasm_msm_basis_mode(1);
                 Ok(())
             }
-            _ => Err(JsValue::from_str("basis mode must be 'projective' or 'affine'")),
+            _ => Err(JsValue::from_str(
+                "basis mode must be 'blst', 'projective' or 'affine'",
+            )),
         }
     }
 }

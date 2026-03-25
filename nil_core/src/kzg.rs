@@ -272,6 +272,50 @@ impl KzgContext {
         } else {
             // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
             // over the evaluations.
+            #[cfg(target_arch = "wasm32")]
+            {
+                let wasm_basis_mode = WASM_MSM_BASIS_MODE.load(Ordering::Relaxed);
+                if wasm_basis_mode == 1 || wasm_basis_mode == 2 {
+                    let decode_start = now_ms();
+                    let evals = bytes_to_scalars(blob_bytes)?;
+                    perf.decode_ms = now_ms() - decode_start;
+
+                    let msm_start = now_ms();
+                    let acc = if wasm_basis_mode == 2 {
+                        msm_pippenger_g1_projective_profiled_wasm(
+                            &self.g1_points_projective,
+                            &evals,
+                            &mut perf,
+                        )
+                    } else {
+                        msm_pippenger_g1_profiled_wasm(&self.g1_points, &evals, &mut perf)
+                    };
+                    perf.msm_ms = now_ms() - msm_start;
+
+                    let compress_start = now_ms();
+                    let commitment = acc.to_affine().to_compressed();
+                    perf.compress_ms = now_ms() - compress_start;
+                    perf.total_ms = now_ms() - total_start;
+                    return Ok((commitment, perf));
+                }
+            }
+
+            #[cfg(any(not(target_arch = "wasm32")))]
+            {
+                let commitment = msm_blst_g1_commitment_from_blob_profiled(
+                    &self.g1_points_blst,
+                    blob_bytes,
+                    &mut perf,
+                )?;
+
+                if perf.decode_ms == 0.0 {
+                    perf.decode_ms = now_ms() - total_start;
+                }
+                perf.total_ms = now_ms() - total_start;
+                return Ok((commitment, perf));
+            }
+
+            #[cfg(target_arch = "wasm32")]
             {
                 let commitment = msm_blst_g1_commitment_from_blob_profiled(
                     &self.g1_points_blst,
@@ -327,7 +371,7 @@ impl KzgContext {
         let mut perf = BlobToCommitmentPerf::default();
 
         #[cfg(target_arch = "wasm32")]
-        if !self.g1_points_are_monomial {
+        if !self.g1_points_are_monomial && WASM_MSM_BASIS_MODE.load(Ordering::Relaxed) == 0 {
             let points = &self.g1_points_blst;
             let n = points.len().min(BLOB_SIZE / 32);
             let scratch_words = unsafe {

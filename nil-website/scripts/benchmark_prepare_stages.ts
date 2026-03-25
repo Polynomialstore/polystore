@@ -77,6 +77,8 @@ type PrepareRun = {
   manifest_root_hex: string
 }
 
+type BasisMode = 'blst' | 'affine' | 'projective'
+
 type Stats = {
   min: number
   median: number
@@ -162,10 +164,14 @@ const rsM = Number(process.env.RS_M || 1)
 const warmupRuns = Number(process.env.WARMUP_RUNS || 0)
 const measureRuns = Number(process.env.MEASURE_RUNS || 3)
 const fileName = process.env.FILE_NAME || 'benchmark.bin'
+const basisMode = (process.env.BASIS_MODE || 'blst') as BasisMode
 
 if (!Number.isFinite(fileBytes) || fileBytes <= 0) throw new Error(`invalid FILE_BYTES: ${process.env.FILE_BYTES ?? ''}`)
 if (!Number.isFinite(warmupRuns) || warmupRuns < 0) throw new Error(`invalid WARMUP_RUNS: ${process.env.WARMUP_RUNS ?? ''}`)
 if (!Number.isFinite(measureRuns) || measureRuns <= 0) throw new Error(`invalid MEASURE_RUNS: ${process.env.MEASURE_RUNS ?? ''}`)
+if (!['blst', 'affine', 'projective'].includes(basisMode)) {
+  throw new Error(`invalid BASIS_MODE: ${process.env.BASIS_MODE ?? ''}`)
+}
 
 const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
 const wasmBuffer = await fs.readFile(wasmPath)
@@ -174,6 +180,7 @@ await init({ module_or_path: wasmBuffer })
 const trustedSetupPath = path.resolve(websiteRoot, 'public', 'trusted_setup.txt')
 const trustedSetup = new Uint8Array(await fs.readFile(trustedSetupPath))
 const wasm = new NilWasm(trustedSetup)
+wasm.set_wasm_msm_basis_mode(basisMode)
 const wasmInitMs = performance.now() - wasmInitStart
 
 const payload = makeDeterministicPayload(fileBytes)
@@ -363,6 +370,7 @@ const summary = {
   total_user_mdus: totalUserMdus,
   rs_k: rsK,
   rs_m: rsM,
+  basis_mode: basisMode,
   warmup_runs: warmupRuns,
   measure_runs: measureRuns,
   init: {
