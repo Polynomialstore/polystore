@@ -1,18 +1,13 @@
-use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
+use crate::builder::Mdu0Builder;
 use crate::coding::{
-    expand_mdu_encoded_flat,
-    expand_payload_flat,
-    reconstruct_mdu_from_shards,
-    MDU_PAYLOAD_BYTES,
-    SCALAR_BYTES,
-    SCALAR_PAYLOAD_BYTES,
-    SCALARS_PER_MDU,
+    MDU_PAYLOAD_BYTES, SCALAR_BYTES, SCALAR_PAYLOAD_BYTES, SCALARS_PER_MDU,
+    expand_mdu_encoded_flat, expand_payload_flat, reconstruct_mdu_from_shards,
 };
+use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
+use crate::layout::{FileRecordV1, pack_length_and_flags};
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;
-use crate::builder::Mdu0Builder;
-use crate::layout::{FileRecordV1, pack_length_and_flags};
 
 static KZG_CTX: OnceLock<KzgContext> = OnceLock::new();
 
@@ -191,8 +186,10 @@ pub extern "C" fn nil_expand_mdu_rs(
     }
 
     let mdu_slice = unsafe { std::slice::from_raw_parts(mdu_bytes, mdu_bytes_len) };
-    let witness_out = unsafe { std::slice::from_raw_parts_mut(out_witness_flat, out_witness_flat_len) };
-    let shards_out = unsafe { std::slice::from_raw_parts_mut(out_shards_flat, out_shards_flat_len) };
+    let witness_out =
+        unsafe { std::slice::from_raw_parts_mut(out_witness_flat, out_witness_flat_len) };
+    let shards_out =
+        unsafe { std::slice::from_raw_parts_mut(out_shards_flat, out_shards_flat_len) };
     if expand_mdu_encoded_flat(ctx, mdu_slice, ds, ps, witness_out, shards_out).is_err() {
         return -3;
     }
@@ -257,8 +254,10 @@ pub extern "C" fn nil_expand_payload_rs(
     } else {
         unsafe { std::slice::from_raw_parts(payload_bytes, payload_bytes_len) }
     };
-    let witness_out = unsafe { std::slice::from_raw_parts_mut(out_witness_flat, out_witness_flat_len) };
-    let shards_out = unsafe { std::slice::from_raw_parts_mut(out_shards_flat, out_shards_flat_len) };
+    let witness_out =
+        unsafe { std::slice::from_raw_parts_mut(out_witness_flat, out_witness_flat_len) };
+    let shards_out =
+        unsafe { std::slice::from_raw_parts_mut(out_shards_flat, out_shards_flat_len) };
 
     if expand_payload_flat(ctx, payload_slice, ds, ps, witness_out, shards_out).is_err() {
         return -3;
@@ -905,7 +904,11 @@ pub extern "C" fn nil_mdu0_builder_free(ptr: *mut Mdu0Builder) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_builder_load(data_ptr: *const u8, len: usize, max_user_mdus: u64) -> *mut Mdu0Builder {
+pub extern "C" fn nil_mdu0_builder_load(
+    data_ptr: *const u8,
+    len: usize,
+    max_user_mdus: u64,
+) -> *mut Mdu0Builder {
     if data_ptr.is_null() || len != crate::builder::MDU_SIZE {
         return std::ptr::null_mut();
     }
@@ -934,7 +937,11 @@ pub extern "C" fn nil_mdu0_builder_load_with_commitments(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_builder_bytes(ptr: *mut Mdu0Builder, out_ptr: *mut u8, out_len: usize) -> c_int {
+pub extern "C" fn nil_mdu0_builder_bytes(
+    ptr: *mut Mdu0Builder,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> c_int {
     if ptr.is_null() || out_ptr.is_null() || out_len != crate::builder::MDU_SIZE {
         return -1;
     }
@@ -968,13 +975,13 @@ pub extern "C" fn nil_mdu0_append_file_with_flags(
         return -1;
     }
     let builder = unsafe { &mut *ptr };
-    
+
     let c_str = unsafe { CStr::from_ptr(path_ptr) };
     let path_str = match c_str.to_str() {
         Ok(s) => s,
         Err(_) => return -2,
     };
-    
+
     let mut path_bytes = [0u8; 40];
     let bytes = path_str.as_bytes();
     if bytes.len() > 40 {
@@ -1016,11 +1023,7 @@ pub extern "C" fn nil_mdu0_set_root(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_get_root(
-    ptr: *mut Mdu0Builder,
-    index: u64,
-    root_ptr: *mut u8,
-) -> c_int {
+pub extern "C" fn nil_mdu0_get_root(ptr: *mut Mdu0Builder, index: u64, root_ptr: *mut u8) -> c_int {
     if ptr.is_null() || root_ptr.is_null() {
         return -1;
     }
@@ -1055,7 +1058,11 @@ pub extern "C" fn nil_mdu0_get_record_count(ptr: *mut Mdu0Builder) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_get_record(ptr: *mut Mdu0Builder, index: u32, out_rec: *mut FileRecordV1) -> c_int {
+pub extern "C" fn nil_mdu0_get_record(
+    ptr: *mut Mdu0Builder,
+    index: u32,
+    out_rec: *mut FileRecordV1,
+) -> c_int {
     if ptr.is_null() || out_rec.is_null() {
         return -1;
     }

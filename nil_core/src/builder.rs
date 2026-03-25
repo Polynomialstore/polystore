@@ -1,7 +1,7 @@
 use crate::layout::{self, FileRecordV1, FileTableHeader, MAGIC_NILF};
 
 pub const MDU_SIZE: usize = 8 * 1024 * 1024; // 8 MiB
-pub const BLOB_SIZE: usize = 128 * 1024;      // 128 KiB
+pub const BLOB_SIZE: usize = 128 * 1024; // 128 KiB
 pub const ROOT_TABLE_START: usize = 0;
 pub const ROOT_TABLE_END: usize = 16 * BLOB_SIZE;
 pub const FILE_TABLE_START: usize = 16 * BLOB_SIZE;
@@ -24,7 +24,11 @@ impl Mdu0Builder {
     }
 
     pub fn new_with_commitments(max_user_mdus: u64, commitments_per_mdu: u64) -> Self {
-        let commitments = if commitments_per_mdu == 0 { 64 } else { commitments_per_mdu };
+        let commitments = if commitments_per_mdu == 0 {
+            64
+        } else {
+            commitments_per_mdu
+        };
         // Calculate W
         let total_commitment_bytes = (max_user_mdus * commitments * 48) as f64;
         let w = (total_commitment_bytes / MDU_SIZE as f64).ceil() as u64;
@@ -48,12 +52,20 @@ impl Mdu0Builder {
         Self::load_with_commitments(data, max_user_mdus, 64)
     }
 
-    pub fn load_with_commitments(data: &[u8], max_user_mdus: u64, commitments_per_mdu: u64) -> Result<Self, String> {
+    pub fn load_with_commitments(
+        data: &[u8],
+        max_user_mdus: u64,
+        commitments_per_mdu: u64,
+    ) -> Result<Self, String> {
         if data.len() != MDU_SIZE {
             return Err("invalid MDU size".to_string());
         }
 
-        let commitments = if commitments_per_mdu == 0 { 64 } else { commitments_per_mdu };
+        let commitments = if commitments_per_mdu == 0 {
+            64
+        } else {
+            commitments_per_mdu
+        };
         let total_commitment_bytes = (max_user_mdus * commitments * 48) as f64;
         let witness_mdu_count = (total_commitment_bytes / MDU_SIZE as f64).ceil() as u64;
 
@@ -75,7 +87,8 @@ impl Mdu0Builder {
 
     pub fn flush_header(&mut self) {
         let bytes = self.header.to_bytes();
-        self.buffer[FILE_TABLE_START..FILE_TABLE_START + FILE_TABLE_HEADER_SIZE].copy_from_slice(&bytes);
+        self.buffer[FILE_TABLE_START..FILE_TABLE_START + FILE_TABLE_HEADER_SIZE]
+            .copy_from_slice(&bytes);
     }
 
     pub fn bytes(&mut self) -> &[u8] {
@@ -100,13 +113,15 @@ impl Mdu0Builder {
     }
 
     pub fn get_file_record(&self, index: u32) -> FileRecordV1 {
-        let offset = FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
+        let offset =
+            FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
         FileRecordV1::from_bytes(&self.buffer[offset..offset + FILE_RECORD_SIZE])
     }
 
     pub fn append_file_record(&mut self, rec: FileRecordV1) -> Result<(), String> {
         let index = self.header.record_count;
-        let offset = FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
+        let offset =
+            FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
 
         if offset + FILE_RECORD_SIZE > FILE_TABLE_END {
             return Err("file table full".to_string());
@@ -124,8 +139,9 @@ impl Mdu0Builder {
         if index >= self.header.record_count {
             return Err("index out of bounds".to_string());
         }
-        let offset = FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
-        
+        let offset =
+            FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
+
         let bytes = rec.to_bytes();
         self.buffer[offset..offset + FILE_RECORD_SIZE].copy_from_slice(&bytes);
         Ok(())
@@ -141,7 +157,7 @@ impl Mdu0Builder {
                 let (tomb_len, _) = layout::unpack_length_and_flags(existing.length_and_flags);
                 if tomb_len >= required_len {
                     // FOUND MATCH.
-                    
+
                     // 1. Overwrite this slot with new record
                     // Preserve the original StartOffset of the slot!
                     rec.start_offset = existing.start_offset;
@@ -195,7 +211,11 @@ mod tests {
         // 65536 MDUs * 64 blobs/MDU * 48 bytes/blob = 201,326,592 bytes
         // 201,326,592 / 8,388,608 = 24.0000... -> 24 MDUs
         let expected_w = 24u64;
-        assert_eq!(b.witness_mdu_count, expected_w, "W calculation failed. Want {}, got {}", expected_w, b.witness_mdu_count);
+        assert_eq!(
+            b.witness_mdu_count, expected_w,
+            "W calculation failed. Want {}, got {}",
+            expected_w, b.witness_mdu_count
+        );
     }
 
     #[test]
@@ -283,7 +303,9 @@ mod tests {
             ..Default::default()
         };
 
-        let idx = b.find_free_slot_and_insert(rec2).expect("FindFreeSlot failed");
+        let idx = b
+            .find_free_slot_and_insert(rec2)
+            .expect("FindFreeSlot failed");
 
         assert_eq!(idx, 0, "Expected reuse of slot 0");
 
@@ -295,11 +317,14 @@ mod tests {
 
         // Slot 1 should be Tombstone (70KB)
         // RecordCount should be 2
-        assert_eq!(b.header.record_count, 2, "Expected 2 records (1 active + 1 split tombstone)");
-        
+        assert_eq!(
+            b.header.record_count, 2,
+            "Expected 2 records (1 active + 1 split tombstone)"
+        );
+
         let slot1 = b.get_file_record(1);
         assert_eq!(slot1.path[0], 0, "Slot 1 should be tombstone");
-        
+
         let (l1, _) = layout::unpack_length_and_flags(slot1.length_and_flags);
         assert_eq!(l1, 70000, "Tombstone size wrong");
     }

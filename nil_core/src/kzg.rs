@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 use thiserror::Error;
 
 #[cfg(not(target_arch = "wasm32"))]
-use blst::{blst_p1, blst_p1_affine, blst_p1_compress, blst_p1_uncompress, MultiPoint, BLST_ERROR};
+use blst::{BLST_ERROR, MultiPoint, blst_p1, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
 
 pub const MDU_SIZE: usize = 8 * 1024 * 1024;
 pub const SHARD_SIZE: usize = 1 * 1024 * 1024;
@@ -128,8 +128,8 @@ impl KzgContext {
         // Determine whether the provided G1 points are monomial powers-of-τ (SRS) or Lagrange
         // points over the blob domain. The standard EIP-4844 ceremony file provides Lagrange
         // points for G1 (to commit directly from blob evaluations).
-        let g1_points_are_monomial =
-            bls12_381::pairing(&g1_points[1], &g2_points[0]) == bls12_381::pairing(&g1_points[0], &g2_points[1]);
+        let g1_points_are_monomial = bls12_381::pairing(&g1_points[1], &g2_points[0])
+            == bls12_381::pairing(&g1_points[0], &g2_points[1]);
 
         // The KZG verification equation uses the base G1 generator (τ^0).
         // - Monomial SRS: generator is g1_points[0].
@@ -286,7 +286,9 @@ impl KzgContext {
             let proof = if points.is_empty() {
                 G1Affine::identity().to_compressed()
             } else {
-                msm_pippenger_g1(&points, &scalars).to_affine().to_compressed()
+                msm_pippenger_g1(&points, &scalars)
+                    .to_affine()
+                    .to_compressed()
             };
 
             let mut y_le = y.to_repr();
@@ -327,14 +329,16 @@ impl KzgContext {
             let mut num = Scalar::zero();
             let mut den = Scalar::zero();
             for (fi, xi) in evals.iter().zip(domain.iter()) {
-                let inv = Option::<Scalar>::from((z - xi).invert())
-                    .ok_or_else(|| KzgError::Internal("z unexpectedly equals a domain point".into()))?;
+                let inv = Option::<Scalar>::from((z - xi).invert()).ok_or_else(|| {
+                    KzgError::Internal("z unexpectedly equals a domain point".into())
+                })?;
                 let t = *xi * inv;
                 den += t;
                 num += *fi * t;
             }
-            let den_inv = Option::<Scalar>::from(den.invert())
-                .ok_or_else(|| KzgError::Internal("barycentric denominator is not invertible".into()))?;
+            let den_inv = Option::<Scalar>::from(den.invert()).ok_or_else(|| {
+                KzgError::Internal("barycentric denominator is not invertible".into())
+            })?;
             num * den_inv
         };
 
@@ -345,8 +349,9 @@ impl KzgContext {
                 if i == k {
                     continue;
                 }
-                let inv = Option::<Scalar>::from((domain[i] - z).invert())
-                    .ok_or_else(|| KzgError::Internal("unexpected zero denominator in q_evals".into()))?;
+                let inv = Option::<Scalar>::from((domain[i] - z).invert()).ok_or_else(|| {
+                    KzgError::Internal("unexpected zero denominator in q_evals".into())
+                })?;
                 let qi = (evals[i] - y) * inv;
                 q_evals[i] = qi;
                 sum += qi * domain[i];
@@ -358,13 +363,16 @@ impl KzgContext {
             q_evals[k] = -sum * inv_z;
         } else {
             for i in 0..4096 {
-                let inv = Option::<Scalar>::from((domain[i] - z).invert())
-                    .ok_or_else(|| KzgError::Internal("unexpected zero denominator in q_evals".into()))?;
+                let inv = Option::<Scalar>::from((domain[i] - z).invert()).ok_or_else(|| {
+                    KzgError::Internal("unexpected zero denominator in q_evals".into())
+                })?;
                 q_evals[i] = (evals[i] - y) * inv;
             }
         }
 
-        let proof = msm_pippenger_g1(&self.g1_points, &q_evals).to_affine().to_compressed();
+        let proof = msm_pippenger_g1(&self.g1_points, &q_evals)
+            .to_affine()
+            .to_compressed();
 
         let mut y_le = y.to_repr();
         let mut y_be = [0u8; 32];
@@ -414,7 +422,8 @@ impl KzgContext {
         let mut blob_bytes = vec![0u8; BLOB_SIZE];
         for (i, root) in mdu_roots.iter().enumerate().take(4096) {
             let start = i * 32;
-            blob_bytes[start..start + 32].copy_from_slice(&scalar_to_bytes_be(&reduce_bytes32_to_scalar(root)));
+            blob_bytes[start..start + 32]
+                .copy_from_slice(&scalar_to_bytes_be(&reduce_bytes32_to_scalar(root)));
         }
 
         let commitment = self.blob_to_commitment(&blob_bytes)?;
@@ -669,7 +678,7 @@ fn msm_blst_g1_commitment_from_blob(
 
     let mut scalar_bytes = vec![0u8; n * 32];
     for (i, chunk) in blob_bytes.chunks_exact(32).take(n).enumerate() {
-        let dst = &mut scalar_bytes[i * 32..(i+1) * 32];
+        let dst = &mut scalar_bytes[i * 32..(i + 1) * 32];
         for j in 0..32 {
             dst[j] = chunk[31 - j];
         }
@@ -872,7 +881,8 @@ mod tests {
         }
 
         let fast = msm_pippenger_g1(&points, &scalars);
-        let points_projective: Vec<G1Projective> = points.iter().map(|p| G1Projective::from(*p)).collect();
+        let points_projective: Vec<G1Projective> =
+            points.iter().map(|p| G1Projective::from(*p)).collect();
         let fast_projective = msm_pippenger_g1_projective(&points_projective, &scalars);
         assert_eq!(fast.to_affine(), naive.to_affine());
         assert_eq!(fast_projective.to_affine(), naive.to_affine());
@@ -912,7 +922,9 @@ mod tests {
         let z_bytes = crate::utils::z_for_cell(0); // z = 1
         let (proof, y_out) = ctx.compute_proof(&blob, &z_bytes).unwrap();
 
-        let ok = ctx.verify_proof(&commitment, &z_bytes, &y_out, &proof).unwrap();
+        let ok = ctx
+            .verify_proof(&commitment, &z_bytes, &y_out, &proof)
+            .unwrap();
         assert!(ok, "KZG proof must verify for constant-one blob");
     }
 

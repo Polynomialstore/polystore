@@ -107,6 +107,16 @@ self.onmessage = async (event) => {
         const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat
         const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat
         const shardLen = Number((parsed as { shard_len?: unknown }).shard_len ?? 0)
+        const rustPerf = (parsed as {
+          perf?: {
+            encode_ms?: unknown
+            rs_ms?: unknown
+            commit_ms?: unknown
+            total_ms?: unknown
+            rows?: unknown
+            shards_total?: unknown
+          }
+        }).perf
         if (!Number.isInteger(shardLen) || shardLen <= 0) {
           throw new Error('expandPayloadRs returned an invalid shard length')
         }
@@ -136,6 +146,12 @@ self.onmessage = async (event) => {
                 totalMs: performance.now() - opStart,
                 shardCount: shardsFlat.byteLength / shardLen,
                 shardLen,
+                rustEncodeMs: Number(rustPerf?.encode_ms ?? 0),
+                rustRsMs: Number(rustPerf?.rs_ms ?? 0),
+                rustCommitMs: Number(rustPerf?.commit_ms ?? 0),
+                rustTotalMs: Number(rustPerf?.total_ms ?? 0),
+                rows: Number(rustPerf?.rows ?? 0),
+                shardsTotal: Number(rustPerf?.shards_total ?? 0),
               },
             },
           },

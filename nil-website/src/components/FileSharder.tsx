@@ -128,9 +128,14 @@ type PreparePerfSample = {
   encodeMs: number
   copyMs: number
   wasmMs: number
+  workerTotalMs: number
+  workerQueueMs: number
   workerExpandMs: number
   workerCommitMs: number
   workerRootMs: number
+  workerRustEncodeMs: number
+  workerRustRsMs: number
+  workerRustCommitMs: number
   totalMs: number
   batchBlobs?: number
   shardCount?: number
@@ -149,9 +154,13 @@ type PreparePerfProfile = {
   phases: {
     jsEncodeMs: number
     jsCopyMs: number
+    workerQueueMs: number
     workerExpandMs: number
     workerCommitMs: number
     workerRootMs: number
+    workerRustEncodeMs: number
+    workerRustRsMs: number
+    workerRustCommitMs: number
     manifestMs: number
     unaccountedMs: number
   }
@@ -2455,8 +2464,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ? await workerClient.expandMduRs(chunkCopy, rsK, rsM)
               : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM)
             const wasmMs = performance.now() - wasmStart
+            const workerTotalMs = Number(result.perf?.totalMs ?? 0)
             const workerExpandMs = Number(result.perf?.expandMs ?? 0)
             const workerRootMs = Number(result.perf?.rootMs ?? 0)
+            const workerQueueMs = Math.max(0, wasmMs - workerTotalMs)
+            const workerRustEncodeMs = Number(result.perf?.rustEncodeMs ?? 0)
+            const workerRustRsMs = Number(result.perf?.rustRsMs ?? 0)
+            const workerRustCommitMs = Number(result.perf?.rustCommitMs ?? 0)
 
             if (!encodedMdu) {
               const encodeStart = performance.now()
@@ -2494,9 +2508,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               encodeMs,
               copyMs,
               wasmMs,
+              workerTotalMs,
+              workerQueueMs,
               workerExpandMs,
               workerCommitMs: 0,
               workerRootMs,
+              workerRustEncodeMs,
+              workerRustRsMs,
+              workerRustCommitMs,
               totalMs: opMs,
               shardCount:
                 result.shards_flat && Number(result.shard_len ?? 0) > 0
@@ -2620,8 +2639,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 },
               });
               const wasmMs = performance.now() - wasmStart;
+              const workerTotalMs = Number(result.perf?.totalMs ?? 0);
               const workerCommitMs = Number(result.perf?.commitMs ?? 0);
               const workerRootMs = Number(result.perf?.rootMs ?? 0);
+              const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
 
               const rootBytes = toU8(result.mdu_root);
               userRoots.push(rootBytes);
@@ -2643,9 +2664,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 encodeMs,
                 copyMs,
                 wasmMs,
+                workerTotalMs,
+                workerQueueMs,
                 workerExpandMs: 0,
                 workerCommitMs,
                 workerRootMs,
+                workerRustEncodeMs: 0,
+                workerRustRsMs: 0,
+                workerRustCommitMs: 0,
                 totalMs: opMs,
                 batchBlobs,
               };
@@ -2751,8 +2777,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               },
             });
             const wasmMs = performance.now() - wasmStart;
+            const workerTotalMs = Number(result.perf?.totalMs ?? 0);
             const workerCommitMs = Number(result.perf?.commitMs ?? 0);
             const workerRootMs = Number(result.perf?.rootMs ?? 0);
+            const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
 
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
@@ -2769,9 +2797,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               encodeMs,
               copyMs,
               wasmMs,
+              workerTotalMs,
+              workerQueueMs,
               workerExpandMs: 0,
               workerCommitMs,
               workerRootMs,
+              workerRustEncodeMs: 0,
+              workerRustRsMs: 0,
+              workerRustCommitMs: 0,
               totalMs: opMs,
               batchBlobs,
             };
@@ -2859,8 +2892,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           },
         });
         const wasmMs = performance.now() - wasmStart;
+        const workerTotalMs = Number(mdu0Result.perf?.totalMs ?? 0);
         const workerCommitMs = Number(mdu0Result.perf?.commitMs ?? 0);
         const workerRootMs = Number(mdu0Result.perf?.rootMs ?? 0);
+        const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
         const mdu0Root = toU8(mdu0Result.mdu_root);
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
         const opMs = performance.now() - opStartMdu0;
@@ -2872,9 +2907,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           encodeMs: 0,
           copyMs: mdu0CopyMs,
           wasmMs,
+          workerTotalMs,
+          workerQueueMs,
           workerExpandMs: 0,
           workerCommitMs,
           workerRootMs,
+          workerRustEncodeMs: 0,
+          workerRustRsMs: 0,
+          workerRustCommitMs: 0,
           totalMs: opMs,
           batchBlobs: mdu0BatchBlobs,
         }
@@ -2974,9 +3014,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           phases: {
             jsEncodeMs: sumBy(allSamples, (sample) => sample.encodeMs),
             jsCopyMs: sumBy(allSamples, (sample) => sample.copyMs),
+            workerQueueMs: sumBy(allSamples, (sample) => sample.workerQueueMs),
             workerExpandMs: sumBy(allSamples, (sample) => sample.workerExpandMs),
             workerCommitMs: sumBy(allSamples, (sample) => sample.workerCommitMs),
             workerRootMs: sumBy(allSamples, (sample) => sample.workerRootMs),
+            workerRustEncodeMs: sumBy(allSamples, (sample) => sample.workerRustEncodeMs),
+            workerRustRsMs: sumBy(allSamples, (sample) => sample.workerRustRsMs),
+            workerRustCommitMs: sumBy(allSamples, (sample) => sample.workerRustCommitMs),
             manifestMs,
             unaccountedMs: 0,
           },
@@ -2987,6 +3031,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           prepareProfile.totalMs -
             prepareProfile.phases.jsEncodeMs -
             prepareProfile.phases.jsCopyMs -
+            prepareProfile.phases.workerQueueMs -
             prepareProfile.phases.workerExpandMs -
             prepareProfile.phases.workerCommitMs -
             prepareProfile.phases.workerRootMs -

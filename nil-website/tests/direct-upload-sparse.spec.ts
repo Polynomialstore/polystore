@@ -295,6 +295,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
       return (window as Window & { __nilPreparePerf?: unknown }).__nilPreparePerf ?? null
     })
     console.log('[direct sparse prepare profile]', prepareProfile)
+    console.log('[direct sparse prepare profile json]', JSON.stringify(prepareProfile))
     return
   }
 

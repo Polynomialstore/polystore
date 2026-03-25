@@ -1,5 +1,5 @@
 use nil_core::coding::{expand_mdu_encoded, reconstruct_mdu_from_shards};
-use nil_core::kzg::{KzgCommitment, KzgContext, BLOB_SIZE, MDU_SIZE};
+use nil_core::kzg::{BLOB_SIZE, KzgCommitment, KzgContext, MDU_SIZE};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -90,7 +90,8 @@ fn mode2_artifacts_v1_fixture_k8m4_matches_hashes() {
     assert_eq!(sha256_hex0x(&payload), fixture.payload_sha256);
 
     let encoded_user = encode_payload_to_mdu(&payload);
-    let expanded = expand_mdu_encoded(&ctx, &encoded_user, fixture.k, fixture.m).expect("expand_mdu_encoded");
+    let expanded =
+        expand_mdu_encoded(&ctx, &encoded_user, fixture.k, fixture.m).expect("expand_mdu_encoded");
     assert_eq!(expanded.witness.len(), fixture.leaf_count);
     assert_eq!(expanded.shards.len(), fixture.k + fixture.m);
 
@@ -108,7 +109,9 @@ fn mode2_artifacts_v1_fixture_k8m4_matches_hashes() {
 
     // Leaf ordering sanity: witness[slot=0,row=0] matches commitment(shards[0][row0]).
     let first_blob = &expanded.shards[0][0..BLOB_SIZE];
-    let c0 = ctx.blob_to_commitment(first_blob).expect("blob_to_commitment");
+    let c0 = ctx
+        .blob_to_commitment(first_blob)
+        .expect("blob_to_commitment");
     assert_eq!(expanded.witness[0], c0.to_vec());
 
     // Reconstruct from <=M missing shards.
@@ -116,7 +119,8 @@ fn mode2_artifacts_v1_fixture_k8m4_matches_hashes() {
     shards_opt[0] = None;
     shards_opt[3] = None;
     shards_opt[9] = None;
-    let reconstructed = reconstruct_mdu_from_shards(&mut shards_opt, fixture.k, fixture.m).expect("reconstruct");
+    let reconstructed =
+        reconstruct_mdu_from_shards(&mut shards_opt, fixture.k, fixture.m).expect("reconstruct");
     assert_eq!(reconstructed, encoded_user);
 
     // User MDU root from witness commitments.
@@ -131,11 +135,16 @@ fn mode2_artifacts_v1_fixture_k8m4_matches_hashes() {
     let user_root = ctx
         .create_mdu_merkle_root(&commitments)
         .expect("create_mdu_merkle_root");
-    assert_eq!(format!("0x{}", hex::encode(user_root)), fixture.roots.user_mdu_root);
+    assert_eq!(
+        format!("0x{}", hex::encode(user_root)),
+        fixture.roots.user_mdu_root
+    );
 
     // Shard hashes match fixture artifacts for slab_index = 1 + W + user_ordinal, W=1, user_ordinal=0 => 2.
     for (slot, shard) in shards_opt.iter().enumerate() {
-        let shard = shard.as_ref().expect("shard should be present after reconstruct");
+        let shard = shard
+            .as_ref()
+            .expect("shard should be present after reconstruct");
         let name = format!("mdu_2_slot_{slot}.bin");
         let expected = fixture
             .artifact_sha256

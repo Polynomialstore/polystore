@@ -1,5 +1,6 @@
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext, KzgError, MDU_SIZE};
 use reed_solomon_erasure::galois_8::ReedSolomon;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 pub const SHARDS_NUM: usize = 12;
@@ -31,6 +32,17 @@ use serde::{Deserialize, Serialize};
 pub struct ExpandedMdu {
     pub witness: Vec<Vec<u8>>, // Commitments in slot-major order (48 bytes each)
     pub shards: Vec<Vec<u8>>,  // Shards per slot (rows * 128 KiB)
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+pub struct ExpandPayloadFlatPerf {
+    pub encode_ms: f64,
+    pub rs_ms: f64,
+    pub commit_ms: f64,
+    pub total_ms: f64,
+    pub rows: usize,
+    pub shards_total: usize,
+    pub shard_len: usize,
 }
 
 fn encode_to_mdu(raw_data: &[u8]) -> Vec<u8> {
@@ -180,7 +192,9 @@ pub fn expand_mdu_encoded_flat(
 
     let expected_witness_len = shards_total * rows * 48;
     let expected_shards_len = shards_total * shard_len;
-    if out_witness_flat.len() != expected_witness_len || out_shards_flat.len() != expected_shards_len {
+    if out_witness_flat.len() != expected_witness_len
+        || out_shards_flat.len() != expected_shards_len
+    {
         return Err(CodingError::InvalidSize);
     }
 
@@ -194,7 +208,8 @@ pub fn expand_mdu_encoded_flat(
             let offset = slot * shard_len + row_idx * BLOB_SIZE;
             // SAFETY: each `(slot, row_idx)` maps to a disjoint BLOB_SIZE region within the
             // `out_shards_flat` buffer.
-            row_shards.push(unsafe { std::slice::from_raw_parts_mut(base_ptr.add(offset), BLOB_SIZE) });
+            row_shards
+                .push(unsafe { std::slice::from_raw_parts_mut(base_ptr.add(offset), BLOB_SIZE) });
         }
 
         for slot in 0..data_shards {
@@ -225,14 +240,14 @@ pub fn expand_mdu_encoded_flat(
 ///
 /// The payload is encoded into the field-aligned MDU layout (31-byte chunks right-aligned in 32-byte
 /// scalars) before RS encoding.
-pub fn expand_payload_flat(
+fn expand_payload_flat_impl(
     ctx: &KzgContext,
     payload_bytes: &[u8],
     data_shards: usize,
     parity_shards: usize,
     out_witness_flat: &mut [u8],
     out_shards_flat: &mut [u8],
-) -> Result<(), CodingError> {
+) -> Result<ExpandPayloadFlatPerf, CodingError> {
     if data_shards == 0 || parity_shards == 0 {
         return Err(CodingError::InvalidRsParams);
     }
@@ -240,7 +255,9 @@ pub fn expand_payload_flat(
         return Err(CodingError::InvalidRsParams);
     }
 
-    let payload = payload_bytes.get(..MDU_PAYLOAD_BYTES).unwrap_or(payload_bytes);
+    let payload = payload_bytes
+        .get(..MDU_PAYLOAD_BYTES)
+        .unwrap_or(payload_bytes);
 
     let rows = BLOBS_PER_MDU / data_shards;
     let shards_total = data_shards + parity_shards;
@@ -248,12 +265,19 @@ pub fn expand_payload_flat(
 
     let expected_witness_len = shards_total * rows * 48;
     let expected_shards_len = shards_total * shard_len;
-    if out_witness_flat.len() != expected_witness_len || out_shards_flat.len() != expected_shards_len {
+    if out_witness_flat.len() != expected_witness_len
+        || out_shards_flat.len() != expected_shards_len
+    {
         return Err(CodingError::InvalidSize);
     }
 
     let r = ReedSolomon::new(data_shards, parity_shards)
         .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+
+    let total_start = Instant::now();
+    let mut encode_dur = Duration::ZERO;
+    let mut rs_dur = Duration::ZERO;
+    let mut commit_dur = Duration::ZERO;
 
     // RS encode and commit row-by-row to keep the working set small (and avoid an intermediate 8 MiB MDU buffer).
     for row_idx in 0..rows {
@@ -263,9 +287,11 @@ pub fn expand_payload_flat(
             let offset = slot * shard_len + row_idx * BLOB_SIZE;
             // SAFETY: each `(slot, row_idx)` maps to a disjoint BLOB_SIZE region within the
             // `out_shards_flat` buffer.
-            row_shards.push(unsafe { std::slice::from_raw_parts_mut(base_ptr.add(offset), BLOB_SIZE) });
+            row_shards
+                .push(unsafe { std::slice::from_raw_parts_mut(base_ptr.add(offset), BLOB_SIZE) });
         }
 
+        let encode_start = Instant::now();
         for slot in 0..data_shards {
             let blob_idx = row_idx * data_shards + slot;
             let payload_base = blob_idx * SCALARS_PER_BLOB * SCALAR_PAYLOAD_BYTES;
@@ -274,18 +300,68 @@ pub fn expand_payload_flat(
         for slot in data_shards..shards_total {
             row_shards[slot].fill(0);
         }
+        encode_dur += encode_start.elapsed();
 
+        let rs_start = Instant::now();
         r.encode(&mut row_shards)
             .map_err(|e| CodingError::Rs(format!("{}", e)))?;
+        rs_dur += rs_start.elapsed();
 
+        let commit_start = Instant::now();
         for slot in 0..shards_total {
             let commitment = ctx.blob_to_commitment(row_shards[slot])?;
             let woff = (slot * rows + row_idx) * 48;
             out_witness_flat[woff..woff + 48].copy_from_slice(&commitment);
         }
+        commit_dur += commit_start.elapsed();
     }
 
+    Ok(ExpandPayloadFlatPerf {
+        encode_ms: encode_dur.as_secs_f64() * 1000.0,
+        rs_ms: rs_dur.as_secs_f64() * 1000.0,
+        commit_ms: commit_dur.as_secs_f64() * 1000.0,
+        total_ms: total_start.elapsed().as_secs_f64() * 1000.0,
+        rows,
+        shards_total,
+        shard_len,
+    })
+}
+
+pub fn expand_payload_flat(
+    ctx: &KzgContext,
+    payload_bytes: &[u8],
+    data_shards: usize,
+    parity_shards: usize,
+    out_witness_flat: &mut [u8],
+    out_shards_flat: &mut [u8],
+) -> Result<(), CodingError> {
+    let _ = expand_payload_flat_impl(
+        ctx,
+        payload_bytes,
+        data_shards,
+        parity_shards,
+        out_witness_flat,
+        out_shards_flat,
+    )?;
     Ok(())
+}
+
+pub fn expand_payload_flat_profiled(
+    ctx: &KzgContext,
+    payload_bytes: &[u8],
+    data_shards: usize,
+    parity_shards: usize,
+    out_witness_flat: &mut [u8],
+    out_shards_flat: &mut [u8],
+) -> Result<ExpandPayloadFlatPerf, CodingError> {
+    expand_payload_flat_impl(
+        ctx,
+        payload_bytes,
+        data_shards,
+        parity_shards,
+        out_witness_flat,
+        out_shards_flat,
+    )
 }
 
 pub fn reconstruct_mdu_from_shards(
@@ -316,7 +392,9 @@ pub fn reconstruct_mdu_from_shards(
         }
     }
     if present < data_shards {
-        return Err(CodingError::Rs("not enough shards to reconstruct".to_string()));
+        return Err(CodingError::Rs(
+            "not enough shards to reconstruct".to_string(),
+        ));
     }
 
     let r = ReedSolomon::new(data_shards, parity_shards)
@@ -330,9 +408,9 @@ pub fn reconstruct_mdu_from_shards(
         for slot in 0..data_shards {
             let blob_idx = row_idx * data_shards + slot;
             let dst = blob_idx * BLOB_SIZE;
-            let shard = shards[slot]
-                .as_ref()
-                .ok_or_else(|| CodingError::Rs("missing data shard after reconstruct".to_string()))?;
+            let shard = shards[slot].as_ref().ok_or_else(|| {
+                CodingError::Rs("missing data shard after reconstruct".to_string())
+            })?;
             let src = &shard[row_offset..row_offset + BLOB_SIZE];
             mdu[dst..dst + BLOB_SIZE].copy_from_slice(src);
         }
@@ -428,7 +506,8 @@ mod tests {
         shards[1] = None; // drop one data shard
         shards[10] = None; // drop a parity shard
 
-        let reconstructed = reconstruct_mdu_from_shards(&mut shards, DATA_SHARDS_NUM, PARITY_SHARDS_NUM).unwrap();
+        let reconstructed =
+            reconstruct_mdu_from_shards(&mut shards, DATA_SHARDS_NUM, PARITY_SHARDS_NUM).unwrap();
         assert_eq!(reconstructed, mdu);
     }
 
@@ -458,7 +537,8 @@ mod tests {
         }
 
         let encoded = encode_to_mdu(&payload);
-        let expanded = expand_mdu_encoded(&ctx, &encoded, DATA_SHARDS_NUM, PARITY_SHARDS_NUM).unwrap();
+        let expanded =
+            expand_mdu_encoded(&ctx, &encoded, DATA_SHARDS_NUM, PARITY_SHARDS_NUM).unwrap();
 
         let rows = BLOBS_PER_MDU / DATA_SHARDS_NUM;
         let shard_count = DATA_SHARDS_NUM + PARITY_SHARDS_NUM;

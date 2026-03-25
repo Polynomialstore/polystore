@@ -1,10 +1,10 @@
-use crate::coding::{expand_mdu, expand_mdu_encoded, expand_payload_flat};
-use crate::kzg::KzgContext;
 use crate::builder::Mdu0Builder;
-use crate::layout::{FileRecordV1, pack_length_and_flags};
-use wasm_bindgen::prelude::*;
-use js_sys::Uint8Array;
+use crate::coding::{expand_mdu, expand_mdu_encoded, expand_payload_flat_profiled};
+use crate::kzg::KzgContext;
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU};
+use crate::layout::{FileRecordV1, pack_length_and_flags};
+use js_sys::Uint8Array;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct NilWasm {
@@ -39,7 +39,12 @@ impl NilWasm {
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
 
-    pub fn expand_payload_rs_flat(&self, payload_bytes: &[u8], k: u32, m: u32) -> Result<JsValue, JsValue> {
+    pub fn expand_payload_rs_flat(
+        &self,
+        payload_bytes: &[u8],
+        k: u32,
+        m: u32,
+    ) -> Result<JsValue, JsValue> {
         let data_shards = k as usize;
         let parity_shards = m as usize;
         if data_shards == 0 || parity_shards == 0 {
@@ -55,7 +60,7 @@ impl NilWasm {
         let mut witness_flat = vec![0u8; shard_count * rows * 48];
         let mut shards_flat = vec![0u8; shard_count * shard_len];
 
-        expand_payload_flat(
+        let perf = expand_payload_flat_profiled(
             &self.kzg_ctx,
             payload_bytes,
             data_shards,
@@ -66,16 +71,37 @@ impl NilWasm {
         .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
 
         #[derive(serde::Serialize)]
+        struct ExpandPayloadFlatPerfResult {
+            encode_ms: f64,
+            rs_ms: f64,
+            commit_ms: f64,
+            total_ms: f64,
+            rows: usize,
+            shards_total: usize,
+            shard_len: usize,
+        }
+
+        #[derive(serde::Serialize)]
         struct ExpandPayloadFlatResult {
             witness_flat: Vec<u8>,
             shards_flat: Vec<u8>,
             shard_len: usize,
+            perf: ExpandPayloadFlatPerfResult,
         }
 
         let res = ExpandPayloadFlatResult {
             witness_flat,
             shards_flat,
             shard_len,
+            perf: ExpandPayloadFlatPerfResult {
+                encode_ms: perf.encode_ms,
+                rs_ms: perf.rs_ms,
+                commit_ms: perf.commit_ms,
+                total_ms: perf.total_ms,
+                rows: perf.rows,
+                shards_total: perf.shards_total,
+                shard_len: perf.shard_len,
+            },
         };
 
         serde_wasm_bindgen::to_value(&res)
@@ -119,7 +145,9 @@ impl NilWasm {
 
     pub fn commit_blobs(&self, blobs_flat: &[u8]) -> Result<Uint8Array, JsValue> {
         if blobs_flat.len() % crate::kzg::BLOB_SIZE != 0 {
-            return Err(JsValue::from_str("Blobs length must be a multiple of 128 KiB"));
+            return Err(JsValue::from_str(
+                "Blobs length must be a multiple of 128 KiB",
+            ));
         }
 
         let count = blobs_flat.len() / crate::kzg::BLOB_SIZE;
@@ -149,7 +177,9 @@ impl NilWasm {
             roots.push(r);
         }
 
-        let (commitment, blob) = self.kzg_ctx.compute_manifest_commitment(&roots)
+        let (commitment, blob) = self
+            .kzg_ctx
+            .compute_manifest_commitment(&roots)
             .map_err(|e| JsValue::from_str(&format!("Compute manifest failed: {:?}", e)))?;
 
         #[derive(serde::Serialize)]
@@ -157,13 +187,17 @@ impl NilWasm {
             root: Vec<u8>,
             blob: Vec<u8>,
         }
-        let res = ManifestResult { root: commitment.to_vec(), blob };
-        serde_wasm_bindgen::to_value(&res).map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+        let res = ManifestResult {
+            root: commitment.to_vec(),
+            blob,
+        };
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
 
     pub fn compute_mdu_root(&self, witness_flat: &[u8]) -> Result<JsValue, JsValue> {
         if witness_flat.len() % 48 != 0 {
-             return Err(JsValue::from_str("Witness length must be multiple of 48"));
+            return Err(JsValue::from_str("Witness length must be multiple of 48"));
         }
         let count = witness_flat.len() / 48;
         let mut commitments = Vec::with_capacity(count);
@@ -172,10 +206,12 @@ impl NilWasm {
             c.copy_from_slice(chunk);
             commitments.push(c);
         }
-        
-        let root = self.kzg_ctx.create_mdu_merkle_root(&commitments)
+
+        let root = self
+            .kzg_ctx
+            .create_mdu_merkle_root(&commitments)
             .map_err(|e| JsValue::from_str(&format!("Merkle root failed: {:?}", e)))?;
-            
+
         serde_wasm_bindgen::to_value(&root.to_vec())
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
@@ -190,16 +226,24 @@ pub struct WasmMdu0Builder {
 impl WasmMdu0Builder {
     #[wasm_bindgen(constructor)]
     pub fn new(max_user_mdus: u64) -> WasmMdu0Builder {
-        WasmMdu0Builder { inner: Mdu0Builder::new(max_user_mdus) }
+        WasmMdu0Builder {
+            inner: Mdu0Builder::new(max_user_mdus),
+        }
     }
 
     #[wasm_bindgen]
     pub fn new_with_commitments(max_user_mdus: u64, commitments_per_mdu: u64) -> WasmMdu0Builder {
-        WasmMdu0Builder { inner: Mdu0Builder::new_with_commitments(max_user_mdus, commitments_per_mdu) }
+        WasmMdu0Builder {
+            inner: Mdu0Builder::new_with_commitments(max_user_mdus, commitments_per_mdu),
+        }
     }
 
     #[wasm_bindgen]
-    pub fn load(data: &[u8], max_user_mdus: u64, commitments_per_mdu: u64) -> Result<WasmMdu0Builder, JsValue> {
+    pub fn load(
+        data: &[u8],
+        max_user_mdus: u64,
+        commitments_per_mdu: u64,
+    ) -> Result<WasmMdu0Builder, JsValue> {
         let builder = Mdu0Builder::load_with_commitments(data, max_user_mdus, commitments_per_mdu)
             .map_err(|e| JsValue::from_str(&e))?;
         Ok(WasmMdu0Builder { inner: builder })
@@ -209,11 +253,17 @@ impl WasmMdu0Builder {
         self.append_file_with_flags(path, size, start_offset, 0)
     }
 
-    pub fn append_file_with_flags(&mut self, path: &str, size: u64, start_offset: u64, flags: u8) -> Result<(), JsValue> {
+    pub fn append_file_with_flags(
+        &mut self,
+        path: &str,
+        size: u64,
+        start_offset: u64,
+        flags: u8,
+    ) -> Result<(), JsValue> {
         let mut path_bytes = [0u8; 40];
         let bytes = path.as_bytes();
         if bytes.len() > 40 {
-             return Err(JsValue::from_str("path too long"));
+            return Err(JsValue::from_str("path too long"));
         }
         path_bytes[..bytes.len()].copy_from_slice(bytes);
 
@@ -223,37 +273,30 @@ impl WasmMdu0Builder {
             timestamp: 0,
             path: path_bytes,
         };
-        self.inner.append_file_record(rec).map_err(|e| JsValue::from_str(&e))
+        self.inner
+            .append_file_record(rec)
+            .map_err(|e| JsValue::from_str(&e))
     }
 
     pub fn bytes(&mut self) -> Vec<u8> {
         self.inner.bytes().to_vec()
     }
-    
-        pub fn set_root(&mut self, index: u64, root: &[u8]) -> Result<(), JsValue> {
-    
-            if root.len() != 32 {
-    
-                return Err(JsValue::from_str("root must be 32 bytes"));
-    
-            }
-    
-            let mut r = [0u8; 32];
-    
-            r.copy_from_slice(root);
-    
-            self.inner.set_root(index, r).map_err(|e| JsValue::from_str(&e))
-    
+
+    pub fn set_root(&mut self, index: u64, root: &[u8]) -> Result<(), JsValue> {
+        if root.len() != 32 {
+            return Err(JsValue::from_str("root must be 32 bytes"));
         }
-    
-    
-    
-        pub fn get_witness_count(&self) -> u64 {
-    
-            self.inner.witness_mdu_count
-    
-        }
-    
+
+        let mut r = [0u8; 32];
+
+        r.copy_from_slice(root);
+
+        self.inner
+            .set_root(index, r)
+            .map_err(|e| JsValue::from_str(&e))
     }
-    
-    
+
+    pub fn get_witness_count(&self) -> u64 {
+        self.inner.witness_mdu_count
+    }
+}

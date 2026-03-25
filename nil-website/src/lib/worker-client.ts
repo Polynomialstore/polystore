@@ -179,6 +179,12 @@ export interface ExpandedStripe {
       totalMs?: number;
       shardCount?: number;
       shardLen?: number;
+      rustEncodeMs?: number;
+      rustRsMs?: number;
+      rustCommitMs?: number;
+      rustTotalMs?: number;
+      rows?: number;
+      shardsTotal?: number;
     };
 }
 

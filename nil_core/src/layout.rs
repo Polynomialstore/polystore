@@ -12,12 +12,12 @@ pub const FLAG_COMPRESSION_BROTLI: u8 = 0x03;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub struct FileTableHeader {
-    pub magic: [u8; 4],       // 4 bytes
-    pub version: u8,          // 1 byte
-    pub pad1: u8,             // 1 byte (Explicit alignment padding)
-    pub record_size: u16,     // 2 bytes
-    pub record_count: u32,    // 4 bytes
-    pub reserved: [u8; 116],  // 116 bytes padding
+    pub magic: [u8; 4],      // 4 bytes
+    pub version: u8,         // 1 byte
+    pub pad1: u8,            // 1 byte (Explicit alignment padding)
+    pub record_size: u16,    // 2 bytes
+    pub record_count: u32,   // 4 bytes
+    pub reserved: [u8; 116], // 116 bytes padding
 }
 
 impl Default for FileTableHeader {
@@ -71,10 +71,10 @@ impl FileTableHeader {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub struct FileRecordV1 {
-    pub start_offset: u64,    // 8 bytes (Little Endian)
-    pub length_and_flags: u64,// 8 bytes (Little Endian)
-    pub timestamp: u64,       // 8 bytes (Little Endian)
-    pub path: [u8; 40],       // 40 bytes (Null-terminated)
+    pub start_offset: u64,     // 8 bytes (Little Endian)
+    pub length_and_flags: u64, // 8 bytes (Little Endian)
+    pub timestamp: u64,        // 8 bytes (Little Endian)
+    pub path: [u8; 40],        // 40 bytes (Null-terminated)
 }
 
 impl Default for FileRecordV1 {
@@ -144,8 +144,18 @@ mod tests {
 
         // Verify Packing
         let expected_top_byte = 0x81u64;
-        assert_eq!(packed >> 56, expected_top_byte, "Packing failed. Expected top byte {:x}, got {:x}", expected_top_byte, packed >> 56);
-        assert_eq!(packed & 0x00FFFFFFFFFFFFFF, raw_length, "Packing corrupted length");
+        assert_eq!(
+            packed >> 56,
+            expected_top_byte,
+            "Packing failed. Expected top byte {:x}, got {:x}",
+            expected_top_byte,
+            packed >> 56
+        );
+        assert_eq!(
+            packed & 0x00FFFFFFFFFFFFFF,
+            raw_length,
+            "Packing corrupted length"
+        );
 
         // Unpack
         let (l, f) = unpack_length_and_flags(packed);
@@ -155,8 +165,16 @@ mod tests {
 
     #[test]
     fn test_struct_alignment() {
-        assert_eq!(std::mem::size_of::<FileRecordV1>(), 64, "FileRecordV1 size mismatch");
-        assert_eq!(std::mem::size_of::<FileTableHeader>(), 128, "FileTableHeader size mismatch");
+        assert_eq!(
+            std::mem::size_of::<FileRecordV1>(),
+            64,
+            "FileRecordV1 size mismatch"
+        );
+        assert_eq!(
+            std::mem::size_of::<FileTableHeader>(),
+            128,
+            "FileTableHeader size mismatch"
+        );
     }
 
     #[test]
@@ -176,7 +194,10 @@ mod tests {
         let bytes = original_rec.to_bytes();
         let deserialized_rec = FileRecordV1::from_bytes(&bytes);
 
-        assert_eq!(original_rec, deserialized_rec, "Serialization roundtrip failed for FileRecordV1");
+        assert_eq!(
+            original_rec, deserialized_rec,
+            "Serialization roundtrip failed for FileRecordV1"
+        );
 
         // 2. FileTableHeader
         let mut reserved = [0u8; 116];
@@ -194,6 +215,9 @@ mod tests {
         let bytes = original_header.to_bytes();
         let deserialized_header = FileTableHeader::from_bytes(&bytes);
 
-        assert_eq!(original_header, deserialized_header, "Serialization roundtrip failed for FileTableHeader");
+        assert_eq!(
+            original_header, deserialized_header,
+            "Serialization roundtrip failed for FileTableHeader"
+        );
     }
 }
