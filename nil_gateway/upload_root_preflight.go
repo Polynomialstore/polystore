@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 const nilUploadPreviousManifestRootHeader = "X-Nil-Previous-Manifest-Root"
@@ -24,10 +26,12 @@ type nilfsUploadRootPreflightCacheEntry struct {
 var (
 	nilfsUploadRootPreflightCache    sync.Map
 	nilfsUploadRootPreflightCacheTTL = time.Duration(envInt("NIL_UPLOAD_ROOT_PREFLIGHT_CACHE_TTL_MS", 15000)) * time.Millisecond
+	nilfsUploadRootPreflightGroup    singleflight.Group
 )
 
 func resetNilfsUploadRootPreflightCacheForTest() {
 	nilfsUploadRootPreflightCache = sync.Map{}
+	nilfsUploadRootPreflightGroup = singleflight.Group{}
 }
 
 func validateNilfsUploadPreviousManifestRoot(
@@ -54,22 +58,32 @@ func validateNilfsUploadPreviousManifestRoot(
 		}
 	}
 
-	meta, err := fetchDealMetaFresh(dealID)
-	if err != nil {
-		return err
-	}
-	expectedPrevious := normalizeManifestRootOrEmpty(meta.ManifestRoot)
-	if expectedPrevious != previousManifestRoot {
-		recordNilfsCASPreflightConflict(nilfsCASPreflightConflictUpload)
-		return fmt.Errorf("stale previous_manifest_root: expected %s", expectedPrevious)
-	}
+	resultKey := fmt.Sprintf("%d|%s|%s", key.dealID, key.manifestRoot, key.previousManifestRoot)
+	ch := nilfsUploadRootPreflightGroup.DoChan(resultKey, func() (any, error) {
+		meta, err := fetchDealMetaFresh(dealID)
+		if err != nil {
+			return nil, err
+		}
+		expectedPrevious := normalizeManifestRootOrEmpty(meta.ManifestRoot)
+		if expectedPrevious != previousManifestRoot {
+			recordNilfsCASPreflightConflict(nilfsCASPreflightConflictUpload)
+			return nil, fmt.Errorf("stale previous_manifest_root: expected %s", expectedPrevious)
+		}
 
-	if nilfsUploadRootPreflightCacheTTL > 0 {
-		nilfsUploadRootPreflightCache.Store(key, nilfsUploadRootPreflightCacheEntry{
-			expiresAt: time.Now().Add(nilfsUploadRootPreflightCacheTTL),
-		})
+		if nilfsUploadRootPreflightCacheTTL > 0 {
+			nilfsUploadRootPreflightCache.Store(key, nilfsUploadRootPreflightCacheEntry{
+				expiresAt: time.Now().Add(nilfsUploadRootPreflightCacheTTL),
+			})
+		}
+		return nil, nil
+	})
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case res := <-ch:
+		return res.Err
 	}
-	return nil
 }
 
 func uploadPreviousManifestRootHeader(r *http.Request) string {
