@@ -1,16 +1,15 @@
 # NilStore Network Development Roadmap
 
 ## Protocol for Agents
-**CRITICAL:** When pushing changes to the repository, you **MUST** push to both remotes to ensure synchronization.
-*   `git push origin main` (Primary)
-*   `git push nil-store main` (Mirror)
+**CRITICAL:** When pushing changes to the repository, use the canonical `origin` remote.
+*   `git push origin <branch>`
 
 ### Git Best Practices for Agents
 *   **Commit Regularly:** Always commit your work frequently, in small, logical chunks.
 *   **Prohibited Commands:** Agents are strictly forbidden from running aggressive Git commands like `git clean` or `git reset --hard` as these can lead to irreversible data loss of uncommitted work. If such commands are necessary, confirm with the user first.
 *   **Tests Before Push:** For every non-trivial change, run the most relevant unit/e2e tests before committing. Do not push code that you haven't at least smoke-tested locally.
 *   **Commit & Push Cadence:** Treat `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md` as the canonical PR-by-PR TODO list for the Feb 2026 trusted devnet soft launch. Keep this file high-level and link out to repo-tracked TODOs/checklists instead of using this as a sprint tracker.
-*   **Default Autonomy:** Unless the user explicitly says “don’t commit/push yet,” agents should **automatically** commit completed work (after relevant tests pass) and push to both remotes. Keep commits small and descriptive, and avoid batching unrelated changes.
+*   **Default Autonomy:** Unless the user explicitly says “don’t commit/push yet,” agents should **automatically** commit completed work (after relevant tests pass) and push to `origin`. Keep commits small and descriptive, and avoid batching unrelated changes.
 
 ### Auto-commit contract (MANDATORY)
 *   If a task is implemented and the user did not explicitly say “don’t commit/push yet,” commit and push automatically.
@@ -20,9 +19,8 @@
     *   required tests failing with unclear remediation
     *   ambiguous ownership of conflicting uncommitted changes
     *   destructive/history-rewrite action required
-*   Always push both remotes in sequence:
-    *   `git push origin main`
-    *   `git push nil-store main`
+*   Push to `origin` only:
+    *   `git push origin <branch>`
 
 This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
@@ -1023,7 +1021,7 @@ This sprint closes the biggest remaining UX/product gaps for multi-provider devn
 
 ### 11.0.1 Completed Goals (Previous Sprint)
 
-This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to both remotes.
+This is the **canonical execution checklist** for the next development sprint. Each item below must be completed in small, testable commits; after passing the listed test gates, commit and push to `origin`.
 
 - [x] **Goal 1: Close NilFS “single source of truth” (restart-safe slab).**
     - **Steps:** `11.6.A3.0` restart safety E2E; `11.6.A3.1` require `file_path` in `GatewayFetch`; `11.6.A3.2` require `file_path` in `GatewayProveRetrieval`; `11.6.A3.3` delete `uploads/index.json` legacy flows.
@@ -1198,26 +1196,26 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/keeper/msg_server_test.go`, `nilchain/x/nilchain/keeper/genesis_test.go`
     - **Pass gate:** `CreateDeal` + `CreateDealFromEvm` create deals with `Deal.size == 0` + empty `Deal.manifest_root` until `UpdateDealContent*` is executed; any legacy tier fields are ignored for state.
     - **Test gate:** `cd nilchain && go test ./x/nilchain/keeper -run CreateDeal`
-    - **Commit gate:** After pass, commit `fix(nilchain): thin-provision CreateDeal` and push to both remotes.
+    - **Commit gate:** After pass, commit `fix(nilchain): thin-provision CreateDeal` and push to `origin`.
 
 - [x] **11.2.2 Remove `size_tier` from EIP-712 CreateDeal intent end-to-end.**
     - **Files (chain):** `nilchain/x/nilchain/types/eip712.go`, `nilchain/x/nilchain/keeper/msg_server.go`
     - **Files (web/tools):** `nil-website/src/lib/eip712.ts`, `nil-website/src/lib/eip712.test.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/scripts/sign_intent.ts`
     - **Pass gate:** A CreateDeal signature produced by the web (MetaMask or viem) verifies on-chain and `create-deal-from-evm` succeeds with an intent JSON that does **not** include `size_tier`.
     - **Test gate:** `cd nil-website && npm run test:unit` and `cd nilchain && go test ./...` and `./e2e_create_deal_from_evm.sh`
-    - **Commit gate:** After pass, commit `refactor(eip712): remove size_tier from CreateDeal intent` and push to both remotes.
+    - **Commit gate:** After pass, commit `refactor(eip712): remove size_tier from CreateDeal intent` and push to `origin`.
 
 - [x] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
     - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `nil-website/website-spec.md`, `nil-website/debug/*`
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
     - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
-    - **Commit gate:** After pass, commit `chore: remove tier remnants` and push to both remotes.
+    - **Commit gate:** After pass, commit `chore: remove tier remnants` and push to `origin`.
 
 - [x] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
     - **Files:** `nilchain/proto/nilchain/nilchain/v1/tx.proto` (reserve field 10), generated `nilchain/x/nilchain/types/tx.pb.go`, `nil-website/src/lib/eip712.ts`, `nilchain/x/nilchain/types/eip712.go`
     - **Pass gate:** `create-deal-from-evm` still works (intent JSON omits `size_tier`; default semantics unchanged); no code references `SizeTier`.
     - **Test gate:** `cd nilchain && make proto-gen && go test ./...` and `./scripts/e2e_lifecycle.sh`
-    - **Commit gate:** After pass, commit `refactor(proto): remove EvmCreateDealIntent.size_tier` and push to both remotes.
+    - **Commit gate:** After pass, commit `refactor(proto): remove EvmCreateDealIntent.size_tier` and push to `origin`.
 
 ### 11.3 Gateway & File Lifecycle E2E
 - [x] Stabilize `/gateway/upload`, `/gateway/create-deal-evm`, and `/gateway/update-deal-content-evm` so that a full “allocate capacity → upload file → commit content → fetch file” flow works reliably via both curl and the web UI.
@@ -1240,31 +1238,31 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Files:** `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, (new) `nil-website/src/lib/e2eWallet.ts`
     - **Pass gate:** In E2E mode, “Connect Wallet” works without the MetaMask extension and supports `eth_signTypedData_v4` for create-deal + update-content.
     - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
-    - **Commit gate:** After pass, commit `test(nil-website): deterministic E2E wallet` and push to both remotes.
+    - **Commit gate:** After pass, commit `test(nil-website): deterministic E2E wallet` and push to `origin`.
 
 - [x] **11.4.2 Add stable selectors for the demo flow (no UI polish).**
     - **Files:** `nil-website/src/components/Dashboard.tsx`, `nil-website/src/components/DealDetail.tsx`, `nil-website/src/components/ConnectWallet.tsx`
     - **Pass gate:** Playwright tests use `data-testid` selectors (not brittle text matching); UX polish remains backlog.
     - **Test gate:** `cd nil-website && npm run test:e2e`
-    - **Commit gate:** After pass, commit `test(nil-website): add stable e2e selectors` and push to both remotes.
+    - **Commit gate:** After pass, commit `test(nil-website): add stable e2e selectors` and push to `origin`.
 
 - [x] **11.4.3 Browser smoke: dashboard lifecycle (connect → create → upload → commit).**
     - **Files:** `nil-website/tests/deal-smoke.spec.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/src/hooks/useUpload.ts`, `nil-website/src/hooks/useUpdateDealContent.ts`
     - **Pass gate:** Test creates a deal, uploads a small file, commits content, and asserts the deal row shows a non-zero size + a manifest root.
     - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
-    - **Commit gate:** After pass, commit `test(nil-website): dashboard lifecycle smoke e2e` and push to both remotes.
+    - **Commit gate:** After pass, commit `test(nil-website): dashboard lifecycle smoke e2e` and push to `origin`.
 
 - [x] **11.4.4 Browser smoke: deal explorer shows file + fetch works.**
     - **Files:** `nil-website/tests/deal-smoke.spec.ts`, `nil-website/src/components/DealDetail.tsx`
     - **Pass gate:** Uploaded file appears in the NilFS file list and can be downloaded via `/gateway/fetch/...&file_path=...` (HTTP 200).
     - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
-    - **Commit gate:** After pass, commit `test(nil-website): deal explorer smoke e2e` and push to both remotes.
+    - **Commit gate:** After pass, commit `test(nil-website): deal explorer smoke e2e` and push to `origin`.
 
 - [x] **11.4.5 One-command runner script (start stack → run tests → stop).**
     - **Files:** (new) `scripts/e2e_browser_smoke.sh`
     - **Pass gate:** Script is idempotent and leaves no running processes on success/failure.
     - **Test gate:** `./scripts/e2e_browser_smoke.sh`
-    - **Commit gate:** After pass, commit `test(scripts): browser smoke runner` and push to both remotes.
+    - **Commit gate:** After pass, commit `test(scripts): browser smoke runner` and push to `origin`.
 
 ### 11.4.6 Frontend Observables & Node-Testable Logic (Dashboard/Explorer)
 **Goal:** Make the web UI’s deal lifecycle observable and testable end-to-end (create → upload → commit → slab/files), using the same TypeScript model/controller code the UI consumes.
@@ -1288,7 +1286,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Change:** Replace `fastShardQuick` / `IngestNewDealFast` as the default with `IngestNewDeal` (full NilFS slab build: MDU #0 + Witness MDUs + User MDUs + ManifestRoot).
     - **Keep fake modes only behind explicit env:** e.g. `NIL_FAKE_INGEST=1` for simulations.
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes with *no* ingest env flags set, and the returned `manifest_root` matches the on‑chain `Deal.manifest_root` after commit.
-    - **Commit gate:** After pass, commit `feat(nil_gateway): default to canonical ingest` and push to both remotes.
+    - **Commit gate:** After pass, commit `feat(nil_gateway): default to canonical ingest` and push to `origin`.
 
 - [x] **A2. Implement “append to existing deal” in `/gateway/upload` using `deal_id`.**
     - **Change:** If `deal_id` is supplied, load existing slab (`uploads/<manifest_root_key>/mdu_0.bin` + Witness MDUs), append/overwrite a `FileRecord`, update Root Table + Witness MDUs, and recompute a new ManifestRoot.
