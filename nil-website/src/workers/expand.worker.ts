@@ -101,10 +101,9 @@ self.onmessage = async (event) => {
 
         const opStart = performance.now()
         const expandStart = performance.now()
-        const expanded = nilWasmInstance.expand_payload_rs_flat(data, Number(k), Number(m)) as unknown
+        const expanded = nilWasmInstance.expand_payload_rs_flat_uncommitted(data, Number(k), Number(m)) as unknown
         const expandMs = performance.now() - expandStart
         const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded
-        const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat
         const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat
         const shardLen = Number((parsed as { shard_len?: unknown }).shard_len ?? 0)
         const rustPerf = (parsed as {
@@ -125,11 +124,16 @@ self.onmessage = async (event) => {
           throw new Error('expandPayloadRs returned an invalid shard length')
         }
 
-        const witnessFlat = witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike)
         const shardsFlat = shardsRaw instanceof Uint8Array ? shardsRaw : new Uint8Array(shardsRaw as ArrayBufferLike)
         if (shardsFlat.byteLength % shardLen !== 0) {
           throw new Error('expandPayloadRs returned misaligned shard bytes')
         }
+
+        const commitStart = performance.now()
+        const committedRaw = nilWasmInstance.commit_blobs(shardsFlat) as unknown
+        const commitMs = performance.now() - commitStart
+        const witnessFlat =
+          committedRaw instanceof Uint8Array ? committedRaw : new Uint8Array(committedRaw as ArrayBufferLike)
 
         const rootStart = performance.now()
         const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown
@@ -146,17 +150,18 @@ self.onmessage = async (event) => {
               shard_len: shardLen,
               perf: {
                 expandMs,
+                commitMs,
                 rootMs,
                 totalMs: performance.now() - opStart,
                 shardCount: shardsFlat.byteLength / shardLen,
                 shardLen,
                 rustEncodeMs: Number(rustPerf?.encode_ms ?? 0),
                 rustRsMs: Number(rustPerf?.rs_ms ?? 0),
-                rustCommitDecodeMs: Number(rustPerf?.commit_decode_ms ?? 0),
-                rustCommitTransformMs: Number(rustPerf?.commit_transform_ms ?? 0),
-                rustCommitMsmMs: Number(rustPerf?.commit_msm_ms ?? 0),
-                rustCommitCompressMs: Number(rustPerf?.commit_compress_ms ?? 0),
-                rustCommitMs: Number(rustPerf?.commit_ms ?? 0),
+                rustCommitDecodeMs: 0,
+                rustCommitTransformMs: 0,
+                rustCommitMsmMs: 0,
+                rustCommitCompressMs: 0,
+                rustCommitMs: commitMs,
                 rustTotalMs: Number(rustPerf?.total_ms ?? 0),
                 rows: Number(rustPerf?.rows ?? 0),
                 shardsTotal: Number(rustPerf?.shards_total ?? 0),
