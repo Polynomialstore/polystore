@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { CheckCircle2, Cpu, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { pickExpansionWorkerCount, workerClient } from '../lib/worker-client';
+import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
+import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
@@ -527,6 +528,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           : null
       const memory = perfObj?.memory
       const payload = {
+        ...extra,
         event,
         dealId,
         runId: run?.id ?? null,
@@ -540,8 +542,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           typeof document !== 'undefined' && typeof document.visibilityState === 'string'
             ? document.visibilityState
             : null,
-        ...extra,
       }
+      const MAX_BROWSER_PERF_EVENTS = 512
       if (typeof window !== 'undefined') {
         const perfWindow = window as typeof window & {
           __nilBrowserPerfLog?: Array<Record<string, unknown>>
@@ -552,6 +554,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           perfWindow.__nilBrowserPerfLog = []
         }
         perfWindow.__nilBrowserPerfLog.push(payload)
+        if (perfWindow.__nilBrowserPerfLog.length > MAX_BROWSER_PERF_EVENTS) {
+          perfWindow.__nilBrowserPerfLog.splice(0, perfWindow.__nilBrowserPerfLog.length - MAX_BROWSER_PERF_EVENTS)
+        }
         perfWindow.__nilBrowserPerfLast = payload
         perfWindow.__nilPerfBundle = {
           browserPerfLog: perfWindow.__nilBrowserPerfLog,
@@ -560,7 +565,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           prepareProfile: perfWindow.__nilPerfBundle?.prepareProfile ?? null,
         }
       }
-      console.log('[browser-perf]', payload)
+      if (import.meta.env.DEV) {
+        console.log('[browser-perf]', payload)
+      }
     },
     [dealId],
   )
@@ -3620,7 +3627,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           rustCommitMsmBucketFillMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmBucketFillMs),
           rustCommitMsmReduceMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmReduceMs),
           rustCommitMsmDoubleMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmDoubleMs),
-          rustCommitMsmMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmMs),
+          workerRustCommitMsmMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmMs),
           rustCommitCompressMs: roundPerfMs(prepareProfile.phases.workerRustCommitCompressMs),
           rustCommitBackend,
           rustCommitMsmSubphasesAvailable,

@@ -2,6 +2,7 @@
 
 // This file provides a simple client API to interact with the gateway.worker.ts
 // It abstracts the message passing and Promise-based communication.
+import { DEFAULT_EXPANSION_HARDWARE_CONCURRENCY, pickExpansionWorkerCount } from './expansionWorkers'
 
 // Instantiate the worker
 const worker = new Worker(new URL('../workers/gateway.worker.ts', import.meta.url), {
@@ -26,23 +27,6 @@ const expansionPending = new Map<number, ExpansionWorkerPending>()
 const expansionPendingByWorker = new Map<Worker, Set<number>>()
 let expansionNextMessageId = 1
 let expansionRoundRobin = 0
-
-const DEFAULT_EXPANSION_HARDWARE_CONCURRENCY = 4
-const MAX_EXPANSION_WORKERS = 4
-
-export function pickExpansionWorkerCount(hardwareConcurrency?: number, totalJobs?: number): number {
-  const hc = Number.isFinite(hardwareConcurrency)
-    ? Math.max(1, Math.floor(Number(hardwareConcurrency)))
-    : DEFAULT_EXPANSION_HARDWARE_CONCURRENCY
-  const jobCap = Number.isFinite(totalJobs) ? Math.max(1, Math.floor(Number(totalJobs))) : Number.POSITIVE_INFINITY
-
-  let desired = 1
-  if (hc >= 6) desired = MAX_EXPANSION_WORKERS
-  else if (hc >= 4) desired = 3
-  else if (hc >= 3) desired = 2
-
-  return Math.max(1, Math.min(desired, jobCap))
-}
 
 // Handle messages coming back from the worker
 worker.onmessage = (event) => {
