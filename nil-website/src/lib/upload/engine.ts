@@ -35,6 +35,19 @@ export interface UploadProgressStep {
   error?: string
 }
 
+export interface UploadTaskEvent {
+  phase: 'start' | 'end'
+  kind: SparseArtifactKind
+  target: string
+  index?: number
+  slot?: number
+  bytes: number
+  fullSize?: number
+  durationMs?: number
+  ok?: boolean
+  error?: string
+}
+
 export interface UploadTransportRequest {
   dealId: string
   manifestRoot: string
@@ -90,6 +103,7 @@ export interface DirectUploadInput {
   mdus: PreparedMdu[]
   target: UploadTarget
   onProgress?: (steps: UploadProgressStep[]) => void
+  onTaskEvent?: (event: UploadTaskEvent) => void
 }
 
 export interface StripedUploadInput {
@@ -103,6 +117,7 @@ export interface StripedUploadInput {
   metadataTargets: UploadTarget[]
   shardTargets?: UploadTarget[]
   onProgress?: (steps: UploadProgressStep[]) => void
+  onTaskEvent?: (event: UploadTaskEvent) => void
 }
 
 export interface PreparedCommitInput {
@@ -219,6 +234,7 @@ async function runUploadTasks(
   tasks: UploadTask[],
   initialSteps: UploadProgressStep[],
   onProgress: ((steps: UploadProgressStep[]) => void) | undefined,
+  onTaskEvent: ((event: UploadTaskEvent) => void) | undefined,
   concurrency: number,
   transport: UploadTransportPort,
 ): Promise<UploadEngineResult> {
@@ -243,17 +259,53 @@ async function runUploadTasks(
         const task = tasks[nextIndex]
         nextIndex += 1
         active += 1
+        const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        const target = task.request.target.label || task.request.target.baseUrl
+        onTaskEvent?.({
+          phase: 'start',
+          kind: task.request.artifact.kind,
+          target,
+          index: 'index' in task.request.artifact ? task.request.artifact.index : undefined,
+          slot: 'slot' in task.request.artifact ? task.request.artifact.slot : undefined,
+          bytes: task.request.artifact.bytes.byteLength,
+          fullSize: task.request.artifact.fullSize,
+        })
 
         steps = emitProgress(updateStep(steps, task.predicate, { status: 'uploading', error: undefined }), onProgress)
 
         void transport
           .sendArtifact(task.request)
           .then(() => {
+            const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+            onTaskEvent?.({
+              phase: 'end',
+              kind: task.request.artifact.kind,
+              target,
+              index: 'index' in task.request.artifact ? task.request.artifact.index : undefined,
+              slot: 'slot' in task.request.artifact ? task.request.artifact.slot : undefined,
+              bytes: task.request.artifact.bytes.byteLength,
+              fullSize: task.request.artifact.fullSize,
+              durationMs: finishedAt - startedAt,
+              ok: true,
+            })
             steps = emitProgress(updateStep(steps, task.predicate, { status: 'complete' }), onProgress)
           })
           .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error)
             if (!firstError) firstError = message
+            const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+            onTaskEvent?.({
+              phase: 'end',
+              kind: task.request.artifact.kind,
+              target,
+              index: 'index' in task.request.artifact ? task.request.artifact.index : undefined,
+              slot: 'slot' in task.request.artifact ? task.request.artifact.slot : undefined,
+              bytes: task.request.artifact.bytes.byteLength,
+              fullSize: task.request.artifact.fullSize,
+              durationMs: finishedAt - startedAt,
+              ok: false,
+              error: message,
+            })
             steps = emitProgress(updateStep(steps, task.predicate, { status: 'error', error: message }), onProgress)
           })
           .finally(() => {
@@ -337,7 +389,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
         },
       ]
 
-      return runUploadTasks(tasks, steps, input.onProgress, directConcurrency, ports.transport)
+      return runUploadTasks(tasks, steps, input.onProgress, input.onTaskEvent, directConcurrency, ports.transport)
     },
 
     async uploadStriped(input: StripedUploadInput): Promise<UploadEngineResult> {
@@ -380,6 +432,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
         metadataTasks,
         steps,
         input.onProgress,
+        input.onTaskEvent,
         stripedMetadataConcurrency,
         ports.transport,
       )
@@ -417,7 +470,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
         }
       }
 
-      return runUploadTasks(shardTasks, steps, input.onProgress, stripedShardConcurrency, ports.transport)
+      return runUploadTasks(shardTasks, steps, input.onProgress, input.onTaskEvent, stripedShardConcurrency, ports.transport)
     },
 
     async commitPreparedContent(input: PreparedCommitInput): Promise<ChainCommitRequest> {
