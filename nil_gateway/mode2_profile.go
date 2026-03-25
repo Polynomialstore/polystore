@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -88,4 +89,13 @@ func mode2UploadProfileFromContext(ctx context.Context) *mode2UploadProfile {
 		}
 	}
 	return nil
+}
+
+func logMode2UploadProfile(op string, started time.Time, dealID uint64, storedPath string, outcome string, statusCode int, profile *mode2UploadProfile) {
+	if profile == nil {
+		return
+	}
+	profile.addDuration("total_ms", time.Since(started))
+	ms, counts := profile.snapshots()
+	log.Printf("%s profile: deal_id=%d path=%s outcome=%s status=%d metrics_ms=%v counts=%v", op, dealID, storedPath, outcome, statusCode, ms, counts)
 }
