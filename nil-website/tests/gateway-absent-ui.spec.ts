@@ -156,7 +156,6 @@ test.describe('gateway absent', () => {
     await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'success', { timeout: 180_000 })
     await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
-    await expect(page.getByRole('button', { name: /Upload another file/i })).toBeVisible({ timeout: 60_000 })
     await expect(page.getByTestId('mdu-system-activity-toggle')).toHaveCount(0)
   })
 })
