@@ -518,10 +518,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
     setBaseManifestRoot(currentManifestRoot)
-    onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined);
 
     const hasLocalArtifacts = collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0)
-    if (!hasLocalArtifacts) return
+    const notifyCommitSuccess = () => {
+      onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined)
+    }
+    if (!hasLocalArtifacts) {
+      notifyCommitSuccess()
+      return
+    }
 
     const manifestRoot = currentManifestRoot
     const manifestBlob = currentManifestBlob
@@ -608,6 +613,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         addLog(`> Failed to save MDUs locally: ${msg}`)
+      } finally {
+        notifyCommitSuccess()
       }
     })()
 
@@ -3248,7 +3255,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   </div>
                 </div>
                 <label className="inline-flex w-full cursor-pointer items-center justify-center border border-border bg-background px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40 sm:w-auto">
-                  Upload another file
+                  Upload file
                   <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                 </label>
               </div>
@@ -3287,7 +3294,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               </div>
             </div>
             <label className="inline-flex shrink-0 cursor-pointer items-center justify-center border border-border bg-background px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40">
-              Upload another file
+              Upload file
               <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
             </label>
           </div>

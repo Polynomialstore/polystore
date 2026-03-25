@@ -308,7 +308,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
   await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'success', { timeout: 60_000 })
   await expect(page.getByTestId('mdu-commit')).toContainText(/Committed!/i, { timeout: 60_000 })
-  await expect(page.getByText('Upload another file')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('mdu-upload-card').getByText(/^Upload file$/i)).toBeVisible({ timeout: 60_000 })
   await expect.poll(() => committedRoot, { timeout: 30_000 }).toMatch(/^0x[0-9a-f]{96}$/i)
 
   // Second tab: chain reports committed CID, but gateway slab endpoints fail.
