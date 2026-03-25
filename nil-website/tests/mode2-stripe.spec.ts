@@ -53,6 +53,13 @@ async function openFileActionMenuItem(page: Page, filePath: string, testId: stri
 }
 
 async function openSystemActivity(page: Page): Promise<Locator> {
+  const underTheHood = page.getByTestId('mdu-under-the-hood')
+  if (await underTheHood.count().catch(() => 0)) {
+    const detailsOpen = await underTheHood.evaluate((node) => node.hasAttribute('open')).catch(() => false)
+    if (!detailsOpen) {
+      await page.getByTestId('mdu-under-the-hood-toggle').click()
+    }
+  }
   const toggle = page.getByTestId('mdu-system-activity-toggle')
   await expect(toggle).toBeVisible({ timeout: 30_000 })
   const panel = page.getByTestId('mdu-system-activity')

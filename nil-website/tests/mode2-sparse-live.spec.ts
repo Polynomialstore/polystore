@@ -155,6 +155,12 @@ test.describe('mode2 sparse live', () => {
     const commitBtn = page.getByTestId('mdu-commit')
     await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 180_000 })
 
+    const underTheHood = page.getByTestId('mdu-under-the-hood')
+    await expect(underTheHood).toBeVisible({ timeout: 60_000 })
+    const underTheHoodOpen = await underTheHood.evaluate((node) => node.hasAttribute('open')).catch(() => false)
+    if (!underTheHoodOpen) {
+      await page.getByTestId('mdu-under-the-hood-toggle').click()
+    }
     const activityToggle = page.getByTestId('mdu-system-activity-toggle')
     await expect(activityToggle).toBeVisible({ timeout: 60_000 })
     await activityToggle.click()

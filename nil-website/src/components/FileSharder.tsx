@@ -3060,6 +3060,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     done: 'border-success/40 bg-success/10 text-foreground',
     error: 'border-destructive/40 bg-destructive/10 text-destructive',
   }
+  const showRetryUpload =
+    !isUploadComplete &&
+    !activeUploading &&
+    !processing &&
+    (hasError || readyToUpload)
+  const showUnderTheHood =
+    processing ||
+    activeUploading ||
+    readyToCommit ||
+    isCommitPending ||
+    isCommitConfirming ||
+    hasError ||
+    logs.length > 0
 
   useEffect(() => {
     const node = logContainerRef.current;
@@ -3399,41 +3412,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   </div>
                 </div>
 
-                <details className="text-[11px] text-muted-foreground">
-                  <summary className="cursor-pointer select-none hover:text-foreground font-mono-data uppercase tracking-[0.2em] text-[10px] font-bold">
-                    Under the hood
-                  </summary>
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">File</div>
-                      <div className="mt-1 text-foreground font-mono-data">{formatBytes(shardProgress.fileBytesTotal)}</div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">MDUs</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.totalUserMdus} user • {shardProgress.totalWitnessMdus} witness • 1 meta
-                      </div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Blobs</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.blobsDone}/{shardProgress.blobsTotal}
-                      </div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Phase</div>
-                      <div className="mt-1 text-foreground font-mono-data">{shardProgress.phase}</div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Current</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.currentMduKind
-                          ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}`
-                          : '—'}
-                      </div>
-                    </div>
-                  </div>
-                </details>
               </div>
             )}
 
@@ -3489,54 +3467,98 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               </div>
             ) : null}
 
-            {logs.length > 0 ? (
-              <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="text-primary font-bold uppercase tracking-[0.2em]">System Activity</p>
-                  <button
-                    type="button"
-                    data-testid="mdu-system-activity-toggle"
-                    onClick={() => setShowSystemActivity((prev) => !prev)}
-                    className="border border-border bg-background px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40"
-                  >
-                    {showSystemActivity || hasError ? 'Hide' : 'Show'}
-                  </button>
+            {showUnderTheHood ? (
+              <details data-testid="mdu-under-the-hood" className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
+                <summary
+                  data-testid="mdu-under-the-hood-toggle"
+                  className="cursor-pointer select-none hover:text-foreground font-mono-data uppercase tracking-[0.2em] text-[10px] font-bold"
+                >
+                  Under the hood
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="nil-tab-inset px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">File</div>
+                      <div className="mt-1 text-foreground font-mono-data">
+                        {currentFileMeta ? formatBytes(currentFileMeta.fileSizeBytes) : formatBytes(shardProgress.fileBytesTotal)}
+                      </div>
+                    </div>
+                    <div className="nil-tab-inset px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">MDUs</div>
+                      <div className="mt-1 text-foreground font-mono-data">
+                        {shardProgress.totalUserMdus} user • {shardProgress.totalWitnessMdus} witness • 1 meta
+                      </div>
+                    </div>
+                    <div className="nil-tab-inset px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Blobs</div>
+                      <div className="mt-1 text-foreground font-mono-data">
+                        {shardProgress.blobsDone}/{shardProgress.blobsTotal}
+                      </div>
+                    </div>
+                    <div className="nil-tab-inset px-2 py-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Phase</div>
+                      <div className="mt-1 text-foreground font-mono-data">{shardProgress.phase}</div>
+                    </div>
+                    <div className="nil-tab-inset px-2 py-2 sm:col-span-2">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Current</div>
+                      <div className="mt-1 text-foreground font-mono-data">
+                        {shardProgress.currentMduKind
+                          ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}`
+                          : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {logs.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-primary font-bold uppercase tracking-[0.2em]">System Activity</p>
+                        <button
+                          type="button"
+                          data-testid="mdu-system-activity-toggle"
+                          onClick={() => setShowSystemActivity((prev) => !prev)}
+                          className="border border-border bg-background px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40"
+                        >
+                          {showSystemActivity || hasError ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                      {showSystemActivity || hasError ? (
+                        <div ref={logContainerRef} data-testid="mdu-system-activity" className="space-y-1 max-h-32 overflow-y-auto">
+                          {logs.map((log, i) => (
+                            <p key={i}>{log}</p>
+                          ))}
+                          {processing && <p className="animate-pulse">...</p>}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-muted-foreground/80">
+                          Hidden by default. Open this log only when you need low-level upload details.
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
-                {showSystemActivity || hasError ? (
-                  <div ref={logContainerRef} data-testid="mdu-system-activity" className="space-y-1 max-h-32 overflow-y-auto">
-                    {logs.map((log, i) => (
-                      <p key={i}>{log}</p>
-                    ))}
-                    {processing && <p className="animate-pulse">...</p>}
-                  </div>
-                ) : (
-                  <div className="text-[10px] text-muted-foreground/80">
-                    Hidden by default. Open this log only when you need low-level upload details.
-                  </div>
-                )}
-              </div>
+              </details>
             ) : null}
 
             <div className="flex flex-col gap-2">
-              {!isUploadComplete ? (
+              {showRetryUpload ? (
                 <button
                   onClick={() => {
                     void retryPreparedUpload()
                   }}
-                  disabled={activeUploading || processing}
                   data-testid="mdu-upload"
                   className="cta-shadow mt-1 inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {activeUploading ? 'Uploading...' : 'Retry Upload'}
+                  Retry Upload
                 </button>
-              ) : (
+              ) : isUploadComplete ? (
                 <div
                   data-testid="mdu-upload-state"
                   className="nil-tab-panel mt-1 border-success/30 bg-success/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-success"
                 >
                   Upload Complete
                 </div>
-              )}
+              ) : null}
 
               {!isMode2 && (activeUploading || isUploadComplete) && uploadProgress.length > 0 && (
                 <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
