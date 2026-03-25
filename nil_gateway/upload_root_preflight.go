@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,6 +13,19 @@ import (
 )
 
 const nilUploadPreviousManifestRootHeader = "X-Nil-Previous-Manifest-Root"
+
+var errInvalidUploadPreviousManifestRoot = errors.New("invalid upload previous manifest root")
+
+type staleUploadPreviousManifestRootError struct {
+	expected string
+}
+
+func (e *staleUploadPreviousManifestRootError) Error() string {
+	if e == nil {
+		return "stale previous_manifest_root"
+	}
+	return fmt.Sprintf("stale previous_manifest_root: expected %s", e.expected)
+}
 
 type nilfsUploadRootPreflightCacheKey struct {
 	dealID               uint64
@@ -42,7 +56,7 @@ func validateNilfsUploadPreviousManifestRoot(
 ) error {
 	previousManifestRoot, err := parseManifestRootOrEmpty(rawPreviousManifestRoot)
 	if err != nil {
-		return fmt.Errorf("invalid %s: %w", nilUploadPreviousManifestRootHeader, err)
+		return fmt.Errorf("%w: %s: %v", errInvalidUploadPreviousManifestRoot, nilUploadPreviousManifestRootHeader, err)
 	}
 	key := nilfsUploadRootPreflightCacheKey{
 		dealID:               dealID,
@@ -67,7 +81,7 @@ func validateNilfsUploadPreviousManifestRoot(
 		expectedPrevious := normalizeManifestRootOrEmpty(meta.ManifestRoot)
 		if expectedPrevious != previousManifestRoot {
 			recordNilfsCASPreflightConflict(nilfsCASPreflightConflictUpload)
-			return nil, fmt.Errorf("stale previous_manifest_root: expected %s", expectedPrevious)
+			return nil, &staleUploadPreviousManifestRootError{expected: expectedPrevious}
 		}
 
 		if nilfsUploadRootPreflightCacheTTL > 0 {
@@ -91,4 +105,21 @@ func uploadPreviousManifestRootHeader(r *http.Request) string {
 		return ""
 	}
 	return strings.TrimSpace(r.Header.Get(nilUploadPreviousManifestRootHeader))
+}
+
+func classifyNilfsUploadPreviousManifestRootError(err error) int {
+	switch {
+	case err == nil:
+		return http.StatusOK
+	case errors.Is(err, errInvalidUploadPreviousManifestRoot):
+		return http.StatusBadRequest
+	case errors.Is(err, ErrDealNotFound):
+		return http.StatusNotFound
+	default:
+		var staleErr *staleUploadPreviousManifestRootError
+		if errors.As(err, &staleErr) {
+			return http.StatusConflict
+		}
+		return http.StatusInternalServerError
+	}
 }

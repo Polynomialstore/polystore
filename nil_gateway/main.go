@@ -6290,25 +6290,6 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
-	validateStarted := time.Now()
-	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
-		profile.addDuration("validate_deal_ms", time.Since(validateStarted))
-		if errors.Is(err, ErrDealNotFound) {
-			statusCode = http.StatusNotFound
-			outcome = "deal_not_found"
-			http.Error(w, "deal not found", http.StatusNotFound)
-			return
-		}
-		// If we can't talk to the chain, we can't validate. Fail safe.
-		log.Printf("SpUploadMdu: failed to fetch deal %d: %v", dealID, err)
-		statusCode = http.StatusInternalServerError
-		outcome = "validate_deal_failed"
-		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
-		return
-	}
-	profile.addDuration("validate_deal_ms", time.Since(validateStarted))
-
 	if clientManifestRoot == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_manifest_root"
@@ -6318,13 +6299,22 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	validatePrevStarted := time.Now()
 	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
 		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		conflictStatus := http.StatusConflict
-		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
-			conflictStatus = http.StatusBadRequest
+		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		switch statusCode {
+		case http.StatusBadRequest:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		case http.StatusNotFound:
+			outcome = "deal_not_found"
+			http.Error(w, "deal not found", statusCode)
+		case http.StatusConflict:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		default:
+			log.Printf("SpUploadMdu: failed to validate deal %d previous root: %v", dealID, err)
+			outcome = "validate_previous_root_failed"
+			http.Error(w, "failed to validate deal", statusCode)
 		}
-		statusCode = conflictStatus
-		outcome = "validate_previous_root_failed"
-		http.Error(w, err.Error(), conflictStatus)
 		return
 	}
 	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
@@ -6542,24 +6532,6 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
-	validateStarted := time.Now()
-	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
-		profile.addDuration("validate_deal_ms", time.Since(validateStarted))
-		if errors.Is(err, ErrDealNotFound) {
-			statusCode = http.StatusNotFound
-			outcome = "deal_not_found"
-			http.Error(w, "deal not found", http.StatusNotFound)
-			return
-		}
-		log.Printf("SpUploadShard: failed to fetch deal %d: %v", dealID, err)
-		statusCode = http.StatusInternalServerError
-		outcome = "validate_deal_failed"
-		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
-		return
-	}
-	profile.addDuration("validate_deal_ms", time.Since(validateStarted))
-
 	if clientManifestRoot == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_manifest_root"
@@ -6569,13 +6541,22 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	validatePrevStarted := time.Now()
 	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
 		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		conflictStatus := http.StatusConflict
-		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
-			conflictStatus = http.StatusBadRequest
+		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		switch statusCode {
+		case http.StatusBadRequest:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		case http.StatusNotFound:
+			outcome = "deal_not_found"
+			http.Error(w, "deal not found", statusCode)
+		case http.StatusConflict:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		default:
+			log.Printf("SpUploadShard: failed to validate deal %d previous root: %v", dealID, err)
+			outcome = "validate_previous_root_failed"
+			http.Error(w, "failed to validate deal", statusCode)
 		}
-		statusCode = conflictStatus
-		outcome = "validate_previous_root_failed"
-		http.Error(w, err.Error(), conflictStatus)
 		return
 	}
 	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
@@ -6864,24 +6845,6 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
-	validateStarted := time.Now()
-	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
-		profile.addDuration("validate_deal_ms", time.Since(validateStarted))
-		if errors.Is(err, ErrDealNotFound) {
-			statusCode = http.StatusNotFound
-			outcome = "deal_not_found"
-			http.Error(w, "deal not found", http.StatusNotFound)
-			return
-		}
-		log.Printf("SpUploadManifest: failed to fetch deal %d: %v", dealID, err)
-		statusCode = http.StatusInternalServerError
-		outcome = "validate_deal_failed"
-		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
-		return
-	}
-	profile.addDuration("validate_deal_ms", time.Since(validateStarted))
-
 	parsed, err := parseManifestRoot(clientManifestRoot)
 	if err != nil {
 		statusCode = http.StatusBadRequest
@@ -6892,13 +6855,22 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	validatePrevStarted := time.Now()
 	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
 		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		conflictStatus := http.StatusConflict
-		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
-			conflictStatus = http.StatusBadRequest
+		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		switch statusCode {
+		case http.StatusBadRequest:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		case http.StatusNotFound:
+			outcome = "deal_not_found"
+			http.Error(w, "deal not found", statusCode)
+		case http.StatusConflict:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		default:
+			log.Printf("SpUploadManifest: failed to validate deal %d previous root: %v", dealID, err)
+			outcome = "validate_previous_root_failed"
+			http.Error(w, "failed to validate deal", statusCode)
 		}
-		statusCode = conflictStatus
-		outcome = "validate_previous_root_failed"
-		http.Error(w, err.Error(), conflictStatus)
 		return
 	}
 	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
