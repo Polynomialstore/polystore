@@ -248,6 +248,18 @@ self.onmessage = async (event) => {
                 result = 'Root set in Mdu0';
                 break;
             }
+            case 'setMdu0RootsBatch': {
+                if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
+                const { startIndex, rootsFlat } = payload as { startIndex: number; rootsFlat: Uint8Array };
+                if (!(rootsFlat instanceof Uint8Array)) throw new Error('rootsFlat must be a Uint8Array');
+                if (rootsFlat.byteLength % 32 !== 0) throw new Error('rootsFlat must be a multiple of 32 bytes');
+                let rootIndex = Number(startIndex);
+                for (let offset = 0; offset < rootsFlat.byteLength; offset += 32, rootIndex += 1) {
+                    mdu0BuilderInstance.set_root(BigInt(rootIndex), rootsFlat.subarray(offset, offset + 32));
+                }
+                result = 'Roots set in Mdu0';
+                break;
+            }
             case 'getMdu0WitnessCount': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
                 result = mdu0BuilderInstance.get_witness_count();

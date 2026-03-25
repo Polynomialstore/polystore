@@ -3232,11 +3232,22 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             setShards((prev) => prev.map((s) => (s.id === 1 + i ? { ...s, status: 'expanded' } : s)));
             await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         }
+        if (witnessRoots.length > 0) {
+          const witnessRootsFlat = new Uint8Array(witnessRoots.length * 32)
+          for (let i = 0; i < witnessRoots.length; i += 1) {
+            witnessRootsFlat.set(witnessRoots[i], i * 32)
+          }
+          await workerClient.setMdu0RootsBatch(0, witnessRootsFlat)
+        }
         const witnessStageMs = performance.now() - witnessStageStart
 
         const userRootRegistrationStart = performance.now()
-        for (let i = 0; i < userRoots.length; i++) {
-            await workerClient.setMdu0Root(witnessMduCount + i, userRoots[i]);
+        if (userRoots.length > 0) {
+          const userRootsFlat = new Uint8Array(userRoots.length * 32)
+          for (let i = 0; i < userRoots.length; i += 1) {
+            userRootsFlat.set(userRoots[i], i * 32)
+          }
+          await workerClient.setMdu0RootsBatch(witnessMduCount, userRootsFlat)
         }
         const userRootRegistrationMs = performance.now() - userRootRegistrationStart
 

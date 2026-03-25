@@ -266,6 +266,10 @@ export const workerClient = {
     return sendMessageToWorker('setMdu0Root', { index, root }) as Promise<string>;
   },
 
+  async setMdu0RootsBatch(startIndex: number, rootsFlat: Uint8Array): Promise<string> {
+    return sendMessageToWorker('setMdu0RootsBatch', { startIndex, rootsFlat }, [rootsFlat.buffer]) as Promise<string>;
+  },
+
   // Get witness count from MDU #0 builder
   async getMdu0WitnessCount(): Promise<number> {
     return sendMessageToWorker('getMdu0WitnessCount', {}) as Promise<number>;
