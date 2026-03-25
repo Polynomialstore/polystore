@@ -1638,7 +1638,7 @@ func mode2UploadArtifactsToProviders(
 		return sizes, nil
 	}
 
-	tasks := make([]uploadTask, 0, totalUploads)
+	metadataTaskGroups := make([][]uploadTask, 0, witnessCount+2)
 
 	// Upload replicated metadata once per provider, interleaved by MDU index so
 	// scheduler fair-sharing starts across providers immediately.
@@ -1649,12 +1649,13 @@ func mode2UploadArtifactsToProviders(
 		if err != nil {
 			return err
 		}
+		group := make([]uploadTask, 0, len(metadataProviders))
 		for _, provider := range metadataProviders {
 			base := providerBases[provider]
 			if base == "" {
 				continue
 			}
-			tasks = append(tasks, uploadTask{
+			group = append(group, uploadTask{
 				url:                  base + "/sp/upload_mdu",
 				path:                 artifactPath,
 				sizeBytes:            sizes.full,
@@ -1666,6 +1667,9 @@ func mode2UploadArtifactsToProviders(
 				mduIndex:             mduIndexStr,
 			})
 		}
+		if len(group) > 0 {
+			metadataTaskGroups = append(metadataTaskGroups, group)
+		}
 	}
 
 	manifestPath := filepath.Join(finalDir, "manifest.bin")
@@ -1673,12 +1677,13 @@ func mode2UploadArtifactsToProviders(
 	if err != nil {
 		return err
 	}
+	manifestGroup := make([]uploadTask, 0, len(metadataProviders))
 	for _, provider := range metadataProviders {
 		base := providerBases[provider]
 		if base == "" {
 			continue
 		}
-		tasks = append(tasks, uploadTask{
+		manifestGroup = append(manifestGroup, uploadTask{
 			url:                  base + "/sp/upload_manifest",
 			path:                 manifestPath,
 			sizeBytes:            manifestSizes.full,
@@ -1689,9 +1694,14 @@ func mode2UploadArtifactsToProviders(
 			previousManifestRoot: previousManifestRoot,
 		})
 	}
+	if len(manifestGroup) > 0 {
+		metadataTaskGroups = append(metadataTaskGroups, manifestGroup)
+	}
 
+	shardTaskGroups := make([][]uploadTask, 0, userMdus)
 	// Upload striped user shards interleaved across providers per slab index.
 	for i := uint64(0); i < userMdus; i++ {
+		group := make([]uploadTask, 0, len(targets))
 		for _, target := range targets {
 			slot := target.slot
 			base := providerBases[target.provider]
@@ -1706,7 +1716,7 @@ func mode2UploadArtifactsToProviders(
 			if err != nil {
 				return err
 			}
-			tasks = append(tasks, uploadTask{
+			group = append(group, uploadTask{
 				url:                  base + "/sp/upload_shard",
 				path:                 artifactPath,
 				sizeBytes:            sizes.full,
@@ -1718,6 +1728,23 @@ func mode2UploadArtifactsToProviders(
 				mduIndex:             slabIndexStr,
 				slot:                 slotStr,
 			})
+		}
+		if len(group) > 0 {
+			shardTaskGroups = append(shardTaskGroups, group)
+		}
+	}
+
+	tasks := make([]uploadTask, 0, totalUploads)
+	rounds := len(metadataTaskGroups)
+	if len(shardTaskGroups) > rounds {
+		rounds = len(shardTaskGroups)
+	}
+	for i := 0; i < rounds; i++ {
+		if i < len(metadataTaskGroups) {
+			tasks = append(tasks, metadataTaskGroups[i]...)
+		}
+		if i < len(shardTaskGroups) {
+			tasks = append(tasks, shardTaskGroups[i]...)
 		}
 	}
 	if profile != nil {
