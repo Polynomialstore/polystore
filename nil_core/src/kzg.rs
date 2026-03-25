@@ -3,6 +3,8 @@ use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 use ff::{Field, PrimeField};
 use group::Curve;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -24,6 +26,19 @@ pub type Bytes48 = [u8; 48];
 
 static PIPPENGER_WINDOW_OVERRIDE: AtomicUsize = AtomicUsize::new(0);
 static WASM_MSM_BASIS_MODE: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Default)]
+struct WasmMsmScratch {
+    scalar_bytes: Vec<[u8; 32]>,
+    buckets: Vec<G1Projective>,
+}
+
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    static WASM_MSM_AFFINE_SCRATCH: RefCell<WasmMsmScratch> = RefCell::new(WasmMsmScratch::default());
+    static WASM_MSM_PROJECTIVE_SCRATCH: RefCell<WasmMsmScratch> = RefCell::new(WasmMsmScratch::default());
+}
 
 pub fn set_pippenger_window_override(window_bits: Option<usize>) {
     PIPPENGER_WINDOW_OVERRIDE.store(window_bits.unwrap_or(0), Ordering::Relaxed);
@@ -696,6 +711,30 @@ fn pippenger_window(bytes_le: &[u8; 32], bit_offset: usize, window_bits: usize) 
     (shifted & mask) as usize
 }
 
+#[cfg(target_arch = "wasm32")]
+fn prepare_scalar_bytes<'a>(
+    scalar_bytes: &'a mut Vec<[u8; 32]>,
+    scalars: &[Scalar],
+) -> &'a [[u8; 32]] {
+    if scalar_bytes.len() < scalars.len() {
+        scalar_bytes.resize(scalars.len(), [0u8; 32]);
+    }
+    for (dst, scalar) in scalar_bytes.iter_mut().zip(scalars.iter()) {
+        dst.copy_from_slice(scalar.to_repr().as_ref());
+    }
+    &scalar_bytes[..scalars.len()]
+}
+
+#[cfg(target_arch = "wasm32")]
+fn prepare_buckets(buckets: &mut Vec<G1Projective>, buckets_len: usize) -> &mut [G1Projective] {
+    if buckets.len() < buckets_len {
+        buckets.resize(buckets_len, G1Projective::identity());
+    }
+    let buckets = &mut buckets[..buckets_len];
+    buckets.fill(G1Projective::identity());
+    buckets
+}
+
 fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     debug_assert_eq!(points.len(), scalars.len());
 
@@ -710,46 +749,90 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     let buckets_len = 1usize << window_bits;
     let windows = (256 + window_bits - 1) / window_bits;
 
-    let scalar_bytes: Vec<[u8; 32]> = scalars
-        .iter()
-        .map(|s| {
-            let repr = s.to_repr();
-            let mut out = [0u8; 32];
-            out.copy_from_slice(repr.as_ref());
-            out
-        })
-        .collect();
+    #[cfg(target_arch = "wasm32")]
+    {
+        return WASM_MSM_AFFINE_SCRATCH.with(|scratch| {
+            let mut scratch = scratch.borrow_mut();
+            let WasmMsmScratch {
+                scalar_bytes: scalar_bytes_buf,
+                buckets: buckets_buf,
+            } = &mut *scratch;
+            let scalar_bytes = prepare_scalar_bytes(scalar_bytes_buf, scalars);
+            let mut acc = G1Projective::identity();
 
-    let mut buckets = vec![G1Projective::identity(); buckets_len];
-    let mut acc = G1Projective::identity();
+            for window_index in (0..windows).rev() {
+                if window_index != windows - 1 {
+                    for _ in 0..window_bits {
+                        acc = acc.double();
+                    }
+                }
 
-    for window_index in (0..windows).rev() {
-        if window_index != windows - 1 {
-            for _ in 0..window_bits {
-                acc = acc.double();
+                let buckets = prepare_buckets(buckets_buf, buckets_len);
+
+                let bit_offset = window_index * window_bits;
+                for (i, point) in points.iter().enumerate() {
+                    let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
+                    if w != 0 && w < buckets_len {
+                        buckets[w] += *point;
+                    }
+                }
+
+                let mut running = G1Projective::identity();
+                let mut window_sum = G1Projective::identity();
+                for idx in (1..buckets_len).rev() {
+                    running += buckets[idx];
+                    window_sum += running;
+                }
+                acc += window_sum;
             }
-        }
 
-        buckets.fill(G1Projective::identity());
-
-        let bit_offset = window_index * window_bits;
-        for (i, point) in points.iter().enumerate() {
-            let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
-            if w != 0 && w < buckets_len {
-                buckets[w] += *point;
-            }
-        }
-
-        let mut running = G1Projective::identity();
-        let mut window_sum = G1Projective::identity();
-        for idx in (1..buckets_len).rev() {
-            running += buckets[idx];
-            window_sum += running;
-        }
-        acc += window_sum;
+            acc
+        });
     }
 
-    acc
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let scalar_bytes: Vec<[u8; 32]> = scalars
+            .iter()
+            .map(|s| {
+                let repr = s.to_repr();
+                let mut out = [0u8; 32];
+                out.copy_from_slice(repr.as_ref());
+                out
+            })
+            .collect();
+
+        let mut buckets = vec![G1Projective::identity(); buckets_len];
+        let mut acc = G1Projective::identity();
+
+        for window_index in (0..windows).rev() {
+            if window_index != windows - 1 {
+                for _ in 0..window_bits {
+                    acc = acc.double();
+                }
+            }
+
+            buckets.fill(G1Projective::identity());
+
+            let bit_offset = window_index * window_bits;
+            for (i, point) in points.iter().enumerate() {
+                let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
+                if w != 0 && w < buckets_len {
+                    buckets[w] += *point;
+                }
+            }
+
+            let mut running = G1Projective::identity();
+            let mut window_sum = G1Projective::identity();
+            for idx in (1..buckets_len).rev() {
+                running += buckets[idx];
+                window_sum += running;
+            }
+            acc += window_sum;
+        }
+
+        acc
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -819,46 +902,90 @@ fn msm_pippenger_g1_projective(points: &[G1Projective], scalars: &[Scalar]) -> G
     let buckets_len = 1usize << window_bits;
     let windows = (256 + window_bits - 1) / window_bits;
 
-    let scalar_bytes: Vec<[u8; 32]> = scalars
-        .iter()
-        .map(|s| {
-            let repr = s.to_repr();
-            let mut out = [0u8; 32];
-            out.copy_from_slice(repr.as_ref());
-            out
-        })
-        .collect();
+    #[cfg(target_arch = "wasm32")]
+    {
+        return WASM_MSM_PROJECTIVE_SCRATCH.with(|scratch| {
+            let mut scratch = scratch.borrow_mut();
+            let WasmMsmScratch {
+                scalar_bytes: scalar_bytes_buf,
+                buckets: buckets_buf,
+            } = &mut *scratch;
+            let scalar_bytes = prepare_scalar_bytes(scalar_bytes_buf, scalars);
+            let mut acc = G1Projective::identity();
 
-    let mut buckets = vec![G1Projective::identity(); buckets_len];
-    let mut acc = G1Projective::identity();
+            for window_index in (0..windows).rev() {
+                if window_index != windows - 1 {
+                    for _ in 0..window_bits {
+                        acc = acc.double();
+                    }
+                }
 
-    for window_index in (0..windows).rev() {
-        if window_index != windows - 1 {
-            for _ in 0..window_bits {
-                acc = acc.double();
+                let buckets = prepare_buckets(buckets_buf, buckets_len);
+
+                let bit_offset = window_index * window_bits;
+                for (i, point) in points.iter().enumerate() {
+                    let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
+                    if w != 0 && w < buckets_len {
+                        buckets[w] += *point;
+                    }
+                }
+
+                let mut running = G1Projective::identity();
+                let mut window_sum = G1Projective::identity();
+                for idx in (1..buckets_len).rev() {
+                    running += buckets[idx];
+                    window_sum += running;
+                }
+                acc += window_sum;
             }
-        }
 
-        buckets.fill(G1Projective::identity());
-
-        let bit_offset = window_index * window_bits;
-        for (i, point) in points.iter().enumerate() {
-            let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
-            if w != 0 && w < buckets_len {
-                buckets[w] += *point;
-            }
-        }
-
-        let mut running = G1Projective::identity();
-        let mut window_sum = G1Projective::identity();
-        for idx in (1..buckets_len).rev() {
-            running += buckets[idx];
-            window_sum += running;
-        }
-        acc += window_sum;
+            acc
+        });
     }
 
-    acc
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let scalar_bytes: Vec<[u8; 32]> = scalars
+            .iter()
+            .map(|s| {
+                let repr = s.to_repr();
+                let mut out = [0u8; 32];
+                out.copy_from_slice(repr.as_ref());
+                out
+            })
+            .collect();
+
+        let mut buckets = vec![G1Projective::identity(); buckets_len];
+        let mut acc = G1Projective::identity();
+
+        for window_index in (0..windows).rev() {
+            if window_index != windows - 1 {
+                for _ in 0..window_bits {
+                    acc = acc.double();
+                }
+            }
+
+            buckets.fill(G1Projective::identity());
+
+            let bit_offset = window_index * window_bits;
+            for (i, point) in points.iter().enumerate() {
+                let w = pippenger_window(&scalar_bytes[i], bit_offset, window_bits);
+                if w != 0 && w < buckets_len {
+                    buckets[w] += *point;
+                }
+            }
+
+            let mut running = G1Projective::identity();
+            let mut window_sum = G1Projective::identity();
+            for idx in (1..buckets_len).rev() {
+                running += buckets[idx];
+                window_sum += running;
+            }
+            acc += window_sum;
+        }
+
+        acc
+    }
 }
 
 fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
