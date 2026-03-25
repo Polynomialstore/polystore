@@ -287,24 +287,10 @@ impl NilWasm {
     }
 
     pub fn commit_blobs(&self, blobs_flat: &[u8]) -> Result<Uint8Array, JsValue> {
-        if blobs_flat.len() % crate::kzg::BLOB_SIZE != 0 {
-            return Err(JsValue::from_str(
-                "Blobs length must be a multiple of 128 KiB",
-            ));
-        }
-
-        let count = blobs_flat.len() / crate::kzg::BLOB_SIZE;
-        let mut flat = Vec::with_capacity(count * 48);
-        for i in 0..count {
-            let start = i * crate::kzg::BLOB_SIZE;
-            let end = start + crate::kzg::BLOB_SIZE;
-            let c = self
-                .kzg_ctx
-                .blob_to_commitment(&blobs_flat[start..end])
-                .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
-            flat.extend_from_slice(&c);
-        }
-
+        let flat = self
+            .kzg_ctx
+            .commit_blobs_flat(blobs_flat)
+            .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
         Ok(Uint8Array::from(flat.as_slice()))
     }
 
@@ -316,35 +302,10 @@ impl NilWasm {
         }
 
         let count = blobs_flat.len() / crate::kzg::BLOB_SIZE;
-        let mut flat = Vec::with_capacity(count * 48);
-        let mut perf_decode_ms = 0.0;
-        let mut perf_transform_ms = 0.0;
-        let mut perf_msm_scalar_prep_ms = 0.0;
-        let mut perf_msm_bucket_fill_ms = 0.0;
-        let mut perf_msm_reduce_ms = 0.0;
-        let mut perf_msm_double_ms = 0.0;
-        let mut perf_msm_ms = 0.0;
-        let mut perf_compress_ms = 0.0;
-        let mut perf_total_ms = 0.0;
-
-        for i in 0..count {
-            let start = i * crate::kzg::BLOB_SIZE;
-            let end = start + crate::kzg::BLOB_SIZE;
-            let (c, perf) = self
-                .kzg_ctx
-                .blob_to_commitment_profiled(&blobs_flat[start..end])
-                .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
-            flat.extend_from_slice(&c);
-            perf_decode_ms += perf.decode_ms;
-            perf_transform_ms += perf.transform_ms;
-            perf_msm_scalar_prep_ms += perf.msm_scalar_prep_ms;
-            perf_msm_bucket_fill_ms += perf.msm_bucket_fill_ms;
-            perf_msm_reduce_ms += perf.msm_reduce_ms;
-            perf_msm_double_ms += perf.msm_double_ms;
-            perf_msm_ms += perf.msm_ms;
-            perf_compress_ms += perf.compress_ms;
-            perf_total_ms += perf.total_ms;
-        }
+        let (flat, perf) = self
+            .kzg_ctx
+            .commit_blobs_flat_profiled(blobs_flat)
+            .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
 
         #[derive(serde::Serialize)]
         struct CommitBlobsProfiledPerf {
@@ -369,15 +330,15 @@ impl NilWasm {
         let res = CommitBlobsProfiledResult {
             witness_flat: flat,
             perf: CommitBlobsProfiledPerf {
-                decode_ms: perf_decode_ms,
-                transform_ms: perf_transform_ms,
-                msm_scalar_prep_ms: perf_msm_scalar_prep_ms,
-                msm_bucket_fill_ms: perf_msm_bucket_fill_ms,
-                msm_reduce_ms: perf_msm_reduce_ms,
-                msm_double_ms: perf_msm_double_ms,
-                msm_ms: perf_msm_ms,
-                compress_ms: perf_compress_ms,
-                total_ms: perf_total_ms,
+                decode_ms: perf.decode_ms,
+                transform_ms: perf.transform_ms,
+                msm_scalar_prep_ms: perf.msm_scalar_prep_ms,
+                msm_bucket_fill_ms: perf.msm_bucket_fill_ms,
+                msm_reduce_ms: perf.msm_reduce_ms,
+                msm_double_ms: perf.msm_double_ms,
+                msm_ms: perf.msm_ms,
+                compress_ms: perf.compress_ms,
+                total_ms: perf.total_ms,
                 blobs: count,
             },
         };
