@@ -5,6 +5,8 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
+const uploadSizeBytes = Number(process.env.SPARSE_FILE_SIZE_BYTES || 192 * 1024)
+const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
 
 function ethToNil(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
@@ -28,6 +30,26 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   let gatewayProbeAttempts = 0
   let activeUploads = 0
   let peakActiveUploads = 0
+  const perf = { user: [] as unknown[], witness: [] as unknown[], meta: null as unknown, manifest: null as unknown, totals: null as unknown }
+
+  page.on('console', async (msg) => {
+    const text = msg.text()
+    if (!capturePreparePerf || !text.includes('[perf]')) return
+    const values: unknown[] = []
+    for (const arg of msg.args()) {
+      try {
+        values.push(await arg.jsonValue())
+      } catch {
+        values.push(String(arg))
+      }
+    }
+    const payload = values[1] ?? null
+    if (text.includes('[perf] user mdu')) perf.user.push(payload)
+    else if (text.includes('[perf] witness mdu')) perf.witness.push(payload)
+    else if (text.includes('[perf] meta mdu0')) perf.meta = payload
+    else if (text.includes('[perf] manifest aggregation')) perf.manifest = payload
+    else if (text.includes('[perf] sharding totals')) perf.totals = payload
+  })
 
   async function recordConcurrentUpload<T>(fn: () => Promise<T>): Promise<T> {
     activeUploads += 1
@@ -235,7 +257,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.getByTestId('mdu-file-input').setInputFiles({
     name: 'direct-sparse.txt',
     mimeType: 'application/octet-stream',
-    buffer: crypto.randomBytes(192 * 1024),
+    buffer: crypto.randomBytes(uploadSizeBytes),
   })
 
   await expect(page.getByTestId('mdu-upload-card')).not.toHaveAttribute('data-panel-state', 'idle', { timeout: 60_000 })
@@ -252,11 +274,13 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const sparseShardUploads = shardUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
 
   console.log('[direct sparse upload evidence]', {
+    uploadSizeBytes,
     gatewayProbeAttempts,
     mduUploads,
     manifestUploads,
     shardUploads,
     peakActiveUploads,
+    perf,
   })
 
   expect(sparseMduUploads.length).toBeGreaterThan(0)

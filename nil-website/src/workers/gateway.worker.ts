@@ -149,10 +149,14 @@ self.onmessage = async (event) => {
         let result;
         const collectTransferables = (val: unknown): Transferable[] => {
             const out: Transferable[] = [];
+            const seen = new Set<Transferable>();
             const visit = (v: unknown) => {
                 if (!v) return;
                 if (v instanceof Uint8Array) {
-                    out.push(v.buffer);
+                    if (!seen.has(v.buffer)) {
+                        seen.add(v.buffer);
+                        out.push(v.buffer);
+                    }
                     return;
                 }
                 if (Array.isArray(v)) {
@@ -359,15 +363,10 @@ self.onmessage = async (event) => {
                     throw new Error('expandPayloadRs returned misaligned shard bytes');
                 }
 
-                const shardsList: Uint8Array[] = [];
-                for (let offset = 0; offset < shardsFlat.byteLength; offset += shardLen) {
-                    shardsList.push(shardsFlat.slice(offset, offset + shardLen));
-                }
-
                 const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
                 const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
 
-                result = { witness_flat: witnessFlat, mdu_root: rootBytes, shards: shardsList };
+                result = { witness_flat: witnessFlat, mdu_root: rootBytes, shards_flat: shardsFlat, shard_len: shardLen };
                 break;
             }
             case 'computeManifest': {

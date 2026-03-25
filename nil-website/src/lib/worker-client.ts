@@ -15,6 +15,18 @@ const pendingWorkerMessages = new Map<
 >();
 let nextWorkerMessageId = 0;
 
+type ExpansionWorkerPending = {
+  resolve: (value: unknown) => void
+  reject: (reason?: unknown) => void
+}
+
+let expansionWorkers: Worker[] = []
+let expansionWorkersReady: Promise<void> | null = null
+const expansionPending = new Map<number, ExpansionWorkerPending>()
+const expansionPendingByWorker = new Map<Worker, Set<number>>()
+let expansionNextMessageId = 1
+let expansionRoundRobin = 0
+
 // Handle messages coming back from the worker
 worker.onmessage = (event) => {
   const { id, type, payload } = event.data;
@@ -43,6 +55,72 @@ worker.onerror = (error) => {
   }
 };
 
+function initializeExpansionPool(trustedSetupBytes: Uint8Array): Promise<void> {
+  if (expansionWorkersReady) return expansionWorkersReady
+
+  const hc = navigator.hardwareConcurrency ?? 4
+  const desired = Math.max(1, Math.min(3, Math.max(0, Number(hc) - 1) || 1))
+  if (desired <= 1) {
+    expansionWorkers = []
+    expansionWorkersReady = Promise.resolve()
+    return expansionWorkersReady
+  }
+
+  expansionWorkersReady = (async () => {
+    const workers: Worker[] = []
+    try {
+      for (let i = 0; i < desired; i += 1) {
+        const w = new Worker(new URL('../workers/expand.worker.ts', import.meta.url), { type: 'module' })
+        expansionPendingByWorker.set(w, new Set())
+        w.onmessage = (event) => {
+          const { id, type, payload } = event.data
+          expansionPendingByWorker.get(w)?.delete(id)
+          const pending = expansionPending.get(id)
+          if (!pending) return
+          if (type === 'result') pending.resolve(payload)
+          else pending.reject(new Error(String(payload)))
+          expansionPending.delete(id)
+        }
+        w.onerror = (error) => {
+          console.warn('Expansion worker error:', error)
+          const ids = expansionPendingByWorker.get(w)
+          if (ids) {
+            for (const id of ids) {
+              expansionPending.get(id)?.reject(new Error('Expansion worker crashed'))
+              expansionPending.delete(id)
+            }
+            expansionPendingByWorker.delete(w)
+          }
+          expansionWorkers = expansionWorkers.filter((ww) => ww !== w)
+        }
+        workers.push(w)
+      }
+    } catch (error) {
+      console.warn('Failed to spawn expansion worker pool; continuing single-threaded.', error)
+      expansionWorkers = []
+      return
+    }
+
+    const initPromises = workers.map((w) => {
+      const id = expansionNextMessageId++
+      const setupCopy = trustedSetupBytes.slice()
+      return new Promise<void>((resolve, reject) => {
+        expansionPending.set(id, {
+          resolve: () => resolve(),
+          reject,
+        })
+        expansionPendingByWorker.get(w)?.add(id)
+        w.postMessage({ id, type: 'initNilWasm', payload: { trustedSetupBytes: setupCopy } }, [setupCopy.buffer])
+      })
+    })
+
+    await Promise.all(initPromises)
+    expansionWorkers = workers
+  })()
+
+  return expansionWorkersReady
+}
+
 // Function to send messages to the worker and await a response
 function sendMessageToWorker(
   type: string,
@@ -57,6 +135,25 @@ function sendMessageToWorker(
   });
 }
 
+function sendExpansionMessageToWorker(
+  type: 'expandMduRs' | 'expandPayloadRs',
+  payload: unknown,
+  transferables?: Transferable[],
+): Promise<unknown> {
+  if (!expansionWorkers || expansionWorkers.length === 0) {
+    return sendMessageToWorker(type, payload, transferables)
+  }
+
+  const w = expansionWorkers[expansionRoundRobin % expansionWorkers.length]
+  expansionRoundRobin += 1
+  const id = expansionNextMessageId++
+  return new Promise((resolve, reject) => {
+    expansionPending.set(id, { resolve, reject })
+    expansionPendingByWorker.get(w)?.add(id)
+    w.postMessage({ id, type, payload }, transferables || [])
+  })
+}
+
 export interface ExpandedMdu {
     witness_flat: Uint8Array | number[]; // 96 * 48 bytes
     mdu_root: Uint8Array | number[]; // 32 bytes
@@ -65,7 +162,9 @@ export interface ExpandedMdu {
 export interface ExpandedStripe {
     witness_flat: Uint8Array | number[];
     mdu_root: Uint8Array | number[];
-    shards: Array<Uint8Array | number[]>;
+    shards?: Array<Uint8Array | number[]>;
+    shards_flat?: Uint8Array | number[];
+    shard_len?: number;
 }
 
 // --- Public API for interacting with the Worker ---
@@ -73,7 +172,10 @@ export interface ExpandedStripe {
 export const workerClient = {
   // Initialize the WASM module inside the worker, including KzgContext
   async initNilWasm(trustedSetupBytes: Uint8Array): Promise<string> {
-    return sendMessageToWorker('initNilWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer]) as Promise<string>;
+    const setupCopy = trustedSetupBytes.slice()
+    const result = await sendMessageToWorker('initNilWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer]) as string
+    await initializeExpansionPool(setupCopy)
+    return result
   },
 
   // Initialize Mdu0Builder within the worker
@@ -129,11 +231,11 @@ export const workerClient = {
   },
 
   async expandMduRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
-    return sendMessageToWorker('expandMduRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
+    return sendExpansionMessageToWorker('expandMduRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
   },
 
   async expandPayloadRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
-    return sendMessageToWorker('expandPayloadRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
+    return sendExpansionMessageToWorker('expandPayloadRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
   },
 
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)

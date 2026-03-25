@@ -2355,77 +2355,228 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const witnessDataBlobs: Uint8Array[] = [];
         const mode2UserShards: PreparedBrowserShardSet[] = [];
 
-        for (let i = 0; i < totalUserChunks; i++) {
-            const opStart = performance.now();
-            const isExisting = appendMode2 && i < existingUserCount;
-            const nonTrivialBlobs = nonTrivialBlobsForPayload(userPayloads[i] ?? 0);
-            const workTotalThisMdu = weightedWorkForMdu(nonTrivialBlobs);
+        if (useMode2) {
+          const hardwareConcurrency =
+            typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
+              ? Math.max(1, Number(navigator.hardwareConcurrency))
+              : 4
+          const userConcurrency = Math.max(1, Math.min(3, Math.floor((hardwareConcurrency + 1) / 2), totalUserChunks))
+          let nextUserIndex = 0
+
+          const processMode2UserMdu = async (i: number): Promise<void> => {
+            const opStart = performance.now()
+            const isExisting = appendMode2 && i < existingUserCount
+            const nonTrivialBlobs = nonTrivialBlobsForPayload(userPayloads[i] ?? 0)
+            const workTotalThisMdu = weightedWorkForMdu(nonTrivialBlobs)
             setShardProgress((p) => ({
               ...p,
               phase: 'shard_user',
-              label: `Sharding user MDU #${i}...`,
+              label: userConcurrency > 1 ? `Sharding user MDUs in parallel (${userConcurrency} workers)...` : `Sharding user MDU #${i}...`,
               currentOpStartedAtMs: opStart,
               currentMduKind: 'user',
               currentMduIndex: i,
               blobsInCurrentMdu: 0,
               blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
               workDone: workCommitted,
-            }));
+            }))
             setShards((prev) =>
               prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'processing' } : s)),
-            );
+            )
 
-            let rawChunk: Uint8Array = new Uint8Array();
-            let encodedMdu: Uint8Array | null = null;
-            let encodeMs = 0;
+            let rawChunk: Uint8Array = new Uint8Array()
+            let encodedMdu: Uint8Array | null = null
+            let encodeMs = 0
 
             if (isExisting) {
-              encodedMdu = existingUserMdus[i].data;
+              encodedMdu = existingUserMdus[i].data
             } else {
-              const newIndex = i - existingUserCount;
-              const start = newIndex * RawMduCapacity;
-              const end = Math.min(start + RawMduCapacity, bytes.length);
-              rawChunk = bytes.subarray(start, end) as Uint8Array;
+              const newIndex = i - existingUserCount
+              const start = newIndex * RawMduCapacity
+              const end = Math.min(start + RawMduCapacity, bytes.length)
+              rawChunk = bytes.subarray(start, end) as Uint8Array
             }
-            const expansionInputSource = isExisting ? encodedMdu : rawChunk;
+            const expansionInputSource = isExisting ? encodedMdu : rawChunk
             if (!expansionInputSource) {
               throw new Error(`missing expansion input for user MDU #${i}`)
             }
-            const copyStart = performance.now();
-            const chunkCopy = new Uint8Array(expansionInputSource);
-            const copyMs = performance.now() - copyStart;
+            const copyStart = performance.now()
+            const chunkCopy = new Uint8Array(expansionInputSource)
+            const copyMs = performance.now() - copyStart
 
-            if (useMode2) {
-              addLog(`> Sharding User MDU #${i}${isExisting ? ' (existing)' : ''} (RS ${rsK}+${rsM})${isExisting ? '' : ' via payload-aware path'}...`);
-              const wasmStart = performance.now();
-              const result = isExisting
-                ? await workerClient.expandMduRs(chunkCopy, rsK, rsM)
-                : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM);
-              const wasmMs = performance.now() - wasmStart;
+            addLog(`> Sharding User MDU #${i}${isExisting ? ' (existing)' : ''} (RS ${rsK}+${rsM})${isExisting ? '' : ' via payload-aware path'}...`)
+            const wasmStart = performance.now()
+            const result = isExisting
+              ? await workerClient.expandMduRs(chunkCopy, rsK, rsM)
+              : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM)
+            const wasmMs = performance.now() - wasmStart
+
+            if (!encodedMdu) {
+              const encodeStart = performance.now()
+              encodedMdu = encodeToMdu(rawChunk)
+              encodeMs = performance.now() - encodeStart
+            }
+            userMdus[i] = makePreparedMdu(i, encodedMdu)
+
+            const rootBytes = toU8(result.mdu_root)
+            userRoots[i] = rootBytes
+            const witnessFlat = toU8(result.witness_flat)
+            witnessDataBlobs[i] = witnessFlat
+
+            const shardsList: PreparedBrowserShard[] = []
+            if (result.shards_flat && Number(result.shard_len ?? 0) > 0) {
+              const shardLen = Number(result.shard_len)
+              const shardsFlat = toU8(result.shards_flat)
+              for (let offset = 0, slot = 0; offset < shardsFlat.byteLength; offset += shardLen, slot += 1) {
+                shardsList.push(makePreparedShard(i, slot, shardsFlat.subarray(offset, offset + shardLen), shardLen))
+              }
+            } else {
+              for (const [slot, shard] of (result.shards ?? []).entries()) {
+                shardsList.push(makePreparedShard(i, slot, toU8(shard)))
+              }
+            }
+            mode2UserShards[i] = { index: i, shards: shardsList }
+
+            const opMs = performance.now() - opStart
+            console.log('[perf] user mdu (mode2)', {
+              i,
+              rawBytes: isExisting ? userPayloads[i] ?? 0 : rawChunk.byteLength,
+              expansionPath: isExisting ? 'encoded_mdu' : 'payload',
+              concurrency: userConcurrency,
+              encodeMs,
+              copyMs,
+              wasmMs,
+              totalMs: opMs,
+            })
+            prevCommitMsPerMdu = opMs
+            mdusCommitted += 1
+            workCommitted += workTotalThisMdu
+            setShardProgress((p) => {
+              const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU
+              const avg =
+                p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs
+              return {
+                ...p,
+                blobsDone,
+                blobsInCurrentMdu: PLANNER_BLOBS_PER_MDU,
+                currentOpStartedAtMs: null,
+                lastOpMs: opMs,
+                workDone: workCommitted,
+                avgWorkMs: avg,
+              }
+            })
+            setShards((prev) =>
+              prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'expanded' } : s)),
+            )
+          }
+
+          const workers = Array.from({ length: userConcurrency }, async () => {
+            let hasMore = true
+            while (hasMore) {
+              const i = nextUserIndex
+              nextUserIndex += 1
+              if (i >= totalUserChunks) {
+                hasMore = false
+                continue
+              }
+              await processMode2UserMdu(i)
+            }
+          })
+          await Promise.all(workers)
+        } else {
+          for (let i = 0; i < totalUserChunks; i++) {
+              const opStart = performance.now();
+              const isExisting = appendMode2 && i < existingUserCount;
+              const nonTrivialBlobs = nonTrivialBlobsForPayload(userPayloads[i] ?? 0);
+              const workTotalThisMdu = weightedWorkForMdu(nonTrivialBlobs);
+              setShardProgress((p) => ({
+                ...p,
+                phase: 'shard_user',
+                label: `Sharding user MDU #${i}...`,
+                currentOpStartedAtMs: opStart,
+                currentMduKind: 'user',
+                currentMduIndex: i,
+                blobsInCurrentMdu: 0,
+                blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+                workDone: workCommitted,
+              }));
+              setShards((prev) =>
+                prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'processing' } : s)),
+              );
+
+              let rawChunk: Uint8Array = new Uint8Array();
+              let encodedMdu: Uint8Array | null = null;
+              let encodeMs = 0;
+
+              if (isExisting) {
+                encodedMdu = existingUserMdus[i].data;
+              } else {
+                const newIndex = i - existingUserCount;
+                const start = newIndex * RawMduCapacity;
+                const end = Math.min(start + RawMduCapacity, bytes.length);
+                rawChunk = bytes.subarray(start, end) as Uint8Array;
+              }
+              const expansionInputSource = isExisting ? encodedMdu : rawChunk;
+              if (!expansionInputSource) {
+                throw new Error(`missing expansion input for user MDU #${i}`)
+              }
+              const copyStart = performance.now();
+              const chunkCopy = new Uint8Array(expansionInputSource);
+              const copyMs = performance.now() - copyStart;
 
               if (!encodedMdu) {
                 const encodeStart = performance.now();
                 encodedMdu = encodeToMdu(rawChunk);
                 encodeMs = performance.now() - encodeStart;
               }
+              if (!encodedMdu) {
+                throw new Error(`missing encoded user MDU bytes for user MDU #${i}`)
+              }
               userMdus.push(makePreparedMdu(i, encodedMdu));
+
+              addLog(`> Sharding User MDU #${i}...`);
+              const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
+              const wasmStart = performance.now();
+              const result = await workerClient.shardFileProgressive(chunkCopy, {
+                batchBlobs,
+                onProgress: (progress) => {
+                  const payload = progress as { kind?: string; done?: number; total?: number };
+                  if (payload.kind !== 'blob') return;
+                  const done = Number(payload.done ?? 0);
+                  setShardProgress((prev) => {
+                    const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
+                    const doneNonTrivial = Math.min(done, nonTrivialBlobs);
+                    const doneTrivial = Math.max(0, done - nonTrivialBlobs);
+                    const workInMdu = doneNonTrivial + doneTrivial * PLANNER_TRIVIAL_BLOB_WEIGHT;
+                    const workDone = workCommitted + Math.min(workTotalThisMdu, workInMdu);
+                    return {
+                      ...prev,
+                      blobsInCurrentMdu: done,
+                      blobsDone,
+                      workDone,
+                      avgWorkMs:
+                        prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
+                    };
+                  });
+                },
+              });
+              const wasmMs = performance.now() - wasmStart;
 
               const rootBytes = toU8(result.mdu_root);
               userRoots.push(rootBytes);
+              console.log(
+                `[Debug] User MDU Root #${i}: 0x${Array.from(rootBytes)
+                  .map((b) => b.toString(16).padStart(2, '0'))
+                  .join('')}`,
+              );
+
               const witnessFlat = toU8(result.witness_flat);
               witnessDataBlobs.push(witnessFlat);
-              const shardsList = result.shards.map((s, slot) => makePreparedShard(i, slot, toU8(s)));
-              // Every committed generation must carry shard artifacts for the full
-              // user-MDU set. If we only upload shards for newly appended MDUs,
-              // the new manifest root can no longer serve older files once stale
-              // generations are cleaned up.
-              mode2UserShards.push({ index: i, shards: shardsList });
 
               const opMs = performance.now() - opStart;
-              console.log('[perf] user mdu (mode2)', {
+              console.log('[perf] user mdu', {
                 i,
-                rawBytes: isExisting ? userPayloads[i] ?? 0 : rawChunk.byteLength,
-                expansionPath: isExisting ? 'encoded_mdu' : 'payload',
+                rawBytes: rawChunk.byteLength,
+                batchBlobs,
                 encodeMs,
                 copyMs,
                 wasmMs,
@@ -2441,7 +2592,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 return {
                   ...p,
                   blobsDone,
-                  blobsInCurrentMdu: PLANNER_BLOBS_PER_MDU,
+                  blobsInCurrentMdu: 0,
                   currentOpStartedAtMs: null,
                   lastOpMs: opMs,
                   workDone: workCommitted,
@@ -2452,89 +2603,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'expanded' } : s)),
               );
               await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-              continue;
-            }
-
-            if (!encodedMdu) {
-              const encodeStart = performance.now();
-              encodedMdu = encodeToMdu(rawChunk);
-              encodeMs = performance.now() - encodeStart;
-            }
-            if (!encodedMdu) {
-              throw new Error(`missing encoded user MDU bytes for user MDU #${i}`)
-            }
-            userMdus.push(makePreparedMdu(i, encodedMdu));
-
-            addLog(`> Sharding User MDU #${i}...`);
-            const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
-            const wasmStart = performance.now();
-            const result = await workerClient.shardFileProgressive(chunkCopy, {
-              batchBlobs,
-              onProgress: (progress) => {
-                const payload = progress as { kind?: string; done?: number; total?: number };
-                if (payload.kind !== 'blob') return;
-                const done = Number(payload.done ?? 0);
-                setShardProgress((prev) => {
-                  const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
-                  const doneNonTrivial = Math.min(done, nonTrivialBlobs);
-                  const doneTrivial = Math.max(0, done - nonTrivialBlobs);
-                  const workInMdu = doneNonTrivial + doneTrivial * PLANNER_TRIVIAL_BLOB_WEIGHT;
-                  const workDone = workCommitted + Math.min(workTotalThisMdu, workInMdu);
-                  return {
-                    ...prev,
-                    blobsInCurrentMdu: done,
-                    blobsDone,
-                    workDone,
-                    avgWorkMs:
-                      prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
-                  };
-                });
-              },
-            });
-            const wasmMs = performance.now() - wasmStart;
-
-            const rootBytes = toU8(result.mdu_root);
-            userRoots.push(rootBytes);
-            console.log(
-              `[Debug] User MDU Root #${i}: 0x${Array.from(rootBytes)
-                .map((b) => b.toString(16).padStart(2, '0'))
-                .join('')}`,
-            );
-
-            const witnessFlat = toU8(result.witness_flat);
-            witnessDataBlobs.push(witnessFlat);
-
-            const opMs = performance.now() - opStart;
-            console.log('[perf] user mdu', {
-              i,
-              rawBytes: rawChunk.byteLength,
-              batchBlobs,
-              encodeMs,
-              copyMs,
-              wasmMs,
-              totalMs: opMs,
-            });
-            prevCommitMsPerMdu = opMs;
-            mdusCommitted += 1;
-            workCommitted += workTotalThisMdu;
-            setShardProgress((p) => {
-              const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU;
-              const avg =
-                p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
-              return {
-                ...p,
-                blobsDone,
-                blobsInCurrentMdu: 0,
-                currentOpStartedAtMs: null,
-                lastOpMs: opMs,
-                workDone: workCommitted,
-                avgWorkMs: avg,
-              };
-            });
-            setShards((prev) =>
-              prev.map((s) => (s.id === 1 + witnessMduCount + i ? { ...s, status: 'expanded' } : s)),
-            );
-            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          }
         }
 
         if (useMode2) {

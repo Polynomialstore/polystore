@@ -9,7 +9,9 @@ export interface ExistingUserMdu {
 export interface ExpandedBootstrapStripe {
   witness_flat: Uint8Array | number[]
   mdu_root: Uint8Array | number[]
-  shards: Array<Uint8Array | number[]>
+  shards?: Array<Uint8Array | number[]>
+  shards_flat?: Uint8Array | number[]
+  shard_len?: number
 }
 
 export interface CommittedMduResult {
@@ -48,6 +50,19 @@ function toU8(value: Uint8Array | number[]): Uint8Array {
   return value instanceof Uint8Array ? value : new Uint8Array(value)
 }
 
+function materializeBootstrapShards(expanded: ExpandedBootstrapStripe): Array<{ data: Uint8Array; fullSize?: number }> {
+  if (expanded.shards_flat && Number(expanded.shard_len ?? 0) > 0) {
+    const shardLen = Number(expanded.shard_len)
+    const flat = toU8(expanded.shards_flat)
+    const shards: Array<{ data: Uint8Array; fullSize?: number }> = []
+    for (let offset = 0; offset < flat.byteLength; offset += shardLen) {
+      shards.push({ data: flat.subarray(offset, offset + shardLen), fullSize: shardLen })
+    }
+    return shards
+  }
+  return (expanded.shards ?? []).map((shard) => ({ data: toU8(shard) }))
+}
+
 export async function materializeBootstrapGeneration(
   input: MaterializeBootstrapGenerationInput,
 ): Promise<MaterializedBootstrapGeneration> {
@@ -75,7 +90,7 @@ export async function materializeBootstrapGeneration(
     witnessDataBlobs.push(toU8(expanded.witness_flat))
     shardSets.push({
       index: userMdu.index,
-      shards: expanded.shards.map((shard) => ({ data: toU8(shard) })),
+      shards: materializeBootstrapShards(expanded),
     })
   }
 
