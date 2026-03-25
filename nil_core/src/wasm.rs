@@ -4,7 +4,7 @@ use crate::coding::{
     expand_payload_flat_profiled, expand_payload_flat_uncommitted,
 };
 use crate::kzg::KzgContext;
-use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override};
+use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override, set_wasm_msm_basis_mode};
 use crate::layout::{FileRecordV1, pack_length_and_flags};
 use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
@@ -361,6 +361,20 @@ impl NilWasm {
             set_pippenger_window_override(Some(bits as usize));
         }
         Ok(())
+    }
+
+    pub fn set_wasm_msm_basis_mode(&self, mode: &str) -> Result<(), JsValue> {
+        match mode {
+            "projective" => {
+                set_wasm_msm_basis_mode(2);
+                Ok(())
+            }
+            "affine" => {
+                set_wasm_msm_basis_mode(1);
+                Ok(())
+            }
+            _ => Err(JsValue::from_str("basis mode must be 'projective' or 'affine'")),
+        }
     }
 }
 

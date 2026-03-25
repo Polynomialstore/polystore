@@ -23,9 +23,14 @@ pub type Bytes32 = [u8; 32];
 pub type Bytes48 = [u8; 48];
 
 static PIPPENGER_WINDOW_OVERRIDE: AtomicUsize = AtomicUsize::new(0);
+static WASM_MSM_BASIS_MODE: AtomicUsize = AtomicUsize::new(0);
 
 pub fn set_pippenger_window_override(window_bits: Option<usize>) {
     PIPPENGER_WINDOW_OVERRIDE.store(window_bits.unwrap_or(0), Ordering::Relaxed);
+}
+
+pub fn set_wasm_msm_basis_mode(mode: usize) {
+    WASM_MSM_BASIS_MODE.store(mode, Ordering::Relaxed);
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -259,7 +264,11 @@ impl KzgContext {
                 let evals = bytes_to_scalars(blob_bytes)?;
                 perf.decode_ms = now_ms() - decode_start;
                 let msm_start = now_ms();
-                let acc = msm_pippenger_g1_projective(&self.g1_points_projective, &evals);
+                let acc = if WASM_MSM_BASIS_MODE.load(Ordering::Relaxed) == 2 {
+                    msm_pippenger_g1_projective(&self.g1_points_projective, &evals)
+                } else {
+                    msm_pippenger_g1(&self.g1_points, &evals)
+                };
                 perf.msm_ms = now_ms() - msm_start;
                 let compress_start = now_ms();
                 let commitment = acc.to_affine().to_compressed();

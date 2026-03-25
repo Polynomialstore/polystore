@@ -23,6 +23,10 @@ const windows = (process.env.WINDOWS || '8,9,10,11,12,13')
   .split(',')
   .map((value) => Number(value.trim()))
   .filter((value) => Number.isFinite(value) && value > 0)
+const basisModes = (process.env.BASIS_MODES || 'projective')
+  .split(',')
+  .map((value) => value.trim())
+  .filter((value): value is 'projective' | 'affine' => value === 'projective' || value === 'affine')
 
 function stats(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b)
@@ -60,25 +64,30 @@ const shardsFlatRaw = (expanded as { shards_flat?: unknown }).shards_flat
 const shardsFlat = shardsFlatRaw instanceof Uint8Array ? shardsFlatRaw : new Uint8Array(shardsFlatRaw as ArrayBufferLike)
 
 const results = []
-for (const bits of windows) {
-  wasm.set_pippenger_window_bits(bits)
-  for (let i = 0; i < warmupRuns; i += 1) {
-    wasm.commit_blobs(shardsFlat)
+for (const basisMode of basisModes) {
+  wasm.set_wasm_msm_basis_mode(basisMode)
+  for (const bits of windows) {
+    wasm.set_pippenger_window_bits(bits)
+    for (let i = 0; i < warmupRuns; i += 1) {
+      wasm.commit_blobs(shardsFlat)
+    }
+    const runs: number[] = []
+    for (let i = 0; i < measureRuns; i += 1) {
+      const t0 = performance.now()
+      wasm.commit_blobs(shardsFlat)
+      runs.push(performance.now() - t0)
+    }
+    results.push({
+      basis_mode: basisMode,
+      window_bits: bits,
+      stats: stats(runs),
+      runs,
+    })
   }
-  const runs: number[] = []
-  for (let i = 0; i < measureRuns; i += 1) {
-    const t0 = performance.now()
-    wasm.commit_blobs(shardsFlat)
-    runs.push(performance.now() - t0)
-  }
-  results.push({
-    window_bits: bits,
-    stats: stats(runs),
-    runs,
-  })
 }
 
 wasm.set_pippenger_window_bits(0)
+wasm.set_wasm_msm_basis_mode('projective')
 
 console.log(JSON.stringify({
   file_bytes: payload.byteLength,
@@ -86,6 +95,7 @@ console.log(JSON.stringify({
   rs_m: rsM,
   warmup_runs: warmupRuns,
   measure_runs: measureRuns,
+  basis_modes: basisModes,
   windows,
   results,
 }, null, 2))
