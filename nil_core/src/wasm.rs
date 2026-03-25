@@ -6,7 +6,7 @@ use crate::coding::{
 use crate::kzg::KzgContext;
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override, set_wasm_msm_basis_mode};
 use crate::layout::{FileRecordV1, pack_length_and_flags};
-use js_sys::Uint8Array;
+use js_sys::{Date, Uint8Array};
 use wasm_bindgen::prelude::*;
 
 fn compute_mdu_root_from_witness_flat_bytes(
@@ -26,6 +26,10 @@ fn compute_mdu_root_from_witness_flat_bytes(
 
     ctx.create_mdu_merkle_root(&commitments)
         .map_err(|e| JsValue::from_str(&format!("Merkle root failed: {:?}", e)))
+}
+
+fn now_ms() -> f64 {
+    Date::now()
 }
 
 #[wasm_bindgen]
@@ -360,6 +364,78 @@ impl NilWasm {
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
 
+    pub fn expand_payload_rs_flat_committed(
+        &self,
+        payload_bytes: &[u8],
+        k: u32,
+        m: u32,
+    ) -> Result<JsValue, JsValue> {
+        let data_shards = k as usize;
+        let parity_shards = m as usize;
+        if data_shards == 0 || parity_shards == 0 {
+            return Err(JsValue::from_str("RS parameters must be positive"));
+        }
+        if BLOBS_PER_MDU % data_shards != 0 {
+            return Err(JsValue::from_str("Invalid RS parameters"));
+        }
+
+        let rows = BLOBS_PER_MDU / data_shards;
+        let shard_count = data_shards + parity_shards;
+        let shard_len = rows * BLOB_SIZE;
+        let mut shards_flat = vec![0u8; shard_count * shard_len];
+
+        let expand_perf =
+            expand_payload_flat_uncommitted(payload_bytes, data_shards, parity_shards, &mut shards_flat)
+            .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+
+        let commit_start = now_ms();
+        let witness_flat = self
+            .kzg_ctx
+            .commit_blobs_flat(&shards_flat)
+            .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
+        let commit_ms = now_ms() - commit_start;
+        let mdu_root = compute_mdu_root_from_witness_flat_bytes(&self.kzg_ctx, &witness_flat)?;
+
+        #[derive(serde::Serialize)]
+        struct ExpandPayloadCommittedPerfResult {
+            encode_ms: f64,
+            rs_ms: f64,
+            commit_ms: f64,
+            total_ms: f64,
+            rows: usize,
+            shards_total: usize,
+            shard_len: usize,
+        }
+
+        #[derive(serde::Serialize)]
+        struct ExpandPayloadCommittedResult {
+            witness_flat: Vec<u8>,
+            mdu_root: Vec<u8>,
+            shards_flat: Vec<u8>,
+            shard_len: usize,
+            perf: ExpandPayloadCommittedPerfResult,
+        }
+
+        let res = ExpandPayloadCommittedResult {
+            witness_flat,
+            mdu_root: mdu_root.to_vec(),
+            shards_flat,
+            shard_len,
+            perf: ExpandPayloadCommittedPerfResult {
+                encode_ms: expand_perf.encode_ms,
+                rs_ms: expand_perf.rs_ms,
+                commit_ms,
+                total_ms: expand_perf.total_ms + commit_ms,
+                rows: expand_perf.rows,
+                shards_total: expand_perf.shards_total,
+                shard_len: expand_perf.shard_len,
+            },
+        };
+
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
     pub fn commit_mdu(&self, mdu_bytes: &[u8]) -> Result<JsValue, JsValue> {
         if mdu_bytes.len() != crate::kzg::MDU_SIZE {
             return Err(JsValue::from_str("MDU bytes must be exactly 8 MiB"));
@@ -536,6 +612,78 @@ impl NilWasm {
                 commit_compress_ms: commit_perf.compress_ms,
                 commit_ms: commit_perf.total_ms,
                 total_ms: expand_perf.total_ms + commit_perf.total_ms,
+                rows: expand_perf.rows,
+                shards_total: expand_perf.shards_total,
+                shard_len: expand_perf.shard_len,
+            },
+        };
+
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
+    pub fn expand_mdu_rs_flat_committed(
+        &self,
+        mdu_bytes: &[u8],
+        k: u32,
+        m: u32,
+    ) -> Result<JsValue, JsValue> {
+        let data_shards = k as usize;
+        let parity_shards = m as usize;
+        if data_shards == 0 || parity_shards == 0 {
+            return Err(JsValue::from_str("RS parameters must be positive"));
+        }
+        if BLOBS_PER_MDU % data_shards != 0 {
+            return Err(JsValue::from_str("Invalid RS parameters"));
+        }
+
+        let rows = BLOBS_PER_MDU / data_shards;
+        let shard_count = data_shards + parity_shards;
+        let shard_len = rows * BLOB_SIZE;
+        let mut shards_flat = vec![0u8; shard_count * shard_len];
+
+        let expand_perf =
+            expand_mdu_encoded_flat_uncommitted(mdu_bytes, data_shards, parity_shards, &mut shards_flat)
+            .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+
+        let commit_start = now_ms();
+        let witness_flat = self
+            .kzg_ctx
+            .commit_blobs_flat(&shards_flat)
+            .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
+        let commit_ms = now_ms() - commit_start;
+        let mdu_root = compute_mdu_root_from_witness_flat_bytes(&self.kzg_ctx, &witness_flat)?;
+
+        #[derive(serde::Serialize)]
+        struct ExpandMduCommittedPerfResult {
+            encode_ms: f64,
+            rs_ms: f64,
+            commit_ms: f64,
+            total_ms: f64,
+            rows: usize,
+            shards_total: usize,
+            shard_len: usize,
+        }
+
+        #[derive(serde::Serialize)]
+        struct ExpandMduCommittedResult {
+            witness_flat: Vec<u8>,
+            mdu_root: Vec<u8>,
+            shards_flat: Vec<u8>,
+            shard_len: usize,
+            perf: ExpandMduCommittedPerfResult,
+        }
+
+        let res = ExpandMduCommittedResult {
+            witness_flat,
+            mdu_root: mdu_root.to_vec(),
+            shards_flat,
+            shard_len,
+            perf: ExpandMduCommittedPerfResult {
+                encode_ms: expand_perf.encode_ms,
+                rs_ms: expand_perf.rs_ms,
+                commit_ms,
+                total_ms: expand_perf.total_ms + commit_ms,
                 rows: expand_perf.rows,
                 shards_total: expand_perf.shards_total,
                 shard_len: expand_perf.shard_len,

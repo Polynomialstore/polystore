@@ -2838,9 +2838,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
             addLog(`> Sharding User MDU #${i}${isExisting ? ' (existing)' : ''} (RS ${rsK}+${rsM})${isExisting ? '' : ' via payload-aware path'}...`)
             const wasmStart = performance.now()
+            const profileExpandedUserMdu = i === 0
             const result = isExisting
-              ? await workerClient.expandMduRs(chunkCopy, rsK, rsM)
-              : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM)
+              ? await workerClient.expandMduRs(chunkCopy, rsK, rsM, { profile: profileExpandedUserMdu })
+              : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM, { profile: profileExpandedUserMdu })
             const wasmMs = performance.now() - wasmStart
             const workerTotalMs = Number(result.perf?.totalMs ?? 0)
             const workerExpandMs = Number(result.perf?.expandMs ?? 0)

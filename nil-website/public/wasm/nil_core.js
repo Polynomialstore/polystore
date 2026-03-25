@@ -323,10 +323,40 @@ export class NilWasm {
      * @param {number} m
      * @returns {any}
      */
+    expand_mdu_rs_flat_committed(mdu_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.nilwasm_expand_mdu_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} mdu_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
     expand_mdu_rs_flat_uncommitted(mdu_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.nilwasm_expand_mdu_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} payload_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
+    expand_payload_rs_flat_committed(payload_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.nilwasm_expand_payload_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }

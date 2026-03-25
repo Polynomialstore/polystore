@@ -14,7 +14,13 @@ type WorkerInput = {
   wasmPath: string
   rsK: number
   rsM: number
-  pipelineMode: 'split' | 'split_unprofiled' | 'combined' | 'fused_batch'
+  pipelineMode:
+    | 'split'
+    | 'split_unprofiled'
+    | 'combined'
+    | 'fused_batch'
+    | 'fused_batch_unprofiled'
+    | 'fused_batch_sampled'
 }
 
 type TaskPayload = {
@@ -137,9 +143,20 @@ parentPort.on('message', (message: TaskPayload) => {
       }
       witnessFlat = toU8((expanded as { witness_flat?: unknown }).witness_flat)
       commitMs = performance.now() - combinedStart
-    } else if (input.pipelineMode === 'fused_batch') {
+    } else if (
+      input.pipelineMode === 'fused_batch' ||
+      input.pipelineMode === 'fused_batch_unprofiled' ||
+      input.pipelineMode === 'fused_batch_sampled'
+    ) {
       const fusedStart = performance.now()
-      const expandedRaw = wasm.expand_payload_rs_flat_committed_profiled(message.chunk, input.rsK, input.rsM) as unknown
+      const useProfiled =
+        input.pipelineMode === 'fused_batch' ||
+        (input.pipelineMode === 'fused_batch_sampled' && message.index === 0)
+      const expandedRaw = (
+        useProfiled
+          ? wasm.expand_payload_rs_flat_committed_profiled(message.chunk, input.rsK, input.rsM)
+          : wasm.expand_payload_rs_flat_committed(message.chunk, input.rsK, input.rsM)
+      ) as unknown
       const expanded = typeof expandedRaw === 'string' ? JSON.parse(expandedRaw) : expandedRaw
       const perfRaw = (expanded as { perf?: unknown }).perf as {
         encode_ms?: unknown

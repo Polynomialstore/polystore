@@ -4,7 +4,13 @@ import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
 type BasisMode = 'blst' | 'affine' | 'projective'
-type PipelineMode = 'split' | 'split_unprofiled' | 'combined' | 'fused_batch'
+type PipelineMode =
+  | 'split'
+  | 'split_unprofiled'
+  | 'combined'
+  | 'fused_batch'
+  | 'fused_batch_unprofiled'
+  | 'fused_batch_sampled'
 
 type ResultPayload = {
   id: number
@@ -53,7 +59,12 @@ const pipelineModes = (process.env.PIPELINE_MODES || process.env.PIPELINE_MODE |
   .map((value) => value.trim())
   .filter(
     (value): value is PipelineMode =>
-      value === 'split' || value === 'split_unprofiled' || value === 'combined' || value === 'fused_batch',
+      value === 'split' ||
+      value === 'split_unprofiled' ||
+      value === 'combined' ||
+      value === 'fused_batch' ||
+      value === 'fused_batch_unprofiled' ||
+      value === 'fused_batch_sampled',
   )
 const concurrencies = (process.env.CONCURRENCIES || '3,4,5,6')
   .split(',')
@@ -70,7 +81,23 @@ if (concurrencies.length === 0) {
   throw new Error('CONCURRENCIES must include at least one positive integer')
 }
 if (pipelineModes.length === 0) {
-  throw new Error('PIPELINE_MODES must include at least one of split,split_unprofiled,combined,fused_batch')
+  throw new Error(
+    'PIPELINE_MODES must include at least one of split,split_unprofiled,combined,fused_batch,fused_batch_unprofiled',
+  )
+}
+
+if (
+  pipelineModes.some(
+    (value) =>
+      value !== 'split' &&
+      value !== 'split_unprofiled' &&
+      value !== 'combined' &&
+      value !== 'fused_batch' &&
+      value !== 'fused_batch_unprofiled' &&
+      value !== 'fused_batch_sampled',
+  )
+) {
+  throw new Error('invalid PIPELINE_MODES')
 }
 
 function makeDeterministicPayload(length: number): Uint8Array {

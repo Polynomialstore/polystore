@@ -44,10 +44,14 @@ self.onmessage = async (event) => {
       }
       case 'expandMduRs': {
         if (!nilWasmInstance) throw new Error('NilWasm not initialized')
-        const { data, k, m } = payload as { data: Uint8Array; k: number; m: number }
+        const { data, k, m, profile = true } = payload as { data: Uint8Array; k: number; m: number; profile?: boolean }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
         const opStart = performance.now()
-        const expanded = nilWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m)) as unknown
+        const expanded = (
+          profile
+            ? nilWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m))
+            : nilWasmInstance.expand_mdu_rs_flat_committed(data, Number(k), Number(m))
+        ) as unknown
         const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded
         const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat
         const rootRaw = (parsed as { mdu_root?: unknown }).mdu_root
@@ -119,11 +123,20 @@ self.onmessage = async (event) => {
       }
       case 'expandPayloadRs': {
         if (!nilWasmInstance) throw new Error('NilWasm not initialized')
-        const { data, k, m } = payload as { data: Uint8Array; k: number; m: number }
+        const { data, k, m, profile = true } = payload as {
+          data: Uint8Array
+          k: number
+          m: number
+          profile?: boolean
+        }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
 
         const opStart = performance.now()
-        const expanded = nilWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m)) as unknown
+        const expanded = (
+          profile
+            ? nilWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m))
+            : nilWasmInstance.expand_payload_rs_flat_committed(data, Number(k), Number(m))
+        ) as unknown
         const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded
         const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat
         const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat
