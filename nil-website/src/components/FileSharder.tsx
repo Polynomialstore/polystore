@@ -157,6 +157,22 @@ type PreparePerfProfile = {
   totalWitnessMdus: number
   userConcurrency: number
   manifestMs: number
+  wallClock: {
+    prepareMs: number
+    manifestMs: number
+  }
+  summary: {
+    userSampleCount: number
+    maxUserTotalMs: number
+    maxUserCommitMs: number
+    maxUserExpandMs: number
+    maxUserQueueMs: number
+    sumUserTotalMs: number
+    sumUserCommitMs: number
+    sumUserExpandMs: number
+    sumUserQueueMs: number
+    slowestUserMduIndex: number | null
+  }
   phases: {
     jsEncodeMs: number
     jsCopyMs: number
@@ -173,6 +189,10 @@ type PreparePerfProfile = {
     workerRustCommitMs: number
     manifestMs: number
     unaccountedMs: number
+  }
+  notes: {
+    phasesAreParallelSums: true
+    unaccountedMsIsWallClockRemainder: true
   }
   samples: {
     user: PreparePerfSample[]
@@ -192,6 +212,10 @@ type BrowserPerfRun = {
 function roundPerfMs(value: number | null | undefined): number | null {
   if (!Number.isFinite(value ?? NaN)) return null
   return Math.round(Number(value) * 100) / 100
+}
+
+function maxBy(samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number): number {
+  return samples.reduce((best, sample) => Math.max(best, pick(sample)), 0)
 }
 
 function createInitialShardProgress(fileBytesTotal = 0): ShardProgressState {
@@ -3296,6 +3320,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const sumBy = (samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number) =>
           samples.reduce((total, sample) => total + pick(sample), 0)
         const allSamples = [...perfSamples.user, ...perfSamples.witness, ...perfSamples.meta]
+        const slowestUserSample =
+          perfSamples.user.reduce<PreparePerfSample | null>(
+            (best, sample) => (!best || sample.totalMs > best.totalMs ? sample : best),
+            null,
+          ) ?? null
         const prepareProfile: PreparePerfProfile = {
           totalMs: elapsedMs,
           fileBytes: bytes.length,
@@ -3305,6 +3334,22 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalWitnessMdus: witnessMduCount,
           userConcurrency: useMode2 ? pickExpansionWorkerCount(prepareHardwareConcurrency, totalUserChunks) : 1,
           manifestMs,
+          wallClock: {
+            prepareMs: elapsedMs,
+            manifestMs,
+          },
+          summary: {
+            userSampleCount: perfSamples.user.length,
+            maxUserTotalMs: maxBy(perfSamples.user, (sample) => sample.totalMs),
+            maxUserCommitMs: maxBy(perfSamples.user, (sample) => sample.workerRustCommitMs),
+            maxUserExpandMs: maxBy(perfSamples.user, (sample) => sample.workerExpandMs),
+            maxUserQueueMs: maxBy(perfSamples.user, (sample) => sample.workerQueueMs),
+            sumUserTotalMs: sumBy(perfSamples.user, (sample) => sample.totalMs),
+            sumUserCommitMs: sumBy(perfSamples.user, (sample) => sample.workerRustCommitMs),
+            sumUserExpandMs: sumBy(perfSamples.user, (sample) => sample.workerExpandMs),
+            sumUserQueueMs: sumBy(perfSamples.user, (sample) => sample.workerQueueMs),
+            slowestUserMduIndex: slowestUserSample?.index ?? null,
+          },
           phases: {
             jsEncodeMs: sumBy(allSamples, (sample) => sample.encodeMs),
             jsCopyMs: sumBy(allSamples, (sample) => sample.copyMs),
@@ -3322,6 +3367,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             manifestMs,
             unaccountedMs: 0,
           },
+          notes: {
+            phasesAreParallelSums: true,
+            unaccountedMsIsWallClockRemainder: true,
+          },
           samples: perfSamples,
         }
         prepareProfile.phases.unaccountedMs = Math.max(
@@ -3337,7 +3386,27 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         )
 
         if (typeof window !== 'undefined') {
-          (window as typeof window & { __nilPreparePerf?: PreparePerfProfile }).__nilPreparePerf = prepareProfile
+          (
+            window as typeof window & {
+              __nilPreparePerf?: PreparePerfProfile
+              __nilPrepareSummary?: PreparePerfProfile['summary'] & {
+                prepareWallMs: number
+                manifestMs: number
+              }
+            }
+          ).__nilPreparePerf = prepareProfile
+          ;(
+            window as typeof window & {
+              __nilPrepareSummary?: PreparePerfProfile['summary'] & {
+                prepareWallMs: number
+                manifestMs: number
+              }
+            }
+          ).__nilPrepareSummary = {
+            prepareWallMs: roundPerfMs(elapsedMs) ?? 0,
+            manifestMs: roundPerfMs(manifestMs) ?? 0,
+            ...prepareProfile.summary,
+          }
         }
         console.log('[perf] sharding totals', {
           totalMs: elapsedMs,
@@ -3346,6 +3415,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
           manifestMs,
+        });
+        console.log('[perf] prepare summary', {
+          prepareWallMs: roundPerfMs(elapsedMs),
+          userConcurrency: prepareProfile.userConcurrency,
+          totalUserMdus: totalUserChunks,
+          maxUserTotalMs: roundPerfMs(prepareProfile.summary.maxUserTotalMs),
+          maxUserCommitMs: roundPerfMs(prepareProfile.summary.maxUserCommitMs),
+          maxUserExpandMs: roundPerfMs(prepareProfile.summary.maxUserExpandMs),
+          maxUserQueueMs: roundPerfMs(prepareProfile.summary.maxUserQueueMs),
+          sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
+          sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
+          sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
+          manifestMs: roundPerfMs(manifestMs),
+          note: 'max* fields are closest to wall-clock critical path; sum* fields are parallel worker totals',
         });
         console.log('[perf] prepare profile', prepareProfile);
         browserPerfEndPhase('prepare', {
@@ -3356,11 +3440,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
           userConcurrency: prepareProfile.userConcurrency,
-          workerQueueMs: roundPerfMs(prepareProfile.phases.workerQueueMs),
-          workerExpandMs: roundPerfMs(prepareProfile.phases.workerExpandMs),
-          workerCommitMs: roundPerfMs(prepareProfile.phases.workerCommitMs),
-          workerRootMs: roundPerfMs(prepareProfile.phases.workerRootMs),
-          rustCommitMsmMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmMs),
+          maxUserTotalMs: roundPerfMs(prepareProfile.summary.maxUserTotalMs),
+          maxUserCommitMs: roundPerfMs(prepareProfile.summary.maxUserCommitMs),
+          maxUserExpandMs: roundPerfMs(prepareProfile.summary.maxUserExpandMs),
+          maxUserQueueMs: roundPerfMs(prepareProfile.summary.maxUserQueueMs),
+          sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
+          sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
+          sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
           manifestMs: roundPerfMs(manifestMs),
         })
 
