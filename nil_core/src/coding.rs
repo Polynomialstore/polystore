@@ -37,6 +37,10 @@ pub struct ExpandedMdu {
 pub struct ExpandPayloadFlatPerf {
     pub encode_ms: f64,
     pub rs_ms: f64,
+    pub commit_decode_ms: f64,
+    pub commit_transform_ms: f64,
+    pub commit_msm_ms: f64,
+    pub commit_compress_ms: f64,
     pub commit_ms: f64,
     pub total_ms: f64,
     pub rows: usize,
@@ -290,6 +294,10 @@ fn expand_payload_flat_impl(
     let total_start = now_ms();
     let mut encode_ms = 0.0;
     let mut rs_ms = 0.0;
+    let mut commit_decode_ms = 0.0;
+    let mut commit_transform_ms = 0.0;
+    let mut commit_msm_ms = 0.0;
+    let mut commit_compress_ms = 0.0;
     let mut commit_ms = 0.0;
 
     // RS encode and commit row-by-row to keep the working set small (and avoid an intermediate 8 MiB MDU buffer).
@@ -320,18 +328,25 @@ fn expand_payload_flat_impl(
             .map_err(|e| CodingError::Rs(format!("{}", e)))?;
         rs_ms += now_ms() - rs_start;
 
-        let commit_start = now_ms();
         for slot in 0..shards_total {
-            let commitment = ctx.blob_to_commitment(row_shards[slot])?;
+            let (commitment, perf) = ctx.blob_to_commitment_profiled(row_shards[slot])?;
             let woff = (slot * rows + row_idx) * 48;
             out_witness_flat[woff..woff + 48].copy_from_slice(&commitment);
+            commit_decode_ms += perf.decode_ms;
+            commit_transform_ms += perf.transform_ms;
+            commit_msm_ms += perf.msm_ms;
+            commit_compress_ms += perf.compress_ms;
+            commit_ms += perf.total_ms;
         }
-        commit_ms += now_ms() - commit_start;
     }
 
     Ok(ExpandPayloadFlatPerf {
         encode_ms,
         rs_ms,
+        commit_decode_ms,
+        commit_transform_ms,
+        commit_msm_ms,
+        commit_compress_ms,
         commit_ms,
         total_ms: now_ms() - total_start,
         rows,

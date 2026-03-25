@@ -7,6 +7,7 @@ import { bech32 } from 'bech32'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const uploadSizeBytes = Number(process.env.SPARSE_FILE_SIZE_BYTES || 192 * 1024)
+const largeUploadTimeoutMs = uploadSizeBytes > 32 * 1024 * 1024 ? 900_000 : 30_000
 const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
 const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
 
@@ -301,7 +302,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
 
   await expect(page.getByTestId('mdu-upload-card')).not.toHaveAttribute('data-panel-state', 'idle', { timeout: 60_000 })
   await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, {
-    timeout: uploadSizeBytes > 50 * 1024 * 1024 ? 900_000 : 30_000,
+    timeout: largeUploadTimeoutMs,
   })
 
   expect(mduUploads.length).toBeGreaterThan(0)

@@ -74,6 +74,10 @@ impl NilWasm {
         struct ExpandPayloadFlatPerfResult {
             encode_ms: f64,
             rs_ms: f64,
+            commit_decode_ms: f64,
+            commit_transform_ms: f64,
+            commit_msm_ms: f64,
+            commit_compress_ms: f64,
             commit_ms: f64,
             total_ms: f64,
             rows: usize,
@@ -96,6 +100,10 @@ impl NilWasm {
             perf: ExpandPayloadFlatPerfResult {
                 encode_ms: perf.encode_ms,
                 rs_ms: perf.rs_ms,
+                commit_decode_ms: perf.commit_decode_ms,
+                commit_transform_ms: perf.commit_transform_ms,
+                commit_msm_ms: perf.commit_msm_ms,
+                commit_compress_ms: perf.commit_compress_ms,
                 commit_ms: perf.commit_ms,
                 total_ms: perf.total_ms,
                 rows: perf.rows,

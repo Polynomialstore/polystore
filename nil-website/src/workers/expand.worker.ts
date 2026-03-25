@@ -111,6 +111,10 @@ self.onmessage = async (event) => {
           perf?: {
             encode_ms?: unknown
             rs_ms?: unknown
+            commit_decode_ms?: unknown
+            commit_transform_ms?: unknown
+            commit_msm_ms?: unknown
+            commit_compress_ms?: unknown
             commit_ms?: unknown
             total_ms?: unknown
             rows?: unknown
@@ -148,6 +152,10 @@ self.onmessage = async (event) => {
                 shardLen,
                 rustEncodeMs: Number(rustPerf?.encode_ms ?? 0),
                 rustRsMs: Number(rustPerf?.rs_ms ?? 0),
+                rustCommitDecodeMs: Number(rustPerf?.commit_decode_ms ?? 0),
+                rustCommitTransformMs: Number(rustPerf?.commit_transform_ms ?? 0),
+                rustCommitMsmMs: Number(rustPerf?.commit_msm_ms ?? 0),
+                rustCommitCompressMs: Number(rustPerf?.commit_compress_ms ?? 0),
                 rustCommitMs: Number(rustPerf?.commit_ms ?? 0),
                 rustTotalMs: Number(rustPerf?.total_ms ?? 0),
                 rows: Number(rustPerf?.rows ?? 0),

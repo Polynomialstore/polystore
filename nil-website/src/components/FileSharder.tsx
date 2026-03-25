@@ -135,6 +135,10 @@ type PreparePerfSample = {
   workerRootMs: number
   workerRustEncodeMs: number
   workerRustRsMs: number
+  workerRustCommitDecodeMs: number
+  workerRustCommitTransformMs: number
+  workerRustCommitMsmMs: number
+  workerRustCommitCompressMs: number
   workerRustCommitMs: number
   totalMs: number
   batchBlobs?: number
@@ -160,6 +164,10 @@ type PreparePerfProfile = {
     workerRootMs: number
     workerRustEncodeMs: number
     workerRustRsMs: number
+    workerRustCommitDecodeMs: number
+    workerRustCommitTransformMs: number
+    workerRustCommitMsmMs: number
+    workerRustCommitCompressMs: number
     workerRustCommitMs: number
     manifestMs: number
     unaccountedMs: number
@@ -302,7 +310,7 @@ function formatGatewayError(error: unknown): string {
 const gatewayUploadPollIntervalMs = 1000
 const gatewayUploadPollTimeoutMs = 2500
 const gatewayUploadHeartbeatStaleMs = 15_000
-const gatewayFallbackWasmMaxFileBytes = 32 * 1024 * 1024
+const gatewayFallbackWasmMaxFileBytes = Number.POSITIVE_INFINITY
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const MANIFEST_BLOB_SIZE_BYTES = 128 * 1024
 
@@ -2470,6 +2478,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const workerQueueMs = Math.max(0, wasmMs - workerTotalMs)
             const workerRustEncodeMs = Number(result.perf?.rustEncodeMs ?? 0)
             const workerRustRsMs = Number(result.perf?.rustRsMs ?? 0)
+            const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
+            const workerRustCommitTransformMs = Number(result.perf?.rustCommitTransformMs ?? 0)
+            const workerRustCommitMsmMs = Number(result.perf?.rustCommitMsmMs ?? 0)
+            const workerRustCommitCompressMs = Number(result.perf?.rustCommitCompressMs ?? 0)
             const workerRustCommitMs = Number(result.perf?.rustCommitMs ?? 0)
 
             if (!encodedMdu) {
@@ -2515,6 +2527,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               workerRootMs,
               workerRustEncodeMs,
               workerRustRsMs,
+              workerRustCommitDecodeMs,
+              workerRustCommitTransformMs,
+              workerRustCommitMsmMs,
+              workerRustCommitCompressMs,
               workerRustCommitMs,
               totalMs: opMs,
               shardCount:
@@ -2671,6 +2687,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 workerRootMs,
                 workerRustEncodeMs: 0,
                 workerRustRsMs: 0,
+                workerRustCommitDecodeMs: 0,
+                workerRustCommitTransformMs: 0,
+                workerRustCommitMsmMs: 0,
+                workerRustCommitCompressMs: 0,
                 workerRustCommitMs: 0,
                 totalMs: opMs,
                 batchBlobs,
@@ -2804,6 +2824,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               workerRootMs,
               workerRustEncodeMs: 0,
               workerRustRsMs: 0,
+              workerRustCommitDecodeMs: 0,
+              workerRustCommitTransformMs: 0,
+              workerRustCommitMsmMs: 0,
+              workerRustCommitCompressMs: 0,
               workerRustCommitMs: 0,
               totalMs: opMs,
               batchBlobs,
@@ -2914,6 +2938,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           workerRootMs,
           workerRustEncodeMs: 0,
           workerRustRsMs: 0,
+          workerRustCommitDecodeMs: 0,
+          workerRustCommitTransformMs: 0,
+          workerRustCommitMsmMs: 0,
+          workerRustCommitCompressMs: 0,
           workerRustCommitMs: 0,
           totalMs: opMs,
           batchBlobs: mdu0BatchBlobs,
@@ -3020,6 +3048,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             workerRootMs: sumBy(allSamples, (sample) => sample.workerRootMs),
             workerRustEncodeMs: sumBy(allSamples, (sample) => sample.workerRustEncodeMs),
             workerRustRsMs: sumBy(allSamples, (sample) => sample.workerRustRsMs),
+            workerRustCommitDecodeMs: sumBy(allSamples, (sample) => sample.workerRustCommitDecodeMs),
+            workerRustCommitTransformMs: sumBy(allSamples, (sample) => sample.workerRustCommitTransformMs),
+            workerRustCommitMsmMs: sumBy(allSamples, (sample) => sample.workerRustCommitMsmMs),
+            workerRustCommitCompressMs: sumBy(allSamples, (sample) => sample.workerRustCommitCompressMs),
             workerRustCommitMs: sumBy(allSamples, (sample) => sample.workerRustCommitMs),
             manifestMs,
             unaccountedMs: 0,

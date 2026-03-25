@@ -21,6 +21,15 @@ pub type KzgCommitment = [u8; 48];
 pub type Bytes32 = [u8; 32];
 pub type Bytes48 = [u8; 48];
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BlobToCommitmentPerf {
+    pub decode_ms: f64,
+    pub transform_ms: f64,
+    pub msm_ms: f64,
+    pub compress_ms: f64,
+    pub total_ms: f64,
+}
+
 #[derive(Error, Debug)]
 pub enum KzgError {
     #[error("IO error: {0}")]
@@ -155,19 +164,34 @@ impl KzgContext {
     }
 
     pub fn blob_to_commitment(&self, blob_bytes: &[u8]) -> Result<KzgCommitment, KzgError> {
+        self.blob_to_commitment_profiled(blob_bytes)
+            .map(|(commitment, _)| commitment)
+    }
+
+    pub fn blob_to_commitment_profiled(
+        &self,
+        blob_bytes: &[u8],
+    ) -> Result<(KzgCommitment, BlobToCommitmentPerf), KzgError> {
         if blob_bytes.len() != BLOB_SIZE {
             return Err(KzgError::InvalidDataLength);
         }
 
         if blob_bytes.iter().all(|&b| b == 0) {
-            return Ok(zero_blob_commitment());
+            return Ok((zero_blob_commitment(), BlobToCommitmentPerf::default()));
         }
+
+        let total_start = now_ms();
+        let mut perf = BlobToCommitmentPerf::default();
 
         if self.g1_points_are_monomial {
             // Blob is in evaluation form; interpolate to coefficients, then commit using monomial SRS.
             let omega = scalar_for_cell_index(1)?;
+            let decode_start = now_ms();
             let mut coeffs = bytes_to_scalars(blob_bytes)?;
+            perf.decode_ms = now_ms() - decode_start;
+            let transform_start = now_ms();
             ifft_in_place(&mut coeffs, omega)?;
+            perf.transform_ms = now_ms() - transform_start;
 
             let mut points = Vec::new();
             let mut scalars = Vec::new();
@@ -185,23 +209,48 @@ impl KzgContext {
             let acc = if points.is_empty() {
                 G1Projective::identity()
             } else {
-                msm_pippenger_g1(&points, &scalars)
+                let msm_start = now_ms();
+                let acc = msm_pippenger_g1(&points, &scalars);
+                perf.msm_ms = now_ms() - msm_start;
+                acc
             };
 
-            Ok(acc.to_affine().to_compressed())
+            let compress_start = now_ms();
+            let commitment = acc.to_affine().to_compressed();
+            perf.compress_ms = now_ms() - compress_start;
+            perf.total_ms = now_ms() - total_start;
+
+            Ok((commitment, perf))
         } else {
             // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
             // over the evaluations.
             #[cfg(not(target_arch = "wasm32"))]
             {
-                return msm_blst_g1_commitment_from_blob(&self.g1_points_blst, blob_bytes);
+                let decode_start = now_ms();
+                let commitment = msm_blst_g1_commitment_from_blob_profiled(
+                    &self.g1_points_blst,
+                    blob_bytes,
+                    &mut perf,
+                )?;
+                if perf.decode_ms == 0.0 {
+                    perf.decode_ms = now_ms() - decode_start;
+                }
+                perf.total_ms = now_ms() - total_start;
+                return Ok((commitment, perf));
             }
             #[cfg(target_arch = "wasm32")]
             {
+                let decode_start = now_ms();
                 let evals = bytes_to_scalars(blob_bytes)?;
-                return Ok(msm_pippenger_g1(&self.g1_points, &evals)
-                    .to_affine()
-                    .to_compressed());
+                perf.decode_ms = now_ms() - decode_start;
+                let msm_start = now_ms();
+                let acc = msm_pippenger_g1(&self.g1_points, &evals);
+                perf.msm_ms = now_ms() - msm_start;
+                let compress_start = now_ms();
+                let commitment = acc.to_affine().to_compressed();
+                perf.compress_ms = now_ms() - compress_start;
+                perf.total_ms = now_ms() - total_start;
+                return Ok((commitment, perf));
             }
         }
     }
@@ -488,6 +537,20 @@ impl KzgContext {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn now_ms() -> f64 {
+    js_sys::Date::now()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn now_ms() -> f64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0)
+}
+
 fn zero_blob_commitment() -> KzgCommitment {
     static ZERO: OnceLock<KzgCommitment> = OnceLock::new();
     *ZERO.get_or_init(|| G1Affine::identity().to_compressed())
@@ -662,9 +725,23 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(not(test), allow(dead_code))]
 fn msm_blst_g1_commitment_from_blob(
     points: &[blst_p1_affine],
     blob_bytes: &[u8],
+) -> Result<KzgCommitment, KzgError> {
+    msm_blst_g1_commitment_from_blob_profiled(
+        points,
+        blob_bytes,
+        &mut BlobToCommitmentPerf::default(),
+    )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn msm_blst_g1_commitment_from_blob_profiled(
+    points: &[blst_p1_affine],
+    blob_bytes: &[u8],
+    perf: &mut BlobToCommitmentPerf,
 ) -> Result<KzgCommitment, KzgError> {
     debug_assert_eq!(blob_bytes.len(), BLOB_SIZE);
 
@@ -676,6 +753,7 @@ fn msm_blst_g1_commitment_from_blob(
 
     let points = &points[..n];
 
+    let decode_start = now_ms();
     let mut scalar_bytes = vec![0u8; n * 32];
     for (i, chunk) in blob_bytes.chunks_exact(32).take(n).enumerate() {
         let dst = &mut scalar_bytes[i * 32..(i + 1) * 32];
@@ -683,13 +761,18 @@ fn msm_blst_g1_commitment_from_blob(
             dst[j] = chunk[31 - j];
         }
     }
+    perf.decode_ms += now_ms() - decode_start;
 
     // Use 256 bits so arbitrary (non-canonical) bytes still map correctly (mod r).
+    let msm_start = now_ms();
     let res: blst_p1 = points.mult(&scalar_bytes, 256);
+    perf.msm_ms += now_ms() - msm_start;
     let mut out = [0u8; 48];
+    let compress_start = now_ms();
     unsafe {
         blst_p1_compress(out.as_mut_ptr(), &res);
     }
+    perf.compress_ms += now_ms() - compress_start;
     Ok(out)
 }
 
@@ -926,6 +1009,22 @@ mod tests {
             .verify_proof(&commitment, &z_bytes, &y_out, &proof)
             .unwrap();
         assert!(ok, "KZG proof must verify for constant-one blob");
+    }
+
+    #[test]
+    fn blob_to_commitment_profiled_matches_plain_commitment() {
+        let path = get_trusted_setup_path();
+        let ctx = KzgContext::load_from_file(&path).unwrap();
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(4242);
+        let mut blob = vec![0u8; BLOB_SIZE];
+        rng.fill_bytes(&mut blob);
+
+        let plain = ctx.blob_to_commitment(&blob).unwrap();
+        let (profiled, perf) = ctx.blob_to_commitment_profiled(&blob).unwrap();
+
+        assert_eq!(profiled, plain);
+        assert!(perf.total_ms >= 0.0);
     }
 
     #[test]

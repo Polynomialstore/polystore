@@ -17,6 +17,10 @@ const RAW_MDU_CAPACITY = Math.floor(MDU_SIZE_BYTES / SCALAR_BYTES) * SCALAR_PAYL
 type ExpandPerf = {
   encode_ms?: number
   rs_ms?: number
+  commit_decode_ms?: number
+  commit_transform_ms?: number
+  commit_msm_ms?: number
+  commit_compress_ms?: number
   commit_ms?: number
   total_ms?: number
   rows?: number
@@ -89,6 +93,10 @@ const summary = {
   phases: {
     rust_encode_ms: sumBy((record) => Number(record.encode_ms ?? 0)),
     rust_rs_ms: sumBy((record) => Number(record.rs_ms ?? 0)),
+    rust_commit_decode_ms: sumBy((record) => Number(record.commit_decode_ms ?? 0)),
+    rust_commit_transform_ms: sumBy((record) => Number(record.commit_transform_ms ?? 0)),
+    rust_commit_msm_ms: sumBy((record) => Number(record.commit_msm_ms ?? 0)),
+    rust_commit_compress_ms: sumBy((record) => Number(record.commit_compress_ms ?? 0)),
     rust_commit_ms: sumBy((record) => Number(record.commit_ms ?? 0)),
     rust_total_ms: sumBy((record) => Number(record.total_ms ?? 0)),
     outer_wall_ms: sumBy((record) => Number(record.wall_ms ?? 0)),

@@ -181,6 +181,10 @@ export interface ExpandedStripe {
       shardLen?: number;
       rustEncodeMs?: number;
       rustRsMs?: number;
+      rustCommitDecodeMs?: number;
+      rustCommitTransformMs?: number;
+      rustCommitMsmMs?: number;
+      rustCommitCompressMs?: number;
       rustCommitMs?: number;
       rustTotalMs?: number;
       rows?: number;
