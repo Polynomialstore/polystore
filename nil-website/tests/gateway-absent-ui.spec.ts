@@ -1,7 +1,12 @@
 import { test, expect } from '@playwright/test'
+import crypto from 'node:crypto'
+import fs from 'node:fs/promises'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
+const uploadSizeBytes = Number(process.env.GATEWAY_ABSENT_FILE_SIZE_BYTES || 18)
+const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
+const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
 
 async function completeUploadAndCommit(page: Parameters<typeof test>[0]['page'], timeout = 300_000): Promise<void> {
   const uploadBtn = page.getByTestId('mdu-upload')
@@ -57,15 +62,29 @@ async function completeUploadAndCommit(page: Parameters<typeof test>[0]['page'],
 test.describe('gateway absent', () => {
   test.skip(!hasLocalStack, 'requires local stack (gateway disabled)')
 
-  test('gateway absent: dashboard upload falls back to direct SP', async ({ page }) => {
-    test.setTimeout(300_000)
+  test('gateway absent: dashboard upload falls back to direct SP', async ({ page }, testInfo) => {
+    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 900_000 : 300_000)
     const fileName = 'gateway-absent.txt'
-    const fileBytes = Buffer.from('gateway-absent-upload')
+    const fileBytes = uploadSizeBytes > 1024 ? crypto.randomBytes(uploadSizeBytes) : Buffer.from('gateway-absent-upload')
+    const perf = { profile: null as unknown }
 
     page.on('pageerror', (err) => {
       console.log(`[pageerror] ${err.message}`)
     })
     page.on('console', (msg) => {
+      if (capturePreparePerf && msg.text().includes('[perf] prepare profile')) {
+        void (async () => {
+          const values: unknown[] = []
+          for (const arg of msg.args()) {
+            try {
+              values.push(await arg.jsonValue())
+            } catch {
+              values.push(String(arg))
+            }
+          }
+          perf.profile = values[1] ?? null
+        })()
+      }
       if (msg.type() === 'error') {
         console.log(`[console:${msg.type()}] ${msg.text()}`)
       }
@@ -145,11 +164,40 @@ test.describe('gateway absent', () => {
     if (await compressCheckbox.isChecked().catch(() => false)) {
       await compressToggle.click({ force: true })
     }
-    await mode2FileInput.setInputFiles({
-      name: fileName,
-      mimeType: 'text/plain',
-      buffer: fileBytes,
-    })
+    if (uploadSizeBytes > 50 * 1024 * 1024) {
+      const uploadPath = testInfo.outputPath(fileName)
+      await fs.writeFile(uploadPath, fileBytes)
+      await mode2FileInput.setInputFiles(uploadPath)
+    } else {
+      await mode2FileInput.setInputFiles({
+        name: fileName,
+        mimeType: 'text/plain',
+        buffer: fileBytes,
+      })
+    }
+
+    if (stopAfterPreparePerf) {
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              return (window as Window & { __nilPreparePerf?: unknown }).__nilPreparePerf ?? null
+            }),
+          {
+            timeout: uploadSizeBytes > 50 * 1024 * 1024 ? 900_000 : 180_000,
+          },
+        )
+        .not.toBeNull()
+
+      const prepareProfile = await page.evaluate(() => {
+        return (window as Window & { __nilPreparePerf?: unknown }).__nilPreparePerf ?? null
+      })
+      console.log('[gateway absent prepare profile]', prepareProfile)
+      if (capturePreparePerf) {
+        expect(prepareProfile).toBeTruthy()
+      }
+      return
+    }
 
     await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'running', { timeout: 60_000 })
     await expect(page.getByRole('button', { name: /Retry Upload/i })).toHaveCount(0)

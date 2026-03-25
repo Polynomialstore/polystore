@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { test, expect } from '@playwright/test'
 import crypto from 'node:crypto'
+import fs from 'node:fs/promises'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const uploadSizeBytes = Number(process.env.SPARSE_FILE_SIZE_BYTES || 192 * 1024)
 const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
+const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
 
 function ethToNil(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
@@ -14,8 +16,8 @@ function ethToNil(ethAddress: string): string {
   return bech32.encode('nil', words)
 }
 
-test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest, and shard bodies', async ({ page }) => {
-  test.setTimeout(300_000)
+test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest, and shard bodies', async ({ page }, testInfo) => {
+  test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 900_000 : 300_000)
 
   const randomPk = generatePrivateKey()
   const account = privateKeyToAccount(randomPk)
@@ -30,7 +32,14 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   let gatewayProbeAttempts = 0
   let activeUploads = 0
   let peakActiveUploads = 0
-  const perf = { user: [] as unknown[], witness: [] as unknown[], meta: null as unknown, manifest: null as unknown, totals: null as unknown }
+  const perf = {
+    user: [] as unknown[],
+    witness: [] as unknown[],
+    meta: null as unknown,
+    manifest: null as unknown,
+    totals: null as unknown,
+    profile: null as unknown,
+  }
 
   page.on('console', async (msg) => {
     const text = msg.text()
@@ -49,6 +58,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
     else if (text.includes('[perf] meta mdu0')) perf.meta = payload
     else if (text.includes('[perf] manifest aggregation')) perf.manifest = payload
     else if (text.includes('[perf] sharding totals')) perf.totals = payload
+    else if (text.includes('[perf] prepare profile')) perf.profile = payload
   })
 
   async function recordConcurrentUpload<T>(fn: () => Promise<T>): Promise<T> {
@@ -252,16 +262,46 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const dealRow = page.getByTestId('deal-row-1')
   await expect(dealRow).toBeVisible({ timeout: 60_000 })
   await dealRow.click()
-  await expect(page.getByTestId('mdu-file-input')).toBeAttached({ timeout: 30_000 })
-
-  await page.getByTestId('mdu-file-input').setInputFiles({
-    name: 'direct-sparse.txt',
-    mimeType: 'application/octet-stream',
-    buffer: crypto.randomBytes(uploadSizeBytes),
+  await expect(page.getByTestId('mdu-file-input')).toBeAttached({
+    timeout: uploadSizeBytes > 50 * 1024 * 1024 ? 120_000 : 30_000,
   })
 
+  if (uploadSizeBytes > 50 * 1024 * 1024) {
+    const uploadPath = testInfo.outputPath('direct-sparse.bin')
+    await fs.writeFile(uploadPath, crypto.randomBytes(uploadSizeBytes))
+    await page.getByTestId('mdu-file-input').setInputFiles(uploadPath)
+  } else {
+    await page.getByTestId('mdu-file-input').setInputFiles({
+      name: 'direct-sparse.txt',
+      mimeType: 'application/octet-stream',
+      buffer: crypto.randomBytes(uploadSizeBytes),
+    })
+  }
+
+  if (stopAfterPreparePerf) {
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            return (window as Window & { __nilPreparePerf?: unknown }).__nilPreparePerf ?? null
+          }),
+        {
+          timeout: uploadSizeBytes > 50 * 1024 * 1024 ? 900_000 : 120_000,
+        },
+      )
+      .not.toBeNull()
+
+    const prepareProfile = await page.evaluate(() => {
+      return (window as Window & { __nilPreparePerf?: unknown }).__nilPreparePerf ?? null
+    })
+    console.log('[direct sparse prepare profile]', prepareProfile)
+    return
+  }
+
   await expect(page.getByTestId('mdu-upload-card')).not.toHaveAttribute('data-panel-state', 'idle', { timeout: 60_000 })
-  await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, { timeout: 30_000 })
+  await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, {
+    timeout: uploadSizeBytes > 50 * 1024 * 1024 ? 900_000 : 30_000,
+  })
 
   expect(mduUploads.length).toBeGreaterThan(0)
   expect(manifestUploads.length).toBeGreaterThan(0)
@@ -290,4 +330,9 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   expect(
     Math.max(...sparseMduUploads.map((upload) => upload.bodyLen / Math.max(1, upload.fullSize || 1))),
   ).toBeLessThan(0.35)
+  if (capturePreparePerf) {
+    expect(perf.profile).toBeTruthy()
+    expect((perf.profile as { phases?: { workerCommitMs?: number; workerExpandMs?: number } }).phases?.workerCommitMs ?? 0).toBeGreaterThanOrEqual(0)
+    expect((perf.profile as { phases?: { workerExpandMs?: number } }).phases?.workerExpandMs ?? 0).toBeGreaterThanOrEqual(0)
+  }
 })

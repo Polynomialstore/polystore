@@ -121,6 +121,47 @@ interface ShardProgressState {
   lastOpMs: number | null;
 }
 
+type PreparePerfSample = {
+  index: number
+  kind: 'user' | 'witness' | 'meta'
+  rawBytes: number
+  encodeMs: number
+  copyMs: number
+  wasmMs: number
+  workerExpandMs: number
+  workerCommitMs: number
+  workerRootMs: number
+  totalMs: number
+  batchBlobs?: number
+  shardCount?: number
+  concurrency?: number
+  expansionPath?: 'payload' | 'encoded_mdu' | 'progressive'
+}
+
+type PreparePerfProfile = {
+  totalMs: number
+  fileBytes: number
+  logicalBytes: number
+  totalMdus: number
+  totalUserMdus: number
+  totalWitnessMdus: number
+  manifestMs: number
+  phases: {
+    jsEncodeMs: number
+    jsCopyMs: number
+    workerExpandMs: number
+    workerCommitMs: number
+    workerRootMs: number
+    manifestMs: number
+    unaccountedMs: number
+  }
+  samples: {
+    user: PreparePerfSample[]
+    witness: PreparePerfSample[]
+    meta: PreparePerfSample[]
+  }
+}
+
 function createInitialShardProgress(fileBytesTotal = 0): ShardProgressState {
   return {
     phase: 'idle',
@@ -2354,6 +2395,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const userMdus: PreparedBrowserMdu[] = [];
         const witnessDataBlobs: Uint8Array[] = [];
         const mode2UserShards: PreparedBrowserShardSet[] = [];
+        const perfSamples: PreparePerfProfile['samples'] = {
+          user: [],
+          witness: [],
+          meta: [],
+        }
 
         if (useMode2) {
           const hardwareConcurrency =
@@ -2409,6 +2455,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ? await workerClient.expandMduRs(chunkCopy, rsK, rsM)
               : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM)
             const wasmMs = performance.now() - wasmStart
+            const workerExpandMs = Number(result.perf?.expandMs ?? 0)
+            const workerRootMs = Number(result.perf?.rootMs ?? 0)
 
             if (!encodedMdu) {
               const encodeStart = performance.now()
@@ -2437,15 +2485,27 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             mode2UserShards[i] = { index: i, shards: shardsList }
 
             const opMs = performance.now() - opStart
-            console.log('[perf] user mdu (mode2)', {
-              i,
+            const perfSample: PreparePerfSample = {
+              index: i,
+              kind: 'user',
               rawBytes: isExisting ? userPayloads[i] ?? 0 : rawChunk.byteLength,
               expansionPath: isExisting ? 'encoded_mdu' : 'payload',
               concurrency: userConcurrency,
               encodeMs,
               copyMs,
               wasmMs,
+              workerExpandMs,
+              workerCommitMs: 0,
+              workerRootMs,
               totalMs: opMs,
+              shardCount:
+                result.shards_flat && Number(result.shard_len ?? 0) > 0
+                  ? Math.floor(toU8(result.shards_flat).byteLength / Math.max(1, Number(result.shard_len)))
+                  : (result.shards ?? []).length,
+            }
+            perfSamples.user.push(perfSample)
+            console.log('[perf] user mdu (mode2)', {
+              ...perfSample,
             })
             prevCommitMsPerMdu = opMs
             mdusCommitted += 1
@@ -2560,6 +2620,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 },
               });
               const wasmMs = performance.now() - wasmStart;
+              const workerCommitMs = Number(result.perf?.commitMs ?? 0);
+              const workerRootMs = Number(result.perf?.rootMs ?? 0);
 
               const rootBytes = toU8(result.mdu_root);
               userRoots.push(rootBytes);
@@ -2573,14 +2635,23 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               witnessDataBlobs.push(witnessFlat);
 
               const opMs = performance.now() - opStart;
-              console.log('[perf] user mdu', {
-                i,
+              const perfSample: PreparePerfSample = {
+                index: i,
+                kind: 'user',
                 rawBytes: rawChunk.byteLength,
-                batchBlobs,
+                expansionPath: 'progressive',
                 encodeMs,
                 copyMs,
                 wasmMs,
+                workerExpandMs: 0,
+                workerCommitMs,
+                workerRootMs,
                 totalMs: opMs,
+                batchBlobs,
+              };
+              perfSamples.user.push(perfSample);
+              console.log('[perf] user mdu', {
+                ...perfSample,
               });
               prevCommitMsPerMdu = opMs;
               mdusCommitted += 1;
@@ -2680,6 +2751,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               },
             });
             const wasmMs = performance.now() - wasmStart;
+            const workerCommitMs = Number(result.perf?.commitMs ?? 0);
+            const workerRootMs = Number(result.perf?.rootMs ?? 0);
 
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
@@ -2688,14 +2761,23 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             await workerClient.setMdu0Root(i, rootBytes);
 
             const opMs = performance.now() - opStart;
-            console.log('[perf] witness mdu', {
-              i,
+            const perfSample: PreparePerfSample = {
+              index: i,
+              kind: 'witness',
               rawBytes: rawChunk.byteLength,
-              batchBlobs,
+              expansionPath: 'progressive',
               encodeMs,
               copyMs,
               wasmMs,
+              workerExpandMs: 0,
+              workerCommitMs,
+              workerRootMs,
               totalMs: opMs,
+              batchBlobs,
+            };
+            perfSamples.witness.push(perfSample);
+            console.log('[perf] witness mdu', {
+              ...perfSample,
             });
             prevCommitMsPerMdu = opMs;
             mdusCommitted += 1;
@@ -2777,15 +2859,29 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           },
         });
         const wasmMs = performance.now() - wasmStart;
+        const workerCommitMs = Number(mdu0Result.perf?.commitMs ?? 0);
+        const workerRootMs = Number(mdu0Result.perf?.rootMs ?? 0);
         const mdu0Root = toU8(mdu0Result.mdu_root);
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
         const opMs = performance.now() - opStartMdu0;
+        const metaPerfSample: PreparePerfSample = {
+          index: 0,
+          kind: 'meta',
+          rawBytes: mdu0Bytes.byteLength,
+          expansionPath: 'progressive',
+          encodeMs: 0,
+          copyMs: mdu0CopyMs,
+          wasmMs,
+          workerExpandMs: 0,
+          workerCommitMs,
+          workerRootMs,
+          totalMs: opMs,
+          batchBlobs: mdu0BatchBlobs,
+        }
+        perfSamples.meta.push(metaPerfSample)
         console.log('[perf] meta mdu0', {
           fetchMs: mdu0FetchMs,
-          copyMs: mdu0CopyMs,
-          batchBlobs: mdu0BatchBlobs,
-          wasmMs,
-          totalMs: opMs,
+          ...metaPerfSample,
         });
         prevCommitMsPerMdu = opMs;
         mdusCommitted += 1;
@@ -2863,17 +2959,53 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             ? `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User); ${mode2UserShards.length} striped user MDUs uploaded for this generation`
             : `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`,
         );
+        const elapsedMs = performance.now() - startTs;
+        const sumBy = (samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number) =>
+          samples.reduce((total, sample) => total + pick(sample), 0)
+        const allSamples = [...perfSamples.user, ...perfSamples.witness, ...perfSamples.meta]
+        const prepareProfile: PreparePerfProfile = {
+          totalMs: elapsedMs,
+          fileBytes: bytes.length,
+          logicalBytes: logicalSizeBytes,
+          totalMdus: finalMdus.length,
+          totalUserMdus: totalUserChunks,
+          totalWitnessMdus: witnessMduCount,
+          manifestMs,
+          phases: {
+            jsEncodeMs: sumBy(allSamples, (sample) => sample.encodeMs),
+            jsCopyMs: sumBy(allSamples, (sample) => sample.copyMs),
+            workerExpandMs: sumBy(allSamples, (sample) => sample.workerExpandMs),
+            workerCommitMs: sumBy(allSamples, (sample) => sample.workerCommitMs),
+            workerRootMs: sumBy(allSamples, (sample) => sample.workerRootMs),
+            manifestMs,
+            unaccountedMs: 0,
+          },
+          samples: perfSamples,
+        }
+        prepareProfile.phases.unaccountedMs = Math.max(
+          0,
+          prepareProfile.totalMs -
+            prepareProfile.phases.jsEncodeMs -
+            prepareProfile.phases.jsCopyMs -
+            prepareProfile.phases.workerExpandMs -
+            prepareProfile.phases.workerCommitMs -
+            prepareProfile.phases.workerRootMs -
+            prepareProfile.phases.manifestMs,
+        )
 
+        if (typeof window !== 'undefined') {
+          (window as typeof window & { __nilPreparePerf?: PreparePerfProfile }).__nilPreparePerf = prepareProfile
+        }
         console.log('[perf] sharding totals', {
-          totalMs: performance.now() - startTs,
+          totalMs: elapsedMs,
           fileBytes: bytes.length,
           totalMdus: finalMdus.length,
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
           manifestMs,
         });
+        console.log('[perf] prepare profile', prepareProfile);
 
-        const elapsedMs = performance.now() - startTs;
         const mib = logicalSizeBytes / (1024 * 1024);
         const seconds = elapsedMs / 1000;
         const avgMibPerSec = seconds > 0 ? mib / seconds : 0;

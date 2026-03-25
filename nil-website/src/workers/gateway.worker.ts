@@ -273,6 +273,8 @@ self.onmessage = async (event) => {
                 const witnessFlat = new Uint8Array(BLOBS_PER_MDU * 48);
                 const concurrency = Math.max(1, commitWorkers.length || 1);
                 let completedBlobs = 0;
+                let commitMs = 0;
+                const opStart = performance.now();
 
                 const inFlight = new Set<Promise<void>>();
                 const enqueue = (p: Promise<void>) => {
@@ -292,7 +294,9 @@ self.onmessage = async (event) => {
                     // Copy to a dedicated buffer so we can transfer it to a pool worker.
                     const blobBatch = data.slice(start, end);
                     const task = (async () => {
+                        const commitStart = performance.now();
                         const commitmentsBytes = await commitBlobsWithPool(blobBatch);
+                        commitMs += performance.now() - commitStart;
                         witnessFlat.set(commitmentsBytes, blobIndex * 48);
                         completedBlobs += n;
                         self.postMessage({
@@ -309,9 +313,22 @@ self.onmessage = async (event) => {
                     await Promise.all(Array.from(inFlight));
                 }
 
+                const rootStart = performance.now();
                 const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
+                const rootMs = performance.now() - rootStart;
                 const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
-                result = { witness_flat: witnessFlat, mdu_root: rootBytes };
+                result = {
+                    witness_flat: witnessFlat,
+                    mdu_root: rootBytes,
+                    perf: {
+                        commitMs,
+                        rootMs,
+                        totalMs: performance.now() - opStart,
+                        batchCount: Math.ceil(BLOBS_PER_MDU / batch),
+                        batchSize: batch,
+                        blobCount: BLOBS_PER_MDU,
+                    },
+                };
                 break;
             }
             case 'expandMduRs': {

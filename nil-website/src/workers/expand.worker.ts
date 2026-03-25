@@ -46,7 +46,10 @@ self.onmessage = async (event) => {
         if (!nilWasmInstance) throw new Error('NilWasm not initialized')
         const { data, k, m } = payload as { data: Uint8Array; k: number; m: number }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
+        const opStart = performance.now()
+        const expandStart = performance.now()
         const expanded = nilWasmInstance.expand_mdu_rs(data, Number(k), Number(m)) as unknown
+        const expandMs = performance.now() - expandStart
         const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded
         const witnessRaw = (parsed as { witness?: unknown[] }).witness ?? []
         const shardsRaw = (parsed as { shards?: unknown[] }).shards ?? []
@@ -65,12 +68,28 @@ self.onmessage = async (event) => {
           offset += w.length
         }
 
+        const rootStart = performance.now()
         const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown
+        const rootMs = performance.now() - rootStart
         const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike)
         const transferables: Transferable[] = [witnessFlat.buffer, rootBytes.buffer]
         for (const shard of shardsList) transferables.push(shard.buffer)
         ;(self as unknown as Worker).postMessage(
-          { id, type: 'result', payload: { witness_flat: witnessFlat, mdu_root: rootBytes, shards: shardsList } },
+          {
+            id,
+            type: 'result',
+            payload: {
+              witness_flat: witnessFlat,
+              mdu_root: rootBytes,
+              shards: shardsList,
+              perf: {
+                expandMs,
+                rootMs,
+                totalMs: performance.now() - opStart,
+                shardCount: shardsList.length,
+              },
+            },
+          },
           transferables,
         )
         return
@@ -80,7 +99,10 @@ self.onmessage = async (event) => {
         const { data, k, m } = payload as { data: Uint8Array; k: number; m: number }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
 
+        const opStart = performance.now()
+        const expandStart = performance.now()
         const expanded = nilWasmInstance.expand_payload_rs_flat(data, Number(k), Number(m)) as unknown
+        const expandMs = performance.now() - expandStart
         const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded
         const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat
         const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat
@@ -95,10 +117,28 @@ self.onmessage = async (event) => {
           throw new Error('expandPayloadRs returned misaligned shard bytes')
         }
 
+        const rootStart = performance.now()
         const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown
+        const rootMs = performance.now() - rootStart
         const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike)
         ;(self as unknown as Worker).postMessage(
-          { id, type: 'result', payload: { witness_flat: witnessFlat, mdu_root: rootBytes, shards_flat: shardsFlat, shard_len: shardLen } },
+          {
+            id,
+            type: 'result',
+            payload: {
+              witness_flat: witnessFlat,
+              mdu_root: rootBytes,
+              shards_flat: shardsFlat,
+              shard_len: shardLen,
+              perf: {
+                expandMs,
+                rootMs,
+                totalMs: performance.now() - opStart,
+                shardCount: shardsFlat.byteLength / shardLen,
+                shardLen,
+              },
+            },
+          },
           [witnessFlat.buffer, rootBytes.buffer, shardsFlat.buffer],
         )
         return

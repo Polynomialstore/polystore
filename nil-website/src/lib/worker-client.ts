@@ -157,6 +157,14 @@ function sendExpansionMessageToWorker(
 export interface ExpandedMdu {
     witness_flat: Uint8Array | number[]; // 96 * 48 bytes
     mdu_root: Uint8Array | number[]; // 32 bytes
+    perf?: {
+      commitMs?: number;
+      rootMs?: number;
+      totalMs?: number;
+      batchCount?: number;
+      batchSize?: number;
+      blobCount?: number;
+    };
 }
 
 export interface ExpandedStripe {
@@ -165,6 +173,13 @@ export interface ExpandedStripe {
     shards?: Array<Uint8Array | number[]>;
     shards_flat?: Uint8Array | number[];
     shard_len?: number;
+    perf?: {
+      expandMs?: number;
+      rootMs?: number;
+      totalMs?: number;
+      shardCount?: number;
+      shardLen?: number;
+    };
 }
 
 // --- Public API for interacting with the Worker ---
