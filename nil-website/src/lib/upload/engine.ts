@@ -393,13 +393,16 @@ export function createUploadEngine(options: UploadEngineOptions) {
 
   return {
     async uploadDirect(input: DirectUploadInput): Promise<UploadEngineResult> {
-      let steps = emitProgress(buildDirectUploadSteps(input), input.onProgress)
-      const stepIndices = indexUploadSteps(steps)
+      const trackSteps = Boolean(input.onProgress)
+      let steps = trackSteps ? emitProgress(buildDirectUploadSteps(input), input.onProgress) : []
+      const stepIndices = trackSteps ? indexUploadSteps(steps) : new Map<string, number>()
       if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
         const message = 'manifest blob missing (re-shard to regenerate)'
         const targetLabel = input.target.label || input.target.baseUrl
-        const manifestIndex = stepIndices.get(stepKey('manifest', targetLabel))
-        steps = emitProgress(updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message }), input.onProgress)
+        if (trackSteps) {
+          const manifestIndex = stepIndices.get(stepKey('manifest', targetLabel))
+          steps = emitProgress(updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message }), input.onProgress)
+        }
         return { ok: false, steps, error: message }
       }
 
@@ -432,16 +435,19 @@ export function createUploadEngine(options: UploadEngineOptions) {
     },
 
     async uploadStriped(input: StripedUploadInput): Promise<UploadEngineResult> {
-      let steps = emitProgress(buildStripedUploadSteps(input), input.onProgress)
-      const stepIndices = indexUploadSteps(steps)
+      const trackSteps = Boolean(input.onProgress)
+      let steps = trackSteps ? emitProgress(buildStripedUploadSteps(input), input.onProgress) : []
+      const stepIndices = trackSteps ? indexUploadSteps(steps) : new Map<string, number>()
       if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
         const message = 'manifest blob missing (re-shard to regenerate)'
-        for (const target of input.metadataTargets) {
-          const targetLabel = target.label || target.baseUrl
-          const manifestIndex = stepIndices.get(stepKey('manifest', targetLabel))
-          steps = updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message })
+        if (trackSteps) {
+          for (const target of input.metadataTargets) {
+            const targetLabel = target.label || target.baseUrl
+            const manifestIndex = stepIndices.get(stepKey('manifest', targetLabel))
+            steps = updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message })
+          }
+          steps = emitProgress(steps, input.onProgress)
         }
-        steps = emitProgress(steps, input.onProgress)
         return { ok: false, steps, error: message }
       }
       const manifestBlob = input.manifestBlob
@@ -488,14 +494,16 @@ export function createUploadEngine(options: UploadEngineOptions) {
           const target = input.shardTargets?.[slot]
           if (!target) {
             const message = `missing upload target for slot ${slot}`
-            steps = emitProgress(
-              updateStep(
-                steps,
-                stepIndices.get(stepKey('shard', `slot-${slot}`, shardSet.index, slot)) ?? -1,
-                { status: 'error', error: message },
-              ),
-              input.onProgress,
-            )
+            if (trackSteps) {
+              steps = emitProgress(
+                updateStep(
+                  steps,
+                  stepIndices.get(stepKey('shard', `slot-${slot}`, shardSet.index, slot)) ?? -1,
+                  { status: 'error', error: message },
+                ),
+                input.onProgress,
+              )
+            }
             return { ok: false, steps, error: message }
           }
           const targetLabel = target.label || target.baseUrl

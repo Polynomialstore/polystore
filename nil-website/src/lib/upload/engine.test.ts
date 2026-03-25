@@ -110,6 +110,7 @@ test('upload engine: striped upload interleaves metadata and shard requests', as
   })
 
   assert.equal(result.ok, true)
+  assert.equal(result.steps.length, 0)
   assert.deepEqual(
     transport.calls.map((call) => `${call.target.label}:${call.artifact.kind}:${call.artifact.index ?? 'manifest'}:${call.artifact.slot ?? '-'}`),
     [
@@ -266,6 +267,7 @@ test('upload engine: striped upload overlaps metadata and shard requests with co
   })
 
   assert.equal(result.ok, true)
+  assert.equal(result.steps.length, 0)
   assert.equal(shardStartedBeforeMetadataComplete, true)
   assert.equal(peakTotal, 4)
 })
