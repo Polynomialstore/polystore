@@ -36,6 +36,21 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
+var uploadCopyBufferPool = sync.Pool{
+	New: func() any {
+		return make([]byte, 256<<10)
+	},
+}
+
+func copyUploadBody(dst io.Writer, src io.Reader) (int64, error) {
+	buf, _ := uploadCopyBufferPool.Get().([]byte)
+	if len(buf) == 0 {
+		buf = make([]byte, 256<<10)
+	}
+	defer uploadCopyBufferPool.Put(buf)
+	return io.CopyBuffer(dst, src, buf)
+}
+
 func parseUintFromJSON(raw any) (uint64, bool) {
 	switch v := raw.(type) {
 	case nil:
@@ -6384,7 +6399,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	copyStarted := time.Now()
-	n, err := io.Copy(tmp, r.Body)
+	n, err := copyUploadBody(tmp, r.Body)
 	profile.addDuration("body_copy_ms", time.Since(copyStarted))
 	if err != nil {
 		statusCode = http.StatusInternalServerError
@@ -6634,7 +6649,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	copyStarted := time.Now()
-	n, err := io.Copy(tmp, r.Body)
+	n, err := copyUploadBody(tmp, r.Body)
 	profile.addDuration("body_copy_ms", time.Since(copyStarted))
 	if err != nil {
 		statusCode = http.StatusInternalServerError
@@ -6913,7 +6928,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	copyStarted := time.Now()
-	n, err := io.Copy(tmp, r.Body)
+	n, err := copyUploadBody(tmp, r.Body)
 	profile.addDuration("body_copy_ms", time.Since(copyStarted))
 	if err != nil {
 		statusCode = http.StatusInternalServerError
