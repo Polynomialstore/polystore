@@ -266,6 +266,22 @@ self.onmessage = async (event) => {
         )
         return
       }
+      case 'computeManifest': {
+        if (!nilWasmInstance) throw new Error('NilWasm not initialized')
+        const { roots } = payload as { roots: Uint8Array }
+        if (!(roots instanceof Uint8Array)) throw new Error('roots must be Uint8Array')
+        const manifest = nilWasmInstance.compute_manifest(roots) as unknown as {
+          root: Uint8Array | ArrayBufferLike
+          blob: Uint8Array | ArrayBufferLike
+        }
+        const root = manifest.root instanceof Uint8Array ? manifest.root : new Uint8Array(manifest.root)
+        const blob = manifest.blob instanceof Uint8Array ? manifest.blob : new Uint8Array(manifest.blob)
+        ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: { root, blob } }, [
+          root.buffer,
+          blob.buffer,
+        ])
+        return
+      }
       default:
         throw new Error(`Unknown message type: ${type}`)
     }

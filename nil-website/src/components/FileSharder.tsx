@@ -3259,22 +3259,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         if (recordPath !== file.name) {
           addLog(`> NilFS path truncated for V1 record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
         }
-        const mdu0PrepareStart = performance.now()
-        const mdu0PrepareResult = await workerClient.prepareAndCommitMdu0(
-          witnessRootsFlat,
-          witnessMduCount,
-          userRootsFlat,
-          recordPath,
-          bytes.length,
-          fileStartOffset,
-          fileFlags,
-        )
-        const wasmMs = performance.now() - mdu0PrepareStart
-        const userRootRegistrationMs =
-          Number(mdu0PrepareResult.perf?.witnessRootSetMs ?? 0) + Number(mdu0PrepareResult.perf?.userRootSetMs ?? 0)
-        const mdu0AppendMs =
-          Number(mdu0PrepareResult.perf?.appendMs ?? 0) + Number(mdu0PrepareResult.perf?.bytesMs ?? 0)
-
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();
         const workTotalThisMdu0 = weightedWorkForMdu(1);
@@ -3290,6 +3274,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           workDone: workCommitted,
         }));
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'processing' } : s)));
+        const mdu0PrepareStart = performance.now()
+        const mdu0PrepareResult = await workerClient.prepareAndCommitMdu0(
+          witnessRootsFlat,
+          witnessMduCount,
+          userRootsFlat,
+          recordPath,
+          bytes.length,
+          fileStartOffset,
+          fileFlags,
+        )
+        const wasmMs = performance.now() - mdu0PrepareStart
+        const userRootRegistrationMs =
+          Number(mdu0PrepareResult.perf?.witnessRootSetMs ?? 0) + Number(mdu0PrepareResult.perf?.userRootSetMs ?? 0)
+        const mdu0AppendMs =
+          Number(mdu0PrepareResult.perf?.appendMs ?? 0) + Number(mdu0PrepareResult.perf?.bytesMs ?? 0)
         const mdu0Bytes = toU8(mdu0PrepareResult.mdu0_bytes);
         const workerTotalMs = Number(mdu0PrepareResult.perf?.totalMs ?? 0);
         const workerCommitMs = Number(mdu0PrepareResult.perf?.commitMs ?? 0);

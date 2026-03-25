@@ -153,7 +153,7 @@ function sendMessageToWorker(
 }
 
 function sendExpansionMessageToWorker(
-  type: 'expandMduRs' | 'expandPayloadRs' | 'commitMduProfiled',
+  type: 'expandMduRs' | 'expandPayloadRs' | 'commitMduProfiled' | 'computeManifest',
   payload: unknown,
   transferables?: Transferable[],
 ): Promise<unknown> {
@@ -375,7 +375,10 @@ export const workerClient = {
 
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)
   async computeManifest(roots: Uint8Array): Promise<{ root: Uint8Array; blob: Uint8Array }> {
-    return sendMessageToWorker('computeManifest', { roots }, [roots.buffer]) as Promise<{ root: Uint8Array; blob: Uint8Array }>;
+    return sendExpansionMessageToWorker('computeManifest', { roots }, [roots.buffer]) as Promise<{
+      root: Uint8Array;
+      blob: Uint8Array;
+    }>;
   },
 
   async computeMduRoot(witness: Uint8Array): Promise<Uint8Array> {
