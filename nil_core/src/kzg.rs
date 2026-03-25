@@ -56,6 +56,8 @@ impl rs_merkle::Hasher for Blake2s256Hasher {
 
 pub struct KzgContext {
     g1_points: Vec<G1Affine>,
+    #[cfg(target_arch = "wasm32")]
+    g1_points_projective: Vec<G1Projective>,
     #[cfg(not(target_arch = "wasm32"))]
     g1_points_blst: Vec<blst_p1_affine>,
     g2_points: Vec<G2Affine>,
@@ -153,8 +155,14 @@ impl KzgContext {
             acc.to_affine()
         };
 
+        #[cfg(target_arch = "wasm32")]
+        let g1_points_projective: Vec<G1Projective> =
+            g1_points.iter().map(|p| G1Projective::from(*p)).collect();
+
         Ok(Self {
             g1_points,
+            #[cfg(target_arch = "wasm32")]
+            g1_points_projective,
             #[cfg(not(target_arch = "wasm32"))]
             g1_points_blst,
             g2_points,
@@ -244,7 +252,7 @@ impl KzgContext {
                 let evals = bytes_to_scalars(blob_bytes)?;
                 perf.decode_ms = now_ms() - decode_start;
                 let msm_start = now_ms();
-                let acc = msm_pippenger_g1(&self.g1_points, &evals);
+                let acc = msm_pippenger_g1_projective(&self.g1_points_projective, &evals);
                 perf.msm_ms = now_ms() - msm_start;
                 let compress_start = now_ms();
                 let commitment = acc.to_affine().to_compressed();
@@ -776,7 +784,6 @@ fn msm_blst_g1_commitment_from_blob_profiled(
     Ok(out)
 }
 
-#[cfg(test)]
 fn msm_pippenger_g1_projective(points: &[G1Projective], scalars: &[Scalar]) -> G1Projective {
     debug_assert_eq!(points.len(), scalars.len());
 
