@@ -145,6 +145,8 @@ type PreparePerfSample = {
   workerRustCommitMsmMs: number
   workerRustCommitCompressMs: number
   workerRustCommitMs: number
+  workerRustCommitBackend?: string
+  workerRustCommitMsmSubphasesAvailable?: boolean
   totalMs: number
   batchBlobs?: number
   shardCount?: number
@@ -201,6 +203,8 @@ type PreparePerfProfile = {
   notes: {
     phasesAreParallelSums: true
     unaccountedMsIsWallClockRemainder: true
+    rustCommitBackend?: string
+    rustCommitMsmSubphasesAvailable?: boolean
   }
   samples: {
     user: PreparePerfSample[]
@@ -500,6 +504,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         heapUsedBytes: roundPerfMs(memory?.usedJSHeapSize),
         heapTotalBytes: roundPerfMs(memory?.totalJSHeapSize),
         heapLimitBytes: roundPerfMs(memory?.jsHeapSizeLimit),
+        visibilityState:
+          typeof document !== 'undefined' && typeof document.visibilityState === 'string'
+            ? document.visibilityState
+            : null,
         ...extra,
       }
       if (typeof window !== 'undefined') {
@@ -2801,6 +2809,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const workerRustCommitMsmMs = Number(result.perf?.rustCommitMsmMs ?? 0)
             const workerRustCommitCompressMs = Number(result.perf?.rustCommitCompressMs ?? 0)
             const workerRustCommitMs = Number(result.perf?.rustCommitMs ?? 0)
+            const workerRustCommitBackend =
+              typeof result.perf?.rustCommitBackend === 'string' ? result.perf.rustCommitBackend : undefined
+            const workerRustCommitMsmSubphasesAvailable =
+              typeof result.perf?.rustCommitMsmSubphasesAvailable === 'boolean'
+                ? result.perf.rustCommitMsmSubphasesAvailable
+                : undefined
 
             if (!encodedMdu) {
               const encodeStart = performance.now()
@@ -2854,6 +2868,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               workerRustCommitMsmMs,
               workerRustCommitCompressMs,
               workerRustCommitMs,
+              workerRustCommitBackend,
+              workerRustCommitMsmSubphasesAvailable,
               totalMs: opMs,
               shardCount:
                 result.shards_flat && Number(result.shard_len ?? 0) > 0
@@ -3365,6 +3381,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const sumBy = (samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number) =>
           samples.reduce((total, sample) => total + pick(sample), 0)
         const allSamples = [...perfSamples.user, ...perfSamples.witness, ...perfSamples.meta]
+        const rustCommitBackend =
+          perfSamples.user.find((sample) => typeof sample.workerRustCommitBackend === 'string')?.workerRustCommitBackend
+        const rustCommitMsmSubphasesAvailable = perfSamples.user.some(
+          (sample) => sample.workerRustCommitMsmSubphasesAvailable === true,
+        )
         const slowestUserSample =
           perfSamples.user.reduce<PreparePerfSample | null>(
             (best, sample) => (!best || sample.totalMs > best.totalMs ? sample : best),
@@ -3419,6 +3440,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           notes: {
             phasesAreParallelSums: true,
             unaccountedMsIsWallClockRemainder: true,
+            rustCommitBackend,
+            rustCommitMsmSubphasesAvailable,
           },
           samples: perfSamples,
         }
@@ -3511,6 +3534,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           rustCommitMsmDoubleMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmDoubleMs),
           rustCommitMsmMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmMs),
           rustCommitCompressMs: roundPerfMs(prepareProfile.phases.workerRustCommitCompressMs),
+          rustCommitBackend,
+          rustCommitMsmSubphasesAvailable,
           slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
           manifestMs: roundPerfMs(manifestMs),
           note: 'max* fields are closest to wall-clock critical path; sum* fields are parallel worker totals',

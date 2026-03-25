@@ -208,6 +208,8 @@ export interface ExpandedStripe {
       rustCommitCompressMs?: number;
       rustCommitMs?: number;
       rustTotalMs?: number;
+      rustCommitBackend?: string;
+      rustCommitMsmSubphasesAvailable?: boolean;
       rows?: number;
       shardsTotal?: number;
     };

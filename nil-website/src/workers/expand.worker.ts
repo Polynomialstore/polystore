@@ -186,6 +186,8 @@ self.onmessage = async (event) => {
                 rustCommitCompressMs: Number(commitPerf?.compress_ms ?? 0),
                 rustCommitMs: Number(commitPerf?.total_ms ?? commitMs),
                 rustTotalMs: Number(rustPerf?.total_ms ?? 0),
+                rustCommitBackend: 'blst',
+                rustCommitMsmSubphasesAvailable: false,
                 rows: Number(rustPerf?.rows ?? 0),
                 shardsTotal: Number(rustPerf?.shards_total ?? 0),
               },
