@@ -1,5 +1,5 @@
 export const DEFAULT_EXPANSION_HARDWARE_CONCURRENCY = 4
-const MAX_EXPANSION_WORKERS = 5
+const MAX_EXPANSION_WORKERS = 6
 
 export function pickExpansionWorkerCount(hardwareConcurrency?: number, totalJobs?: number): number {
   const hc = Number.isFinite(hardwareConcurrency)
@@ -9,6 +9,7 @@ export function pickExpansionWorkerCount(hardwareConcurrency?: number, totalJobs
 
   let desired = 1
   if (hc >= 10) desired = MAX_EXPANSION_WORKERS
+  else if (hc >= 8) desired = 5
   else if (hc >= 6) desired = 4
   else if (hc >= 4) desired = 3
   else if (hc >= 3) desired = 2
