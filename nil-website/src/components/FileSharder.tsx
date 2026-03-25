@@ -3150,36 +3150,28 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             const copyStart = performance.now();
             const chunkCopy = new Uint8Array(witnessMduBytes);
             const copyMs = performance.now() - copyStart;
-            const batchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
             const wasmStart = performance.now();
-            const result = await workerClient.shardFileProgressive(chunkCopy, {
-              batchBlobs,
-              onProgress: (progress) => {
-                const payload = progress as { kind?: string; done?: number; total?: number };
-                if (payload.kind !== 'blob') return;
-                const done = Number(payload.done ?? 0);
-                setShardProgress((prev) => {
-                  const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
-                  const doneNonTrivial = Math.min(done, nonTrivialBlobs);
-                  const doneTrivial = Math.max(0, done - nonTrivialBlobs);
-                  const workInMdu = doneNonTrivial + doneTrivial * PLANNER_TRIVIAL_BLOB_WEIGHT;
-                  const workDone = workCommitted + Math.min(workTotalThisMdu, workInMdu);
-                  return {
-                    ...prev,
-                    blobsInCurrentMdu: done,
-                    blobsDone,
-                    workDone,
-                    avgWorkMs:
-                      prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
-                  };
-                });
-              },
-            });
+            const result = await workerClient.commitMduProfiled(chunkCopy);
             const wasmMs = performance.now() - wasmStart;
             const workerTotalMs = Number(result.perf?.totalMs ?? 0);
             const workerCommitMs = Number(result.perf?.commitMs ?? 0);
             const workerRootMs = Number(result.perf?.rootMs ?? 0);
             const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
+            const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
+            const workerRustCommitTransformMs = Number(result.perf?.rustCommitTransformMs ?? 0)
+            const workerRustCommitMsmScalarPrepMs = Number(result.perf?.rustCommitMsmScalarPrepMs ?? 0)
+            const workerRustCommitMsmBucketFillMs = Number(result.perf?.rustCommitMsmBucketFillMs ?? 0)
+            const workerRustCommitMsmReduceMs = Number(result.perf?.rustCommitMsmReduceMs ?? 0)
+            const workerRustCommitMsmDoubleMs = Number(result.perf?.rustCommitMsmDoubleMs ?? 0)
+            const workerRustCommitMsmMs = Number(result.perf?.rustCommitMsmMs ?? 0)
+            const workerRustCommitCompressMs = Number(result.perf?.rustCommitCompressMs ?? 0)
+            const workerRustCommitMs = Number(result.perf?.rustCommitMs ?? workerCommitMs)
+            const workerRustCommitBackend =
+              typeof result.perf?.rustCommitBackend === 'string' ? result.perf.rustCommitBackend : undefined
+            const workerRustCommitMsmSubphasesAvailable =
+              typeof result.perf?.rustCommitMsmSubphasesAvailable === 'boolean'
+                ? result.perf.rustCommitMsmSubphasesAvailable
+                : undefined
 
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
@@ -3203,17 +3195,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               workerRootMs,
               workerRustEncodeMs: 0,
               workerRustRsMs: 0,
-              workerRustCommitDecodeMs: 0,
-              workerRustCommitTransformMs: 0,
-              workerRustCommitMsmScalarPrepMs: 0,
-              workerRustCommitMsmBucketFillMs: 0,
-              workerRustCommitMsmReduceMs: 0,
-              workerRustCommitMsmDoubleMs: 0,
-              workerRustCommitMsmMs: 0,
-              workerRustCommitCompressMs: 0,
-              workerRustCommitMs: 0,
+              workerRustCommitDecodeMs,
+              workerRustCommitTransformMs,
+              workerRustCommitMsmScalarPrepMs,
+              workerRustCommitMsmBucketFillMs,
+              workerRustCommitMsmReduceMs,
+              workerRustCommitMsmDoubleMs,
+              workerRustCommitMsmMs,
+              workerRustCommitCompressMs,
+              workerRustCommitMs,
+              workerRustCommitBackend,
+              workerRustCommitMsmSubphasesAvailable,
               totalMs: opMs,
-              batchBlobs,
             };
             perfSamples.witness.push(perfSample);
             console.log('[perf] witness mdu', {
@@ -3278,36 +3271,28 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         const mdu0CopyStart = performance.now();
         const mdu0Copy = new Uint8Array(mdu0Bytes);
         const mdu0CopyMs = performance.now() - mdu0CopyStart;
-        const mdu0BatchBlobs = pickBatchBlobs(prevCommitMsPerMdu);
         const wasmStart = performance.now();
-        const mdu0Result = await workerClient.shardFileProgressive(mdu0Copy, {
-          batchBlobs: mdu0BatchBlobs,
-          onProgress: (progress) => {
-            const payload = progress as { kind?: string; done?: number; total?: number };
-            if (payload.kind !== 'blob') return;
-            const done = Number(payload.done ?? 0);
-            setShardProgress((prev) => {
-              const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
-              const doneNonTrivial = Math.min(done, 1);
-              const doneTrivial = Math.max(0, done - 1);
-              const workInMdu = doneNonTrivial + doneTrivial * PLANNER_TRIVIAL_BLOB_WEIGHT;
-              const workDone = workCommitted + Math.min(workTotalThisMdu0, workInMdu);
-              return {
-                ...prev,
-                blobsInCurrentMdu: done,
-                blobsDone,
-                workDone,
-                avgWorkMs:
-                  prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
-              };
-            });
-          },
-        });
+        const mdu0Result = await workerClient.commitMduProfiled(mdu0Copy);
         const wasmMs = performance.now() - wasmStart;
         const workerTotalMs = Number(mdu0Result.perf?.totalMs ?? 0);
         const workerCommitMs = Number(mdu0Result.perf?.commitMs ?? 0);
         const workerRootMs = Number(mdu0Result.perf?.rootMs ?? 0);
         const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
+        const workerRustCommitDecodeMs = Number(mdu0Result.perf?.rustCommitDecodeMs ?? 0)
+        const workerRustCommitTransformMs = Number(mdu0Result.perf?.rustCommitTransformMs ?? 0)
+        const workerRustCommitMsmScalarPrepMs = Number(mdu0Result.perf?.rustCommitMsmScalarPrepMs ?? 0)
+        const workerRustCommitMsmBucketFillMs = Number(mdu0Result.perf?.rustCommitMsmBucketFillMs ?? 0)
+        const workerRustCommitMsmReduceMs = Number(mdu0Result.perf?.rustCommitMsmReduceMs ?? 0)
+        const workerRustCommitMsmDoubleMs = Number(mdu0Result.perf?.rustCommitMsmDoubleMs ?? 0)
+        const workerRustCommitMsmMs = Number(mdu0Result.perf?.rustCommitMsmMs ?? 0)
+        const workerRustCommitCompressMs = Number(mdu0Result.perf?.rustCommitCompressMs ?? 0)
+        const workerRustCommitMs = Number(mdu0Result.perf?.rustCommitMs ?? workerCommitMs)
+        const workerRustCommitBackend =
+          typeof mdu0Result.perf?.rustCommitBackend === 'string' ? mdu0Result.perf.rustCommitBackend : undefined
+        const workerRustCommitMsmSubphasesAvailable =
+          typeof mdu0Result.perf?.rustCommitMsmSubphasesAvailable === 'boolean'
+            ? mdu0Result.perf.rustCommitMsmSubphasesAvailable
+            : undefined
         const mdu0Root = toU8(mdu0Result.mdu_root);
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
         const opMs = performance.now() - opStartMdu0;
@@ -3327,17 +3312,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           workerRootMs,
           workerRustEncodeMs: 0,
           workerRustRsMs: 0,
-          workerRustCommitDecodeMs: 0,
-          workerRustCommitTransformMs: 0,
-          workerRustCommitMsmScalarPrepMs: 0,
-          workerRustCommitMsmBucketFillMs: 0,
-          workerRustCommitMsmReduceMs: 0,
-          workerRustCommitMsmDoubleMs: 0,
-          workerRustCommitMsmMs: 0,
-          workerRustCommitCompressMs: 0,
-          workerRustCommitMs: 0,
+          workerRustCommitDecodeMs,
+          workerRustCommitTransformMs,
+          workerRustCommitMsmScalarPrepMs,
+          workerRustCommitMsmBucketFillMs,
+          workerRustCommitMsmReduceMs,
+          workerRustCommitMsmDoubleMs,
+          workerRustCommitMsmMs,
+          workerRustCommitCompressMs,
+          workerRustCommitMs,
+          workerRustCommitBackend,
+          workerRustCommitMsmSubphasesAvailable,
           totalMs: opMs,
-          batchBlobs: mdu0BatchBlobs,
         }
         perfSamples.meta.push(metaPerfSample)
         console.log('[perf] meta mdu0', {

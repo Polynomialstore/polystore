@@ -181,6 +181,17 @@ export interface ExpandedMdu {
       batchCount?: number;
       batchSize?: number;
       blobCount?: number;
+      rustCommitDecodeMs?: number;
+      rustCommitTransformMs?: number;
+      rustCommitMsmScalarPrepMs?: number;
+      rustCommitMsmBucketFillMs?: number;
+      rustCommitMsmReduceMs?: number;
+      rustCommitMsmDoubleMs?: number;
+      rustCommitMsmMs?: number;
+      rustCommitCompressMs?: number;
+      rustCommitMs?: number;
+      rustCommitBackend?: string;
+      rustCommitMsmSubphasesAvailable?: boolean;
     };
 }
 
@@ -276,6 +287,10 @@ export const workerClient = {
       [data.buffer],
       opts?.onProgress,
     ) as Promise<ExpandedMdu>;
+  },
+
+  async commitMduProfiled(data: Uint8Array): Promise<ExpandedMdu> {
+    return sendMessageToWorker('commitMduProfiled', { data }, [data.buffer]) as Promise<ExpandedMdu>;
   },
 
   async expandMduRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
