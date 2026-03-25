@@ -1,6 +1,12 @@
 use blake2::{Blake2s256, Digest};
 use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
-use blst::{BLST_ERROR, MultiPoint, blst_p1, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
+use blst::{BLST_ERROR, blst_p1, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
+#[cfg(not(target_arch = "wasm32"))]
+use blst::MultiPoint;
+#[cfg(target_arch = "wasm32")]
+use blst::{
+    blst_p1s_mult_pippenger, blst_p1s_mult_pippenger_scratch_sizeof, limb_t,
+};
 use ff::{Field, PrimeField};
 use group::Curve;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
@@ -33,9 +39,17 @@ struct WasmMsmScratch {
 }
 
 #[cfg(target_arch = "wasm32")]
+#[derive(Default)]
+struct WasmBlstScratch {
+    scalar_bytes: Vec<u8>,
+    scratch: Vec<u64>,
+}
+
+#[cfg(target_arch = "wasm32")]
 thread_local! {
     static WASM_MSM_AFFINE_SCRATCH: RefCell<WasmMsmScratch> = RefCell::new(WasmMsmScratch::default());
     static WASM_MSM_PROJECTIVE_SCRATCH: RefCell<WasmMsmScratch> = RefCell::new(WasmMsmScratch::default());
+    static WASM_BLST_SCRATCH: RefCell<WasmBlstScratch> = RefCell::new(WasmBlstScratch::default());
 }
 
 pub fn set_pippenger_window_override(window_bits: Option<usize>) {
@@ -257,14 +271,14 @@ impl KzgContext {
             // G1 points are already in Lagrange form for the blob domain, so we can MSM directly
             // over the evaluations.
             {
-                let decode_start = now_ms();
                 let commitment = msm_blst_g1_commitment_from_blob_profiled(
                     &self.g1_points_blst,
                     blob_bytes,
                     &mut perf,
                 )?;
+
                 if perf.decode_ms == 0.0 {
-                    perf.decode_ms = now_ms() - decode_start;
+                    perf.decode_ms = now_ms() - total_start;
                 }
                 perf.total_ms = now_ms() - total_start;
                 return Ok((commitment, perf));
@@ -979,19 +993,68 @@ fn msm_blst_g1_commitment_from_blob_profiled(
     let points = &points[..n];
 
     let decode_start = now_ms();
-    let mut scalar_bytes = vec![0u8; n * 32];
-    for (i, chunk) in blob_bytes.chunks_exact(32).take(n).enumerate() {
-        let dst = &mut scalar_bytes[i * 32..(i + 1) * 32];
-        for j in 0..32 {
-            dst[j] = chunk[31 - j];
+    #[cfg(target_arch = "wasm32")]
+    let res: blst_p1 = WASM_BLST_SCRATCH.with(|scratch| {
+        let mut scratch = scratch.borrow_mut();
+        let needed_scalar_bytes = n * 32;
+        if scratch.scalar_bytes.len() < needed_scalar_bytes {
+            scratch.scalar_bytes.resize(needed_scalar_bytes, 0);
         }
-    }
-    perf.decode_ms += now_ms() - decode_start;
+        {
+            let scalar_bytes = &mut scratch.scalar_bytes[..needed_scalar_bytes];
+            for (dst, chunk) in scalar_bytes
+                .chunks_exact_mut(32)
+                .zip(blob_bytes.chunks_exact(32).take(n))
+            {
+                dst.copy_from_slice(chunk);
+                dst.reverse();
+            }
+        }
+        perf.decode_ms += now_ms() - decode_start;
 
-    // Use 256 bits so arbitrary (non-canonical) bytes still map correctly (mod r).
-    let msm_start = now_ms();
-    let res: blst_p1 = points.mult(&scalar_bytes, 256);
-    perf.msm_ms += now_ms() - msm_start;
+        let scratch_words =
+            unsafe { blst_p1s_mult_pippenger_scratch_sizeof(n) / std::mem::size_of::<limb_t>() };
+        if scratch.scratch.len() < scratch_words {
+            scratch.scratch.resize(scratch_words, 0);
+        }
+
+        let point_refs = [points.as_ptr(), std::ptr::null()];
+        let scalar_refs = [scratch.scalar_bytes.as_ptr(), std::ptr::null()];
+        let msm_start = now_ms();
+        let mut out = blst_p1::default();
+        unsafe {
+            blst_p1s_mult_pippenger(
+                &mut out,
+                point_refs.as_ptr(),
+                n,
+                scalar_refs.as_ptr(),
+                256,
+                scratch.scratch.as_mut_ptr() as *mut limb_t,
+            );
+        }
+        perf.msm_ms += now_ms() - msm_start;
+        out
+    });
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let res: blst_p1 = {
+        let mut scalar_bytes = vec![0u8; n * 32];
+        for (dst, chunk) in scalar_bytes
+            .chunks_exact_mut(32)
+            .zip(blob_bytes.chunks_exact(32).take(n))
+        {
+            dst.copy_from_slice(chunk);
+            dst.reverse();
+        }
+        perf.decode_ms += now_ms() - decode_start;
+
+        // Use 256 bits so arbitrary (non-canonical) bytes still map correctly (mod r).
+        let msm_start = now_ms();
+        let out = points.mult(&scalar_bytes, 256);
+        perf.msm_ms += now_ms() - msm_start;
+        out
+    };
+
     let mut out = [0u8; 48];
     let compress_start = now_ms();
     unsafe {
