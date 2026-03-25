@@ -195,6 +195,17 @@ export interface ExpandedMdu {
     };
 }
 
+export interface PreparedMdu0 {
+  mdu0_bytes: Uint8Array | number[]
+  perf?: {
+    witnessRootSetMs?: number
+    userRootSetMs?: number
+    appendMs?: number
+    bytesMs?: number
+    totalMs?: number
+  }
+}
+
 export interface ExpandedStripe {
     witness_flat: Uint8Array | number[];
     mdu_root: Uint8Array | number[];
@@ -268,6 +279,22 @@ export const workerClient = {
 
   async setMdu0RootsBatch(startIndex: number, rootsFlat: Uint8Array): Promise<string> {
     return sendMessageToWorker('setMdu0RootsBatch', { startIndex, rootsFlat }, [rootsFlat.buffer]) as Promise<string>;
+  },
+
+  async prepareMdu0Bytes(
+    witnessRootsFlat: Uint8Array,
+    userRootStartIndex: number,
+    userRootsFlat: Uint8Array,
+    path: string,
+    size: number,
+    startOffset: number,
+    flags?: number,
+  ): Promise<PreparedMdu0> {
+    return sendMessageToWorker(
+      'prepareMdu0Bytes',
+      { witnessRootsFlat, userRootStartIndex, userRootsFlat, path, size, startOffset, flags },
+      [witnessRootsFlat.buffer, userRootsFlat.buffer],
+    ) as Promise<PreparedMdu0>
   },
 
   // Get witness count from MDU #0 builder

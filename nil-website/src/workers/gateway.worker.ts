@@ -260,6 +260,76 @@ self.onmessage = async (event) => {
                 result = 'Roots set in Mdu0';
                 break;
             }
+            case 'prepareMdu0Bytes': {
+                if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
+                const {
+                    witnessRootsFlat,
+                    userRootStartIndex,
+                    userRootsFlat,
+                    path,
+                    size,
+                    startOffset,
+                    flags,
+                } = payload as {
+                    witnessRootsFlat?: Uint8Array;
+                    userRootStartIndex: number;
+                    userRootsFlat?: Uint8Array;
+                    path: string;
+                    size: number;
+                    startOffset: number;
+                    flags?: number;
+                };
+                const perf = {
+                    witnessRootSetMs: 0,
+                    userRootSetMs: 0,
+                    appendMs: 0,
+                    bytesMs: 0,
+                    totalMs: 0,
+                };
+                const totalStart = performance.now();
+
+                if (witnessRootsFlat) {
+                    if (!(witnessRootsFlat instanceof Uint8Array)) throw new Error('witnessRootsFlat must be a Uint8Array');
+                    if (witnessRootsFlat.byteLength % 32 !== 0) throw new Error('witnessRootsFlat must be a multiple of 32 bytes');
+                    const start = performance.now();
+                    let rootIndex = 0;
+                    for (let offset = 0; offset < witnessRootsFlat.byteLength; offset += 32, rootIndex += 1) {
+                        mdu0BuilderInstance.set_root(BigInt(rootIndex), witnessRootsFlat.subarray(offset, offset + 32));
+                    }
+                    perf.witnessRootSetMs = performance.now() - start;
+                }
+
+                if (userRootsFlat) {
+                    if (!(userRootsFlat instanceof Uint8Array)) throw new Error('userRootsFlat must be a Uint8Array');
+                    if (userRootsFlat.byteLength % 32 !== 0) throw new Error('userRootsFlat must be a multiple of 32 bytes');
+                    const start = performance.now();
+                    let rootIndex = Number(userRootStartIndex);
+                    for (let offset = 0; offset < userRootsFlat.byteLength; offset += 32, rootIndex += 1) {
+                        mdu0BuilderInstance.set_root(BigInt(rootIndex), userRootsFlat.subarray(offset, offset + 32));
+                    }
+                    perf.userRootSetMs = performance.now() - start;
+                }
+
+                const appendStart = performance.now();
+                const flagValue = typeof flags === 'number' ? flags : 0;
+                if (typeof (mdu0BuilderInstance as WasmMdu0Builder).append_file_with_flags === 'function') {
+                    mdu0BuilderInstance.append_file_with_flags(path, BigInt(size), BigInt(startOffset), flagValue);
+                } else {
+                    mdu0BuilderInstance.append_file(path, BigInt(size), BigInt(startOffset));
+                }
+                perf.appendMs = performance.now() - appendStart;
+
+                const bytesStart = performance.now();
+                const mdu0Bytes = mdu0BuilderInstance.bytes();
+                perf.bytesMs = performance.now() - bytesStart;
+                perf.totalMs = performance.now() - totalStart;
+
+                result = {
+                    mdu0_bytes: mdu0Bytes,
+                    perf,
+                };
+                break;
+            }
             case 'getMdu0WitnessCount': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
                 result = mdu0BuilderInstance.get_witness_count();

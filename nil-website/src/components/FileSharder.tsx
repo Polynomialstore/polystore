@@ -3232,33 +3232,35 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             setShards((prev) => prev.map((s) => (s.id === 1 + i ? { ...s, status: 'expanded' } : s)));
             await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         }
-        if (witnessRoots.length > 0) {
-          const witnessRootsFlat = new Uint8Array(witnessRoots.length * 32)
-          for (let i = 0; i < witnessRoots.length; i += 1) {
-            witnessRootsFlat.set(witnessRoots[i], i * 32)
-          }
-          await workerClient.setMdu0RootsBatch(0, witnessRootsFlat)
-        }
         const witnessStageMs = performance.now() - witnessStageStart
 
-        const userRootRegistrationStart = performance.now()
-        if (userRoots.length > 0) {
-          const userRootsFlat = new Uint8Array(userRoots.length * 32)
-          for (let i = 0; i < userRoots.length; i += 1) {
-            userRootsFlat.set(userRoots[i], i * 32)
-          }
-          await workerClient.setMdu0RootsBatch(witnessMduCount, userRootsFlat)
+        const witnessRootsFlat = new Uint8Array(witnessRoots.length * 32)
+        for (let i = 0; i < witnessRoots.length; i += 1) {
+          witnessRootsFlat.set(witnessRoots[i], i * 32)
         }
-        const userRootRegistrationMs = performance.now() - userRootRegistrationStart
+        const userRootsFlat = new Uint8Array(userRoots.length * 32)
+        for (let i = 0; i < userRoots.length; i += 1) {
+          userRootsFlat.set(userRoots[i], i * 32)
+        }
 
         const fileStartOffset = appendMode2 ? uploadPlan.appendStartOffset : 0;
         const recordPath = sanitizeNilfsRecordPath(file.name);
         if (recordPath !== file.name) {
           addLog(`> NilFS path truncated for V1 record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
         }
-        const mdu0AppendStart = performance.now()
-        await workerClient.appendFileToMdu0(recordPath, bytes.length, fileStartOffset, fileFlags);
-        const mdu0AppendMs = performance.now() - mdu0AppendStart
+        const mdu0PrepareResult = await workerClient.prepareMdu0Bytes(
+          witnessRootsFlat,
+          witnessMduCount,
+          userRootsFlat,
+          recordPath,
+          bytes.length,
+          fileStartOffset,
+          fileFlags,
+        )
+        const userRootRegistrationMs =
+          Number(mdu0PrepareResult.perf?.witnessRootSetMs ?? 0) + Number(mdu0PrepareResult.perf?.userRootSetMs ?? 0)
+        const mdu0AppendMs =
+          Number(mdu0PrepareResult.perf?.appendMs ?? 0) + Number(mdu0PrepareResult.perf?.bytesMs ?? 0)
 
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();
@@ -3275,9 +3277,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           workDone: workCommitted,
         }));
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'processing' } : s)));
-        const mdu0FetchStart = performance.now();
-        const mdu0Bytes = await workerClient.getMdu0Bytes();
-        const mdu0FetchMs = performance.now() - mdu0FetchStart;
+        const mdu0Bytes = toU8(mdu0PrepareResult.mdu0_bytes);
 
         const mdu0CopyStart = performance.now();
         const mdu0Copy = new Uint8Array(mdu0Bytes);
@@ -3338,7 +3338,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
         perfSamples.meta.push(metaPerfSample)
         console.log('[perf] meta mdu0', {
-          fetchMs: mdu0FetchMs,
+          prepareBuilderMs: Number(mdu0PrepareResult.perf?.totalMs ?? 0),
           ...metaPerfSample,
         });
         prevCommitMsPerMdu = opMs;
