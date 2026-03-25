@@ -42,6 +42,8 @@ var uploadCopyBufferPool = sync.Pool{
 	},
 }
 
+var uploadRootDirCache sync.Map
+
 func copyUploadBody(dst io.Writer, src io.Reader) (int64, error) {
 	buf, _ := uploadCopyBufferPool.Get().([]byte)
 	if len(buf) == 0 {
@@ -49,6 +51,38 @@ func copyUploadBody(dst io.Writer, src io.Reader) (int64, error) {
 	}
 	defer uploadCopyBufferPool.Put(buf)
 	return io.CopyBuffer(dst, src, buf)
+}
+
+func ensureUploadRootDir(rootDir string) error {
+	if rootDir == "" {
+		return fmt.Errorf("empty upload root dir")
+	}
+	if _, ok := uploadRootDirCache.Load(rootDir); ok {
+		return nil
+	}
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		return err
+	}
+	uploadRootDirCache.Store(rootDir, struct{}{})
+	return nil
+}
+
+func createTempInUploadRoot(rootDir, pattern string) (*os.File, error) {
+	if err := ensureUploadRootDir(rootDir); err != nil {
+		return nil, err
+	}
+	tmp, err := os.CreateTemp(rootDir, pattern)
+	if err == nil {
+		return tmp, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		uploadRootDirCache.Delete(rootDir)
+		if retryErr := ensureUploadRootDir(rootDir); retryErr != nil {
+			return nil, retryErr
+		}
+		return os.CreateTemp(rootDir, pattern)
+	}
+	return nil, err
 }
 
 func parseUintFromJSON(raw any) (uint64, bool) {
@@ -6359,7 +6393,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	// Store under deal-scoped directory to avoid collisions across deals.
 	rootDir := dealScopedDir(dealID, parsed)
 	mkdirStarted := time.Now()
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+	if err := ensureUploadRootDir(rootDir); err != nil {
 		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 		statusCode = http.StatusInternalServerError
 		outcome = "mkdir_failed"
@@ -6382,7 +6416,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
+	tmp, err := createTempInUploadRoot(rootDir, filename+".tmp-*")
 	if err != nil {
 		statusCode = http.StatusInternalServerError
 		outcome = "create_temp_failed"
@@ -6605,7 +6639,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	}
 	rootDir := dealScopedDir(dealID, parsed)
 	mkdirStarted := time.Now()
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+	if err := ensureUploadRootDir(rootDir); err != nil {
 		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 		statusCode = http.StatusInternalServerError
 		outcome = "mkdir_failed"
@@ -6632,7 +6666,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
+	tmp, err := createTempInUploadRoot(rootDir, filename+".tmp-*")
 	if err != nil {
 		statusCode = http.StatusInternalServerError
 		outcome = "create_temp_failed"
@@ -6892,7 +6926,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 
 	rootDir := dealScopedDir(dealID, parsed)
 	mkdirStarted := time.Now()
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+	if err := ensureUploadRootDir(rootDir); err != nil {
 		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 		statusCode = http.StatusInternalServerError
 		outcome = "mkdir_failed"
@@ -6911,7 +6945,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmp, err := os.CreateTemp(rootDir, "manifest.bin.tmp-*")
+	tmp, err := createTempInUploadRoot(rootDir, "manifest.bin.tmp-*")
 	if err != nil {
 		statusCode = http.StatusInternalServerError
 		outcome = "create_temp_failed"
