@@ -210,8 +210,11 @@ function buildStripedUploadSteps(input: StripedUploadInput): UploadProgressStep[
 }
 
 function emitProgress(steps: UploadProgressStep[], onProgress?: (steps: UploadProgressStep[]) => void): UploadProgressStep[] {
+  if (!onProgress) {
+    return steps
+  }
   const snapshot = cloneSteps(steps)
-  onProgress?.(snapshot)
+  onProgress(snapshot)
   return snapshot
 }
 
