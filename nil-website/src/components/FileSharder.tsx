@@ -181,6 +181,19 @@ type PreparePerfProfile = {
   }
 }
 
+type BrowserPerfRun = {
+  id: number
+  fileName: string
+  fileSize: number
+  startedAtMs: number
+  phaseStarts: Record<string, number>
+}
+
+function roundPerfMs(value: number | null | undefined): number | null {
+  if (!Number.isFinite(value ?? NaN)) return null
+  return Math.round(Number(value) * 100) / 100
+}
+
 function createInitialShardProgress(fileBytesTotal = 0): ShardProgressState {
   return {
     phase: 'idle',
@@ -385,6 +398,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const autoUploadManifestRef = useRef<string | null>(null)
   const autoCommitManifestRef = useRef<string | null>(null)
   const lastStaleCommitMessageRef = useRef<string | null>(null)
+  const browserPerfRunRef = useRef<BrowserPerfRun | null>(null)
+  const browserPerfSeqRef = useRef(1)
   const dealSetupAttemptRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const gatewayUploadProgressRef = useRef<{ phase: string; workDone: number; workTotal: number }>({
@@ -417,6 +432,81 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   )
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
+
+  const browserPerfLog = useCallback(
+    (event: string, extra: Record<string, unknown> = {}) => {
+      const now = performance.now()
+      const run = browserPerfRunRef.current
+      const payload = {
+        event,
+        dealId,
+        runId: run?.id ?? null,
+        fileName: run?.fileName ?? null,
+        fileBytes: run?.fileSize ?? null,
+        sinceRunMs: run ? roundPerfMs(now - run.startedAtMs) : null,
+        ...extra,
+      }
+      if (typeof window !== 'undefined') {
+        const perfWindow = window as typeof window & {
+          __nilBrowserPerfLog?: Array<Record<string, unknown>>
+          __nilBrowserPerfLast?: Record<string, unknown>
+        }
+        if (!Array.isArray(perfWindow.__nilBrowserPerfLog)) {
+          perfWindow.__nilBrowserPerfLog = []
+        }
+        perfWindow.__nilBrowserPerfLog.push(payload)
+        perfWindow.__nilBrowserPerfLast = payload
+      }
+      console.log('[browser-perf]', payload)
+    },
+    [dealId],
+  )
+
+  const browserPerfStartRun = useCallback(
+    (file: File) => {
+      browserPerfRunRef.current = {
+        id: browserPerfSeqRef.current++,
+        fileName: file.name,
+        fileSize: file.size,
+        startedAtMs: performance.now(),
+        phaseStarts: {},
+      }
+      browserPerfLog('run:start', {
+        hardwareConcurrency:
+          typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
+            ? Number(navigator.hardwareConcurrency)
+            : null,
+      })
+    },
+    [browserPerfLog],
+  )
+
+  const browserPerfStartPhase = useCallback(
+    (phase: string, extra: Record<string, unknown> = {}) => {
+      const run = browserPerfRunRef.current
+      if (!run) return
+      run.phaseStarts[phase] = performance.now()
+      browserPerfLog(`${phase}:start`, extra)
+    },
+    [browserPerfLog],
+  )
+
+  const browserPerfEndPhase = useCallback(
+    (phase: string, extra: Record<string, unknown> = {}) => {
+      const run = browserPerfRunRef.current
+      const now = performance.now()
+      const startedAtMs = run?.phaseStarts[phase]
+      const durationMs = startedAtMs !== undefined ? roundPerfMs(now - startedAtMs) : null
+      if (run && startedAtMs !== undefined) {
+        delete run.phaseStarts[phase]
+      }
+      browserPerfLog(`${phase}:end`, {
+        durationMs,
+        ...extra,
+      })
+    },
+    [browserPerfLog],
+  )
 
   const resetUploadPanel = useCallback(() => {
     setProcessing(false)
@@ -614,9 +704,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
     setBaseManifestRoot(currentManifestRoot)
+    browserPerfLog('commit:confirmed', {
+      commitHash,
+      manifestRoot: currentManifestRoot,
+    })
 
     const hasLocalArtifacts = collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0)
     const notifyCommitSuccess = () => {
+      browserPerfLog('run:complete', {
+        manifestRoot: currentManifestRoot,
+        commitHash,
+      })
       onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined)
     }
     if (!hasLocalArtifacts) {
@@ -678,6 +776,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 )
               })
             : []
+        browserPerfStartPhase('persist_local', {
+          manifestRoot: safeRoot,
+          mdus: mdus.length,
+          shards: shardWrites.length,
+        })
         await writeSlabGenerationAtomically(dealId, {
           manifestRoot: safeRoot,
           manifestBlob,
@@ -706,9 +809,20 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
         lastPersistedManifestRootRef.current = safeRoot
         addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.')
+        browserPerfEndPhase('persist_local', {
+          ok: true,
+          manifestRoot: safeRoot,
+          mdus: mdus.length,
+          shards: shardWrites.length,
+        })
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         addLog(`> Failed to save MDUs locally: ${msg}`)
+        browserPerfEndPhase('persist_local', {
+          ok: false,
+          manifestRoot: safeRoot,
+          error: msg,
+        })
       } finally {
         notifyCommitSuccess()
       }
@@ -722,6 +836,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     })
   }, [
     addLog,
+    browserPerfEndPhase,
+    browserPerfLog,
+    browserPerfStartPhase,
     collectedMdus,
     commitHash,
     currentManifestBlob,
@@ -1574,6 +1691,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
       }
 
+      browserPerfStartRun(file)
       lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };
       const startTs = performance.now();
       setShowSystemActivity(false)
@@ -1616,6 +1734,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       const shouldTryGatewayMode2 = useMode2 && isGatewayMode2UploadEnabled({
         gatewayDisabled: !gatewayMode2Enabled,
         gatewayBase: localGateway.url || appConfig.gatewayBase,
+        localGatewayStatus: localGateway.status,
+      })
+      browserPerfLog('flow:selected-path', {
+        useMode2,
+        shouldTryGatewayMode2,
+        gatewayMode2Enabled,
         localGatewayStatus: localGateway.status,
       })
 
@@ -1753,6 +1877,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
           }))
+          browserPerfEndPhase('gateway_ingest', {
+            ok: true,
+            manifestRoot: root,
+            sizeBytes: gatewaySizeBytes,
+            totalMdus: gatewayTotalMdus,
+            totalWitnessMdus: gatewayWitnessMdus,
+            totalUserMdus: gatewayUserMdusFinal,
+          })
           setProcessing(false)
           return true
         }
@@ -2137,6 +2269,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         for (let i = 0; i < gatewayBases.length; i++) {
           const gatewayBase = gatewayBases[i]
           try {
+            browserPerfStartPhase('gateway_ingest', {
+              gatewayBase,
+              attempt: i + 1,
+            })
             const { payload, lastJob } = await runGatewayUpload(
               gatewayBase,
               'Gateway Mode 2: starting upload...',
@@ -2146,10 +2282,20 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             if (finalizeGatewaySuccess(payload, lastJob)) return
             gatewayErrorMessage = 'gateway upload returned no manifest_root'
             gatewayUnreachable = false
+            browserPerfEndPhase('gateway_ingest', {
+              ok: false,
+              gatewayBase,
+              error: gatewayErrorMessage,
+            })
             break
           } catch (e: unknown) {
             let msg = formatGatewayError(e)
             addLog(`> Gateway Mode 2 ingest failed: ${msg}`)
+            browserPerfEndPhase('gateway_ingest', {
+              ok: false,
+              gatewayBase,
+              error: msg,
+            })
 
             const missingLocalState =
               /mode2 append failed/i.test(msg) &&
@@ -2195,6 +2341,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
         if (providerUploadUnavailable && gatewayErrorMessage) {
           const errorMessage = `Storage Provider upload path unavailable: ${gatewayErrorMessage}`
+          browserPerfLog('gateway_ingest:fallback-blocked', {
+            error: errorMessage,
+          })
           setMode2UploadError(errorMessage)
           setShardProgress((p) => ({
             ...p,
@@ -2210,6 +2359,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           if (file.size > gatewayFallbackWasmMaxFileBytes) {
             const sizeLabel = formatBytes(file.size)
             const errorMessage = `Gateway unavailable while processing ${sizeLabel}. In-browser fallback is disabled for large files; please keep the local gateway running, allow local network access for localhost/127.0.0.1, and retry.`
+            browserPerfLog('gateway_ingest:fallback-blocked', {
+              error: errorMessage,
+              fileBytes: file.size,
+            })
             addLog(`> ${errorMessage}`)
             setMode2UploadError(errorMessage)
             setShardProgress((p) => ({
@@ -2224,6 +2377,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           }
 
           addLog('> Gateway unavailable; falling back to in-browser Mode 2 sharding + stripe upload.')
+          browserPerfLog('gateway_ingest:fallback-browser', {
+            fileBytes: file.size,
+          })
           setMode2UploadError(null)
           setShardProgress((p) => ({
             ...p,
@@ -2248,9 +2404,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
 
       try {
+        browserPerfStartPhase('prepare', {
+          mode: useMode2 ? 'mode2' : 'mode1',
+          path: shouldTryGatewayMode2 ? 'gateway' : 'browser',
+        })
         await ensureWasmReady()
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
+        browserPerfEndPhase('prepare', {
+          ok: false,
+          error: `WASM init failed: ${msg}`,
+        })
         addLog(`Error initializing WASM in worker: ${msg}`)
         setShardProgress((p) => ({
           ...p,
@@ -3125,6 +3289,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           manifestMs,
         });
         console.log('[perf] prepare profile', prepareProfile);
+        browserPerfEndPhase('prepare', {
+          ok: true,
+          totalMs: roundPerfMs(elapsedMs),
+          fileBytes: bytes.length,
+          totalMdus: finalMdus.length,
+          totalUserMdus: totalUserChunks,
+          totalWitnessMdus: witnessMduCount,
+          userConcurrency: prepareProfile.userConcurrency,
+          workerQueueMs: roundPerfMs(prepareProfile.phases.workerQueueMs),
+          workerExpandMs: roundPerfMs(prepareProfile.phases.workerExpandMs),
+          workerCommitMs: roundPerfMs(prepareProfile.phases.workerCommitMs),
+          workerRootMs: roundPerfMs(prepareProfile.phases.workerRootMs),
+          rustCommitMsmMs: roundPerfMs(prepareProfile.phases.workerRustCommitMsmMs),
+          manifestMs: roundPerfMs(manifestMs),
+        })
 
         const mib = logicalSizeBytes / (1024 * 1024);
         const seconds = elapsedMs / 1000;
@@ -3141,6 +3320,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } catch (e: unknown) {
         console.error(e);
         const msg = e instanceof Error ? e.message : String(e);
+        browserPerfLog('run:error', {
+          error: msg,
+        })
         addLog(`Error: ${msg}`);
         setShardProgress((p) => ({
           ...p,
@@ -3154,7 +3336,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
         setProcessing(false);
     }
-  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded]);
+  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, browserPerfEndPhase, browserPerfLog, browserPerfStartPhase, browserPerfStartRun, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded]);
 
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
@@ -3264,6 +3446,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!currentManifestRoot) return false
       if (processing || activeUploading || isUploadComplete) return false
 
+      browserPerfStartPhase('upload', {
+        trigger,
+        mode: isMode2 ? 'mode2' : 'mode1',
+        preparedMdus: collectedMdus.length,
+        stripedMdus: mode2Shards.length,
+      })
       if (trigger === 'auto') {
         addLog('> Expansion complete. Starting upload to Storage Providers...')
       } else {
@@ -3271,6 +3459,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }
 
       const ok = isMode2 ? await uploadMode2() : await uploadMdus(collectedMdus)
+      browserPerfEndPhase('upload', {
+        ok,
+        mode: isMode2 ? 'mode2' : 'mode1',
+      })
       if (ok) {
         void mirrorSlabToGateway()
       }
@@ -3279,11 +3471,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     [
       activeUploading,
       addLog,
+      browserPerfEndPhase,
+      browserPerfStartPhase,
       collectedMdus,
       currentManifestRoot,
       isMode2,
       isUploadComplete,
       mirrorSlabToGateway,
+      mode2Shards.length,
       processing,
       uploadMdus,
       uploadMode2,
@@ -3454,6 +3649,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       if (!readyToCommit || !currentManifestRoot) return false
       if (isCommitPending || isCommitConfirming || isAlreadyCommitted) return false
 
+      browserPerfStartPhase('commit', {
+        trigger,
+        manifestRoot: currentManifestRoot,
+      })
       if (trigger === 'auto') {
         addLog('> Upload complete. Starting on-chain commit...')
       } else {
@@ -3471,9 +3670,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           totalUserMdus: shardProgress.totalUserMdus,
           mdus: collectedMdus,
         })
+        browserPerfEndPhase('commit', {
+          ok: true,
+          manifestRoot: currentManifestRoot,
+        })
         return true
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
+        browserPerfEndPhase('commit', {
+          ok: false,
+          manifestRoot: currentManifestRoot,
+          error: msg,
+        })
         addLog(`Commit failed: ${msg}`)
         return false
       }
@@ -3481,6 +3689,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     [
       addLog,
       baseManifestRoot,
+      browserPerfEndPhase,
+      browserPerfStartPhase,
       collectedMdus,
       currentManifestRoot,
       dealId,
