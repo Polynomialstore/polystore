@@ -43,6 +43,19 @@ type SplitPerf = {
   shard_len?: number
 }
 
+type CommitPerf = {
+  decode_ms?: number
+  transform_ms?: number
+  msm_scalar_prep_ms?: number
+  msm_bucket_fill_ms?: number
+  msm_reduce_ms?: number
+  msm_double_ms?: number
+  msm_ms?: number
+  compress_ms?: number
+  total_ms?: number
+  blobs?: number
+}
+
 type RecordWithWall = {
   index: number
   payload_bytes: number
@@ -77,6 +90,11 @@ function toExpandRecord(raw: unknown): ExpandPerf {
 function toSplitRecord(raw: unknown): SplitPerf {
   if (!raw || typeof raw !== 'object') return {}
   return raw as SplitPerf
+}
+
+function toCommitRecord(raw: unknown): CommitPerf {
+  if (!raw || typeof raw !== 'object') return {}
+  return raw as CommitPerf
 }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -293,10 +311,15 @@ function runSplitIteration(backend: 'nil_wasm' | 'kzg_wasm'): IterationResult {
     let commitMs = 0
     let hexEncodeMs = 0
     let hexDecodeMs = 0
+    let commitPerf: CommitPerf = {}
     if (backend === 'nil_wasm') {
       const commitStart = performance.now()
-      witnessFlat = wasm.commit_blobs(shardsFlat)
+      const committedRaw = wasm.commit_blobs_profiled(shardsFlat) as unknown
       commitMs = performance.now() - commitStart
+      const committed = typeof committedRaw === 'string' ? JSON.parse(committedRaw) : committedRaw
+      const witnessRaw = (committed as { witness_flat?: unknown }).witness_flat
+      witnessFlat = witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike)
+      commitPerf = toCommitRecord((committed as { perf?: unknown }).perf)
     } else {
       const committed = commitShardsWithKzgWasm(shardsFlat)
       witnessFlat = committed.witnessFlat
@@ -328,6 +351,14 @@ function runSplitIteration(backend: 'nil_wasm' | 'kzg_wasm'): IterationResult {
       rows: Number(splitPerf.rows ?? 0),
       shards_total: Number(splitPerf.shards_total ?? 0),
       shard_len: Number(splitPerf.shard_len ?? 0),
+      commit_decode_ms: Number(commitPerf.decode_ms ?? 0),
+      commit_transform_ms: Number(commitPerf.transform_ms ?? 0),
+      commit_msm_scalar_prep_ms: Number(commitPerf.msm_scalar_prep_ms ?? 0),
+      commit_msm_bucket_fill_ms: Number(commitPerf.msm_bucket_fill_ms ?? 0),
+      commit_msm_reduce_ms: Number(commitPerf.msm_reduce_ms ?? 0),
+      commit_msm_double_ms: Number(commitPerf.msm_double_ms ?? 0),
+      commit_msm_ms: Number(commitPerf.msm_ms ?? 0),
+      commit_compress_ms: Number(commitPerf.compress_ms ?? 0),
     })
   }
 

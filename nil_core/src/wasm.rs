@@ -308,6 +308,84 @@ impl NilWasm {
         Ok(Uint8Array::from(flat.as_slice()))
     }
 
+    pub fn commit_blobs_profiled(&self, blobs_flat: &[u8]) -> Result<JsValue, JsValue> {
+        if blobs_flat.len() % crate::kzg::BLOB_SIZE != 0 {
+            return Err(JsValue::from_str(
+                "Blobs length must be a multiple of 128 KiB",
+            ));
+        }
+
+        let count = blobs_flat.len() / crate::kzg::BLOB_SIZE;
+        let mut flat = Vec::with_capacity(count * 48);
+        let mut perf_decode_ms = 0.0;
+        let mut perf_transform_ms = 0.0;
+        let mut perf_msm_scalar_prep_ms = 0.0;
+        let mut perf_msm_bucket_fill_ms = 0.0;
+        let mut perf_msm_reduce_ms = 0.0;
+        let mut perf_msm_double_ms = 0.0;
+        let mut perf_msm_ms = 0.0;
+        let mut perf_compress_ms = 0.0;
+        let mut perf_total_ms = 0.0;
+
+        for i in 0..count {
+            let start = i * crate::kzg::BLOB_SIZE;
+            let end = start + crate::kzg::BLOB_SIZE;
+            let (c, perf) = self
+                .kzg_ctx
+                .blob_to_commitment_profiled(&blobs_flat[start..end])
+                .map_err(|e| JsValue::from_str(&format!("Commitment failed: {:?}", e)))?;
+            flat.extend_from_slice(&c);
+            perf_decode_ms += perf.decode_ms;
+            perf_transform_ms += perf.transform_ms;
+            perf_msm_scalar_prep_ms += perf.msm_scalar_prep_ms;
+            perf_msm_bucket_fill_ms += perf.msm_bucket_fill_ms;
+            perf_msm_reduce_ms += perf.msm_reduce_ms;
+            perf_msm_double_ms += perf.msm_double_ms;
+            perf_msm_ms += perf.msm_ms;
+            perf_compress_ms += perf.compress_ms;
+            perf_total_ms += perf.total_ms;
+        }
+
+        #[derive(serde::Serialize)]
+        struct CommitBlobsProfiledPerf {
+            decode_ms: f64,
+            transform_ms: f64,
+            msm_scalar_prep_ms: f64,
+            msm_bucket_fill_ms: f64,
+            msm_reduce_ms: f64,
+            msm_double_ms: f64,
+            msm_ms: f64,
+            compress_ms: f64,
+            total_ms: f64,
+            blobs: usize,
+        }
+
+        #[derive(serde::Serialize)]
+        struct CommitBlobsProfiledResult {
+            witness_flat: Vec<u8>,
+            perf: CommitBlobsProfiledPerf,
+        }
+
+        let res = CommitBlobsProfiledResult {
+            witness_flat: flat,
+            perf: CommitBlobsProfiledPerf {
+                decode_ms: perf_decode_ms,
+                transform_ms: perf_transform_ms,
+                msm_scalar_prep_ms: perf_msm_scalar_prep_ms,
+                msm_bucket_fill_ms: perf_msm_bucket_fill_ms,
+                msm_reduce_ms: perf_msm_reduce_ms,
+                msm_double_ms: perf_msm_double_ms,
+                msm_ms: perf_msm_ms,
+                compress_ms: perf_compress_ms,
+                total_ms: perf_total_ms,
+                blobs: count,
+            },
+        };
+
+        serde_wasm_bindgen::to_value(&res)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
+    }
+
     pub fn compute_manifest(&self, roots_flat: &[u8]) -> Result<JsValue, JsValue> {
         if roots_flat.len() % 32 != 0 {
             return Err(JsValue::from_str("Roots length must be multiple of 32"));
