@@ -4161,7 +4161,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     const { totalPreparedMdus, userMdus, witnessMdus, mdu0Count } = workflowPreparedCounts
     if (hasManifestRoot && totalPreparedMdus > 0) {
       const metadataMdus = Math.max(0, mdu0Count + witnessMdus)
-      const userShards = userMdus * workflowRsSlotCount
+      const perSpArtifacts = Math.max(0, metadataMdus + userMdus + 1) // + manifest upload
       summaries[1] = {
         headline: isMode2 ? `${String(totalPreparedMdus)} Slab MDUs Prepared` : `${String(totalPreparedMdus)} MDUs Prepared`,
         secondary:
@@ -4170,11 +4170,13 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             : undefined,
         chips: isMode2
           ? [
-              { label: 'Metadata MDUs', value: String(metadataMdus), tone: 'neutral' },
-              { label: 'User MDUs', value: String(userMdus), tone: 'neutral' },
-              { label: 'User Shards', value: String(userShards), tone: 'primary' },
+              { label: 'Providers', value: String(workflowRsSlotCount), tone: 'neutral' },
+              { label: 'Artifacts Per Provider', value: String(perSpArtifacts), tone: 'primary' },
             ]
           : [],
+        details: isMode2
+          ? [`Composition: ${String(metadataMdus)} Metadata MDUs + ${String(userMdus)} User MDUs + 1 Manifest`]
+          : undefined,
       }
     }
 
@@ -4202,14 +4204,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         headline: isMode2
           ? `Uploaded To ${String(workflowRsSlotCount)} Storage Provider${workflowRsSlotCount === 1 ? '' : 's'}`
           : 'Provider upload complete',
-        secondary: isMode2 ? `Accounting: ${String(perSpArtifacts)} Artifacts Per Provider` : undefined,
-        details: undefined,
+        secondary: isMode2
+          ? `Accounting: ${String(perSpArtifacts)} Artifacts Per Provider × ${String(workflowRsSlotCount)} Providers = ${String(totalSpUploads)} Total Uploads`
+          : undefined,
+        details: mirrorLabel ? [`Gateway Mirror: ${mirrorLabel}`] : undefined,
         chips: isMode2
-          ? [
-              { label: 'Total Uploads', value: String(totalSpUploads), tone: 'success' },
-              { label: 'Uploads Per Provider', value: String(perSpArtifacts), tone: 'neutral' },
-              ...(mirrorLabel ? [{ label: 'Gateway Mirror', value: mirrorLabel, tone: 'neutral' as const }] : []),
-            ]
+          ? [{ label: 'Total Uploads', value: String(totalSpUploads), tone: 'success' }]
           : [{ label: 'artifacts', value: uploadedArtifactsLabel, tone: 'success' }],
       }
     }
