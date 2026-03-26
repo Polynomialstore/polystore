@@ -400,11 +400,15 @@ export function createUploadEngine(options: UploadEngineOptions) {
       const trackSteps = Boolean(input.onProgress)
       let steps = trackSteps ? emitProgress(buildDirectUploadSteps(input), input.onProgress) : []
       const stepIndices = trackSteps ? indexUploadSteps(steps) : new Map<string, number>()
+      const resolveStepIndex = trackSteps
+        ? (kind: SparseArtifactKind, target: string, index?: number, slot?: number) =>
+            stepIndices.get(stepKey(kind, target, index, slot)) ?? -1
+        : () => -1
       if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
         const message = 'manifest blob missing (re-shard to regenerate)'
         const targetLabel = input.target.label || input.target.baseUrl
         if (trackSteps) {
-          const manifestIndex = stepIndices.get(stepKey('manifest', targetLabel))
+          const manifestIndex = resolveStepIndex('manifest', targetLabel)
           steps = emitProgress(updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message }), input.onProgress)
         }
         return { ok: false, steps, error: message }
@@ -414,7 +418,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
 
       const tasks: UploadTask[] = [
         ...input.mdus.map((mdu) => ({
-          stepIndex: stepIndices.get(stepKey('mdu', targetLabel, mdu.index)) ?? -1,
+          stepIndex: resolveStepIndex('mdu', targetLabel, mdu.index),
           request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
@@ -424,7 +428,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           },
         })),
         {
-          stepIndex: stepIndices.get(stepKey('manifest', targetLabel)) ?? -1,
+          stepIndex: resolveStepIndex('manifest', targetLabel),
           request: {
             dealId: input.dealId,
             manifestRoot: input.manifestRoot,
@@ -442,12 +446,16 @@ export function createUploadEngine(options: UploadEngineOptions) {
       const trackSteps = Boolean(input.onProgress)
       let steps = trackSteps ? emitProgress(buildStripedUploadSteps(input), input.onProgress) : []
       const stepIndices = trackSteps ? indexUploadSteps(steps) : new Map<string, number>()
+      const resolveStepIndex = trackSteps
+        ? (kind: SparseArtifactKind, target: string, index?: number, slot?: number) =>
+            stepIndices.get(stepKey(kind, target, index, slot)) ?? -1
+        : () => -1
       if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
         const message = 'manifest blob missing (re-shard to regenerate)'
         if (trackSteps) {
           for (const target of input.metadataTargets) {
             const targetLabel = target.label || target.baseUrl
-            const manifestIndex = stepIndices.get(stepKey('manifest', targetLabel))
+            const manifestIndex = resolveStepIndex('manifest', targetLabel)
             steps = updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message })
           }
           steps = emitProgress(steps, input.onProgress)
@@ -466,7 +474,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           for (const target of input.metadataTargets) {
             const targetLabel = target.label || target.baseUrl
             combinedTasks.push({
-              stepIndex: stepIndices.get(stepKey('mdu', targetLabel, mdu.index)) ?? -1,
+              stepIndex: resolveStepIndex('mdu', targetLabel, mdu.index),
               request: {
                 dealId: input.dealId,
                 manifestRoot: input.manifestRoot,
@@ -480,7 +488,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           for (const target of input.metadataTargets) {
             const targetLabel = target.label || target.baseUrl
             combinedTasks.push({
-              stepIndex: stepIndices.get(stepKey('manifest', targetLabel)) ?? -1,
+              stepIndex: resolveStepIndex('manifest', targetLabel),
               request: {
                 dealId: input.dealId,
                 manifestRoot: input.manifestRoot,
@@ -503,7 +511,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
                 steps = emitProgress(
                   updateStep(
                     steps,
-                    stepIndices.get(stepKey('shard', `slot-${slot}`, shardSet.index, slot)) ?? -1,
+                    resolveStepIndex('shard', `slot-${slot}`, shardSet.index, slot),
                     { status: 'error', error: message },
                   ),
                   input.onProgress,
@@ -513,7 +521,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
             }
             const targetLabel = target.label || target.baseUrl
             combinedTasks.push({
-              stepIndex: stepIndices.get(stepKey('shard', targetLabel, shardSet.index, slot)) ?? -1,
+              stepIndex: resolveStepIndex('shard', targetLabel, shardSet.index, slot),
               request: {
                 dealId: input.dealId,
                 manifestRoot: input.manifestRoot,
