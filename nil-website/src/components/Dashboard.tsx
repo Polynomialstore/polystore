@@ -485,7 +485,6 @@ export function Dashboard() {
     }
     return out
   }, [recentFiles])
-  const targetDealRecentActivity = targetDealId ? recentActivityByDeal.get(targetDealId) : undefined
   const filteredOwnedDeals = useMemo(() => {
     const query = dealFilter.trim().toLowerCase()
     if (!query) return ownedDeals
@@ -1262,41 +1261,9 @@ export function Dashboard() {
     )
 
   const onChainCid = String(targetDeal?.cid || '').trim()
-  const targetDealHealthLabel = targetDealExpired ? 'Expired' : onChainCid ? 'Active' : 'Empty'
-  const targetDealHealthClass = targetDealExpired
-    ? 'text-destructive border-destructive/40 bg-destructive/10'
-    : onChainCid
-      ? 'text-success border-success/40 bg-success/10'
-      : 'text-muted-foreground border-border bg-secondary/50'
-  const targetDealModeLabel = isTargetDealMode2
-    ? `Mode 2 RS(${targetDealService.rsK ?? appConfig.defaultRsK},${targetDealService.rsM ?? appConfig.defaultRsM})`
-    : 'Mode 1 (gateway)'
-  const targetDealPathLabel = isTargetDealMode2 ? 'Direct to providers' : 'Gateway sharding'
 
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-card">
-      <div className="nil-inset border border-border/60 bg-background/40 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
-          <span className="font-semibold text-foreground">Deal Context</span>
-          <span className="text-border/60">•</span>
-          <span data-testid="workspace-context-deal">Deal {targetDealId ? `#${targetDealId}` : '—'}</span>
-          <span className="text-border/60">•</span>
-          <span>{targetDealModeLabel}</span>
-          <span className="text-border/60">•</span>
-          <span>{targetDealPathLabel}</span>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em]">
-          <span className={cn('border px-2 py-0.5 font-semibold', targetDealHealthClass)}>{targetDealHealthLabel}</span>
-          <span className="border border-border bg-secondary/60 px-2 py-0.5 text-muted-foreground">
-            Last activity: {formatRelativeTime(targetDealRecentActivity?.updatedAt)}
-          </span>
-          {targetDealRecentActivity?.filePath ? (
-            <span className="truncate border border-border bg-background px-2 py-0.5 text-muted-foreground" title={targetDealRecentActivity.filePath}>
-              {targetDealRecentActivity.filePath}
-            </span>
-          ) : null}
-        </div>
-      </div>
       {showAdvanced ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             <button
