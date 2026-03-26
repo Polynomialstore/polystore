@@ -119,6 +119,9 @@ interface ShardProgressState {
   startTsMs: number | null;
   totalUserMdus: number;
   totalWitnessMdus: number;
+  totalMdus: number;
+  mdusDone: number;
+  userBytesDone: number;
   currentMduIndex: number | null;
   currentMduKind: 'user' | 'witness' | 'meta' | null;
   lastOpMs: number | null;
@@ -290,6 +293,9 @@ function createInitialShardProgress(fileBytesTotal = 0): ShardProgressState {
     startTsMs: null,
     totalUserMdus: 0,
     totalWitnessMdus: 0,
+    totalMdus: 0,
+    mdusDone: 0,
+    userBytesDone: 0,
     currentMduIndex: null,
     currentMduKind: null,
     lastOpMs: null,
@@ -424,7 +430,6 @@ const dealSetupPollIntervalMs = 1_000
 const dealSetupMaxAttempts = 30
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const MANIFEST_BLOB_SIZE_BYTES = 128 * 1024
-const SHARDER_DIAGNOSTICS_KEY = 'nil_dashboard_sharder_diagnostics_v1'
 const SHARDER_SLAB_VIEW_KEY = 'nil_dashboard_sharder_slab_view_v1'
 
 function makePreparedMdu(index: number, data: Uint8Array, fullSize = MDU_SIZE_BYTES): PreparedBrowserMdu {
@@ -471,13 +476,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
   const [compressUploads, setCompressUploads] = useState(true)
-  const [showSystemActivity, setShowSystemActivity] = useState(false)
-  const [underTheHoodOpen, setUnderTheHoodOpen] = useState(false)
   const [slabViewMode, setSlabViewMode] = useState<'summary' | 'detail'>('summary')
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [, setLogs] = useState<string[]>([]);
   const [shardProgress, setShardProgress] = useState<ShardProgressState>(createInitialShardProgress());
   const [uiTick, setUiTick] = useState(0);
   const recentSpeedMibPerSecRef = useRef<number>(0);
@@ -490,7 +493,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const lastCommitTxRef = useRef<string | null>(null);
   const lastFileMetaRef = useRef<{ filePath: string; fileSizeBytes: number } | null>(null);
   const wasmInitPromiseRef = useRef<Promise<void> | null>(null);
-  const logContainerRef = useRef<HTMLDivElement | null>(null);
   const persistInFlightRef = useRef<Promise<void> | null>(null)
   const lastPersistedManifestRootRef = useRef<string | null>(null)
   const autoUploadManifestRef = useRef<string | null>(null)
@@ -535,8 +537,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const diagnostics = window.sessionStorage.getItem(SHARDER_DIAGNOSTICS_KEY)
-      if (diagnostics === '1') setUnderTheHoodOpen(true)
       const slabView = window.sessionStorage.getItem(SHARDER_SLAB_VIEW_KEY)
       if (slabView === 'summary' || slabView === 'detail') {
         setSlabViewMode(slabView)
@@ -549,12 +549,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      window.sessionStorage.setItem(SHARDER_DIAGNOSTICS_KEY, underTheHoodOpen ? '1' : '0')
       window.sessionStorage.setItem(SHARDER_SLAB_VIEW_KEY, slabViewMode)
     } catch (e) {
       console.warn('Failed to persist sharder UI preferences', e)
     }
-  }, [slabViewMode, underTheHoodOpen])
+  }, [slabViewMode])
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
@@ -696,7 +695,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     setMode2UploadError(null)
     setMirrorStatus('idle')
     setMirrorError(null)
-    setShowSystemActivity(false)
     autoUploadManifestRef.current = null
     autoCommitManifestRef.current = null
     gatewayUploadProgressRef.current = {
@@ -1502,14 +1500,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     if (shardProgress.startTsMs == null) return;
 
     // Reset per-run state when a new run starts.
-    if (shardProgress.blobsDone === 0) {
+    if (shardProgress.mdusDone === 0 && shardProgress.userBytesDone === 0) {
       recentSpeedMibPerSecRef.current = 0;
       speedSamplesRef.current = [];
       etaDisplayMsRef.current = null;
       etaLastTickMsRef.current = null;
       etaLastRawMsRef.current = null;
     }
-  }, [processing, shardProgress.startTsMs, shardProgress.blobsDone]);
+  }, [processing, shardProgress.startTsMs, shardProgress.mdusDone, shardProgress.userBytesDone]);
 
   useEffect(() => {
     if (!processing) return;
@@ -1520,9 +1518,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     // --- Rolling speed (effective bytes over a fixed window) ---
     // Using a fixed window avoids inflated "burst" speeds when progress events arrive in batches.
     const SPEED_WINDOW_MS = 3000;
-    const totalWork = shardProgress.workTotal;
-    const workFrac = totalWork > 0 ? Math.max(0, Math.min(1, shardProgress.workDone / totalWork)) : 0;
-    const bytesDone = shardProgress.fileBytesTotal * workFrac;
+    const bytesDone = Math.max(0, Math.min(shardProgress.fileBytesTotal, shardProgress.userBytesDone));
     const samples = speedSamplesRef.current;
     samples.push({ tMs: now, bytesDone });
     while (samples.length > 2 && now - samples[0].tMs > SPEED_WINDOW_MS) samples.shift();
@@ -1583,24 +1579,29 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const remainingWork = Math.max(0, shardProgress.workTotal - shardProgress.workDone);
     const etaRawMs = avgWorkMs ? avgWorkMs * remainingWork : null;
     const etaMs = etaDisplayMsRef.current ?? etaRawMs;
-    const mib = shardProgress.fileBytesTotal > 0 ? shardProgress.fileBytesTotal / (1024 * 1024) : 0;
+    const processedMib = shardProgress.userBytesDone > 0 ? shardProgress.userBytesDone / (1024 * 1024) : 0;
     const seconds = elapsedMs / 1000;
-    const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
+    const avgMibPerSec = seconds > 0 ? processedMib / seconds : 0;
     const mibPerSec = recentSpeedMibPerSecRef.current > 0 ? recentSpeedMibPerSecRef.current : avgMibPerSec;
 
     const phaseDetails = (() => {
       if (shardProgress.phase === 'shard_user') {
-        return `User MDU ${String((shardProgress.currentMduIndex ?? 0) + 1)} / ${String(shardProgress.totalUserMdus)} • Blob ${String(
-          shardProgress.blobsInCurrentMdu,
-        )}/${String(shardProgress.blobsPerMdu)}`;
+        const done = Math.max(0, Math.min(shardProgress.totalUserMdus, shardProgress.mdusDone))
+        const parallel = shardProgress.label.toLowerCase().includes('parallel')
+        if (parallel) return `User MDUs ${String(done)} / ${String(shardProgress.totalUserMdus)}`
+        const current = Math.max(done + 1, Math.min(shardProgress.totalUserMdus, (shardProgress.currentMduIndex ?? 0) + 1))
+        return `User MDU ${String(current)} / ${String(shardProgress.totalUserMdus)}`
       }
       if (shardProgress.phase === 'shard_witness') {
-        return `Witness MDU ${String((shardProgress.currentMduIndex ?? 0) + 1)} / ${String(
-          shardProgress.totalWitnessMdus,
-        )} • Blob ${String(shardProgress.blobsInCurrentMdu)}/${String(shardProgress.blobsPerMdu)}`;
+        const witnessDone = Math.max(0, shardProgress.mdusDone - shardProgress.totalUserMdus)
+        const current = Math.max(
+          witnessDone + 1,
+          Math.min(shardProgress.totalWitnessMdus, (shardProgress.currentMduIndex ?? 0) + 1),
+        )
+        return `Witness MDU ${String(Math.min(current, shardProgress.totalWitnessMdus))} / ${String(shardProgress.totalWitnessMdus)}`
       }
       if (shardProgress.phase === 'finalize_mdu0') {
-        return `Finalizing MDU #0 • Blob ${String(shardProgress.blobsInCurrentMdu)}/${String(shardProgress.blobsPerMdu)}`;
+        return 'Finalizing MDU #0';
       }
       if (shardProgress.phase === 'compute_manifest') return 'Computing manifest commitment';
       if (shardProgress.phase === 'reading') return 'Reading file into memory';
@@ -1871,7 +1872,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       })
       lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };
       const startTs = performance.now();
-      setShowSystemActivity(false)
       autoCommitManifestRef.current = null
       setProcessing(true);
       setShards([]);
@@ -1902,6 +1902,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         startTsMs: startTs,
         totalUserMdus: 0,
         totalWitnessMdus: 0,
+        totalMdus: 0,
+        mdusDone: 0,
+        userBytesDone: 0,
         currentMduIndex: null,
         currentMduKind: null,
         lastOpMs: null,
@@ -2051,6 +2054,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             fileBytesTotal: gatewaySizeBytes,
             totalUserMdus: gatewayUserMdusFinal,
             totalWitnessMdus: gatewayWitnessMdus,
+            totalMdus: gatewayTotalMdus > 0 ? gatewayTotalMdus : p.totalMdus,
+            mdusDone: gatewayTotalMdus > 0 ? gatewayTotalMdus : p.mdusDone,
+            userBytesDone: Math.max(p.userBytesDone, gatewaySizeBytes),
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
           }))
@@ -2206,6 +2212,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               blobsDone: normalizedDone,
               blobsTotal: normalizedTotal,
               fileBytesTotal: bytesTotal > 0 ? bytesTotal : p.fileBytesTotal,
+              userBytesDone:
+                bytesTotal > 0
+                  ? Math.max(p.userBytesDone, Math.max(0, Math.min(bytesTotal, bytesDone)))
+                  : p.userBytesDone,
             }))
           }
 
@@ -2350,6 +2360,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               blobsDone: 0,
               blobsTotal: file.size,
               fileBytesTotal: file.size,
+              userBytesDone: 0,
               currentOpStartedAtMs: performance.now(),
             }))
 
@@ -2766,6 +2777,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const totalUserChunks = uploadPlan.totalUserMdus
     const totalFileBytes = uploadPlan.totalFileBytes
     const witnessMduCount = uploadPlan.witnessMduCount
+    const totalMdus = uploadPlan.totalMdus
     const witnessPayloads = uploadPlan.witnessPayloads
     const userPayloads = uploadPlan.userPayloads
     const workTotal = uploadPlan.workTotal
@@ -2798,6 +2810,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       fileBytesTotal: totalFileBytes,
       totalUserMdus: totalUserChunks,
       totalWitnessMdus: witnessMduCount,
+      totalMdus,
+      mdusDone: 0,
+      userBytesDone: 0,
       currentOpStartedAtMs: null,
       currentMduIndex: null,
       currentMduKind: null,
@@ -2819,9 +2834,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           await workerClient.initMdu0Builder(totalUserChunks, commitmentsPerMdu);
         }
 
-        let mdusCommitted = 0;
+        let userMdusCommitted = 0;
+        let witnessMdusCommitted = 0;
+        let metaMdusCommitted = 0;
+        let userBytesCommitted = 0;
         let workCommitted = 0;
         let prevCommitMsPerMdu: number | null = null;
+        const overallMdusCommitted = () => userMdusCommitted + witnessMdusCommitted + metaMdusCommitted
+        const overallBlobsCommitted = () => overallMdusCommitted() * uploadPlan.blobsPerMdu
 
         const pickBatchBlobs = (prevMduMs: number | null): number => {
           const TARGET_UPDATE_MS = 2500;
@@ -2873,7 +2893,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               currentMduKind: 'user',
               currentMduIndex: i,
               blobsInCurrentMdu: 0,
-              blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+              blobsDone: overallBlobsCommitted(),
+              mdusDone: overallMdusCommitted(),
+              userBytesDone: userBytesCommitted,
               workDone: workCommitted,
             }))
             setShards((prev) =>
@@ -2994,16 +3016,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ...perfSample,
             })
             prevCommitMsPerMdu = opMs
-            mdusCommitted += 1
+            userMdusCommitted += 1
+            userBytesCommitted += userPayloads[i] ?? 0
             workCommitted += workTotalThisMdu
             setShardProgress((p) => {
-              const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU
+              const blobsDone = overallBlobsCommitted()
               const avg =
                 p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs
               return {
                 ...p,
                 blobsDone,
-                blobsInCurrentMdu: PLANNER_BLOBS_PER_MDU,
+                blobsInCurrentMdu: 0,
+                mdusDone: overallMdusCommitted(),
+                userBytesDone: Math.min(p.fileBytesTotal, userBytesCommitted),
                 currentOpStartedAtMs: null,
                 lastOpMs: opMs,
                 workDone: workCommitted,
@@ -3042,7 +3067,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 currentMduKind: 'user',
                 currentMduIndex: i,
                 blobsInCurrentMdu: 0,
-                blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+                blobsDone: overallBlobsCommitted(),
+                mdusDone: overallMdusCommitted(),
+                userBytesDone: userBytesCommitted,
                 workDone: workCommitted,
               }));
               setShards((prev) =>
@@ -3094,15 +3121,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   if (!isFinal && now - lastProgressUiUpdateMs < 100) return;
                   lastProgressUiUpdateMs = now;
                   setShardProgress((prev) => {
-                    const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
+                    const blobsDone = overallBlobsCommitted() + done;
                     const doneNonTrivial = Math.min(done, nonTrivialBlobs);
                     const doneTrivial = Math.max(0, done - nonTrivialBlobs);
                     const workInMdu = doneNonTrivial + doneTrivial * PLANNER_TRIVIAL_BLOB_WEIGHT;
                     const workDone = workCommitted + Math.min(workTotalThisMdu, workInMdu);
+                    const partialUserBytes = Math.min(rawChunk.byteLength, (done / PLANNER_BLOBS_PER_MDU) * rawChunk.byteLength);
+                    const userBytesDone = Math.min(prev.fileBytesTotal, userBytesCommitted + partialUserBytes);
                     return {
                       ...prev,
                       blobsInCurrentMdu: done,
                       blobsDone,
+                      mdusDone: overallMdusCommitted(),
+                      userBytesDone,
                       workDone,
                       avgWorkMs:
                         prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
@@ -3160,16 +3191,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 ...perfSample,
               });
               prevCommitMsPerMdu = opMs;
-              mdusCommitted += 1;
+              userMdusCommitted += 1;
+              userBytesCommitted += rawChunk.byteLength;
               workCommitted += workTotalThisMdu;
               setShardProgress((p) => {
-                const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU;
+                const blobsDone = overallBlobsCommitted();
                 const avg =
                   p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
                 return {
                   ...p,
                   blobsDone,
                   blobsInCurrentMdu: 0,
+                  mdusDone: overallMdusCommitted(),
+                  userBytesDone: Math.min(p.fileBytesTotal, userBytesCommitted),
                   currentOpStartedAtMs: null,
                   lastOpMs: opMs,
                   workDone: workCommitted,
@@ -3218,7 +3252,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               currentMduKind: 'witness',
               currentMduIndex: i,
               blobsInCurrentMdu: 0,
-              blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+              blobsDone: overallBlobsCommitted(),
+              mdusDone: overallMdusCommitted(),
+              userBytesDone: userBytesCommitted,
               workDone: workCommitted,
             }));
             setShards((prev) => prev.map((s) => (s.id === 1 + i ? { ...s, status: 'processing' } : s)));
@@ -3296,16 +3332,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ...perfSample,
             });
             prevCommitMsPerMdu = opMs;
-            mdusCommitted += 1;
+            witnessMdusCommitted += 1;
             workCommitted += workTotalThisMdu;
             setShardProgress((p) => {
-              const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU;
+              const blobsDone = overallBlobsCommitted();
               const avg =
                 p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
               return {
                 ...p,
                 blobsDone,
                 blobsInCurrentMdu: 0,
+                mdusDone: overallMdusCommitted(),
+                userBytesDone: Math.min(p.fileBytesTotal, userBytesCommitted),
                 currentOpStartedAtMs: null,
                 lastOpMs: opMs,
                 workDone: workCommitted,
@@ -3342,7 +3380,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           currentMduKind: 'meta',
           currentMduIndex: 0,
           blobsInCurrentMdu: 0,
-          blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+          blobsDone: overallBlobsCommitted(),
+          mdusDone: overallMdusCommitted(),
+          userBytesDone: userBytesCommitted,
           workDone: workCommitted,
         }));
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'processing' } : s)));
@@ -3419,16 +3459,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           ...metaPerfSample,
         });
         prevCommitMsPerMdu = opMs;
-        mdusCommitted += 1;
+        metaMdusCommitted += 1;
         workCommitted += workTotalThisMdu0;
         setShardProgress((p) => {
-          const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU;
+          const blobsDone = overallBlobsCommitted();
           const avg =
             p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
           return {
             ...p,
             blobsDone,
             blobsInCurrentMdu: 0,
+            mdusDone: overallMdusCommitted(),
+            userBytesDone: Math.min(p.fileBytesTotal, userBytesCommitted),
             currentOpStartedAtMs: null,
             lastOpMs: opMs,
             workDone: workCommitted,
@@ -3487,6 +3529,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           currentMduKind: null,
           blobsDone: p.blobsTotal,
           blobsInCurrentMdu: 0,
+          mdusDone: p.totalMdus,
+          userBytesDone: p.fileBytesTotal,
         }));
 
         addLog(`> Manifest Root: ${finalRootHex.slice(0, 16)}...`);
@@ -3813,12 +3857,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const readyToCommit = hasManifestRoot && isUploadComplete && !isAlreadyCommitted;
   const commitRejectedByUser = isWalletUserRejected(commitError)
   const commitDisplayError = commitError && !commitRejectedByUser ? commitError : null
-  const hasError = shardProgress.phase === 'error' || Boolean(mode2UploadError) || Boolean(commitDisplayError);
-  const currentFileMeta = lastFileMetaRef.current
   const uploadErrorMessage =
     mode2UploadError ||
     uploadProgress.find((entry) => entry.status === 'error')?.error ||
     null
+  const expansionError = shardProgress.phase === 'error'
+  const uploadError = Boolean(uploadErrorMessage)
+  const hasError = expansionError || uploadError || Boolean(commitDisplayError);
+  const currentFileMeta = lastFileMetaRef.current
   const showStatusPanel =
     processing ||
     activeUploading ||
@@ -3946,9 +3992,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       shardProgress.phase !== 'done' &&
       shardProgress.phase !== 'error'
 
-    const selectState: WorkflowStepState = hasError && !selected ? 'error' : selected ? 'done' : 'active'
+    const selectState: WorkflowStepState = expansionError && !selected ? 'error' : selected ? 'done' : 'active'
     const expandState: WorkflowStepState =
-      hasError && (processing || hasManifestRoot)
+      expansionError && (processing || hasManifestRoot)
         ? 'error'
         : gatewayMode2Flow
           ? expandActiveInGatewayMode
@@ -3962,7 +4008,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ? 'done'
               : 'idle'
     const uploadState: WorkflowStepState =
-      uploadErrorMessage
+      uploadError
         ? 'error'
         : activeUploading || shardProgress.phase === 'gateway_uploading'
           ? 'active'
@@ -4029,9 +4075,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     commitDisplayError,
     commitRejectedByUser,
     currentFileMeta,
+    expansionError,
     gatewayMode2Enabled,
     gatewayReachable,
-    hasError,
     hasManifestRoot,
     isAlreadyCommitted,
     isCommitConfirming,
@@ -4043,6 +4089,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     shardProgress.label,
     shardProgress.phase,
     shards.length,
+    uploadError,
     uploadErrorMessage,
   ])
 
@@ -4068,15 +4115,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     !isUploadComplete &&
     !activeUploading &&
     !processing &&
-    (hasError || readyToUpload)
-  const showUnderTheHood =
-    processing ||
-    activeUploading ||
-    readyToCommit ||
-    isCommitPending ||
-    isCommitConfirming ||
-    hasError ||
-    logs.length > 0
+    (expansionError || uploadError || readyToUpload)
 
   const slabRoleForShard = useCallback((shard: ShardItem): 'meta' | 'witness' | 'user' => {
     if (shard.id === 0) return 'meta'
@@ -4123,20 +4162,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
     return summary
   }, [shards, slabRoleForShard, slabStateForShard])
-
-  useEffect(() => {
-    const node = logContainerRef.current;
-    if (!node) return;
-    node.scrollTop = node.scrollHeight;
-  }, [logs.length, processing, activeUploading, readyToCommit, isCommitPending, isCommitConfirming, isAlreadyCommitted, hasError]);
-
-  useEffect(() => {
-    if (hasError) {
-      setShowSystemActivity(true)
-      setUnderTheHoodOpen(true)
-    }
-  }, [hasError])
-
   const triggerPreparedCommit = useCallback(
     async (trigger: 'auto' | 'manual' = 'manual') => {
       if (!readyToCommit || !currentManifestRoot) return false
@@ -4480,7 +4505,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                         '—'
                       )
                     ) : (
-                      `${shardProgress.blobsDone}/${shardProgress.blobsTotal} blobs`
+                      shardProgress.totalMdus > 0 ? `${shardProgress.mdusDone}/${shardProgress.totalMdus} MDUs` : '—'
                     )}
                   </div>
                 </div>
@@ -4571,96 +4596,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     Tx: {commitHash}
                   </div>
                 )}
-              </div>
-            ) : null}
-
-            {showUnderTheHood ? (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setUnderTheHoodOpen((prev) => !prev)}
-                  className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {underTheHoodOpen || hasError ? 'Hide diagnostics' : 'Show diagnostics'}
-                </button>
-                <details
-                  data-testid="mdu-under-the-hood"
-                  open={underTheHoodOpen || hasError}
-                  onToggle={(event) => {
-                    const target = event.currentTarget as HTMLDetailsElement
-                    setUnderTheHoodOpen(target.open)
-                  }}
-                  className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground"
-                >
-                <summary
-                  data-testid="mdu-under-the-hood-toggle"
-                  className="cursor-pointer select-none hover:text-foreground font-mono-data uppercase tracking-[0.2em] text-[10px] font-bold"
-                >
-                  Under the hood
-                </summary>
-                <div className="mt-3 space-y-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">File</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {currentFileMeta ? formatBytes(currentFileMeta.fileSizeBytes) : formatBytes(shardProgress.fileBytesTotal)}
-                      </div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">MDUs</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.totalUserMdus} user • {shardProgress.totalWitnessMdus} witness • 1 meta
-                      </div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Blobs</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.blobsDone}/{shardProgress.blobsTotal}
-                      </div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Phase</div>
-                      <div className="mt-1 text-foreground font-mono-data">{shardProgress.phase}</div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2 sm:col-span-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Current</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.currentMduKind
-                          ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}`
-                          : '—'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {logs.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-primary font-bold uppercase tracking-[0.2em]">System Activity</p>
-                        <button
-                          type="button"
-                          data-testid="mdu-system-activity-toggle"
-                          onClick={() => setShowSystemActivity((prev) => !prev)}
-                          className="border border-border bg-background px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40"
-                        >
-                          {showSystemActivity || hasError ? 'Hide' : 'Show'}
-                        </button>
-                      </div>
-                      {showSystemActivity || hasError ? (
-                        <div ref={logContainerRef} data-testid="mdu-system-activity" className="space-y-1 max-h-32 overflow-y-auto">
-                          {logs.map((log, i) => (
-                            <p key={i}>{log}</p>
-                          ))}
-                          {processing && <p className="animate-pulse">...</p>}
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-muted-foreground/80">
-                          Hidden by default. Open this log only when you need low-level upload details.
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-                </details>
               </div>
             ) : null}
 
