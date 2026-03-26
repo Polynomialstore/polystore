@@ -54,6 +54,23 @@ func (e *providerUploadHTTPError) Error() string {
 	return fmt.Sprintf("upload failed: %s (%s)", e.status, msg)
 }
 
+func isBundleUnsupportedHTTPError(httpErr *providerUploadHTTPError) bool {
+	if httpErr == nil {
+		return false
+	}
+	switch httpErr.statusCode {
+	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusUnsupportedMediaType, http.StatusNotImplemented:
+		return true
+	case http.StatusBadRequest:
+		body := strings.ToLower(strings.TrimSpace(httpErr.body))
+		return strings.Contains(body, "invalid bundle") ||
+			strings.Contains(body, "invalid multipart") ||
+			strings.Contains(body, "invalid deal_id")
+	default:
+		return false
+	}
+}
+
 func isUploadCanceledErr(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
@@ -1491,12 +1508,7 @@ func mode2UploadArtifactsToProviders(
 		if !errors.As(err, &httpErr) {
 			return false
 		}
-		switch httpErr.statusCode {
-		case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
-			return true
-		default:
-			return false
-		}
+		return isBundleUnsupportedHTTPError(httpErr)
 	}
 
 	var retries atomic.Uint64
