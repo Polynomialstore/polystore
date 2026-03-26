@@ -4121,6 +4121,23 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     [uploadProgress],
   )
 
+  const workflowPreparedCounts = useMemo(() => {
+    const totalPreparedMdus = shardProgress.totalMdus > 0 ? shardProgress.totalMdus : shards.length
+    const userMdus = Math.max(0, shardProgress.totalUserMdus)
+    const witnessMdus = Math.max(0, shardProgress.totalWitnessMdus)
+    const mdu0Count = Math.max(0, totalPreparedMdus - userMdus - witnessMdus)
+    return { totalPreparedMdus, userMdus, witnessMdus, mdu0Count }
+  }, [shardProgress.totalMdus, shardProgress.totalUserMdus, shardProgress.totalWitnessMdus, shards.length])
+
+  const workflowRsSlotCount = useMemo(() => {
+    if (stripeParams && stripeParams.k > 0 && stripeParams.m >= 0) {
+      return Math.max(1, stripeParams.k + stripeParams.m)
+    }
+    if (slotBases.length > 0) return slotBases.length
+    if (slotProviders.length > 0) return slotProviders.length
+    return 1
+  }, [slotBases.length, slotProviders.length, stripeParams])
+
   const workflowDoneSummaries = useMemo<Record<number, WorkflowDoneSummary | null>>(() => {
     const summaries: Record<number, WorkflowDoneSummary | null> = {
       0: null,
@@ -4140,23 +4157,38 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       }
     }
 
-    const totalPreparedMdus = shardProgress.totalMdus > 0 ? shardProgress.totalMdus : shards.length
+    const { totalPreparedMdus, userMdus, witnessMdus, mdu0Count } = workflowPreparedCounts
     if (hasManifestRoot && totalPreparedMdus > 0) {
+      const mode2Secondary =
+        isMode2 && stripeParams
+          ? `RS(${stripeParams.k},${stripeParams.m}) => ${workflowRsSlotCount} shards per user MDU (${String(userMdus * workflowRsSlotCount)} user shards total).`
+          : undefined
       summaries[1] = {
-        headline: `${String(totalPreparedMdus)} MDUs prepared`,
+        headline: isMode2 ? `${String(totalPreparedMdus)} slab MDUs prepared` : `${String(totalPreparedMdus)} MDUs prepared`,
+        secondary: mode2Secondary,
         chips: [
-          { label: 'user', value: String(shardProgress.totalUserMdus), tone: 'neutral' },
-          { label: 'witness', value: String(shardProgress.totalWitnessMdus), tone: 'neutral' },
+          ...(mdu0Count > 0 ? [{ label: 'mdu0', value: String(mdu0Count), tone: 'neutral' as const }] : []),
+          ...(witnessMdus > 0 ? [{ label: 'witness', value: String(witnessMdus), tone: 'neutral' as const }] : []),
+          ...(userMdus > 0 ? [{ label: 'user', value: String(userMdus), tone: 'neutral' as const }] : []),
+          ...(isMode2 ? [{ label: 'slots', value: String(workflowRsSlotCount), tone: 'neutral' as const }] : []),
         ],
       }
     }
 
     if (isUploadComplete || readyToCommit || isAlreadyCommitted || isCommitPending || isCommitConfirming) {
-      const uploadedArtifactsLabel =
-        uploadProgress.length > 0
+      const { totalPreparedMdus, userMdus, witnessMdus, mdu0Count } = workflowPreparedCounts
+      const metadataMdus = Math.max(0, mdu0Count + witnessMdus)
+      const perSpArtifacts = Math.max(0, metadataMdus + userMdus + 1) // + manifest upload
+      const totalSpUploads = perSpArtifacts * workflowRsSlotCount
+      const mode2UploadSecondary = `${String(metadataMdus * workflowRsSlotCount)} metadata + ${String(
+        userMdus * workflowRsSlotCount,
+      )} user shards + ${String(workflowRsSlotCount)} manifest uploads`
+      const uploadedArtifactsLabel = isMode2
+        ? `${String(totalSpUploads)} uploads`
+        : uploadProgress.length > 0
           ? `${String(uploadArtifactsDone)} / ${String(uploadProgress.length)} artifacts`
-          : shardProgress.totalMdus > 0
-            ? `${String(shardProgress.totalMdus)} MDUs uploaded`
+          : totalPreparedMdus > 0
+            ? `${String(totalPreparedMdus)} MDUs uploaded`
             : 'Upload finished'
       const mirrorLabel =
         mirrorStatus === 'success'
@@ -4170,8 +4202,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         mirrorStatus === 'error' ? 'primary' : 'neutral'
       summaries[2] = {
         headline: 'Provider upload complete',
+        secondary: isMode2 ? mode2UploadSecondary : undefined,
         chips: [
-          { label: 'artifacts', value: uploadedArtifactsLabel, tone: 'success' },
+          { label: isMode2 ? 'uploads' : 'artifacts', value: uploadedArtifactsLabel, tone: 'success' },
+          ...(isMode2
+            ? [
+                { label: 'sps', value: String(workflowRsSlotCount), tone: 'neutral' as const },
+                { label: 'per sp', value: `${String(perSpArtifacts)} artifacts`, tone: 'neutral' as const },
+              ]
+            : []),
           ...(mirrorLabel ? [{ label: 'gateway', value: mirrorLabel, tone: mirrorTone }] : []),
         ],
       }
@@ -4197,15 +4236,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     isCommitConfirming,
     isCommitPending,
     isUploadComplete,
+    isMode2,
     mirrorStatus,
     readyToCommit,
     selectedFileDisplayName,
-    shardProgress.totalMdus,
-    shardProgress.totalUserMdus,
-    shardProgress.totalWitnessMdus,
-    shards.length,
+    stripeParams,
     uploadArtifactsDone,
     uploadProgress.length,
+    workflowPreparedCounts,
+    workflowRsSlotCount,
   ])
 
   const activeWorkflowStepIndex = useMemo(() => {
