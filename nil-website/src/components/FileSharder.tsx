@@ -4425,110 +4425,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 Retry setup
               </button>
             </div>
-          ) : uploadPanelState === 'idle' ? (
-            <div
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              data-testid="mdu-upload-card"
-              data-panel-state="idle"
-              className={`
-                nil-tab-panel p-6 transition-colors duration-200
-                ${isDragging
-                  ? 'border-primary/50 bg-primary/10'
-                  : 'hover:border-primary/30 hover:bg-secondary/40'
-                }
-              `}
-            >
-              <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-4">
-                  <div className="nil-inset shrink-0 flex h-12 w-12 items-center justify-center">
-                    <Cpu className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-lg font-bold text-foreground">Upload file</div>
-                    <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      Choose a file to add to this deal. Progress appears below.
-                    </div>
-                    <div className={`mt-3 text-[10px] font-mono-data uppercase tracking-[0.2em] ${sharderSummaryToneClass}`}>
-                      {wasmStatus === 'initializing' ? (
-                        <span className="animate-pulse">{sharderSummary}</span>
-                      ) : (
-                        sharderSummary
-                      )}
-                    </div>
-                    <label className="mt-4 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
-                      <div className={`flex h-4 w-4 items-center justify-center border transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
-                        {compressUploads && <div className="h-1.5 w-1.5 bg-primary-foreground" />}
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="hidden"
-                        checked={compressUploads}
-                        disabled={processing || activeUploading}
-                        onChange={(e) => setCompressUploads(e.target.checked)}
-                      />
-                      <span>Compress before upload</span>
-                    </label>
-                  </div>
-                </div>
-                <label className="cta-shadow inline-flex w-full cursor-pointer items-center justify-center border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] sm:w-auto">
-                  Upload file
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-                </label>
-              </div>
-            </div>
-          ) : uploadPanelState === 'success' ? (
-            <div
-              className="relative overflow-hidden glass-panel industrial-border p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]"
-              data-testid="mdu-upload-card"
-              data-panel-state="success"
-            >
-              <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
-              <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-4">
-                  <div className="nil-inset shrink-0 flex h-12 w-12 items-center justify-center">
-                    <CheckCircle2 className="h-5 w-5 text-success" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-lg font-bold text-foreground">Upload complete</div>
-                    <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      {currentFileMeta
-                        ? `${currentFileMeta.filePath} is committed. Choose another file to append to this deal.`
-                        : 'Your file is committed. Choose another file to append to this deal.'}
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
-                      <div
-                        data-testid="mdu-upload-state"
-                        className="nil-tab-panel border-success/30 bg-success/10 px-3 py-2 font-bold text-success"
-                      >
-                        Upload Complete
-                      </div>
-                      <div
-                        data-testid="mdu-commit"
-                        className="nil-tab-panel border-success/30 bg-success/10 px-3 py-2 font-bold text-success"
-                      >
-                        Committed!
-                      </div>
-                    </div>
-                    {commitHash ? (
-                      <div className="mt-3 text-[10px] font-mono-data text-muted-foreground truncate uppercase tracking-[0.2em]">
-                        Tx: {commitHash}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                <label className="inline-flex w-full cursor-pointer items-center justify-center border border-border bg-background px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40 sm:w-auto">
-                  Upload file
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-                </label>
-              </div>
-            </div>
-          ) : null}
-          {uploadPanelState === 'running' || uploadPanelState === 'error' ? (
+          ) : (
         <div
-          className="relative overflow-hidden glass-panel industrial-border p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] text-sm"
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+          className={`relative overflow-hidden glass-panel industrial-border p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] text-sm ${isDragging ? 'border-primary/50 bg-primary/5' : ''}`}
           data-testid="mdu-upload-card"
           data-panel-state={uploadPanelState}
           data-upload-phase={uploadPhase}
@@ -4542,7 +4445,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             <div className="min-w-0">
               <p className="nil-section-label mb-2">/proc/sharder</p>
               <div className="text-sm font-semibold text-foreground">
-                {processing
+                {isAlreadyCommitted
+                  ? 'Upload complete'
+                  : processing
                   ? 'Preparing upload'
                   : activeUploading
                     ? 'Uploading to providers'
@@ -4550,18 +4455,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                       ? 'Committing to chain'
                       : hasError
                         ? 'Upload needs attention'
-                        : 'Upload in progress'}
+                        : currentFileMeta
+                          ? 'Upload in progress'
+                          : 'Upload file'}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {currentFileMeta
                   ? `${currentFileMeta.filePath} • ${formatBytes(currentFileMeta.fileSizeBytes)}`
-                  : 'Processing the selected file for this deal.'}
+                  : 'Choose a file to add to this deal. Progress appears below.'}
               </div>
             </div>
-            <label className="inline-flex shrink-0 cursor-pointer items-center justify-center border border-border bg-background px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40">
-              Upload file
-              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-            </label>
           </div>
           <div className="relative space-y-2">
             <div className="space-y-1.5">
@@ -4618,6 +4521,42 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     {expanded ? (
                       <div className="mt-2 space-y-2">
                         <div className="text-[11px] font-mono-data leading-relaxed">{step.detail}</div>
+
+                        {index === 0 ? (
+                          <div className={`nil-tab-panel p-3 ${isDragging ? 'border-primary/50 bg-primary/10' : ''}`}>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <div className={`text-[10px] font-mono-data uppercase tracking-[0.2em] ${sharderSummaryToneClass}`}>
+                                  {wasmStatus === 'initializing' ? (
+                                    <span className="animate-pulse">{sharderSummary}</span>
+                                  ) : (
+                                    sharderSummary
+                                  )}
+                                </div>
+                                <div className="mt-2 text-[11px] text-muted-foreground font-mono-data">
+                                  {isDragging ? 'Drop the file to start upload.' : 'Drag and drop a file here, or choose a file.'}
+                                </div>
+                              </div>
+                              <label className="cta-shadow inline-flex cursor-pointer items-center justify-center border border-primary bg-primary px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]">
+                                Select file
+                                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
+                              </label>
+                            </div>
+                            <label className="mt-3 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
+                              <div className={`flex h-4 w-4 items-center justify-center border transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
+                                {compressUploads && <div className="h-1.5 w-1.5 bg-primary-foreground" />}
+                              </div>
+                              <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={compressUploads}
+                                disabled={processing || activeUploading}
+                                onChange={(e) => setCompressUploads(e.target.checked)}
+                              />
+                              <span>Compress before upload</span>
+                            </label>
+                          </div>
+                        ) : null}
 
                         {index === 1 && processing ? (
                           <div className="space-y-2" data-testid="wasm-sharding-progress">
@@ -4979,7 +4918,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             ) : null}
           </div>
         </div>
-          ) : null}
+          )}
 
       </>
       )}
