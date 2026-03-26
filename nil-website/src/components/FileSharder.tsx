@@ -410,6 +410,8 @@ const dealSetupPollIntervalMs = 1_000
 const dealSetupMaxAttempts = 30
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const MANIFEST_BLOB_SIZE_BYTES = 128 * 1024
+const SHARDER_DIAGNOSTICS_KEY = 'nil_dashboard_sharder_diagnostics_v1'
+const SHARDER_SLAB_VIEW_KEY = 'nil_dashboard_sharder_slab_view_v1'
 
 function makePreparedMdu(index: number, data: Uint8Array, fullSize = MDU_SIZE_BYTES): PreparedBrowserMdu {
   const sparse = makeSparseArtifact({ kind: 'mdu', index, bytes: data, fullSize })
@@ -456,6 +458,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
   const [compressUploads, setCompressUploads] = useState(true)
   const [showSystemActivity, setShowSystemActivity] = useState(false)
+  const [underTheHoodOpen, setUnderTheHoodOpen] = useState(false)
+  const [slabViewMode, setSlabViewMode] = useState<'summary' | 'detail'>('summary')
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -513,6 +517,30 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }),
     [commitContent],
   )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const diagnostics = window.sessionStorage.getItem(SHARDER_DIAGNOSTICS_KEY)
+      if (diagnostics === '1') setUnderTheHoodOpen(true)
+      const slabView = window.sessionStorage.getItem(SHARDER_SLAB_VIEW_KEY)
+      if (slabView === 'summary' || slabView === 'detail') {
+        setSlabViewMode(slabView)
+      }
+    } catch (e) {
+      console.warn('Failed to restore sharder UI preferences', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.setItem(SHARDER_DIAGNOSTICS_KEY, underTheHoodOpen ? '1' : '0')
+      window.sessionStorage.setItem(SHARDER_SLAB_VIEW_KEY, slabViewMode)
+    } catch (e) {
+      console.warn('Failed to persist sharder UI preferences', e)
+    }
+  }, [slabViewMode, underTheHoodOpen])
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
@@ -3999,6 +4027,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     uploadErrorMessage,
   ])
 
+  const activeWorkflowStepIndex = useMemo(() => {
+    const errorIdx = workflowSteps.findIndex((step) => step.state === 'error')
+    if (errorIdx >= 0) return errorIdx
+    const activeIdx = workflowSteps.findIndex((step) => step.state === 'active')
+    if (activeIdx >= 0) return activeIdx
+    let doneIdx = -1
+    for (let i = 0; i < workflowSteps.length; i++) {
+      if (workflowSteps[i].state === 'done') doneIdx = i
+    }
+    return doneIdx >= 0 ? doneIdx : 0
+  }, [workflowSteps])
+
   const stepToneClasses: Record<WorkflowStepState, string> = {
     idle: 'border-border/50 bg-background/35 text-muted-foreground',
     active: 'border-primary/40 bg-primary/10 text-foreground',
@@ -4019,6 +4059,52 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     hasError ||
     logs.length > 0
 
+  const slabRoleForShard = useCallback((shard: ShardItem): 'meta' | 'witness' | 'user' => {
+    if (shard.id === 0) return 'meta'
+    if (shard.id <= shardProgress.totalWitnessMdus) return 'witness'
+    return 'user'
+  }, [shardProgress.totalWitnessMdus])
+
+  const slabStateForShard = useCallback((shard: ShardItem): 'complete' | 'processing' | 'empty' | 'error' | 'pending_witness' => {
+    if (shard.status === 'expanded') return 'complete'
+    if (shard.status === 'processing') return 'processing'
+    if (shard.status === 'error') return 'error'
+    if (slabRoleForShard(shard) === 'witness') return 'pending_witness'
+    return 'empty'
+  }, [slabRoleForShard])
+
+  const slabLegendCounts = useMemo(() => {
+    const counts: Record<'complete' | 'processing' | 'empty' | 'error' | 'pending_witness', number> = {
+      complete: 0,
+      processing: 0,
+      empty: 0,
+      error: 0,
+      pending_witness: 0,
+    }
+    for (const shard of shards) {
+      counts[slabStateForShard(shard)] += 1
+    }
+    return counts
+  }, [shards, slabStateForShard])
+
+  const slabRoleSummary = useMemo(() => {
+    const summary: Record<'meta' | 'witness' | 'user', { total: number; complete: number; processing: number; pending: number; error: number }> = {
+      meta: { total: 0, complete: 0, processing: 0, pending: 0, error: 0 },
+      witness: { total: 0, complete: 0, processing: 0, pending: 0, error: 0 },
+      user: { total: 0, complete: 0, processing: 0, pending: 0, error: 0 },
+    }
+    for (const shard of shards) {
+      const role = slabRoleForShard(shard)
+      const state = slabStateForShard(shard)
+      summary[role].total += 1
+      if (state === 'complete') summary[role].complete += 1
+      if (state === 'processing') summary[role].processing += 1
+      if (state === 'error') summary[role].error += 1
+      if (state === 'empty' || state === 'pending_witness') summary[role].pending += 1
+    }
+    return summary
+  }, [shards, slabRoleForShard, slabStateForShard])
+
   useEffect(() => {
     const node = logContainerRef.current;
     if (!node) return;
@@ -4028,6 +4114,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   useEffect(() => {
     if (hasError) {
       setShowSystemActivity(true)
+      setUnderTheHoodOpen(true)
     }
   }, [hasError])
 
@@ -4308,29 +4395,34 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             </label>
           </div>
           <div className="relative space-y-2">
-            <div className="grid gap-2 md:grid-cols-4">
-              {workflowSteps.map((step) => (
-                <div
-                  key={step.title}
-                  className={`nil-tab-panel px-3 py-3 ${stepToneClasses[step.state]}`}
-                >
-                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
-                    {step.state === 'done' ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-                    ) : step.state === 'active' ? (
-                      <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
-                    ) : step.state === 'error' ? (
-                      <UploadCloud className="h-3.5 w-3.5" />
-                    ) : (
-                      <span className="inline-block h-3.5 w-3.5 border border-current/50" />
-                    )}
-                    <span>{step.title}</span>
+            <div className="space-y-1.5">
+              {workflowSteps.map((step, index) => {
+                const expanded = step.state === 'error' || index === activeWorkflowStepIndex
+                return (
+                  <div key={step.title} className={`nil-tab-panel px-3 py-2.5 ${stepToneClasses[step.state]}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
+                        {step.state === 'done' ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                        ) : step.state === 'active' ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
+                        ) : step.state === 'error' ? (
+                          <UploadCloud className="h-3.5 w-3.5" />
+                        ) : (
+                          <span className="inline-block h-3.5 w-3.5 border border-current/50" />
+                        )}
+                        <span>{step.title}</span>
+                      </div>
+                      <div className="text-[9px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+                        {step.state === 'done' ? 'Done' : step.state === 'active' ? 'Active' : step.state === 'error' ? 'Error' : 'Pending'}
+                      </div>
+                    </div>
+                    {expanded ? (
+                      <div className="mt-2 text-[11px] font-mono-data leading-relaxed">{step.detail}</div>
+                    ) : null}
                   </div>
-                  <div className="mt-2 text-[11px] font-mono-data leading-relaxed">
-                    {step.detail}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {hasError ? (
@@ -4464,7 +4556,23 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             ) : null}
 
             {showUnderTheHood ? (
-              <details data-testid="mdu-under-the-hood" className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setUnderTheHoodOpen((prev) => !prev)}
+                  className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {underTheHoodOpen || hasError ? 'Hide diagnostics' : 'Show diagnostics'}
+                </button>
+                <details
+                  data-testid="mdu-under-the-hood"
+                  open={underTheHoodOpen || hasError}
+                  onToggle={(event) => {
+                    const target = event.currentTarget as HTMLDetailsElement
+                    setUnderTheHoodOpen(target.open)
+                  }}
+                  className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground"
+                >
                 <summary
                   data-testid="mdu-under-the-hood-toggle"
                   className="cursor-pointer select-none hover:text-foreground font-mono-data uppercase tracking-[0.2em] text-[10px] font-bold"
@@ -4533,7 +4641,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     </div>
                   ) : null}
                 </div>
-              </details>
+                </details>
+              </div>
             ) : null}
 
             <div className="flex flex-col gap-2">
@@ -4596,7 +4705,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         <div className="relative overflow-hidden glass-panel industrial-border p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
           <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
 
-          <div className="relative flex justify-between items-center mb-6 gap-3">
+          <div className="relative mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
                 /mnt/slab_map
@@ -4612,72 +4721,151 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 </Link>
               </div>
             </div>
-            <div className="shrink-0 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSlabViewMode('summary')}
+                className={`border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${slabViewMode === 'summary' ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground'}`}
+              >
+                Summary
+              </button>
+              <button
+                type="button"
+                onClick={() => setSlabViewMode('detail')}
+                className={`border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${slabViewMode === 'detail' ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground'}`}
+              >
+                Detail
+              </button>
+            </div>
+          </div>
+
+          <div className="relative mb-4 flex flex-wrap items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.18em] text-muted-foreground">
+            <span className="nil-tab-inset px-2 py-1">
+              {slabLegendCounts.complete} complete
+            </span>
+            <span className="nil-tab-inset px-2 py-1">
+              {slabLegendCounts.processing} processing
+            </span>
+            <span className="nil-tab-inset px-2 py-1">
+              {slabLegendCounts.pending_witness} pending witness
+            </span>
+            <span className="nil-tab-inset px-2 py-1">
+              {slabLegendCounts.empty} empty
+            </span>
+            <span className="nil-tab-inset px-2 py-1">
+              {slabLegendCounts.error} error
+            </span>
+            <div className="ml-auto text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
               {shards.filter((s) => s.status === 'expanded').length} / {shards.length} MDUs Expanded
             </div>
           </div>
 
-          <div className="relative grid grid-cols-[repeat(auto-fit,minmax(172px,1fr))] gap-3 max-h-[520px] overflow-y-auto pr-2">
-            {shards.map((shard) => {
-              const state =
-                shard.status === 'expanded' ? 'COMPLETE' : shard.status === 'processing' ? 'PROCESSING' : 'EMPTY'
-              const stateClass =
-                shard.status === 'expanded'
-                  ? 'text-success'
-                  : shard.status === 'processing'
-                    ? 'text-primary'
-                    : 'text-muted-foreground'
-              const cellClass =
-                shard.status === 'expanded'
-                  ? 'bg-success'
-                  : shard.status === 'processing'
-                    ? 'bg-primary/20 animate-pulse'
-                    : 'bg-background/50'
-              const ringClass =
-                shard.status === 'expanded'
-                  ? 'ring-1 ring-success/30'
-                  : shard.status === 'processing'
-                    ? 'ring-1 ring-primary/30'
-                    : 'ring-1 ring-border/30'
-
-              return (
-                <div
-                  key={shard.id}
-                  className={`relative overflow-hidden glass-panel industrial-border min-h-[168px] p-3 ${ringClass}`}
-                  title={shard.commitments[0] || 'Pending...'}
-                >
-                  {shard.status === 'processing' ? (
-                    <div className="absolute inset-0 pointer-events-none opacity-10 bg-primary/5" />
-                  ) : null}
-
-                  <div className="relative flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
-                    <span>MDU {shard.id}</span>
-                    <span className={stateClass}>{state}</span>
-                  </div>
-
-                  <div className="relative mt-3 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
-                    {Array.from({ length: 64 }).map((_, i) => (
-                      <div key={i} className={`aspect-square ${cellClass}`} />
-                    ))}
-                  </div>
-
-                  <div className="relative mt-3 text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
-                    <div className="truncate">
-                      {shard.id === 0 ? 'Meta MDU' : shard.id <= shardProgress.totalWitnessMdus ? 'Witness MDU' : 'User MDU'}
+          {slabViewMode === 'summary' ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {(['meta', 'witness', 'user'] as const).map((role) => {
+                const row = slabRoleSummary[role]
+                return (
+                  <div key={role} className="nil-tab-panel p-3 text-[10px] font-mono-data uppercase tracking-[0.18em]">
+                    <div className="font-bold text-foreground">
+                      {role === 'meta' ? 'Meta MDU' : role === 'witness' ? 'Witness MDUs' : 'User MDUs'}
+                    </div>
+                    <div className="mt-2 text-muted-foreground">
+                      Total: <span className="text-foreground">{row.total}</span>
+                    </div>
+                    <div className="mt-1 text-success">
+                      Complete: <span className="text-foreground">{row.complete}</span>
+                    </div>
+                    <div className="mt-1 text-primary">
+                      Processing: <span className="text-foreground">{row.processing}</span>
+                    </div>
+                    <div className="mt-1 text-muted-foreground">
+                      Pending: <span className="text-foreground">{row.pending}</span>
+                    </div>
+                    <div className="mt-1 text-destructive">
+                      Error: <span className="text-foreground">{row.error}</span>
                     </div>
                   </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="relative grid max-h-[520px] grid-cols-[repeat(auto-fit,minmax(172px,1fr))] gap-3 overflow-y-auto pr-2">
+              {shards.map((shard) => {
+                const role = slabRoleForShard(shard)
+                const stateKey = slabStateForShard(shard)
+                const state = stateKey === 'pending_witness' ? 'PENDING WITNESS' : stateKey.toUpperCase()
+                const stateClass =
+                  stateKey === 'complete'
+                    ? 'text-success'
+                    : stateKey === 'processing'
+                      ? 'text-primary'
+                      : stateKey === 'error'
+                        ? 'text-destructive'
+                        : stateKey === 'pending_witness'
+                          ? 'text-primary'
+                          : 'text-muted-foreground'
+                const cellClass =
+                  stateKey === 'complete'
+                    ? 'bg-success'
+                    : stateKey === 'processing'
+                      ? 'bg-primary/20 animate-pulse'
+                      : stateKey === 'error'
+                        ? 'bg-destructive/30'
+                        : stateKey === 'pending_witness'
+                          ? 'bg-primary/10'
+                          : 'bg-background/50'
+                const ringClass =
+                  stateKey === 'complete'
+                    ? 'ring-1 ring-success/30'
+                    : stateKey === 'processing'
+                      ? 'ring-1 ring-primary/30'
+                      : stateKey === 'error'
+                        ? 'ring-1 ring-destructive/30'
+                        : stateKey === 'pending_witness'
+                          ? 'ring-1 ring-primary/20'
+                          : 'ring-1 ring-border/30'
 
-                  <div className="relative mt-1 truncate text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
-                    {shard.status === 'expanded'
-                      ? `ROOT ${shard.commitments[0]?.slice(0, 8) ?? '—'}…`
-                      : shard.status === 'processing'
-                        ? 'EXPANDING...'
-                        : 'PENDING'}
+                return (
+                  <div
+                    key={shard.id}
+                    className={`relative min-h-[168px] overflow-hidden glass-panel industrial-border p-3 ${ringClass}`}
+                    title={shard.commitments[0] || 'Pending...'}
+                  >
+                    {stateKey === 'processing' ? (
+                      <div className="absolute inset-0 pointer-events-none bg-primary/5 opacity-10" />
+                    ) : null}
+
+                    <div className="relative flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+                      <span>MDU {shard.id}</span>
+                      <span className={stateClass}>{state}</span>
+                    </div>
+
+                    <div className="relative mt-3 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
+                      {Array.from({ length: 64 }).map((_, i) => (
+                        <div key={i} className={`aspect-square ${cellClass}`} />
+                      ))}
+                    </div>
+
+                    <div className="relative mt-3 truncate text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+                      {role === 'meta' ? 'Meta MDU' : role === 'witness' ? 'Witness MDU' : 'User MDU'}
+                    </div>
+
+                    <div className="relative mt-1 truncate text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+                      {stateKey === 'complete'
+                        ? `ROOT ${shard.commitments[0]?.slice(0, 8) ?? '—'}…`
+                        : stateKey === 'processing'
+                          ? 'EXPANDING...'
+                          : stateKey === 'pending_witness'
+                            ? 'WAITING FOR USER ROOTS'
+                            : stateKey === 'error'
+                              ? 'RETRY REQUIRED'
+                              : 'PENDING'}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
       </>
