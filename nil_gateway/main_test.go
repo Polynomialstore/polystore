@@ -41,6 +41,36 @@ func useTempUploadDir(t *testing.T) string {
 	return dir
 }
 
+func TestCreateTempInUploadRoot_RetriesAfterCachedDirDisappears(t *testing.T) {
+	rootDir := filepath.Join(t.TempDir(), "deal-root")
+
+	oldCache := uploadRootDirCache
+	uploadRootDirCache = sync.Map{}
+	t.Cleanup(func() { uploadRootDirCache = oldCache })
+
+	if err := ensureUploadRootDir(rootDir); err != nil {
+		t.Fatalf("ensureUploadRootDir failed: %v", err)
+	}
+	if err := os.RemoveAll(rootDir); err != nil {
+		t.Fatalf("RemoveAll failed: %v", err)
+	}
+
+	tmp, err := createTempInUploadRoot(rootDir, "upload-*.tmp")
+	if err != nil {
+		t.Fatalf("createTempInUploadRoot failed: %v", err)
+	}
+	tmpPath := tmp.Name()
+	_ = tmp.Close()
+	t.Cleanup(func() { _ = os.Remove(tmpPath) })
+
+	if got := filepath.Dir(tmpPath); got != rootDir {
+		t.Fatalf("temp file created in wrong dir: got %q want %q", got, rootDir)
+	}
+	if _, err := os.Stat(rootDir); err != nil {
+		t.Fatalf("expected root dir to be recreated: %v", err)
+	}
+}
+
 // setupMockCombinedOutput mocks the CombinedOutput of exec.CommandContext.
 // It returns a cleanup function to restore the original behavior.
 func setupMockCombinedOutput(t *testing.T, mockFn func(ctx context.Context, name string, args ...string) ([]byte, error)) {

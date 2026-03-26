@@ -70,9 +70,6 @@ func ensureUploadRootDir(rootDir string) error {
 }
 
 func createTempInUploadRoot(rootDir, pattern string) (*os.File, error) {
-	if err := ensureUploadRootDir(rootDir); err != nil {
-		return nil, err
-	}
 	tmp, err := os.CreateTemp(rootDir, pattern)
 	if err == nil {
 		return tmp, nil
