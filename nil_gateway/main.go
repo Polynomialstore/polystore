@@ -43,6 +43,7 @@ var uploadCopyBufferPool = sync.Pool{
 }
 
 var uploadRootDirCache sync.Map
+var verboseMode2UploadLogs = envDefault("NIL_VERBOSE_MODE2_UPLOAD_LOGS", "0") == "1"
 
 func copyUploadBody(dst io.Writer, src io.Reader) (int64, error) {
 	buf, _ := uploadCopyBufferPool.Get().([]byte)
@@ -83,6 +84,13 @@ func createTempInUploadRoot(rootDir, pattern string) (*os.File, error) {
 		return os.CreateTemp(rootDir, pattern)
 	}
 	return nil, err
+}
+
+func logVerboseMode2Uploadf(format string, args ...any) {
+	if !verboseMode2UploadLogs {
+		return
+	}
+	log.Printf(format, args...)
 }
 
 func parseUintFromJSON(raw any) (uint64, bool) {
@@ -6411,7 +6419,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		storedPath = path
 		profile.setCount("stored_size_bytes", uint64(info.Size()))
 		outcome = "already_present"
-		log.Printf("SpUploadMdu: already present %s for deal %d", path, dealID)
+		logVerboseMode2Uploadf("SpUploadMdu: already present %s for deal %d", path, dealID)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -6502,7 +6510,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 			storedPath = path
 			profile.setCount("stored_size_bytes", uint64(info.Size()))
 			outcome = "race_kept_existing"
-			log.Printf("SpUploadMdu: race detected; keeping existing %s for deal %d", path, dealID)
+			logVerboseMode2Uploadf("SpUploadMdu: race detected; keeping existing %s for deal %d", path, dealID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -6515,7 +6523,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	committed = true
 	storedPath = path
 
-	log.Printf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
+	logVerboseMode2Uploadf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -6660,7 +6668,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 			storedPath = path
 			profile.setCount("stored_size_bytes", uint64(info.Size()))
 			outcome = "already_present"
-			log.Printf("SpUploadShard: already present %s for deal %d", path, dealID)
+			logVerboseMode2Uploadf("SpUploadShard: already present %s for deal %d", path, dealID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -6745,7 +6753,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 				storedPath = path
 				profile.setCount("stored_size_bytes", uint64(info.Size()))
 				outcome = "race_kept_existing"
-				log.Printf("SpUploadShard: race detected; keeping existing %s for deal %d", path, dealID)
+				logVerboseMode2Uploadf("SpUploadShard: race detected; keeping existing %s for deal %d", path, dealID)
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -6759,7 +6767,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	committed = true
 	storedPath = path
 
-	log.Printf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, storedSize, dealID, slot)
+	logVerboseMode2Uploadf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, storedSize, dealID, slot)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -6940,7 +6948,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		storedPath = path
 		profile.setCount("stored_size_bytes", uint64(info.Size()))
 		outcome = "already_present"
-		log.Printf("SpUploadManifest: already present %s for deal %d", path, dealID)
+		logVerboseMode2Uploadf("SpUploadManifest: already present %s for deal %d", path, dealID)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -7024,7 +7032,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 			storedPath = path
 			profile.setCount("stored_size_bytes", uint64(info.Size()))
 			outcome = "race_kept_existing"
-			log.Printf("SpUploadManifest: race detected; keeping existing %s for deal %d", path, dealID)
+			logVerboseMode2Uploadf("SpUploadManifest: race detected; keeping existing %s for deal %d", path, dealID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -7037,6 +7045,6 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	committed = true
 	storedPath = path
 
-	log.Printf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
+	logVerboseMode2Uploadf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
 	w.WriteHeader(http.StatusOK)
 }
