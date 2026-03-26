@@ -42,8 +42,9 @@ import {
   PLANNER_TRIVIAL_BLOB_WEIGHT,
   weightedWorkForMdu,
 } from '../lib/upload/planner';
-import { createUploadEngine } from '../lib/upload/engine';
+import { createUploadEngine, type UploadTaskEvent } from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
+import { pickUploadParallelism } from '../lib/upload/uploadParallelism';
 import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
@@ -503,6 +504,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     () =>
       createUploadEngine({
         transport: createSparseHttpTransportPort(),
+        parallelism: pickUploadParallelism(
+          typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined,
+        ),
         chainCommitter: {
           commitContent,
         },
@@ -618,6 +622,22 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     [browserPerfLog],
   )
 
+  const browserPerfUploadTaskEvent = useCallback(
+    (event: UploadTaskEvent) => {
+      browserPerfLog(`upload_task:${event.phase}`, {
+        artifactKind: event.kind,
+        target: event.target,
+        index: event.index ?? null,
+        slot: event.slot ?? null,
+        bytes: event.bytes,
+        fullSize: event.fullSize ?? null,
+        durationMs: event.durationMs !== undefined ? roundPerfMs(event.durationMs) : null,
+        ok: event.ok ?? null,
+        error: event.error ?? null,
+      })
+    },
+    [browserPerfLog],
+  )
   const resetUploadPanel = useCallback(() => {
     setProcessing(false)
     setShards([])
@@ -1018,6 +1038,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       mduPath: '/sp/upload_mdu',
       manifestPath: '/sp/upload_manifest',
       shardPath: '/sp/upload_shard',
+      bundlePath: '/sp/upload_bundle',
       label: base,
     }))
     const shardTargets = metadataTargets
@@ -1041,6 +1062,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         shardSets,
         metadataTargets,
         shardTargets,
+        onTaskEvent: browserPerfUploadTaskEvent,
       })
       if (!result.ok) {
         throw new Error(result.error || 'Mode 2 upload failed')
@@ -1055,7 +1077,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
       setMode2Uploading(false)
     }
-  }, [baseManifestRoot, collectedMdus, currentManifestBlob, currentManifestBlobFullSize, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams, uploadEngine])
+  }, [baseManifestRoot, browserPerfUploadTaskEvent, collectedMdus, currentManifestBlob, currentManifestBlobFullSize, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams, uploadEngine])
 
   const rehydrateGatewayFromOpfs = useCallback(async (): Promise<boolean> => {
     const gatewaySeed = (localGateway.url || appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
@@ -2838,9 +2860,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
             addLog(`> Sharding User MDU #${i}${isExisting ? ' (existing)' : ''} (RS ${rsK}+${rsM})${isExisting ? '' : ' via payload-aware path'}...`)
             const wasmStart = performance.now()
+            const profileExpandedUserMdu = i === 0
             const result = isExisting
-              ? await workerClient.expandMduRs(chunkCopy, rsK, rsM)
-              : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM)
+              ? await workerClient.expandMduRs(chunkCopy, rsK, rsM, { profile: profileExpandedUserMdu })
+              : await workerClient.expandPayloadRs(chunkCopy, rsK, rsM, { profile: profileExpandedUserMdu })
             const wasmMs = performance.now() - wasmStart
             const workerTotalMs = Number(result.perf?.totalMs ?? 0)
             const workerExpandMs = Number(result.perf?.expandMs ?? 0)

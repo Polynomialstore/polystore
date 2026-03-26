@@ -11,31 +11,27 @@ function shouldRetrySparseUpload(response: Response, sendSize: number, fullSize:
   return sendSize < fullSize && (response.status === 400 || response.status === 411)
 }
 
-function buildBody(bytes: Uint8Array): Blob {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new Blob([bytes as any])
-}
-
 export async function postSparseArtifact(request: SparseUploadRequest): Promise<Response> {
   const fetchImpl = request.fetchImpl ?? fetch
   const sparseArtifact = makeSparseArtifact(request.artifact)
   const fullPayload = request.artifact.bytes
+  const asBodyInit = (bytes: Uint8Array): BodyInit => bytes as unknown as BodyInit
+  const defaultContentType = request.headers['Content-Type'] || 'application/octet-stream'
+  const requestHeaders =
+    request.headers['Content-Type'] === defaultContentType
+      ? request.headers
+      : { ...request.headers, 'Content-Type': defaultContentType }
 
   const post = async (bodyBytes: Uint8Array, fullSizeHeader?: number): Promise<Response> => {
-    const headers: Record<string, string> = {
-      ...request.headers,
-      'Content-Type': request.headers['Content-Type'] || 'application/octet-stream',
-    }
-    if (fullSizeHeader != null && bodyBytes.byteLength < fullSizeHeader) {
-      headers['X-Nil-Full-Size'] = String(fullSizeHeader)
-    } else {
-      delete headers['X-Nil-Full-Size']
-    }
+    const headers: Record<string, string> =
+      fullSizeHeader != null && bodyBytes.byteLength < fullSizeHeader
+        ? { ...requestHeaders, 'X-Nil-Full-Size': String(fullSizeHeader) }
+        : requestHeaders
 
     return fetchImpl(request.url, {
       method: 'POST',
       headers,
-      body: buildBody(bodyBytes),
+      body: asBodyInit(bodyBytes),
     })
   }
 

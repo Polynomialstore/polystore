@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -13,11 +14,35 @@ type mode2UploadProfile struct {
 	counts    map[string]uint64
 }
 
+var mode2UploadProfilePool = sync.Pool{
+	New: func() any {
+		return &mode2UploadProfile{
+			durations: make(map[string]time.Duration),
+			counts:    make(map[string]uint64),
+		}
+	},
+}
+
 func newMode2UploadProfile() *mode2UploadProfile {
-	return &mode2UploadProfile{
-		durations: make(map[string]time.Duration),
-		counts:    make(map[string]uint64),
+	profile, _ := mode2UploadProfilePool.Get().(*mode2UploadProfile)
+	if profile == nil {
+		return &mode2UploadProfile{
+			durations: make(map[string]time.Duration),
+			counts:    make(map[string]uint64),
+		}
 	}
+	return profile
+}
+
+func releaseMode2UploadProfile(profile *mode2UploadProfile) {
+	if profile == nil {
+		return
+	}
+	profile.mu.Lock()
+	clear(profile.durations)
+	clear(profile.counts)
+	profile.mu.Unlock()
+	mode2UploadProfilePool.Put(profile)
 }
 
 func (p *mode2UploadProfile) addDuration(label string, d time.Duration) {
@@ -88,4 +113,13 @@ func mode2UploadProfileFromContext(ctx context.Context) *mode2UploadProfile {
 		}
 	}
 	return nil
+}
+
+func logMode2UploadProfile(op string, started time.Time, dealID uint64, storedPath string, outcome string, statusCode int, profile *mode2UploadProfile) {
+	if profile == nil {
+		return
+	}
+	profile.addDuration("total_ms", time.Since(started))
+	ms, counts := profile.snapshots()
+	log.Printf("%s profile: deal_id=%d path=%s outcome=%s status=%d metrics_ms=%v counts=%v", op, dealID, storedPath, outcome, statusCode, ms, counts)
 }

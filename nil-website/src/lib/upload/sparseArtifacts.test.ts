@@ -23,6 +23,14 @@ test('computeSparsePayloadPlan: non-zero payload keeps full length', () => {
   })
 })
 
+test('computeSparsePayloadPlan: exact-size dense payload fast path keeps full length', () => {
+  assert.deepStrictEqual(computeSparsePayloadPlan(new Uint8Array([0, 0, 3])), {
+    fullSize: 3,
+    sendSize: 3,
+    sparse: false,
+  })
+})
+
 test('computeSparsePayloadPlan: trailing zeros become implicit', () => {
   assert.deepStrictEqual(computeSparsePayloadPlan(new Uint8Array([9, 8, 0, 0, 0])), {
     fullSize: 5,
@@ -60,6 +68,16 @@ test('makeSparseArtifact: trims payload and preserves artifact identity', () => 
   assert.strictEqual(artifact.slot, 3)
   assert.strictEqual(artifact.fullSize, 4)
   assert.deepStrictEqual(artifact.bytes, new Uint8Array([7, 7]))
+})
+
+test('makeSparseArtifact: reuses exact full payload without copying', () => {
+  const bytes = new Uint8Array([7, 8, 9])
+  const artifact = makeSparseArtifact({
+    kind: 'manifest',
+    bytes,
+  })
+
+  assert.strictEqual(artifact.bytes, bytes)
 })
 
 test('makeSparseArtifact: canonicalizes all-zero sparse payloads to one zero byte', () => {

@@ -31,10 +31,65 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gorilla/mux"
+	"golang.org/x/sync/singleflight"
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
 )
+
+var uploadCopyBufferPool = sync.Pool{
+	New: func() any {
+		return make([]byte, 256<<10)
+	},
+}
+
+var uploadRootDirCache sync.Map
+var verboseMode2UploadLogs = envDefault("NIL_VERBOSE_MODE2_UPLOAD_LOGS", "0") == "1"
+
+func copyUploadBody(dst io.Writer, src io.Reader) (int64, error) {
+	buf, _ := uploadCopyBufferPool.Get().([]byte)
+	if len(buf) == 0 {
+		buf = make([]byte, 256<<10)
+	}
+	defer uploadCopyBufferPool.Put(buf)
+	return io.CopyBuffer(dst, src, buf)
+}
+
+func ensureUploadRootDir(rootDir string) error {
+	if rootDir == "" {
+		return fmt.Errorf("empty upload root dir")
+	}
+	if _, ok := uploadRootDirCache.Load(rootDir); ok {
+		return nil
+	}
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		return err
+	}
+	uploadRootDirCache.Store(rootDir, struct{}{})
+	return nil
+}
+
+func createTempInUploadRoot(rootDir, pattern string) (*os.File, error) {
+	tmp, err := os.CreateTemp(rootDir, pattern)
+	if err == nil {
+		return tmp, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		uploadRootDirCache.Delete(rootDir)
+		if retryErr := ensureUploadRootDir(rootDir); retryErr != nil {
+			return nil, retryErr
+		}
+		return os.CreateTemp(rootDir, pattern)
+	}
+	return nil, err
+}
+
+func logVerboseMode2Uploadf(format string, args ...any) {
+	if !verboseMode2UploadLogs {
+		return
+	}
+	log.Printf(format, args...)
+}
 
 func parseUintFromJSON(raw any) (uint64, bool) {
 	switch v := raw.(type) {
@@ -231,6 +286,7 @@ func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
 		r.HandleFunc("/gateway/mirror_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/mirror_shard", SpUploadShard).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_bundle", SpUploadBundle).Methods("POST", "OPTIONS")
 		return
 	}
 
@@ -264,6 +320,7 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/upload_bundle", SpUploadBundle).Methods("POST", "OPTIONS")
 
 	// Provider retrieval APIs consumed by trusted user-gateway and direct browser fallbacks.
 	r.HandleFunc("/sp/retrieval/upload", GatewayUpload).Methods("POST", "OPTIONS")
@@ -905,6 +962,12 @@ func buildStatusURL(r *http.Request, dealID uint64, uploadID string) string {
 func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	uploadStarted := time.Now()
 	profile := newMode2UploadProfile()
+	releaseProfile := true
+	defer func() {
+		if releaseProfile {
+			releaseMode2UploadProfile(profile)
+		}
+	}()
 
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -1605,6 +1668,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer ingestCancel()
 			defer cleanupRun()
+			defer releaseMode2UploadProfile(profile)
 			if job != nil {
 				job.setPhase(uploadJobPhaseEncoding, "Gateway upload accepted; processing in background...")
 			}
@@ -1627,6 +1691,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				)
 			}
 		}()
+		releaseProfile = false
 		resp := map[string]any{
 			"status":     "accepted",
 			"deal_id":    dealIDStr,
@@ -5214,10 +5279,12 @@ var (
 	dealMetaCacheTTL     = time.Duration(envInt("NIL_DEAL_META_CACHE_TTL_MS", 3000)) * time.Millisecond
 	freshnessMemoTTL     = time.Duration(envInt("NIL_MANIFEST_FRESHNESS_TTL_MS", 3000)) * time.Millisecond
 	freshnessReasonFresh = "fresh"
+	freshDealMetaGroup   singleflight.Group
 )
 
 func clearDealMetaCache() {
 	dealMetaCache = sync.Map{}
+	freshDealMetaGroup = singleflight.Group{}
 }
 
 func setCacheFreshnessHeaders(w http.ResponseWriter, status, reason string) {
@@ -5330,7 +5397,14 @@ func fetchDealMeta(dealID uint64) (dealMeta, error) {
 // paths that enforce compare-and-swap semantics must use fresh chain state so
 // two back-to-back writers cannot both pass a stale-root check inside the TTL.
 func fetchDealMetaFresh(dealID uint64) (dealMeta, error) {
-	return fetchDealMetaUncached(dealID)
+	result, err, _ := freshDealMetaGroup.Do(strconv.FormatUint(dealID, 10), func() (any, error) {
+		return fetchDealMetaUncached(dealID)
+	})
+	if err != nil {
+		return dealMeta{}, err
+	}
+	meta, _ := result.(dealMeta)
+	return meta, nil
 }
 
 // creatorHasSomeBalance checks whether a given bech32 address has any non-zero
@@ -6240,8 +6314,20 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 // SpUploadMdu accepts a raw MDU blob from a client and stores it in the deal's directory.
 // This supports the "Direct Upload" (Thick Client) flow where the browser performs sharding.
 func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
+	uploadStarted := time.Now()
+	profile := newMode2UploadProfile()
+	statusCode := http.StatusOK
+	outcome := "ok"
+	storedPath := ""
+	var dealID uint64
+	defer func() {
+		logMode2UploadProfile("SpUploadMdu", uploadStarted, dealID, storedPath, outcome, statusCode, profile)
+		releaseMode2UploadProfile(profile)
+	}()
+
 	setCORS(w)
 	if r.Method == http.MethodOptions {
+		statusCode = http.StatusNoContent
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -6259,66 +6345,79 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
 	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
+	if r.ContentLength > 0 {
+		profile.setCount("content_length_bytes", uint64(r.ContentLength))
+	}
 
 	if dealIDStr == "" || mduIndexStr == "" {
+		statusCode = http.StatusBadRequest
+		outcome = "missing_headers"
 		http.Error(w, "X-Nil-Deal-ID and X-Nil-Mdu-Index headers are required", http.StatusBadRequest)
 		return
 	}
 
-	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	var err error
+	dealID, err = strconv.ParseUint(dealIDStr, 10, 64)
 	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_deal_id"
 		http.Error(w, "invalid deal_id", http.StatusBadRequest)
 		return
 	}
 
-	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
-	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
-		if errors.Is(err, ErrDealNotFound) {
-			http.Error(w, "deal not found", http.StatusNotFound)
-			return
-		}
-		// If we can't talk to the chain, we can't validate. Fail safe.
-		log.Printf("SpUploadMdu: failed to fetch deal %d: %v", dealID, err)
-		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
-		return
-	}
-
 	if clientManifestRoot == "" {
+		statusCode = http.StatusBadRequest
+		outcome = "missing_manifest_root"
 		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
 		return
 	}
+	validatePrevStarted := time.Now()
 	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
-		statusCode := http.StatusConflict
-		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
-			statusCode = http.StatusBadRequest
+		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
+		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		switch statusCode {
+		case http.StatusBadRequest:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		case http.StatusNotFound:
+			outcome = "deal_not_found"
+			http.Error(w, "deal not found", statusCode)
+		case http.StatusConflict:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		default:
+			log.Printf("SpUploadMdu: failed to validate deal %d previous root: %v", dealID, err)
+			outcome = "validate_previous_root_failed"
+			http.Error(w, "failed to validate deal", statusCode)
 		}
-		http.Error(w, err.Error(), statusCode)
 		return
 	}
+	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 	declaredFullSize := int64(0)
 	hasDeclaredFullSize := false
 	if fullSizeHeader != "" {
 		n, err := strconv.ParseInt(fullSizeHeader, 10, 64)
 		if err != nil || n <= 0 {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_full_size"
 			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
 			return
 		}
 		declaredFullSize = n
 		hasDeclaredFullSize = true
+		profile.setCount("declared_full_size_bytes", uint64(declaredFullSize))
 	}
 
 	// Canonicalize Root
 	parsed, err := parseManifestRoot(clientManifestRoot)
 	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_manifest_root"
 		http.Error(w, "invalid manifest root", http.StatusBadRequest)
 		return
 	}
 	// Store under deal-scoped directory to avoid collisions across deals.
 	rootDir := dealScopedDir(dealID, parsed)
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
-		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
-		return
-	}
 
 	// Write MDU
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
@@ -6326,13 +6425,28 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 
 	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.MDU_SIZE) {
 		// Idempotent: already stored.
-		log.Printf("SpUploadMdu: already present %s for deal %d", path, dealID)
+		storedPath = path
+		profile.setCount("stored_size_bytes", uint64(info.Size()))
+		outcome = "already_present"
+		logVerboseMode2Uploadf("SpUploadMdu: already present %s for deal %d", path, dealID)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
+	mkdirStarted := time.Now()
+	if err := ensureUploadRootDir(rootDir); err != nil {
+		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "mkdir_failed"
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+
+	tmp, err := createTempInUploadRoot(rootDir, filename+".tmp-*")
 	if err != nil {
+		statusCode = http.StatusInternalServerError
+		outcome = "create_temp_failed"
 		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
@@ -6345,65 +6459,110 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	n, err := io.Copy(tmp, r.Body)
+	copyStarted := time.Now()
+	n, err := copyUploadBody(tmp, r.Body)
+	profile.addDuration("body_copy_ms", time.Since(copyStarted))
 	if err != nil {
+		statusCode = http.StatusInternalServerError
+		outcome = "body_copy_failed"
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+	profile.setCount("received_body_bytes", uint64(n))
 	storedSize := n
 	if hasDeclaredFullSize {
 		if declaredFullSize != int64(types.MDU_SIZE) {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_declared_full_size"
 			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (want %d)", declaredFullSize, types.MDU_SIZE), http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize < n {
+			statusCode = http.StatusBadRequest
+			outcome = "declared_full_size_too_small"
 			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize > (10 << 20) {
+			statusCode = http.StatusBadRequest
+			outcome = "declared_full_size_too_large"
 			http.Error(w, "X-Nil-Full-Size exceeds max allowed size", http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize > n {
+			truncateStarted := time.Now()
 			if err := tmp.Truncate(declaredFullSize); err != nil {
+				profile.addDuration("truncate_ms", time.Since(truncateStarted))
+				statusCode = http.StatusInternalServerError
+				outcome = "truncate_failed"
 				http.Error(w, "failed to finalize sparse upload", http.StatusInternalServerError)
 				return
 			}
+			profile.addDuration("truncate_ms", time.Since(truncateStarted))
 		}
 		storedSize = declaredFullSize
 	}
+	profile.setCount("stored_size_bytes", uint64(storedSize))
 
+	closeStarted := time.Now()
 	if err := tmp.Close(); err != nil {
+		profile.addDuration("close_temp_ms", time.Since(closeStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "close_temp_failed"
 		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
 		return
 	}
+	profile.addDuration("close_temp_ms", time.Since(closeStarted))
 
 	if storedSize != int64(types.MDU_SIZE) {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_mdu_size"
 		http.Error(w, fmt.Sprintf("invalid mdu size: got %d bytes (want %d)", storedSize, types.MDU_SIZE), http.StatusBadRequest)
 		return
 	}
 
+	renameStarted := time.Now()
 	if err := os.Rename(tmpPath, path); err != nil {
+		profile.addDuration("rename_ms", time.Since(renameStarted))
 		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == int64(types.MDU_SIZE) {
 			// Race/idempotent: another upload wrote the same MDU.
-			log.Printf("SpUploadMdu: race detected; keeping existing %s for deal %d", path, dealID)
+			storedPath = path
+			profile.setCount("stored_size_bytes", uint64(info.Size()))
+			outcome = "race_kept_existing"
+			logVerboseMode2Uploadf("SpUploadMdu: race detected; keeping existing %s for deal %d", path, dealID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		statusCode = http.StatusInternalServerError
+		outcome = "rename_failed"
 		http.Error(w, "failed to store file", http.StatusInternalServerError)
 		return
 	}
+	profile.addDuration("rename_ms", time.Since(renameStarted))
 	committed = true
+	storedPath = path
 
-	log.Printf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
+	logVerboseMode2Uploadf("SpUploadMdu: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
 	w.WriteHeader(http.StatusOK)
 }
 
 // SpUploadShard accepts a per-slot shard from a client and stores it in the deal's directory.
 // This supports Mode 2 (StripeReplica) uploads where providers store slot shards.
 func SpUploadShard(w http.ResponseWriter, r *http.Request) {
+	uploadStarted := time.Now()
+	profile := newMode2UploadProfile()
+	statusCode := http.StatusOK
+	outcome := "ok"
+	storedPath := ""
+	var dealID uint64
+	defer func() {
+		logMode2UploadProfile("SpUploadShard", uploadStarted, dealID, storedPath, outcome, statusCode, profile)
+		releaseMode2UploadProfile(profile)
+	}()
+
 	setCORS(w)
 	if r.Method == http.MethodOptions {
+		statusCode = http.StatusNoContent
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -6422,73 +6581,91 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	slotStr := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
 	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
+	if r.ContentLength > 0 {
+		profile.setCount("content_length_bytes", uint64(r.ContentLength))
+	}
 
 	if dealIDStr == "" || mduIndexStr == "" || slotStr == "" {
+		statusCode = http.StatusBadRequest
+		outcome = "missing_headers"
 		http.Error(w, "X-Nil-Deal-ID, X-Nil-Mdu-Index, and X-Nil-Slot headers are required", http.StatusBadRequest)
 		return
 	}
 
-	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	var err error
+	dealID, err = strconv.ParseUint(dealIDStr, 10, 64)
 	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_deal_id"
 		http.Error(w, "invalid deal_id", http.StatusBadRequest)
 		return
 	}
 
 	slot, err := strconv.ParseUint(slotStr, 10, 64)
 	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_slot"
 		http.Error(w, "invalid slot", http.StatusBadRequest)
 		return
 	}
 
-	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
-	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
-		if errors.Is(err, ErrDealNotFound) {
-			http.Error(w, "deal not found", http.StatusNotFound)
-			return
-		}
-		log.Printf("SpUploadShard: failed to fetch deal %d: %v", dealID, err)
-		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
-		return
-	}
-
 	if clientManifestRoot == "" {
+		statusCode = http.StatusBadRequest
+		outcome = "missing_manifest_root"
 		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
 		return
 	}
+	validatePrevStarted := time.Now()
 	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
-		statusCode := http.StatusConflict
-		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
-			statusCode = http.StatusBadRequest
+		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
+		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		switch statusCode {
+		case http.StatusBadRequest:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		case http.StatusNotFound:
+			outcome = "deal_not_found"
+			http.Error(w, "deal not found", statusCode)
+		case http.StatusConflict:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		default:
+			log.Printf("SpUploadShard: failed to validate deal %d previous root: %v", dealID, err)
+			outcome = "validate_previous_root_failed"
+			http.Error(w, "failed to validate deal", statusCode)
 		}
-		http.Error(w, err.Error(), statusCode)
 		return
 	}
+	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 	declaredFullSize := int64(0)
 	hasDeclaredFullSize := false
 	if fullSizeHeader != "" {
 		n, err := strconv.ParseInt(fullSizeHeader, 10, 64)
 		if err != nil || n <= 0 {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_full_size"
 			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
 			return
 		}
 		if n > int64(types.MDU_SIZE) {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_declared_full_size"
 			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (max %d)", n, types.MDU_SIZE), http.StatusBadRequest)
 			return
 		}
 		declaredFullSize = n
 		hasDeclaredFullSize = true
+		profile.setCount("declared_full_size_bytes", uint64(declaredFullSize))
 	}
 
 	parsed, err := parseManifestRoot(clientManifestRoot)
 	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_manifest_root"
 		http.Error(w, "invalid manifest root", http.StatusBadRequest)
 		return
 	}
 	rootDir := dealScopedDir(dealID, parsed)
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
-		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
-		return
-	}
 
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
@@ -6499,14 +6676,29 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 			expectedSize = declaredFullSize
 		}
 		if expectedSize <= 0 || info.Size() == expectedSize {
-			log.Printf("SpUploadShard: already present %s for deal %d", path, dealID)
+			storedPath = path
+			profile.setCount("stored_size_bytes", uint64(info.Size()))
+			outcome = "already_present"
+			logVerboseMode2Uploadf("SpUploadShard: already present %s for deal %d", path, dealID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 	}
 
-	tmp, err := os.CreateTemp(rootDir, filename+".tmp-*")
+	mkdirStarted := time.Now()
+	if err := ensureUploadRootDir(rootDir); err != nil {
+		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "mkdir_failed"
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+
+	tmp, err := createTempInUploadRoot(rootDir, filename+".tmp-*")
 	if err != nil {
+		statusCode = http.StatusInternalServerError
+		outcome = "create_temp_failed"
 		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
@@ -6519,55 +6711,84 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	n, err := io.Copy(tmp, r.Body)
+	copyStarted := time.Now()
+	n, err := copyUploadBody(tmp, r.Body)
+	profile.addDuration("body_copy_ms", time.Since(copyStarted))
 	if err != nil {
+		statusCode = http.StatusInternalServerError
+		outcome = "body_copy_failed"
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+	profile.setCount("received_body_bytes", uint64(n))
 	storedSize := n
 	if hasDeclaredFullSize {
 		if declaredFullSize < n {
+			statusCode = http.StatusBadRequest
+			outcome = "declared_full_size_too_small"
 			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize > n {
+			truncateStarted := time.Now()
 			if err := tmp.Truncate(declaredFullSize); err != nil {
+				profile.addDuration("truncate_ms", time.Since(truncateStarted))
+				statusCode = http.StatusInternalServerError
+				outcome = "truncate_failed"
 				http.Error(w, "failed to finalize sparse upload", http.StatusInternalServerError)
 				return
 			}
+			profile.addDuration("truncate_ms", time.Since(truncateStarted))
 		}
 		storedSize = declaredFullSize
 	}
+	profile.setCount("stored_size_bytes", uint64(storedSize))
 
+	closeStarted := time.Now()
 	if err := tmp.Close(); err != nil {
+		profile.addDuration("close_temp_ms", time.Since(closeStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "close_temp_failed"
 		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
 		return
 	}
+	profile.addDuration("close_temp_ms", time.Since(closeStarted))
 
 	// Shard size depends on the RS params (K), so enforce only an upper bound here.
 	if storedSize <= 0 || storedSize > int64(types.MDU_SIZE) {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_shard_size"
 		http.Error(w, fmt.Sprintf("invalid shard size: got %d bytes (max %d)", storedSize, types.MDU_SIZE), http.StatusBadRequest)
 		return
 	}
 
+	renameStarted := time.Now()
 	if err := os.Rename(tmpPath, path); err != nil {
+		profile.addDuration("rename_ms", time.Since(renameStarted))
 		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= int64(types.MDU_SIZE) {
 			expectedSize := r.ContentLength
 			if hasDeclaredFullSize {
 				expectedSize = declaredFullSize
 			}
 			if expectedSize <= 0 || info.Size() == expectedSize {
-				log.Printf("SpUploadShard: race detected; keeping existing %s for deal %d", path, dealID)
+				storedPath = path
+				profile.setCount("stored_size_bytes", uint64(info.Size()))
+				outcome = "race_kept_existing"
+				logVerboseMode2Uploadf("SpUploadShard: race detected; keeping existing %s for deal %d", path, dealID)
 				w.WriteHeader(http.StatusOK)
 				return
 			}
 		}
+		statusCode = http.StatusInternalServerError
+		outcome = "rename_failed"
 		http.Error(w, "failed to store file", http.StatusInternalServerError)
 		return
 	}
+	profile.addDuration("rename_ms", time.Since(renameStarted))
 	committed = true
+	storedPath = path
 
-	log.Printf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, storedSize, dealID, slot)
+	logVerboseMode2Uploadf("SpUploadShard: stored %s (%d bytes) for deal %d slot %d", path, storedSize, dealID, slot)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -6640,8 +6861,20 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 // SpUploadManifest accepts a raw manifest blob (128 KiB) and stores it as manifest.bin in the slab directory.
 // This supports thick-client uploads where the browser computes the manifest commitment and blob.
 func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
+	uploadStarted := time.Now()
+	profile := newMode2UploadProfile()
+	statusCode := http.StatusOK
+	outcome := "ok"
+	storedPath := ""
+	var dealID uint64
+	defer func() {
+		logMode2UploadProfile("SpUploadManifest", uploadStarted, dealID, storedPath, outcome, statusCode, profile)
+		releaseMode2UploadProfile(profile)
+	}()
+
 	setCORS(w)
 	if r.Method == http.MethodOptions {
+		statusCode = http.StatusNoContent
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -6657,8 +6890,13 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
 	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
+	if r.ContentLength > 0 {
+		profile.setCount("content_length_bytes", uint64(r.ContentLength))
+	}
 
 	if dealIDStr == "" || clientManifestRoot == "" {
+		statusCode = http.StatusBadRequest
+		outcome = "missing_headers"
 		http.Error(w, "X-Nil-Deal-ID and X-Nil-Manifest-Root headers are required", http.StatusBadRequest)
 		return
 	}
@@ -6667,59 +6905,81 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	if fullSizeHeader != "" {
 		n, err := strconv.ParseInt(fullSizeHeader, 10, 64)
 		if err != nil || n <= 0 {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_full_size"
 			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
 			return
 		}
 		declaredFullSize = n
 		hasDeclaredFullSize = true
+		profile.setCount("declared_full_size_bytes", uint64(declaredFullSize))
 	}
 
-	dealID, err := strconv.ParseUint(dealIDStr, 10, 64)
+	var err error
+	dealID, err = strconv.ParseUint(dealIDStr, 10, 64)
 	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_deal_id"
 		http.Error(w, "invalid deal_id", http.StatusBadRequest)
-		return
-	}
-
-	// Validate Deal against Chain (cached to keep Mode 2 uploads fast).
-	if err := ensureDealExistsCached(r.Context(), dealID); err != nil {
-		if errors.Is(err, ErrDealNotFound) {
-			http.Error(w, "deal not found", http.StatusNotFound)
-			return
-		}
-		log.Printf("SpUploadManifest: failed to fetch deal %d: %v", dealID, err)
-		http.Error(w, "failed to validate deal", http.StatusInternalServerError)
 		return
 	}
 
 	parsed, err := parseManifestRoot(clientManifestRoot)
 	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_manifest_root"
 		http.Error(w, "invalid manifest root", http.StatusBadRequest)
 		return
 	}
+	validatePrevStarted := time.Now()
 	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
-		statusCode := http.StatusConflict
-		if strings.Contains(err.Error(), "invalid X-Nil-Previous-Manifest-Root") {
-			statusCode = http.StatusBadRequest
+		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
+		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		switch statusCode {
+		case http.StatusBadRequest:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		case http.StatusNotFound:
+			outcome = "deal_not_found"
+			http.Error(w, "deal not found", statusCode)
+		case http.StatusConflict:
+			outcome = "validate_previous_root_failed"
+			http.Error(w, err.Error(), statusCode)
+		default:
+			log.Printf("SpUploadManifest: failed to validate deal %d previous root: %v", dealID, err)
+			outcome = "validate_previous_root_failed"
+			http.Error(w, "failed to validate deal", statusCode)
 		}
-		http.Error(w, err.Error(), statusCode)
 		return
 	}
+	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 
 	rootDir := dealScopedDir(dealID, parsed)
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
-		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
-		return
-	}
 
 	path := filepath.Join(rootDir, "manifest.bin")
 	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
-		log.Printf("SpUploadManifest: already present %s for deal %d", path, dealID)
+		storedPath = path
+		profile.setCount("stored_size_bytes", uint64(info.Size()))
+		outcome = "already_present"
+		logVerboseMode2Uploadf("SpUploadManifest: already present %s for deal %d", path, dealID)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	tmp, err := os.CreateTemp(rootDir, "manifest.bin.tmp-*")
+	mkdirStarted := time.Now()
+	if err := ensureUploadRootDir(rootDir); err != nil {
+		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "mkdir_failed"
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+
+	tmp, err := createTempInUploadRoot(rootDir, "manifest.bin.tmp-*")
 	if err != nil {
+		statusCode = http.StatusInternalServerError
+		outcome = "create_temp_failed"
 		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
 		return
 	}
@@ -6732,51 +6992,82 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	n, err := io.Copy(tmp, r.Body)
+	copyStarted := time.Now()
+	n, err := copyUploadBody(tmp, r.Body)
+	profile.addDuration("body_copy_ms", time.Since(copyStarted))
 	if err != nil {
+		statusCode = http.StatusInternalServerError
+		outcome = "body_copy_failed"
 		http.Error(w, "failed to write file", http.StatusInternalServerError)
 		return
 	}
+	profile.setCount("received_body_bytes", uint64(n))
 	storedSize := n
 	if hasDeclaredFullSize {
 		if declaredFullSize != int64(types.BLOB_SIZE) {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_declared_full_size"
 			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (want %d)", declaredFullSize, types.BLOB_SIZE), http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize < n {
+			statusCode = http.StatusBadRequest
+			outcome = "declared_full_size_too_small"
 			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize > n {
+			truncateStarted := time.Now()
 			if err := tmp.Truncate(declaredFullSize); err != nil {
+				profile.addDuration("truncate_ms", time.Since(truncateStarted))
+				statusCode = http.StatusInternalServerError
+				outcome = "truncate_failed"
 				http.Error(w, "failed to finalize sparse upload", http.StatusInternalServerError)
 				return
 			}
+			profile.addDuration("truncate_ms", time.Since(truncateStarted))
 		}
 		storedSize = declaredFullSize
 	}
+	profile.setCount("stored_size_bytes", uint64(storedSize))
 
+	closeStarted := time.Now()
 	if err := tmp.Close(); err != nil {
+		profile.addDuration("close_temp_ms", time.Since(closeStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "close_temp_failed"
 		http.Error(w, "failed to finalize file", http.StatusInternalServerError)
 		return
 	}
+	profile.addDuration("close_temp_ms", time.Since(closeStarted))
 
 	if storedSize != int64(types.BLOB_SIZE) {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_manifest_size"
 		http.Error(w, fmt.Sprintf("invalid manifest size: got %d bytes (want %d)", storedSize, types.BLOB_SIZE), http.StatusBadRequest)
 		return
 	}
 
+	renameStarted := time.Now()
 	if err := os.Rename(tmpPath, path); err != nil {
+		profile.addDuration("rename_ms", time.Since(renameStarted))
 		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
-			log.Printf("SpUploadManifest: race detected; keeping existing %s for deal %d", path, dealID)
+			storedPath = path
+			profile.setCount("stored_size_bytes", uint64(info.Size()))
+			outcome = "race_kept_existing"
+			logVerboseMode2Uploadf("SpUploadManifest: race detected; keeping existing %s for deal %d", path, dealID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		statusCode = http.StatusInternalServerError
+		outcome = "rename_failed"
 		http.Error(w, "failed to store file", http.StatusInternalServerError)
 		return
 	}
+	profile.addDuration("rename_ms", time.Since(renameStarted))
 	committed = true
+	storedPath = path
 
-	log.Printf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
+	logVerboseMode2Uploadf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
 	w.WriteHeader(http.StatusOK)
 }

@@ -46,6 +46,13 @@ export function computeSparsePayloadPlan(bytes: Uint8Array, declaredFullSize = b
   if (declaredFullSize === 0) {
     return { fullSize: 0, sendSize: 0, sparse: false }
   }
+  if (bytes.byteLength === declaredFullSize && bytes.byteLength > 0 && bytes[bytes.byteLength - 1] !== 0) {
+    return {
+      fullSize: declaredFullSize,
+      sendSize: declaredFullSize,
+      sparse: false,
+    }
+  }
 
   for (let i = bytes.byteLength - 1; i >= 0; i -= 1) {
     if (bytes[i] !== 0) {
@@ -75,8 +82,10 @@ export function makeSparseArtifact(input: SparseArtifactInput): SparseArtifact {
   let bytes: Uint8Array
   if (plan.fullSize === 0) {
     bytes = new Uint8Array(0)
+  } else if (plan.sendSize === input.bytes.byteLength) {
+    bytes = input.bytes
   } else if (input.bytes.byteLength >= plan.sendSize) {
-    bytes = input.bytes.slice(0, plan.sendSize)
+    bytes = input.bytes.subarray(0, plan.sendSize)
   } else if (plan.sendSize === 1 && input.bytes.byteLength === 0) {
     bytes = new Uint8Array(1)
   } else {

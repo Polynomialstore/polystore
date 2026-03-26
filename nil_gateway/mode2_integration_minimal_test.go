@@ -87,6 +87,97 @@ func newProviderServer(t *testing.T) (*httptest.Server, *sync.Map) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/sp/upload_bundle":
+			if got := strings.TrimSpace(r.Header.Get("Expect")); got != "100-continue" {
+				t.Errorf("missing Expect: 100-continue header (got %q) on %s", got, r.URL.Path)
+				http.Error(w, "missing Expect header", http.StatusBadRequest)
+				return
+			}
+			var meta spUploadBundleRequest
+			storeBody := func(resolved spUploadBundleResolvedArtifact, body []byte) {
+				if resolved.fullSize > int64(len(body)) {
+					padded := make([]byte, resolved.fullSize)
+					copy(padded, body)
+					body = padded
+				}
+				if resolved.meta.Kind == spUploadBundleKindShard {
+					manifest := strings.TrimSpace(meta.ManifestRoot)
+					mduIdx := strconv.FormatUint(*resolved.meta.MduIndex, 10)
+					slot := strconv.FormatUint(*resolved.meta.Slot, 10)
+					shards.Store(manifest+"|"+mduIdx+"|"+slot, body)
+				}
+			}
+			if strings.HasPrefix(strings.TrimSpace(r.Header.Get("Content-Type")), spUploadBundleV2MediaType) {
+				req, err := readSpUploadBundleV2Request(r.Body)
+				if err != nil {
+					http.Error(w, "invalid bundle", http.StatusBadRequest)
+					return
+				}
+				meta = req
+				for _, artifact := range meta.Artifacts {
+					resolved, err := artifact.resolve()
+					if err != nil {
+						http.Error(w, "invalid artifact meta", http.StatusBadRequest)
+						return
+					}
+					body, _ := io.ReadAll(io.LimitReader(r.Body, resolved.sendSize))
+					if int64(len(body)) != resolved.sendSize {
+						http.Error(w, "bundle size mismatch", http.StatusBadRequest)
+						return
+					}
+					storeBody(resolved, body)
+				}
+			} else {
+				mr, err := r.MultipartReader()
+				if err != nil {
+					http.Error(w, "invalid multipart", http.StatusBadRequest)
+					return
+				}
+				resolvedByPart := map[string]spUploadBundleResolvedArtifact{}
+				for {
+					part, err := mr.NextPart()
+					if err == io.EOF {
+						break
+					}
+					if err != nil {
+						http.Error(w, "invalid multipart", http.StatusBadRequest)
+						return
+					}
+					partName := strings.TrimSpace(part.FormName())
+					if partName == "meta" {
+						if err := json.NewDecoder(part).Decode(&meta); err != nil {
+							_ = part.Close()
+							http.Error(w, "invalid meta", http.StatusBadRequest)
+							return
+						}
+						_ = part.Close()
+						for _, artifact := range meta.Artifacts {
+							resolved, err := artifact.resolve()
+							if err != nil {
+								http.Error(w, "invalid artifact meta", http.StatusBadRequest)
+								return
+							}
+							resolvedByPart[artifact.Part] = resolved
+						}
+						continue
+					}
+					resolved, ok := resolvedByPart[partName]
+					if !ok {
+						_ = part.Close()
+						http.Error(w, "unexpected bundle part", http.StatusBadRequest)
+						return
+					}
+					body, _ := io.ReadAll(io.LimitReader(part, resolved.sendSize+1))
+					_ = part.Close()
+					if int64(len(body)) != resolved.sendSize {
+						http.Error(w, "bundle size mismatch", http.StatusBadRequest)
+						return
+					}
+					storeBody(resolved, body)
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+			return
 		case "/sp/upload_shard":
 			if got := strings.TrimSpace(r.Header.Get("Expect")); got != "100-continue" {
 				t.Errorf("missing Expect: 100-continue header (got %q) on %s", got, r.URL.Path)

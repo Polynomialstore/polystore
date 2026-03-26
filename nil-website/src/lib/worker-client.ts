@@ -257,6 +257,10 @@ export interface ExpandedStripe {
     };
 }
 
+type ExpandStripeOptions = {
+  profile?: boolean
+}
+
 // --- Public API for interacting with the Worker ---
 
 export const workerClient = {
@@ -360,12 +364,21 @@ export const workerClient = {
     return sendExpansionMessageToWorker('commitMduProfiled', { data }, [data.buffer]) as Promise<ExpandedMdu>;
   },
 
-  async expandMduRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
-    return sendExpansionMessageToWorker('expandMduRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
+  async expandMduRs(data: Uint8Array, k: number, m: number, opts?: ExpandStripeOptions): Promise<ExpandedStripe> {
+    return sendExpansionMessageToWorker('expandMduRs', { data, k, m, profile: opts?.profile !== false }, [
+      data.buffer,
+    ]) as Promise<ExpandedStripe>;
   },
 
-  async expandPayloadRs(data: Uint8Array, k: number, m: number): Promise<ExpandedStripe> {
-    return sendExpansionMessageToWorker('expandPayloadRs', { data, k, m }, [data.buffer]) as Promise<ExpandedStripe>;
+  async expandPayloadRs(
+    data: Uint8Array,
+    k: number,
+    m: number,
+    opts?: ExpandStripeOptions,
+  ): Promise<ExpandedStripe> {
+    return sendExpansionMessageToWorker('expandPayloadRs', { data, k, m, profile: opts?.profile !== false }, [
+      data.buffer,
+    ]) as Promise<ExpandedStripe>;
   },
 
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)

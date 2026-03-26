@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -50,6 +52,23 @@ func (e *providerUploadHTTPError) Error() string {
 		return fmt.Sprintf("upload failed: %s", e.status)
 	}
 	return fmt.Sprintf("upload failed: %s (%s)", e.status, msg)
+}
+
+func isBundleUnsupportedHTTPError(httpErr *providerUploadHTTPError) bool {
+	if httpErr == nil {
+		return false
+	}
+	switch httpErr.statusCode {
+	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusUnsupportedMediaType, http.StatusNotImplemented:
+		return true
+	case http.StatusBadRequest:
+		body := strings.ToLower(strings.TrimSpace(httpErr.body))
+		return strings.Contains(body, "invalid bundle") ||
+			strings.Contains(body, "invalid multipart") ||
+			strings.Contains(body, "invalid deal_id")
+	default:
+		return false
+	}
 }
 
 func isUploadCanceledErr(err error) bool {
@@ -497,6 +516,34 @@ func mode2ExpectContinueTimeout() time.Duration {
 	// Keep a short pause for early 4xx/5xx rejects without paying a multi-second
 	// RTT penalty per upload request.
 	return 250 * time.Millisecond
+}
+
+func mode2BundleUploadsEnabled() bool {
+	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_BUNDLE_UPLOAD"))
+	if raw == "" {
+		return true
+	}
+	switch strings.ToLower(raw) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
+func mode2BundleUploadTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_BUNDLE_UPLOAD_TIMEOUT_SECONDS"))
+	if raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			return time.Duration(parsed) * time.Second
+		}
+	}
+	// Bundles collapse many artifact requests into one larger tunneled request.
+	// Give that request a longer wall clock budget than the per-artifact path.
+	if mode2UploadTaskTimeout > 2*time.Minute {
+		return mode2UploadTaskTimeout
+	}
+	return 3 * time.Minute
 }
 
 func mode2UploadTargetMetricKey(rawURL string) string {
@@ -1392,11 +1439,14 @@ func mode2UploadArtifactsToProviders(
 		IdleConnTimeout:       90 * time.Second,
 	}
 	client := &http.Client{Timeout: mode2UploadTaskTimeout, Transport: transport}
+	bundleClient := &http.Client{Timeout: mode2BundleUploadTimeout(), Transport: transport}
 	manifestRootCanonical := manifestRoot.Canonical
 	dealIDStr := strconv.FormatUint(dealID, 10)
 	sparseUploads := mode2SparseUploadEnabled()
 
 	type uploadTask struct {
+		kind                 string
+		providerBase         string
 		url                  string
 		path                 string
 		sizeBytes            int64
@@ -1451,6 +1501,14 @@ func mode2UploadArtifactsToProviders(
 			}
 		}
 		return false
+	}
+
+	isBundleUnsupportedErr := func(err error) bool {
+		var httpErr *providerUploadHTTPError
+		if !errors.As(err, &httpErr) {
+			return false
+		}
+		return isBundleUnsupportedHTTPError(httpErr)
 	}
 
 	var retries atomic.Uint64
@@ -1638,7 +1696,7 @@ func mode2UploadArtifactsToProviders(
 		return sizes, nil
 	}
 
-	tasks := make([]uploadTask, 0, totalUploads)
+	metadataTaskGroups := make([][]uploadTask, 0, witnessCount+2)
 
 	// Upload replicated metadata once per provider, interleaved by MDU index so
 	// scheduler fair-sharing starts across providers immediately.
@@ -1649,12 +1707,15 @@ func mode2UploadArtifactsToProviders(
 		if err != nil {
 			return err
 		}
+		group := make([]uploadTask, 0, len(metadataProviders))
 		for _, provider := range metadataProviders {
 			base := providerBases[provider]
 			if base == "" {
 				continue
 			}
-			tasks = append(tasks, uploadTask{
+			group = append(group, uploadTask{
+				kind:                 spUploadBundleKindMDU,
+				providerBase:         base,
 				url:                  base + "/sp/upload_mdu",
 				path:                 artifactPath,
 				sizeBytes:            sizes.full,
@@ -1666,6 +1727,9 @@ func mode2UploadArtifactsToProviders(
 				mduIndex:             mduIndexStr,
 			})
 		}
+		if len(group) > 0 {
+			metadataTaskGroups = append(metadataTaskGroups, group)
+		}
 	}
 
 	manifestPath := filepath.Join(finalDir, "manifest.bin")
@@ -1673,12 +1737,15 @@ func mode2UploadArtifactsToProviders(
 	if err != nil {
 		return err
 	}
+	manifestGroup := make([]uploadTask, 0, len(metadataProviders))
 	for _, provider := range metadataProviders {
 		base := providerBases[provider]
 		if base == "" {
 			continue
 		}
-		tasks = append(tasks, uploadTask{
+		manifestGroup = append(manifestGroup, uploadTask{
+			kind:                 spUploadBundleKindManifest,
+			providerBase:         base,
 			url:                  base + "/sp/upload_manifest",
 			path:                 manifestPath,
 			sizeBytes:            manifestSizes.full,
@@ -1689,9 +1756,14 @@ func mode2UploadArtifactsToProviders(
 			previousManifestRoot: previousManifestRoot,
 		})
 	}
+	if len(manifestGroup) > 0 {
+		metadataTaskGroups = append(metadataTaskGroups, manifestGroup)
+	}
 
+	shardTaskGroups := make([][]uploadTask, 0, userMdus)
 	// Upload striped user shards interleaved across providers per slab index.
 	for i := uint64(0); i < userMdus; i++ {
+		group := make([]uploadTask, 0, len(targets))
 		for _, target := range targets {
 			slot := target.slot
 			base := providerBases[target.provider]
@@ -1706,7 +1778,9 @@ func mode2UploadArtifactsToProviders(
 			if err != nil {
 				return err
 			}
-			tasks = append(tasks, uploadTask{
+			group = append(group, uploadTask{
+				kind:                 spUploadBundleKindShard,
+				providerBase:         base,
 				url:                  base + "/sp/upload_shard",
 				path:                 artifactPath,
 				sizeBytes:            sizes.full,
@@ -1719,14 +1793,32 @@ func mode2UploadArtifactsToProviders(
 				slot:                 slotStr,
 			})
 		}
+		if len(group) > 0 {
+			shardTaskGroups = append(shardTaskGroups, group)
+		}
+	}
+
+	tasks := make([]uploadTask, 0, totalUploads)
+	rounds := len(metadataTaskGroups)
+	if len(shardTaskGroups) > rounds {
+		rounds = len(shardTaskGroups)
+	}
+	for i := 0; i < rounds; i++ {
+		if i < len(metadataTaskGroups) {
+			tasks = append(tasks, metadataTaskGroups[i]...)
+		}
+		if i < len(shardTaskGroups) {
+			tasks = append(tasks, shardTaskGroups[i]...)
+		}
 	}
 	if profile != nil {
 		profile.addDuration("mode2_build_upload_tasks_ms", time.Since(taskBuildStarted))
 	}
 
 	uploadParallelism := mode2UploadParallelism(stripe.slotCount)
+	bundleUploadsEnabled := mode2BundleUploadsEnabled()
 	log.Printf(
-		"GatewayUpload mode2 upload plan: deal_id=%d providers=%d targets=%d user_mdus=%d witness_mdus=%d total_tasks=%d parallelism=%d timeout=%s sparse=%t",
+		"GatewayUpload mode2 upload plan: deal_id=%d providers=%d targets=%d user_mdus=%d witness_mdus=%d total_tasks=%d parallelism=%d timeout=%s sparse=%t bundle=%t",
 		dealID,
 		len(metadataProviders),
 		len(targets),
@@ -1736,6 +1828,7 @@ func mode2UploadArtifactsToProviders(
 		uploadParallelism,
 		mode2UploadTaskTimeout.String(),
 		sparseUploads,
+		bundleUploadsEnabled,
 	)
 	progressCtx, cancelProgress := context.WithCancel(ctx)
 	defer cancelProgress()
@@ -1785,35 +1878,326 @@ func mode2UploadArtifactsToProviders(
 			}
 		}
 	}()
-	eg, egctx := errgroup.WithContext(ctx)
-	eg.SetLimit(uploadParallelism)
-	var firstUploadErr error
-	var firstUploadErrMu sync.Mutex
-	for _, task := range tasks {
-		task := task
-		eg.Go(func() error {
-			inFlight.Add(1)
-			defer inFlight.Add(-1)
-			if err := uploadBlob(egctx, task); err != nil {
-				captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
+
+	type providerBundleUpload struct {
+		providerBase string
+		url          string
+		tasks        []uploadTask
+		sizeBytes    int64
+	}
+
+	uploadBundle := func(ctx context.Context, bundle providerBundleUpload) error {
+		const maxAttempts = 3
+		targetKey := mode2UploadTargetMetricKey(bundle.providerBase)
+		targetDurationLabel := "mode2_upload_target_" + targetKey + "_ms"
+		targetRequestsLabel := "mode2_upload_target_" + targetKey + "_requests"
+		targetBytesLabel := "mode2_upload_target_" + targetKey + "_bytes"
+		taskStarted := time.Now()
+		defer func() {
+			if profile != nil {
+				profile.addDuration(targetDurationLabel, time.Since(taskStarted))
+			}
+		}()
+
+		type bundleBody struct {
+			reader      io.ReadCloser
+			contentType string
+			errCh       <-chan error
+		}
+		openBundleBody := func() (*bundleBody, error) {
+			meta := spUploadBundleRequest{
+				DealID:               &dealID,
+				ManifestRoot:         manifestRootCanonical,
+				PreviousManifestRoot: strings.TrimSpace(previousManifestRoot),
+				Artifacts:            make([]spUploadBundleArtifact, 0, len(bundle.tasks)),
+			}
+			for i, task := range bundle.tasks {
+				partName := fmt.Sprintf("artifact_%02d", i)
+				artifact := spUploadBundleArtifact{
+					Part:     partName,
+					Kind:     task.kind,
+					FullSize: task.sizeBytes,
+					SendSize: task.sendBytes,
+				}
+				if task.mduIndex != "" {
+					idx, err := strconv.ParseUint(task.mduIndex, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("invalid bundle mdu index %q: %w", task.mduIndex, err)
+					}
+					artifact.MduIndex = &idx
+				}
+				if task.slot != "" {
+					slot, err := strconv.ParseUint(task.slot, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("invalid bundle slot %q: %w", task.slot, err)
+					}
+					artifact.Slot = &slot
+				}
+				meta.Artifacts = append(meta.Artifacts, artifact)
+			}
+			metaJSON, err := json.Marshal(meta)
+			if err != nil {
+				return nil, err
+			}
+
+			pr, pw := io.Pipe()
+			errCh := make(chan error, 1)
+			go func() {
+				defer close(errCh)
+				closeWithErr := func(err error) {
+					_ = pw.CloseWithError(err)
+					errCh <- err
+				}
+				var header [8]byte
+				copy(header[:4], []byte(spUploadBundleV2Magic))
+				binary.LittleEndian.PutUint32(header[4:], uint32(len(metaJSON)))
+				if _, err := pw.Write(header[:]); err != nil {
+					closeWithErr(err)
+					return
+				}
+				if _, err := pw.Write(metaJSON); err != nil {
+					closeWithErr(err)
+					return
+				}
+				for _, task := range bundle.tasks {
+					f, err := os.Open(task.path)
+					if err != nil {
+						closeWithErr(err)
+						return
+					}
+					var reader io.Reader = f
+					if sparseUploads && task.sendBytes > 0 && task.sendBytes < task.sizeBytes {
+						reader = io.LimitReader(f, task.sendBytes)
+					}
+					_, err = io.Copy(pw, reader)
+					closeErr := f.Close()
+					if err != nil {
+						closeWithErr(err)
+						return
+					}
+					if closeErr != nil {
+						closeWithErr(closeErr)
+						return
+					}
+				}
+				errCh <- pw.Close()
+			}()
+			return &bundleBody{
+				reader:      pr,
+				contentType: spUploadBundleV2MediaType,
+				errCh:       errCh,
+			}, nil
+		}
+
+		uploadOnce := func(ctx context.Context) error {
+			body, err := openBundleBody()
+			if err != nil {
 				return err
 			}
-			bump(task.sizeBytes)
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, bundle.url, body.reader)
+			if err != nil {
+				_ = body.reader.Close()
+				return err
+			}
+			req.Header.Set("Content-Type", body.contentType)
+			if expectContinueTimeout > 0 {
+				req.Header.Set("Expect", "100-continue")
+			}
+			resp, err := bundleClient.Do(req)
+			if err != nil {
+				_ = body.reader.Close()
+				select {
+				case <-body.errCh:
+				default:
+				}
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				msg, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+				return &providerUploadHTTPError{
+					statusCode: resp.StatusCode,
+					status:     resp.Status,
+					body:       string(msg),
+				}
+			}
+			if writeErr := <-body.errCh; writeErr != nil {
+				return writeErr
+			}
 			return nil
-		})
+		}
+
+		var lastErr error
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			err := uploadOnce(ctx)
+			if err == nil {
+				if profile != nil {
+					profile.addCount(targetRequestsLabel, 1)
+					if bundle.sizeBytes > 0 {
+						profile.addCount(targetBytesLabel, uint64(bundle.sizeBytes))
+					}
+					profile.addCount("mode2_bundle_requests", 1)
+				}
+				return nil
+			}
+			lastErr = err
+			if attempt == maxAttempts || !isRetryableUploadErr(err) || isBundleUnsupportedErr(err) {
+				break
+			}
+			log.Printf(
+				"GatewayUpload mode2 bundle retry: deal_id=%d target=%s attempt=%d/%d err=%v",
+				dealID,
+				bundle.url,
+				attempt,
+				maxAttempts,
+				err,
+			)
+			retries.Add(1)
+			backoff := time.Duration(attempt*attempt) * 250 * time.Millisecond
+			timer := time.NewTimer(backoff)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
+		return fmt.Errorf("bundle upload to %s failed after retries: %w", bundle.url, lastErr)
 	}
-	if err := eg.Wait(); err != nil {
-		cancelProgress()
-		firstUploadErrMu.Lock()
-		errFromUpload := firstUploadErr
-		firstUploadErrMu.Unlock()
-		if errFromUpload != nil {
-			return fmt.Errorf("mode2 provider upload failed: %w", errFromUpload)
+
+	runPerArtifactUploads := func(ctx context.Context, tasks []uploadTask) error {
+		eg, egctx := errgroup.WithContext(ctx)
+		eg.SetLimit(uploadParallelism)
+		var firstUploadErr error
+		var firstUploadErrMu sync.Mutex
+		for _, task := range tasks {
+			task := task
+			eg.Go(func() error {
+				inFlight.Add(1)
+				defer inFlight.Add(-1)
+				if err := uploadBlob(egctx, task); err != nil {
+					captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
+					return err
+				}
+				bump(task.sizeBytes)
+				return nil
+			})
 		}
-		if isUploadCanceledErr(err) {
-			return fmt.Errorf("mode2 provider upload canceled: %w", err)
+		if err := eg.Wait(); err != nil {
+			firstUploadErrMu.Lock()
+			errFromUpload := firstUploadErr
+			firstUploadErrMu.Unlock()
+			if errFromUpload != nil {
+				return fmt.Errorf("mode2 provider upload failed: %w", errFromUpload)
+			}
+			if isUploadCanceledErr(err) {
+				return fmt.Errorf("mode2 provider upload canceled: %w", err)
+			}
+			return fmt.Errorf("mode2 provider upload failed: %w", err)
 		}
-		return fmt.Errorf("mode2 provider upload failed: %w", err)
+		return nil
+	}
+
+	if bundleUploadsEnabled && len(tasks) > 0 {
+		bundlesByBase := make(map[string]*providerBundleUpload, len(metadataProviders))
+		order := make([]string, 0, len(metadataProviders))
+		for _, provider := range metadataProviders {
+			base := providerBases[provider]
+			if base == "" {
+				continue
+			}
+			if _, ok := bundlesByBase[base]; ok {
+				continue
+			}
+			bundlesByBase[base] = &providerBundleUpload{
+				providerBase: base,
+				url:          base + "/sp/upload_bundle",
+			}
+			order = append(order, base)
+		}
+		for _, task := range tasks {
+			base := strings.TrimSpace(task.providerBase)
+			if base == "" {
+				return fmt.Errorf("missing provider base for bundle upload task")
+			}
+			bundle := bundlesByBase[base]
+			if bundle == nil {
+				bundle = &providerBundleUpload{
+					providerBase: base,
+					url:          base + "/sp/upload_bundle",
+				}
+				bundlesByBase[base] = bundle
+				order = append(order, base)
+			}
+			bundle.tasks = append(bundle.tasks, task)
+			if task.sizeBytes > 0 {
+				bundle.sizeBytes += task.sizeBytes
+			}
+		}
+		bundles := make([]providerBundleUpload, 0, len(order))
+		for _, base := range order {
+			if bundle := bundlesByBase[base]; bundle != nil && len(bundle.tasks) > 0 {
+				bundles = append(bundles, *bundle)
+			}
+		}
+		if profile != nil {
+			profile.setCount("mode2_bundle_provider_count", uint64(len(bundles)))
+		}
+
+		eg, egctx := errgroup.WithContext(ctx)
+		eg.SetLimit(len(bundles))
+		var firstUploadErr error
+		var firstUploadErrMu sync.Mutex
+		for _, bundle := range bundles {
+			bundle := bundle
+			eg.Go(func() error {
+				inFlight.Add(1)
+				defer inFlight.Add(-1)
+				err := uploadBundle(egctx, bundle)
+				if err != nil && isBundleUnsupportedErr(err) {
+					if profile != nil {
+						profile.addCount("mode2_bundle_fallback_providers", 1)
+					}
+					for _, task := range bundle.tasks {
+						if err := uploadBlob(egctx, task); err != nil {
+							captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
+							return err
+						}
+						bump(task.sizeBytes)
+					}
+					return nil
+				}
+				if err != nil {
+					captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
+					return err
+				}
+				for _, task := range bundle.tasks {
+					bump(task.sizeBytes)
+				}
+				return nil
+			})
+		}
+		if err := eg.Wait(); err != nil {
+			cancelProgress()
+			firstUploadErrMu.Lock()
+			errFromUpload := firstUploadErr
+			firstUploadErrMu.Unlock()
+			if errFromUpload != nil {
+				return fmt.Errorf("mode2 provider upload failed: %w", errFromUpload)
+			}
+			if isUploadCanceledErr(err) {
+				return fmt.Errorf("mode2 provider upload canceled: %w", err)
+			}
+			return fmt.Errorf("mode2 provider upload failed: %w", err)
+		}
+	} else {
+		if err := runPerArtifactUploads(ctx, tasks); err != nil {
+			cancelProgress()
+			return err
+		}
 	}
 	cancelProgress()
 	if profile != nil {
