@@ -2136,44 +2136,46 @@ export function DealDetail({
       className="glass-panel industrial-border cyber-grid p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_25px_hsl(var(--border)_/_0.25)]"
       data-testid="deal-detail"
     >
-      <div className="flex items-center justify-between p-5 border-b border-border/40 bg-background/40 backdrop-blur-md">
-        <div className="flex items-center gap-3">
+      <div className="p-5 border-b border-border/40 bg-background/40 backdrop-blur-md">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="bg-primary/10 p-2 border border-primary/30">
-                <FileJson className="w-5 h-5 text-primary" />
+              <FileJson className="w-5 h-5 text-primary" />
             </div>
-            <div>
-                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/deal/explorer</div>
-                <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">Deal #{deal.id}</div>
-                {displayManifestRoot ? (
-                  <div
-                    className="mt-2 font-mono-data text-[10px] text-primary break-all"
-                    data-testid={`deal-manifest-${deal.id}`}
-                    title={displayManifestRoot}
-                  >
-                    {displayManifestRoot}
-                  </div>
-                ) : null}
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/deal/explorer</div>
+              <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">Deal #{deal.id}</div>
             </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-[11px] text-muted-foreground">
+            {uploadWorkflowActive ? (
+              <div className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
+                Active
+              </div>
+            ) : null}
+            <span
+              className={`border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] ${
+                hasCommittedContent
+                  ? 'border-success/40 bg-success/10 text-success'
+                  : 'border-border bg-secondary/60 text-muted-foreground'
+              }`}
+            >
+              {hasCommittedContent ? dealSizeLabel : 'Empty'}
+            </span>
+            <span className="border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+              {redundancyLabel}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-muted-foreground">
-          {uploadWorkflowActive ? (
-            <div className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
-              Active
-            </div>
-          ) : null}
-          <span
-            className={`border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] ${
-              hasCommittedContent
-                ? 'border-success/40 bg-success/10 text-success'
-                : 'border-border bg-secondary/60 text-muted-foreground'
-            }`}
+        {displayManifestRoot ? (
+          <div
+            className="mt-3 font-mono-data text-[10px] text-primary break-all"
+            data-testid={`deal-manifest-${deal.id}`}
+            title={displayManifestRoot}
           >
-            {hasCommittedContent ? dealSizeLabel : 'Empty'}
-          </span>
-          <span className="border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            {redundancyLabel}
-          </span>
-        </div>
+            {displayManifestRoot}
+          </div>
+        ) : null}
       </div>
 
       {topPanel ? <div className="border-b border-border">{topPanel}</div> : null}
