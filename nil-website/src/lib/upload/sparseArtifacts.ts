@@ -46,6 +46,13 @@ export function computeSparsePayloadPlan(bytes: Uint8Array, declaredFullSize = b
   if (declaredFullSize === 0) {
     return { fullSize: 0, sendSize: 0, sparse: false }
   }
+  if (bytes.byteLength === declaredFullSize && bytes.byteLength > 0 && bytes[bytes.byteLength - 1] !== 0) {
+    return {
+      fullSize: declaredFullSize,
+      sendSize: declaredFullSize,
+      sparse: false,
+    }
+  }
 
   for (let i = bytes.byteLength - 1; i >= 0; i -= 1) {
     if (bytes[i] !== 0) {

@@ -23,6 +23,14 @@ test('computeSparsePayloadPlan: non-zero payload keeps full length', () => {
   })
 })
 
+test('computeSparsePayloadPlan: exact-size dense payload fast path keeps full length', () => {
+  assert.deepStrictEqual(computeSparsePayloadPlan(new Uint8Array([0, 0, 3])), {
+    fullSize: 3,
+    sendSize: 3,
+    sparse: false,
+  })
+})
+
 test('computeSparsePayloadPlan: trailing zeros become implicit', () => {
   assert.deepStrictEqual(computeSparsePayloadPlan(new Uint8Array([9, 8, 0, 0, 0])), {
     fullSize: 5,
