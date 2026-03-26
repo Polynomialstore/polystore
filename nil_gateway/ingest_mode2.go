@@ -514,6 +514,21 @@ func mode2BundleUploadsEnabled() bool {
 	}
 }
 
+func mode2BundleUploadTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_BUNDLE_UPLOAD_TIMEOUT_SECONDS"))
+	if raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			return time.Duration(parsed) * time.Second
+		}
+	}
+	// Bundles collapse many artifact requests into one larger tunneled request.
+	// Give that request a longer wall clock budget than the per-artifact path.
+	if mode2UploadTaskTimeout > 2*time.Minute {
+		return mode2UploadTaskTimeout
+	}
+	return 3 * time.Minute
+}
+
 func mode2UploadTargetMetricKey(rawURL string) string {
 	host := strings.TrimSpace(rawURL)
 	if parsed, err := url.Parse(rawURL); err == nil {
@@ -1407,6 +1422,7 @@ func mode2UploadArtifactsToProviders(
 		IdleConnTimeout:       90 * time.Second,
 	}
 	client := &http.Client{Timeout: mode2UploadTaskTimeout, Transport: transport}
+	bundleClient := &http.Client{Timeout: mode2BundleUploadTimeout(), Transport: transport}
 	manifestRootCanonical := manifestRoot.Canonical
 	dealIDStr := strconv.FormatUint(dealID, 10)
 	sparseUploads := mode2SparseUploadEnabled()
@@ -1561,7 +1577,7 @@ func mode2UploadArtifactsToProviders(
 				req.Header.Set(nilUploadPreviousManifestRootHeader, strings.TrimSpace(task.previousManifestRoot))
 			}
 
-			resp, err := client.Do(req)
+			resp, err := bundleClient.Do(req)
 			if err != nil {
 				return err
 			}
