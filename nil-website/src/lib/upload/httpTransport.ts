@@ -130,6 +130,10 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
       if (!bundleUrl) {
         throw makeBundleUnsupportedError('bundle upload unsupported')
       }
+      const parsedDealId = Number(first.dealId)
+      if (!Number.isInteger(parsedDealId) || parsedDealId < 0) {
+        throw new Error(`invalid deal id for bundle upload: ${first.dealId}`)
+      }
 
       const artifacts = requests.map((request, index) => {
         const sparseArtifact = makeSparseArtifact(request.artifact)
@@ -137,7 +141,7 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
         return { request, sparseArtifact, part }
       })
       const metaJson = JSON.stringify({
-        deal_id: first.dealId,
+        deal_id: parsedDealId,
         manifest_root: first.manifestRoot,
         previous_manifest_root: String(first.previousManifestRoot || '').trim(),
         artifacts: artifacts.map(({ request, sparseArtifact, part }) => ({

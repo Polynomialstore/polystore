@@ -146,7 +146,7 @@ test('http transport bundles target artifacts into one binary bundle request', a
 
   assert.equal(receivedUrl, 'http://provider.test/sp/upload_bundle')
   assert.equal(receivedContentType, 'application/x.nilstore-bundle-v2')
-  assert.match(receivedMeta, /"deal_id":"42"/)
+  assert.match(receivedMeta, /"deal_id":42/)
   assert.match(receivedMeta, /"kind":"mdu"/)
   assert.match(receivedMeta, /"kind":"manifest"/)
   assert.deepStrictEqual(Array.from(receivedBytes.slice(-4)), [1, 2, 3, 9])

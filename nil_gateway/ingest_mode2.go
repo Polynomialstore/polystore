@@ -1589,7 +1589,7 @@ func mode2UploadArtifactsToProviders(
 				req.Header.Set(nilUploadPreviousManifestRootHeader, strings.TrimSpace(task.previousManifestRoot))
 			}
 
-			resp, err := bundleClient.Do(req)
+			resp, err := client.Do(req)
 			if err != nil {
 				return err
 			}
@@ -2003,7 +2003,7 @@ func mode2UploadArtifactsToProviders(
 			if expectContinueTimeout > 0 {
 				req.Header.Set("Expect", "100-continue")
 			}
-			resp, err := client.Do(req)
+			resp, err := bundleClient.Do(req)
 			if err != nil {
 				_ = body.reader.Close()
 				select {

@@ -145,8 +145,9 @@ function updateStep(
   if (stepIndex < 0 || stepIndex >= steps.length) return steps
   const current = steps[stepIndex]
   if (!current) return steps
-  steps[stepIndex] = { ...current, ...patch }
-  return steps
+  const next = cloneSteps(steps)
+  next[stepIndex] = { ...current, ...patch }
+  return next
 }
 
 function buildDirectUploadSteps(input: DirectUploadInput): UploadProgressStep[] {
