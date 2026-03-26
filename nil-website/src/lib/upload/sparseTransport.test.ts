@@ -104,3 +104,29 @@ test('postSparseArtifact sends direct typed-array bodies without blob wrapping',
   assert.ok(body instanceof Uint8Array)
   assert.deepStrictEqual(body, bytes)
 })
+
+test('postSparseArtifact reuses headers object when no sparse header is needed', async () => {
+  const headers = {
+    'X-Nil-Deal-ID': '1',
+    'Content-Type': 'application/octet-stream',
+  }
+  let seenHeaders: HeadersInit | undefined
+  const fetchImpl: typeof fetch = async (_url, init) => {
+    seenHeaders = init?.headers
+    return new Response('ok', { status: 200 })
+  }
+
+  await postSparseArtifact({
+    url: 'http://example.test/sp/upload_mdu',
+    headers,
+    artifact: {
+      kind: 'mdu',
+      index: 0,
+      bytes: new Uint8Array([1, 2, 3]),
+      fullSize: 3,
+    },
+    fetchImpl,
+  })
+
+  assert.equal(seenHeaders, headers)
+})
