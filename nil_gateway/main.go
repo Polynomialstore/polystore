@@ -6400,15 +6400,6 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	}
 	// Store under deal-scoped directory to avoid collisions across deals.
 	rootDir := dealScopedDir(dealID, parsed)
-	mkdirStarted := time.Now()
-	if err := ensureUploadRootDir(rootDir); err != nil {
-		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
-		statusCode = http.StatusInternalServerError
-		outcome = "mkdir_failed"
-		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
-		return
-	}
-	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 
 	// Write MDU
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
@@ -6423,6 +6414,16 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+
+	mkdirStarted := time.Now()
+	if err := ensureUploadRootDir(rootDir); err != nil {
+		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "mkdir_failed"
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 
 	tmp, err := createTempInUploadRoot(rootDir, filename+".tmp-*")
 	if err != nil {
@@ -6646,15 +6647,6 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rootDir := dealScopedDir(dealID, parsed)
-	mkdirStarted := time.Now()
-	if err := ensureUploadRootDir(rootDir); err != nil {
-		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
-		statusCode = http.StatusInternalServerError
-		outcome = "mkdir_failed"
-		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
-		return
-	}
-	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
@@ -6673,6 +6665,16 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	mkdirStarted := time.Now()
+	if err := ensureUploadRootDir(rootDir); err != nil {
+		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "mkdir_failed"
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 
 	tmp, err := createTempInUploadRoot(rootDir, filename+".tmp-*")
 	if err != nil {
@@ -6933,15 +6935,6 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 
 	rootDir := dealScopedDir(dealID, parsed)
-	mkdirStarted := time.Now()
-	if err := ensureUploadRootDir(rootDir); err != nil {
-		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
-		statusCode = http.StatusInternalServerError
-		outcome = "mkdir_failed"
-		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
-		return
-	}
-	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 
 	path := filepath.Join(rootDir, "manifest.bin")
 	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
@@ -6952,6 +6945,16 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+
+	mkdirStarted := time.Now()
+	if err := ensureUploadRootDir(rootDir); err != nil {
+		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
+		statusCode = http.StatusInternalServerError
+		outcome = "mkdir_failed"
+		http.Error(w, "failed to create slab directory", http.StatusInternalServerError)
+		return
+	}
+	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 
 	tmp, err := createTempInUploadRoot(rootDir, "manifest.bin.tmp-*")
 	if err != nil {
