@@ -12,6 +12,75 @@ export interface ProviderP2pEndpoint {
   target: P2pTarget
 }
 
+const LOCAL_PROVIDER_BASE_BY_HOST: Record<string, string> = {
+  'sp1.nilstore.org': 'http://127.0.0.1:8091',
+  'sp2.nilstore.org': 'http://127.0.0.1:8092',
+  'sp3.nilstore.org': 'http://127.0.0.1:8093',
+}
+
+const localProviderBaseProbeCache = new Map<string, Promise<string | null>>()
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return String(baseUrl || '').trim().replace(/\/$/, '')
+}
+
+export function localProviderBaseFor(baseUrl: string): string {
+  const normalized = normalizeBaseUrl(baseUrl)
+  if (!normalized) return ''
+  try {
+    const parsed = new URL(normalized)
+    return LOCAL_PROVIDER_BASE_BY_HOST[parsed.hostname.toLowerCase()] || ''
+  } catch {
+    return ''
+  }
+}
+
+export function clearLocalProviderBaseProbeCache(): void {
+  localProviderBaseProbeCache.clear()
+}
+
+async function probeLocalProviderBase(loopbackBase: string, fetchFn: typeof fetch): Promise<string | null> {
+  const statusUrl = `${loopbackBase}/status`
+  try {
+    const res = await fetchFn(statusUrl, {
+      method: 'GET',
+      signal: AbortSignal.timeout(1_000),
+    })
+    if (!res.ok) return null
+    const payload = await res.json().catch(() => null)
+    if (!payload || typeof payload !== 'object') return null
+    const persona = typeof payload.persona === 'string' ? payload.persona.trim().toLowerCase() : ''
+    if (persona !== 'provider-daemon' && persona !== 'provider_daemon') return null
+    const families = Array.isArray(payload.allowed_route_families)
+      ? payload.allowed_route_families
+          .filter((value: unknown): value is string => typeof value === 'string')
+          .map((value: string) => value.trim().toLowerCase())
+      : []
+    if (families.length > 0 && !families.some((value: string) => value === 'sp' || value.startsWith('sp/'))) {
+      return null
+    }
+    return loopbackBase
+  } catch {
+    return null
+  }
+}
+
+export async function preferLocalProviderBase(
+  baseUrl: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<string> {
+  const normalized = normalizeBaseUrl(baseUrl)
+  const loopbackBase = localProviderBaseFor(normalized)
+  if (!normalized || !loopbackBase) return normalized
+  let probe = localProviderBaseProbeCache.get(loopbackBase)
+  if (!probe) {
+    probe = probeLocalProviderBase(loopbackBase, fetchFn)
+    localProviderBaseProbeCache.set(loopbackBase, probe)
+  }
+  const preferred = await probe.catch(() => null)
+  return preferred || normalized
+}
+
 export async function resolveProviderEndpoint(
   lcdBase: string,
   dealId: string,
@@ -36,6 +105,7 @@ export async function resolveProviderEndpoint(
       if (target) p2pTarget = target
     }
   }
+  baseUrl = await preferLocalProviderBase(baseUrl)
   if (!baseUrl && !p2pTarget) return null
   return { provider, baseUrl, p2pTarget }
 }
@@ -90,6 +160,7 @@ export async function resolveProviderEndpoints(
         if (target) p2pTarget = target
       }
     }
+    baseUrl = await preferLocalProviderBase(baseUrl)
     out.push({ provider, baseUrl, p2pTarget })
   }
   return out
@@ -116,6 +187,7 @@ export async function resolveProviderEndpointByAddress(
       if (target) p2pTarget = target
     }
   }
+  baseUrl = await preferLocalProviderBase(baseUrl)
   if (!baseUrl && !p2pTarget) return null
   return { provider: addr, baseUrl, p2pTarget }
 }
