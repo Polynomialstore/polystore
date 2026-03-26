@@ -154,13 +154,19 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
         asBlobPart(header),
         ...artifacts.map(({ sparseArtifact }) => asBlobPart(sparseArtifact.bytes)),
       ])
-      const response = await fetch(bundleUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': BUNDLE_V2_CONTENT_TYPE,
-        },
-        body,
-      })
+      let response: Response
+      try {
+        response = await fetch(bundleUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': BUNDLE_V2_CONTENT_TYPE,
+          },
+          body,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw makeBundleUnsupportedError(`bundle upload unavailable: ${message}`)
+      }
       if (!response.ok) {
         const text = await response.text().catch(() => '')
         const message = text || `bundle upload failed (${response.status})`
