@@ -29,7 +29,6 @@ func (e *staleUploadPreviousManifestRootError) Error() string {
 
 type nilfsUploadRootPreflightCacheKey struct {
 	dealID               uint64
-	manifestRoot         string
 	previousManifestRoot string
 }
 
@@ -54,13 +53,13 @@ func validateNilfsUploadPreviousManifestRoot(
 	manifestRoot string,
 	rawPreviousManifestRoot string,
 ) error {
+	_ = manifestRoot
 	previousManifestRoot, err := parseManifestRootOrEmpty(rawPreviousManifestRoot)
 	if err != nil {
 		return fmt.Errorf("%w: %s: %v", errInvalidUploadPreviousManifestRoot, nilUploadPreviousManifestRootHeader, err)
 	}
 	key := nilfsUploadRootPreflightCacheKey{
 		dealID:               dealID,
-		manifestRoot:         normalizeManifestRootOrEmpty(manifestRoot),
 		previousManifestRoot: previousManifestRoot,
 	}
 	if nilfsUploadRootPreflightCacheTTL > 0 {
@@ -72,7 +71,7 @@ func validateNilfsUploadPreviousManifestRoot(
 		}
 	}
 
-	resultKey := fmt.Sprintf("%d|%s|%s", key.dealID, key.manifestRoot, key.previousManifestRoot)
+	resultKey := fmt.Sprintf("%d|%s", key.dealID, key.previousManifestRoot)
 	ch := nilfsUploadRootPreflightGroup.DoChan(resultKey, func() (any, error) {
 		meta, err := fetchDealMetaFresh(dealID)
 		if err != nil {

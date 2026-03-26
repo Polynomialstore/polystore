@@ -94,3 +94,49 @@ func TestValidateNilfsUploadPreviousManifestRoot_SingleflightConcurrentHits(t *t
 		t.Fatalf("expected singleflight to collapse to 1 LCD fetch, got %d", got)
 	}
 }
+
+func TestValidateNilfsUploadPreviousManifestRoot_SingleflightIgnoresCandidateManifestRoot(t *testing.T) {
+	resetNilfsUploadRootPreflightCacheForTest()
+	clearDealMetaCache()
+	t.Cleanup(resetNilfsUploadRootPreflightCacheForTest)
+	t.Cleanup(clearDealMetaCache)
+
+	origTTL := nilfsUploadRootPreflightCacheTTL
+	nilfsUploadRootPreflightCacheTTL = time.Minute
+	t.Cleanup(func() { nilfsUploadRootPreflightCacheTTL = origTTL })
+
+	currentRoot := mustTestManifestRoot(t, "upload-root-preflight-sf-current-shared")
+	nextRootA := mustTestManifestRoot(t, "upload-root-preflight-sf-next-a")
+	nextRootB := mustTestManifestRoot(t, "upload-root-preflight-sf-next-b")
+
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		time.Sleep(25 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"deal":{"owner":"nil1owner","manifest_root":"` + currentRoot.Canonical + `"}}`))
+	}))
+	defer srv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	errs := make(chan error, 2)
+	go func() {
+		errs <- validateNilfsUploadPreviousManifestRoot(t.Context(), 11, nextRootA.Canonical, currentRoot.Canonical)
+	}()
+	go func() {
+		errs <- validateNilfsUploadPreviousManifestRoot(t.Context(), 11, nextRootB.Canonical, currentRoot.Canonical)
+	}()
+
+	for i := 0; i < 2; i += 1 {
+		if err := <-errs; err != nil {
+			t.Fatalf("validate failed: %v", err)
+		}
+	}
+
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("expected singleflight to ignore candidate manifest root and collapse to 1 LCD fetch, got %d", got)
+	}
+}
