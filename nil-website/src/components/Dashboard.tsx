@@ -239,7 +239,7 @@ export function Dashboard() {
 
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
-  const [dealUploadActive, setDealUploadActive] = useState(false)
+  const [dealUploadActiveById, setDealUploadActiveById] = useState<Record<string, boolean>>({})
   const [stagedUpload, setStagedUpload] = useState<StagedUpload | null>(null)
   const [, setContentSlabLoading] = useState(false)
   const [, setContentSlabError] = useState<string | null>(null)
@@ -578,11 +578,25 @@ export function Dashboard() {
     [providerEndpointsByAddr],
   )
 
+  const selectedDealUploadActive = useMemo(() => {
+    const dealKey = String(targetDealId || '').trim()
+    if (!dealKey) return false
+    return Boolean(dealUploadActiveById[dealKey])
+  }, [dealUploadActiveById, targetDealId])
+
+  const handleWorkflowActiveChange = useCallback((dealId: string, active: boolean) => {
+    const dealKey = String(dealId || '').trim()
+    if (!dealKey) return
+    setDealUploadActiveById((prev) => {
+      if (Boolean(prev[dealKey]) === active) return prev
+      return { ...prev, [dealKey]: active }
+    })
+  }, [])
+
   useEffect(() => {
     setStagedUpload(null)
     setContentSlabError(null)
     setContentSlabLoading(false)
-    setDealUploadActive(false)
   }, [targetDealId])
 
   useEffect(() => {
@@ -1415,7 +1429,7 @@ export function Dashboard() {
             <FileSharder
               dealId={targetDealId}
               onCommitSuccess={handleMduCommitSuccess}
-              onWorkflowActiveChange={setDealUploadActive}
+              onWorkflowActiveChange={handleWorkflowActiveChange}
             />
           ) : (
             <div className="nil-inset rounded-none border-dashed p-10 text-center">
@@ -1704,7 +1718,7 @@ export function Dashboard() {
                 nilAddress={nilAddress}
                 onFileActivity={recordRecentActivity}
                 topPanel={dealExplorerTopPanel}
-                uploadWorkflowActive={dealUploadActive}
+                uploadWorkflowActive={selectedDealUploadActive}
                 requestedTab={dealDetailRequestedTab ?? undefined}
                 requestedTabNonce={dealDetailRequestedTabNonce}
               />

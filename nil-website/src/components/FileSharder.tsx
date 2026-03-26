@@ -102,7 +102,7 @@ interface WorkflowDoneSummary {
 export interface FileSharderProps {
   dealId: string;
   onCommitSuccess?: (dealId: string, manifestRoot: string, fileMeta?: { filePath: string; fileSizeBytes: number }) => void;
-  onWorkflowActiveChange?: (active: boolean) => void;
+  onWorkflowActiveChange?: (dealId: string, active: boolean) => void;
 }
 
 type ShardPhase =
@@ -4242,11 +4242,10 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     [workflowSteps],
   )
   useEffect(() => {
-    onWorkflowActiveChange?.(hasActiveWorkflowStep)
-    return () => {
-      onWorkflowActiveChange?.(false)
-    }
-  }, [hasActiveWorkflowStep, onWorkflowActiveChange])
+    const dealKey = String(dealId || '').trim()
+    if (!dealKey) return
+    onWorkflowActiveChange?.(dealKey, hasActiveWorkflowStep)
+  }, [dealId, hasActiveWorkflowStep, onWorkflowActiveChange])
   const showRetryUpload =
     !isUploadComplete &&
     !activeUploading &&
