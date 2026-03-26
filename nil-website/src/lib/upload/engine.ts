@@ -456,83 +456,77 @@ export function createUploadEngine(options: UploadEngineOptions) {
       }
       const manifestBlob = input.manifestBlob
 
-      const metadataTaskGroups: UploadTask[][] = []
-      for (const mdu of input.metadataMdus) {
-        const group: UploadTask[] = []
-        for (const target of input.metadataTargets) {
-          const targetLabel = target.label || target.baseUrl
-          group.push({
-            stepIndex: stepIndices.get(stepKey('mdu', targetLabel, mdu.index)) ?? -1,
-            request: {
-              dealId: input.dealId,
-              manifestRoot: input.manifestRoot,
-              previousManifestRoot: input.previousManifestRoot,
-              target,
-              artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize } as const,
-            },
-          })
-        }
-        metadataTaskGroups.push(group)
-      }
-      metadataTaskGroups.push(
-        input.metadataTargets.map((target) => {
-          const targetLabel = target.label || target.baseUrl
-          return {
-            stepIndex: stepIndices.get(stepKey('manifest', targetLabel)) ?? -1,
-            request: {
-              dealId: input.dealId,
-              manifestRoot: input.manifestRoot,
-              previousManifestRoot: input.previousManifestRoot,
-              target,
-              artifact: { kind: 'manifest', bytes: manifestBlob, fullSize: input.manifestBlobFullSize } as const,
-            },
-          } satisfies UploadTask
-        }),
-      )
-
-      const shardTaskGroups: UploadTask[][] = []
-      for (const shardSet of input.shardSets ?? []) {
-        const group: UploadTask[] = []
-        for (let slot = 0; slot < shardSet.shards.length; slot += 1) {
-          const shard = shardSet.shards[slot]
-          const target = input.shardTargets?.[slot]
-          if (!target) {
-            const message = `missing upload target for slot ${slot}`
-            if (trackSteps) {
-              steps = emitProgress(
-                updateStep(
-                  steps,
-                  stepIndices.get(stepKey('shard', `slot-${slot}`, shardSet.index, slot)) ?? -1,
-                  { status: 'error', error: message },
-                ),
-                input.onProgress,
-              )
-            }
-            return { ok: false, steps, error: message }
-          }
-          const targetLabel = target.label || target.baseUrl
-          group.push({
-            stepIndex: stepIndices.get(stepKey('shard', targetLabel, shardSet.index, slot)) ?? -1,
-            request: {
-              dealId: input.dealId,
-              manifestRoot: input.manifestRoot,
-              previousManifestRoot: input.previousManifestRoot,
-              target,
-              artifact: { kind: 'shard', index: shardSet.index, slot, bytes: shard.data, fullSize: shard.fullSize } as const,
-            },
-          })
-        }
-        shardTaskGroups.push(group)
-      }
-
+      const shardSets = input.shardSets ?? []
       const combinedTasks: UploadTask[] = []
-      const rounds = Math.max(metadataTaskGroups.length, shardTaskGroups.length)
+      const metadataRounds = input.metadataMdus.length + 1
+      const rounds = Math.max(metadataRounds, shardSets.length)
       for (let i = 0; i < rounds; i += 1) {
-        if (i < metadataTaskGroups.length) combinedTasks.push(...metadataTaskGroups[i])
-        if (i < shardTaskGroups.length) combinedTasks.push(...shardTaskGroups[i])
+        if (i < input.metadataMdus.length) {
+          const mdu = input.metadataMdus[i]
+          for (const target of input.metadataTargets) {
+            const targetLabel = target.label || target.baseUrl
+            combinedTasks.push({
+              stepIndex: stepIndices.get(stepKey('mdu', targetLabel, mdu.index)) ?? -1,
+              request: {
+                dealId: input.dealId,
+                manifestRoot: input.manifestRoot,
+                previousManifestRoot: input.previousManifestRoot,
+                target,
+                artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize } as const,
+              },
+            })
+          }
+        } else if (i === input.metadataMdus.length) {
+          for (const target of input.metadataTargets) {
+            const targetLabel = target.label || target.baseUrl
+            combinedTasks.push({
+              stepIndex: stepIndices.get(stepKey('manifest', targetLabel)) ?? -1,
+              request: {
+                dealId: input.dealId,
+                manifestRoot: input.manifestRoot,
+                previousManifestRoot: input.previousManifestRoot,
+                target,
+                artifact: { kind: 'manifest', bytes: manifestBlob, fullSize: input.manifestBlobFullSize } as const,
+              },
+            })
+          }
+        }
+
+        if (i < shardSets.length) {
+          const shardSet = shardSets[i]
+          for (let slot = 0; slot < shardSet.shards.length; slot += 1) {
+            const shard = shardSet.shards[slot]
+            const target = input.shardTargets?.[slot]
+            if (!target) {
+              const message = `missing upload target for slot ${slot}`
+              if (trackSteps) {
+                steps = emitProgress(
+                  updateStep(
+                    steps,
+                    stepIndices.get(stepKey('shard', `slot-${slot}`, shardSet.index, slot)) ?? -1,
+                    { status: 'error', error: message },
+                  ),
+                  input.onProgress,
+                )
+              }
+              return { ok: false, steps, error: message }
+            }
+            const targetLabel = target.label || target.baseUrl
+            combinedTasks.push({
+              stepIndex: stepIndices.get(stepKey('shard', targetLabel, shardSet.index, slot)) ?? -1,
+              request: {
+                dealId: input.dealId,
+                manifestRoot: input.manifestRoot,
+                previousManifestRoot: input.previousManifestRoot,
+                target,
+                artifact: { kind: 'shard', index: shardSet.index, slot, bytes: shard.data, fullSize: shard.fullSize } as const,
+              },
+            })
+          }
+        }
       }
       const combinedConcurrency =
-        shardTaskGroups.length > 0
+        shardSets.length > 0
           ? Math.min(combinedTasks.length, stripedMetadataConcurrency + stripedShardConcurrency)
           : Math.min(combinedTasks.length, stripedMetadataConcurrency)
 
