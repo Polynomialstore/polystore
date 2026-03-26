@@ -259,6 +259,7 @@ async function runUploadTasks(
   transport: UploadTransportPort,
 ): Promise<UploadEngineResult> {
   const trackProgress = Boolean(onProgress) && initialSteps.length > 0
+  const trackTaskEvents = Boolean(onTaskEvent)
   let steps = initialSteps
   let nextIndex = 0
   let active = 0
@@ -280,17 +281,23 @@ async function runUploadTasks(
         const task = tasks[nextIndex]
         nextIndex += 1
         active += 1
-        const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
-        const target = task.request.target.label || task.request.target.baseUrl
-        onTaskEvent?.({
-          phase: 'start',
-          kind: task.request.artifact.kind,
-          target,
-          index: 'index' in task.request.artifact ? task.request.artifact.index : undefined,
-          slot: 'slot' in task.request.artifact ? task.request.artifact.slot : undefined,
-          bytes: task.request.artifact.bytes.byteLength,
-          fullSize: task.request.artifact.fullSize,
-        })
+        const startedAt = trackTaskEvents ? (typeof performance !== 'undefined' ? performance.now() : Date.now()) : 0
+        const target = trackTaskEvents ? task.request.target.label || task.request.target.baseUrl : ''
+        const index = trackTaskEvents && 'index' in task.request.artifact ? task.request.artifact.index : undefined
+        const slot = trackTaskEvents && 'slot' in task.request.artifact ? task.request.artifact.slot : undefined
+        const bytes = trackTaskEvents ? task.request.artifact.bytes.byteLength : 0
+        const fullSize = trackTaskEvents ? task.request.artifact.fullSize : undefined
+        if (trackTaskEvents) {
+          onTaskEvent?.({
+            phase: 'start',
+            kind: task.request.artifact.kind,
+            target,
+            index,
+            slot,
+            bytes,
+            fullSize,
+          })
+        }
 
         if (trackProgress) {
           steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'uploading', error: undefined }), onProgress)
@@ -299,18 +306,20 @@ async function runUploadTasks(
         void transport
           .sendArtifact(task.request)
           .then(() => {
-            const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
-            onTaskEvent?.({
-              phase: 'end',
-              kind: task.request.artifact.kind,
-              target,
-              index: 'index' in task.request.artifact ? task.request.artifact.index : undefined,
-              slot: 'slot' in task.request.artifact ? task.request.artifact.slot : undefined,
-              bytes: task.request.artifact.bytes.byteLength,
-              fullSize: task.request.artifact.fullSize,
-              durationMs: finishedAt - startedAt,
-              ok: true,
-            })
+            if (trackTaskEvents) {
+              const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+              onTaskEvent?.({
+                phase: 'end',
+                kind: task.request.artifact.kind,
+                target,
+                index,
+                slot,
+                bytes,
+                fullSize,
+                durationMs: finishedAt - startedAt,
+                ok: true,
+              })
+            }
             if (trackProgress) {
               steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'complete' }), onProgress)
             }
@@ -318,19 +327,21 @@ async function runUploadTasks(
           .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error)
             if (!firstError) firstError = message
-            const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
-            onTaskEvent?.({
-              phase: 'end',
-              kind: task.request.artifact.kind,
-              target,
-              index: 'index' in task.request.artifact ? task.request.artifact.index : undefined,
-              slot: 'slot' in task.request.artifact ? task.request.artifact.slot : undefined,
-              bytes: task.request.artifact.bytes.byteLength,
-              fullSize: task.request.artifact.fullSize,
-              durationMs: finishedAt - startedAt,
-              ok: false,
-              error: message,
-            })
+            if (trackTaskEvents) {
+              const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+              onTaskEvent?.({
+                phase: 'end',
+                kind: task.request.artifact.kind,
+                target,
+                index,
+                slot,
+                bytes,
+                fullSize,
+                durationMs: finishedAt - startedAt,
+                ok: false,
+                error: message,
+              })
+            }
             if (trackProgress) {
               steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'error', error: message }), onProgress)
             }

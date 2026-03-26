@@ -176,6 +176,37 @@ test('upload engine: direct upload overlaps artifact requests with bounded concu
   assert.ok(elapsedMs < 140, `expected bounded parallel direct upload, got ${elapsedMs}ms`)
 })
 
+test('upload engine: direct upload emits task events when requested', async () => {
+  const transport = makeRecordingTransport()
+  const engine = createUploadEngine({ transport: transport.transport })
+  const events: string[] = []
+
+  const result = await engine.uploadDirect({
+    dealId: '16',
+    manifestRoot: '0x111',
+    manifestBlob: new Uint8Array([9, 9]),
+    manifestBlobFullSize: 128 * 1024,
+    mdus: [{ index: 0, data: new Uint8Array([1]), fullSize: 8 * 1024 * 1024 }],
+    target: {
+      baseUrl: 'http://provider-a',
+      mduPath: '/sp/upload_mdu',
+      manifestPath: '/sp/upload_manifest',
+      label: 'provider-a',
+    },
+    onTaskEvent(event) {
+      events.push(`${event.phase}:${event.kind}:${event.index ?? 'manifest'}:${event.ok ?? 'na'}`)
+    },
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(events, [
+    'start:mdu:0:na',
+    'start:manifest:manifest:na',
+    'end:mdu:0:true',
+    'end:manifest:manifest:true',
+  ])
+})
+
 test('upload engine: striped upload overlaps metadata and shard requests with combined bounded concurrency', async () => {
   let activeTotal = 0
   let peakTotal = 0
