@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,8 @@ const (
 	spUploadBundleKindMDU      = "mdu"
 	spUploadBundleKindShard    = "shard"
 	spUploadBundleKindManifest = "manifest"
+	spUploadBundleV2Magic      = "NLB2"
+	spUploadBundleV2MediaType  = "application/x.nilstore-bundle-v2"
 )
 
 type spUploadBundleRequest struct {
@@ -104,8 +107,8 @@ func (a spUploadBundleArtifact) resolve() (spUploadBundleResolvedArtifact, error
 	return resolved, nil
 }
 
-func copyBundleArtifactPart(tmp *os.File, part *multipart.Part, resolved spUploadBundleResolvedArtifact, profile *mode2UploadProfile) (int64, error) {
-	limited := io.LimitReader(part, resolved.sendSize+1)
+func copyBundleArtifactBody(tmp *os.File, src io.Reader, resolved spUploadBundleResolvedArtifact, profile *mode2UploadProfile) (int64, error) {
+	limited := io.LimitReader(src, resolved.sendSize+1)
 	copyStarted := time.Now()
 	n, err := copyUploadBody(tmp, limited)
 	if profile != nil {
@@ -121,6 +124,96 @@ func copyBundleArtifactPart(tmp *os.File, part *multipart.Part, resolved spUploa
 		return n, fmt.Errorf("artifact %s shorter than declared send_size", resolved.meta.Part)
 	}
 	return n, nil
+}
+
+func readSpUploadBundleV2Request(r io.Reader) (spUploadBundleRequest, error) {
+	var header [8]byte
+	if _, err := io.ReadFull(r, header[:]); err != nil {
+		return spUploadBundleRequest{}, err
+	}
+	if string(header[:4]) != spUploadBundleV2Magic {
+		return spUploadBundleRequest{}, fmt.Errorf("invalid bundle magic")
+	}
+	metaLen := binary.LittleEndian.Uint32(header[4:])
+	if metaLen == 0 || metaLen > 1<<20 {
+		return spUploadBundleRequest{}, fmt.Errorf("invalid bundle meta length")
+	}
+	metaBytes := make([]byte, metaLen)
+	if _, err := io.ReadFull(r, metaBytes); err != nil {
+		return spUploadBundleRequest{}, err
+	}
+	var req spUploadBundleRequest
+	if err := json.Unmarshal(metaBytes, &req); err != nil {
+		return spUploadBundleRequest{}, err
+	}
+	return req, nil
+}
+
+func storeBundleArtifact(rootDir string, resolved spUploadBundleResolvedArtifact, src io.Reader, profile *mode2UploadProfile) error {
+	path := filepath.Join(rootDir, resolved.filename)
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == resolved.fullSize {
+		n, discardErr := io.Copy(io.Discard, io.LimitReader(src, resolved.sendSize+1))
+		if discardErr != nil {
+			return fmt.Errorf("failed to discard existing artifact body: %w", discardErr)
+		}
+		if n != resolved.sendSize {
+			return fmt.Errorf("bundle artifact size mismatch")
+		}
+		profile.addCount("received_body_bytes", uint64(n))
+		profile.addCount("stored_size_bytes", uint64(info.Size()))
+		return nil
+	}
+
+	tmp, err := createTempInUploadRoot(rootDir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	n, err := copyBundleArtifactBody(tmp, src, resolved, profile)
+	if err != nil {
+		return err
+	}
+	profile.addCount("received_body_bytes", uint64(n))
+
+	storedSize := n
+	if resolved.fullSize > n {
+		truncateStarted := time.Now()
+		if truncateErr := tmp.Truncate(resolved.fullSize); truncateErr != nil {
+			profile.addDuration("truncate_ms", time.Since(truncateStarted))
+			return truncateErr
+		}
+		profile.addDuration("truncate_ms", time.Since(truncateStarted))
+		storedSize = resolved.fullSize
+	}
+	profile.addCount("stored_size_bytes", uint64(storedSize))
+
+	closeStarted := time.Now()
+	if closeErr := tmp.Close(); closeErr != nil {
+		profile.addDuration("close_temp_ms", time.Since(closeStarted))
+		return closeErr
+	}
+	profile.addDuration("close_temp_ms", time.Since(closeStarted))
+
+	renameStarted := time.Now()
+	if renameErr := os.Rename(tmpPath, path); renameErr != nil {
+		profile.addDuration("rename_ms", time.Since(renameStarted))
+		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == resolved.fullSize {
+			committed = true
+			return nil
+		}
+		return renameErr
+	}
+	profile.addDuration("rename_ms", time.Since(renameStarted))
+	committed = true
+	return nil
 }
 
 func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
@@ -142,44 +235,58 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mr, err := r.MultipartReader()
-	if err != nil {
-		statusCode = http.StatusBadRequest
-		outcome = "invalid_multipart"
-		http.Error(w, "invalid multipart form", http.StatusBadRequest)
-		return
-	}
+	binaryBundle := strings.HasPrefix(strings.TrimSpace(r.Header.Get("Content-Type")), spUploadBundleV2MediaType)
+	var (
+		req spUploadBundleRequest
+		mr  *multipart.Reader
+		err error
+	)
+	if binaryBundle {
+		req, err = readSpUploadBundleV2Request(r.Body)
+		if err != nil {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_bundle_v2"
+			http.Error(w, "invalid bundle body", http.StatusBadRequest)
+			return
+		}
+	} else {
+		mr, err = r.MultipartReader()
+		if err != nil {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_multipart"
+			http.Error(w, "invalid multipart form", http.StatusBadRequest)
+			return
+		}
 
-	metaPart, err := mr.NextPart()
-	if err != nil {
-		statusCode = http.StatusBadRequest
-		outcome = "missing_meta"
-		http.Error(w, "bundle meta part is required", http.StatusBadRequest)
-		return
-	}
-	if strings.TrimSpace(metaPart.FormName()) != "meta" {
+		metaPart, err := mr.NextPart()
+		if err != nil {
+			statusCode = http.StatusBadRequest
+			outcome = "missing_meta"
+			http.Error(w, "bundle meta part is required", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(metaPart.FormName()) != "meta" {
+			_ = metaPart.Close()
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_meta_part"
+			http.Error(w, "first multipart part must be meta", http.StatusBadRequest)
+			return
+		}
+
+		metaBytes, readErr := io.ReadAll(io.LimitReader(metaPart, 1<<20))
 		_ = metaPart.Close()
-		statusCode = http.StatusBadRequest
-		outcome = "invalid_meta_part"
-		http.Error(w, "first multipart part must be meta", http.StatusBadRequest)
-		return
-	}
-
-	metaBytes, err := io.ReadAll(io.LimitReader(metaPart, 1<<20))
-	_ = metaPart.Close()
-	if err != nil {
-		statusCode = http.StatusBadRequest
-		outcome = "invalid_meta"
-		http.Error(w, "failed to read bundle meta", http.StatusBadRequest)
-		return
-	}
-
-	var req spUploadBundleRequest
-	if err := json.Unmarshal(metaBytes, &req); err != nil {
-		statusCode = http.StatusBadRequest
-		outcome = "invalid_meta_json"
-		http.Error(w, "invalid bundle meta", http.StatusBadRequest)
-		return
+		if readErr != nil {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_meta"
+			http.Error(w, "failed to read bundle meta", http.StatusBadRequest)
+			return
+		}
+		if err := json.Unmarshal(metaBytes, &req); err != nil {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_meta_json"
+			http.Error(w, "invalid bundle meta", http.StatusBadRequest)
+			return
+		}
 	}
 
 	dealID = req.DealID
@@ -283,140 +390,79 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	received := make(map[string]struct{}, len(artifactsByPart))
-	for {
-		part, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			statusCode = http.StatusBadRequest
-			outcome = "invalid_bundle_part"
-			http.Error(w, "invalid multipart form", http.StatusBadRequest)
-			return
-		}
-
-		partName := strings.TrimSpace(part.FormName())
-		if partName == "" {
-			_ = part.Close()
-			continue
-		}
-
-		resolved, ok := artifactsByPart[partName]
-		if !ok {
-			_ = part.Close()
-			statusCode = http.StatusBadRequest
-			outcome = "unexpected_artifact_part"
-			http.Error(w, "unexpected bundle artifact part", http.StatusBadRequest)
-			return
-		}
-		if _, exists := received[partName]; exists {
-			_ = part.Close()
-			statusCode = http.StatusBadRequest
-			outcome = "duplicate_artifact_part"
-			http.Error(w, "duplicate bundle artifact part", http.StatusBadRequest)
-			return
-		}
-
-		path := filepath.Join(rootDir, resolved.filename)
-		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == resolved.fullSize {
-			n, discardErr := io.Copy(io.Discard, io.LimitReader(part, resolved.sendSize+1))
-			_ = part.Close()
-			if discardErr != nil {
+	if binaryBundle {
+		for _, artifact := range req.Artifacts {
+			resolved := artifactsByPart[artifact.Part]
+			if err := storeBundleArtifact(rootDir, resolved, io.LimitReader(r.Body, resolved.sendSize), profile); err != nil {
+				log.Printf("SpUploadBundle: failed to store binary artifact part=%s target=%s: %v", artifact.Part, resolved.filename, err)
 				statusCode = http.StatusInternalServerError
-				outcome = "body_copy_failed"
-				http.Error(w, "failed to discard existing artifact body", http.StatusInternalServerError)
+				outcome = "artifact_store_failed"
+				http.Error(w, "failed to store bundle artifact", http.StatusInternalServerError)
 				return
 			}
-			if n != resolved.sendSize {
+			received[artifact.Part] = struct{}{}
+			storedPath = rootDir
+		}
+		var trailing [1]byte
+		n, readErr := r.Body.Read(trailing[:])
+		if n != 0 || (readErr != nil && readErr != io.EOF) {
+			statusCode = http.StatusBadRequest
+			outcome = "unexpected_trailing_bytes"
+			http.Error(w, "bundle contains unexpected trailing bytes", http.StatusBadRequest)
+			return
+		}
+	} else {
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
 				statusCode = http.StatusBadRequest
-				outcome = "artifact_size_mismatch"
-				http.Error(w, "bundle artifact size mismatch", http.StatusBadRequest)
+				outcome = "invalid_bundle_part"
+				http.Error(w, "invalid multipart form", http.StatusBadRequest)
 				return
 			}
-			profile.addCount("received_body_bytes", uint64(n))
-			profile.addCount("stored_size_bytes", uint64(info.Size()))
+
+			partName := strings.TrimSpace(part.FormName())
+			if partName == "" {
+				_ = part.Close()
+				continue
+			}
+
+			resolved, ok := artifactsByPart[partName]
+			if !ok {
+				_ = part.Close()
+				statusCode = http.StatusBadRequest
+				outcome = "unexpected_artifact_part"
+				http.Error(w, "unexpected bundle artifact part", http.StatusBadRequest)
+				return
+			}
+			if _, exists := received[partName]; exists {
+				_ = part.Close()
+				statusCode = http.StatusBadRequest
+				outcome = "duplicate_artifact_part"
+				http.Error(w, "duplicate bundle artifact part", http.StatusBadRequest)
+				return
+			}
+			if err := storeBundleArtifact(rootDir, resolved, part, profile); err != nil {
+				log.Printf("SpUploadBundle: failed to store multipart artifact part=%s target=%s: %v", partName, resolved.filename, err)
+				_ = part.Close()
+				statusCode = http.StatusInternalServerError
+				outcome = "artifact_store_failed"
+				http.Error(w, "failed to store bundle artifact", http.StatusInternalServerError)
+				return
+			}
+			_ = part.Close()
 			received[partName] = struct{}{}
 			storedPath = rootDir
-			continue
 		}
-
-		tmp, err := createTempInUploadRoot(rootDir, filepath.Base(path)+".tmp-*")
-		if err != nil {
-			_ = part.Close()
-			statusCode = http.StatusInternalServerError
-			outcome = "create_temp_failed"
-			http.Error(w, "failed to create temp file", http.StatusInternalServerError)
+		if len(received) != len(artifactsByPart) {
+			statusCode = http.StatusBadRequest
+			outcome = "missing_artifact_part"
+			http.Error(w, fmt.Sprintf("bundle incomplete: received %d/%d artifacts", len(received), len(artifactsByPart)), http.StatusBadRequest)
 			return
 		}
-		tmpPath := tmp.Name()
-		committed := false
-		func() {
-			defer func() {
-				_ = tmp.Close()
-				if !committed {
-					_ = os.Remove(tmpPath)
-				}
-			}()
-
-			n, copyErr := copyBundleArtifactPart(tmp, part, resolved, profile)
-			_ = part.Close()
-			if copyErr != nil {
-				err = copyErr
-				return
-			}
-			profile.addCount("received_body_bytes", uint64(n))
-
-			storedSize := n
-			if resolved.fullSize > n {
-				truncateStarted := time.Now()
-				if truncateErr := tmp.Truncate(resolved.fullSize); truncateErr != nil {
-					profile.addDuration("truncate_ms", time.Since(truncateStarted))
-					err = truncateErr
-					return
-				}
-				profile.addDuration("truncate_ms", time.Since(truncateStarted))
-				storedSize = resolved.fullSize
-			}
-			profile.addCount("stored_size_bytes", uint64(storedSize))
-
-			closeStarted := time.Now()
-			if closeErr := tmp.Close(); closeErr != nil {
-				profile.addDuration("close_temp_ms", time.Since(closeStarted))
-				err = closeErr
-				return
-			}
-			profile.addDuration("close_temp_ms", time.Since(closeStarted))
-
-			renameStarted := time.Now()
-			if renameErr := os.Rename(tmpPath, path); renameErr != nil {
-				profile.addDuration("rename_ms", time.Since(renameStarted))
-				if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == resolved.fullSize {
-					received[partName] = struct{}{}
-					storedPath = rootDir
-					committed = true
-					return
-				}
-				err = renameErr
-				return
-			}
-			profile.addDuration("rename_ms", time.Since(renameStarted))
-			received[partName] = struct{}{}
-			storedPath = rootDir
-			committed = true
-		}()
-		if err != nil {
-			statusCode = http.StatusInternalServerError
-			outcome = "artifact_store_failed"
-			http.Error(w, "failed to store bundle artifact", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if len(received) != len(artifactsByPart) {
-		statusCode = http.StatusBadRequest
-		outcome = "missing_artifact_part"
-		http.Error(w, fmt.Sprintf("bundle incomplete: received %d/%d artifacts", len(received), len(artifactsByPart)), http.StatusBadRequest)
-		return
 	}
 
 	w.WriteHeader(http.StatusOK)

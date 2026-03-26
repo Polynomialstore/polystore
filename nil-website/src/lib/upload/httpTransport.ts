@@ -10,6 +10,9 @@ interface TargetUrlSet {
   bundle?: string
 }
 
+const BUNDLE_V2_CONTENT_TYPE = 'application/x.nilstore-bundle-v2'
+const bundleHeaderEncoder = new TextEncoder()
+
 const targetUrlCache = new WeakMap<UploadTarget, TargetUrlSet>()
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -43,6 +46,22 @@ function targetUrl(target: UploadTarget, artifact: SparseArtifactInput): string 
     throw new Error(`target ${target.label || target.baseUrl} does not support shard uploads`)
   }
   return urls.shard
+}
+
+function buildBundleV2Header(metaJson: string): Uint8Array {
+  const metaBytes = bundleHeaderEncoder.encode(metaJson)
+  const header = new Uint8Array(8 + metaBytes.byteLength)
+  header[0] = 0x4e // N
+  header[1] = 0x4c // L
+  header[2] = 0x42 // B
+  header[3] = 0x32 // 2
+  const metaLen = metaBytes.byteLength >>> 0
+  header[4] = metaLen & 0xff
+  header[5] = (metaLen >>> 8) & 0xff
+  header[6] = (metaLen >>> 16) & 0xff
+  header[7] = (metaLen >>> 24) & 0xff
+  header.set(metaBytes, 8)
+  return header
 }
 
 function buildHeaders(
@@ -95,46 +114,35 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
         throw unsupported
       }
 
-      const form = new FormData()
       const artifacts = requests.map((request, index) => {
         const sparseArtifact = makeSparseArtifact(request.artifact)
         const part = `artifact_${String(index).padStart(2, '0')}`
         return { request, sparseArtifact, part }
       })
-      form.append(
-        'meta',
-        new Blob(
-          [
-            JSON.stringify({
-              deal_id: first.dealId,
-              manifest_root: first.manifestRoot,
-              previous_manifest_root: String(first.previousManifestRoot || '').trim(),
-              artifacts: artifacts.map(({ request, sparseArtifact, part }) => ({
-                part,
-                kind: request.artifact.kind,
-                mdu_index: request.artifact.kind === 'mdu' || request.artifact.kind === 'shard' ? request.artifact.index : undefined,
-                slot: request.artifact.kind === 'shard' ? request.artifact.slot : undefined,
-                full_size: sparseArtifact.fullSize,
-                send_size: sparseArtifact.bytes.byteLength,
-              })),
-            }),
-          ],
-          { type: 'application/json' },
-        ),
-      )
-      for (const { request, sparseArtifact, part } of artifacts) {
-        const filename =
-          request.artifact.kind === 'manifest'
-            ? 'manifest.bin'
-            : request.artifact.kind === 'mdu'
-              ? `mdu_${request.artifact.index}.bin`
-              : `mdu_${request.artifact.index}_slot_${request.artifact.slot}.bin`
-        form.append(part, new Blob([asBlobPart(sparseArtifact.bytes)]), filename)
-      }
-
+      const metaJson = JSON.stringify({
+        deal_id: first.dealId,
+        manifest_root: first.manifestRoot,
+        previous_manifest_root: String(first.previousManifestRoot || '').trim(),
+        artifacts: artifacts.map(({ request, sparseArtifact, part }) => ({
+          part,
+          kind: request.artifact.kind,
+          mdu_index: request.artifact.kind === 'mdu' || request.artifact.kind === 'shard' ? request.artifact.index : undefined,
+          slot: request.artifact.kind === 'shard' ? request.artifact.slot : undefined,
+          full_size: sparseArtifact.fullSize,
+          send_size: sparseArtifact.bytes.byteLength,
+        })),
+      })
+      const header = buildBundleV2Header(metaJson)
+      const body = new Blob([
+        asBlobPart(header),
+        ...artifacts.map(({ sparseArtifact }) => asBlobPart(sparseArtifact.bytes)),
+      ])
       const response = await fetch(bundleUrl, {
         method: 'POST',
-        body: form,
+        headers: {
+          'Content-Type': BUNDLE_V2_CONTENT_TYPE,
+        },
+        body,
       })
       if (response.status === 404 || response.status === 405 || response.status === 501) {
         const unsupported = new Error(`bundle upload unsupported (${response.status})`)

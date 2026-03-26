@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
-	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -1899,10 +1899,8 @@ func mode2UploadArtifactsToProviders(
 				PreviousManifestRoot: strings.TrimSpace(previousManifestRoot),
 				Artifacts:            make([]spUploadBundleArtifact, 0, len(bundle.tasks)),
 			}
-			partNames := make([]string, len(bundle.tasks))
 			for i, task := range bundle.tasks {
 				partName := fmt.Sprintf("artifact_%02d", i)
-				partNames[i] = partName
 				artifact := spUploadBundleArtifact{
 					Part:     partName,
 					Kind:     task.kind,
@@ -1931,7 +1929,6 @@ func mode2UploadArtifactsToProviders(
 			}
 
 			pr, pw := io.Pipe()
-			mw := multipart.NewWriter(pw)
 			errCh := make(chan error, 1)
 			go func() {
 				defer close(errCh)
@@ -1939,21 +1936,18 @@ func mode2UploadArtifactsToProviders(
 					_ = pw.CloseWithError(err)
 					errCh <- err
 				}
-				metaPart, err := mw.CreateFormField("meta")
-				if err != nil {
+				var header [8]byte
+				copy(header[:4], []byte(spUploadBundleV2Magic))
+				binary.LittleEndian.PutUint32(header[4:], uint32(len(metaJSON)))
+				if _, err := pw.Write(header[:]); err != nil {
 					closeWithErr(err)
 					return
 				}
-				if _, err := metaPart.Write(metaJSON); err != nil {
+				if _, err := pw.Write(metaJSON); err != nil {
 					closeWithErr(err)
 					return
 				}
-				for i, task := range bundle.tasks {
-					part, err := mw.CreateFormFile(partNames[i], filepath.Base(task.path))
-					if err != nil {
-						closeWithErr(err)
-						return
-					}
+				for _, task := range bundle.tasks {
 					f, err := os.Open(task.path)
 					if err != nil {
 						closeWithErr(err)
@@ -1963,7 +1957,7 @@ func mode2UploadArtifactsToProviders(
 					if sparseUploads && task.sendBytes > 0 && task.sendBytes < task.sizeBytes {
 						reader = io.LimitReader(f, task.sendBytes)
 					}
-					_, err = io.Copy(part, reader)
+					_, err = io.Copy(pw, reader)
 					closeErr := f.Close()
 					if err != nil {
 						closeWithErr(err)
@@ -1974,15 +1968,11 @@ func mode2UploadArtifactsToProviders(
 						return
 					}
 				}
-				if err := mw.Close(); err != nil {
-					closeWithErr(err)
-					return
-				}
 				errCh <- pw.Close()
 			}()
 			return &bundleBody{
 				reader:      pr,
-				contentType: mw.FormDataContentType(),
+				contentType: spUploadBundleV2MediaType,
 				errCh:       errCh,
 			}, nil
 		}

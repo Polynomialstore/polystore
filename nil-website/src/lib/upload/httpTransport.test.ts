@@ -85,16 +85,20 @@ test('http transport normalizes target base url once across repeated requests', 
   ])
 })
 
-test('http transport bundles target artifacts into one multipart request', async () => {
+test('http transport bundles target artifacts into one binary bundle request', async () => {
   let receivedUrl = ''
   let receivedMeta = ''
+  let receivedContentType = ''
+  let receivedBytes = new Uint8Array(0)
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
     receivedUrl = String(input)
-    assert.ok(init?.body instanceof FormData)
-    const meta = (init.body as FormData).get('meta')
-    assert.ok(meta instanceof Blob)
-    receivedMeta = await meta.text()
+    receivedContentType = String((init?.headers as Record<string, string>)?.['Content-Type'] || '')
+    const bodyBytes = new Uint8Array(await new Response(init?.body ?? null).arrayBuffer())
+    receivedBytes = bodyBytes
+    assert.equal(String.fromCharCode(...bodyBytes.slice(0, 4)), 'NLB2')
+    const metaLen = bodyBytes[4] | (bodyBytes[5] << 8) | (bodyBytes[6] << 16) | (bodyBytes[7] << 24)
+    receivedMeta = new TextDecoder().decode(bodyBytes.slice(8, 8 + metaLen))
     return new Response('OK', { status: 200 })
   }) as typeof fetch
   try {
@@ -141,9 +145,11 @@ test('http transport bundles target artifacts into one multipart request', async
   }
 
   assert.equal(receivedUrl, 'http://provider.test/sp/upload_bundle')
+  assert.equal(receivedContentType, 'application/x.nilstore-bundle-v2')
   assert.match(receivedMeta, /"deal_id":"42"/)
   assert.match(receivedMeta, /"kind":"mdu"/)
   assert.match(receivedMeta, /"kind":"manifest"/)
+  assert.deepStrictEqual(Array.from(receivedBytes.slice(-4)), [1, 2, 3, 9])
 })
 
 test('http transport marks bundle upload unsupported on 404', async () => {
