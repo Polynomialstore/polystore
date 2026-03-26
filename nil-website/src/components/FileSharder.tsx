@@ -4468,7 +4468,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                         {step.state === 'done' ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-success" />
                         ) : step.state === 'active' && index === 0 ? (
-                          <span className="inline-block h-3.5 w-3.5 rounded-full border border-primary/70" />
+                          <span className="inline-block h-3.5 w-3.5 rounded-none border border-primary/70" />
                         ) : step.state === 'active' ? (
                           <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
                         ) : step.state === 'error' ? (
