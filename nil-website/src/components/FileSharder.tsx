@@ -85,6 +85,20 @@ type WorkflowStepState = 'idle' | 'active' | 'done' | 'error'
 type UploadPanelState = 'idle' | 'running' | 'success' | 'error'
 type DealSetupStatus = 'loading' | 'ready' | 'error'
 
+type WorkflowDoneSummaryTone = 'neutral' | 'primary' | 'success'
+
+interface WorkflowDoneSummaryChip {
+  label: string
+  value: string
+  tone?: WorkflowDoneSummaryTone
+}
+
+interface WorkflowDoneSummary {
+  headline: string
+  secondary?: string
+  chips: WorkflowDoneSummaryChip[]
+}
+
 export interface FileSharderProps {
   dealId: string;
   onCommitSuccess?: (dealId: string, manifestRoot: string, fileMeta?: { filePath: string; fileSizeBytes: number }) => void;
@@ -4093,6 +4107,112 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     uploadErrorMessage,
   ])
 
+  const selectedFileDisplayName = useMemo(() => {
+    const raw = String(currentFileMeta?.filePath || '').trim()
+    if (!raw) return ''
+    const normalized = raw.replace(/\\/g, '/')
+    const parts = normalized.split('/')
+    return parts[parts.length - 1] || raw
+  }, [currentFileMeta])
+
+  const uploadArtifactsDone = useMemo(
+    () => uploadProgress.filter((entry) => entry.status === 'complete').length,
+    [uploadProgress],
+  )
+
+  const workflowDoneSummaries = useMemo<Record<number, WorkflowDoneSummary | null>>(() => {
+    const summaries: Record<number, WorkflowDoneSummary | null> = {
+      0: null,
+      1: null,
+      2: null,
+      3: null,
+    }
+
+    if (currentFileMeta) {
+      const fullPath = String(currentFileMeta.filePath || '').trim()
+      summaries[0] = {
+        headline: selectedFileDisplayName || fullPath,
+        secondary: fullPath && fullPath !== selectedFileDisplayName ? fullPath : undefined,
+        chips: [
+          { label: 'size', value: formatBytes(currentFileMeta.fileSizeBytes), tone: 'primary' },
+        ],
+      }
+    }
+
+    const totalPreparedMdus = shardProgress.totalMdus > 0 ? shardProgress.totalMdus : shards.length
+    if (hasManifestRoot && totalPreparedMdus > 0) {
+      const elapsedLabel = shardingUi.elapsedMs > 0 ? formatDuration(shardingUi.elapsedMs) : '—'
+      const throughputLabel = shardingUi.mibPerSec > 0 ? `${shardingUi.mibPerSec.toFixed(2)} MiB/s` : '—'
+      summaries[1] = {
+        headline: `${String(totalPreparedMdus)} MDUs prepared`,
+        chips: [
+          { label: 'user', value: String(shardProgress.totalUserMdus), tone: 'neutral' },
+          { label: 'witness', value: String(shardProgress.totalWitnessMdus), tone: 'neutral' },
+          { label: 'elapsed', value: elapsedLabel, tone: 'primary' },
+          { label: 'avg', value: throughputLabel, tone: 'primary' },
+        ],
+      }
+    }
+
+    if (isUploadComplete || readyToCommit || isAlreadyCommitted || isCommitPending || isCommitConfirming) {
+      const uploadedArtifactsLabel =
+        uploadProgress.length > 0
+          ? `${String(uploadArtifactsDone)} / ${String(uploadProgress.length)} artifacts`
+          : shardProgress.totalMdus > 0
+            ? `${String(shardProgress.totalMdus)} MDUs uploaded`
+            : 'Upload finished'
+      const mirrorLabel =
+        mirrorStatus === 'success'
+          ? 'mirrored'
+          : mirrorStatus === 'skipped'
+            ? 'mirror skipped'
+            : mirrorStatus === 'error'
+              ? 'mirror failed'
+              : null
+      const mirrorTone: WorkflowDoneSummaryTone =
+        mirrorStatus === 'error' ? 'primary' : 'neutral'
+      summaries[2] = {
+        headline: 'Provider upload complete',
+        chips: [
+          { label: 'artifacts', value: uploadedArtifactsLabel, tone: 'success' },
+          ...(mirrorLabel ? [{ label: 'gateway', value: mirrorLabel, tone: mirrorTone }] : []),
+        ],
+      }
+    }
+
+    if (isAlreadyCommitted || Boolean(commitHash)) {
+      const shortHash =
+        commitHash && commitHash.length > 20
+          ? `${commitHash.slice(0, 10)}…${commitHash.slice(-6)}`
+          : commitHash || 'ready'
+      summaries[3] = {
+        headline: isAlreadyCommitted ? 'Committed on-chain' : 'Commit prepared',
+        chips: [{ label: 'tx', value: shortHash, tone: isAlreadyCommitted ? 'success' : 'neutral' }],
+      }
+    }
+
+    return summaries
+  }, [
+    commitHash,
+    currentFileMeta,
+    hasManifestRoot,
+    isAlreadyCommitted,
+    isCommitConfirming,
+    isCommitPending,
+    isUploadComplete,
+    mirrorStatus,
+    readyToCommit,
+    selectedFileDisplayName,
+    shardProgress.totalMdus,
+    shardProgress.totalUserMdus,
+    shardProgress.totalWitnessMdus,
+    shards.length,
+    shardingUi.elapsedMs,
+    shardingUi.mibPerSec,
+    uploadArtifactsDone,
+    uploadProgress.length,
+  ])
+
   const activeWorkflowStepIndex = useMemo(() => {
     const errorIdx = workflowSteps.findIndex((step) => step.state === 'error')
     if (errorIdx >= 0) return errorIdx
@@ -4110,6 +4230,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     active: 'border-primary/40 bg-primary/10 text-foreground',
     done: 'border-success/40 bg-success/10 text-foreground',
     error: 'border-destructive/40 bg-destructive/10 text-destructive',
+  }
+  const doneSummaryChipToneClasses: Record<WorkflowDoneSummaryTone, string> = {
+    neutral: 'border-border/70 bg-background/50 text-muted-foreground',
+    primary: 'border-primary/35 bg-primary/10 text-primary',
+    success: 'border-success/35 bg-success/10 text-success',
   }
   const showRetryUpload =
     !isUploadComplete &&
@@ -4442,6 +4567,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             <div className="space-y-1.5">
               {workflowSteps.map((step, index) => {
                 const expanded = step.state === 'error' || index === activeWorkflowStepIndex
+                const doneSummary = step.state === 'done' && !expanded ? workflowDoneSummaries[index] : null
                 return (
                   <div key={step.title} className={`nil-tab-panel px-3 py-2.5 ${stepToneClasses[step.state]}`}>
                     <div className="flex items-center justify-between gap-3">
@@ -4461,6 +4587,34 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                         {step.state === 'done' ? 'Done' : step.state === 'active' ? 'Active' : step.state === 'error' ? 'Error' : 'Pending'}
                       </div>
                     </div>
+                    {doneSummary ? (
+                      <div className="mt-2 space-y-1.5">
+                        <div className="truncate text-[13px] font-semibold leading-tight text-foreground">
+                          {doneSummary.headline}
+                        </div>
+                        {doneSummary.secondary ? (
+                          <div className="truncate text-[10px] font-mono-data text-muted-foreground">
+                            {doneSummary.secondary}
+                          </div>
+                        ) : null}
+                        {doneSummary.chips.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {doneSummary.chips.map((chip, chipIndex) => {
+                              const tone = chip.tone || 'neutral'
+                              return (
+                                <span
+                                  key={`${chip.label}-${chip.value}-${chipIndex}`}
+                                  className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-mono-data tracking-[0.14em] ${doneSummaryChipToneClasses[tone]}`}
+                                >
+                                  <span className="uppercase opacity-80">{chip.label}</span>
+                                  <span className="font-semibold normal-case tracking-normal">{chip.value}</span>
+                                </span>
+                              )
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {expanded ? (
                       <div className="mt-2 space-y-2">
                         <div className="text-[11px] font-mono-data leading-relaxed">{step.detail}</div>
