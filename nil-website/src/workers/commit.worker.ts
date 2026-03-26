@@ -3,7 +3,7 @@
 // A small worker used as a compute pool to parallelize blob commitment generation
 // across multiple single-threaded WASM instances (no SharedArrayBuffer required).
 
-import init, { NilWasm } from '../../public/wasm/nil_core.js'
+import init, { NilWasm } from '../lib/nilCoreRuntime.js'
 
 let wasmInitialized = false
 let wasmInitPromise: Promise<void> | null = null
