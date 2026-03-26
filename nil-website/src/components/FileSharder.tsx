@@ -4533,6 +4533,172 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                           </div>
                         ) : null}
 
+                        {index === 1 && shards.length > 0 ? (
+                          <div className="nil-tab-panel mt-1 p-3" data-testid="mdu-slab-map-step">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                                  /mnt/slab_map
+                                </div>
+                                <h3 className="mt-1 text-sm font-semibold flex items-center gap-2 text-foreground">
+                                  <FileJson className="w-4 h-4 text-primary" />
+                                  Slab Map
+                                </h3>
+                                <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
+                                  8&nbsp;MiB MDU = 64 × 128&nbsp;KiB blobs.{" "}
+                                  <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
+                                    MDU primer
+                                  </Link>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSlabViewMode('summary')}
+                                  className={`border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${slabViewMode === 'summary' ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground'}`}
+                                >
+                                  Summary
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSlabViewMode('detail')}
+                                  className={`border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${slabViewMode === 'detail' ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground'}`}
+                                >
+                                  Detail
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mb-3 flex flex-wrap items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.18em] text-muted-foreground">
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.complete} complete
+                              </span>
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.processing} processing
+                              </span>
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.pending_witness} pending witness
+                              </span>
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.empty} empty
+                              </span>
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.error} error
+                              </span>
+                              <div className="ml-auto text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+                                {shards.filter((s) => s.status === 'expanded').length} / {shards.length} MDUs Expanded
+                              </div>
+                            </div>
+
+                            {slabViewMode === 'summary' ? (
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                {(['meta', 'witness', 'user'] as const).map((role) => {
+                                  const row = slabRoleSummary[role]
+                                  return (
+                                    <div key={role} className="nil-tab-panel p-3 text-[10px] font-mono-data uppercase tracking-[0.18em]">
+                                      <div className="font-bold text-foreground">
+                                        {role === 'meta' ? 'Meta MDU' : role === 'witness' ? 'Witness MDUs' : 'User MDUs'}
+                                      </div>
+                                      <div className="mt-2 text-muted-foreground">
+                                        Total: <span className="text-foreground">{row.total}</span>
+                                      </div>
+                                      <div className="mt-1 text-success">
+                                        Complete: <span className="text-foreground">{row.complete}</span>
+                                      </div>
+                                      <div className="mt-1 text-primary">
+                                        Processing: <span className="text-foreground">{row.processing}</span>
+                                      </div>
+                                      <div className="mt-1 text-muted-foreground">
+                                        Pending: <span className="text-foreground">{row.pending}</span>
+                                      </div>
+                                      <div className="mt-1 text-destructive">
+                                        Error: <span className="text-foreground">{row.error}</span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <div className="relative grid max-h-[420px] grid-cols-[repeat(auto-fit,minmax(172px,1fr))] gap-3 overflow-y-auto pr-2">
+                                {shards.map((shard) => {
+                                  const role = slabRoleForShard(shard)
+                                  const stateKey = slabStateForShard(shard)
+                                  const state = stateKey === 'pending_witness' ? 'PENDING WITNESS' : stateKey.toUpperCase()
+                                  const stateClass =
+                                    stateKey === 'complete'
+                                      ? 'text-success'
+                                      : stateKey === 'processing'
+                                        ? 'text-primary'
+                                        : stateKey === 'error'
+                                          ? 'text-destructive'
+                                          : stateKey === 'pending_witness'
+                                            ? 'text-primary'
+                                            : 'text-muted-foreground'
+                                  const cellClass =
+                                    stateKey === 'complete'
+                                      ? 'bg-success'
+                                      : stateKey === 'processing'
+                                        ? 'bg-primary/20 animate-pulse'
+                                        : stateKey === 'error'
+                                          ? 'bg-destructive/30'
+                                          : stateKey === 'pending_witness'
+                                            ? 'bg-primary/10'
+                                            : 'bg-background/50'
+                                  const ringClass =
+                                    stateKey === 'complete'
+                                      ? 'ring-1 ring-success/30'
+                                      : stateKey === 'processing'
+                                        ? 'ring-1 ring-primary/30'
+                                        : stateKey === 'error'
+                                          ? 'ring-1 ring-destructive/30'
+                                          : stateKey === 'pending_witness'
+                                            ? 'ring-1 ring-primary/20'
+                                            : 'ring-1 ring-border/30'
+
+                                  return (
+                                    <div
+                                      key={shard.id}
+                                      className={`relative min-h-[168px] overflow-hidden glass-panel industrial-border p-3 ${ringClass}`}
+                                      title={shard.commitments[0] || 'Pending...'}
+                                    >
+                                      {stateKey === 'processing' ? (
+                                        <div className="absolute inset-0 pointer-events-none bg-primary/5 opacity-10" />
+                                      ) : null}
+
+                                      <div className="relative flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+                                        <span>MDU {shard.id}</span>
+                                        <span className={stateClass}>{state}</span>
+                                      </div>
+
+                                      <div className="relative mt-3 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
+                                        {Array.from({ length: 64 }).map((_, i) => (
+                                          <div key={i} className={`aspect-square ${cellClass}`} />
+                                        ))}
+                                      </div>
+
+                                      <div className="relative mt-3 truncate text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+                                        {role === 'meta' ? 'Meta MDU' : role === 'witness' ? 'Witness MDU' : 'User MDU'}
+                                      </div>
+
+                                      <div className="relative mt-1 truncate text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+                                        {stateKey === 'complete'
+                                          ? `ROOT ${shard.commitments[0]?.slice(0, 8) ?? '—'}…`
+                                          : stateKey === 'processing'
+                                            ? 'EXPANDING...'
+                                            : stateKey === 'pending_witness'
+                                              ? 'WAITING FOR USER ROOTS'
+                                              : stateKey === 'error'
+                                                ? 'RETRY REQUIRED'
+                                                : 'PENDING'}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+
                         {index === 2 ? (
                           <div className="space-y-2">
                             {activeUploading ? (
@@ -4661,174 +4827,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         </div>
           ) : null}
 
-      {/* Visualization Grid */}
-      {shards.length > 0 && (
-        <div className="relative overflow-hidden glass-panel industrial-border p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
-
-          <div className="relative mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
-                /mnt/slab_map
-              </div>
-              <h3 className="mt-2 text-sm font-semibold flex items-center gap-2 text-foreground">
-                <FileJson className="w-4 h-4 text-primary" />
-                Slab Map
-              </h3>
-              <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
-                8&nbsp;MiB MDU = 64 × 128&nbsp;KiB blobs.{" "}
-                <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
-                  MDU primer
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setSlabViewMode('summary')}
-                className={`border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${slabViewMode === 'summary' ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground'}`}
-              >
-                Summary
-              </button>
-              <button
-                type="button"
-                onClick={() => setSlabViewMode('detail')}
-                className={`border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${slabViewMode === 'detail' ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground'}`}
-              >
-                Detail
-              </button>
-            </div>
-          </div>
-
-          <div className="relative mb-4 flex flex-wrap items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.18em] text-muted-foreground">
-            <span className="nil-tab-inset px-2 py-1">
-              {slabLegendCounts.complete} complete
-            </span>
-            <span className="nil-tab-inset px-2 py-1">
-              {slabLegendCounts.processing} processing
-            </span>
-            <span className="nil-tab-inset px-2 py-1">
-              {slabLegendCounts.pending_witness} pending witness
-            </span>
-            <span className="nil-tab-inset px-2 py-1">
-              {slabLegendCounts.empty} empty
-            </span>
-            <span className="nil-tab-inset px-2 py-1">
-              {slabLegendCounts.error} error
-            </span>
-            <div className="ml-auto text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-              {shards.filter((s) => s.status === 'expanded').length} / {shards.length} MDUs Expanded
-            </div>
-          </div>
-
-          {slabViewMode === 'summary' ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {(['meta', 'witness', 'user'] as const).map((role) => {
-                const row = slabRoleSummary[role]
-                return (
-                  <div key={role} className="nil-tab-panel p-3 text-[10px] font-mono-data uppercase tracking-[0.18em]">
-                    <div className="font-bold text-foreground">
-                      {role === 'meta' ? 'Meta MDU' : role === 'witness' ? 'Witness MDUs' : 'User MDUs'}
-                    </div>
-                    <div className="mt-2 text-muted-foreground">
-                      Total: <span className="text-foreground">{row.total}</span>
-                    </div>
-                    <div className="mt-1 text-success">
-                      Complete: <span className="text-foreground">{row.complete}</span>
-                    </div>
-                    <div className="mt-1 text-primary">
-                      Processing: <span className="text-foreground">{row.processing}</span>
-                    </div>
-                    <div className="mt-1 text-muted-foreground">
-                      Pending: <span className="text-foreground">{row.pending}</span>
-                    </div>
-                    <div className="mt-1 text-destructive">
-                      Error: <span className="text-foreground">{row.error}</span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="relative grid max-h-[520px] grid-cols-[repeat(auto-fit,minmax(172px,1fr))] gap-3 overflow-y-auto pr-2">
-              {shards.map((shard) => {
-                const role = slabRoleForShard(shard)
-                const stateKey = slabStateForShard(shard)
-                const state = stateKey === 'pending_witness' ? 'PENDING WITNESS' : stateKey.toUpperCase()
-                const stateClass =
-                  stateKey === 'complete'
-                    ? 'text-success'
-                    : stateKey === 'processing'
-                      ? 'text-primary'
-                      : stateKey === 'error'
-                        ? 'text-destructive'
-                        : stateKey === 'pending_witness'
-                          ? 'text-primary'
-                          : 'text-muted-foreground'
-                const cellClass =
-                  stateKey === 'complete'
-                    ? 'bg-success'
-                    : stateKey === 'processing'
-                      ? 'bg-primary/20 animate-pulse'
-                      : stateKey === 'error'
-                        ? 'bg-destructive/30'
-                        : stateKey === 'pending_witness'
-                          ? 'bg-primary/10'
-                          : 'bg-background/50'
-                const ringClass =
-                  stateKey === 'complete'
-                    ? 'ring-1 ring-success/30'
-                    : stateKey === 'processing'
-                      ? 'ring-1 ring-primary/30'
-                      : stateKey === 'error'
-                        ? 'ring-1 ring-destructive/30'
-                        : stateKey === 'pending_witness'
-                          ? 'ring-1 ring-primary/20'
-                          : 'ring-1 ring-border/30'
-
-                return (
-                  <div
-                    key={shard.id}
-                    className={`relative min-h-[168px] overflow-hidden glass-panel industrial-border p-3 ${ringClass}`}
-                    title={shard.commitments[0] || 'Pending...'}
-                  >
-                    {stateKey === 'processing' ? (
-                      <div className="absolute inset-0 pointer-events-none bg-primary/5 opacity-10" />
-                    ) : null}
-
-                    <div className="relative flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
-                      <span>MDU {shard.id}</span>
-                      <span className={stateClass}>{state}</span>
-                    </div>
-
-                    <div className="relative mt-3 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
-                      {Array.from({ length: 64 }).map((_, i) => (
-                        <div key={i} className={`aspect-square ${cellClass}`} />
-                      ))}
-                    </div>
-
-                    <div className="relative mt-3 truncate text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
-                      {role === 'meta' ? 'Meta MDU' : role === 'witness' ? 'Witness MDU' : 'User MDU'}
-                    </div>
-
-                    <div className="relative mt-1 truncate text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
-                      {stateKey === 'complete'
-                        ? `ROOT ${shard.commitments[0]?.slice(0, 8) ?? '—'}…`
-                        : stateKey === 'processing'
-                          ? 'EXPANDING...'
-                          : stateKey === 'pending_witness'
-                            ? 'WAITING FOR USER ROOTS'
-                            : stateKey === 'error'
-                              ? 'RETRY REQUIRED'
-                              : 'PENDING'}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
       </>
       )}
     </div>
