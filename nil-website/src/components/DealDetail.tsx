@@ -846,7 +846,6 @@ export function DealDetail({
   const committedManifestRoot = authoritativeManifestRoot || fallbackManifestRoot
   const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
   const hasCommittedContent = Boolean(committedManifestRoot)
-  const dealStatusLabel = hasCommittedContent ? 'Active' : 'Empty'
   const dealSizeBytes = Number.parseInt(String(deal.size ?? '0'), 10)
   const dealSizeLabel = Number.isFinite(dealSizeBytes) && dealSizeBytes > 0
     ? `${(dealSizeBytes / 1024 / 1024).toFixed(2)} MB`
@@ -2169,10 +2168,8 @@ export function DealDetail({
                 : 'border-border bg-secondary/60 text-muted-foreground'
             }`}
           >
-            {dealStatusLabel}
+            {hasCommittedContent ? dealSizeLabel : 'Empty'}
           </span>
-          <span className="font-mono-data text-foreground">{dealSizeLabel}</span>
-          <span className="text-border">|</span>
           <span className="border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
             {redundancyLabel}
           </span>
