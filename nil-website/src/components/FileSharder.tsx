@@ -638,7 +638,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     },
     [browserPerfLog],
   )
-
   const resetUploadPanel = useCallback(() => {
     setProcessing(false)
     setShards([])
