@@ -717,27 +717,37 @@ function FileRow({
       data-file-path={file.path}
       data-cache-browser={browserCached ? 'yes' : 'no'}
       data-cache-gateway={gatewayCached ? 'yes' : 'no'}
-      className="nil-list-row relative flex items-center justify-between gap-3 border border-border bg-background/50 px-4 py-4 group"
+      className="nil-list-row relative grid grid-cols-[minmax(0,1.7fr)_auto_auto_auto] items-center gap-3 border border-border bg-background/50 px-4 py-3 group"
     >
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-bold text-foreground" title={file.path}>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold text-foreground" title={file.path}>
           {file.path}
         </div>
-        <div className="nil-detail-meta mt-1 flex items-center gap-2 tracking-tight">
-          <span className="text-foreground/70">{formatBytes(file.size_bytes)}</span>
-          <span className="text-border/60">|</span>
-          <span>BROWSER: <span className={browserCached ? 'text-success font-bold' : ''}>{browserCached ? 'YES' : '—'}</span></span>
-          <span className="text-border/60">|</span>
-          <span>GATEWAY: <span className={gatewayCached ? 'text-success font-bold' : ''}>{gatewayCached ? 'YES' : '—'}</span></span>
+        <div className="mt-1 text-[10px] font-mono-data uppercase tracking-[0.16em] text-muted-foreground">
+          start {String(file.start_offset || 0)}
         </div>
       </div>
+
+      <div className="text-[11px] font-mono-data text-foreground/80">
+        {formatBytes(file.size_bytes)}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1 text-[9px] font-bold uppercase tracking-[0.14em]">
+        <span className={`border px-1.5 py-0.5 ${browserCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
+          Browser {browserCached ? 'Yes' : '—'}
+        </span>
+        <span className={`border px-1.5 py-0.5 ${gatewayCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
+          Gateway {gatewayCached ? 'Yes' : '—'}
+        </span>
+      </div>
+
       <div className="flex items-center gap-2">
         <button
           onClick={handleAutoDownload}
           disabled={isAnyDownloading || isBusy || !manifestRoot}
           data-testid="deal-detail-download"
           data-file-path={file.path}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-none transition-colors disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
+          className="bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary-foreground rounded-none shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] transition-colors hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-50"
         >
           {isBusy ? 'BUSY' : 'Download'}
         </button>
@@ -2478,6 +2488,12 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                         </div>
                       ) : files && files.length > 0 ? (
                         <div className="nil-tab-panel space-y-2" data-testid="deal-detail-file-list">
+                          <div className="grid grid-cols-[minmax(0,1.7fr)_auto_auto_auto] gap-3 border-b border-border/40 px-2 pb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                            <span>Path</span>
+                            <span>Size</span>
+                            <span>Cache</span>
+                            <span>Actions</span>
+                          </div>
                           {files.map((f) => (
                             <FileRow
                               key={`${f.path}:${f.start_offset}`}

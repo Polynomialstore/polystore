@@ -55,6 +55,7 @@ type RecentFileEntry = {
 
 const RECENT_FILES_KEY = 'nil_recent_files_v1'
 const MAX_RECENT_FILES = 3
+const DASHBOARD_DIAGNOSTICS_KEY = 'nil_dashboard_show_diagnostics_v1'
 const RETRIEVAL_SESSIONS_POLL_MS = 120_000
 const RETRIEVAL_SESSIONS_HIDDEN_POLL_MS = 600_000
 const RETRIEVAL_PARAMS_POLL_MS = 600_000
@@ -105,6 +106,7 @@ export function Dashboard() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showSystemStatus, setShowSystemStatus] = useState(false)
   const [showCreateDeal, setShowCreateDeal] = useState(false)
+  const [dealFilter, setDealFilter] = useState('')
   const [compressUploads, setCompressUploads] = useState(true)
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
@@ -113,6 +115,26 @@ export function Dashboard() {
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
   const [rpcHeight, setRpcHeight] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.sessionStorage.getItem(DASHBOARD_DIAGNOSTICS_KEY)
+      if (raw === '1') setShowSystemStatus(true)
+    } catch (e) {
+      console.warn('Failed to load dashboard diagnostics preference', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.setItem(DASHBOARD_DIAGNOSTICS_KEY, showSystemStatus ? '1' : '0')
+    } catch (e) {
+      console.warn('Failed to persist dashboard diagnostics preference', e)
+    }
+  }, [showSystemStatus])
+
   useEffect(() => {
     let cancelled = false
     let timer: number | null = null
@@ -452,6 +474,27 @@ export function Dashboard() {
   }, [rpcHeight, targetDealEndBlock, targetDealExpired])
   const isTargetDealMode2 = targetDealService.mode === 'mode2' || targetDealService.mode === 'auto'
   const hasSelectedDeal = Boolean(targetDealId)
+  const recentActivityByDeal = useMemo(() => {
+    const out = new Map<string, RecentFileEntry>()
+    for (const entry of recentFiles) {
+      if (!entry?.dealId) continue
+      const existing = out.get(entry.dealId)
+      if (!existing || existing.updatedAt < entry.updatedAt) {
+        out.set(entry.dealId, entry)
+      }
+    }
+    return out
+  }, [recentFiles])
+  const targetDealRecentActivity = targetDealId ? recentActivityByDeal.get(targetDealId) : undefined
+  const filteredOwnedDeals = useMemo(() => {
+    const query = dealFilter.trim().toLowerCase()
+    if (!query) return ownedDeals
+    return ownedDeals.filter((deal) => {
+      const id = String(deal.id || '').toLowerCase()
+      const manifest = String(deal.cid || '').toLowerCase()
+      return id.includes(query) || manifest.includes(query)
+    })
+  }, [dealFilter, ownedDeals])
 
   const setDurationFromPreset = useCallback(
     (preset: string) => {
@@ -717,6 +760,18 @@ export function Dashboard() {
       idx++
     }
     return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
+  }
+
+  function formatRelativeTime(ts: number | null | undefined): string {
+    if (!ts || !Number.isFinite(ts)) return '—'
+    const deltaMs = Date.now() - ts
+    if (deltaMs < 60_000) return 'just now'
+    const minutes = Math.floor(deltaMs / 60_000)
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
   }
 
   function parseUint64(v: unknown): bigint {
@@ -1213,9 +1268,41 @@ export function Dashboard() {
     )
 
   const onChainCid = String(targetDeal?.cid || '').trim()
+  const targetDealHealthLabel = targetDealExpired ? 'Expired' : onChainCid ? 'Active' : 'Empty'
+  const targetDealHealthClass = targetDealExpired
+    ? 'text-destructive border-destructive/40 bg-destructive/10'
+    : onChainCid
+      ? 'text-success border-success/40 bg-success/10'
+      : 'text-muted-foreground border-border bg-secondary/50'
+  const targetDealModeLabel = isTargetDealMode2
+    ? `Mode 2 RS(${targetDealService.rsK ?? appConfig.defaultRsK},${targetDealService.rsM ?? appConfig.defaultRsM})`
+    : 'Mode 1 (gateway)'
+  const targetDealPathLabel = isTargetDealMode2 ? 'Direct to providers' : 'Gateway sharding'
 
   const dealExplorerTopPanel = (
     <div className="p-5 space-y-4 bg-card">
+      <div className="nil-inset border border-border/60 bg-background/40 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+          <span className="font-semibold text-foreground">Deal Context</span>
+          <span className="text-border/60">•</span>
+          <span data-testid="workspace-context-deal">Deal {targetDealId ? `#${targetDealId}` : '—'}</span>
+          <span className="text-border/60">•</span>
+          <span>{targetDealModeLabel}</span>
+          <span className="text-border/60">•</span>
+          <span>{targetDealPathLabel}</span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em]">
+          <span className={cn('border px-2 py-0.5 font-semibold', targetDealHealthClass)}>{targetDealHealthLabel}</span>
+          <span className="border border-border bg-secondary/60 px-2 py-0.5 text-muted-foreground">
+            Last activity: {formatRelativeTime(targetDealRecentActivity?.updatedAt)}
+          </span>
+          {targetDealRecentActivity?.filePath ? (
+            <span className="truncate border border-border bg-background px-2 py-0.5 text-muted-foreground" title={targetDealRecentActivity.filePath}>
+              {targetDealRecentActivity.filePath}
+            </span>
+          ) : null}
+        </div>
+      </div>
       {showAdvanced ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             <button
@@ -1376,6 +1463,136 @@ export function Dashboard() {
     </div>
   )
 
+  const createDealDrawer = (
+    <div ref={allocRef} className="flex h-full flex-col overflow-y-auto bg-card">
+      <div className="flex items-start justify-between gap-3 border-b border-border/40 px-6 py-5">
+        <div>
+          <div className="nil-section-label">/ALLOC/CREATE_DEAL</div>
+          <div className="mt-2 text-sm font-semibold text-foreground">Create deal container</div>
+          <p className="mt-1 text-[11px] font-mono-data text-muted-foreground">
+            Allocate the container first, then upload content into it.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreateDeal(false)}
+          className="nil-inset inline-flex items-center justify-center px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="space-y-4 px-6 py-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[11px] font-mono-data text-muted-foreground">
+            Mode 2 is default for trusted devnet uploads.
+          </div>
+          <button
+            type="button"
+            data-testid="workspace-advanced-toggle"
+            onClick={() => setShowAdvanced((value) => !value)}
+            className="inline-flex items-center justify-center border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary transition-colors hover:bg-primary/15"
+          >
+            {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="nil-section-label text-foreground">Duration</label>
+          <select
+            value={durationPreset}
+            onChange={(e) => setDurationFromPreset(e.target.value)}
+            className="recessed-input px-3 py-2 text-xs"
+          >
+            {DURATION_PRESETS.map((preset) => (
+              <option key={preset.value} value={preset.value}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="nil-section-label text-foreground">Escrow</label>
+            <input
+              type="number"
+              value={initialEscrow}
+              onChange={(e) => setInitialEscrow(e.target.value)}
+              className="recessed-input px-3 py-2 text-xs"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="nil-section-label text-foreground">Max Spend</label>
+            <input
+              type="number"
+              value={maxMonthlySpend}
+              onChange={(e) => setMaxMonthlySpend(e.target.value)}
+              className="recessed-input px-3 py-2 text-xs"
+            />
+          </div>
+        </div>
+
+        <div className="nil-inset p-3 text-[10px]">
+          <span className="font-bold uppercase text-primary">Redundancy:</span>
+          <span className="ml-2 text-muted-foreground">Mode 2 (default RS {defaultRsLabel}).</span>
+        </div>
+
+        {showAdvanced ? (
+          <div className="space-y-4 border border-border/40 bg-background/40 p-4">
+            <div className="nil-section-label">/ALLOC/ADVANCED</div>
+            <div className="flex flex-col gap-2">
+              <label className="nil-section-label text-foreground">Placement Profile</label>
+              <select
+                value={placementProfile}
+                onChange={(e) => setPlacementProfile(e.target.value as 'auto' | 'custom')}
+                data-testid="alloc-placement-profile"
+                className="recessed-input px-3 py-2 text-xs"
+              >
+                <option value="auto">Automatic</option>
+                <option value="custom">Custom RS</option>
+              </select>
+            </div>
+
+            {placementProfile === 'custom' ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className="nil-section-label text-foreground">RS K</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={rsK}
+                    onChange={(e) => setRsK(e.target.value)}
+                    className="recessed-input px-3 py-2 text-xs"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="nil-section-label text-foreground">RS M</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={rsM}
+                    onChange={(e) => setRsM(e.target.value)}
+                    className="recessed-input px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <button
+          onClick={handleCreateDealClick}
+          disabled={dealLoading || !initialEscrow}
+          data-testid="alloc-submit"
+          className="w-full bg-primary py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+        >
+          {dealLoading ? 'Allocating...' : 'Create Deal Container'}
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div className="px-4 pb-12 pt-24">
       <div className="container mx-auto max-w-6xl space-y-6">
@@ -1447,119 +1664,16 @@ export function Dashboard() {
             }
           >
 
-            {showCreateDeal && (
-              <div ref={allocRef} className="space-y-4 border-b border-border/40 bg-card p-6">
-                <div className="nil-section-label">/ALLOC/CREATE_DEAL</div>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[11px] font-mono-data text-muted-foreground">
-                      Create a container, then upload content into it.
-                    </div>
-                    <button
-                      type="button"
-                      data-testid="workspace-advanced-toggle"
-                      onClick={() => setShowAdvanced((value) => !value)}
-                      className="inline-flex items-center justify-center border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary transition-colors hover:bg-primary/15"
-                    >
-                      {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
-                    </button>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label className="nil-section-label text-foreground">Duration</label>
-                    <select
-                      value={durationPreset}
-                      onChange={(e) => setDurationFromPreset(e.target.value)}
-                      className="recessed-input px-3 py-2 text-xs"
-                    >
-                      {DURATION_PRESETS.map((preset) => (
-                        <option key={preset.value} value={preset.value}>
-                          {preset.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-2">
-                      <label className="nil-section-label text-foreground">Escrow</label>
-                      <input
-                        type="number"
-                        value={initialEscrow}
-                        onChange={(e) => setInitialEscrow(e.target.value)}
-                        className="recessed-input px-3 py-2 text-xs"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="nil-section-label text-foreground">Max Spend</label>
-                      <input
-                        type="number"
-                        value={maxMonthlySpend}
-                        onChange={(e) => setMaxMonthlySpend(e.target.value)}
-                        className="recessed-input px-3 py-2 text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="nil-inset p-3 text-[10px]">
-                    <span className="font-bold uppercase text-primary">Redundancy:</span>
-                    <span className="ml-2 text-muted-foreground">Mode 2 (default RS {defaultRsLabel}).</span>
-                  </div>
-
-                  {showAdvanced ? (
-                    <div className="space-y-4 border border-border/40 bg-background/40 p-4">
-                      <div className="nil-section-label">/ALLOC/ADVANCED</div>
-                      <div className="flex flex-col gap-2">
-                        <label className="nil-section-label text-foreground">Placement Profile</label>
-                        <select
-                          value={placementProfile}
-                          onChange={(e) => setPlacementProfile(e.target.value as 'auto' | 'custom')}
-                          data-testid="alloc-placement-profile"
-                          className="recessed-input px-3 py-2 text-xs"
-                        >
-                          <option value="auto">Automatic</option>
-                          <option value="custom">Custom RS</option>
-                        </select>
-                      </div>
-
-                      {placementProfile === 'custom' ? (
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex flex-col gap-2">
-                            <label className="nil-section-label text-foreground">RS K</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={rsK}
-                              onChange={(e) => setRsK(e.target.value)}
-                              className="recessed-input px-3 py-2 text-xs"
-                            />
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <label className="nil-section-label text-foreground">RS M</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={rsM}
-                              onChange={(e) => setRsM(e.target.value)}
-                              className="recessed-input px-3 py-2 text-xs"
-                            />
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  <button
-                    onClick={handleCreateDealClick}
-                    disabled={dealLoading || !initialEscrow}
-                    data-testid="alloc-submit"
-                    className="w-full bg-primary py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-                  >
-                    {dealLoading ? 'Allocating...' : 'Create Deal Container'}
-                  </button>
-                </div>
-              </div>
-            )}
+            <div className="border-b border-border/40 bg-card p-4">
+              <label className="nil-section-label text-foreground">Deal filter</label>
+              <input
+                type="text"
+                value={dealFilter}
+                onChange={(event) => setDealFilter(event.target.value)}
+                placeholder="Search by id or manifest root"
+                className="recessed-input mt-2 w-full px-3 py-2 text-xs"
+              />
+            </div>
 
             {loading ? (
               <div className="text-center py-10">
@@ -1570,22 +1684,35 @@ export function Dashboard() {
               <div className="divide-y divide-border/30">
                 {ownedDeals.length === 0 ? (
                   <EmptyStateCard title="No deals detected." compact />
+                ) : filteredOwnedDeals.length === 0 ? (
+                  <EmptyStateCard title="No deals match filter." compact />
                 ) : (
-                  ownedDeals.map((deal) => {
-                    const isSelected = String(deal.id) === String(targetDealId || '')
-                    const sizeNum = Number(deal.size)
-                    const sizeLabel = formatBytes(sizeNum > 0 ? sizeNum : 0)
-                    return (
-                      <DealRow
-                        key={deal.id}
-                        dealId={String(deal.id)}
-                        isActive={Boolean(deal.cid)}
-                        sizeLabel={sizeLabel}
-                        selected={isSelected}
-                        onClick={() => setTargetDealId(String(deal.id))}
-                      />
-                    )
-                  })
+                  <>
+                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-border/40 bg-card/80 px-4 py-2 text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                      <span>Deal</span>
+                      <span>Status</span>
+                      <span>Size</span>
+                      <span>Last Activity</span>
+                    </div>
+                    {filteredOwnedDeals.map((deal) => {
+                      const recent = recentActivityByDeal.get(String(deal.id))
+                      const recentLabel = recent ? formatRelativeTime(recent.updatedAt) : '—'
+                      const sizeNum = Number(deal.size)
+                      const sizeLabel = formatBytes(sizeNum > 0 ? sizeNum : 0)
+                      const isSelected = String(deal.id) === String(targetDealId || '')
+                      return (
+                        <DealRow
+                          key={deal.id}
+                          dealId={String(deal.id)}
+                          isActive={Boolean(deal.cid)}
+                          sizeLabel={sizeLabel}
+                          lastActivityLabel={recentLabel}
+                          selected={isSelected}
+                          onClick={() => setTargetDealId(String(deal.id))}
+                        />
+                      )
+                    })}
+                  </>
                 )}
               </div>
             )}
@@ -1685,6 +1812,15 @@ export function Dashboard() {
         </div>
       </div>
 
+      {showCreateDeal ? (
+        <div className="fixed inset-0 z-40">
+          <div className="absolute inset-0 bg-background/70 backdrop-blur-[1px]" onClick={() => setShowCreateDeal(false)} />
+          <aside className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border/40 shadow-2xl">
+            {createDealDrawer}
+          </aside>
+        </div>
+      ) : null}
+
       {downloadToast && (
         <div className="fixed bottom-8 right-8 z-50">
           <div className="flex items-center gap-3 glass-panel industrial-border px-5 py-3 text-[10px] font-black uppercase tracking-[0.3em] font-mono-data text-success border-success/40 bg-success/5 shadow-xl animate-in fade-in slide-in-from-right-8 duration-500">
@@ -1729,12 +1865,14 @@ function DealRow({
   dealId,
   isActive,
   sizeLabel,
+  lastActivityLabel,
   selected,
   onClick,
 }: {
   dealId: string
   isActive: boolean
   sizeLabel: string
+  lastActivityLabel: string
   selected?: boolean
   onClick: () => void
 }) {
@@ -1743,12 +1881,14 @@ function DealRow({
       onClick={onClick}
       data-testid={`deal-row-${dealId}`}
       className={cn(
-        'nil-list-row group flex w-full items-center justify-between border-b border-border/20 bg-background/50 px-6 py-4 text-left last:border-b-0',
+        'nil-list-row group grid w-full grid-cols-[1fr_auto_auto_auto] items-center gap-2 border-b border-border/20 bg-background/50 px-4 py-3 text-left last:border-b-0',
         selected && 'border-primary/30 bg-primary/10',
       )}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-3">
         <span className="font-mono-data text-sm font-black text-foreground">#{dealId}</span>
+      </div>
+      <div>
         <span
           className={cn(
             'border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
@@ -1757,9 +1897,9 @@ function DealRow({
         >
           {isActive ? 'ACTIVE' : 'EMPTY'}
         </span>
-        <span className="font-mono-data text-[11px] text-muted-foreground">{sizeLabel}</span>
       </div>
-      {selected ? <div className="h-2 w-2 bg-primary" /> : null}
+      <span className="font-mono-data text-[11px] text-muted-foreground">{sizeLabel}</span>
+      <span className="font-mono-data text-[11px] text-muted-foreground">{lastActivityLabel}</span>
     </button>
   )
 }
