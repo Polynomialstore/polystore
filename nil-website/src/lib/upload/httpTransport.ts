@@ -16,6 +16,10 @@ function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
 }
 
+function asBlobPart(bytes: Uint8Array): BlobPart {
+  return bytes as unknown as BlobPart
+}
+
 function targetUrls(target: UploadTarget): TargetUrlSet {
   const cached = targetUrlCache.get(target)
   if (cached) return cached
@@ -125,7 +129,7 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
             : request.artifact.kind === 'mdu'
               ? `mdu_${request.artifact.index}.bin`
               : `mdu_${request.artifact.index}_slot_${request.artifact.slot}.bin`
-        form.append(part, new Blob([Uint8Array.from(sparseArtifact.bytes)]), filename)
+        form.append(part, new Blob([asBlobPart(sparseArtifact.bytes)]), filename)
       }
 
       const response = await fetch(bundleUrl, {
