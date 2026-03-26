@@ -4265,8 +4265,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   }
   const doneSummaryChipToneClasses: Record<WorkflowDoneSummaryTone, string> = {
     neutral: 'border-border/70 bg-background/50 text-muted-foreground',
-    primary: 'border-primary/35 bg-primary/10 text-primary',
-    success: 'border-success/35 bg-success/10 text-success',
+    primary: 'border-border/70 bg-background/50 text-muted-foreground',
+    success: 'border-border/70 bg-background/50 text-muted-foreground',
   }
   const hasActiveWorkflowStep = useMemo(
     () => workflowSteps.some((step) => step.state === 'active'),
