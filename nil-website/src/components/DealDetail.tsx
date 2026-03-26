@@ -852,7 +852,7 @@ export function DealDetail({
     ? `${(dealSizeBytes / 1024 / 1024).toFixed(2)} MB`
     : '0 B'
   const redundancyLabel = isMode2 && serviceHint.rsK && serviceHint.rsM
-    ? `Mode 2 RS(${serviceHint.rsK},${serviceHint.rsM})`
+    ? `RS(${serviceHint.rsK},${serviceHint.rsM})`
     : 'Mode 2 (Auto)'
   const stripeLayout = useMemo(() => {
     const k = serviceHint.rsK ?? 8
