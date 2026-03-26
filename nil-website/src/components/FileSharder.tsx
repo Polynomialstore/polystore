@@ -4546,8 +4546,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                                   key={`${chip.label}-${chip.value}-${chipIndex}`}
                                   className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-mono-data tracking-[0.14em] ${doneSummaryChipToneClasses[tone]}`}
                                 >
-                                  <span className="uppercase opacity-80">{chip.label}</span>
-                                  <span className="font-semibold normal-case tracking-normal">{chip.value}</span>
+                                  <span className="uppercase opacity-90">{chip.label}:</span>
+                                  <span className="uppercase opacity-90">{chip.value}</span>
                                 </span>
                               )
                             })}
