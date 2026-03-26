@@ -4135,22 +4135,18 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         headline: selectedFileDisplayName || fullPath,
         secondary: fullPath && fullPath !== selectedFileDisplayName ? fullPath : undefined,
         chips: [
-          { label: 'size', value: formatBytes(currentFileMeta.fileSizeBytes), tone: 'primary' },
+          { label: 'size', value: formatBytes(currentFileMeta.fileSizeBytes), tone: 'neutral' },
         ],
       }
     }
 
     const totalPreparedMdus = shardProgress.totalMdus > 0 ? shardProgress.totalMdus : shards.length
     if (hasManifestRoot && totalPreparedMdus > 0) {
-      const elapsedLabel = shardingUi.elapsedMs > 0 ? formatDuration(shardingUi.elapsedMs) : '—'
-      const throughputLabel = shardingUi.mibPerSec > 0 ? `${shardingUi.mibPerSec.toFixed(2)} MiB/s` : '—'
       summaries[1] = {
         headline: `${String(totalPreparedMdus)} MDUs prepared`,
         chips: [
           { label: 'user', value: String(shardProgress.totalUserMdus), tone: 'neutral' },
           { label: 'witness', value: String(shardProgress.totalWitnessMdus), tone: 'neutral' },
-          { label: 'elapsed', value: elapsedLabel, tone: 'primary' },
-          { label: 'avg', value: throughputLabel, tone: 'primary' },
         ],
       }
     }
@@ -4208,8 +4204,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     shardProgress.totalUserMdus,
     shardProgress.totalWitnessMdus,
     shards.length,
-    shardingUi.elapsedMs,
-    shardingUi.mibPerSec,
     uploadArtifactsDone,
     uploadProgress.length,
   ])
