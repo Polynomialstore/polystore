@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -707,6 +709,52 @@ func TestFetchDealMeta_UsesShortTTLCache(t *testing.T) {
 	}
 	if requestCount < 2 {
 		t.Fatalf("expected cache expiry to trigger a new LCD request, got %d", requestCount)
+	}
+}
+
+func TestFetchDealMetaFresh_SingleflightsConcurrentRequests(t *testing.T) {
+	clearDealMetaCache()
+	t.Cleanup(clearDealMetaCache)
+
+	var requestCount atomic.Int32
+	owner := testDealOwner(t)
+	manifestRoot := mustTestManifestRoot(t, "deal-meta-fresh-singleflight").Canonical
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		time.Sleep(25 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"deal":{"id":"12","owner":"` + owner + `","cid":"` + manifestRoot + `","end_block":"100"}}`))
+	}))
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	const workers = 8
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i += 1 {
+		go func() {
+			defer wg.Done()
+			meta, err := fetchDealMetaFresh(12)
+			if err == nil && meta.ManifestRoot != manifestRoot {
+				err = fmt.Errorf("unexpected manifest root: %q", meta.ManifestRoot)
+			}
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("fetchDealMetaFresh failed: %v", err)
+		}
+	}
+
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("expected fresh singleflight to collapse to 1 LCD request, got %d", got)
 	}
 }
 

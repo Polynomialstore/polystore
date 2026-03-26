@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gorilla/mux"
+	"golang.org/x/sync/singleflight"
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
@@ -5271,10 +5272,12 @@ var (
 	dealMetaCacheTTL     = time.Duration(envInt("NIL_DEAL_META_CACHE_TTL_MS", 3000)) * time.Millisecond
 	freshnessMemoTTL     = time.Duration(envInt("NIL_MANIFEST_FRESHNESS_TTL_MS", 3000)) * time.Millisecond
 	freshnessReasonFresh = "fresh"
+	freshDealMetaGroup   singleflight.Group
 )
 
 func clearDealMetaCache() {
 	dealMetaCache = sync.Map{}
+	freshDealMetaGroup = singleflight.Group{}
 }
 
 func setCacheFreshnessHeaders(w http.ResponseWriter, status, reason string) {
@@ -5387,7 +5390,14 @@ func fetchDealMeta(dealID uint64) (dealMeta, error) {
 // paths that enforce compare-and-swap semantics must use fresh chain state so
 // two back-to-back writers cannot both pass a stale-root check inside the TTL.
 func fetchDealMetaFresh(dealID uint64) (dealMeta, error) {
-	return fetchDealMetaUncached(dealID)
+	result, err, _ := freshDealMetaGroup.Do(strconv.FormatUint(dealID, 10), func() (any, error) {
+		return fetchDealMetaUncached(dealID)
+	})
+	if err != nil {
+		return dealMeta{}, err
+	}
+	meta, _ := result.(dealMeta)
+	return meta, nil
 }
 
 // creatorHasSomeBalance checks whether a given bech32 address has any non-zero
