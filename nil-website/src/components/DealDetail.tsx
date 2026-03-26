@@ -2148,16 +2148,10 @@ export function DealDetail({
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-[11px] text-muted-foreground">
-            <span className="border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            <span className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
               {redundancyLabel}
             </span>
-            <span
-              className={`border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] ${
-                hasCommittedContent
-                  ? 'border-success/40 bg-success/10 text-success'
-                  : 'border-border bg-secondary/60 text-muted-foreground'
-              }`}
-            >
+            <span className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
               {hasCommittedContent ? dealSizeLabel : 'Empty'}
             </span>
             {uploadWorkflowActive ? (
