@@ -402,6 +402,20 @@ function formatGatewayError(error: unknown): string {
   return String(error || '')
 }
 
+function isWalletUserRejected(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error || '')
+  const lower = text.toLowerCase()
+  return (
+    lower.includes('user denied transaction signature') ||
+    lower.includes('user denied') ||
+    lower.includes('user rejected') ||
+    lower.includes('rejected the request') ||
+    lower.includes('request rejected') ||
+    lower.includes('code: 4001') ||
+    lower.includes('error 4001')
+  )
+}
+
 const gatewayUploadPollIntervalMs = 1000
 const gatewayUploadPollTimeoutMs = 2500
 const gatewayUploadHeartbeatStaleMs = 15_000
@@ -3797,7 +3811,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     !isUploadComplete &&
     (collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0));
   const readyToCommit = hasManifestRoot && isUploadComplete && !isAlreadyCommitted;
-  const hasError = shardProgress.phase === 'error' || Boolean(mode2UploadError) || Boolean(commitError);
+  const commitRejectedByUser = isWalletUserRejected(commitError)
+  const commitDisplayError = commitError && !commitRejectedByUser ? commitError : null
+  const hasError = shardProgress.phase === 'error' || Boolean(mode2UploadError) || Boolean(commitDisplayError);
   const currentFileMeta = lastFileMetaRef.current
   const uploadErrorMessage =
     mode2UploadError ||
@@ -3956,7 +3972,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ? 'active'
               : 'idle'
     const commitState: WorkflowStepState =
-      commitError ? 'error' : isAlreadyCommitted ? 'done' : isCommitPending || isCommitConfirming ? 'active' : readyToCommit ? 'active' : 'idle'
+      commitDisplayError ? 'error' : isAlreadyCommitted ? 'done' : isCommitPending || isCommitConfirming ? 'active' : readyToCommit ? 'active' : 'idle'
 
     return [
       stepState(
@@ -4001,6 +4017,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           ? 'Committed on-chain'
           : isCommitPending || isCommitConfirming
             ? 'Waiting for wallet / chain confirmation'
+            : commitRejectedByUser
+              ? 'Wallet request canceled. Click commit to retry.'
             : readyToCommit
               ? 'Ready for final on-chain commit'
               : 'Commit becomes available after upload',
@@ -4008,7 +4026,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     ]
   }, [
     activeUploading,
-    commitError,
+    commitDisplayError,
+    commitRejectedByUser,
     currentFileMeta,
     gatewayMode2Enabled,
     gatewayReachable,
@@ -4427,10 +4446,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
             {hasError ? (
               <div className="nil-tab-panel border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">
-                {commitError ? `Commit failed: ${commitError.message}` : null}
-                {commitError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
+                {commitDisplayError ? `Commit failed: ${commitDisplayError.message}` : null}
+                {commitDisplayError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
                 {mode2UploadError ? `Upload failed: ${mode2UploadError}` : null}
-                {!commitError && !mode2UploadError && shardProgress.label ? shardProgress.label : null}
+                {!commitDisplayError && !mode2UploadError && shardProgress.label ? shardProgress.label : null}
               </div>
             ) : null}
 

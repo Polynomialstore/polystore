@@ -522,12 +522,6 @@ export function Dashboard() {
     setTargetDealId(String(newestDeal.id))
   }, [nilAddress, ownedDeals, targetDealId])
 
-  useEffect(() => {
-    if (!nilAddress) return
-    if (ownedDeals.length === 0) {
-      setShowCreateDeal(true)
-    }
-  }, [nilAddress, ownedDeals.length])
   const mode2Config = useMemo(() => {
     if (placementProfile !== 'custom') return { slots: null as number | null, error: null as string | null }
     const k = Number(rsK)
