@@ -303,6 +303,94 @@ test('upload engine: striped upload overlaps metadata and shard requests with co
   assert.equal(peakTotal, 4)
 })
 
+test('upload engine: striped upload bundles requests per target when transport supports it', async () => {
+  const bundleCalls: string[][] = []
+  const transport = {
+    async sendArtifact() {
+      throw new Error('sendArtifact should not be used when bundle transport is available')
+    },
+    async sendBundle(requests: UploadTransportRequest[]) {
+      bundleCalls.push(
+        requests.map((request) => `${request.target.label}:${request.artifact.kind}:${request.artifact.index ?? 'manifest'}:${request.artifact.slot ?? '-'}`),
+      )
+    },
+  }
+
+  const engine = createUploadEngine({ transport })
+  const result = await engine.uploadStriped({
+    dealId: '18',
+    manifestRoot: '0xbundle',
+    previousManifestRoot: '0xprev',
+    manifestBlob: new Uint8Array([5, 4, 3]),
+    manifestBlobFullSize: 128 * 1024,
+    metadataMdus: [
+      { index: 0, data: new Uint8Array([1]), fullSize: 8 * 1024 * 1024 },
+      { index: 1, data: new Uint8Array([2]), fullSize: 8 * 1024 * 1024 },
+    ],
+    shardSets: [
+      {
+        index: 2,
+        shards: [
+          { data: new Uint8Array([7]), fullSize: 1024 },
+          { data: new Uint8Array([8]), fullSize: 1024 },
+        ],
+      },
+    ],
+    metadataTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-b',
+      },
+    ],
+    shardTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-b',
+      },
+    ],
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(bundleCalls, [
+    [
+      'provider-a:mdu:0:-',
+      'provider-a:shard:2:0',
+      'provider-a:mdu:1:-',
+      'provider-a:manifest:manifest:-',
+    ],
+    [
+      'provider-b:mdu:0:-',
+      'provider-b:shard:2:1',
+      'provider-b:mdu:1:-',
+      'provider-b:manifest:manifest:-',
+    ],
+  ])
+})
+
 test('buildCommitRequest: mode2 derives total mdus from witness + user counts', () => {
   assert.deepEqual(
     buildCommitRequest({

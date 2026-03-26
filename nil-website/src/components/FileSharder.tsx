@@ -1039,6 +1039,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       mduPath: '/sp/upload_mdu',
       manifestPath: '/sp/upload_manifest',
       shardPath: '/sp/upload_shard',
+      bundlePath: '/sp/upload_bundle',
       label: base,
     }))
     const shardTargets = metadataTargets

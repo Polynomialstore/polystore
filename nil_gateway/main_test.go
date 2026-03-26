@@ -167,6 +167,8 @@ func testRouter() *mux.Router {
 	r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/upload_bundle", SpUploadBundle).Methods("POST", "OPTIONS")
 	return r
 }
 

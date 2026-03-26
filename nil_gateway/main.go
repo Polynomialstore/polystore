@@ -286,6 +286,7 @@ func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
 		r.HandleFunc("/gateway/mirror_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/mirror_shard", SpUploadShard).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_bundle", SpUploadBundle).Methods("POST", "OPTIONS")
 		return
 	}
 
@@ -319,6 +320,7 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/shard", SpFetchShard).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/upload_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/upload_bundle", SpUploadBundle).Methods("POST", "OPTIONS")
 
 	// Provider retrieval APIs consumed by trusted user-gateway and direct browser fallbacks.
 	r.HandleFunc("/sp/retrieval/upload", GatewayUpload).Methods("POST", "OPTIONS")

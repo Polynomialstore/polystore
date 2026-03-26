@@ -21,6 +21,7 @@ export interface UploadTarget {
   mduPath: string
   manifestPath: string
   shardPath?: string
+  bundlePath?: string
   label?: string
 }
 
@@ -58,6 +59,7 @@ export interface UploadTransportRequest {
 
 export interface UploadTransportPort {
   sendArtifact(request: UploadTransportRequest): Promise<void>
+  sendBundle?(requests: UploadTransportRequest[]): Promise<void>
 }
 
 export interface ChainCommitRequest {
@@ -227,6 +229,11 @@ interface UploadTask {
   request: UploadTransportRequest
 }
 
+interface UploadTaskBundle {
+  target: string
+  tasks: UploadTask[]
+}
+
 function stepKey(kind: SparseArtifactKind, target: string, index?: number, slot?: number): string {
   return `${kind}|${target}|${index ?? ''}|${slot ?? ''}`
 }
@@ -360,6 +367,164 @@ async function runUploadTasks(
   })
 }
 
+function groupUploadTasksByTarget(tasks: UploadTask[]): UploadTaskBundle[] {
+  const bundles = new Map<string, UploadTaskBundle>()
+  const ordered: UploadTaskBundle[] = []
+  for (const task of tasks) {
+    const targetLabel = task.request.target.label || task.request.target.baseUrl
+    let bundle = bundles.get(targetLabel)
+    if (!bundle) {
+      bundle = { target: targetLabel, tasks: [] }
+      bundles.set(targetLabel, bundle)
+      ordered.push(bundle)
+    }
+    bundle.tasks.push(task)
+  }
+  return ordered
+}
+
+function isBundleUnsupportedError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'BundleUnsupportedUploadError'
+}
+
+async function runUploadTaskBundles(
+  bundles: UploadTaskBundle[],
+  initialSteps: UploadProgressStep[],
+  onProgress: ((steps: UploadProgressStep[]) => void) | undefined,
+  onTaskEvent: ((event: UploadTaskEvent) => void) | undefined,
+  concurrency: number,
+  transport: UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
+): Promise<UploadEngineResult & { bundleUnsupported?: boolean }> {
+  const trackProgress = Boolean(onProgress) && initialSteps.length > 0
+  const trackTaskEvents = Boolean(onTaskEvent)
+  let steps = initialSteps
+  let nextIndex = 0
+  let active = 0
+  let firstError: string | null = null
+  let bundleUnsupported = false
+
+  return await new Promise<UploadEngineResult & { bundleUnsupported?: boolean }>((resolve) => {
+    const settleIfDone = () => {
+      if (active !== 0) return
+      if (nextIndex < bundles.length && !firstError && !bundleUnsupported) return
+      if (bundleUnsupported) {
+        resolve({ ok: false, steps, error: 'bundle upload unsupported', bundleUnsupported: true })
+      } else if (firstError) {
+        resolve({ ok: false, steps, error: firstError })
+      } else {
+        resolve({ ok: true, steps })
+      }
+    }
+
+    const launchNext = () => {
+      while (!firstError && !bundleUnsupported && active < concurrency && nextIndex < bundles.length) {
+        const bundle = bundles[nextIndex]
+        nextIndex += 1
+        active += 1
+        const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        const events = trackTaskEvents
+          ? bundle.tasks.map((task) => ({
+              request: task.request,
+              target: task.request.target.label || task.request.target.baseUrl,
+              index: 'index' in task.request.artifact ? task.request.artifact.index : undefined,
+              slot: 'slot' in task.request.artifact ? task.request.artifact.slot : undefined,
+              bytes: task.request.artifact.bytes.byteLength,
+              fullSize: task.request.artifact.fullSize,
+            }))
+          : []
+
+        if (trackTaskEvents) {
+          for (const event of events) {
+            onTaskEvent?.({
+              phase: 'start',
+              kind: event.request.artifact.kind,
+              target: event.target,
+              index: event.index,
+              slot: event.slot,
+              bytes: event.bytes,
+              fullSize: event.fullSize,
+            })
+          }
+        }
+
+        if (trackProgress) {
+          for (const task of bundle.tasks) {
+            steps = updateStep(steps, task.stepIndex, { status: 'uploading', error: undefined })
+          }
+          steps = emitProgress(steps, onProgress)
+        }
+
+        void transport
+          .sendBundle(bundle.tasks.map((task) => task.request))
+          .then(() => {
+            const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+            if (trackTaskEvents) {
+              for (const event of events) {
+                onTaskEvent?.({
+                  phase: 'end',
+                  kind: event.request.artifact.kind,
+                  target: event.target,
+                  index: event.index,
+                  slot: event.slot,
+                  bytes: event.bytes,
+                  fullSize: event.fullSize,
+                  durationMs: finishedAt - startedAt,
+                  ok: true,
+                })
+              }
+            }
+            if (trackProgress) {
+              for (const task of bundle.tasks) {
+                steps = updateStep(steps, task.stepIndex, { status: 'complete' })
+              }
+              steps = emitProgress(steps, onProgress)
+            }
+          })
+          .catch((error: unknown) => {
+            if (isBundleUnsupportedError(error)) {
+              bundleUnsupported = true
+              return
+            }
+            const message = error instanceof Error ? error.message : String(error)
+            if (!firstError) firstError = message
+            const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+            if (trackTaskEvents) {
+              for (const event of events) {
+                onTaskEvent?.({
+                  phase: 'end',
+                  kind: event.request.artifact.kind,
+                  target: event.target,
+                  index: event.index,
+                  slot: event.slot,
+                  bytes: event.bytes,
+                  fullSize: event.fullSize,
+                  durationMs: finishedAt - startedAt,
+                  ok: false,
+                  error: message,
+                })
+              }
+            }
+            if (trackProgress) {
+              for (const task of bundle.tasks) {
+                steps = updateStep(steps, task.stepIndex, { status: 'error', error: message })
+              }
+              steps = emitProgress(steps, onProgress)
+            }
+          })
+          .finally(() => {
+            active -= 1
+            launchNext()
+            settleIfDone()
+          })
+      }
+
+      settleIfDone()
+    }
+
+    launchNext()
+  })
+}
+
 export function buildCommitRequest(input: PreparedCommitInput): ChainCommitRequest {
   const witnessMdus = Math.max(0, Number(input.totalWitnessMdus) || 0)
   const totalMdus = input.isMode2
@@ -431,15 +596,30 @@ export function createUploadEngine(options: UploadEngineOptions) {
         }
       }
       tasks[input.mdus.length] = {
-          stepIndex: resolveStepIndex('manifest', targetLabel),
-          request: {
-            dealId: input.dealId,
-            manifestRoot: input.manifestRoot,
+        stepIndex: resolveStepIndex('manifest', targetLabel),
+        request: {
+          dealId: input.dealId,
+          manifestRoot: input.manifestRoot,
             previousManifestRoot: input.previousManifestRoot,
             target: input.target,
             artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize } as const,
-          },
+        },
+      }
+
+      if (ports.transport.sendBundle) {
+        const bundleResult = await runUploadTaskBundles(
+          groupUploadTasksByTarget(tasks),
+          steps,
+          input.onProgress,
+          input.onTaskEvent,
+          1,
+          ports.transport as UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
+        )
+        if (!bundleResult.bundleUnsupported) {
+          return bundleResult
         }
+        steps = trackSteps ? emitProgress(buildDirectUploadSteps(input), input.onProgress) : []
+      }
 
       return runUploadTasks(tasks, steps, input.onProgress, input.onTaskEvent, directConcurrency, ports.transport)
     },
@@ -539,6 +719,22 @@ export function createUploadEngine(options: UploadEngineOptions) {
         shardSets.length > 0
           ? Math.min(combinedTasks.length, stripedMetadataConcurrency + stripedShardConcurrency)
           : Math.min(combinedTasks.length, stripedMetadataConcurrency)
+
+      if (ports.transport.sendBundle) {
+        const groupedBundles = groupUploadTasksByTarget(combinedTasks)
+        const bundleResult = await runUploadTaskBundles(
+          groupedBundles,
+          steps,
+          input.onProgress,
+          input.onTaskEvent,
+          Math.max(1, Math.min(groupedBundles.length, combinedConcurrency)),
+          ports.transport as UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
+        )
+        if (!bundleResult.bundleUnsupported) {
+          return bundleResult
+        }
+        steps = trackSteps ? emitProgress(buildStripedUploadSteps(input), input.onProgress) : []
+      }
 
       return runUploadTasks(combinedTasks, steps, input.onProgress, input.onTaskEvent, combinedConcurrency, ports.transport)
     },

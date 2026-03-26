@@ -54,6 +54,7 @@ test('http transport normalizes target base url once across repeated requests', 
       mduPath: '/sp/upload_mdu',
       manifestPath: '/sp/upload_manifest',
       shardPath: '/sp/upload_shard',
+      bundlePath: '/sp/upload_bundle',
     }
     await transport.sendArtifact({
       dealId: '42',
@@ -82,4 +83,95 @@ test('http transport normalizes target base url once across repeated requests', 
     'http://provider.test/sp/upload_mdu',
     'http://provider.test/sp/upload_manifest',
   ])
+})
+
+test('http transport bundles target artifacts into one multipart request', async () => {
+  let receivedUrl = ''
+  let receivedMeta = ''
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
+    receivedUrl = String(input)
+    assert.ok(init?.body instanceof FormData)
+    const meta = (init.body as FormData).get('meta')
+    assert.ok(meta instanceof Blob)
+    receivedMeta = await meta.text()
+    return new Response('OK', { status: 200 })
+  }) as typeof fetch
+  try {
+    const transport = createSparseHttpTransportPort()
+    await transport.sendBundle?.([
+      {
+        dealId: '42',
+        manifestRoot: '0xnext',
+        previousManifestRoot: '0xprev',
+        target: {
+          baseUrl: 'http://provider.test/',
+          mduPath: '/sp/upload_mdu',
+          manifestPath: '/sp/upload_manifest',
+          shardPath: '/sp/upload_shard',
+          bundlePath: '/sp/upload_bundle',
+        },
+        artifact: {
+          kind: 'mdu',
+          index: 0,
+          bytes: new Uint8Array([1, 2, 3]),
+          fullSize: 8,
+        },
+      },
+      {
+        dealId: '42',
+        manifestRoot: '0xnext',
+        previousManifestRoot: '0xprev',
+        target: {
+          baseUrl: 'http://provider.test/',
+          mduPath: '/sp/upload_mdu',
+          manifestPath: '/sp/upload_manifest',
+          shardPath: '/sp/upload_shard',
+          bundlePath: '/sp/upload_bundle',
+        },
+        artifact: {
+          kind: 'manifest',
+          bytes: new Uint8Array([9]),
+          fullSize: 16,
+        },
+      },
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert.equal(receivedUrl, 'http://provider.test/sp/upload_bundle')
+  assert.match(receivedMeta, /"deal_id":"42"/)
+  assert.match(receivedMeta, /"kind":"mdu"/)
+  assert.match(receivedMeta, /"kind":"manifest"/)
+})
+
+test('http transport marks bundle upload unsupported on 404', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async () => new Response('missing', { status: 404 })) as typeof fetch
+  try {
+    const transport = createSparseHttpTransportPort()
+    await assert.rejects(
+      () =>
+        transport.sendBundle?.([
+          {
+            dealId: '42',
+            manifestRoot: '0xnext',
+            target: {
+              baseUrl: 'http://provider.test',
+              mduPath: '/sp/upload_mdu',
+              manifestPath: '/sp/upload_manifest',
+              bundlePath: '/sp/upload_bundle',
+            },
+            artifact: {
+              kind: 'manifest',
+              bytes: new Uint8Array([1]),
+            },
+          },
+        ]) ?? Promise.resolve(),
+      (error: unknown) => error instanceof Error && error.name === 'BundleUnsupportedUploadError',
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
