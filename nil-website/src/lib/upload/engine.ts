@@ -416,8 +416,10 @@ export function createUploadEngine(options: UploadEngineOptions) {
 
       const targetLabel = input.target.label || input.target.baseUrl
 
-      const tasks: UploadTask[] = [
-        ...input.mdus.map((mdu) => ({
+      const tasks: UploadTask[] = new Array(input.mdus.length + 1)
+      for (let i = 0; i < input.mdus.length; i += 1) {
+        const mdu = input.mdus[i]
+        tasks[i] = {
           stepIndex: resolveStepIndex('mdu', targetLabel, mdu.index),
           request: {
             dealId: input.dealId,
@@ -426,8 +428,9 @@ export function createUploadEngine(options: UploadEngineOptions) {
             target: input.target,
             artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize } as const,
           },
-        })),
-        {
+        }
+      }
+      tasks[input.mdus.length] = {
           stepIndex: resolveStepIndex('manifest', targetLabel),
           request: {
             dealId: input.dealId,
@@ -436,8 +439,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
             target: input.target,
             artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize } as const,
           },
-        },
-      ]
+        }
 
       return runUploadTasks(tasks, steps, input.onProgress, input.onTaskEvent, directConcurrency, ports.transport)
     },
