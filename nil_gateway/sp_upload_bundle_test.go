@@ -21,7 +21,7 @@ func TestSpUploadBundle_AcceptsSparseArtifacts(t *testing.T) {
 	resetNilfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-bundle")
-	dealID := uint64(1)
+	dealID := uint64(0)
 
 	srv := dynamicMockDealServer(map[uint64]struct {
 		Owner string
@@ -38,7 +38,7 @@ func TestSpUploadBundle_AcceptsSparseArtifacts(t *testing.T) {
 	mw := multipart.NewWriter(&body)
 
 	metaBytes, err := json.Marshal(spUploadBundleRequest{
-		DealID:               dealID,
+		DealID:               ptrUint64(dealID),
 		ManifestRoot:         manifestRoot.Canonical,
 		PreviousManifestRoot: "",
 		Artifacts: []spUploadBundleArtifact{
@@ -117,7 +117,7 @@ func TestSpUploadBundle_AcceptsSparseArtifacts(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	rootDir := filepath.Join(uploadDir, "deals", "1", manifestRoot.Key)
+	rootDir := filepath.Join(uploadDir, "deals", "0", manifestRoot.Key)
 	gotMdu, err := os.ReadFile(filepath.Join(rootDir, "mdu_0.bin"))
 	if err != nil {
 		t.Fatalf("read mdu_0.bin: %v", err)
@@ -172,7 +172,7 @@ func TestSpUploadBundle_AcceptsBinaryBundleV2(t *testing.T) {
 	t.Cleanup(func() { lcdBase = oldLCD })
 
 	reqMeta := spUploadBundleRequest{
-		DealID:               dealID,
+		DealID:               ptrUint64(dealID),
 		ManifestRoot:         manifestRoot.Canonical,
 		PreviousManifestRoot: "",
 		Artifacts: []spUploadBundleArtifact{

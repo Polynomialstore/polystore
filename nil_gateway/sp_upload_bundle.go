@@ -25,7 +25,7 @@ const (
 )
 
 type spUploadBundleRequest struct {
-	DealID               uint64                   `json:"deal_id"`
+	DealID               *uint64                  `json:"deal_id"`
 	ManifestRoot         string                   `json:"manifest_root"`
 	PreviousManifestRoot string                   `json:"previous_manifest_root,omitempty"`
 	Artifacts            []spUploadBundleArtifact `json:"artifacts"`
@@ -289,13 +289,13 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dealID = req.DealID
-	if dealID == 0 {
+	if req.DealID == nil {
 		statusCode = http.StatusBadRequest
 		outcome = "invalid_deal_id"
-		http.Error(w, "invalid deal_id", http.StatusBadRequest)
+		http.Error(w, "deal_id is required", http.StatusBadRequest)
 		return
 	}
+	dealID = *req.DealID
 
 	clientManifestRoot := strings.TrimSpace(req.ManifestRoot)
 	if clientManifestRoot == "" {

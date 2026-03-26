@@ -1906,7 +1906,7 @@ func mode2UploadArtifactsToProviders(
 		}
 		openBundleBody := func() (*bundleBody, error) {
 			meta := spUploadBundleRequest{
-				DealID:               dealID,
+				DealID:               &dealID,
 				ManifestRoot:         manifestRootCanonical,
 				PreviousManifestRoot: strings.TrimSpace(previousManifestRoot),
 				Artifacts:            make([]spUploadBundleArtifact, 0, len(bundle.tasks)),
