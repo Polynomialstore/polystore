@@ -4493,7 +4493,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                 const expanded = step.state === 'error' || index === activeWorkflowStepIndex
                 const doneSummary = step.state === 'done' && !expanded ? workflowDoneSummaries[index] : null
                 return (
-                  <div key={step.title} className={`nil-tab-panel glass-panel industrial-border px-4 py-3 ${stepToneClasses[step.state]}`}>
+                  <div
+                    key={step.title}
+                    className={`nil-tab-panel px-4 py-3 ${stepToneClasses[step.state]} ${
+                      step.state === 'done' || step.state === 'active' ? 'glass-panel industrial-border' : ''
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
                         {step.state === 'done' ? (
