@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
-import { CheckCircle2, Cpu, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
+import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
 import { workerClient } from '../lib/worker-client';
@@ -4598,7 +4598,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                           <div className="space-y-2" data-testid="wasm-sharding-progress">
                             <div className="flex items-start justify-between gap-3">
                               <p className="flex items-center gap-2">
-                                <Cpu className="w-4 h-4 text-primary" />
                                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
                                   {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
                                     ? 'Gateway ingest'
