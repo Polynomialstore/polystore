@@ -4472,7 +4472,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
           onDrop={handleDrop}
-          className={`relative overflow-hidden glass-panel industrial-border p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] text-sm ${isDragging ? 'border-primary/50 bg-primary/5' : ''}`}
+          className={`relative glass-panel industrial-border p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] text-sm ${isDragging ? 'border-primary/50 bg-primary/5' : ''}`}
           data-testid="mdu-upload-card"
           data-panel-state={uploadPanelState}
           data-upload-phase={uploadPhase}
@@ -4493,7 +4493,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                 const expanded = step.state === 'error' || index === activeWorkflowStepIndex
                 const doneSummary = step.state === 'done' && !expanded ? workflowDoneSummaries[index] : null
                 return (
-                  <div key={step.title} className={`nil-tab-panel px-4 py-3 ${stepToneClasses[step.state]}`}>
+                  <div key={step.title} className={`nil-tab-panel glass-panel industrial-border px-4 py-3 ${stepToneClasses[step.state]}`}>
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
                         {step.state === 'done' ? (
