@@ -212,6 +212,36 @@ test('http transport marks binary bundle parse failures as unsupported', async (
   }
 })
 
+test('http transport marks empty-body 400 bundle responses as unsupported', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async () => new Response('', { status: 400 })) as typeof fetch
+  try {
+    const transport = createSparseHttpTransportPort()
+    await assert.rejects(
+      () =>
+        transport.sendBundle?.([
+          {
+            dealId: '42',
+            manifestRoot: '0xnext',
+            target: {
+              baseUrl: 'http://provider.test',
+              mduPath: '/sp/upload_mdu',
+              manifestPath: '/sp/upload_manifest',
+              bundlePath: '/sp/upload_bundle',
+            },
+            artifact: {
+              kind: 'manifest',
+              bytes: new Uint8Array([1]),
+            },
+          },
+        ]) ?? Promise.resolve(),
+      (error: unknown) => error instanceof Error && error.name === 'BundleUnsupportedUploadError',
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('http transport marks bundle network errors as unsupported', async () => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async () => {
