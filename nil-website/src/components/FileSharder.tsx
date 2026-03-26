@@ -4455,21 +4455,16 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           <div className="relative flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="nil-section-label mb-2">/DEAL/Upload</p>
-              {currentFileMeta ? (
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {`${currentFileMeta.filePath} • ${formatBytes(currentFileMeta.fileSizeBytes)}`}
-                </div>
-              ) : null}
             </div>
           </div>
-          <div className="relative space-y-2">
-            <div className="space-y-1.5">
+          <div className="relative space-y-3">
+            <div className="space-y-2.5">
               {workflowSteps.map((step, index) => {
                 const expanded = step.state === 'error' || index === activeWorkflowStepIndex
                 const doneSummary = step.state === 'done' && !expanded ? workflowDoneSummaries[index] : null
                 return (
-                  <div key={step.title} className={`nil-tab-panel px-3 py-2.5 ${stepToneClasses[step.state]}`}>
-                    <div className="flex items-center justify-between gap-3">
+                  <div key={step.title} className={`nil-tab-panel px-4 py-3 ${stepToneClasses[step.state]}`}>
+                    <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
                         {step.state === 'done' ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-success" />
@@ -4491,7 +4486,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                       )}
                     </div>
                     {doneSummary ? (
-                      <div className="mt-2 space-y-1.5">
+                      <div className="mt-2.5 space-y-2">
                         <div className="truncate text-[13px] font-semibold leading-tight text-foreground">
                           {doneSummary.headline}
                         </div>
@@ -4501,7 +4496,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                           </div>
                         ) : null}
                         {doneSummary.chips.length > 0 ? (
-                          <div className="flex flex-wrap items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
                             {doneSummary.chips.map((chip, chipIndex) => {
                               const tone = chip.tone || 'neutral'
                               return (
@@ -4519,14 +4514,14 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                       </div>
                     ) : null}
                     {expanded ? (
-                      <div className="mt-2 space-y-2">
+                      <div className="mt-3 space-y-2.5">
                         {step.detail ? (
                           <div className="text-[11px] font-mono-data leading-relaxed">{step.detail}</div>
                         ) : null}
 
                         {index === 0 ? (
-                          <div className={`nil-tab-panel p-3 ${isDragging ? 'border-primary/50 bg-primary/10' : ''}`}>
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className={`nil-tab-panel p-4 ${isDragging ? 'border-primary/50 bg-primary/10' : ''}`}>
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">
                                 <div className={`text-[10px] font-mono-data uppercase tracking-[0.2em] ${sharderSummaryToneClass}`}>
                                   {wasmStatus === 'initializing' ? (
