@@ -120,7 +120,7 @@ func newProviderServer(t *testing.T) (*httptest.Server, *sync.Map) {
 						http.Error(w, "invalid artifact meta", http.StatusBadRequest)
 						return
 					}
-					body, _ := io.ReadAll(io.LimitReader(r.Body, resolved.sendSize+1))
+					body, _ := io.ReadAll(io.LimitReader(r.Body, resolved.sendSize))
 					if int64(len(body)) != resolved.sendSize {
 						http.Error(w, "bundle size mismatch", http.StatusBadRequest)
 						return
