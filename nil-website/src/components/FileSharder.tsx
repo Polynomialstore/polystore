@@ -4598,7 +4598,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                           <div className="space-y-2" data-testid="wasm-sharding-progress">
                             <div className="flex items-start justify-between gap-3">
                               <p className="flex items-center gap-2">
-                                <Cpu className="w-4 h-4 animate-spin text-primary" />
+                                <Cpu className="w-4 h-4 text-primary" />
                                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
                                   {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
                                     ? 'Gateway ingest'
