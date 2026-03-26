@@ -189,6 +189,7 @@ interface DealDetailProps {
   nilAddress: string
   onFileActivity?: (activity: FileActivity) => void
   topPanel?: ReactNode
+  uploadWorkflowActive?: boolean
   requestedTab?: 'files' | 'info' | 'manifest' | 'heat'
   requestedTabNonce?: number
 }
@@ -825,7 +826,15 @@ function FileRow({
   )
 }
 
-export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, requestedTab, requestedTabNonce }: DealDetailProps) {
+export function DealDetail({
+  deal,
+  nilAddress,
+  onFileActivity,
+  topPanel,
+  uploadWorkflowActive = false,
+  requestedTab,
+  requestedTabNonce,
+}: DealDetailProps) {
   const serviceHint = parseServiceHint(deal?.service_hint)
   const dealOwner = String(deal.owner || '').trim()
   const fallbackManifestRoot = normalizeManifestRoot(String(deal.cid || ''))
@@ -2163,6 +2172,11 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel, request
                 ) : null}
             </div>
         </div>
+        {uploadWorkflowActive ? (
+          <div className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
+            Active
+          </div>
+        ) : null}
       </div>
 
       {topPanel ? <div className="border-b border-border">{topPanel}</div> : null}

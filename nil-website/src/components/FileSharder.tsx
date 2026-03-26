@@ -102,6 +102,7 @@ interface WorkflowDoneSummary {
 export interface FileSharderProps {
   dealId: string;
   onCommitSuccess?: (dealId: string, manifestRoot: string, fileMeta?: { filePath: string; fileSizeBytes: number }) => void;
+  onWorkflowActiveChange?: (active: boolean) => void;
 }
 
 type ShardPhase =
@@ -461,7 +462,7 @@ function makePreparedManifest(bytes: Uint8Array, fullSize = MANIFEST_BLOB_SIZE_B
   return { bytes: sparse.bytes, fullSize: sparse.fullSize }
 }
 
-export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
+export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }: FileSharderProps) {
   const { isConnected, address } = useAccount();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient({ chainId: appConfig.chainId });
@@ -4240,6 +4241,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     () => workflowSteps.some((step) => step.state === 'active'),
     [workflowSteps],
   )
+  useEffect(() => {
+    onWorkflowActiveChange?.(hasActiveWorkflowStep)
+    return () => {
+      onWorkflowActiveChange?.(false)
+    }
+  }, [hasActiveWorkflowStep, onWorkflowActiveChange])
   const showRetryUpload =
     !isUploadComplete &&
     !activeUploading &&
@@ -4447,33 +4454,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
           <div className="relative flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="nil-section-label mb-2">/proc/sharder</p>
-              <div className="text-sm font-semibold text-foreground">
-                {isAlreadyCommitted
-                  ? 'Upload complete'
-                  : processing
-                  ? 'Preparing upload'
-                  : activeUploading
-                    ? 'Uploading to providers'
-                    : isCommitPending || isCommitConfirming
-                      ? 'Committing to chain'
-                      : hasError
-                        ? 'Upload needs attention'
-                        : currentFileMeta
-                          ? 'Upload in progress'
-                          : 'Upload file'}
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {currentFileMeta
-                  ? `${currentFileMeta.filePath} • ${formatBytes(currentFileMeta.fileSizeBytes)}`
-                  : 'Choose a file to add to this deal. Progress appears below.'}
-              </div>
+              <p className="nil-section-label mb-2">/DEAL/Upload</p>
+              {currentFileMeta ? (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {`${currentFileMeta.filePath} • ${formatBytes(currentFileMeta.fileSizeBytes)}`}
+                </div>
+              ) : null}
             </div>
-            {hasActiveWorkflowStep ? (
-              <div className="text-[9px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
-                Active
-              </div>
-            ) : null}
           </div>
           <div className="relative space-y-2">
             <div className="space-y-1.5">

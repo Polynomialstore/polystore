@@ -239,6 +239,7 @@ export function Dashboard() {
 
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
+  const [dealUploadActive, setDealUploadActive] = useState(false)
   const [stagedUpload, setStagedUpload] = useState<StagedUpload | null>(null)
   const [, setContentSlabLoading] = useState(false)
   const [, setContentSlabError] = useState<string | null>(null)
@@ -581,6 +582,7 @@ export function Dashboard() {
     setStagedUpload(null)
     setContentSlabError(null)
     setContentSlabLoading(false)
+    setDealUploadActive(false)
   }, [targetDealId])
 
   useEffect(() => {
@@ -1410,7 +1412,11 @@ export function Dashboard() {
               </div>
             </div>
           ) : (
-            <FileSharder dealId={targetDealId} onCommitSuccess={handleMduCommitSuccess} />
+            <FileSharder
+              dealId={targetDealId}
+              onCommitSuccess={handleMduCommitSuccess}
+              onWorkflowActiveChange={setDealUploadActive}
+            />
           ) : (
             <div className="nil-inset rounded-none border-dashed p-10 text-center">
               <div className="text-sm font-semibold text-foreground">Select a deal to upload</div>
@@ -1698,6 +1704,7 @@ export function Dashboard() {
                 nilAddress={nilAddress}
                 onFileActivity={recordRecentActivity}
                 topPanel={dealExplorerTopPanel}
+                uploadWorkflowActive={dealUploadActive}
                 requestedTab={dealDetailRequestedTab ?? undefined}
                 requestedTabNonce={dealDetailRequestedTabNonce}
               />
