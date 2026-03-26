@@ -96,6 +96,7 @@ interface WorkflowDoneSummaryChip {
 interface WorkflowDoneSummary {
   headline: string
   secondary?: string
+  details?: string[]
   chips: WorkflowDoneSummaryChip[]
 }
 
@@ -4159,19 +4160,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
     const { totalPreparedMdus, userMdus, witnessMdus, mdu0Count } = workflowPreparedCounts
     if (hasManifestRoot && totalPreparedMdus > 0) {
-      const mode2Secondary =
-        isMode2 && stripeParams
-          ? `RS(${stripeParams.k},${stripeParams.m}) => ${workflowRsSlotCount} shards per user MDU (${String(userMdus * workflowRsSlotCount)} user shards total).`
-          : undefined
+      const mode2Secondary = isMode2
+        ? `M0 ${String(mdu0Count)} • W ${String(witnessMdus)} • U ${String(userMdus)} • RS(${String(
+            stripeParams?.k ?? 0,
+          )},${String(stripeParams?.m ?? 0)}) • user shards ${String(userMdus * workflowRsSlotCount)}`
+        : `M0 ${String(mdu0Count)} • W ${String(witnessMdus)} • U ${String(userMdus)}`
       summaries[1] = {
         headline: isMode2 ? `${String(totalPreparedMdus)} slab MDUs prepared` : `${String(totalPreparedMdus)} MDUs prepared`,
         secondary: mode2Secondary,
-        chips: [
-          ...(mdu0Count > 0 ? [{ label: 'mdu0', value: String(mdu0Count), tone: 'neutral' as const }] : []),
-          ...(witnessMdus > 0 ? [{ label: 'witness', value: String(witnessMdus), tone: 'neutral' as const }] : []),
-          ...(userMdus > 0 ? [{ label: 'user', value: String(userMdus), tone: 'neutral' as const }] : []),
-          ...(isMode2 ? [{ label: 'slots', value: String(workflowRsSlotCount), tone: 'neutral' as const }] : []),
-        ],
+        chips: [],
       }
     }
 
@@ -4180,9 +4177,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       const metadataMdus = Math.max(0, mdu0Count + witnessMdus)
       const perSpArtifacts = Math.max(0, metadataMdus + userMdus + 1) // + manifest upload
       const totalSpUploads = perSpArtifacts * workflowRsSlotCount
-      const mode2UploadSecondary = `${String(metadataMdus * workflowRsSlotCount)} metadata + ${String(
-        userMdus * workflowRsSlotCount,
-      )} user shards + ${String(workflowRsSlotCount)} manifest uploads`
+      const mode2UploadSecondary = `Per SP: ${String(perSpArtifacts)} artifacts = ${String(metadataMdus)} metadata + ${String(
+        userMdus,
+      )} user ${userMdus === 1 ? 'shard' : 'shards'} + 1 manifest`
       const uploadedArtifactsLabel = isMode2
         ? `${String(totalSpUploads)} uploads`
         : uploadProgress.length > 0
@@ -4198,21 +4195,13 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             : mirrorStatus === 'error'
               ? 'mirror failed'
               : null
-      const mirrorTone: WorkflowDoneSummaryTone =
-        mirrorStatus === 'error' ? 'primary' : 'neutral'
       summaries[2] = {
-        headline: 'Provider upload complete',
+        headline: isMode2
+          ? `Uploaded to ${String(workflowRsSlotCount)} SP${workflowRsSlotCount === 1 ? '' : 's'} (${String(totalSpUploads)} total uploads)`
+          : 'Provider upload complete',
         secondary: isMode2 ? mode2UploadSecondary : undefined,
-        chips: [
-          { label: isMode2 ? 'uploads' : 'artifacts', value: uploadedArtifactsLabel, tone: 'success' },
-          ...(isMode2
-            ? [
-                { label: 'sps', value: String(workflowRsSlotCount), tone: 'neutral' as const },
-                { label: 'per sp', value: `${String(perSpArtifacts)} artifacts`, tone: 'neutral' as const },
-              ]
-            : []),
-          ...(mirrorLabel ? [{ label: 'gateway', value: mirrorLabel, tone: mirrorTone }] : []),
-        ],
+        details: mirrorLabel ? [`Gateway mirror: ${mirrorLabel}`] : undefined,
+        chips: isMode2 ? [] : [{ label: 'artifacts', value: uploadedArtifactsLabel, tone: 'success' }],
       }
     }
 
@@ -4523,8 +4512,20 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                           {doneSummary.headline}
                         </div>
                         {doneSummary.secondary ? (
-                          <div className="truncate text-[10px] font-mono-data text-muted-foreground">
+                          <div className="text-[10px] font-mono-data text-muted-foreground leading-relaxed">
                             {doneSummary.secondary}
+                          </div>
+                        ) : null}
+                        {doneSummary.details && doneSummary.details.length > 0 ? (
+                          <div className="space-y-1">
+                            {doneSummary.details.map((line, lineIndex) => (
+                              <div
+                                key={`${line}-${lineIndex}`}
+                                className="text-[10px] font-mono-data text-muted-foreground leading-relaxed"
+                              >
+                                {line}
+                              </div>
+                            ))}
                           </div>
                         ) : null}
                         {doneSummary.chips.length > 0 ? (
