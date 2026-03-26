@@ -2145,22 +2145,6 @@ export function DealDetail({
             <div>
                 <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-muted-foreground dark:text-foreground/90">/deal/explorer</div>
                 <div className="text-lg font-bold text-foreground" data-testid="workspace-deal-title">Deal #{deal.id}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                  <span
-                    className={`border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] ${
-                      hasCommittedContent
-                        ? 'border-success/40 bg-success/10 text-success'
-                        : 'border-border bg-secondary/60 text-muted-foreground'
-                    }`}
-                  >
-                    {dealStatusLabel}
-                  </span>
-                  <span className="font-mono-data text-foreground">{dealSizeLabel}</span>
-                  <span className="text-border">|</span>
-                  <span className="border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                    {redundancyLabel}
-                  </span>
-                </div>
                 {displayManifestRoot ? (
                   <div
                     className="mt-2 font-mono-data text-[10px] text-primary break-all"
@@ -2172,11 +2156,29 @@ export function DealDetail({
                 ) : null}
             </div>
         </div>
-        {uploadWorkflowActive ? (
-          <div className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
-            Active
+        <div className="flex flex-col items-end gap-2">
+          {uploadWorkflowActive ? (
+            <div className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
+              Active
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-muted-foreground">
+            <span
+              className={`border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] ${
+                hasCommittedContent
+                  ? 'border-success/40 bg-success/10 text-success'
+                  : 'border-border bg-secondary/60 text-muted-foreground'
+              }`}
+            >
+              {dealStatusLabel}
+            </span>
+            <span className="font-mono-data text-foreground">{dealSizeLabel}</span>
+            <span className="text-border">|</span>
+            <span className="border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+              {redundancyLabel}
+            </span>
           </div>
-        ) : null}
+        </div>
       </div>
 
       {topPanel ? <div className="border-b border-border">{topPanel}</div> : null}
