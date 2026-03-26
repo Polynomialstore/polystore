@@ -14,11 +14,35 @@ type mode2UploadProfile struct {
 	counts    map[string]uint64
 }
 
+var mode2UploadProfilePool = sync.Pool{
+	New: func() any {
+		return &mode2UploadProfile{
+			durations: make(map[string]time.Duration),
+			counts:    make(map[string]uint64),
+		}
+	},
+}
+
 func newMode2UploadProfile() *mode2UploadProfile {
-	return &mode2UploadProfile{
-		durations: make(map[string]time.Duration),
-		counts:    make(map[string]uint64),
+	profile, _ := mode2UploadProfilePool.Get().(*mode2UploadProfile)
+	if profile == nil {
+		return &mode2UploadProfile{
+			durations: make(map[string]time.Duration),
+			counts:    make(map[string]uint64),
+		}
 	}
+	return profile
+}
+
+func releaseMode2UploadProfile(profile *mode2UploadProfile) {
+	if profile == nil {
+		return
+	}
+	profile.mu.Lock()
+	clear(profile.durations)
+	clear(profile.counts)
+	profile.mu.Unlock()
+	mode2UploadProfilePool.Put(profile)
 }
 
 func (p *mode2UploadProfile) addDuration(label string, d time.Duration) {

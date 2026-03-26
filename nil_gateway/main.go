@@ -960,6 +960,12 @@ func buildStatusURL(r *http.Request, dealID uint64, uploadID string) string {
 func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	uploadStarted := time.Now()
 	profile := newMode2UploadProfile()
+	releaseProfile := true
+	defer func() {
+		if releaseProfile {
+			releaseMode2UploadProfile(profile)
+		}
+	}()
 
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -1660,6 +1666,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer ingestCancel()
 			defer cleanupRun()
+			defer releaseMode2UploadProfile(profile)
 			if job != nil {
 				job.setPhase(uploadJobPhaseEncoding, "Gateway upload accepted; processing in background...")
 			}
@@ -1682,6 +1689,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				)
 			}
 		}()
+		releaseProfile = false
 		resp := map[string]any{
 			"status":     "accepted",
 			"deal_id":    dealIDStr,
@@ -6312,6 +6320,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	var dealID uint64
 	defer func() {
 		logMode2UploadProfile("SpUploadMdu", uploadStarted, dealID, storedPath, outcome, statusCode, profile)
+		releaseMode2UploadProfile(profile)
 	}()
 
 	setCORS(w)
@@ -6546,6 +6555,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	var dealID uint64
 	defer func() {
 		logMode2UploadProfile("SpUploadShard", uploadStarted, dealID, storedPath, outcome, statusCode, profile)
+		releaseMode2UploadProfile(profile)
 	}()
 
 	setCORS(w)
@@ -6857,6 +6867,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	var dealID uint64
 	defer func() {
 		logMode2UploadProfile("SpUploadManifest", uploadStarted, dealID, storedPath, outcome, statusCode, profile)
+		releaseMode2UploadProfile(profile)
 	}()
 
 	setCORS(w)
