@@ -2148,11 +2148,9 @@ export function DealDetail({
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-[11px] text-muted-foreground">
-            {uploadWorkflowActive ? (
-              <div className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
-                Active
-              </div>
-            ) : null}
+            <span className="border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+              {redundancyLabel}
+            </span>
             <span
               className={`border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] ${
                 hasCommittedContent
@@ -2162,9 +2160,11 @@ export function DealDetail({
             >
               {hasCommittedContent ? dealSizeLabel : 'Empty'}
             </span>
-            <span className="border border-border bg-secondary/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-              {redundancyLabel}
-            </span>
+            {uploadWorkflowActive ? (
+              <div className="border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary">
+                Active
+              </div>
+            ) : null}
           </div>
         </div>
         {displayManifestRoot ? (
