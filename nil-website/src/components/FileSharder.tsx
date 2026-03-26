@@ -4462,7 +4462,187 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                       </div>
                     </div>
                     {expanded ? (
-                      <div className="mt-2 text-[11px] font-mono-data leading-relaxed">{step.detail}</div>
+                      <div className="mt-2 space-y-2">
+                        <div className="text-[11px] font-mono-data leading-relaxed">{step.detail}</div>
+
+                        {index === 1 && processing ? (
+                          <div className="space-y-2" data-testid="wasm-sharding-progress">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="flex items-center gap-2">
+                                <Cpu className="w-4 h-4 animate-spin text-primary" />
+                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
+                                  {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
+                                    ? 'Gateway ingest'
+                                    : 'WASM Sharding'}
+                                </span>
+                                <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">•</span>
+                                <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+                                  {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
+                                    ? shardProgress.label
+                                    : shardingUi.phaseDetails || 'Working...'}
+                                </span>
+                              </p>
+                              <div className="text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em] whitespace-nowrap">
+                                {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2') ? (
+                                  shardProgress.phase === 'gateway_receiving' && shardProgress.workTotal > 0 ? (
+                                    `${formatBytes(shardProgress.workDone)} / ${formatBytes(shardProgress.workTotal)}`
+                                  ) : shardProgress.workTotal > 0 ? (
+                                    `${shardProgress.workDone}/${shardProgress.workTotal} steps`
+                                  ) : (
+                                    '—'
+                                  )
+                                ) : (
+                                  shardProgress.totalMdus > 0 ? `${shardProgress.mdusDone}/${shardProgress.totalMdus} MDUs` : '—'
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="h-2 w-full overflow-hidden border border-border/60 bg-background/40">
+                              <div
+                                className="h-full bg-primary transition-[width] duration-300 ease-out dark:shadow-[0_0_18px_hsl(var(--primary)_/_0.25)]"
+                                style={{ width: `${(shardingUi.overallPct * 100).toFixed(1)}%` }}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground sm:grid-cols-4">
+                              <div className="nil-tab-inset px-2 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Elapsed</div>
+                                <div className="mt-1 text-foreground font-mono-data">{formatDuration(shardingUi.elapsedMs)}</div>
+                              </div>
+                              <div className="nil-tab-inset px-2 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">ETA</div>
+                                <div className="mt-1 text-foreground font-mono-data">
+                                  {shardingUi.etaMs == null ? '—' : formatDuration(shardingUi.etaMs)}
+                                </div>
+                              </div>
+                              <div className="nil-tab-inset px-2 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Throughput</div>
+                                <div className="mt-1 text-foreground font-mono-data">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
+                              </div>
+                              <div className="nil-tab-inset px-2 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Op Time</div>
+                                <div className="mt-1 text-foreground font-mono-data">
+                                  {shardProgress.currentOpStartedAtMs
+                                    ? formatDuration(shardingUi.currentOpMs)
+                                    : shardProgress.lastOpMs != null
+                                      ? formatDuration(shardProgress.lastOpMs)
+                                      : '—'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {index === 2 ? (
+                          <div className="space-y-2">
+                            {activeUploading ? (
+                              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
+                                <FileJson className="w-4 h-4 animate-pulse text-primary" />
+                                {isMode2 ? 'Uploading Mode 2 shards to Storage Providers...' : 'Uploading MDUs directly to Storage Provider...'}
+                              </p>
+                            ) : null}
+
+                            {readyToUpload && !processing && !activeUploading ? (
+                              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
+                                Expansion complete. Upload starts automatically; use retry only if the provider step fails.
+                              </div>
+                            ) : null}
+
+                            {showRetryUpload ? (
+                              <button
+                                onClick={() => {
+                                  void retryPreparedUpload()
+                                }}
+                                data-testid="mdu-upload"
+                                className="cta-shadow mt-1 inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                              >
+                                Retry Upload
+                              </button>
+                            ) : isUploadComplete ? (
+                              <div
+                                data-testid="mdu-upload-state"
+                                className="nil-tab-panel mt-1 border-success/30 bg-success/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-success"
+                              >
+                                Upload Complete
+                              </div>
+                            ) : null}
+
+                            {!isMode2 && (activeUploading || isUploadComplete) && uploadProgress.length > 0 ? (
+                              <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
+                                <p className="mb-1 text-primary font-bold uppercase tracking-[0.2em]">Upload Progress</p>
+                                <div className="space-y-1 max-h-24 overflow-y-auto">
+                                  {uploadProgress.map((p, i) => (
+                                    <div key={i} className="flex justify-between items-center">
+                                      <span>{p.label}:</span>
+                                      <span className={`font-bold ${p.status === 'complete' ? 'text-success' : p.status === 'error' ? 'text-destructive' : 'text-primary'}`}>
+                                        {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {isMode2 && mode2UploadError ? (
+                              <div className="nil-tab-panel text-[11px] font-mono-data text-destructive border-destructive/30 bg-destructive/5">
+                                Mode 2 upload failed: {mode2UploadError}
+                              </div>
+                            ) : null}
+
+                            {mirrorStatus !== 'idle' ? (
+                              <div
+                                className={`nil-tab-panel text-[11px] font-mono-data ${mirrorStatus === 'error' ? 'text-destructive border-destructive/30 bg-destructive/5' : 'text-muted-foreground'}`}
+                              >
+                                Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
+                                {mirrorError ? ` (${mirrorError})` : ''}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {index === 3 ? (
+                          <div className="space-y-2">
+                            {readyToCommit && !processing && !activeUploading ? (
+                              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
+                                Upload complete. Commit starts automatically; retry only if the wallet or chain step fails.
+                              </div>
+                            ) : null}
+
+                            {(isCommitPending || isCommitConfirming) ? (
+                              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
+                                <FileJson className="w-4 h-4 animate-pulse text-primary" /> Committing manifest root to chain...
+                              </p>
+                            ) : null}
+
+                            {readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted ? (
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  onClick={() => {
+                                    void triggerPreparedCommit('manual')
+                                  }}
+                                  disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
+                                  data-testid="mdu-commit"
+                                  className="cta-shadow inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
+                                >
+                                  {isCommitPending
+                                    ? 'Check Wallet...'
+                                    : isCommitConfirming
+                                      ? 'Confirming...'
+                                      : isAlreadyCommitted
+                                        ? 'Committed!'
+                                        : 'Commit to Chain'}
+                                </button>
+
+                                {commitHash ? (
+                                  <div className="text-[10px] font-mono-data text-muted-foreground truncate uppercase tracking-[0.2em]">
+                                    Tx: {commitHash}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 )
@@ -4477,179 +4657,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 {!commitDisplayError && !mode2UploadError && shardProgress.label ? shardProgress.label : null}
               </div>
             ) : null}
-
-            {processing && (
-              <div className="space-y-2" data-testid="wasm-sharding-progress">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="flex items-center gap-2">
-                    <Cpu className="w-4 h-4 animate-spin text-primary" />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
-                      {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
-                        ? 'Gateway ingest'
-                        : 'WASM Sharding'}
-                    </span>
-                    <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">•</span>
-                    <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-                      {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
-                        ? shardProgress.label
-                        : shardingUi.phaseDetails || 'Working...'}
-                    </span>
-                  </p>
-                  <div className="text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em] whitespace-nowrap">
-                    {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2') ? (
-                      shardProgress.phase === 'gateway_receiving' && shardProgress.workTotal > 0 ? (
-                        `${formatBytes(shardProgress.workDone)} / ${formatBytes(shardProgress.workTotal)}`
-                      ) : shardProgress.workTotal > 0 ? (
-                        `${shardProgress.workDone}/${shardProgress.workTotal} steps`
-                      ) : (
-                        '—'
-                      )
-                    ) : (
-                      shardProgress.totalMdus > 0 ? `${shardProgress.mdusDone}/${shardProgress.totalMdus} MDUs` : '—'
-                    )}
-                  </div>
-                </div>
-
-                <div className="h-2 w-full overflow-hidden border border-border/60 bg-background/40">
-                  <div
-                    className="h-full bg-primary transition-[width] duration-300 ease-out dark:shadow-[0_0_18px_hsl(var(--primary)_/_0.25)]"
-                    style={{ width: `${(shardingUi.overallPct * 100).toFixed(1)}%` }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground sm:grid-cols-4">
-                  <div className="nil-tab-inset px-2 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Elapsed</div>
-                    <div className="mt-1 text-foreground font-mono-data">{formatDuration(shardingUi.elapsedMs)}</div>
-                  </div>
-                  <div className="nil-tab-inset px-2 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">ETA</div>
-                    <div className="mt-1 text-foreground font-mono-data">
-                      {shardingUi.etaMs == null ? '—' : formatDuration(shardingUi.etaMs)}
-                    </div>
-                  </div>
-                  <div className="nil-tab-inset px-2 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Throughput</div>
-                    <div className="mt-1 text-foreground font-mono-data">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
-                  </div>
-                  <div className="nil-tab-inset px-2 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Op Time</div>
-                    <div className="mt-1 text-foreground font-mono-data">
-                      {shardProgress.currentOpStartedAtMs
-                        ? formatDuration(shardingUi.currentOpMs)
-                        : shardProgress.lastOpMs != null
-                          ? formatDuration(shardProgress.lastOpMs)
-                          : '—'}
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {activeUploading && (
-              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
-                <FileJson className="w-4 h-4 animate-pulse text-primary" />
-                {isMode2 ? 'Uploading Mode 2 shards to Storage Providers...' : 'Uploading MDUs directly to Storage Provider...'}
-              </p>
-            )}
-
-            {readyToUpload && !processing && !activeUploading ? (
-              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
-                Expansion complete. Upload starts automatically; use retry only if the provider step fails.
-              </div>
-            ) : null}
-
-            {readyToCommit && !processing && !activeUploading ? (
-              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
-                Upload complete. Commit starts automatically; retry only if the wallet or chain step fails.
-              </div>
-            ) : null}
-
-            {(isCommitPending || isCommitConfirming) && (
-              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
-                <FileJson className="w-4 h-4 animate-pulse text-primary" /> Committing manifest root to chain...
-              </p>
-            )}
-
-            {readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted ? (
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => {
-                    void triggerPreparedCommit('manual')
-                  }}
-                  disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
-                  data-testid="mdu-commit"
-                  className="cta-shadow inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
-                >
-                  {isCommitPending
-                    ? 'Check Wallet...'
-                    : isCommitConfirming
-                      ? 'Confirming...'
-                      : isAlreadyCommitted
-                        ? 'Committed!'
-                        : 'Commit to Chain'}
-                </button>
-
-                {commitHash && (
-                  <div className="text-[10px] font-mono-data text-muted-foreground truncate uppercase tracking-[0.2em]">
-                    Tx: {commitHash}
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            <div className="flex flex-col gap-2">
-              {showRetryUpload ? (
-                <button
-                  onClick={() => {
-                    void retryPreparedUpload()
-                  }}
-                  data-testid="mdu-upload"
-                  className="cta-shadow mt-1 inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
-                >
-                  Retry Upload
-                </button>
-              ) : isUploadComplete ? (
-                <div
-                  data-testid="mdu-upload-state"
-                  className="nil-tab-panel mt-1 border-success/30 bg-success/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-success"
-                >
-                  Upload Complete
-                </div>
-              ) : null}
-
-              {!isMode2 && (activeUploading || isUploadComplete) && uploadProgress.length > 0 && (
-                <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
-                  <p className="mb-1 text-primary font-bold uppercase tracking-[0.2em]">Upload Progress</p>
-                    <div className="space-y-1 max-h-24 overflow-y-auto">
-                      {uploadProgress.map((p, i) => (
-                        <div key={i} className="flex justify-between items-center">
-                        <span>{p.label}:</span>
-                        <span className={`font-bold ${p.status === 'complete' ? 'text-success' : p.status === 'error' ? 'text-destructive' : 'text-primary'}`}>
-                          {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {isMode2 && mode2UploadError && (
-                <div className="nil-tab-panel text-[11px] font-mono-data text-destructive border-destructive/30 bg-destructive/5">
-                  Mode 2 upload failed: {mode2UploadError}
-                </div>
-              )}
-
-              {mirrorStatus !== 'idle' && (
-                <div
-                  className={`nil-tab-panel text-[11px] font-mono-data ${mirrorStatus === 'error' ? 'text-destructive border-destructive/30 bg-destructive/5' : 'text-muted-foreground'}`}
-                >
-                  Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
-                  {mirrorError ? ` (${mirrorError})` : ''}
-                </div>
-              )}
-            </div>
           </div>
         </div>
           ) : null}
