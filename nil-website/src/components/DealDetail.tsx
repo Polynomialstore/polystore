@@ -255,6 +255,7 @@ interface FileRowProps {
   manifestRoot: string
   owner: string
   browserCached: boolean
+  browserMduAvailable: boolean
   gatewayCached: boolean
   isBusy: boolean
   isAnyDownloading: boolean
@@ -339,6 +340,7 @@ function FileRow({
   manifestRoot,
   owner,
   browserCached,
+  browserMduAvailable,
   gatewayCached,
   isBusy,
   isAnyDownloading,
@@ -363,6 +365,7 @@ function FileRow({
   transportPreference,
 }: FileRowProps) {
   const requestOwner = String(owner || deal.owner || '').trim()
+  const browserAvailable = browserCached || browserMduAvailable
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const [menuViewportPosition, setMenuViewportPosition] = useState<{
     top: number
@@ -746,7 +749,7 @@ function FileRow({
     <div
       data-testid="deal-detail-file-row"
       data-file-path={file.path}
-      data-cache-browser={browserCached ? 'yes' : 'no'}
+      data-cache-browser={browserAvailable ? 'yes' : 'no'}
       data-cache-gateway={gatewayCached ? 'yes' : 'no'}
       className="nil-list-row relative grid grid-cols-[minmax(0,1.7fr)_auto_auto] items-center gap-3 overflow-visible border border-border bg-background/50 px-4 py-3 group"
     >
@@ -837,8 +840,8 @@ function FileRow({
                       </div>
                       <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
                         <span>Browser</span>
-                        <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${browserCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
-                          {browserCached ? 'Yes' : '—'}
+                        <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${browserAvailable ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
+                          {browserAvailable ? 'Yes' : '—'}
                         </span>
                       </div>
                       <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
@@ -944,6 +947,7 @@ export function DealDetail({
   })
   const [dealIndexSyncMessage, setDealIndexSyncMessage] = useState<string>('')
   const [browserCachedByPath, setBrowserCachedByPath] = useState<Record<string, boolean>>({})
+  const [browserMduAvailableByPath, setBrowserMduAvailableByPath] = useState<Record<string, boolean>>({})
   const [busyFilePath, setBusyFilePath] = useState<string | null>(null)
   const [openMenuFilePath, setOpenMenuFilePath] = useState<string | null>(null)
   const [fileActionError, setFileActionError] = useState<string | null>(null)
@@ -1393,6 +1397,7 @@ export function DealDetail({
     async function refreshBrowserCache() {
       if (!files || files.length === 0) {
         setBrowserCachedByPath({})
+        setBrowserMduAvailableByPath({})
         return
       }
       const dealId = String(deal.id)
@@ -1405,16 +1410,72 @@ export function DealDetail({
           }
         }),
       )
+
+      const nextMduAvailable: Record<string, boolean> = {}
+      const chainManifestRoot = normalizeManifestRoot(committedManifestRoot)
+      if (chainManifestRoot) {
+        try {
+          const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(dealId).catch(() => null))
+          const localMeta = await readSlabMetadata(dealId).catch(() => null)
+          const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
+          const localManifestRoot = persistedManifestRoot || metadataManifestRoot
+          const freshness = evaluateCacheFreshness(localManifestRoot, chainManifestRoot)
+          if (freshness.status === 'fresh') {
+            const mdu0 = await readMdu(dealId, 0).catch(() => null)
+            if (mdu0 && mdu0.byteLength > 0) {
+              const { slabStartIdx, maxEnd } = await inferWitnessCountFromOpfs(dealId, files)
+              const mduPresence = new Map<number, boolean>()
+              const hasMdu = async (idx: number): Promise<boolean> => {
+                if (mduPresence.has(idx)) return mduPresence.get(idx) === true
+                const present = Boolean(await readMdu(dealId, idx).catch(() => null))
+                mduPresence.set(idx, present)
+                return present
+              }
+
+              for (const fileEntry of files) {
+                const start = Math.max(0, Number(fileEntry.start_offset) || 0)
+                const size = Math.max(0, Number(fileEntry.size_bytes) || 0)
+                if (size <= 0) {
+                  nextMduAvailable[fileEntry.path] = true
+                  continue
+                }
+
+                const endExclusive = start + size
+                if (endExclusive > maxEnd) {
+                  nextMduAvailable[fileEntry.path] = false
+                  continue
+                }
+
+                const firstUserMdu = Math.floor(start / RAW_MDU_CAPACITY)
+                const lastUserMdu = Math.floor((endExclusive - 1) / RAW_MDU_CAPACITY)
+                let available = true
+                for (let userMdu = firstUserMdu; userMdu <= lastUserMdu; userMdu += 1) {
+                  const slabMdu = slabStartIdx + userMdu
+                  if (!(await hasMdu(slabMdu))) {
+                    available = false
+                    break
+                  }
+                }
+                nextMduAvailable[fileEntry.path] = available
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to compute local MDU availability for cache status', { dealId, error })
+        }
+      }
+
       if (canceled) return
       const next: Record<string, boolean> = {}
       for (const [path, ok] of entries) next[path] = ok
       setBrowserCachedByPath(next)
+      setBrowserMduAvailableByPath(nextMduAvailable)
     }
     void refreshBrowserCache()
     return () => {
       canceled = true
     }
-  }, [deal.id, files])
+  }, [committedManifestRoot, deal.id, files])
 
   function triggerBrowserDownload(url: string, filePath: string) {
     const a = document.createElement('a')
@@ -1617,6 +1678,7 @@ export function DealDetail({
       try {
         await deleteDealDirectory(normalizedDealId)
         setBrowserCachedByPath({})
+        setBrowserMduAvailableByPath({})
         console.info('Cleared stale browser MDU cache', {
           dealId,
           reason: freshness.reason,
@@ -2257,6 +2319,7 @@ export function DealDetail({
       setSlabSource('none')
       setGatewaySlabStatus('unknown')
       setBrowserCachedByPath({})
+      setBrowserMduAvailableByPath({})
       setManifestInfo(null)
       setDealIndexRequirement({
         status: 'ready',
@@ -2654,6 +2717,7 @@ export function DealDetail({
                               manifestRoot={committedManifestRoot}
                               owner={requestOwner}
                               browserCached={!!browserCachedByPath[f.path]}
+                              browserMduAvailable={!!browserMduAvailableByPath[f.path]}
                               gatewayCached={f.cache_present === true}
                               isBusy={busyFilePath === f.path}
                               isAnyDownloading={downloading}
