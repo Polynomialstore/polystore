@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
@@ -41,12 +42,14 @@ test.describe('gateway flow', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
+    await ensureCreateDealDrawerOpen(page)
     await page.getByTestId('workspace-advanced-toggle').click()
 
     await page.getByTestId('alloc-placement-profile').selectOption('auto')
     await page.getByTestId('alloc-submit').click()
 
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+    await dismissCreateDealDrawer(page)
 
     const fileInput = page.getByTestId('content-file-input')
     if (!(await fileInput.isVisible().catch(() => false))) {

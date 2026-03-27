@@ -3,6 +3,7 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
@@ -402,10 +403,13 @@ test('repro bug: download from commit content widget', async ({
   console.log('Faucet received.')
 
   console.log('Creating deal...')
+  await ensureCreateDealDrawerOpen(page)
   const advancedToggle = page.getByTestId('workspace-advanced-toggle')
   const placementSelect = page.getByTestId('alloc-placement-profile')
   if (!(await placementSelect.isVisible().catch(() => false))) {
-    await advancedToggle.click()
+    if (await advancedToggle.isVisible().catch(() => false)) {
+      await advancedToggle.click()
+    }
     await expect(placementSelect).toBeVisible({ timeout: 10_000 })
   }
 
@@ -433,6 +437,7 @@ test('repro bug: download from commit content widget', async ({
       console.log('Error visible on UI:', await errorToast.textContent())
   }
   console.log('Deal created (click sent).')
+  await dismissCreateDealDrawer(page)
 
   const dealRow = page.getByTestId('deal-row-0')
   await expect(dealRow).toBeVisible({ timeout: 60_000 })
@@ -450,7 +455,9 @@ test('repro bug: download from commit content widget', async ({
   if (!(await contentFileInput.isVisible().catch(() => false))) {
     const contentTab = page.getByTestId('tab-content')
     if (!(await contentTab.isVisible().catch(() => false))) {
-      await advancedToggle.click()
+      if (await advancedToggle.isVisible().catch(() => false)) {
+        await advancedToggle.click()
+      }
       await expect(contentTab).toBeVisible({ timeout: 10_000 })
     }
     await contentTab.click()

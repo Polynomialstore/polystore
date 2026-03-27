@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
@@ -131,11 +132,13 @@ test.describe('gateway absent', () => {
       }
     }
 
+    await ensureCreateDealDrawerOpen(page)
     const allocSubmit = page.getByTestId('alloc-submit')
     await expect(allocSubmit).toBeVisible({ timeout: 120_000 })
     await allocSubmit.click()
 
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 120_000 })
+    await dismissCreateDealDrawer(page)
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
@@ -201,14 +204,16 @@ test.describe('gateway absent', () => {
 
     await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'running', { timeout: 60_000 })
     await expect(page.getByRole('button', { name: /Retry Upload/i })).toHaveCount(0)
-    await expect(page.getByTestId('mdu-under-the-hood')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByTestId('workflow-step-2')).toHaveAttribute('data-step-state', /^(active|done)$/i, {
+      timeout: 60_000,
+    })
 
     await completeUploadAndCommit(page, 180_000)
 
     await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'success', { timeout: 180_000 })
     await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
-    await expect(page.getByTestId('mdu-upload-card').getByText(/^Upload file$/i)).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByTestId('mdu-upload-card').getByText(/\/DEAL\/Upload/i)).toBeVisible({ timeout: 60_000 })
     await expect(page.getByText('Upload another file')).toHaveCount(0)
     await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0)
     await expect(page.getByTestId('deal-detail-file-row')).toHaveCount(1, { timeout: 60_000 })

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
@@ -54,6 +55,7 @@ test.describe('libp2p fetch (relay)', () => {
       })
     }
 
+    await ensureCreateDealDrawerOpen(page)
     const advancedToggle = page.getByTestId('workspace-advanced-toggle')
     await expect(advancedToggle).toBeVisible({ timeout: 60_000 })
 
@@ -76,6 +78,7 @@ test.describe('libp2p fetch (relay)', () => {
     await placementSelect.selectOption('auto')
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+    await dismissCreateDealDrawer(page)
 
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''

@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
-import { CheckCircle2, Cpu, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
+import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
 import { workerClient } from '../lib/worker-client';
@@ -85,9 +85,25 @@ type WorkflowStepState = 'idle' | 'active' | 'done' | 'error'
 type UploadPanelState = 'idle' | 'running' | 'success' | 'error'
 type DealSetupStatus = 'loading' | 'ready' | 'error'
 
+type WorkflowDoneSummaryTone = 'neutral' | 'primary' | 'success'
+
+interface WorkflowDoneSummaryChip {
+  label: string
+  value: string
+  tone?: WorkflowDoneSummaryTone
+}
+
+interface WorkflowDoneSummary {
+  headline: string
+  secondary?: string
+  details?: string[]
+  chips: WorkflowDoneSummaryChip[]
+}
+
 export interface FileSharderProps {
   dealId: string;
   onCommitSuccess?: (dealId: string, manifestRoot: string, fileMeta?: { filePath: string; fileSizeBytes: number }) => void;
+  onWorkflowActiveChange?: (dealId: string, active: boolean) => void;
 }
 
 type ShardPhase =
@@ -119,6 +135,9 @@ interface ShardProgressState {
   startTsMs: number | null;
   totalUserMdus: number;
   totalWitnessMdus: number;
+  totalMdus: number;
+  mdusDone: number;
+  userBytesDone: number;
   currentMduIndex: number | null;
   currentMduKind: 'user' | 'witness' | 'meta' | null;
   lastOpMs: number | null;
@@ -290,6 +309,9 @@ function createInitialShardProgress(fileBytesTotal = 0): ShardProgressState {
     startTsMs: null,
     totalUserMdus: 0,
     totalWitnessMdus: 0,
+    totalMdus: 0,
+    mdusDone: 0,
+    userBytesDone: 0,
     currentMduIndex: null,
     currentMduKind: null,
     lastOpMs: null,
@@ -402,6 +424,20 @@ function formatGatewayError(error: unknown): string {
   return String(error || '')
 }
 
+function isWalletUserRejected(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error || '')
+  const lower = text.toLowerCase()
+  return (
+    lower.includes('user denied transaction signature') ||
+    lower.includes('user denied') ||
+    lower.includes('user rejected') ||
+    lower.includes('rejected the request') ||
+    lower.includes('request rejected') ||
+    lower.includes('code: 4001') ||
+    lower.includes('error 4001')
+  )
+}
+
 const gatewayUploadPollIntervalMs = 1000
 const gatewayUploadPollTimeoutMs = 2500
 const gatewayUploadHeartbeatStaleMs = 15_000
@@ -410,6 +446,7 @@ const dealSetupPollIntervalMs = 1_000
 const dealSetupMaxAttempts = 30
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const MANIFEST_BLOB_SIZE_BYTES = 128 * 1024
+const SHARDER_SLAB_VIEW_KEY = 'nil_dashboard_sharder_slab_view_v1'
 
 function makePreparedMdu(index: number, data: Uint8Array, fullSize = MDU_SIZE_BYTES): PreparedBrowserMdu {
   const sparse = makeSparseArtifact({ kind: 'mdu', index, bytes: data, fullSize })
@@ -426,7 +463,7 @@ function makePreparedManifest(bytes: Uint8Array, fullSize = MANIFEST_BLOB_SIZE_B
   return { bytes: sparse.bytes, fullSize: sparse.fullSize }
 }
 
-export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
+export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }: FileSharderProps) {
   const { isConnected, address } = useAccount();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient({ chainId: appConfig.chainId });
@@ -455,11 +492,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
   const [compressUploads, setCompressUploads] = useState(true)
-  const [showSystemActivity, setShowSystemActivity] = useState(false)
+  const [slabViewMode, setSlabViewMode] = useState<'summary' | 'detail'>('summary')
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [, setLogs] = useState<string[]>([]);
   const [shardProgress, setShardProgress] = useState<ShardProgressState>(createInitialShardProgress());
   const [uiTick, setUiTick] = useState(0);
   const recentSpeedMibPerSecRef = useRef<number>(0);
@@ -472,7 +509,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const lastCommitTxRef = useRef<string | null>(null);
   const lastFileMetaRef = useRef<{ filePath: string; fileSizeBytes: number } | null>(null);
   const wasmInitPromiseRef = useRef<Promise<void> | null>(null);
-  const logContainerRef = useRef<HTMLDivElement | null>(null);
   const persistInFlightRef = useRef<Promise<void> | null>(null)
   const lastPersistedManifestRootRef = useRef<string | null>(null)
   const autoUploadManifestRef = useRef<string | null>(null)
@@ -513,6 +549,27 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       }),
     [commitContent],
   )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const slabView = window.sessionStorage.getItem(SHARDER_SLAB_VIEW_KEY)
+      if (slabView === 'summary' || slabView === 'detail') {
+        setSlabViewMode(slabView)
+      }
+    } catch (e) {
+      console.warn('Failed to restore sharder UI preferences', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.setItem(SHARDER_SLAB_VIEW_KEY, slabViewMode)
+    } catch (e) {
+      console.warn('Failed to persist sharder UI preferences', e)
+    }
+  }, [slabViewMode])
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
 
@@ -654,7 +711,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     setMode2UploadError(null)
     setMirrorStatus('idle')
     setMirrorError(null)
-    setShowSystemActivity(false)
     autoUploadManifestRef.current = null
     autoCommitManifestRef.current = null
     gatewayUploadProgressRef.current = {
@@ -1460,14 +1516,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     if (shardProgress.startTsMs == null) return;
 
     // Reset per-run state when a new run starts.
-    if (shardProgress.blobsDone === 0) {
+    if (shardProgress.mdusDone === 0 && shardProgress.userBytesDone === 0) {
       recentSpeedMibPerSecRef.current = 0;
       speedSamplesRef.current = [];
       etaDisplayMsRef.current = null;
       etaLastTickMsRef.current = null;
       etaLastRawMsRef.current = null;
     }
-  }, [processing, shardProgress.startTsMs, shardProgress.blobsDone]);
+  }, [processing, shardProgress.startTsMs, shardProgress.mdusDone, shardProgress.userBytesDone]);
 
   useEffect(() => {
     if (!processing) return;
@@ -1478,9 +1534,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     // --- Rolling speed (effective bytes over a fixed window) ---
     // Using a fixed window avoids inflated "burst" speeds when progress events arrive in batches.
     const SPEED_WINDOW_MS = 3000;
-    const totalWork = shardProgress.workTotal;
-    const workFrac = totalWork > 0 ? Math.max(0, Math.min(1, shardProgress.workDone / totalWork)) : 0;
-    const bytesDone = shardProgress.fileBytesTotal * workFrac;
+    const bytesDone = Math.max(0, Math.min(shardProgress.fileBytesTotal, shardProgress.userBytesDone));
     const samples = speedSamplesRef.current;
     samples.push({ tMs: now, bytesDone });
     while (samples.length > 2 && now - samples[0].tMs > SPEED_WINDOW_MS) samples.shift();
@@ -1541,24 +1595,29 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const remainingWork = Math.max(0, shardProgress.workTotal - shardProgress.workDone);
     const etaRawMs = avgWorkMs ? avgWorkMs * remainingWork : null;
     const etaMs = etaDisplayMsRef.current ?? etaRawMs;
-    const mib = shardProgress.fileBytesTotal > 0 ? shardProgress.fileBytesTotal / (1024 * 1024) : 0;
+    const processedMib = shardProgress.userBytesDone > 0 ? shardProgress.userBytesDone / (1024 * 1024) : 0;
     const seconds = elapsedMs / 1000;
-    const avgMibPerSec = seconds > 0 ? mib / seconds : 0;
+    const avgMibPerSec = seconds > 0 ? processedMib / seconds : 0;
     const mibPerSec = recentSpeedMibPerSecRef.current > 0 ? recentSpeedMibPerSecRef.current : avgMibPerSec;
 
     const phaseDetails = (() => {
       if (shardProgress.phase === 'shard_user') {
-        return `User MDU ${String((shardProgress.currentMduIndex ?? 0) + 1)} / ${String(shardProgress.totalUserMdus)} • Blob ${String(
-          shardProgress.blobsInCurrentMdu,
-        )}/${String(shardProgress.blobsPerMdu)}`;
+        const done = Math.max(0, Math.min(shardProgress.totalUserMdus, shardProgress.mdusDone))
+        const parallel = shardProgress.label.toLowerCase().includes('parallel')
+        if (parallel) return `User MDUs ${String(done)} / ${String(shardProgress.totalUserMdus)}`
+        const current = Math.max(done + 1, Math.min(shardProgress.totalUserMdus, (shardProgress.currentMduIndex ?? 0) + 1))
+        return `User MDU ${String(current)} / ${String(shardProgress.totalUserMdus)}`
       }
       if (shardProgress.phase === 'shard_witness') {
-        return `Witness MDU ${String((shardProgress.currentMduIndex ?? 0) + 1)} / ${String(
-          shardProgress.totalWitnessMdus,
-        )} • Blob ${String(shardProgress.blobsInCurrentMdu)}/${String(shardProgress.blobsPerMdu)}`;
+        const witnessDone = Math.max(0, shardProgress.mdusDone - shardProgress.totalUserMdus)
+        const current = Math.max(
+          witnessDone + 1,
+          Math.min(shardProgress.totalWitnessMdus, (shardProgress.currentMduIndex ?? 0) + 1),
+        )
+        return `Witness MDU ${String(Math.min(current, shardProgress.totalWitnessMdus))} / ${String(shardProgress.totalWitnessMdus)}`
       }
       if (shardProgress.phase === 'finalize_mdu0') {
-        return `Finalizing MDU #0 • Blob ${String(shardProgress.blobsInCurrentMdu)}/${String(shardProgress.blobsPerMdu)}`;
+        return 'Finalizing MDU #0';
       }
       if (shardProgress.phase === 'compute_manifest') return 'Computing manifest commitment';
       if (shardProgress.phase === 'reading') return 'Reading file into memory';
@@ -1829,7 +1888,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       })
       lastFileMetaRef.current = { filePath: file.name, fileSizeBytes: file.size };
       const startTs = performance.now();
-      setShowSystemActivity(false)
       autoCommitManifestRef.current = null
       setProcessing(true);
       setShards([]);
@@ -1860,6 +1918,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         startTsMs: startTs,
         totalUserMdus: 0,
         totalWitnessMdus: 0,
+        totalMdus: 0,
+        mdusDone: 0,
+        userBytesDone: 0,
         currentMduIndex: null,
         currentMduKind: null,
         lastOpMs: null,
@@ -2009,6 +2070,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             fileBytesTotal: gatewaySizeBytes,
             totalUserMdus: gatewayUserMdusFinal,
             totalWitnessMdus: gatewayWitnessMdus,
+            totalMdus: gatewayTotalMdus > 0 ? gatewayTotalMdus : p.totalMdus,
+            mdusDone: gatewayTotalMdus > 0 ? gatewayTotalMdus : p.mdusDone,
+            userBytesDone: Math.max(p.userBytesDone, gatewaySizeBytes),
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
           }))
@@ -2164,6 +2228,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               blobsDone: normalizedDone,
               blobsTotal: normalizedTotal,
               fileBytesTotal: bytesTotal > 0 ? bytesTotal : p.fileBytesTotal,
+              userBytesDone:
+                bytesTotal > 0
+                  ? Math.max(p.userBytesDone, Math.max(0, Math.min(bytesTotal, bytesDone)))
+                  : p.userBytesDone,
             }))
           }
 
@@ -2308,6 +2376,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               blobsDone: 0,
               blobsTotal: file.size,
               fileBytesTotal: file.size,
+              userBytesDone: 0,
               currentOpStartedAtMs: performance.now(),
             }))
 
@@ -2724,6 +2793,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     const totalUserChunks = uploadPlan.totalUserMdus
     const totalFileBytes = uploadPlan.totalFileBytes
     const witnessMduCount = uploadPlan.witnessMduCount
+    const totalMdus = uploadPlan.totalMdus
     const witnessPayloads = uploadPlan.witnessPayloads
     const userPayloads = uploadPlan.userPayloads
     const workTotal = uploadPlan.workTotal
@@ -2756,6 +2826,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       fileBytesTotal: totalFileBytes,
       totalUserMdus: totalUserChunks,
       totalWitnessMdus: witnessMduCount,
+      totalMdus,
+      mdusDone: 0,
+      userBytesDone: 0,
       currentOpStartedAtMs: null,
       currentMduIndex: null,
       currentMduKind: null,
@@ -2777,9 +2850,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           await workerClient.initMdu0Builder(totalUserChunks, commitmentsPerMdu);
         }
 
-        let mdusCommitted = 0;
+        let userMdusCommitted = 0;
+        let witnessMdusCommitted = 0;
+        let metaMdusCommitted = 0;
+        let userBytesCommitted = 0;
         let workCommitted = 0;
         let prevCommitMsPerMdu: number | null = null;
+        const overallMdusCommitted = () => userMdusCommitted + witnessMdusCommitted + metaMdusCommitted
+        const overallBlobsCommitted = () => overallMdusCommitted() * uploadPlan.blobsPerMdu
 
         const pickBatchBlobs = (prevMduMs: number | null): number => {
           const TARGET_UPDATE_MS = 2500;
@@ -2831,7 +2909,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               currentMduKind: 'user',
               currentMduIndex: i,
               blobsInCurrentMdu: 0,
-              blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+              blobsDone: overallBlobsCommitted(),
+              mdusDone: overallMdusCommitted(),
+              userBytesDone: userBytesCommitted,
               workDone: workCommitted,
             }))
             setShards((prev) =>
@@ -2952,16 +3032,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ...perfSample,
             })
             prevCommitMsPerMdu = opMs
-            mdusCommitted += 1
+            userMdusCommitted += 1
+            userBytesCommitted += userPayloads[i] ?? 0
             workCommitted += workTotalThisMdu
             setShardProgress((p) => {
-              const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU
+              const blobsDone = overallBlobsCommitted()
               const avg =
                 p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs
               return {
                 ...p,
                 blobsDone,
-                blobsInCurrentMdu: PLANNER_BLOBS_PER_MDU,
+                blobsInCurrentMdu: 0,
+                mdusDone: overallMdusCommitted(),
+                userBytesDone: Math.min(p.fileBytesTotal, userBytesCommitted),
                 currentOpStartedAtMs: null,
                 lastOpMs: opMs,
                 workDone: workCommitted,
@@ -3000,7 +3083,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 currentMduKind: 'user',
                 currentMduIndex: i,
                 blobsInCurrentMdu: 0,
-                blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+                blobsDone: overallBlobsCommitted(),
+                mdusDone: overallMdusCommitted(),
+                userBytesDone: userBytesCommitted,
                 workDone: workCommitted,
               }));
               setShards((prev) =>
@@ -3052,15 +3137,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   if (!isFinal && now - lastProgressUiUpdateMs < 100) return;
                   lastProgressUiUpdateMs = now;
                   setShardProgress((prev) => {
-                    const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU + done;
+                    const blobsDone = overallBlobsCommitted() + done;
                     const doneNonTrivial = Math.min(done, nonTrivialBlobs);
                     const doneTrivial = Math.max(0, done - nonTrivialBlobs);
                     const workInMdu = doneNonTrivial + doneTrivial * PLANNER_TRIVIAL_BLOB_WEIGHT;
                     const workDone = workCommitted + Math.min(workTotalThisMdu, workInMdu);
+                    const partialUserBytes = Math.min(rawChunk.byteLength, (done / PLANNER_BLOBS_PER_MDU) * rawChunk.byteLength);
+                    const userBytesDone = Math.min(prev.fileBytesTotal, userBytesCommitted + partialUserBytes);
                     return {
                       ...prev,
                       blobsInCurrentMdu: done,
                       blobsDone,
+                      mdusDone: overallMdusCommitted(),
+                      userBytesDone,
                       workDone,
                       avgWorkMs:
                         prev.startTsMs && workDone > 0 ? (performance.now() - prev.startTsMs) / workDone : prev.avgWorkMs,
@@ -3118,16 +3207,19 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 ...perfSample,
               });
               prevCommitMsPerMdu = opMs;
-              mdusCommitted += 1;
+              userMdusCommitted += 1;
+              userBytesCommitted += rawChunk.byteLength;
               workCommitted += workTotalThisMdu;
               setShardProgress((p) => {
-                const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU;
+                const blobsDone = overallBlobsCommitted();
                 const avg =
                   p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
                 return {
                   ...p,
                   blobsDone,
                   blobsInCurrentMdu: 0,
+                  mdusDone: overallMdusCommitted(),
+                  userBytesDone: Math.min(p.fileBytesTotal, userBytesCommitted),
                   currentOpStartedAtMs: null,
                   lastOpMs: opMs,
                   workDone: workCommitted,
@@ -3176,7 +3268,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               currentMduKind: 'witness',
               currentMduIndex: i,
               blobsInCurrentMdu: 0,
-              blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+              blobsDone: overallBlobsCommitted(),
+              mdusDone: overallMdusCommitted(),
+              userBytesDone: userBytesCommitted,
               workDone: workCommitted,
             }));
             setShards((prev) => prev.map((s) => (s.id === 1 + i ? { ...s, status: 'processing' } : s)));
@@ -3254,16 +3348,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ...perfSample,
             });
             prevCommitMsPerMdu = opMs;
-            mdusCommitted += 1;
+            witnessMdusCommitted += 1;
             workCommitted += workTotalThisMdu;
             setShardProgress((p) => {
-              const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU;
+              const blobsDone = overallBlobsCommitted();
               const avg =
                 p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
               return {
                 ...p,
                 blobsDone,
                 blobsInCurrentMdu: 0,
+                mdusDone: overallMdusCommitted(),
+                userBytesDone: Math.min(p.fileBytesTotal, userBytesCommitted),
                 currentOpStartedAtMs: null,
                 lastOpMs: opMs,
                 workDone: workCommitted,
@@ -3300,7 +3396,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           currentMduKind: 'meta',
           currentMduIndex: 0,
           blobsInCurrentMdu: 0,
-          blobsDone: mdusCommitted * PLANNER_BLOBS_PER_MDU,
+          blobsDone: overallBlobsCommitted(),
+          mdusDone: overallMdusCommitted(),
+          userBytesDone: userBytesCommitted,
           workDone: workCommitted,
         }));
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'processing' } : s)));
@@ -3377,16 +3475,18 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           ...metaPerfSample,
         });
         prevCommitMsPerMdu = opMs;
-        mdusCommitted += 1;
+        metaMdusCommitted += 1;
         workCommitted += workTotalThisMdu0;
         setShardProgress((p) => {
-          const blobsDone = mdusCommitted * PLANNER_BLOBS_PER_MDU;
+          const blobsDone = overallBlobsCommitted();
           const avg =
             p.startTsMs && workCommitted > 0 ? (performance.now() - p.startTsMs) / workCommitted : p.avgWorkMs;
           return {
             ...p,
             blobsDone,
             blobsInCurrentMdu: 0,
+            mdusDone: overallMdusCommitted(),
+            userBytesDone: Math.min(p.fileBytesTotal, userBytesCommitted),
             currentOpStartedAtMs: null,
             lastOpMs: opMs,
             workDone: workCommitted,
@@ -3445,6 +3545,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           currentMduKind: null,
           blobsDone: p.blobsTotal,
           blobsInCurrentMdu: 0,
+          mdusDone: p.totalMdus,
+          userBytesDone: p.fileBytesTotal,
         }));
 
         addLog(`> Manifest Root: ${finalRootHex.slice(0, 16)}...`);
@@ -3769,12 +3871,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     !isUploadComplete &&
     (collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0));
   const readyToCommit = hasManifestRoot && isUploadComplete && !isAlreadyCommitted;
-  const hasError = shardProgress.phase === 'error' || Boolean(mode2UploadError) || Boolean(commitError);
-  const currentFileMeta = lastFileMetaRef.current
+  const commitRejectedByUser = isWalletUserRejected(commitError)
+  const commitDisplayError = commitError && !commitRejectedByUser ? commitError : null
   const uploadErrorMessage =
     mode2UploadError ||
     uploadProgress.find((entry) => entry.status === 'error')?.error ||
     null
+  const expansionError = shardProgress.phase === 'error'
+  const uploadError = Boolean(uploadErrorMessage)
+  const hasError = expansionError || uploadError || Boolean(commitDisplayError);
+  const currentFileMeta = lastFileMetaRef.current
   const showStatusPanel =
     processing ||
     activeUploading ||
@@ -3902,9 +4008,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       shardProgress.phase !== 'done' &&
       shardProgress.phase !== 'error'
 
-    const selectState: WorkflowStepState = hasError && !selected ? 'error' : selected ? 'done' : 'active'
+    const selectState: WorkflowStepState = expansionError && !selected ? 'error' : selected ? 'done' : 'active'
     const expandState: WorkflowStepState =
-      hasError && (processing || hasManifestRoot)
+      expansionError && (processing || hasManifestRoot)
         ? 'error'
         : gatewayMode2Flow
           ? expandActiveInGatewayMode
@@ -3918,7 +4024,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ? 'done'
               : 'idle'
     const uploadState: WorkflowStepState =
-      uploadErrorMessage
+      uploadError
         ? 'error'
         : activeUploading || shardProgress.phase === 'gateway_uploading'
           ? 'active'
@@ -3928,13 +4034,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               ? 'active'
               : 'idle'
     const commitState: WorkflowStepState =
-      commitError ? 'error' : isAlreadyCommitted ? 'done' : isCommitPending || isCommitConfirming ? 'active' : readyToCommit ? 'active' : 'idle'
+      commitDisplayError ? 'error' : isAlreadyCommitted ? 'done' : isCommitPending || isCommitConfirming ? 'active' : readyToCommit ? 'active' : 'idle'
 
     return [
       stepState(
         selectState,
         '1. Select file',
-        currentFileMeta ? `${currentFileMeta.filePath} • ${formatBytes(currentFileMeta.fileSizeBytes)}` : 'Choose a file for this deal',
+        currentFileMeta ? `${currentFileMeta.filePath} • ${formatBytes(currentFileMeta.fileSizeBytes)}` : '',
       ),
       stepState(
         expandState,
@@ -3973,6 +4079,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           ? 'Committed on-chain'
           : isCommitPending || isCommitConfirming
             ? 'Waiting for wallet / chain confirmation'
+            : commitRejectedByUser
+              ? 'Wallet request canceled. Click commit to retry.'
             : readyToCommit
               ? 'Ready for final on-chain commit'
               : 'Commit becomes available after upload',
@@ -3980,11 +4088,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     ]
   }, [
     activeUploading,
-    commitError,
+    commitDisplayError,
+    commitRejectedByUser,
     currentFileMeta,
+    expansionError,
     gatewayMode2Enabled,
     gatewayReachable,
-    hasError,
     hasManifestRoot,
     isAlreadyCommitted,
     isCommitConfirming,
@@ -3996,8 +4105,157 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     shardProgress.label,
     shardProgress.phase,
     shards.length,
+    uploadError,
     uploadErrorMessage,
   ])
+
+  const selectedFileDisplayName = useMemo(() => {
+    const raw = String(currentFileMeta?.filePath || '').trim()
+    if (!raw) return ''
+    const normalized = raw.replace(/\\/g, '/')
+    const parts = normalized.split('/')
+    return parts[parts.length - 1] || raw
+  }, [currentFileMeta])
+
+  const uploadArtifactsDone = useMemo(
+    () => uploadProgress.filter((entry) => entry.status === 'complete').length,
+    [uploadProgress],
+  )
+
+  const workflowPreparedCounts = useMemo(() => {
+    const totalPreparedMdus = shardProgress.totalMdus > 0 ? shardProgress.totalMdus : shards.length
+    const userMdus = Math.max(0, shardProgress.totalUserMdus)
+    const witnessMdus = Math.max(0, shardProgress.totalWitnessMdus)
+    const mdu0Count = Math.max(0, totalPreparedMdus - userMdus - witnessMdus)
+    return { totalPreparedMdus, userMdus, witnessMdus, mdu0Count }
+  }, [shardProgress.totalMdus, shardProgress.totalUserMdus, shardProgress.totalWitnessMdus, shards.length])
+
+  const workflowRsSlotCount = useMemo(() => {
+    if (stripeParams && stripeParams.k > 0 && stripeParams.m >= 0) {
+      return Math.max(1, stripeParams.k + stripeParams.m)
+    }
+    if (slotBases.length > 0) return slotBases.length
+    if (slotProviders.length > 0) return slotProviders.length
+    return 1
+  }, [slotBases.length, slotProviders.length, stripeParams])
+
+  const workflowDoneSummaries = useMemo<Record<number, WorkflowDoneSummary | null>>(() => {
+    const summaries: Record<number, WorkflowDoneSummary | null> = {
+      0: null,
+      1: null,
+      2: null,
+      3: null,
+    }
+
+    if (currentFileMeta) {
+      const fullPath = String(currentFileMeta.filePath || '').trim()
+      summaries[0] = {
+        headline: selectedFileDisplayName || fullPath,
+        secondary: fullPath && fullPath !== selectedFileDisplayName ? fullPath : undefined,
+        chips: [
+          { label: 'size', value: formatBytes(currentFileMeta.fileSizeBytes), tone: 'neutral' },
+        ],
+      }
+    }
+
+    const { totalPreparedMdus, userMdus, witnessMdus, mdu0Count } = workflowPreparedCounts
+    if (hasManifestRoot && totalPreparedMdus > 0) {
+      const metadataMdus = Math.max(0, mdu0Count + witnessMdus)
+      const perSpArtifacts = Math.max(0, metadataMdus + userMdus + 1) // + manifest upload
+      summaries[1] = {
+        headline: isMode2 ? `${String(totalPreparedMdus)} Slab MDUs Prepared` : `${String(totalPreparedMdus)} MDUs Prepared`,
+        secondary:
+          isMode2 && stripeParams
+            ? `Erasure Code RS(${String(stripeParams.k)},${String(stripeParams.m)})`
+            : undefined,
+        chips: isMode2
+          ? [
+              { label: 'Providers', value: String(workflowRsSlotCount), tone: 'neutral' },
+              { label: 'Artifacts Per Provider', value: String(perSpArtifacts), tone: 'primary' },
+            ]
+          : [],
+        details: isMode2
+          ? [`Composition: ${String(metadataMdus)} Metadata MDUs + ${String(userMdus)} User MDUs + 1 Manifest`]
+          : undefined,
+      }
+    }
+
+    if (isUploadComplete || readyToCommit || isAlreadyCommitted || isCommitPending || isCommitConfirming) {
+      const { totalPreparedMdus, userMdus, witnessMdus, mdu0Count } = workflowPreparedCounts
+      const metadataMdus = Math.max(0, mdu0Count + witnessMdus)
+      const perSpArtifacts = Math.max(0, metadataMdus + userMdus + 1) // + manifest upload
+      const totalSpUploads = perSpArtifacts * workflowRsSlotCount
+      const uploadedArtifactsLabel = isMode2
+        ? `${String(totalSpUploads)} uploads`
+        : uploadProgress.length > 0
+          ? `${String(uploadArtifactsDone)} / ${String(uploadProgress.length)} artifacts`
+          : totalPreparedMdus > 0
+            ? `${String(totalPreparedMdus)} MDUs uploaded`
+            : 'Upload finished'
+      const mirrorLabel =
+        mirrorStatus === 'success'
+          ? 'Mirrored'
+          : mirrorStatus === 'skipped'
+            ? 'Mirror Skipped'
+            : mirrorStatus === 'error'
+              ? 'Mirror Failed'
+              : null
+      summaries[2] = {
+        headline: isMode2
+          ? `Uploaded To ${String(workflowRsSlotCount)} Storage Provider${workflowRsSlotCount === 1 ? '' : 's'}`
+          : 'Provider upload complete',
+        secondary: isMode2
+          ? `Accounting: ${String(perSpArtifacts)} Artifacts Per Provider × ${String(workflowRsSlotCount)} Providers = ${String(totalSpUploads)} Total Uploads`
+          : undefined,
+        details: mirrorLabel ? [`Gateway Mirror: ${mirrorLabel}`] : undefined,
+        chips: isMode2
+          ? [{ label: 'Total Uploads', value: String(totalSpUploads), tone: 'success' }]
+          : [{ label: 'artifacts', value: uploadedArtifactsLabel, tone: 'success' }],
+      }
+    }
+
+    if (isAlreadyCommitted || Boolean(commitHash)) {
+      const shortHash =
+        commitHash && commitHash.length > 20
+          ? `${commitHash.slice(0, 10)}…${commitHash.slice(-6)}`
+          : commitHash || 'ready'
+      summaries[3] = {
+        headline: isAlreadyCommitted ? 'Committed on-chain' : 'Commit prepared',
+        chips: [{ label: 'tx', value: shortHash, tone: isAlreadyCommitted ? 'success' : 'neutral' }],
+      }
+    }
+
+    return summaries
+  }, [
+    commitHash,
+    currentFileMeta,
+    hasManifestRoot,
+    isAlreadyCommitted,
+    isCommitConfirming,
+    isCommitPending,
+    isUploadComplete,
+    isMode2,
+    mirrorStatus,
+    readyToCommit,
+    selectedFileDisplayName,
+    stripeParams,
+    uploadArtifactsDone,
+    uploadProgress.length,
+    workflowPreparedCounts,
+    workflowRsSlotCount,
+  ])
+
+  const activeWorkflowStepIndex = useMemo(() => {
+    const errorIdx = workflowSteps.findIndex((step) => step.state === 'error')
+    if (errorIdx >= 0) return errorIdx
+    const activeIdx = workflowSteps.findIndex((step) => step.state === 'active')
+    if (activeIdx >= 0) return activeIdx
+    let doneIdx = -1
+    for (let i = 0; i < workflowSteps.length; i++) {
+      if (workflowSteps[i].state === 'done') doneIdx = i
+    }
+    return doneIdx >= 0 ? doneIdx : 0
+  }, [workflowSteps])
 
   const stepToneClasses: Record<WorkflowStepState, string> = {
     idle: 'border-border/50 bg-background/35 text-muted-foreground',
@@ -4005,32 +4263,71 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     done: 'border-success/40 bg-success/10 text-foreground',
     error: 'border-destructive/40 bg-destructive/10 text-destructive',
   }
+  const doneSummaryChipToneClasses: Record<WorkflowDoneSummaryTone, string> = {
+    neutral: 'border-border/70 bg-background/50 text-muted-foreground',
+    primary: 'border-border/70 bg-background/50 text-muted-foreground',
+    success: 'border-border/70 bg-background/50 text-muted-foreground',
+  }
+  const hasActiveWorkflowStep = useMemo(
+    () => workflowSteps.some((step) => step.state === 'active'),
+    [workflowSteps],
+  )
+  useEffect(() => {
+    const dealKey = String(dealId || '').trim()
+    if (!dealKey) return
+    onWorkflowActiveChange?.(dealKey, hasActiveWorkflowStep)
+  }, [dealId, hasActiveWorkflowStep, onWorkflowActiveChange])
   const showRetryUpload =
     !isUploadComplete &&
     !activeUploading &&
     !processing &&
-    (hasError || readyToUpload)
-  const showUnderTheHood =
-    processing ||
-    activeUploading ||
-    readyToCommit ||
-    isCommitPending ||
-    isCommitConfirming ||
-    hasError ||
-    logs.length > 0
+    (expansionError || uploadError || readyToUpload)
 
-  useEffect(() => {
-    const node = logContainerRef.current;
-    if (!node) return;
-    node.scrollTop = node.scrollHeight;
-  }, [logs.length, processing, activeUploading, readyToCommit, isCommitPending, isCommitConfirming, isAlreadyCommitted, hasError]);
+  const slabRoleForShard = useCallback((shard: ShardItem): 'meta' | 'witness' | 'user' => {
+    if (shard.id === 0) return 'meta'
+    if (shard.id <= shardProgress.totalWitnessMdus) return 'witness'
+    return 'user'
+  }, [shardProgress.totalWitnessMdus])
 
-  useEffect(() => {
-    if (hasError) {
-      setShowSystemActivity(true)
+  const slabStateForShard = useCallback((shard: ShardItem): 'complete' | 'processing' | 'empty' | 'error' | 'pending_witness' => {
+    if (shard.status === 'expanded') return 'complete'
+    if (shard.status === 'processing') return 'processing'
+    if (shard.status === 'error') return 'error'
+    if (slabRoleForShard(shard) === 'witness') return 'pending_witness'
+    return 'empty'
+  }, [slabRoleForShard])
+
+  const slabLegendCounts = useMemo(() => {
+    const counts: Record<'complete' | 'processing' | 'empty' | 'error' | 'pending_witness', number> = {
+      complete: 0,
+      processing: 0,
+      empty: 0,
+      error: 0,
+      pending_witness: 0,
     }
-  }, [hasError])
+    for (const shard of shards) {
+      counts[slabStateForShard(shard)] += 1
+    }
+    return counts
+  }, [shards, slabStateForShard])
 
+  const slabRoleSummary = useMemo(() => {
+    const summary: Record<'meta' | 'witness' | 'user', { total: number; complete: number; processing: number; pending: number; error: number }> = {
+      meta: { total: 0, complete: 0, processing: 0, pending: 0, error: 0 },
+      witness: { total: 0, complete: 0, processing: 0, pending: 0, error: 0 },
+      user: { total: 0, complete: 0, processing: 0, pending: 0, error: 0 },
+    }
+    for (const shard of shards) {
+      const role = slabRoleForShard(shard)
+      const state = slabStateForShard(shard)
+      summary[role].total += 1
+      if (state === 'complete') summary[role].complete += 1
+      if (state === 'processing') summary[role].processing += 1
+      if (state === 'error') summary[role].error += 1
+      if (state === 'empty' || state === 'pending_witness') summary[role].pending += 1
+    }
+    return summary
+  }, [shards, slabRoleForShard, slabStateForShard])
   const triggerPreparedCommit = useCallback(
     async (trigger: 'auto' | 'manual' = 'manual') => {
       if (!readyToCommit || !currentManifestRoot) return false
@@ -4169,110 +4466,13 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                 Retry setup
               </button>
             </div>
-          ) : uploadPanelState === 'idle' ? (
-            <div
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              data-testid="mdu-upload-card"
-              data-panel-state="idle"
-              className={`
-                nil-tab-panel p-6 transition-colors duration-200
-                ${isDragging
-                  ? 'border-primary/50 bg-primary/10'
-                  : 'hover:border-primary/30 hover:bg-secondary/40'
-                }
-              `}
-            >
-              <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-4">
-                  <div className="nil-inset shrink-0 flex h-12 w-12 items-center justify-center">
-                    <Cpu className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-lg font-bold text-foreground">Upload file</div>
-                    <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      Choose a file to add to this deal. Progress appears below.
-                    </div>
-                    <div className={`mt-3 text-[10px] font-mono-data uppercase tracking-[0.2em] ${sharderSummaryToneClass}`}>
-                      {wasmStatus === 'initializing' ? (
-                        <span className="animate-pulse">{sharderSummary}</span>
-                      ) : (
-                        sharderSummary
-                      )}
-                    </div>
-                    <label className="mt-4 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
-                      <div className={`flex h-4 w-4 items-center justify-center border transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
-                        {compressUploads && <div className="h-1.5 w-1.5 bg-primary-foreground" />}
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="hidden"
-                        checked={compressUploads}
-                        disabled={processing || activeUploading}
-                        onChange={(e) => setCompressUploads(e.target.checked)}
-                      />
-                      <span>Compress before upload</span>
-                    </label>
-                  </div>
-                </div>
-                <label className="cta-shadow inline-flex w-full cursor-pointer items-center justify-center border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] sm:w-auto">
-                  Upload file
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-                </label>
-              </div>
-            </div>
-          ) : uploadPanelState === 'success' ? (
-            <div
-              className="relative overflow-hidden glass-panel industrial-border p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]"
-              data-testid="mdu-upload-card"
-              data-panel-state="success"
-            >
-              <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
-              <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-4">
-                  <div className="nil-inset shrink-0 flex h-12 w-12 items-center justify-center">
-                    <CheckCircle2 className="h-5 w-5 text-success" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-lg font-bold text-foreground">Upload complete</div>
-                    <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      {currentFileMeta
-                        ? `${currentFileMeta.filePath} is committed. Choose another file to append to this deal.`
-                        : 'Your file is committed. Choose another file to append to this deal.'}
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
-                      <div
-                        data-testid="mdu-upload-state"
-                        className="nil-tab-panel border-success/30 bg-success/10 px-3 py-2 font-bold text-success"
-                      >
-                        Upload Complete
-                      </div>
-                      <div
-                        data-testid="mdu-commit"
-                        className="nil-tab-panel border-success/30 bg-success/10 px-3 py-2 font-bold text-success"
-                      >
-                        Committed!
-                      </div>
-                    </div>
-                    {commitHash ? (
-                      <div className="mt-3 text-[10px] font-mono-data text-muted-foreground truncate uppercase tracking-[0.2em]">
-                        Tx: {commitHash}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                <label className="inline-flex w-full cursor-pointer items-center justify-center border border-border bg-background px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40 sm:w-auto">
-                  Upload file
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-                </label>
-              </div>
-            </div>
-          ) : null}
-          {uploadPanelState === 'running' || uploadPanelState === 'error' ? (
+          ) : (
         <div
-          className="relative overflow-hidden glass-panel industrial-border p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] text-sm"
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+          className={`relative glass-panel industrial-border p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)] text-sm ${isDragging ? 'border-primary/50 bg-primary/5' : ''}`}
           data-testid="mdu-upload-card"
           data-panel-state={uploadPanelState}
           data-upload-phase={uploadPhase}
@@ -4284,402 +4484,484 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
 
           <div className="relative flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="nil-section-label mb-2">/proc/sharder</p>
-              <div className="text-sm font-semibold text-foreground">
-                {processing
-                  ? 'Preparing upload'
-                  : activeUploading
-                    ? 'Uploading to providers'
-                    : isCommitPending || isCommitConfirming
-                      ? 'Committing to chain'
-                      : hasError
-                        ? 'Upload needs attention'
-                        : 'Upload in progress'}
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {currentFileMeta
-                  ? `${currentFileMeta.filePath} • ${formatBytes(currentFileMeta.fileSizeBytes)}`
-                  : 'Processing the selected file for this deal.'}
-              </div>
+              <p className="nil-section-label mb-2">/DEAL/Upload</p>
             </div>
-            <label className="inline-flex shrink-0 cursor-pointer items-center justify-center border border-border bg-background px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40">
-              Upload file
-              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-            </label>
           </div>
-          <div className="relative space-y-2">
-            <div className="grid gap-2 md:grid-cols-4">
-              {workflowSteps.map((step) => (
-                <div
-                  key={step.title}
-                  className={`nil-tab-panel px-3 py-3 ${stepToneClasses[step.state]}`}
-                >
-                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
-                    {step.state === 'done' ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-                    ) : step.state === 'active' ? (
-                      <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
-                    ) : step.state === 'error' ? (
-                      <UploadCloud className="h-3.5 w-3.5" />
-                    ) : (
-                      <span className="inline-block h-3.5 w-3.5 border border-current/50" />
-                    )}
-                    <span>{step.title}</span>
+          <div className="relative space-y-3">
+            <div className="space-y-2.5">
+              {workflowSteps.map((step, index) => {
+                const expanded = step.state === 'error' || index === activeWorkflowStepIndex
+                const doneSummary = step.state === 'done' && !expanded ? workflowDoneSummaries[index] : null
+                return (
+                  <div
+                    key={step.title}
+                    data-testid={`workflow-step-${index + 1}`}
+                    data-step-state={step.state}
+                    className={`nil-tab-panel px-4 py-3 ${stepToneClasses[step.state]} ${
+                      step.state === 'done' || step.state === 'active' ? 'glass-panel industrial-border' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data">
+                        {step.state === 'done' ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                        ) : step.state === 'active' && index === 0 ? (
+                          <UploadCloud className="h-3.5 w-3.5 text-primary" />
+                        ) : step.state === 'active' ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />
+                        ) : step.state === 'error' ? (
+                          <UploadCloud className="h-3.5 w-3.5" />
+                        ) : (
+                          <span className="inline-block h-3.5 w-3.5 border border-current/50" />
+                        )}
+                        <span>{step.title}</span>
+                      </div>
+                      {step.state === 'active' ? null : (
+                        <div className="text-[9px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+                          {step.state === 'done' ? 'Done' : step.state === 'error' ? 'Error' : 'Pending'}
+                        </div>
+                      )}
+                    </div>
+                    {doneSummary ? (
+                      <div className="mt-2.5 space-y-2">
+                        <div className="truncate text-[13px] font-semibold leading-tight text-foreground">
+                          {doneSummary.headline}
+                        </div>
+                        {doneSummary.secondary ? (
+                          <div className="text-[10px] font-mono-data text-muted-foreground leading-relaxed">
+                            {doneSummary.secondary}
+                          </div>
+                        ) : null}
+                        {doneSummary.details && doneSummary.details.length > 0 ? (
+                          <div className="space-y-1">
+                            {doneSummary.details.map((line, lineIndex) => (
+                              <div
+                                key={`${line}-${lineIndex}`}
+                                className="text-[10px] font-mono-data text-muted-foreground leading-relaxed"
+                              >
+                                {line}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {doneSummary.chips.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {doneSummary.chips.map((chip, chipIndex) => {
+                              const tone = chip.tone || 'neutral'
+                              return (
+                                <span
+                                  key={`${chip.label}-${chip.value}-${chipIndex}`}
+                                  className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-mono-data tracking-[0.14em] ${doneSummaryChipToneClasses[tone]}`}
+                                >
+                                  <span className="uppercase opacity-90">{chip.label}:</span>
+                                  <span className="uppercase opacity-90">{chip.value}</span>
+                                </span>
+                              )
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {expanded ? (
+                      <div className="mt-3 space-y-2.5">
+                        {step.detail ? (
+                          <div className="text-[11px] font-mono-data leading-relaxed">{step.detail}</div>
+                        ) : null}
+
+                        {index === 0 ? (
+                          <div className={`nil-tab-panel p-4 ${isDragging ? 'border-primary/50 bg-primary/10' : ''}`}>
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <div className={`text-[10px] font-mono-data uppercase tracking-[0.2em] ${sharderSummaryToneClass}`}>
+                                  {wasmStatus === 'initializing' ? (
+                                    <span className="animate-pulse">{sharderSummary}</span>
+                                  ) : (
+                                    sharderSummary
+                                  )}
+                                </div>
+                              </div>
+                              <label className="cta-shadow inline-flex cursor-pointer items-center justify-center border border-primary bg-primary px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]">
+                                Select file
+                                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
+                              </label>
+                            </div>
+                            <label className="mt-3 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
+                              <div className={`flex h-4 w-4 items-center justify-center border transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
+                                {compressUploads && <div className="h-1.5 w-1.5 bg-primary-foreground" />}
+                              </div>
+                              <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={compressUploads}
+                                disabled={processing || activeUploading}
+                                onChange={(e) => setCompressUploads(e.target.checked)}
+                              />
+                              <span>Compress before upload</span>
+                            </label>
+                          </div>
+                        ) : null}
+
+                        {index === 1 && processing ? (
+                          <div className="space-y-2" data-testid="wasm-sharding-progress">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
+                                  {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
+                                    ? 'Gateway ingest'
+                                    : 'WASM Sharding'}
+                                </span>
+                                <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">•</span>
+                                <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+                                  {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
+                                    ? shardProgress.label
+                                    : shardingUi.phaseDetails || 'Working...'}
+                                </span>
+                              </p>
+                              <div className="text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em] whitespace-nowrap">
+                                {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2') ? (
+                                  shardProgress.phase === 'gateway_receiving' && shardProgress.workTotal > 0 ? (
+                                    `${formatBytes(shardProgress.workDone)} / ${formatBytes(shardProgress.workTotal)}`
+                                  ) : shardProgress.workTotal > 0 ? (
+                                    `${shardProgress.workDone}/${shardProgress.workTotal} steps`
+                                  ) : (
+                                    '—'
+                                  )
+                                ) : (
+                                  shardProgress.totalMdus > 0 ? `${shardProgress.mdusDone}/${shardProgress.totalMdus} MDUs` : '—'
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="h-2 w-full overflow-hidden border border-border/60 bg-background/40">
+                              <div
+                                className="h-full bg-primary transition-[width] duration-300 ease-out dark:shadow-[0_0_18px_hsl(var(--primary)_/_0.25)]"
+                                style={{ width: `${(shardingUi.overallPct * 100).toFixed(1)}%` }}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground sm:grid-cols-4">
+                              <div className="nil-tab-inset px-2 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Elapsed</div>
+                                <div className="mt-1 text-foreground font-mono-data">{formatDuration(shardingUi.elapsedMs)}</div>
+                              </div>
+                              <div className="nil-tab-inset px-2 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">ETA</div>
+                                <div className="mt-1 text-foreground font-mono-data">
+                                  {shardingUi.etaMs == null ? '—' : formatDuration(shardingUi.etaMs)}
+                                </div>
+                              </div>
+                              <div className="nil-tab-inset px-2 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Throughput</div>
+                                <div className="mt-1 text-foreground font-mono-data">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
+                              </div>
+                              <div className="nil-tab-inset px-2 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Op Time</div>
+                                <div className="mt-1 text-foreground font-mono-data">
+                                  {shardProgress.currentOpStartedAtMs
+                                    ? formatDuration(shardingUi.currentOpMs)
+                                    : shardProgress.lastOpMs != null
+                                      ? formatDuration(shardProgress.lastOpMs)
+                                      : '—'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {index === 1 && shards.length > 0 ? (
+                          <div className="nil-tab-panel mt-1 p-3" data-testid="mdu-slab-map-step">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
+                                  /mnt/slab_map
+                                </div>
+                                <h3 className="mt-1 text-sm font-semibold flex items-center gap-2 text-foreground">
+                                  <FileJson className="w-4 h-4 text-primary" />
+                                  Slab Map
+                                </h3>
+                                <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
+                                  8&nbsp;MiB MDU = 64 × 128&nbsp;KiB blobs.{" "}
+                                  <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
+                                    MDU primer
+                                  </Link>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSlabViewMode('summary')}
+                                  className={`border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${slabViewMode === 'summary' ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground'}`}
+                                >
+                                  Summary
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSlabViewMode('detail')}
+                                  className={`border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${slabViewMode === 'detail' ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground'}`}
+                                >
+                                  Detail
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mb-3 flex flex-wrap items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.18em] text-muted-foreground">
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.complete} complete
+                              </span>
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.processing} processing
+                              </span>
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.pending_witness} pending witness
+                              </span>
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.empty} empty
+                              </span>
+                              <span className="nil-tab-inset px-2 py-1">
+                                {slabLegendCounts.error} error
+                              </span>
+                              <div className="ml-auto text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
+                                {shards.filter((s) => s.status === 'expanded').length} / {shards.length} MDUs Expanded
+                              </div>
+                            </div>
+
+                            {slabViewMode === 'summary' ? (
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                {(['meta', 'witness', 'user'] as const).map((role) => {
+                                  const row = slabRoleSummary[role]
+                                  return (
+                                    <div key={role} className="nil-tab-panel p-3 text-[10px] font-mono-data uppercase tracking-[0.18em]">
+                                      <div className="font-bold text-foreground">
+                                        {role === 'meta' ? 'Meta MDU' : role === 'witness' ? 'Witness MDUs' : 'User MDUs'}
+                                      </div>
+                                      <div className="mt-2 text-muted-foreground">
+                                        Total: <span className="text-foreground">{row.total}</span>
+                                      </div>
+                                      <div className="mt-1 text-success">
+                                        Complete: <span className="text-foreground">{row.complete}</span>
+                                      </div>
+                                      <div className="mt-1 text-primary">
+                                        Processing: <span className="text-foreground">{row.processing}</span>
+                                      </div>
+                                      <div className="mt-1 text-muted-foreground">
+                                        Pending: <span className="text-foreground">{row.pending}</span>
+                                      </div>
+                                      <div className="mt-1 text-destructive">
+                                        Error: <span className="text-foreground">{row.error}</span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <div className="relative grid max-h-[420px] grid-cols-[repeat(auto-fit,minmax(172px,1fr))] gap-3 overflow-y-auto pr-2">
+                                {shards.map((shard) => {
+                                  const role = slabRoleForShard(shard)
+                                  const stateKey = slabStateForShard(shard)
+                                  const state = stateKey === 'pending_witness' ? 'PENDING WITNESS' : stateKey.toUpperCase()
+                                  const stateClass =
+                                    stateKey === 'complete'
+                                      ? 'text-success'
+                                      : stateKey === 'processing'
+                                        ? 'text-primary'
+                                        : stateKey === 'error'
+                                          ? 'text-destructive'
+                                          : stateKey === 'pending_witness'
+                                            ? 'text-primary'
+                                            : 'text-muted-foreground'
+                                  const cellClass =
+                                    stateKey === 'complete'
+                                      ? 'bg-success'
+                                      : stateKey === 'processing'
+                                        ? 'bg-primary/20 animate-pulse'
+                                        : stateKey === 'error'
+                                          ? 'bg-destructive/30'
+                                          : stateKey === 'pending_witness'
+                                            ? 'bg-primary/10'
+                                            : 'bg-background/50'
+                                  const ringClass =
+                                    stateKey === 'complete'
+                                      ? 'ring-1 ring-success/30'
+                                      : stateKey === 'processing'
+                                        ? 'ring-1 ring-primary/30'
+                                        : stateKey === 'error'
+                                          ? 'ring-1 ring-destructive/30'
+                                          : stateKey === 'pending_witness'
+                                            ? 'ring-1 ring-primary/20'
+                                            : 'ring-1 ring-border/30'
+
+                                  return (
+                                    <div
+                                      key={shard.id}
+                                      className={`relative min-h-[168px] overflow-hidden glass-panel industrial-border p-3 ${ringClass}`}
+                                      title={shard.commitments[0] || 'Pending...'}
+                                    >
+                                      {stateKey === 'processing' ? (
+                                        <div className="absolute inset-0 pointer-events-none bg-primary/5 opacity-10" />
+                                      ) : null}
+
+                                      <div className="relative flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+                                        <span>MDU {shard.id}</span>
+                                        <span className={stateClass}>{state}</span>
+                                      </div>
+
+                                      <div className="relative mt-3 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
+                                        {Array.from({ length: 64 }).map((_, i) => (
+                                          <div key={i} className={`aspect-square ${cellClass}`} />
+                                        ))}
+                                      </div>
+
+                                      <div className="relative mt-3 truncate text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+                                        {role === 'meta' ? 'Meta MDU' : role === 'witness' ? 'Witness MDU' : 'User MDU'}
+                                      </div>
+
+                                      <div className="relative mt-1 truncate text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground">
+                                        {stateKey === 'complete'
+                                          ? `ROOT ${shard.commitments[0]?.slice(0, 8) ?? '—'}…`
+                                          : stateKey === 'processing'
+                                            ? 'EXPANDING...'
+                                            : stateKey === 'pending_witness'
+                                              ? 'WAITING FOR USER ROOTS'
+                                              : stateKey === 'error'
+                                                ? 'RETRY REQUIRED'
+                                                : 'PENDING'}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+
+                        {index === 2 ? (
+                          <div className="space-y-2">
+                            {activeUploading ? (
+                              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
+                                <FileJson className="w-4 h-4 animate-pulse text-primary" />
+                                {isMode2 ? 'Uploading Mode 2 shards to Storage Providers...' : 'Uploading MDUs directly to Storage Provider...'}
+                              </p>
+                            ) : null}
+
+                            {readyToUpload && !processing && !activeUploading ? (
+                              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
+                                Expansion complete. Upload starts automatically; use retry only if the provider step fails.
+                              </div>
+                            ) : null}
+
+                            {showRetryUpload ? (
+                              <button
+                                onClick={() => {
+                                  void retryPreparedUpload()
+                                }}
+                                data-testid="mdu-upload"
+                                className="cta-shadow mt-1 inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                              >
+                                Retry Upload
+                              </button>
+                            ) : isUploadComplete ? (
+                              <div
+                                data-testid="mdu-upload-state"
+                                className="nil-tab-panel mt-1 border-success/30 bg-success/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-success"
+                              >
+                                Upload Complete
+                              </div>
+                            ) : null}
+
+                            {!isMode2 && (activeUploading || isUploadComplete) && uploadProgress.length > 0 ? (
+                              <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
+                                <p className="mb-1 text-primary font-bold uppercase tracking-[0.2em]">Upload Progress</p>
+                                <div className="space-y-1 max-h-24 overflow-y-auto">
+                                  {uploadProgress.map((p, i) => (
+                                    <div key={i} className="flex justify-between items-center">
+                                      <span>{p.label}:</span>
+                                      <span className={`font-bold ${p.status === 'complete' ? 'text-success' : p.status === 'error' ? 'text-destructive' : 'text-primary'}`}>
+                                        {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {isMode2 && mode2UploadError ? (
+                              <div className="nil-tab-panel text-[11px] font-mono-data text-destructive border-destructive/30 bg-destructive/5">
+                                Mode 2 upload failed: {mode2UploadError}
+                              </div>
+                            ) : null}
+
+                            {mirrorStatus !== 'idle' ? (
+                              <div
+                                className={`nil-tab-panel text-[11px] font-mono-data ${mirrorStatus === 'error' ? 'text-destructive border-destructive/30 bg-destructive/5' : 'text-muted-foreground'}`}
+                              >
+                                Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
+                                {mirrorError ? ` (${mirrorError})` : ''}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {index === 3 ? (
+                          <div className="space-y-2">
+                            {readyToCommit && !processing && !activeUploading ? (
+                              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
+                                Upload complete. Commit starts automatically; retry only if the wallet or chain step fails.
+                              </div>
+                            ) : null}
+
+                            {(isCommitPending || isCommitConfirming) ? (
+                              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
+                                <FileJson className="w-4 h-4 animate-pulse text-primary" /> Committing manifest root to chain...
+                              </p>
+                            ) : null}
+
+                            {readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted ? (
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  onClick={() => {
+                                    void triggerPreparedCommit('manual')
+                                  }}
+                                  disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
+                                  data-testid="mdu-commit"
+                                  className="cta-shadow inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
+                                >
+                                  {isCommitPending
+                                    ? 'Check Wallet...'
+                                    : isCommitConfirming
+                                      ? 'Confirming...'
+                                      : isAlreadyCommitted
+                                        ? 'Committed!'
+                                        : 'Commit to Chain'}
+                                </button>
+
+                                {commitHash ? (
+                                  <div className="text-[10px] font-mono-data text-muted-foreground truncate uppercase tracking-[0.2em]">
+                                    Tx: {commitHash}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="mt-2 text-[11px] font-mono-data leading-relaxed">
-                    {step.detail}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {hasError ? (
               <div className="nil-tab-panel border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">
-                {commitError ? `Commit failed: ${commitError.message}` : null}
-                {commitError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
+                {commitDisplayError ? `Commit failed: ${commitDisplayError.message}` : null}
+                {commitDisplayError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
                 {mode2UploadError ? `Upload failed: ${mode2UploadError}` : null}
-                {!commitError && !mode2UploadError && shardProgress.label ? shardProgress.label : null}
+                {!commitDisplayError && !mode2UploadError && shardProgress.label ? shardProgress.label : null}
               </div>
             ) : null}
-
-            {processing && (
-              <div className="space-y-2" data-testid="wasm-sharding-progress">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="flex items-center gap-2">
-                    <Cpu className="w-4 h-4 animate-spin text-primary" />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
-                      {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
-                        ? 'Gateway ingest'
-                        : 'WASM Sharding'}
-                    </span>
-                    <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">•</span>
-                    <span className="text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-                      {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2')
-                        ? shardProgress.label
-                        : shardingUi.phaseDetails || 'Working...'}
-                    </span>
-                  </p>
-                  <div className="text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em] whitespace-nowrap">
-                    {isMode2 && gatewayMode2Enabled && shardProgress.label.startsWith('Gateway Mode 2') ? (
-                      shardProgress.phase === 'gateway_receiving' && shardProgress.workTotal > 0 ? (
-                        `${formatBytes(shardProgress.workDone)} / ${formatBytes(shardProgress.workTotal)}`
-                      ) : shardProgress.workTotal > 0 ? (
-                        `${shardProgress.workDone}/${shardProgress.workTotal} steps`
-                      ) : (
-                        '—'
-                      )
-                    ) : (
-                      `${shardProgress.blobsDone}/${shardProgress.blobsTotal} blobs`
-                    )}
-                  </div>
-                </div>
-
-                <div className="h-2 w-full overflow-hidden border border-border/60 bg-background/40">
-                  <div
-                    className="h-full bg-primary transition-[width] duration-300 ease-out dark:shadow-[0_0_18px_hsl(var(--primary)_/_0.25)]"
-                    style={{ width: `${(shardingUi.overallPct * 100).toFixed(1)}%` }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground sm:grid-cols-4">
-                  <div className="nil-tab-inset px-2 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Elapsed</div>
-                    <div className="mt-1 text-foreground font-mono-data">{formatDuration(shardingUi.elapsedMs)}</div>
-                  </div>
-                  <div className="nil-tab-inset px-2 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">ETA</div>
-                    <div className="mt-1 text-foreground font-mono-data">
-                      {shardingUi.etaMs == null ? '—' : formatDuration(shardingUi.etaMs)}
-                    </div>
-                  </div>
-                  <div className="nil-tab-inset px-2 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Throughput</div>
-                    <div className="mt-1 text-foreground font-mono-data">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
-                  </div>
-                  <div className="nil-tab-inset px-2 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Op Time</div>
-                    <div className="mt-1 text-foreground font-mono-data">
-                      {shardProgress.currentOpStartedAtMs
-                        ? formatDuration(shardingUi.currentOpMs)
-                        : shardProgress.lastOpMs != null
-                          ? formatDuration(shardProgress.lastOpMs)
-                          : '—'}
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {activeUploading && (
-              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
-                <FileJson className="w-4 h-4 animate-pulse text-primary" />
-                {isMode2 ? 'Uploading Mode 2 shards to Storage Providers...' : 'Uploading MDUs directly to Storage Provider...'}
-              </p>
-            )}
-
-            {readyToUpload && !processing && !activeUploading ? (
-              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
-                Expansion complete. Upload starts automatically; use retry only if the provider step fails.
-              </div>
-            ) : null}
-
-            {readyToCommit && !processing && !activeUploading ? (
-              <div className="nil-tab-panel px-3 py-2 text-[11px] font-mono-data text-muted-foreground ring-1 ring-primary/15">
-                Upload complete. Commit starts automatically; retry only if the wallet or chain step fails.
-              </div>
-            ) : null}
-
-            {(isCommitPending || isCommitConfirming) && (
-              <p className="flex items-center gap-2 text-[11px] font-mono-data text-muted-foreground">
-                <FileJson className="w-4 h-4 animate-pulse text-primary" /> Committing manifest root to chain...
-              </p>
-            )}
-
-            {readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted ? (
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => {
-                    void triggerPreparedCommit('manual')
-                  }}
-                  disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}
-                  data-testid="mdu-commit"
-                  className="cta-shadow inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
-                >
-                  {isCommitPending
-                    ? 'Check Wallet...'
-                    : isCommitConfirming
-                      ? 'Confirming...'
-                      : isAlreadyCommitted
-                        ? 'Committed!'
-                        : 'Commit to Chain'}
-                </button>
-
-                {commitHash && (
-                  <div className="text-[10px] font-mono-data text-muted-foreground truncate uppercase tracking-[0.2em]">
-                    Tx: {commitHash}
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            {showUnderTheHood ? (
-              <details data-testid="mdu-under-the-hood" className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
-                <summary
-                  data-testid="mdu-under-the-hood-toggle"
-                  className="cursor-pointer select-none hover:text-foreground font-mono-data uppercase tracking-[0.2em] text-[10px] font-bold"
-                >
-                  Under the hood
-                </summary>
-                <div className="mt-3 space-y-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">File</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {currentFileMeta ? formatBytes(currentFileMeta.fileSizeBytes) : formatBytes(shardProgress.fileBytesTotal)}
-                      </div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">MDUs</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.totalUserMdus} user • {shardProgress.totalWitnessMdus} witness • 1 meta
-                      </div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Blobs</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.blobsDone}/{shardProgress.blobsTotal}
-                      </div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Phase</div>
-                      <div className="mt-1 text-foreground font-mono-data">{shardProgress.phase}</div>
-                    </div>
-                    <div className="nil-tab-inset px-2 py-2 sm:col-span-2">
-                      <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data opacity-70">Current</div>
-                      <div className="mt-1 text-foreground font-mono-data">
-                        {shardProgress.currentMduKind
-                          ? `${shardProgress.currentMduKind} #${String(shardProgress.currentMduIndex ?? 0)}`
-                          : '—'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {logs.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-primary font-bold uppercase tracking-[0.2em]">System Activity</p>
-                        <button
-                          type="button"
-                          data-testid="mdu-system-activity-toggle"
-                          onClick={() => setShowSystemActivity((prev) => !prev)}
-                          className="border border-border bg-background px-2 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40"
-                        >
-                          {showSystemActivity || hasError ? 'Hide' : 'Show'}
-                        </button>
-                      </div>
-                      {showSystemActivity || hasError ? (
-                        <div ref={logContainerRef} data-testid="mdu-system-activity" className="space-y-1 max-h-32 overflow-y-auto">
-                          {logs.map((log, i) => (
-                            <p key={i}>{log}</p>
-                          ))}
-                          {processing && <p className="animate-pulse">...</p>}
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-muted-foreground/80">
-                          Hidden by default. Open this log only when you need low-level upload details.
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              </details>
-            ) : null}
-
-            <div className="flex flex-col gap-2">
-              {showRetryUpload ? (
-                <button
-                  onClick={() => {
-                    void retryPreparedUpload()
-                  }}
-                  data-testid="mdu-upload"
-                  className="cta-shadow mt-1 inline-flex items-center justify-center border border-primary bg-primary px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
-                >
-                  Retry Upload
-                </button>
-              ) : isUploadComplete ? (
-                <div
-                  data-testid="mdu-upload-state"
-                  className="nil-tab-panel mt-1 border-success/30 bg-success/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-success"
-                >
-                  Upload Complete
-                </div>
-              ) : null}
-
-              {!isMode2 && (activeUploading || isUploadComplete) && uploadProgress.length > 0 && (
-                <div className="nil-tab-panel mt-2 p-3 text-[10px] font-mono-data text-muted-foreground">
-                  <p className="mb-1 text-primary font-bold uppercase tracking-[0.2em]">Upload Progress</p>
-                    <div className="space-y-1 max-h-24 overflow-y-auto">
-                      {uploadProgress.map((p, i) => (
-                        <div key={i} className="flex justify-between items-center">
-                        <span>{p.label}:</span>
-                        <span className={`font-bold ${p.status === 'complete' ? 'text-success' : p.status === 'error' ? 'text-destructive' : 'text-primary'}`}>
-                          {p.status.toUpperCase()} {p.error ? `(${p.error})` : ''}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {isMode2 && mode2UploadError && (
-                <div className="nil-tab-panel text-[11px] font-mono-data text-destructive border-destructive/30 bg-destructive/5">
-                  Mode 2 upload failed: {mode2UploadError}
-                </div>
-              )}
-
-              {mirrorStatus !== 'idle' && (
-                <div
-                  className={`nil-tab-panel text-[11px] font-mono-data ${mirrorStatus === 'error' ? 'text-destructive border-destructive/30 bg-destructive/5' : 'text-muted-foreground'}`}
-                >
-                  Gateway mirror: {mirrorStatus === 'skipped' ? 'skipped' : mirrorStatus}
-                  {mirrorError ? ` (${mirrorError})` : ''}
-                </div>
-              )}
-            </div>
           </div>
         </div>
-          ) : null}
+          )}
 
-      {/* Visualization Grid */}
-      {shards.length > 0 && (
-        <div className="relative overflow-hidden glass-panel industrial-border p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.08)] dark:shadow-[0_0_35px_hsl(var(--primary)_/_0.06)]">
-          <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
-
-          <div className="relative flex justify-between items-center mb-6 gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
-                /mnt/slab_map
-              </div>
-              <h3 className="mt-2 text-sm font-semibold flex items-center gap-2 text-foreground">
-                <FileJson className="w-4 h-4 text-primary" />
-                Slab Map
-              </h3>
-              <div className="mt-1 text-[11px] text-muted-foreground font-mono-data">
-                8&nbsp;MiB MDU = 64 × 128&nbsp;KiB blobs.{" "}
-                <Link to="/technology?section=mdu-primer" className="text-primary hover:underline">
-                  MDU primer
-                </Link>
-              </div>
-            </div>
-            <div className="shrink-0 text-[10px] text-muted-foreground font-mono-data uppercase tracking-[0.2em]">
-              {shards.filter((s) => s.status === 'expanded').length} / {shards.length} MDUs Expanded
-            </div>
-          </div>
-
-          <div className="relative grid grid-cols-[repeat(auto-fit,minmax(172px,1fr))] gap-3 max-h-[520px] overflow-y-auto pr-2">
-            {shards.map((shard) => {
-              const state =
-                shard.status === 'expanded' ? 'COMPLETE' : shard.status === 'processing' ? 'PROCESSING' : 'EMPTY'
-              const stateClass =
-                shard.status === 'expanded'
-                  ? 'text-success'
-                  : shard.status === 'processing'
-                    ? 'text-primary'
-                    : 'text-muted-foreground'
-              const cellClass =
-                shard.status === 'expanded'
-                  ? 'bg-success'
-                  : shard.status === 'processing'
-                    ? 'bg-primary/20 animate-pulse'
-                    : 'bg-background/50'
-              const ringClass =
-                shard.status === 'expanded'
-                  ? 'ring-1 ring-success/30'
-                  : shard.status === 'processing'
-                    ? 'ring-1 ring-primary/30'
-                    : 'ring-1 ring-border/30'
-
-              return (
-                <div
-                  key={shard.id}
-                  className={`relative overflow-hidden glass-panel industrial-border min-h-[168px] p-3 ${ringClass}`}
-                  title={shard.commitments[0] || 'Pending...'}
-                >
-                  {shard.status === 'processing' ? (
-                    <div className="absolute inset-0 pointer-events-none opacity-10 bg-primary/5" />
-                  ) : null}
-
-                  <div className="relative flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
-                    <span>MDU {shard.id}</span>
-                    <span className={stateClass}>{state}</span>
-                  </div>
-
-                  <div className="relative mt-3 grid grid-cols-8 gap-[1px] bg-border/40 p-[1px]">
-                    {Array.from({ length: 64 }).map((_, i) => (
-                      <div key={i} className={`aspect-square ${cellClass}`} />
-                    ))}
-                  </div>
-
-                  <div className="relative mt-3 text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
-                    <div className="truncate">
-                      {shard.id === 0 ? 'Meta MDU' : shard.id <= shardProgress.totalWitnessMdus ? 'Witness MDU' : 'User MDU'}
-                    </div>
-                  </div>
-
-                  <div className="relative mt-1 truncate text-[10px] font-mono-data text-muted-foreground uppercase tracking-[0.2em]">
-                    {shard.status === 'expanded'
-                      ? `ROOT ${shard.commitments[0]?.slice(0, 8) ?? '—'}…`
-                      : shard.status === 'processing'
-                        ? 'EXPANDING...'
-                        : 'PENDING'}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
       </>
       )}
     </div>
