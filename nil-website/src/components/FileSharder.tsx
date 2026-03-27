@@ -875,11 +875,14 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
     const hasLocalArtifacts = collectedMdus.length > 0 || (isMode2 && mode2Shards.length > 0)
     const notifyCommitSuccess = () => {
+      const fileMeta = lastFileMetaRef.current || undefined
       browserPerfLog('run:complete', {
         manifestRoot: currentManifestRoot,
         commitHash,
       })
-      onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined)
+      onCommitSuccess?.(dealId, currentManifestRoot, fileMeta)
+      resetUploadPanel()
+      lastFileMetaRef.current = null
     }
     if (!hasLocalArtifacts) {
       void (async () => {
@@ -1102,6 +1105,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     localGateway.url,
     mode2Shards,
     onCommitSuccess,
+    resetUploadPanel,
     shardProgress.totalWitnessMdus,
     shardProgress.totalUserMdus,
     shardProgress.totalMdus,
