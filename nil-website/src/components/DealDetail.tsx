@@ -8,7 +8,6 @@ import {
   MoreVertical, 
   Zap, 
   Database, 
-  Cpu, 
   Trash2,
   XCircle
 } from 'lucide-react'
@@ -690,31 +689,6 @@ function FileRow({
     }
   }
 
-  const handleBrowserCacheDownload = async () => {
-    setFileActionError(null)
-    setBusyFilePath(file.path)
-    const dealId = String(deal.id)
-    try {
-      const chainCid = String(manifestRoot || '').trim()
-      if (chainCid) {
-        const cacheFreshness = await reconcileLocalMduCache(dealId, chainCid)
-        if (!cacheFreshness.usable) {
-          throw new Error(`browser cache unavailable (${cacheFreshness.reason})`)
-        }
-      }
-      const cachedBytes = await readCachedFile(dealId, file.path)
-      if (!cachedBytes) throw new Error('not cached in browser')
-      downloadBytesAsFile(cachedBytes, file.path)
-      markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setFileActionError(msg)
-    } finally {
-      setBusyFilePath(null)
-      onToggleMenu()
-    }
-  }
-
   const handlePurgeCache = async () => {
     setFileActionError(null)
     const dealId = String(deal.id)
@@ -735,7 +709,7 @@ function FileRow({
       data-file-path={file.path}
       data-cache-browser={browserCached ? 'yes' : 'no'}
       data-cache-gateway={gatewayCached ? 'yes' : 'no'}
-      className="nil-list-row relative grid grid-cols-[minmax(0,1.7fr)_auto_auto_auto] items-center gap-3 border border-border bg-background/50 px-4 py-3 group"
+      className="nil-list-row relative grid grid-cols-[minmax(0,1.7fr)_auto_auto_auto] items-center gap-3 overflow-visible border border-border bg-background/50 px-4 py-3 group"
     >
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold text-foreground" title={file.path}>
@@ -750,12 +724,17 @@ function FileRow({
         {formatBytes(file.size_bytes)}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 text-[9px] font-bold uppercase tracking-[0.14em]">
-        <span className={`border px-1.5 py-0.5 ${browserCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
-          Browser {browserCached ? 'Yes' : '—'}
-        </span>
-        <span className={`border px-1.5 py-0.5 ${gatewayCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
-          Gateway {gatewayCached ? 'Yes' : '—'}
+      <div className="flex items-center text-[9px] font-bold uppercase tracking-[0.14em]">
+        <span
+          className={`border px-1.5 py-0.5 ${
+            browserCached && gatewayCached
+              ? 'border-success/30 bg-success/10 text-success'
+              : browserCached || gatewayCached
+                ? 'border-primary/30 bg-primary/10 text-primary'
+                : 'border-border/30 bg-background text-muted-foreground'
+          }`}
+        >
+          {browserCached && gatewayCached ? 'Synced' : browserCached || gatewayCached ? 'Partial' : 'Miss'}
         </span>
       </div>
 
@@ -780,7 +759,7 @@ function FileRow({
         {isOpen && (
           <>
             <div className="fixed inset-0 z-40" onClick={onToggleMenu} />
-            <div className="absolute right-0 top-full mt-1 w-52 bg-background border border-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] z-50 py-1 industrial-border">
+            <div className="absolute right-0 bottom-full mb-1 w-56 max-h-[70vh] overflow-y-auto bg-background border border-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] z-[90] py-1 industrial-border">
               <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest font-bold text-muted-foreground border-b border-border/40 mb-1">
                 Retrieval Options
               </div>
@@ -815,16 +794,22 @@ function FileRow({
                 Browser MDU
               </button>
               <div className="h-px bg-border/40 my-1" />
-              <button
-                onClick={handleBrowserCacheDownload}
-                disabled={isAnyDownloading || isBusy || !browserCached}
-                data-testid="deal-detail-download-browser-cache"
-                data-file-path={file.path}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
-              >
-                <Cpu className="w-3.5 h-3.5" />
-                Browser Cache
-              </button>
+              <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest font-bold text-muted-foreground border-y border-border/40">
+                Cache Status
+              </div>
+              <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
+                <span>Browser</span>
+                <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${browserCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
+                  {browserCached ? 'Yes' : '—'}
+                </span>
+              </div>
+              <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
+                <span>Gateway</span>
+                <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${gatewayCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
+                  {gatewayCached ? 'Yes' : '—'}
+                </span>
+              </div>
+              <div className="h-px bg-border/40 my-1" />
               <button
                 onClick={handlePurgeCache}
                 disabled={isAnyDownloading || isBusy || !browserCached}
@@ -833,7 +818,7 @@ function FileRow({
                 className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors text-left disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Clear
+                Clear Local Cache
               </button>
             </div>
           </>
@@ -2612,7 +2597,7 @@ export function DealDetail({
                           </div>
                         </div>
                       ) : files && files.length > 0 ? (
-                        <div className="nil-tab-panel space-y-2" data-testid="deal-detail-file-list">
+                        <div className="nil-tab-panel space-y-2 overflow-visible" data-testid="deal-detail-file-list">
                           <div className="grid grid-cols-[minmax(0,1.7fr)_auto_auto_auto] gap-3 border-b border-border/40 px-2 pb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                             <span>Path</span>
                             <span>Size</span>
