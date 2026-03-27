@@ -22,17 +22,20 @@ type UseProofsConfig = number | UseProofsOptions
 
 function parseCommitment(commitment: string): Pick<ProofRow, 'dealId' | 'epochId' | 'tier'> {
   try {
-    // Expected shape: "deal:<id>/epoch:<epoch>/tier:<tier>"
-    const parts = commitment.split('/')
+    // Supports both legacy and current formats:
+    // - "deal:<id>/epoch:<epoch>/tier:<tier>"
+    // - "evidence:... deal=<id> ... tier=<tier>"
     const out: { dealId?: string; epochId?: string; tier?: string } = {}
-    for (const part of parts) {
-      const [k, v] = part.split(':')
-      if (!k || v === undefined) continue
-      const key = k.trim().toLowerCase()
-      const val = v.trim()
-      if (key === 'deal') out.dealId = val
-      else if (key === 'epoch') out.epochId = val
-      else if (key === 'tier') out.tier = val
+    const normalized = String(commitment || '').replace(/\//g, ' ')
+    const kvPattern = /\b(deal|epoch|tier)\s*[:=]\s*([^\s/]+)/gi
+    let match: RegExpExecArray | null
+    while ((match = kvPattern.exec(normalized)) !== null) {
+      const key = String(match[1] || '').trim().toLowerCase()
+      const value = String(match[2] || '').trim()
+      if (!value) continue
+      if (key === 'deal') out.dealId = value
+      else if (key === 'epoch') out.epochId = value
+      else if (key === 'tier') out.tier = value
     }
     return out
   } catch {

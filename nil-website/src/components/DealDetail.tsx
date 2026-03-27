@@ -1103,6 +1103,21 @@ export function DealDetail({
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
+  const observedFailedProofs = useMemo(
+    () => dealProofs.reduce((count, proof) => count + (proof.valid ? 0 : 1), 0),
+    [dealProofs],
+  )
+  const observedLastProofHeight = useMemo(
+    () => dealProofs.reduce((max, proof) => Math.max(max, Number(proof.blockHeight) || 0), 0),
+    [dealProofs],
+  )
+  const heatBytesServedTotal = Number(heat?.bytes_served_total ?? 0) || 0
+  const heatSuccessfulRetrievals = Number(heat?.successful_retrievals_total ?? 0) || 0
+  const heatFailedChallenges = Number(heat?.failed_challenges_total ?? 0) || 0
+  const heatLastUpdateHeight = Number(heat?.last_update_height ?? 0) || 0
+  const displayFailedProofs = Math.max(heatFailedChallenges, observedFailedProofs)
+  const displayLastActivityHeight = Math.max(heatLastUpdateHeight, observedLastProofHeight)
+  const hasHeatOrProofActivity = Boolean(heat) || dealProofs.length > 0
   const dealProviders = useMemo(() => deal.providers || [], [deal.providers])
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
@@ -3204,30 +3219,30 @@ export function DealDetail({
                       <p className="text-xs text-muted-foreground mt-1">Real-time stats from chain state</p>
                   </div>
                   
-                  {heat ? (
+                  {hasHeatOrProofActivity ? (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                           <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Total Traffic</div>
                               <div className="text-lg font-mono-data text-foreground">
-                                  {(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB
+                                  {(heatBytesServedTotal / 1024 / 1024).toFixed(2)} MB
                               </div>
                           </div>
                           <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Total Retrievals</div>
                               <div className="text-lg font-mono-data text-success">
-                                  {heat.successful_retrievals_total || '0'}
+                                  {heatSuccessfulRetrievals}
                               </div>
                           </div>
                           <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Failed Proofs</div>
                               <div className="text-lg font-mono-data text-destructive">
-                                  {heat.failed_challenges_total}
+                                  {displayFailedProofs}
                               </div>
                           </div>
                           <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Last Activity</div>
                               <div className="text-lg font-mono-data text-foreground">
-                                  Block {heat.last_update_height}
+                                  Block {displayLastActivityHeight}
                               </div>
                           </div>
                       </div>
