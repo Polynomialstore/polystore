@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
 import { appConfig } from '../config'
 import { 
@@ -362,6 +363,44 @@ function FileRow({
   transportPreference,
 }: FileRowProps) {
   const requestOwner = String(owner || deal.owner || '').trim()
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null)
+  const [menuViewportPosition, setMenuViewportPosition] = useState<{
+    top: number
+    left: number
+    maxHeight: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) {
+      setMenuViewportPosition(null)
+      return
+    }
+
+    const updateMenuPosition = () => {
+      const anchor = menuButtonRef.current
+      if (!anchor) return
+
+      const rect = anchor.getBoundingClientRect()
+      const menuWidth = 224
+      const edgePadding = 8
+      const top = rect.bottom + 4
+      const left = Math.max(
+        edgePadding,
+        Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - edgePadding),
+      )
+      const maxHeight = Math.max(160, window.innerHeight - top - edgePadding)
+
+      setMenuViewportPosition({ top, left, maxHeight })
+    }
+
+    updateMenuPosition()
+    window.addEventListener('resize', updateMenuPosition)
+    window.addEventListener('scroll', updateMenuPosition, true)
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition)
+      window.removeEventListener('scroll', updateMenuPosition, true)
+    }
+  }, [isOpen])
 
   const readFromLocalMduCache = async (dealId: string, chainCid: string): Promise<Uint8Array> => {
     const cacheFreshness = await withTimeout(
@@ -736,79 +775,96 @@ function FileRow({
         </button>
         <button
           onClick={onToggleMenu}
+          ref={menuButtonRef}
           data-testid="deal-detail-actions-menu"
           data-file-path={file.path}
           className={`p-1 hover:bg-secondary border transition-colors rounded-none ${isOpen ? 'border-primary/50 bg-secondary' : 'border-transparent'}`}
         >
           <MoreVertical className="w-4 h-4 text-muted-foreground" />
         </button>
-        {isOpen && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={onToggleMenu} />
-            <div className="absolute right-0 bottom-full mb-1 w-56 max-h-[70vh] overflow-y-auto bg-background border border-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] z-[90] py-1 industrial-border">
-              <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest font-bold text-muted-foreground border-b border-border/40 mb-1">
-                Retrieval Options
-              </div>
-              <button
-                onClick={handleOnchainRetrieval}
-                disabled={isAnyDownloading || isBusy || !manifestRoot}
-                data-testid="deal-detail-download-sp"
-                data-file-path={file.path}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                Provider
-              </button>
-              <button
-                onClick={handleGatewayCacheDownload}
-                disabled={isAnyDownloading || isBusy || !manifestRoot}
-                data-testid="deal-detail-download-gateway"
-                data-file-path={file.path}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
-              >
-                <Server className="w-3.5 h-3.5" />
-                Gateway
-              </button>
-              <button
-                onClick={handleAssembleMdus}
-                disabled={isAnyDownloading || isBusy || !manifestRoot}
-                data-testid="deal-detail-download-browser-slab"
-                data-file-path={file.path}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
-              >
-                <Database className="w-3.5 h-3.5" />
-                Browser MDU
-              </button>
-              <div className="h-px bg-border/40 my-1" />
-              <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest font-bold text-muted-foreground border-y border-border/40">
-                Cache Status
-              </div>
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
-                <span>Browser</span>
-                <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${browserCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
-                  {browserCached ? 'Yes' : '—'}
-                </span>
-              </div>
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
-                <span>Gateway</span>
-                <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${gatewayCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
-                  {gatewayCached ? 'Yes' : '—'}
-                </span>
-              </div>
-              <div className="h-px bg-border/40 my-1" />
-              <button
-                onClick={handlePurgeCache}
-                disabled={isAnyDownloading || isBusy || !browserCached}
-                data-testid="deal-detail-clear-browser-cache"
-                data-file-path={file.path}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors text-left disabled:opacity-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Clear Local Cache
-              </button>
-            </div>
-          </>
-        )}
+        {isOpen && menuViewportPosition && typeof document !== 'undefined'
+          ? createPortal(
+              <>
+                <div className="fixed inset-0 z-[900]" onClick={onToggleMenu} />
+                <div
+                  className="fixed z-[910] w-56"
+                  style={{
+                    top: `${menuViewportPosition.top}px`,
+                    left: `${menuViewportPosition.left}px`,
+                  }}
+                >
+                  <div className="glass-panel industrial-border shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">
+                    <div
+                      className="overflow-y-auto overflow-x-hidden py-1"
+                      style={{ maxHeight: `${menuViewportPosition.maxHeight}px` }}
+                    >
+                      <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest font-bold text-muted-foreground border-b border-border/40 mb-1">
+                        Retrieval Options
+                      </div>
+                      <button
+                        onClick={handleOnchainRetrieval}
+                        disabled={isAnyDownloading || isBusy || !manifestRoot}
+                        data-testid="deal-detail-download-sp"
+                        data-file-path={file.path}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        Provider
+                      </button>
+                      <button
+                        onClick={handleGatewayCacheDownload}
+                        disabled={isAnyDownloading || isBusy || !manifestRoot}
+                        data-testid="deal-detail-download-gateway"
+                        data-file-path={file.path}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
+                      >
+                        <Server className="w-3.5 h-3.5" />
+                        Gateway
+                      </button>
+                      <button
+                        onClick={handleAssembleMdus}
+                        disabled={isAnyDownloading || isBusy || !manifestRoot}
+                        data-testid="deal-detail-download-browser-slab"
+                        data-file-path={file.path}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
+                      >
+                        <Database className="w-3.5 h-3.5" />
+                        Browser MDU
+                      </button>
+                      <div className="h-px bg-border/40 my-1" />
+                      <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest font-bold text-muted-foreground border-y border-border/40">
+                        Cache Status
+                      </div>
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
+                        <span>Browser</span>
+                        <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${browserCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
+                          {browserCached ? 'Yes' : '—'}
+                        </span>
+                      </div>
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
+                        <span>Gateway</span>
+                        <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${gatewayCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
+                          {gatewayCached ? 'Yes' : '—'}
+                        </span>
+                      </div>
+                      <div className="h-px bg-border/40 my-1" />
+                      <button
+                        onClick={handlePurgeCache}
+                        disabled={isAnyDownloading || isBusy || !browserCached}
+                        data-testid="deal-detail-clear-browser-cache"
+                        data-file-path={file.path}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors text-left disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Clear Local Cache
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>,
+              document.body,
+            )
+          : null}
       </div>
     </div>
   )
