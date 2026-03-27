@@ -15,6 +15,8 @@ import {
   readManifestRoot,
   readMdu,
   readShard,
+  writeManifestRoot,
+  writeSlabMetadata,
   writeSlabGenerationAtomically,
 } from '../lib/storage/OpfsAdapter';
 import {
@@ -25,6 +27,7 @@ import {
 } from '../lib/nilfsLocal';
 import { decodeRawPrefixFromMdu, inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
+import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient';
 import { providerFetchMduWindowWithSession } from '../api/providerClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
@@ -879,7 +882,94 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       onCommitSuccess?.(dealId, currentManifestRoot, lastFileMetaRef.current || undefined)
     }
     if (!hasLocalArtifacts) {
-      notifyCommitSuccess()
+      void (async () => {
+        try {
+          if (isMode2) {
+            const safeRoot = String(currentManifestRoot || '').trim()
+            if (safeRoot) {
+              const owner = String(dealOwner || address || '').trim()
+              const gatewayBase = String(localGateway.url || appConfig.gatewayBase || '')
+                .trim()
+                .replace(/\/$/, '')
+
+              let witnessMdus = Math.max(0, Number(shardProgress.totalWitnessMdus) || 0)
+              let userMdus = Math.max(0, Number(shardProgress.totalUserMdus) || 0)
+              let totalMdus = Math.max(0, Number(shardProgress.totalMdus) || 0)
+
+              if (gatewayBase && owner) {
+                try {
+                  const slab = await gatewayFetchSlabLayout(gatewayBase, safeRoot, { dealId, owner })
+                  witnessMdus = Math.max(0, Number(slab.witness_mdus) || witnessMdus)
+                  userMdus = Math.max(0, Number(slab.user_mdus) || userMdus)
+                  totalMdus = Math.max(0, Number(slab.total_mdus) || totalMdus)
+                } catch (e) {
+                  console.warn('Failed to fetch gateway slab layout for local index snapshot', { dealId, error: e })
+                }
+              }
+
+              if (totalMdus <= 0) totalMdus = 1 + witnessMdus + userMdus
+              if (totalMdus > 1 + witnessMdus && userMdus === 0) userMdus = totalMdus - 1 - witnessMdus
+              if (totalMdus !== 1 + witnessMdus + userMdus) totalMdus = 1 + witnessMdus + userMdus
+
+              let fileRecords: Array<{ path: string; start_offset: number; size_bytes: number; flags: number }> = []
+              if (gatewayBase && owner) {
+                try {
+                  const files = await gatewayListFiles(gatewayBase, safeRoot, { dealId, owner })
+                  fileRecords = files.map((f) => ({
+                    path: String(f.path || ''),
+                    start_offset: Math.max(0, Number(f.start_offset) || 0),
+                    size_bytes: Math.max(0, Number(f.size_bytes) || 0),
+                    flags: Math.max(0, Number(f.flags) || 0),
+                  }))
+                } catch (e) {
+                  console.warn('Failed to fetch gateway file table for local index snapshot', { dealId, error: e })
+                }
+              }
+
+              if (!fileRecords.length) {
+                const fallbackRawPath = String(lastFileMetaRef.current?.filePath || '').trim() || 'upload.bin'
+                const fallbackPath = sanitizeNilfsRecordPath(fallbackRawPath)
+                if (fallbackPath) {
+                  fileRecords = [{
+                    path: fallbackPath,
+                    start_offset: 0,
+                    size_bytes: Math.max(0, Number(lastFileMetaRef.current?.fileSizeBytes || shardProgress.fileBytesTotal) || 0),
+                    flags: 0,
+                  }]
+                }
+              }
+
+              try {
+                await writeManifestRoot(dealId, safeRoot)
+                await writeSlabMetadata(dealId, {
+                  schema_version: 1,
+                  generation_id: `gateway-index-${safeRoot.replace(/^0x/i, '').slice(0, 16)}`,
+                  deal_id: dealId,
+                  manifest_root: safeRoot,
+                  owner: owner || undefined,
+                  redundancy:
+                    isMode2 && stripeParams
+                      ? { k: stripeParams.k, m: stripeParams.m, n: stripeParams.k + stripeParams.m }
+                      : undefined,
+                  source: 'gateway_mode2_manifest_commit',
+                  created_at: new Date().toISOString(),
+                  last_validated_at: null,
+                  witness_mdus: witnessMdus,
+                  user_mdus: userMdus,
+                  total_mdus: totalMdus,
+                  file_records: fileRecords,
+                })
+                addLog('> Saved gateway-backed deal index metadata to OPFS.')
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e)
+                addLog(`> Failed to save gateway-backed deal index metadata: ${msg}`)
+              }
+            }
+          }
+        } finally {
+          notifyCommitSuccess()
+        }
+      })()
       return
     }
 
@@ -1008,9 +1098,14 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     dealId,
     isCommitSuccess,
     isMode2,
+    dealOwner,
+    localGateway.url,
     mode2Shards,
     onCommitSuccess,
     shardProgress.totalWitnessMdus,
+    shardProgress.totalUserMdus,
+    shardProgress.totalMdus,
+    shardProgress.fileBytesTotal,
     address,
     stripeParams,
   ]);

@@ -1615,8 +1615,17 @@ export function DealDetail({
 
   const inspectLocalDealIndexRequirement = useCallback(async (dealId: string, chainManifestRoot: string): Promise<DealIndexRequirement> => {
     const freshness = await reconcileLocalMduCache(String(dealId), chainManifestRoot)
+    const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(String(dealId)).catch(() => null))
+    const localMeta = await readSlabMetadata(String(dealId)).catch(() => null)
+    const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
+    const metadataFresh =
+      !!localMeta &&
+      metadataManifestRoot !== '' &&
+      metadataManifestRoot === freshness.chainManifestRoot &&
+      (persistedManifestRoot === '' || metadataManifestRoot === persistedManifestRoot)
+    const hasMetadataIndex = metadataFresh && Array.isArray(localMeta?.file_records)
     const mdu0 = await readMdu(String(dealId), 0).catch(() => null)
-    if (freshness.usable && mdu0 && mdu0.byteLength > 0) {
+    if (freshness.usable && ((mdu0 && mdu0.byteLength > 0) || hasMetadataIndex)) {
       return {
         status: 'ready',
         reason: freshness.reason,
