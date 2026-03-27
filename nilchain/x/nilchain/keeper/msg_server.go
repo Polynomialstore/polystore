@@ -3440,6 +3440,30 @@ func (k Keeper) recordEvidenceSummary(ctx sdk.Context, dealID uint64, provider s
 	if err := k.Proofs.Set(ctx, proofID, summary); err != nil {
 		return fmt.Errorf("failed to store evidence summary: %w", err)
 	}
+	if shouldCountEvidenceAsFailedChallenge(kind, ok) {
+		if err := k.IncrementHeat(ctx, dealID, 0, true); err != nil {
+			ctx.Logger().Error("failed to increment heat for evidence summary", "deal", dealID, "kind", kind, "error", err)
+		}
+	}
 
 	return nil
+}
+
+func shouldCountEvidenceAsFailedChallenge(kind string, ok bool) bool {
+	if ok {
+		return false
+	}
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "deputy_served",
+		"deputy_miss_repair_started",
+		"quota_miss_repair_started",
+		"provider_degraded_repair_started",
+		"system_proof_invalid",
+		"system_proof_rejected",
+		"system_proof_wrong_challenge",
+		"system_proof_wrong_provider":
+		return true
+	default:
+		return false
+	}
 }
