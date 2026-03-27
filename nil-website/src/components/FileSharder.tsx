@@ -4495,6 +4495,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                 return (
                   <div
                     key={step.title}
+                    data-testid={`workflow-step-${index + 1}`}
+                    data-step-state={step.state}
                     className={`nil-tab-panel px-4 py-3 ${stepToneClasses[step.state]} ${
                       step.state === 'done' || step.state === 'active' ? 'glass-panel industrial-border' : ''
                     }`}

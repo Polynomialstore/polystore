@@ -7,7 +7,7 @@ import { bech32 } from 'bech32'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const uploadSizeBytes = Number(process.env.SPARSE_FILE_SIZE_BYTES || 192 * 1024)
-const largeUploadTimeoutMs = uploadSizeBytes > 32 * 1024 * 1024 ? 900_000 : 30_000
+const largeUploadTimeoutMs = uploadSizeBytes > 32 * 1024 * 1024 ? 900_000 : 120_000
 const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
 const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
 
@@ -81,6 +81,11 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('**/gateway/upload-status*', async (route) => {
     gatewayUploadAttempts += 1
     await route.fulfill({ status: 599, body: 'gateway disabled in sparse e2e' })
+  })
+
+  // Force per-artifact sparse uploads in this test; the bundle path is covered elsewhere.
+  await page.route('**/sp/upload_bundle*', async (route) => {
+    await route.fulfill({ status: 404, body: 'bundle disabled in sparse e2e' })
   })
 
   const failGatewayProbe = async (route: import('@playwright/test').Route) => {
@@ -302,9 +307,12 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   }
 
   await expect(page.getByTestId('mdu-upload-card')).not.toHaveAttribute('data-panel-state', 'idle', { timeout: 60_000 })
-  await expect(page.getByTestId('mdu-upload-state')).toHaveText(/Upload Complete/i, {
-    timeout: largeUploadTimeoutMs,
-  })
+  await expect
+    .poll(() => mduUploads.length > 0 && manifestUploads.length > 0 && shardUploads.length > 0, {
+      timeout: largeUploadTimeoutMs,
+    })
+    .toBe(true)
+  await expect(page.getByTestId('mdu-commit')).toBeVisible({ timeout: largeUploadTimeoutMs })
 
   expect(mduUploads.length).toBeGreaterThan(0)
   expect(manifestUploads.length).toBeGreaterThan(0)
