@@ -709,7 +709,7 @@ function FileRow({
       data-file-path={file.path}
       data-cache-browser={browserCached ? 'yes' : 'no'}
       data-cache-gateway={gatewayCached ? 'yes' : 'no'}
-      className="nil-list-row relative grid grid-cols-[minmax(0,1.7fr)_auto_auto_auto] items-center gap-3 overflow-visible border border-border bg-background/50 px-4 py-3 group"
+      className="nil-list-row relative grid grid-cols-[minmax(0,1.7fr)_auto_auto] items-center gap-3 overflow-visible border border-border bg-background/50 px-4 py-3 group"
     >
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold text-foreground" title={file.path}>
@@ -722,20 +722,6 @@ function FileRow({
 
       <div className="text-[11px] font-mono-data text-foreground/80">
         {formatBytes(file.size_bytes)}
-      </div>
-
-      <div className="flex items-center text-[9px] font-bold uppercase tracking-[0.14em]">
-        <span
-          className={`border px-1.5 py-0.5 ${
-            browserCached && gatewayCached
-              ? 'border-success/30 bg-success/10 text-success'
-              : browserCached || gatewayCached
-                ? 'border-primary/30 bg-primary/10 text-primary'
-                : 'border-border/30 bg-background text-muted-foreground'
-          }`}
-        >
-          {browserCached && gatewayCached ? 'Synced' : browserCached || gatewayCached ? 'Partial' : 'Miss'}
-        </span>
       </div>
 
       <div className="flex items-center gap-2">
@@ -2598,10 +2584,9 @@ export function DealDetail({
                         </div>
                       ) : files && files.length > 0 ? (
                         <div className="nil-tab-panel space-y-2 overflow-visible" data-testid="deal-detail-file-list">
-                          <div className="grid grid-cols-[minmax(0,1.7fr)_auto_auto_auto] gap-3 border-b border-border/40 px-2 pb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                          <div className="grid grid-cols-[minmax(0,1.7fr)_auto_auto] gap-3 border-b border-border/40 px-2 pb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                             <span>Path</span>
                             <span>Size</span>
-                            <span>Cache</span>
                             <span>Actions</span>
                           </div>
                           {files.map((f) => (
