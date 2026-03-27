@@ -1000,6 +1000,7 @@ export function Dashboard() {
       })
       setStatusTone('success')
       setStatusMsg(`Capacity Allocated. Deal ID: ${res.deal_id}. Now verify via content tab.`)
+      setShowCreateDeal(false)
       if (nilAddress) {
         await refreshDealsAfterCreate(nilAddress, String(res.deal_id))
         await fetchBalances(nilAddress)
@@ -1038,6 +1039,7 @@ export function Dashboard() {
         return
       }
       if (!address || !address.startsWith('0x')) throw new Error('Connect wallet to create a deal.')
+      setShowCreateDeal(false)
       await handleCreateDeal(address)
     } catch (e) {
       handleWalletError(e, 'Failed to connect wallet')
@@ -1456,6 +1458,7 @@ export function Dashboard() {
         </div>
         <button
           type="button"
+          data-testid="create-deal-close"
           onClick={() => setShowCreateDeal(false)}
           className="nil-inset inline-flex items-center justify-center px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-foreground"
         >
@@ -1796,8 +1799,12 @@ export function Dashboard() {
 
       {showCreateDeal ? (
         <div className="fixed inset-0 z-40">
-          <div className="absolute inset-0 bg-background/70 backdrop-blur-[1px]" onClick={() => setShowCreateDeal(false)} />
-          <aside className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border/40 shadow-2xl">
+          <div
+            data-testid="create-deal-overlay"
+            className="absolute inset-0 bg-background/70 backdrop-blur-[1px]"
+            onClick={() => setShowCreateDeal(false)}
+          />
+          <aside data-testid="create-deal-drawer" className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border/40 shadow-2xl">
             {createDealDrawer}
           </aside>
         </div>

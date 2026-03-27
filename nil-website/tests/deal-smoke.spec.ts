@@ -4,6 +4,7 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
@@ -248,6 +249,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   await page.getByTestId('faucet-request').click()
   await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
 
+  await ensureCreateDealDrawerOpen(page)
   const placementSelect = page.getByTestId('alloc-placement-profile')
   if (!(await placementSelect.isVisible().catch(() => false))) {
     await page.getByTestId('workspace-advanced-toggle').click()
@@ -255,6 +257,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   }
   await placementSelect.selectOption('auto')
   await page.getByTestId('alloc-submit').click()
+  await dismissCreateDealDrawer(page)
 
   const fileInput = page.getByTestId('content-file-input')
   if (!(await fileInput.isVisible().catch(() => false))) {

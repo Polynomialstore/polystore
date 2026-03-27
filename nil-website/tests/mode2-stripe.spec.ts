@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
@@ -455,9 +456,11 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await ensureWalletFunded(page, mode2FastPrimaryWaitMs)
 
+    await ensureCreateDealDrawerOpen(page)
     await page.getByTestId('alloc-submit').click()
     const workspaceTitle = page.getByTestId('workspace-deal-title')
     await expect(workspaceTitle).toHaveText(/Deal #\d+/, { timeout: mode2FastPrimaryWaitMs })
+    await dismissCreateDealDrawer(page)
     const dealTitle = (await workspaceTitle.textContent().catch(() => '')) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
@@ -728,9 +731,11 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await ensureWalletFunded(page, mode2FastPrimaryWaitMs)
 
+    await ensureCreateDealDrawerOpen(page)
     await page.getByTestId('alloc-submit').click()
     const workspaceTitle = page.getByTestId('workspace-deal-title')
     await expect(workspaceTitle).toHaveText(/Deal #\d+/, { timeout: mode2FastPrimaryWaitMs })
+    await dismissCreateDealDrawer(page)
     const dealTitle = (await workspaceTitle.textContent().catch(() => '')) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
@@ -892,8 +897,10 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await ensureWalletFunded(page, 180_000)
 
+    await ensureCreateDealDrawerOpen(page)
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+    await dismissCreateDealDrawer(page)
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
@@ -937,8 +944,10 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await ensureWalletFunded(page, 180_000)
     console.log('[rehydrate-e2e] faucet funded')
 
+    await ensureCreateDealDrawerOpen(page)
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+    await dismissCreateDealDrawer(page)
     const dealTitle = (await page.getByTestId('workspace-deal-title').textContent()) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')

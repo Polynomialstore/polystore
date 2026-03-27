@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import crypto from 'node:crypto'
+import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
@@ -134,9 +135,11 @@ test.describe('mode2 sparse live', () => {
     await expect(page.getByText('Wrong Network')).toHaveCount(0)
     await ensureWalletFunded(page)
 
+    await ensureCreateDealDrawerOpen(page)
     await page.getByTestId('alloc-submit').click()
     const workspaceTitle = page.getByTestId('workspace-deal-title')
     await expect(workspaceTitle).toHaveText(/Deal #\d+/, { timeout: 120_000 })
+    await dismissCreateDealDrawer(page)
     const dealTitle = (await workspaceTitle.textContent().catch(() => '')) || ''
     const dealId = dealTitle.match(/#(\d+)/)?.[1] || ''
     expect(dealId).not.toBe('')
