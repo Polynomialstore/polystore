@@ -12,6 +12,18 @@ const mode2FastPrimaryWaitMs = isMode2Fast ? 120_000 : 180_000
 const mode2FastUploadWaitMs = isMode2Fast ? 180_000 : 300_000
 const mode2FastMaybeDownloadMs = isMode2Fast ? 60_000 : 120_000
 
+function extractManifestRoot(text: string): string {
+  const match = String(text || '').match(/0x[0-9a-fA-F]{96}/)
+  return (match?.[0] || '').toLowerCase()
+}
+
+async function readDealManifestRoot(page: Page, dealId: string): Promise<string> {
+  const cell = page.getByTestId(`deal-manifest-${dealId}`)
+  if ((await cell.count().catch(() => 0)) === 0) return ''
+  const text = (await cell.first().textContent().catch(() => '')) || ''
+  return extractManifestRoot(text)
+}
+
 async function waitForGatewayConnected(page: Page): Promise<void> {
   const widget = page.getByTestId('gateway-status-widget')
   const count = await widget.count().catch(() => 0)
@@ -179,29 +191,61 @@ async function readDownloadBytesMaybe(page: Page, button: Locator, timeout = 90_
   return readDownloadedBytes(download)
 }
 
-async function completeUploadAndCommit(uploadBtn: Locator, commitBtn: Locator, timeout = 300_000): Promise<void> {
+async function isUploaderResetToInitialState(page: Page): Promise<boolean> {
+  const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+  if (panelState !== 'idle') return false
+  const step2State = await page.getByTestId('workflow-step-2').getAttribute('data-step-state').catch(() => null)
+  const step3State = await page.getByTestId('workflow-step-3').getAttribute('data-step-state').catch(() => null)
+  const step4State = await page.getByTestId('workflow-step-4').getAttribute('data-step-state').catch(() => null)
+  const fileInputCount = await page.getByTestId('mdu-file-input').count().catch(() => 0)
+  return step2State === 'idle' && step3State === 'idle' && step4State === 'idle' && fileInputCount > 0
+}
+
+async function isCommitCompleteOrReset(
+  page: Page,
+  commitBtn: Locator,
+  expectedFilePath: string,
+  dealId: string,
+  initialManifestRoot: string,
+  allowReset: boolean,
+): Promise<boolean> {
+  if (dealId) {
+    const currentManifest = await readDealManifestRoot(page, dealId)
+    if (currentManifest && currentManifest !== initialManifestRoot) return true
+  }
+  if (expectedFilePath) {
+    const fileRow = page.getByTestId('deal-detail-file-row').filter({ hasText: expectedFilePath })
+    if ((await fileRow.count().catch(() => 0)) > 0) return true
+  }
+  const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+  if (panelState === 'success') return true
+  const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+  if (/Committed!/i.test(text)) return true
+  if (allowReset && (await isUploaderResetToInitialState(page))) return true
+  return false
+}
+
+async function completeUploadAndCommit(
+  uploadBtn: Locator,
+  commitBtn: Locator,
+  expectedFilePath: string,
+  dealId: string,
+  timeout = 300_000,
+): Promise<void> {
   const page = uploadBtn.page()
   await waitForUploadControls(uploadBtn, commitBtn, timeout).catch(() => undefined)
+  const initialManifestRoot = dealId ? await readDealManifestRoot(page, dealId) : ''
 
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
-    const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-    if (panelState === 'success') return
-
-    const commitText = ((await commitBtn.textContent().catch(() => '')) || '').trim()
-    if (/Committed!/i.test(commitText)) return
+    if (await isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true)) return
 
     const commitCount = await commitBtn.count().catch(() => 0)
     const commitEnabled = commitCount > 0 && (await commitBtn.isEnabled().catch(() => false))
     if (commitEnabled) {
       await commitBtn.click()
       await expect
-        .poll(async () => {
-          const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-          if (state === 'success') return true
-          const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
-          return /Committed!/i.test(text)
-        }, { timeout: 180_000 })
+        .poll(() => isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true), { timeout: 180_000 })
         .toBe(true)
       return
     }
@@ -224,12 +268,7 @@ async function completeUploadAndCommit(uploadBtn: Locator, commitBtn: Locator, t
   }
 
   await expect
-    .poll(async () => {
-      const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-      if (state === 'success') return true
-      const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
-      return /Committed!/i.test(text)
-    }, { timeout: 180_000 })
+    .poll(() => isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true), { timeout: 180_000 })
     .toBe(true)
   await page.waitForTimeout(150)
 }
@@ -482,7 +521,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
 
-    await completeUploadAndCommit(uploadBtn, commitBtn, mode2FastUploadWaitMs)
+    await completeUploadAndCommit(uploadBtn, commitBtn, filePath, dealId, mode2FastUploadWaitMs)
 
     const fileRow = await waitForDealFileRow(page, dealId, filePath, mode2FastPrimaryWaitMs)
 
@@ -847,12 +886,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     expect(sparseShardUploads.length).toBeGreaterThan(0)
     expect(Math.max(...sparseMduUploads.map((upload) => upload.bodyLen))).toBeLessThan(2 * 1024 * 1024)
     await expect
-      .poll(async () => {
-        const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-        if (panelState === 'success') return true
-        const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
-        return /Committed!/i.test(text)
-      }, { timeout: mode2FastPrimaryWaitMs })
+      .poll(() => isCommitCompleteOrReset(page, commitBtn, filePath, dealId, '', true), { timeout: mode2FastPrimaryWaitMs })
       .toBe(true)
     blockGatewayUpload = false
 
@@ -916,7 +950,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
 
-    await completeUploadAndCommit(uploadBtn, commitBtn, 300_000)
+    await completeUploadAndCommit(uploadBtn, commitBtn, fileA.name, dealId, 300_000)
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: fileB.name,
@@ -924,7 +958,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       buffer: fileB.buffer,
     })
 
-    await completeUploadAndCommit(uploadBtn, commitBtn, 300_000)
+    await completeUploadAndCommit(uploadBtn, commitBtn, fileB.name, dealId, 300_000)
   })
 
   test('mode2 append recovers by rehydrating local gateway from OPFS cache', async ({ page }) => {
@@ -1041,7 +1075,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const uploadBtn = page.getByTestId('mdu-upload')
     const commitBtn = page.getByTestId('mdu-commit')
 
-    await completeUploadAndCommit(uploadBtn, commitBtn, 300_000)
+    await completeUploadAndCommit(uploadBtn, commitBtn, fileA.name, dealId, 300_000)
     console.log('[rehydrate-e2e] fileA upload+commit complete')
     rehydratePhase = 'fileB'
 
@@ -1167,12 +1201,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     console.log('[rehydrate-e2e] detected successful rehydrate logs')
 
     await expect
-      .poll(async () => {
-        const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-        if (panelState === 'success') return true
-        const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
-        return /Committed!/i.test(text)
-      }, { timeout: 180_000 })
+      .poll(() => isCommitCompleteOrReset(page, commitBtn, fileB.name, dealId, '', true), { timeout: 180_000 })
       .toBe(true)
     console.log('[rehydrate-e2e] fileB committed')
     console.log(

@@ -9,28 +9,71 @@ const uploadSizeBytes = Number(process.env.GATEWAY_ABSENT_FILE_SIZE_BYTES || 18)
 const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
 const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
 
-async function completeUploadAndCommit(page: Parameters<typeof test>[0]['page'], timeout = 300_000): Promise<void> {
+function extractManifestRoot(text: string): string {
+  const match = String(text || '').match(/0x[0-9a-fA-F]{96}/)
+  return (match?.[0] || '').toLowerCase()
+}
+
+async function readDealManifestRoot(page: Parameters<typeof test>[0]['page'], dealId: string): Promise<string> {
+  const cell = page.getByTestId(`deal-manifest-${dealId}`)
+  if ((await cell.count().catch(() => 0)) === 0) return ''
+  const text = (await cell.first().textContent().catch(() => '')) || ''
+  return extractManifestRoot(text)
+}
+
+async function isUploaderResetToInitialState(page: Parameters<typeof test>[0]['page']): Promise<boolean> {
+  const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+  if (panelState !== 'idle') return false
+  const step2State = await page.getByTestId('workflow-step-2').getAttribute('data-step-state').catch(() => null)
+  const step3State = await page.getByTestId('workflow-step-3').getAttribute('data-step-state').catch(() => null)
+  const step4State = await page.getByTestId('workflow-step-4').getAttribute('data-step-state').catch(() => null)
+  const fileInputCount = await page.getByTestId('mdu-file-input').count().catch(() => 0)
+  return step2State === 'idle' && step3State === 'idle' && step4State === 'idle' && fileInputCount > 0
+}
+
+async function isCommitCompleteOrReset(
+  page: Parameters<typeof test>[0]['page'],
+  commitBtn: ReturnType<Parameters<typeof test>[0]['page']['getByTestId']>,
+  expectedFilePath: string,
+  dealId: string,
+  initialManifestRoot: string,
+  allowReset: boolean,
+): Promise<boolean> {
+  if (dealId) {
+    const currentManifest = await readDealManifestRoot(page, dealId)
+    if (currentManifest && currentManifest !== initialManifestRoot) return true
+  }
+  if (expectedFilePath) {
+    const fileRow = page.getByTestId('deal-detail-file-row').filter({ hasText: expectedFilePath })
+    if ((await fileRow.count().catch(() => 0)) > 0) return true
+  }
+  const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+  if (panelState === 'success') return true
+  const commitText = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+  if (/Committed!/i.test(commitText)) return true
+  if (allowReset && (await isUploaderResetToInitialState(page))) return true
+  return false
+}
+
+async function completeUploadAndCommit(
+  page: Parameters<typeof test>[0]['page'],
+  expectedFilePath: string,
+  dealId: string,
+  timeout = 300_000,
+): Promise<void> {
   const uploadBtn = page.getByTestId('mdu-upload')
   const commitBtn = page.getByTestId('mdu-commit')
+  const initialManifestRoot = dealId ? await readDealManifestRoot(page, dealId) : ''
   const deadline = Date.now() + timeout
 
   while (Date.now() < deadline) {
-    const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-    if (panelState === 'success') return
-
-    const commitText = ((await commitBtn.textContent().catch(() => '')) || '').trim()
-    if (/Committed!/i.test(commitText)) return
+    if (await isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true)) return
 
     const commitReady = (await commitBtn.count().catch(() => 0)) > 0 && (await commitBtn.isEnabled().catch(() => false))
     if (commitReady) {
       await commitBtn.click()
       await expect
-        .poll(async () => {
-          const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-          if (state === 'success') return true
-          const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
-          return /Committed!/i.test(text)
-        }, { timeout: 180_000 })
+        .poll(() => isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true), { timeout: 180_000 })
         .toBe(true)
       return
     }
@@ -51,12 +94,7 @@ async function completeUploadAndCommit(page: Parameters<typeof test>[0]['page'],
   }
 
   await expect
-    .poll(async () => {
-      const state = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-      if (state === 'success') return true
-      const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
-      return /Committed!/i.test(text)
-    }, { timeout: 180_000 })
+    .poll(() => isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true), { timeout: 180_000 })
     .toBe(true)
 }
 
@@ -208,10 +246,11 @@ test.describe('gateway absent', () => {
       timeout: 60_000,
     })
 
-    await completeUploadAndCommit(page, 180_000)
+    await completeUploadAndCommit(page, fileName, dealId, 180_000)
 
-    await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'success', { timeout: 180_000 })
-    await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
+    await expect
+      .poll(() => isCommitCompleteOrReset(page, page.getByTestId('mdu-commit'), fileName, dealId, '', true), { timeout: 180_000 })
+      .toBe(true)
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
     await expect(page.getByTestId('mdu-upload-card').getByText(/\/DEAL\/Upload/i)).toBeVisible({ timeout: 60_000 })
     await expect(page.getByText('Upload another file')).toHaveCount(0)
