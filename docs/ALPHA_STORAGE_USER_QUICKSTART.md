@@ -47,6 +47,7 @@ Optional power-user target:
    - `docs/onboarding-prompts/storage.md`
 4. Let the agent run as a guided operator:
    - it should walk you through the three canonical paths in order
+   - it should do repo sync first, then immediately move you into the website flow
    - it should ask you to perform wallet/file-picker actions in the browser
    - it should validate each checkpoint (connect, fund, create, upload, commit, retrieve)
    - it should produce evidence (deal ID, tx hashes, file details, retrieval match, and CLI friction notes)

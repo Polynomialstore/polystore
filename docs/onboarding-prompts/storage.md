@@ -11,6 +11,11 @@ Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
    - `git checkout main`
    - `git pull --ff-only origin main`
 
+Execution order:
+- Perform repo bootstrap/sync first.
+- Immediately after repo sync, give the user the website action (`open https://nilstore.org and connect MetaMask`) before any extra diagnostics.
+- Keep the gap between repo sync completion and that website instruction minimal.
+
 Context:
 - Prefer the browser-first path first.
 - Primary homepage for this deployment: `https://nilstore.org` (fallback `https://web.nilstore.org` if needed).
