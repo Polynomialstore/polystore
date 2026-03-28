@@ -373,7 +373,7 @@ export function SpOnboarding() {
           <CopyButton onClick={() => void copyText("Agent bootstrap brief", agentBrief)} />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          If the operator has Codex or Claude Code on the provider machine, this is the recommended starting prompt. Later PRs will replace this generic brief with generated host-specific prompts and bundles.
+          If the operator has a coding agent on the provider machine, this is the recommended starting prompt.
         </p>
         <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
           {agentBrief}

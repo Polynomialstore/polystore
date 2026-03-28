@@ -13,7 +13,7 @@ This stack reframes the website and onboarding around the two testnet personas:
 - data storage users
 - data provider operators
 
-It also adds the agent-first provider/operator posture that assumes users may have access to Codex or Claude Code locally.
+It also adds the agent-first provider/operator posture that assumes users may have access to a local coding agent.
 
 ## Stack Order
 
@@ -47,7 +47,7 @@ Review and merge in this order only:
    - Commit: `0ca65cb`
    - Title: `feat(website): add agent onboarding prompts`
    - Base: `alpha-ux-04-provider-onboarding-ui`
-   - Purpose: add repo-tracked Codex/Claude prompts and website prompt panels.
+   - Purpose: add repo-tracked onboarding prompts and website prompt panels.
 
 6. `alpha-ux-06-provider-bootstrap-doctor`
    - Commit: `e1b6422`
@@ -84,14 +84,12 @@ Shared website components:
 Provider/operator docs:
 - `docs/ALPHA_PROVIDER_QUICKSTART.md`
 - `docs/REMOTE_SP_JOIN_QUICKSTART.md`
-- `docs/onboarding-prompts/provider_codex.md`
-- `docs/onboarding-prompts/provider_claude_code.md`
+- `docs/onboarding-prompts/provider.md`
 - `docs/onboarding-prompts/sp-onboarding.schema.json`
 
 Storage-user docs:
 - `docs/ALPHA_STORAGE_USER_QUICKSTART.md`
-- `docs/onboarding-prompts/storage_codex.md`
-- `docs/onboarding-prompts/storage_claude_code.md`
+- `docs/onboarding-prompts/storage.md`
 
 Collaborator packets:
 - `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`
@@ -139,7 +137,7 @@ If merged in order, the public website should:
 - route users cleanly into `Store Data` or `Become A Provider`
 - present storage onboarding as browser-first
 - present provider onboarding as remote-first
-- give Codex/Claude-oriented prompts directly on the website and in repo docs
+- give coding-agent onboarding prompts directly on the website and in repo docs
 - expose a live shared alpha status page
 - keep old `devnet` and `sp-onboarding` surfaces as secondary/debugging paths rather than the primary story
 

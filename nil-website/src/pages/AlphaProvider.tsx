@@ -72,7 +72,7 @@ export function AlphaProvider() {
             className="mx-auto max-w-2xl"
             badge="/alpha/provider/agent"
             title="Alternatively: Onboard with a coding agent"
-            description="If you have Codex or Claude Code on the provider host, copy the bootstrap prompt and let the agent run the full provider setup and verification loop."
+            description="If you have a coding agent on the provider host, copy the bootstrap prompt and let it run the full provider setup and verification loop."
             prompt={providerAgentPrompt}
           />
         </section>

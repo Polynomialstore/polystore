@@ -22,10 +22,9 @@ Fallback target:
 ## Fast path
 
 1. Clone the repo on the provider machine.
-2. Open Codex or Claude Code locally in the repo.
+2. Open your coding agent locally in the repo.
 3. Paste the provider prompt from:
-   - `docs/onboarding-prompts/provider_codex.md`
-   - `docs/onboarding-prompts/provider_claude_code.md`
+   - `docs/onboarding-prompts/provider.md`
 4. Let the agent install, configure, register, verify, and retry until healthy.
 5. Confirm:
    - local `http://127.0.0.1:8091/health`

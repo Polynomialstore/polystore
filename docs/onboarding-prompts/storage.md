@@ -1,4 +1,4 @@
-# Storage Prompt For Codex
+# Storage Prompt
 
 You are helping a NilStore testnet storage user complete the first successful storage flow.
 

@@ -8,7 +8,7 @@ Recommended target:
 - browser-first flow through `https://web.<domain>`
 
 Optional power-user target:
-- local repo checkout with Codex or Claude Code for diagnostics and local gateway setup
+- local repo checkout with a coding agent for diagnostics and local gateway setup
 
 ## Browser-first flow
 
@@ -23,10 +23,9 @@ Optional power-user target:
 ## Agent-assisted power-user flow
 
 1. Clone the repo locally.
-2. Open Codex or Claude Code in the repo.
+2. Open your coding agent in the repo.
 3. Paste the storage prompt from:
-   - `docs/onboarding-prompts/storage_codex.md`
-   - `docs/onboarding-prompts/storage_claude_code.md`
+   - `docs/onboarding-prompts/storage.md`
 4. Let the agent verify wallet/network setup, local gateway health, and the first store/retrieve cycle.
 
 ## References

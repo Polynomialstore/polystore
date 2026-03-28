@@ -76,7 +76,7 @@ export PROVIDER_KEY="provider1"
 ./scripts/run_devnet_provider.sh register
 ```
 
-If you are letting Codex or Claude Code drive setup locally, you can also use:
+If you are letting a coding agent drive setup locally, you can also use:
 
 ```bash
 ./scripts/run_devnet_provider.sh bootstrap
