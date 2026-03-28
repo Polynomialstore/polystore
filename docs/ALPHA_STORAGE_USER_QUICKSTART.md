@@ -26,7 +26,10 @@ Optional power-user target:
 2. Open your coding agent in the repo.
 3. Paste the storage prompt from:
    - `docs/onboarding-prompts/storage.md`
-4. Let the agent verify wallet/network setup, local gateway health, and the first store/retrieve cycle.
+4. Let the agent run as a guided operator:
+   - it should ask you to perform wallet/file-picker actions in the browser
+   - it should validate each checkpoint (connect, fund, create, upload, commit, retrieve)
+   - it should produce evidence (deal ID, tx hashes, file details, retrieval match)
 
 ## References
 
