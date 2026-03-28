@@ -2,36 +2,52 @@
 
 Set up this machine as a NilStore testnet Storage Provider.
 
-Assumptions:
-- The repository is already cloned locally.
-- Preferred mode is `home server + Cloudflare Tunnel`.
+Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
+1. If repo is missing:
+   - `git clone https://github.com/Nil-Store/nil-store.git`
+   - `cd nil-store`
+2. Refresh checkout:
+   - `git fetch origin --prune`
+   - `git checkout main`
+   - `git pull --ff-only origin main`
+
+Context:
+- Preferred mode: home server + Cloudflare Tunnel.
 - Use:
   - `docs/ALPHA_PROVIDER_QUICKSTART.md`
   - `docs/REMOTE_SP_JOIN_QUICKSTART.md`
   - `docs/networking/PROVIDER_ENDPOINTS.md`
-
-Inputs from the hub operator:
-- `CHAIN_ID`
-- `HUB_NODE`
-- `HUB_LCD`
-- `NIL_GATEWAY_SP_AUTH`
-- provider hostname such as `sp.<domain>`
+- Inputs from hub operator:
+  - `CHAIN_ID`
+  - `HUB_NODE`
+  - `HUB_LCD`
+  - `NIL_GATEWAY_SP_AUTH`
+  - provider hostname like `sp.<domain>`
+- Do not print secrets/private keys in full; redact them.
 
 Tasks:
-1. Check the local machine and repo prerequisites.
-2. Create or import the provider key.
+1. Check local machine + repo prerequisites.
+2. Create or import provider key.
 3. Configure endpoint and local listener values.
-4. Register the provider on-chain.
-5. Start the provider and persist it under a service manager if appropriate.
+4. Register provider on-chain.
+5. Start provider and persist under service manager when appropriate.
 6. Verify:
+   - `./scripts/run_devnet_provider.sh doctor`
    - local `http://127.0.0.1:8091/health`
    - public `https://sp.<domain>/health`
    - LCD provider visibility
-7. Loop on failures until the provider is healthy.
+7. Loop on failures until provider is healthy.
 
 Final output:
-- provider address
-- registered endpoint
-- local and public health URLs
-- service status
-- files changed
+1. JSON summary with:
+   - `provider_address`
+   - `registered_endpoint`
+   - `local_health_url`
+   - `public_health_url`
+   - `local_health_ok`
+   - `public_health_ok`
+   - `lcd_visible`
+   - `service_status`
+   - `commands_run`
+   - `files_changed`
+2. A short plain-language status summary.
