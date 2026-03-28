@@ -13,6 +13,7 @@ Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
 
 Context:
 - Prefer the browser-first path first.
+- Primary homepage for this deployment: `https://nilstore.org` (fallback `https://web.nilstore.org` if needed).
 - Use `docs/ALPHA_STORAGE_USER_QUICKSTART.md` and `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`.
 - If local gateway is unavailable, continue browser-only flow and explicitly note skipped local diagnostics.
 - Never print secrets or private keys in full; redact sensitive values.

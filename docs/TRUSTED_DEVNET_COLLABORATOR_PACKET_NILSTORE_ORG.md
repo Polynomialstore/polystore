@@ -27,7 +27,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 
 ## Website Tester Quickstart
 
-1) Open `https://web.nilstore.org`.
+1) Open `https://nilstore.org` (use `https://web.nilstore.org` only if you are explicitly testing that host).
 2) Connect MetaMask and switch to:
 - RPC URL: `https://evm.nilstore.org`
 - Chain ID: `20260211`

@@ -20,7 +20,7 @@ If you are the hub operator, also read: `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 ## What you need from the hub operator
 
 You should receive:
-- Website URL: `https://web.<domain>`
+- Website URL: `https://nilstore.org` (default public homepage) or deployment-specific `https://web.<domain>`
 - EVM RPC: `https://evm.<domain>`
 - Chain ID: `<chain-id>` (e.g. `20260211`)
 - Faucet URL (optional): `https://faucet.<domain>/faucet`
@@ -42,7 +42,7 @@ If you want the shorter testnet-facing version of this path, use `docs/ALPHA_STO
 
 ### 1) Open the website + connect wallet
 
-1. Open `https://web.<domain>`.
+1. Open `https://nilstore.org` (or the deployment-specific website URL shared by the hub operator).
 2. Click **Connect wallet** (MetaMask).
 3. If prompted, add/switch to the NilStore devnet network using the RPC the hub operator gave you.
 

@@ -5,14 +5,14 @@ This is the primary testnet path for users who want to store data on NilStore.
 Note: this file keeps a legacy `ALPHA_` prefix for compatibility.
 
 Recommended target:
-- browser-first flow through `https://web.<domain>`
+- browser-first flow through `https://nilstore.org` (fallback `https://web.nilstore.org` if needed)
 
 Optional power-user target:
 - local repo checkout with a coding agent for diagnostics and local gateway setup
 
 ## Browser-first flow
 
-1. Open `https://web.<domain>`.
+1. Open `https://nilstore.org`.
 2. Connect MetaMask.
 3. Switch to the NilStore testnet network.
 4. Fund your wallet through the faucet if available.
