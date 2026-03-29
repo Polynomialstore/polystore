@@ -1,4 +1,6 @@
 pub const MAGIC_NILF: [u8; 4] = [0x4E, 0x49, 0x4C, 0x46]; // "NILF"
+pub const FILE_RECORD_SIZE: usize = 256;
+pub const FILE_RECORD_PATH_BYTES: usize = FILE_RECORD_SIZE - 24;
 
 pub const FLAG_ENCRYPTED: u8 = 0x80; // Bit 7
 pub const FLAG_HIDDEN: u8 = 0x40; // Bit 6
@@ -26,7 +28,7 @@ impl Default for FileTableHeader {
             magic: MAGIC_NILF,
             version: 1,
             pad1: 0,
-            record_size: 64,
+            record_size: FILE_RECORD_SIZE as u16,
             record_count: 0,
             reserved: [0; 116],
         }
@@ -71,10 +73,10 @@ impl FileTableHeader {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub struct FileRecordV1 {
-    pub start_offset: u64,     // 8 bytes (Little Endian)
-    pub length_and_flags: u64, // 8 bytes (Little Endian)
-    pub timestamp: u64,        // 8 bytes (Little Endian)
-    pub path: [u8; 40],        // 40 bytes (Null-terminated)
+    pub start_offset: u64,                  // 8 bytes (Little Endian)
+    pub length_and_flags: u64,              // 8 bytes (Little Endian)
+    pub timestamp: u64,                     // 8 bytes (Little Endian)
+    pub path: [u8; FILE_RECORD_PATH_BYTES], // Null-terminated
 }
 
 impl Default for FileRecordV1 {
@@ -83,13 +85,13 @@ impl Default for FileRecordV1 {
             start_offset: 0,
             length_and_flags: 0,
             timestamp: 0,
-            path: [0; 40],
+            path: [0; FILE_RECORD_PATH_BYTES],
         }
     }
 }
 
 impl FileRecordV1 {
-    pub const SIZE: usize = 64;
+    pub const SIZE: usize = FILE_RECORD_SIZE;
 
     pub fn to_bytes(&self) -> [u8; Self::SIZE] {
         let mut bytes = [0u8; Self::SIZE];
@@ -104,8 +106,8 @@ impl FileRecordV1 {
         let start_offset = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
         let length_and_flags = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
         let timestamp = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
-        let mut path = [0u8; 40];
-        path.copy_from_slice(&bytes[24..64]);
+        let mut path = [0u8; FILE_RECORD_PATH_BYTES];
+        path.copy_from_slice(&bytes[24..Self::SIZE]);
 
         Self {
             start_offset,
@@ -167,7 +169,7 @@ mod tests {
     fn test_struct_alignment() {
         assert_eq!(
             std::mem::size_of::<FileRecordV1>(),
-            64,
+            FILE_RECORD_SIZE,
             "FileRecordV1 size mismatch"
         );
         assert_eq!(
@@ -180,7 +182,7 @@ mod tests {
     #[test]
     fn test_serialization() {
         // 1. FileRecordV1
-        let mut path = [0u8; 40];
+        let mut path = [0u8; FILE_RECORD_PATH_BYTES];
         let path_bytes = b"test/file.txt";
         path[..path_bytes.len()].copy_from_slice(path_bytes);
 
@@ -207,7 +209,7 @@ mod tests {
             magic: MAGIC_NILF,
             version: 1,
             pad1: 0,
-            record_size: 64,
+            record_size: FILE_RECORD_SIZE as u16,
             record_count: 5,
             reserved,
         };

@@ -7,6 +7,8 @@ import { sanitizeNilfsRecordPath } from './nilfsPath'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const FILE_RECORD_SIZE = 256;
+const FILE_RECORD_PATH_BYTES = 232;
 
 type WasmMdu0BuilderLike = {
     append_file: (path: string, sizeBytes: bigint, startOffset: bigint) => void
@@ -60,6 +62,8 @@ test('Mdu0Builder WASM', async (t) => {
 
     // Verify Record Count (at magicOffset + 8)
     // record_count is u32 little endian
+    const recordSize = new DataView(bytes.buffer).getUint16(magicOffset + 6, true);
+    assert.strictEqual(recordSize, FILE_RECORD_SIZE, "Record size mismatch");
     const recordCountOffset = magicOffset + 8;
     const recordCount = new DataView(bytes.buffer).getUint32(recordCountOffset, true);
     assert.strictEqual(recordCount, 1, "Record count mismatch");
@@ -71,8 +75,8 @@ test('Mdu0Builder WASM', async (t) => {
     assert.strictEqual(readStartOffset, startOffset, "Start offset mismatch");
     
     // Path (at recordOffset + 24)
-    // Path is 40 bytes null terminated
-    const pathBytes = bytes.slice(recordOffset + 24, recordOffset + 64);
+    // Path is 232 bytes null terminated
+    const pathBytes = bytes.slice(recordOffset + 24, recordOffset + FILE_RECORD_SIZE);
     // find null terminator
     let nullIdx = pathBytes.indexOf(0);
     if (nullIdx === -1) nullIdx = pathBytes.length;
@@ -80,7 +84,7 @@ test('Mdu0Builder WASM', async (t) => {
     assert.strictEqual(readPath, fileName, "Path mismatch");
 });
 
-test('Mdu0Builder WASM rejects paths > 40 bytes (NilFS V1)', async (t) => {
+test('Mdu0Builder WASM rejects paths > 232 bytes', async (t) => {
     const wasm = await loadNilCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (nil-website/public/wasm).')
@@ -90,7 +94,7 @@ test('Mdu0Builder WASM rejects paths > 40 bytes (NilFS V1)', async (t) => {
     await wasm.init({ module_or_path: wasmBuffer });
 
     const mdu = new wasm.WasmMdu0Builder(10n);
-    const longName = 'x'.repeat(41);
+    const longName = 'x'.repeat(FILE_RECORD_PATH_BYTES + 1);
     assert.throws(() => {
         mdu.append_file(longName, 1n, 0n);
     }, /path too long/i);
@@ -106,7 +110,7 @@ test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async 
     await wasm.init({ module_or_path: wasmBuffer });
 
     const mdu = new wasm.WasmMdu0Builder(10n);
-    const sanitized = sanitizeNilfsRecordPath('a/b/' + 'x'.repeat(200) + '.txt');
+    const sanitized = sanitizeNilfsRecordPath('a/b/' + 'x'.repeat(400) + '.txt');
     assert.doesNotThrow(() => {
         mdu.append_file(sanitized, 1n, 0n);
     });

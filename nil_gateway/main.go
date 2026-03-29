@@ -1345,9 +1345,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			fileRecordPath = validated
 		}
 	}
-	if strings.Contains(fileRecordPath, "/") {
-		fileRecordPath = filepath.Base(fileRecordPath)
-	}
+	fileRecordPath = normalizeNilfsRecordBasename(fileRecordPath, filename)
 
 	if dealIDStr == "" && dealIDQueryOK {
 		dealIDStr = strconv.FormatUint(dealIDQuery, 10)

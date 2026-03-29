@@ -982,9 +982,9 @@ pub extern "C" fn nil_mdu0_append_file_with_flags(
         Err(_) => return -2,
     };
 
-    let mut path_bytes = [0u8; 40];
+    let mut path_bytes = [0u8; crate::layout::FILE_RECORD_PATH_BYTES];
     let bytes = path_str.as_bytes();
-    if bytes.len() > 40 {
+    if bytes.len() > crate::layout::FILE_RECORD_PATH_BYTES {
         return -3; // Path too long
     }
     path_bytes[..bytes.len()].copy_from_slice(bytes);

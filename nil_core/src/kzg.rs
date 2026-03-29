@@ -1,14 +1,12 @@
 use blake2::{Blake2s256, Digest};
 use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
-#[cfg(target_arch = "wasm32")]
-use blst::blst_p1;
-use blst::{BLST_ERROR, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
 #[cfg(not(target_arch = "wasm32"))]
 use blst::MultiPoint;
 #[cfg(target_arch = "wasm32")]
-use blst::{
-    blst_p1s_mult_pippenger, blst_p1s_mult_pippenger_scratch_sizeof, limb_t,
-};
+use blst::blst_p1;
+use blst::{BLST_ERROR, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
+#[cfg(target_arch = "wasm32")]
+use blst::{blst_p1s_mult_pippenger, blst_p1s_mult_pippenger_scratch_sizeof, limb_t};
 use ff::{Field, PrimeField};
 use group::Curve;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
@@ -17,8 +15,8 @@ use std::cell::RefCell;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use thiserror::Error;
 
 pub const MDU_SIZE: usize = 8 * 1024 * 1024;

@@ -7,7 +7,7 @@ pub const ROOT_TABLE_END: usize = 16 * BLOB_SIZE;
 pub const FILE_TABLE_START: usize = 16 * BLOB_SIZE;
 pub const FILE_TABLE_END: usize = 64 * BLOB_SIZE;
 pub const FILE_TABLE_HEADER_SIZE: usize = 128;
-pub const FILE_RECORD_SIZE: usize = 64;
+pub const FILE_RECORD_SIZE: usize = layout::FILE_RECORD_SIZE;
 pub const ROOT_SIZE: usize = 32;
 
 pub struct Mdu0Builder {
@@ -74,6 +74,12 @@ impl Mdu0Builder {
 
         if header.magic != MAGIC_NILF {
             return Err("invalid magic".to_string());
+        }
+        if header.record_size as usize != FILE_RECORD_SIZE {
+            return Err(format!(
+                "unsupported record size: got {}, expected {}",
+                header.record_size, FILE_RECORD_SIZE
+            ));
         }
 
         Ok(Mdu0Builder {
@@ -173,7 +179,7 @@ impl Mdu0Builder {
                             start_offset: existing.start_offset + required_len,
                             length_and_flags: layout::pack_length_and_flags(leftover, 0),
                             timestamp: 0,
-                            path: [0; 40],
+                            path: [0; layout::FILE_RECORD_PATH_BYTES],
                         };
                         // Path is already all zeros
                         if let Err(e) = self.append_file_record(new_tomb) {
@@ -223,7 +229,7 @@ mod tests {
         let mut b = Mdu0Builder::new(100);
 
         // Add file 1
-        let mut path = [0u8; 40];
+        let mut path = [0u8; layout::FILE_RECORD_PATH_BYTES];
         path[..9].copy_from_slice(b"file1.txt");
         let rec1 = FileRecordV1 {
             start_offset: 0,
@@ -280,7 +286,7 @@ mod tests {
         let mut b = Mdu0Builder::new(1000);
 
         // 1. Add 100KB file
-        let mut path = [0u8; 40];
+        let mut path = [0u8; layout::FILE_RECORD_PATH_BYTES];
         path[..7].copy_from_slice(b"big.txt");
         let mut rec1 = FileRecordV1 {
             start_offset: 0,
@@ -295,7 +301,7 @@ mod tests {
         b.update_file_record(0, rec1).unwrap();
 
         // 3. Add 30KB file. Should reuse slot 0.
-        let mut path2 = [0u8; 40];
+        let mut path2 = [0u8; layout::FILE_RECORD_PATH_BYTES];
         path2[..9].copy_from_slice(b"small.txt");
         let rec2 = FileRecordV1 {
             length_and_flags: layout::pack_length_and_flags(30000, 0),

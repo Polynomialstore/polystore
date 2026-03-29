@@ -127,7 +127,7 @@ typedef struct {
     unsigned long long start_offset;
     unsigned long long length_and_flags;
     unsigned long long timestamp;
-    unsigned char path[40];
+    unsigned char path[232];
 } FileRecordV1;
 
 int nil_mdu0_get_record(Mdu0BuilderPtr ptr, unsigned int index, FileRecordV1* out_rec);
@@ -160,7 +160,7 @@ type FileRecordV1 struct {
 	StartOffset    uint64
 	LengthAndFlags uint64
 	Timestamp      uint64
-	Path           [40]byte
+	Path           [232]byte
 }
 
 func PackLengthAndFlags(length uint64, flags uint8) uint64 {

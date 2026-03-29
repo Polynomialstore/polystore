@@ -11,6 +11,8 @@ const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const BLOB_SIZE_BYTES = 128 * 1024
 const FILE_TABLE_START = 16 * BLOB_SIZE_BYTES
 const FILE_TABLE_HEADER_SIZE = 128
+const FILE_RECORD_SIZE = 256
+const FILE_RECORD_PATH_BYTES = FILE_RECORD_SIZE - 24
 
 function ethToNil(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
@@ -23,11 +25,12 @@ function buildMdu0WithSingleFile(filePath: string, sizeBytes: number, startOffse
   Buffer.alloc(32, 0x11).copy(mdu0, 0)
   Buffer.alloc(32, 0x22).copy(mdu0, 32)
   mdu0.write('NILF', FILE_TABLE_START, 'utf8')
+  mdu0.writeUInt16LE(FILE_RECORD_SIZE, FILE_TABLE_START + 6)
   mdu0.writeUInt32LE(1, FILE_TABLE_START + 8)
   const recordOffset = FILE_TABLE_START + FILE_TABLE_HEADER_SIZE
   mdu0.writeBigUInt64LE(BigInt(startOffset), recordOffset)
   mdu0.writeBigUInt64LE(BigInt(sizeBytes), recordOffset + 8)
-  Buffer.from(filePath, 'utf8').copy(mdu0, recordOffset + 24, 0, 40)
+  Buffer.from(filePath, 'utf8').copy(mdu0, recordOffset + 24, 0, FILE_RECORD_PATH_BYTES)
   return mdu0
 }
 

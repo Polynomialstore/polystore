@@ -3457,7 +3457,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const fileStartOffset = appendMode2 ? uploadPlan.appendStartOffset : 0;
         const recordPath = sanitizeNilfsRecordPath(file.name);
         if (recordPath !== file.name) {
-          addLog(`> NilFS path truncated for V1 record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
+          addLog(`> NilFS path truncated for record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
         }
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();
