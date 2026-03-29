@@ -50,6 +50,7 @@ import { pickUploadParallelism } from '../lib/upload/uploadParallelism';
 import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
+import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../lib/upload/gatewayRecovery';
 import { classifyNilfsCommitError } from '../lib/nilfsCommitError';
 import { waitForTransactionReceipt } from '../lib/evmRpc';
 import {
@@ -2575,20 +2576,66 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               error: msg,
             })
 
-            const missingLocalState =
-              /mode2 append failed/i.test(msg) &&
-              /failed to resolve existing slab dir|failed to read existing MDU #0|failed to copy existing shard|failed to decode witness mdu|existing Mode 2 slab has no user MDUs/i.test(
-                msg,
-              )
+            const missingLocalState = isMissingGatewayAppendStateError(msg)
             if (missingLocalState) {
-              addLog('> Gateway is missing prior slab state; attempting browser-to-gateway rehydrate from OPFS...')
-              const rehydrated = await rehydrateGatewayFromOpfs()
-              if (rehydrated) {
+              addLog('> Gateway is missing prior slab state; reconciling prerequisites...')
+              setShardProgress((p) => ({
+                ...p,
+                phase: 'planning',
+                label: 'Reconciling gateway upload prerequisites...',
+                currentOpStartedAtMs: p.currentOpStartedAtMs ?? performance.now(),
+              }))
+
+              let recoveredGatewayState = false
+              let recoveredGatewaySource: 'browser' | 'network' | 'none' = 'none'
+              try {
+                const recovered = await recoverGatewayAppendState({
+                  rehydrateFromBrowser: async () => {
+                    addLog('> Attempting browser-to-gateway rehydrate from OPFS...')
+                    return await rehydrateGatewayFromOpfs()
+                  },
+                  bootstrapFromNetwork: async () => {
+                    if (!normalizeManifestRoot(baseManifestRoot)) return false
+                    addLog('> Browser cache is incomplete; retrieving committed index from providers (wallet approval required)...')
+                    setShardProgress((p) => ({
+                      ...p,
+                      phase: 'planning',
+                      label: 'Fetching committed index MDUs from providers...',
+                      currentOpStartedAtMs: p.currentOpStartedAtMs ?? performance.now(),
+                    }))
+                    const bootstrapped = await bootstrapMode2AppendBaseFromNetwork()
+                    return Boolean(bootstrapped)
+                  },
+                })
+                recoveredGatewayState = recovered.ok
+                recoveredGatewaySource = recovered.source
+                if (recovered.ok) {
+                  addLog(
+                    recovered.source === 'network'
+                      ? '> Gateway prerequisites restored via provider bootstrap + rehydrate.'
+                      : '> Gateway prerequisites restored from browser cache.',
+                  )
+                } else {
+                  addLog('> Gateway prerequisites could not be restored from browser cache or provider bootstrap.')
+                }
+              } catch (reconcileErr: unknown) {
+                const reconcileMsg = reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr)
+                addLog(`> Gateway prerequisite reconcile failed: ${reconcileMsg}`)
+                msg = reconcileMsg
+              }
+
+              if (recoveredGatewayState) {
                 try {
-                  addLog('> Gateway rehydrated from browser cache; retrying upload...')
+                  addLog(
+                    recoveredGatewaySource === 'network'
+                      ? '> Gateway rehydrated after provider bootstrap; retrying upload...'
+                      : '> Gateway rehydrated from browser cache; retrying upload...',
+                  )
                   const { payload } = await runGatewayUpload(
                     gatewayBase,
-                    'Gateway rehydrated from browser cache; retrying upload...',
+                    recoveredGatewaySource === 'network'
+                      ? 'Gateway rehydrated after provider bootstrap; retrying upload...'
+                      : 'Gateway rehydrated from browser cache; retrying upload...',
                     uploadId,
                     gatewayBases,
                   )

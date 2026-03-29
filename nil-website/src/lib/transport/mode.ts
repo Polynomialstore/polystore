@@ -24,6 +24,10 @@ export interface GatewayMode2UploadEnabledInput {
 export function resolveTransportPreference(input: ResolveTransportPreferenceInput): RoutePreference {
   const { candidate, gatewayDisabled, p2pEnabled, localGatewayConnected } = input
 
+  if (candidate === 'gateway_only') {
+    return candidate
+  }
+
   if (gatewayDisabled) {
     if (candidate === 'prefer_p2p' && p2pEnabled) return 'prefer_p2p'
     return 'prefer_direct_sp'
@@ -46,7 +50,7 @@ export function resolveTransportPreference(input: ResolveTransportPreferenceInpu
 }
 
 export function allowNonGatewayBackends(preference: RoutePreference): boolean {
-  void preference
+  if (preference === 'gateway_only') return false
   // Even when gateway is preferred, keep direct/p2p candidates available so
   // connection-refused/timeouts can fail over instead of hard failing.
   return true

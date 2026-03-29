@@ -82,6 +82,10 @@ export interface FetchProgress {
 export interface FetchResult {
   url: string
   blob: Blob
+  route?: string
+  cacheSource?: string
+  cacheFreshness?: string
+  provider?: string
 }
 
 export interface RetrievalPlanSummary {
@@ -274,6 +278,7 @@ export function useFetch() {
       const gatewayModeActive =
         gatewayTransportEnabled &&
         (preferenceOverride === 'prefer_gateway' ||
+          preferenceOverride === 'gateway_only' ||
           (preferenceOverride === undefined &&
             transport.preference !== 'prefer_direct_sp' &&
             transport.preference !== 'prefer_p2p' &&
@@ -337,6 +342,10 @@ export function useFetch() {
       let chunksFetched = 0
       let lastChunkProgressAt = Date.now()
       let stallHintShown = false
+      let finalRoute = ''
+      let finalCacheSource = ''
+      let finalCacheFreshness = ''
+      let finalProvider = ''
 
       type PlannedChunk = {
         rangeStart: number
@@ -828,6 +837,10 @@ export function useFetch() {
                 : route === 'libp2p'
                   ? 'network_fetch_p2p'
                   : 'network_fetch'
+          finalRoute = route
+          finalCacheSource = cacheSource
+          finalCacheFreshness = freshness
+          finalProvider = selectedProvider
           const progressMessage =
             freshness && freshnessReason
               ? `route=${route} provider=${selectedProvider.slice(0, 12)}... cache=${cacheSource} freshness=${freshness} (${freshnessReason})`
@@ -936,7 +949,14 @@ export function useFetch() {
         message: receiptPipelineError ? `Download complete; receipt pipeline failed: ${receiptPipelineError}` : p.message,
       }))
 
-      return { url, blob }
+      return {
+        url,
+        blob,
+        route: finalRoute || undefined,
+        cacheSource: finalCacheSource || undefined,
+        cacheFreshness: finalCacheFreshness || undefined,
+        provider: finalProvider || undefined,
+      }
     } catch (e) {
       console.error(e)
       const walletError = classifyWalletError(e, 'Fetch failed')

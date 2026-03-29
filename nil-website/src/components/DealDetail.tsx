@@ -47,6 +47,7 @@ import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
+import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 import { providerFetchMduWindowWithSession } from '../api/providerClient'
 import { lcdFetchDeal } from '../api/lcdClient'
@@ -289,6 +290,7 @@ interface FileRowProps {
   downloadRangeLen: number
   allFiles: NilfsFileEntry[]
   transportPreference?: string
+  gatewayModePreferred: boolean
   setSelectedMdu: React.Dispatch<React.SetStateAction<number>>
   setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'heat') => void
 }
@@ -363,9 +365,15 @@ function FileRow({
   downloadRangeLen,
   allFiles,
   transportPreference,
+  gatewayModePreferred,
 }: FileRowProps) {
   const requestOwner = String(owner || deal.owner || '').trim()
   const browserAvailable = browserCached || browserMduAvailable
+  const primaryCacheLabel = primaryCacheIndicatorLabel({
+    gatewayModePreferred,
+    browserAvailable,
+    gatewayCached,
+  })
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const [menuViewportPosition, setMenuViewportPosition] = useState<{
     top: number
@@ -437,6 +445,7 @@ function FileRow({
     const dealId = String(deal.id)
     const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
     const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+    const preferGatewayRoute = gatewayModePreferred
     try {
       if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
       const manifestHex = manifestRoot
@@ -449,47 +458,51 @@ function FileRow({
         status: 'pending',
       })
 
-      try {
-        const bytes = await readFromLocalMduCache(dealId, manifestHex)
-        downloadBytesAsFile(bytes, file.path)
-        queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
-          setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-        })
-        markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
-        onFileActivity?.({
-          dealId,
-          filePath: file.path,
-          sizeBytes: file.size_bytes,
-          manifestRoot: manifestHex,
-          action: 'download',
-          status: 'success',
-        })
-        return
-      } catch {
-        const cacheFreshness = await withTimeout(
-          reconcileLocalMduCache(dealId, manifestHex),
-          15_000,
-          'browser cache reconciliation',
-        ).catch(() => null)
-        if (cacheFreshness?.usable) {
-          const cachedBytes = await readCachedFile(dealId, file.path)
-          if (cachedBytes) {
-            downloadBytesAsFile(cachedBytes, file.path)
-            markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
-            onFileActivity?.({
-              dealId,
-              filePath: file.path,
-              sizeBytes: file.size_bytes,
-              manifestRoot: manifestHex,
-              action: 'download',
-              status: 'success',
-            })
-            return
+      if (!preferGatewayRoute) {
+        try {
+          const bytes = await readFromLocalMduCache(dealId, manifestHex)
+          downloadBytesAsFile(bytes, file.path)
+          queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
+            setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+          })
+          markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
+          onFileActivity?.({
+            dealId,
+            filePath: file.path,
+            sizeBytes: file.size_bytes,
+            manifestRoot: manifestHex,
+            action: 'download',
+            status: 'success',
+          })
+          return
+        } catch {
+          const cacheFreshness = await withTimeout(
+            reconcileLocalMduCache(dealId, manifestHex),
+            15_000,
+            'browser cache reconciliation',
+          ).catch(() => null)
+          if (cacheFreshness?.usable) {
+            const cachedBytes = await readCachedFile(dealId, file.path)
+            if (cachedBytes) {
+              downloadBytesAsFile(cachedBytes, file.path)
+              markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
+              onFileActivity?.({
+                dealId,
+                filePath: file.path,
+                sizeBytes: file.size_bytes,
+                manifestRoot: manifestHex,
+                action: 'download',
+                status: 'success',
+              })
+              return
+            }
           }
         }
       }
       const autoRoutePreference =
-        transportPreference === 'prefer_p2p'
+        preferGatewayRoute
+          ? 'prefer_gateway'
+          : transportPreference === 'prefer_p2p'
           ? 'prefer_p2p'
           : transportPreference === 'prefer_direct_sp'
             ? 'prefer_direct_sp'
@@ -613,6 +626,75 @@ function FileRow({
         sponsoredAuth,
       })
       if (!result) throw new Error('download failed')
+      const bytes = new Uint8Array(await result.blob.arrayBuffer())
+      downloadBlobAsFile(result.blob, file.path)
+      queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
+        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+      })
+      onFileActivity?.({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes,
+        manifestRoot: manifestHex,
+        action: 'download',
+        status: 'success',
+      })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (manifestRoot) {
+        const manifestHex = manifestRoot
+        onFileActivity?.({
+          dealId,
+          filePath: file.path,
+          sizeBytes: file.size_bytes,
+          manifestRoot: manifestHex,
+          action: 'download',
+          status: 'failed',
+          error: msg,
+        })
+      }
+      setFileActionError(msg)
+    } finally {
+      setBusyFilePath(null)
+      onToggleMenu()
+    }
+  }
+
+  const handleGatewayProviderRetrieval = async () => {
+    setFileActionError(null)
+    setBusyFilePath(file.path)
+    const dealId = String(deal.id)
+    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+    try {
+      if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
+      const manifestHex = manifestRoot
+      onFileActivity?.({
+        dealId,
+        filePath: file.path,
+        sizeBytes: file.size_bytes,
+        manifestRoot: manifestHex,
+        action: 'download',
+        status: 'pending',
+      })
+      const result = await fetchFile({
+        dealId,
+        manifestRoot: manifestHex,
+        owner: requestOwner,
+        filePath: file.path,
+        routePreference: 'gateway_only',
+        rangeStart: safeStart,
+        rangeLen: safeLen,
+        fileStartOffset: file.start_offset,
+        fileSizeBytes: file.size_bytes,
+        mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
+        blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
+        sponsoredAuth,
+      })
+      if (!result) throw new Error('gateway-provider retrieval failed')
+      if (result.route && result.route !== 'gateway') {
+        throw new Error(`gateway-provider retrieval used ${result.route}; gateway route required`)
+      }
       const bytes = new Uint8Array(await result.blob.arrayBuffer())
       downloadBlobAsFile(result.blob, file.path)
       queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
@@ -812,7 +894,17 @@ function FileRow({
                         className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
                       >
                         <Zap className="w-3.5 h-3.5" />
-                        Provider
+                        Browser -&gt; Provider
+                      </button>
+                      <button
+                        onClick={handleGatewayProviderRetrieval}
+                        disabled={isAnyDownloading || isBusy || !manifestRoot}
+                        data-testid="deal-detail-download-gateway-provider"
+                        data-file-path={file.path}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        Gateway -&gt; Provider
                       </button>
                       <button
                         onClick={handleGatewayCacheDownload}
@@ -822,7 +914,7 @@ function FileRow({
                         className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
                       >
                         <Server className="w-3.5 h-3.5" />
-                        Gateway
+                        Gateway Cache
                       </button>
                       <button
                         onClick={handleAssembleMdus}
@@ -839,13 +931,19 @@ function FileRow({
                         Cache Status
                       </div>
                       <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
-                        <span>Browser</span>
+                        <span>Primary</span>
+                        <span className="border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] border-primary/30 bg-primary/10 text-primary">
+                          {primaryCacheLabel}
+                        </span>
+                      </div>
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
+                        <span>Browser Mirror</span>
                         <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${browserAvailable ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
                           {browserAvailable ? 'Yes' : '—'}
                         </span>
                       </div>
                       <div className="px-3 py-1.5 text-[10px] font-semibold text-foreground flex items-center justify-between gap-2">
-                        <span>Gateway</span>
+                        <span>Gateway Local</span>
                         <span className={`border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] ${gatewayCached ? 'border-success/30 bg-success/10 text-success' : 'border-border/30 bg-background text-muted-foreground'}`}>
                           {gatewayCached ? 'Yes' : '—'}
                         </span>
@@ -1131,8 +1229,13 @@ export function DealDetail({
     const backend = lastTrace?.chosen?.backend
     return backend ? backend.replace('_', ' ') : ''
   }, [lastTrace, routeOverride])
-  const displayCacheSource = cacheSourceOverride || progress.cacheSource || ''
+  const rawCacheSource = cacheSourceOverride || progress.cacheSource || ''
+  const displayCacheSource = formatCacheSourceLabel(rawCacheSource)
   const displayCacheFreshness = cacheFreshnessOverride || progress.cacheFreshness || ''
+  const gatewayModePreferred = isGatewayModePreferred({
+    preference: transportPreference,
+    gatewayBase: appConfig.gatewayBase,
+  })
 
   const markDownloadPath = useCallback(
     (route: string, mode: string, cacheSource: string, freshness: string) => {
@@ -2754,6 +2857,7 @@ export function DealDetail({
                               downloadRangeStart={downloadRangeStart}
                               downloadRangeLen={downloadRangeLen}
                               transportPreference={transportPreference}
+                              gatewayModePreferred={gatewayModePreferred}
                               setSelectedMdu={setSelectedMdu}
                               setActiveTab={setActiveTab}
                             />

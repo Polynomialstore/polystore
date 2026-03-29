@@ -47,7 +47,7 @@ export function orderCandidates<T>(
     return candidates
   }
   const preferred =
-    preference === 'prefer_gateway'
+    preference === 'prefer_gateway' || preference === 'gateway_only'
       ? new Set<BackendName>(['gateway'])
       : preference === 'prefer_p2p'
         ? new Set<BackendName>(['libp2p'])
