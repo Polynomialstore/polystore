@@ -67,11 +67,22 @@ test('resolveTransportPreference keeps prefer_p2p only when enabled', () => {
   assert.equal(downgrade, 'prefer_direct_sp')
 })
 
-test('allowNonGatewayBackends keeps fallback candidates for all preferences', () => {
+test('allowNonGatewayBackends disables fallback only for gateway_only', () => {
   assert.equal(allowNonGatewayBackends('prefer_gateway'), true)
+  assert.equal(allowNonGatewayBackends('gateway_only'), false)
   assert.equal(allowNonGatewayBackends('auto'), true)
   assert.equal(allowNonGatewayBackends('prefer_direct_sp'), true)
   assert.equal(allowNonGatewayBackends('prefer_p2p'), true)
+})
+
+test('resolveTransportPreference keeps explicit gateway_only unchanged', () => {
+  const resolved = resolveTransportPreference({
+    candidate: 'gateway_only',
+    gatewayDisabled: true,
+    p2pEnabled: false,
+    localGatewayConnected: false,
+  })
+  assert.equal(resolved, 'gateway_only')
 })
 
 test('isTrustedLocalGatewayBase only allows loopback :8080', () => {
