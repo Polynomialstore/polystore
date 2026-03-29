@@ -189,7 +189,7 @@ export function FirstFile() {
             First File Wizard
           </h1>
           <p className="mt-3 text-muted-foreground">
-            Guided flow to store and retrieve a file on the devnet. Keep the file ≤128&nbsp;KiB for a full download in this wizard.
+            Guided flow to store and retrieve a file on the devnet.
           </p>
         </div>
         </div>

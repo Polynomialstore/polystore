@@ -13,12 +13,12 @@ Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
 
 Execution order:
 - Perform repo bootstrap/sync first.
-- Immediately after repo sync, give the user the website action (`open https://nilstore.org and connect MetaMask`) before any extra diagnostics.
+- Immediately after repo sync, give the user the website action (`open https://nilstore.org/#/first-file and connect MetaMask`) before any extra diagnostics.
 - Keep the gap between repo sync completion and that website instruction minimal.
 
 Context:
 - Prefer the browser-first path first.
-- Primary homepage for this deployment: `https://nilstore.org` (fallback `https://web.nilstore.org` if needed).
+- Primary homepage for this deployment: `https://nilstore.org/#/first-file`.
 - Use `docs/ALPHA_STORAGE_USER_QUICKSTART.md` and `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`.
 - If local gateway is unavailable, continue browser-only flow and explicitly note skipped local diagnostics.
 - Never print secrets or private keys in full; redact sensitive values.
