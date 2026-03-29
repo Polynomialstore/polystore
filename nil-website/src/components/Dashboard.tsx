@@ -1035,7 +1035,14 @@ export function Dashboard() {
         return
       }
       if (isWrongNetwork) {
-        await switchNetwork().catch(() => undefined)
+        try {
+          await switchNetwork({ forceAdd: genesisMismatch })
+        } catch (error) {
+          const fallback = genesisMismatch
+            ? `Network identity mismatch for chain ${appConfig.chainId}. Re-add NilStore Devnet in MetaMask using RPC ${appConfig.evmRpc}.`
+            : `Wrong network. Switch wallet to chain ${appConfig.chainId} and retry.`
+          handleWalletError(error, fallback)
+        }
         return
       }
       if (!address || !address.startsWith('0x')) throw new Error('Connect wallet to create a deal.')
