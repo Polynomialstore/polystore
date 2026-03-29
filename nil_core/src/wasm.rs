@@ -4,7 +4,9 @@ use crate::coding::{
     expand_payload_flat_profiled, expand_payload_flat_uncommitted,
 };
 use crate::kzg::KzgContext;
-use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override, set_wasm_msm_basis_mode};
+use crate::kzg::{
+    BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override, set_wasm_msm_basis_mode,
+};
 use crate::layout::{FileRecordV1, pack_length_and_flags};
 use js_sys::{Date, Uint8Array};
 use wasm_bindgen::prelude::*;
@@ -384,9 +386,13 @@ impl NilWasm {
         let shard_len = rows * BLOB_SIZE;
         let mut shards_flat = vec![0u8; shard_count * shard_len];
 
-        let expand_perf =
-            expand_payload_flat_uncommitted(payload_bytes, data_shards, parity_shards, &mut shards_flat)
-            .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+        let expand_perf = expand_payload_flat_uncommitted(
+            payload_bytes,
+            data_shards,
+            parity_shards,
+            &mut shards_flat,
+        )
+        .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
 
         let commit_start = now_ms();
         let witness_flat = self
@@ -642,9 +648,13 @@ impl NilWasm {
         let shard_len = rows * BLOB_SIZE;
         let mut shards_flat = vec![0u8; shard_count * shard_len];
 
-        let expand_perf =
-            expand_mdu_encoded_flat_uncommitted(mdu_bytes, data_shards, parity_shards, &mut shards_flat)
-            .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
+        let expand_perf = expand_mdu_encoded_flat_uncommitted(
+            mdu_bytes,
+            data_shards,
+            parity_shards,
+            &mut shards_flat,
+        )
+        .map_err(|e| JsValue::from_str(&format!("Expansion failed: {:?}", e)))?;
 
         let commit_start = now_ms();
         let witness_flat = self
@@ -807,9 +817,9 @@ impl WasmMdu0Builder {
         start_offset: u64,
         flags: u8,
     ) -> Result<(), JsValue> {
-        let mut path_bytes = [0u8; 40];
+        let mut path_bytes = [0u8; crate::layout::FILE_RECORD_PATH_BYTES];
         let bytes = path.as_bytes();
-        if bytes.len() > 40 {
+        if bytes.len() > crate::layout::FILE_RECORD_PATH_BYTES {
             return Err(JsValue::from_str("path too long"));
         }
         path_bytes[..bytes.len()].copy_from_slice(bytes);

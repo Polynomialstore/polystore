@@ -1,4 +1,4 @@
-export const NILFS_RECORD_PATH_MAX_BYTES = 40
+export const NILFS_RECORD_PATH_MAX_BYTES = 232
 
 export function sanitizeNilfsRecordPath(input: string): string {
   let value = String(input ?? '').trim()
@@ -22,7 +22,7 @@ export function sanitizeNilfsRecordPath(input: string): string {
   value = value.trim()
   if (!value) return 'file'
 
-  // Match current NilFS V1 fixed 40-byte path field. Truncate by UTF-8 bytes, not JS code units,
+  // Match current NilFS fixed 232-byte path field. Truncate by UTF-8 bytes, not JS code units,
   // so multibyte filenames from macOS/Chrome cannot slip through and trip the WASM builder.
   const encoder = new TextEncoder()
   if (encoder.encode(value).length > NILFS_RECORD_PATH_MAX_BYTES) {

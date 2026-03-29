@@ -166,6 +166,7 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
     const BLOB_SIZE_BYTES = 128 * 1024
     const FILE_TABLE_START = 16 * BLOB_SIZE_BYTES
     const FILE_TABLE_HEADER_SIZE = 128
+    const FILE_RECORD_SIZE = 256
 
     const root = await navigator.storage.getDirectory()
     try {
@@ -189,13 +190,14 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
     const mdu0 = new Uint8Array(MDU_SIZE_BYTES)
     const view = new DataView(mdu0.buffer)
     mdu0.set(new TextEncoder().encode('NILF'), FILE_TABLE_START)
+    view.setUint16(FILE_TABLE_START + 6, FILE_RECORD_SIZE, true)
     view.setUint32(FILE_TABLE_START + 8, 1, true)
     const rec0 = FILE_TABLE_START + FILE_TABLE_HEADER_SIZE
     view.setBigUint64(rec0 + 0, 0n, true) // start_offset
     const lengthAndFlags = (BigInt(fileSize) & 0x00ff_ffff_ffff_ffffn) | (0n << 56n)
     view.setBigUint64(rec0 + 8, lengthAndFlags, true)
     const pathBytes = new TextEncoder().encode(filePath)
-    mdu0.set(pathBytes.slice(0, 40), rec0 + 24)
+    mdu0.set(pathBytes.slice(0, FILE_RECORD_SIZE - 24), rec0 + 24)
     await writeFile('mdu_0.bin', mdu0)
 
     await writeFile('mdu_1.bin', new Uint8Array(MDU_SIZE_BYTES))

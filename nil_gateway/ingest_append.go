@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
@@ -77,13 +76,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 
 	// Append a new file record starting at next MDU boundary.
-	baseName := strings.TrimSpace(recordPath)
-	if baseName == "" {
-		baseName = filepath.Base(filePath)
-	}
-	if len(baseName) > 40 {
-		baseName = baseName[:40]
-	}
+	baseName := normalizeNilfsRecordBasename(recordPath, filePath)
 	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, oldUserCount*RawMduCapacity, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, fmt.Errorf("AppendFileRecord failed: %w", err)

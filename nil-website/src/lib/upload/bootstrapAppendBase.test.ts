@@ -134,6 +134,7 @@ test('bootstrapAppendBaseFromMdus reconstructs append base from committed user m
   const mdu0 = new Uint8Array(8 * 1024 * 1024)
   const BLOB = 128 * 1024
   mdu0.set(new TextEncoder().encode('NILF'), 16 * BLOB)
+  new DataView(mdu0.buffer).setUint16(16 * BLOB + 6, 256, true)
   new DataView(mdu0.buffer).setUint32(16 * BLOB + 8, 1, true)
   const recordOffset = 16 * BLOB + 128
   new DataView(mdu0.buffer).setBigUint64(recordOffset, 0n, true)
@@ -164,6 +165,7 @@ test('bootstrapAppendBaseFromMdus rejects mismatched committed user mdu count', 
   const mdu0 = new Uint8Array(8 * 1024 * 1024)
   const BLOB = 128 * 1024
   mdu0.set(new TextEncoder().encode('NILF'), 16 * BLOB)
+  new DataView(mdu0.buffer).setUint16(16 * BLOB + 6, 256, true)
   new DataView(mdu0.buffer).setUint32(16 * BLOB + 8, 1, true)
   const recordOffset = 16 * BLOB + 128
   new DataView(mdu0.buffer).setBigUint64(recordOffset, 0n, true)

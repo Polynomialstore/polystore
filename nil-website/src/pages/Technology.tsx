@@ -16,7 +16,7 @@ const NILFS_ROOT_TABLE_BLOBS = 16; // blobs 0..15
 const NILFS_FILE_TABLE_BLOBS = 48; // blobs 16..63
 const NILFS_ROOT_SIZE_BYTES = 32;
 const NILFS_FILE_TABLE_HEADER_BYTES = 128;
-const NILFS_FILE_RECORD_BYTES = 64;
+const NILFS_FILE_RECORD_BYTES = 256;
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
@@ -275,7 +275,7 @@ export const Technology = () => {
               <div className="rounded-none border border-border bg-background/60 p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">File table</div>
                 <div className="mt-2 text-sm text-muted-foreground">
-                  Blob 16..63 store the file table header + fixed records. Each record is 64 bytes with packed flags.
+                  Blob 16..63 store the file table header + fixed records. Each record is 256 bytes with packed flags.
                 </div>
                 <div className="mt-3 grid gap-2 text-[12px] text-muted-foreground">
                   <div className="flex items-center justify-between">

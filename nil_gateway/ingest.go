@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"nilchain/x/crypto_ffi"
 )
@@ -143,13 +142,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 	}
 
 	// 7. Append File Record
-	baseName := strings.TrimSpace(recordPath)
-	if baseName == "" {
-		baseName = filepath.Base(filePath)
-	}
-	if len(baseName) > 40 {
-		baseName = baseName[:40]
-	}
+	baseName := normalizeNilfsRecordBasename(recordPath, filePath)
 	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, 0, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, err

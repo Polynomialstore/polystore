@@ -5,7 +5,7 @@ export const BLOB_SIZE_BYTES = 128 * 1024
 const FILE_TABLE_START = 16 * BLOB_SIZE_BYTES
 const ROOT_TABLE_END = FILE_TABLE_START
 const FILE_TABLE_HEADER_SIZE = 128
-const FILE_RECORD_SIZE = 64
+const FILE_RECORD_SIZE = 256
 
 function unpackLengthAndFlags(lengthAndFlags: bigint): { length: number; flags: number } {
   const length = Number(lengthAndFlags & 0x00ff_ffff_ffff_ffffn)
@@ -26,6 +26,8 @@ export function parseNilfsFilesFromMdu0(mdu0: Uint8Array): NilfsFileEntry[] {
   const magicOffset = FILE_TABLE_START
   const magic = parseNullTerminatedUtf8(mdu0.slice(magicOffset, magicOffset + 4))
   if (magic !== 'NILF') return []
+  const recordSize = view.getUint16(magicOffset + 6, true)
+  if (recordSize !== FILE_RECORD_SIZE) return []
 
   const recordCount = view.getUint32(magicOffset + 8, true)
   const recordsOffset = magicOffset + FILE_TABLE_HEADER_SIZE
@@ -38,7 +40,7 @@ export function parseNilfsFilesFromMdu0(mdu0: Uint8Array): NilfsFileEntry[] {
     const startOffset = Number(view.getBigUint64(off, true))
     const lengthAndFlags = view.getBigUint64(off + 8, true)
     const { length, flags } = unpackLengthAndFlags(lengthAndFlags)
-    const pathBytes = mdu0.slice(off + 24, off + 64)
+    const pathBytes = mdu0.slice(off + 24, off + FILE_RECORD_SIZE)
     const path = parseNullTerminatedUtf8(pathBytes).trim()
 
     if (!path) continue // tombstone
