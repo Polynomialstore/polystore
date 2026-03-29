@@ -2,6 +2,9 @@ package app
 
 import (
 	"io"
+	"os"
+	"strconv"
+	"strings"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
 	"cosmossdk.io/core/appmodule"
@@ -17,6 +20,7 @@ import (
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
+	sdkflags "github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/runtime"
@@ -70,6 +74,40 @@ import (
 	nilstoreprecompile "nilchain/precompiles/nilstore"
 	nilchainmodulekeeper "nilchain/x/nilchain/keeper"
 )
+
+func resolveEVMChainID(appOpts servertypes.AppOptions) uint64 {
+	// Prefer canonical cosmos-evm flag key.
+	candidates := []string{
+		evmsrvflags.EVMChainID, // "evm.evm-chain-id"
+		"evm-chain-id",         // app.toml legacy/flat access
+		"evm.chain-id",         // defensive alias
+	}
+
+	for _, key := range candidates {
+		if id := cast.ToUint64(appOpts.Get(key)); id != 0 {
+			return id
+		}
+	}
+
+	// Fall back to environment if service wiring provides chain ID there.
+	if id := cast.ToUint64(strings.TrimSpace(os.Getenv("NIL_CHAIN_ID"))); id != 0 {
+		return id
+	}
+	if id := cast.ToUint64(strings.TrimSpace(os.Getenv("EVM_CHAIN_ID"))); id != 0 {
+		return id
+	}
+
+	// Last chance: if cosmos chain-id is numeric, mirror it.
+	chainID := strings.TrimSpace(cast.ToString(appOpts.Get(sdkflags.FlagChainID)))
+	if chainID != "" {
+		if id, err := strconv.ParseUint(chainID, 10, 64); err == nil && id != 0 {
+			return id
+		}
+	}
+
+	// Legacy localhost fallback.
+	return 31337
+}
 
 const (
 	// Name is the name of the application.
@@ -264,12 +302,9 @@ func New(
 	)
 	app.FeeMarketKeeper = &fmKeeper
 
-	// Read EIP-155 chain ID from app options (CLI flag / app.toml).
-	// Keep 31337 fallback for legacy localhost behavior when unset.
-	evmChainID := cast.ToUint64(appOpts.Get(evmsrvflags.EVMChainID))
-	if evmChainID == 0 {
-		evmChainID = 31337
-	}
+	// Read EIP-155 chain ID from app options (CLI flag / app.toml / env).
+	// Keep 31337 fallback for legacy localhost behavior when all sources are unset.
+	evmChainID := resolveEVMChainID(appOpts)
 
 	evmKeeper := evmkeeper.NewKeeper(
 		app.appCodec,
