@@ -27,12 +27,18 @@ if [[ ! -f "${FILE_PATH}" ]]; then
   echo "error: file not found: ${FILE_PATH}" >&2
   exit 1
 fi
+if ! command -v jq >/dev/null 2>&1; then
+  echo "error: jq is required" >&2
+  exit 1
+fi
 
 GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
 LCD_BASE="${LCD_BASE:-http://localhost:1317}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 SERVICE_HINT="${SERVICE_HINT:-General}"
+UPLOAD_STATUS_TIMEOUT_SECS="${UPLOAD_STATUS_TIMEOUT_SECS:-300}"
+UPLOAD_STATUS_POLL_INTERVAL_SECS="${UPLOAD_STATUS_POLL_INTERVAL_SECS:-2}"
 
 if [[ -z "${EVM_PRIVKEY:-}" ]]; then
   echo "error: EVM_PRIVKEY env var required" >&2
@@ -40,11 +46,7 @@ if [[ -z "${EVM_PRIVKEY:-}" ]]; then
 fi
 
 FILE_NAME="$(basename "${FILE_PATH}")"
-FILE_SIZE_BYTES="$(python3 - <<'PY'
-import os, sys
-print(os.path.getsize(sys.argv[1]))
-PY
-"${FILE_PATH}")"
+FILE_SIZE_BYTES="$(wc -c <"${FILE_PATH}" | tr -d '[:space:]')"
 
 if [[ -z "${NILFS_PATH}" ]]; then
   NILFS_PATH="${FILE_NAME}"
@@ -74,12 +76,7 @@ if [[ -z "${DEAL_ID}" ]]; then
     -H 'Content-Type: application/json' \
     --data "${CREATE_JSON}")"
 
-  DEAL_ID="$(python3 - <<'PY'
-import json, sys
-doc = json.loads(sys.argv[1])
-print(doc.get("deal_id",""))
-PY
-"${CREATE_RESP}")"
+  DEAL_ID="$(printf '%s' "${CREATE_RESP}" | jq -r '.deal_id // ""' 2>/dev/null || true)"
 
   if [[ -z "${DEAL_ID}" ]]; then
     echo "error: failed to create deal. response: ${CREATE_RESP}" >&2
@@ -103,46 +100,70 @@ UPLOAD_RESP="$(curl -sS -X POST "${GATEWAY_BASE}/gateway/upload?deal_id=${DEAL_I
   -F "file_size_bytes=${FILE_SIZE_BYTES}" \
   -F "file=@${FILE_PATH}")"
 
-MANIFEST_ROOT="$(python3 - <<'PY'
-import json, sys
-doc = json.loads(sys.argv[1])
-root = (doc.get("manifest_root") or doc.get("cid") or "").strip()
-print(root)
-PY
-"${UPLOAD_RESP}")"
+MANIFEST_ROOT="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.result.manifest_root // .manifest_root // .cid // "") | tostring' 2>/dev/null || true)"
+SIZE_BYTES="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.result.size_bytes // .size_bytes // .result.file_size_bytes // .file_size_bytes // 0) | tonumber? // 0' 2>/dev/null || echo 0)"
+TOTAL_MDUS="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.result.total_mdus // .total_mdus // .result.totalMdus // .totalMdus // .result.allocated_length // .allocated_length // 0) | tonumber? // 0' 2>/dev/null || echo 0)"
+WITNESS_MDUS="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.result.witness_mdus // .witness_mdus // .result.witnessMdus // .witnessMdus // 0) | tonumber? // 0' 2>/dev/null || echo 0)"
 
-SIZE_BYTES="$(python3 - <<'PY'
-import json, sys
-doc = json.loads(sys.argv[1])
-size = doc.get("size_bytes") or doc.get("file_size_bytes") or 0
-try:
-  print(int(size))
-except Exception:
-  print(0)
-PY
-"${UPLOAD_RESP}")"
+UPLOAD_STATUS="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.status // "") | ascii_downcase' 2>/dev/null || true)"
+STATUS_URL="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.status_url // "") | tostring' 2>/dev/null || true)"
 
-TOTAL_MDUS="$(python3 - <<'PY'
-import json, sys
-doc = json.loads(sys.argv[1])
-total = doc.get("total_mdus") or doc.get("totalMdus") or doc.get("allocated_length") or 0
-try:
-  print(int(total))
-except Exception:
-  print(0)
-PY
-"${UPLOAD_RESP}")"
+if [[ -z "${MANIFEST_ROOT}" && ( "${UPLOAD_STATUS}" == "accepted" || "${UPLOAD_STATUS}" == "running" || -n "${STATUS_URL}" ) ]]; then
+  if [[ -z "${STATUS_URL}" ]]; then
+    STATUS_URL="${GATEWAY_BASE}/gateway/upload-status?deal_id=${DEAL_ID}&upload_id=${UPLOAD_ID}"
+  fi
+  echo ">> Upload accepted asynchronously. Polling status..."
 
-WITNESS_MDUS="$(python3 - <<'PY'
-import json, sys
-doc = json.loads(sys.argv[1])
-w = doc.get("witness_mdus") or doc.get("witnessMdus") or 0
-try:
-  print(int(w))
-except Exception:
-  print(0)
-PY
-"${UPLOAD_RESP}")"
+  poll_started_at="$(date +%s)"
+  poll_attempt=0
+  last_status_payload=""
+
+  while true; do
+    poll_attempt=$((poll_attempt + 1))
+
+    now_ts="$(date +%s)"
+    if (( now_ts - poll_started_at > UPLOAD_STATUS_TIMEOUT_SECS )); then
+      echo "error: timed out waiting for upload completion after ${UPLOAD_STATUS_TIMEOUT_SECS}s. last_status=${last_status_payload}" >&2
+      exit 1
+    fi
+
+    if ! poll_resp="$(curl -sS -w $'\n%{http_code}' "${STATUS_URL}")"; then
+      sleep "${UPLOAD_STATUS_POLL_INTERVAL_SECS}"
+      continue
+    fi
+
+    poll_http_code="$(printf '%s' "${poll_resp}" | tail -n1)"
+    poll_body="$(printf '%s' "${poll_resp}" | sed '$d')"
+    last_status_payload="${poll_body}"
+
+    if [[ "${poll_http_code}" != "200" ]]; then
+      if [[ "${poll_http_code}" == "404" || "${poll_http_code}" == "429" || "${poll_http_code}" == "503" ]]; then
+        sleep "${UPLOAD_STATUS_POLL_INTERVAL_SECS}"
+        continue
+      fi
+      echo "error: upload status poll failed (HTTP ${poll_http_code}): ${poll_body}" >&2
+      exit 1
+    fi
+
+    poll_status="$(printf '%s' "${poll_body}" | jq -r '(.status // "") | ascii_downcase' 2>/dev/null || true)"
+    if [[ "${poll_status}" == "error" ]]; then
+      poll_error="$(printf '%s' "${poll_body}" | jq -r '(.error // .message // "unknown upload error") | tostring' 2>/dev/null || true)"
+      echo "error: upload failed: ${poll_error}" >&2
+      exit 1
+    fi
+
+    if [[ "${poll_status}" == "success" ]]; then
+      UPLOAD_RESP="${poll_body}"
+      MANIFEST_ROOT="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.result.manifest_root // .manifest_root // .cid // "") | tostring' 2>/dev/null || true)"
+      SIZE_BYTES="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.result.size_bytes // .size_bytes // .result.file_size_bytes // .file_size_bytes // 0) | tonumber? // 0' 2>/dev/null || echo 0)"
+      TOTAL_MDUS="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.result.total_mdus // .total_mdus // .result.totalMdus // .totalMdus // .result.allocated_length // .allocated_length // 0) | tonumber? // 0' 2>/dev/null || echo 0)"
+      WITNESS_MDUS="$(printf '%s' "${UPLOAD_RESP}" | jq -r '(.result.witness_mdus // .witness_mdus // .result.witnessMdus // .witnessMdus // 0) | tonumber? // 0' 2>/dev/null || echo 0)"
+      break
+    fi
+
+    sleep "${UPLOAD_STATUS_POLL_INTERVAL_SECS}"
+  done
+fi
 
 if [[ -z "${MANIFEST_ROOT}" ]]; then
   echo "error: gateway upload returned no manifest_root. response: ${UPLOAD_RESP}" >&2
@@ -174,12 +195,7 @@ UPDATE_RESP="$(curl -sS -X POST "${GATEWAY_BASE}/gateway/update-deal-content-evm
   -H 'Content-Type: application/json' \
   --data "${UPDATE_JSON}")"
 
-TX_HASH="$(python3 - <<'PY'
-import json, sys
-doc = json.loads(sys.argv[1])
-print((doc.get("tx_hash") or "").strip())
-PY
-"${UPDATE_RESP}")"
+TX_HASH="$(printf '%s' "${UPDATE_RESP}" | jq -r '.tx_hash // ""' 2>/dev/null || true)"
 
 if [[ -z "${TX_HASH}" ]]; then
   echo "error: commit failed. response: ${UPDATE_RESP}" >&2
