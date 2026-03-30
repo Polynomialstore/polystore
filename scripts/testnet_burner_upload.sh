@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/load_testnet_public_env.sh"
 
 usage() {
   cat <<'USAGE'
@@ -30,6 +32,9 @@ Options:
 Notes:
   - Testnet burner-key flow only. Not for production custody.
   - Private keys are never transmitted over the network by this script.
+  - Requires a local Nil Gateway at GATEWAY_BASE (default: http://localhost:8080).
+  - Uses direct nilchaind submission for create/update by default so local gateway
+    GUI setup does not also need local tx-relay configuration.
 USAGE
 }
 
@@ -45,10 +50,12 @@ KEYSTORE_PASSWORD_ENV="NIL_BURNER_KEYSTORE_PASSWORD"
 ALLOW_RAW_KEY_EXPORT=0
 RAW_KEY_OUT=""
 DESTROY_LOCAL_KEY_AFTER_EXPORT=1
-FAUCET_URL="${FAUCET_URL:-https://faucet.nilstore.org/faucet}"
+FAUCET_URL="${FAUCET_URL:-${NILSTORE_TESTNET_FAUCET_URL:-https://faucet.nilstore.org/faucet}}"
 FAUCET_AUTH_ENV="NIL_FAUCET_AUTH_TOKEN"
-LCD_BASE="${LCD_BASE:-https://lcd.nilstore.org}"
+LCD_BASE="${LCD_BASE:-${NILSTORE_TESTNET_LCD_BASE:-https://lcd.nilstore.org}}"
 WAIT_BALANCE_TIMEOUT=120
+FAUCET_RETRY_ATTEMPTS="${FAUCET_RETRY_ATTEMPTS:-6}"
+FAUCET_RETRY_DELAY_SECS="${FAUCET_RETRY_DELAY_SECS:-10}"
 SKIP_FAUCET=0
 
 POSITIONAL=()
@@ -144,6 +151,25 @@ if [[ ! -x "$ROOT_DIR/scripts/enterprise_upload_job.sh" ]]; then
   exit 1
 fi
 
+export GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
+
+if [[ -z "${NIL_FAUCET_AUTH_TOKEN:-}" && -n "${NILSTORE_TESTNET_FAUCET_AUTH_TOKEN:-}" ]]; then
+  export NIL_FAUCET_AUTH_TOKEN="$NILSTORE_TESTNET_FAUCET_AUTH_TOKEN"
+fi
+export CHAIN_ID="${CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-20260211}}"
+export EVM_CHAIN_ID="${EVM_CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-20260211}}"
+export NIL_NODE="${NIL_NODE:-${NILSTORE_TESTNET_NODE:-https://rpc.nilstore.org}}"
+export LCD_BASE
+export NIL_GAS_PRICES="${NIL_GAS_PRICES:-${NILSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
+export NIL_TX_SENDER_KEY="${NIL_TX_SENDER_KEY:-${NILSTORE_TESTNET_TX_SENDER_KEY:-faucet}}"
+export NIL_TX_SENDER_MNEMONIC="${NIL_TX_SENDER_MNEMONIC:-${NILSTORE_TESTNET_TX_SENDER_MNEMONIC:-}}"
+export NIL_TX_SUBMIT_MODE="${NIL_TX_SUBMIT_MODE:-direct}"
+
+if ! curl -fsS "${GATEWAY_BASE}/health" >/dev/null 2>&1; then
+  echo "error: local gateway is not healthy at ${GATEWAY_BASE}. Start Nil Gateway GUI before running this helper." >&2
+  exit 1
+fi
+
 if [[ ! -d "$ROOT_DIR/nil-website/node_modules" ]]; then
   echo "Installing nil-website dependencies..."
   npm -C "$ROOT_DIR/nil-website" install >/dev/null
@@ -177,18 +203,27 @@ if [[ "$SKIP_FAUCET" != "1" ]]; then
   faucet_payload="$(printf '{"address":"%s"}' "$NIL_ADDRESS")"
 
   echo "Requesting faucet funds..."
-  if [[ -n "$faucet_auth_token" ]]; then
-    faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" -H "Content-Type: application/json" -H "X-Nil-Faucet-Auth: $faucet_auth_token" --data "$faucet_payload")"
-  else
-    faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" -H "Content-Type: application/json" --data "$faucet_payload")"
-  fi
+  faucet_http_code=""
+  faucet_body=""
+  for attempt in $(seq 1 "$FAUCET_RETRY_ATTEMPTS"); do
+    if [[ -n "$faucet_auth_token" ]]; then
+      faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" -H "Content-Type: application/json" -H "X-Nil-Faucet-Auth: $faucet_auth_token" --data "$faucet_payload")"
+    else
+      faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" -H "Content-Type: application/json" --data "$faucet_payload")"
+    fi
 
-  faucet_http_code="$(printf '%s' "$faucet_resp" | tail -n1)"
-  faucet_body="$(printf '%s' "$faucet_resp" | sed '$d')"
-  if [[ "$faucet_http_code" != "200" ]]; then
-    echo "error: faucet request failed (HTTP $faucet_http_code): $faucet_body" >&2
-    exit 1
-  fi
+    faucet_http_code="$(printf '%s' "$faucet_resp" | tail -n1)"
+    faucet_body="$(printf '%s' "$faucet_resp" | sed '$d')"
+    if [[ "$faucet_http_code" == "200" ]]; then
+      break
+    fi
+    if [[ "$faucet_http_code" != "429" || "$attempt" -ge "$FAUCET_RETRY_ATTEMPTS" ]]; then
+      echo "error: faucet request failed (HTTP $faucet_http_code): $faucet_body" >&2
+      exit 1
+    fi
+    echo "Faucet rate limited (attempt $attempt/$FAUCET_RETRY_ATTEMPTS). Retrying in ${FAUCET_RETRY_DELAY_SECS}s..."
+    sleep "$FAUCET_RETRY_DELAY_SECS"
+  done
 
   echo "Waiting for balance on LCD..."
   start_ts="$(date +%s)"

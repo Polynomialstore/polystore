@@ -3,6 +3,33 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+function readPublicTestnetEnv() {
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const envPath = path.resolve(scriptDir, "..", "..", ".env.testnet.public");
+  try {
+    const raw = fs.readFileSync(envPath, "utf8");
+    const out = {};
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 function readFaucetAuthTokenFromEtc() {
   const envPath = "/etc/nilstore/nil-faucet.env";
   try {
@@ -28,13 +55,34 @@ function resolveViteBin() {
 }
 
 const args = process.argv.slice(2);
+const publicTestnetEnv = readPublicTestnetEnv();
+const faucetBase =
+  publicTestnetEnv.NILSTORE_TESTNET_FAUCET_URL?.replace(/\/faucet\/?$/, "") || "";
+
+if (!process.env.VITE_API_BASE && faucetBase) {
+  process.env.VITE_API_BASE = faucetBase;
+}
+if (!process.env.VITE_LCD_BASE && publicTestnetEnv.NILSTORE_TESTNET_LCD_BASE) {
+  process.env.VITE_LCD_BASE = publicTestnetEnv.NILSTORE_TESTNET_LCD_BASE;
+}
+if (!process.env.VITE_EVM_RPC && publicTestnetEnv.NILSTORE_TESTNET_EVM_RPC) {
+  process.env.VITE_EVM_RPC = publicTestnetEnv.NILSTORE_TESTNET_EVM_RPC;
+}
+if (!process.env.VITE_COSMOS_CHAIN_ID && publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID) {
+  process.env.VITE_COSMOS_CHAIN_ID = publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID;
+}
+if (!process.env.VITE_CHAIN_ID && publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID) {
+  process.env.VITE_CHAIN_ID = publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID;
+}
 
 if (process.env.VITE_ENABLE_FAUCET == null || String(process.env.VITE_ENABLE_FAUCET).trim() === "") {
   process.env.VITE_ENABLE_FAUCET = "1";
 }
 
 if (!process.env.VITE_FAUCET_AUTH_TOKEN) {
-  const token = readFaucetAuthTokenFromEtc();
+  const token =
+    publicTestnetEnv.NILSTORE_TESTNET_FAUCET_AUTH_TOKEN ||
+    readFaucetAuthTokenFromEtc();
   if (token) {
     process.env.VITE_FAUCET_AUTH_TOKEN = token;
     // Also export the non-Vite name for convenience in local scripts.

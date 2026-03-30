@@ -22,7 +22,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 
 ## What Collaborators Need From Hub Operator
 
-- Faucet auth token (invite-only; share out-of-band)
+- Faucet auth token (shared pre-alpha devnet bootstrap token; may already be embedded in the website build)
 - Router/provider shared secret `NIL_GATEWAY_SP_AUTH` (SP operators only)
 
 ## Website Tester Quickstart
@@ -38,12 +38,21 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 4) Run the flow:
 - create deal → upload → commit → retrieve.
 
+Fast full-local repo onboarding:
+- Start Nil Gateway GUI on `http://localhost:8080`.
+- Verify `curl -sf http://localhost:8080/health`.
+- Use the repo-tracked public bootstrap defaults in `.env.testnet.public` unless you need explicit overrides.
+- Run `scripts/testnet_burner_upload.sh <file_path>` with a small file.
+- Import the exported keystore into MetaMask.
+- Continue browser verification on `https://nilstore.org/#/first-file` with that same wallet and local gateway.
+
 Local gateway app (recommended for localhost gateway-assisted flows):
 - Start Nil Gateway GUI (or local `nil_gateway`) on `http://localhost:8080`.
 - Download builds: `https://github.com/Nil-Store/nil-store/releases/latest`.
 
 Notes:
-- This deployment is wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
+- The website flow remains wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
+- The repo helper `scripts/testnet_burner_upload.sh` uses the local gateway for upload and direct `nilchaind` submission for create/update, so it does not require a separately managed local faucet or gateway tx-relay setup.
 - The website flow uses direct EVM transactions (MetaMask / precompile), then uses direct provider transport and optional localhost local-gateway mode.
 
 ## SP Operator Quickstart

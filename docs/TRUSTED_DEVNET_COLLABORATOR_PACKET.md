@@ -24,8 +24,8 @@ You should receive:
 - EVM RPC: `https://evm.<domain>`
 - Chain ID: `<chain-id>` (e.g. `20260211`)
 - Faucet URL (optional): `https://faucet.<domain>/faucet`
-- Faucet auth token (optional): a secret string you paste into the website UI (do **not** share publicly)
-- Local gateway endpoint (optional): `http://localhost:8080`
+- Faucet auth token (optional): a shared pre-alpha devnet bootstrap token. It may already be embedded in the website build or repo defaults.
+- Local gateway endpoint for full local onboarding: `http://localhost:8080`
 
 If you are running an SP, you also need:
 - Hub RPC: `https://rpc.<domain>`
@@ -55,7 +55,7 @@ If you need to add the network manually:
 ### 2) Get test funds
 
 If the faucet UI is enabled on the website:
-1. Paste the faucet auth token (if provided).
+1. If prompted, paste the shared faucet bootstrap token.
 2. Click **Fund** (or equivalent).
 
 If the faucet UI is not enabled, ask the hub operator to fund your address.
@@ -70,6 +70,12 @@ If the faucet UI is not enabled, ask the hub operator to fund your address.
 Optional but recommended:
 - Install Nil Gateway GUI and run it locally (`http://localhost:8080`) for gateway-assisted workflows.
 - Download from: `https://github.com/Nil-Store/nil-store/releases/latest`.
+
+Fast full-local repo onboarding:
+- Start Nil Gateway GUI first and verify `curl -sf http://localhost:8080/health`.
+- Run `scripts/testnet_burner_upload.sh <file_path>` with a small file to establish one wallet, one deal, and the MetaMask keystore export.
+- Import that same keystore into MetaMask.
+- Continue browser verification on `https://nilstore.org` with the same wallet and local gateway.
 
 Tip: if you test with a text file, change a line and re-upload to confirm the commit changes the retrieval.
 

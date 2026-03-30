@@ -671,7 +671,7 @@ Recommended onboarding order:
 
 Important:
 - this is **testnet-only** convenience flow, not production custody
-- the flow still requires relay-capable gateway behavior for create/update endpoints
+- the flow still requires a local gateway for `/gateway/upload`, but create/update are submitted directly with `nilchaind` by default so you do not also need a local faucet or gateway tx-relay setup
 
 ## Troubleshooting (hub)
 
