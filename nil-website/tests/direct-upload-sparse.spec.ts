@@ -178,7 +178,8 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
       cid: '',
       size: '0',
       escrow_balance: '1000000',
-      end_block: '1000',
+      end_block: '99999999',
+      service_hint: 'General:rs=2+1',
       providers: ['nil1providera', 'nil1providerb', 'nil1providerc'],
     }
 
@@ -268,9 +269,11 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const dealRow = page.getByTestId('deal-row-1')
   await expect(dealRow).toBeVisible({ timeout: 60_000 })
   await dealRow.click()
-  await expect(page.getByTestId('mdu-file-input')).toBeAttached({
+  await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #1/, { timeout: 30_000 })
+  await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, {
     timeout: uploadSizeBytes > 50 * 1024 * 1024 ? 120_000 : 30_000,
   })
+  await expect(page.getByText('Deal expired')).toHaveCount(0)
 
   if (uploadSizeBytes > 50 * 1024 * 1024) {
     const uploadPath = testInfo.outputPath('direct-sparse.bin')

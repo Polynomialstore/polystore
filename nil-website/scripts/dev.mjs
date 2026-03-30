@@ -58,20 +58,22 @@ const args = process.argv.slice(2);
 const publicTestnetEnv = readPublicTestnetEnv();
 const faucetBase =
   publicTestnetEnv.NILSTORE_TESTNET_FAUCET_URL?.replace(/\/faucet\/?$/, "") || "";
+// E2E harnesses stub loopback services and should not inherit public testnet endpoints.
+const isE2E = process.env.VITE_E2E === "1";
 
-if (!process.env.VITE_API_BASE && faucetBase) {
+if (!isE2E && !process.env.VITE_API_BASE && faucetBase) {
   process.env.VITE_API_BASE = faucetBase;
 }
-if (!process.env.VITE_LCD_BASE && publicTestnetEnv.NILSTORE_TESTNET_LCD_BASE) {
+if (!isE2E && !process.env.VITE_LCD_BASE && publicTestnetEnv.NILSTORE_TESTNET_LCD_BASE) {
   process.env.VITE_LCD_BASE = publicTestnetEnv.NILSTORE_TESTNET_LCD_BASE;
 }
-if (!process.env.VITE_EVM_RPC && publicTestnetEnv.NILSTORE_TESTNET_EVM_RPC) {
+if (!isE2E && !process.env.VITE_EVM_RPC && publicTestnetEnv.NILSTORE_TESTNET_EVM_RPC) {
   process.env.VITE_EVM_RPC = publicTestnetEnv.NILSTORE_TESTNET_EVM_RPC;
 }
-if (!process.env.VITE_COSMOS_CHAIN_ID && publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID) {
+if (!isE2E && !process.env.VITE_COSMOS_CHAIN_ID && publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID) {
   process.env.VITE_COSMOS_CHAIN_ID = publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID;
 }
-if (!process.env.VITE_CHAIN_ID && publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID) {
+if (!isE2E && !process.env.VITE_CHAIN_ID && publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID) {
   process.env.VITE_CHAIN_ID = publicTestnetEnv.NILSTORE_TESTNET_CHAIN_ID;
 }
 
