@@ -15,6 +15,8 @@ Fallback target:
 1. Fast Bootstrap
 - Sync the repo locally.
 - Reuse an already healthy local gateway on `http://localhost:8080` if one is running; otherwise install and open Nil Gateway GUI so it owns that address.
+- macOS: use the latest release `.dmg` for Apple Silicon or Intel, install `nil_gateway_gui.app`, and approve the first launch in Gatekeeper if prompted.
+- Linux: use the latest release `.deb` on Ubuntu or Debian, or `.rpm` on RPM-based systems, then launch `nil_gateway_gui` from the app menu or shell.
 - Confirm required tools are present (`curl`, `jq`, `npm`, and `nilchaind`; `gh` optional).
 - Confirm the hosted LCD and faucet are reachable.
 - Use the repo-tracked public testnet bootstrap defaults from `.env.testnet.public` unless you intentionally need overrides.
@@ -64,6 +66,8 @@ Fallback target:
 4. Let the agent run as a guided operator:
    - it should walk you through the onboarding milestones in order
    - it should sync the repo, reuse an already healthy local gateway when available, otherwise install or open Nil Gateway GUI, and verify `http://localhost:8080/health`
+   - on macOS it should choose the matching Apple Silicon or Intel `.dmg`, install or open `nil_gateway_gui.app`, and only pause for Gatekeeper approval
+   - on Linux it should prefer `.deb` or `.rpm` release packages, launch `nil_gateway_gui`, and only fall back to a source build if the packaged install path is blocked
    - it should use the repo-tracked public testnet defaults for hosted faucet or chain access instead of setting up a local faucet
    - it should create the tiny bootstrap file and complete `scripts/testnet_burner_upload.sh` first, then hand that wallet off to MetaMask
    - it should proceed autonomously through local setup and CLI bootstrap, and only pause for wallet approvals, OS security prompts, browser connection steps, or file-picker actions

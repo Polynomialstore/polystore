@@ -32,6 +32,9 @@ Context:
 - The best UX for users who want local gateway + CLI is: repo sync, install/open Nil Gateway GUI, complete `scripts/testnet_burner_upload.sh`, then MetaMask handoff, then browser continuity verification.
 - `scripts/testnet_burner_upload.sh` proves create/upload/commit and keystore export; retrieval should be verified after MetaMask import in the browser and/or gateway continuity steps.
 - Use the repo-tracked public testnet bootstrap defaults (`.env.testnet.public`) for hosted faucet and chain endpoints unless the user explicitly overrides them.
+- Nil Gateway GUI release packaging reference:
+  - macOS releases are `.dmg` bundles for Apple Silicon and Intel.
+  - Linux releases are `.deb` and `.rpm` packages.
 - Never print secrets or private keys in full; redact sensitive values.
 
 Operating mode:
@@ -87,6 +90,14 @@ Your job:
    - verify required local tools are installed: `curl`, `jq`, `npm`, and `nilchaind` (`gh` optional)
    - check `http://localhost:8080/health` first; if it is already healthy, reuse the existing local gateway
    - otherwise install or open Nil Gateway GUI yourself; prefer the latest GitHub release artifact and only fall back to source-build/manual debugging if the release path is blocked
+   - macOS setup path:
+     - choose the latest release `.dmg` that matches the machine architecture: Apple Silicon for `arm64`, Intel for `x86_64`
+     - mount the `.dmg`, copy `nil_gateway_gui.app` into `/Applications` if needed, then launch it with `open /Applications/nil_gateway_gui.app` or equivalent
+     - if Gatekeeper blocks first launch, pause only long enough to tell the user to approve the app via right-click `Open` or System Settings, then resume automatically
+   - Linux setup path:
+     - on Ubuntu or Debian, prefer the latest `.deb`; on RPM-based systems, prefer the latest `.rpm`
+     - install the package, then launch `nil_gateway_gui` from the desktop launcher or by running `nil_gateway_gui` or `/usr/bin/nil_gateway_gui`
+     - only fall back to `cd nil_gateway_gui && npm ci && npm run tauri build` when no matching package works for the host OS
    - verify local gateway `/health`; use `/status` only if it exists or if debugging is needed
    - create a temporary tiny file locally and complete `scripts/testnet_burner_upload.sh <file_path>`
    - capture wallet address, nil address, keystore path, deal ID, manifest root, file name, file size, create tx hash, and commit tx hash

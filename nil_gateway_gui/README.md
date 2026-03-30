@@ -12,7 +12,10 @@
 ## User Quick Start
 
 1. Download and install the latest GUI build for your OS from GitHub Releases.
+   - macOS: choose the latest `.dmg` for Apple Silicon or Intel, open it, copy `nil_gateway_gui.app` into `/Applications` if needed, then launch it with `open /Applications/nil_gateway_gui.app` or from Finder.
+   - Linux: choose the latest `.deb` on Ubuntu or Debian, or `.rpm` on RPM-based systems, install it, then launch `nil_gateway_gui` from the app menu or by running `nil_gateway_gui`.
 2. Start Nil Gateway GUI (it auto-checks localhost and auto-starts the local Gateway if needed).
+   - If macOS Gatekeeper blocks first launch, use right-click `Open` or approve it in System Settings, then relaunch.
 3. Verify local health:
    - `curl -sf http://localhost:8080/health`
 4. Open `https://nilstore.org/#/dashboard`.
