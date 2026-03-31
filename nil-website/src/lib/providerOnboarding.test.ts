@@ -66,7 +66,7 @@ test('buildProviderEndpointPlan keeps an explicit multiaddr intact', () => {
   assert.equal(plan?.publicHealthUrl, 'https://203.0.113.10:8443/health')
 })
 
-test('buildProviderBootstrapCommand stages init before bootstrap and omits pairing when absent', () => {
+test('buildProviderBootstrapCommand stages init before bootstrap and opts into partial mode when pairing is absent', () => {
   const command = buildProviderBootstrapCommand({
     hostMode: 'public-vps',
     endpointMode: 'ipv4',
@@ -78,6 +78,7 @@ test('buildProviderBootstrapCommand stages init before bootstrap and omits pairi
 
   assert.match(command, /run_devnet_provider\.sh init/)
   assert.match(command, /fund the printed nil1 address with aatom/)
+  assert.match(command, /BOOTSTRAP_ALLOW_PARTIAL=1/)
   assert.doesNotMatch(command, /PAIRING_ID=/)
   assert.match(command, /PROVIDER_KEY='provider-main'/)
   assert.match(command, /PROVIDER_ENDPOINT='\/ip4\/203\.0\.113\.10\/tcp\/8091\/http'/)
@@ -156,6 +157,7 @@ test('buildProviderAgentPrompt includes runtime values and script-aligned status
   assert.match(prompt, /PROVIDER_ENDPOINT=\/dns4\/sp\.example\.com\/tcp\/443\/https/)
   assert.match(prompt, /public health base `https:\/\/sp\.example\.com`/)
   assert.match(prompt, /run_devnet_provider\.sh pair/)
+  assert.match(prompt, /bootstrap` now fails fast unless all three are present/)
   assert.match(prompt, /provider_process_running/)
   assert.match(prompt, /pending_pairing_open/)
   assert.match(prompt, /update-aware on the current testnet build/)
@@ -170,7 +172,7 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
 
   assert.match(quickstart, /Treat `NIL_GATEWAY_SP_AUTH` as a secret/)
   assert.match(quickstart, /https:\/\/nilstore\.org\/#\/sp-onboarding/)
-  assert.match(remote, /`bootstrap` can run without `PAIRING_ID`/)
+  assert.match(remote, /BOOTSTRAP_ALLOW_PARTIAL=1/)
   assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-onboarding/)
   assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-dashboard/)
   assert.match(remote, /run_devnet_provider\.sh pair/)

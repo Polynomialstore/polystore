@@ -44,6 +44,14 @@ export interface ProviderAdminResponse {
   refreshed_at?: string
 }
 
+export interface ProviderPublicStatusResponse {
+  persona?: string
+  mode?: string
+  allowed_route_families?: string[]
+  provider?: ProviderAdminStatusDetail
+  issues?: string[]
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null
 }
@@ -128,6 +136,26 @@ async function postProviderAdmin(
   const payload = (await res.json().catch(() => null)) as ProviderAdminResponse | null
   if (!payload) {
     throw new Error('Invalid provider admin JSON')
+  }
+  return payload
+}
+
+export async function providerFetchPublicStatus(
+  providerBase: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<ProviderPublicStatusResponse> {
+  const normalizedBase = String(providerBase || '').trim().replace(/\/$/, '')
+  if (!normalizedBase) {
+    throw new Error('providerBase is required')
+  }
+  const res = await fetchWithTimeout(`${normalizedBase}/status`, { method: 'GET' }, 10_000, fetchFn)
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(txt || `Provider status returned ${res.status}`)
+  }
+  const payload = (await res.json().catch(() => null)) as ProviderPublicStatusResponse | null
+  if (!payload || !isRecord(payload)) {
+    throw new Error('Invalid provider status JSON')
   }
   return payload
 }

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   providerAdminRefreshStatus,
   providerAdminRotateEndpoint,
+  providerFetchPublicStatus,
   providerFetchMduWindowWithSession,
 } from './providerClient.ts'
 
@@ -109,4 +110,36 @@ test('providerAdminRotateEndpoint surfaces provider-daemon admin errors', async 
     ),
     /rotation failed/,
   )
+})
+
+test('providerFetchPublicStatus reads public provider-daemon status without signing', async () => {
+  const seen: { url?: string; method?: string } = {}
+  const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    seen.url = String(input)
+    seen.method = String(init?.method || 'GET')
+    return new Response(
+      JSON.stringify({
+        persona: 'provider-daemon',
+        allowed_route_families: ['sp', 'sp/retrieval'],
+        provider: {
+          address: 'nil1provider',
+          public_base: 'https://sp.nilstore.org',
+          public_health_ok: true,
+        },
+        issues: [],
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+  }) as typeof fetch
+
+  const response = await providerFetchPublicStatus('https://sp.nilstore.org/', fetchMock)
+
+  assert.equal(seen.url, 'https://sp.nilstore.org/status')
+  assert.equal(seen.method, 'GET')
+  assert.equal(response.persona, 'provider-daemon')
+  assert.equal(response.provider?.public_base, 'https://sp.nilstore.org')
+  assert.equal(response.provider?.public_health_ok, true)
 })

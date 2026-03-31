@@ -63,6 +63,15 @@ const nilstoreABIJSON = `[
   },
   {
     "type":"function",
+    "name":"unpairProvider",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"provider","type":"string"}
+    ],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
     "name":"extendDeal",
     "stateMutability":"nonpayable",
     "inputs":[
@@ -308,6 +317,8 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runUpdateDealContent(ctx, evm, contract, method, input[4:])
 	case "openProviderPairing":
 		return p.runOpenProviderPairing(ctx, evm, contract, method, input[4:])
+	case "unpairProvider":
+		return p.runUnpairProvider(ctx, evm, contract, method, input[4:])
 	case "extendDeal":
 		return p.runExtendDeal(ctx, evm, contract, method, input[4:])
 	case "updateDealRetrievalPolicy":
@@ -966,6 +977,35 @@ func (p *Precompile) runOpenProviderPairing(ctx sdk.Context, _ *vm.EVM, contract
 	out, err := method.Outputs.Pack(true)
 	if err != nil {
 		return nil, fmt.Errorf("openProviderPairing: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runUnpairProvider(ctx sdk.Context, _ *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("unpairProvider: failed to unpack args: %w", err)
+	}
+
+	provider, err := asString(args["provider"])
+	if err != nil {
+		return nil, errors.New("unpairProvider: invalid provider")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	if _, err := msgServer.UnpairProvider(sdk.WrapSDKContext(ctx), &types.MsgUnpairProvider{
+		Creator:  creator,
+		Provider: strings.TrimSpace(provider),
+	}); err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("unpairProvider: failed to pack outputs: %w", err)
 	}
 	return out, nil
 }

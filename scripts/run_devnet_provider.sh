@@ -69,6 +69,7 @@ PROVIDER_LISTEN="${PROVIDER_LISTEN:-${NIL_LISTEN_ADDR:-:8091}}"
 PROVIDER_CAPABILITIES="${PROVIDER_CAPABILITIES:-General}"
 PROVIDER_TOTAL_STORAGE="${PROVIDER_TOTAL_STORAGE:-1099511627776}" # 1 TiB default
 PROVIDER_ENDPOINTS_RAW="${PROVIDER_ENDPOINTS:-${PROVIDER_ENDPOINT:-}}"
+BOOTSTRAP_ALLOW_PARTIAL="${BOOTSTRAP_ALLOW_PARTIAL:-0}"
 
 HOME_DIR="${NIL_HOME:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/nilchain_home}"
 UPLOAD_DIR="${NIL_UPLOAD_DIR:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/uploads}"
@@ -295,12 +296,47 @@ pending_pairing_json() {
 json_string_field() {
   local field="$1"
   local body="${2:-}"
+  if have_cmd jq; then
+    printf '%s' "$body" | jq -r --arg field "$field" '(.[$field] // empty) | strings'
+    return 0
+  fi
+  if have_cmd python3; then
+    JSON_FIELD="$field" python3 -c 'import json, os, sys
+field = os.environ["JSON_FIELD"]
+try:
+    payload = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+value = payload.get(field, "")
+if isinstance(value, str):
+    sys.stdout.write(value)' <<<"$body"
+    return 0
+  fi
   printf '%s' "$body" | tr -d '\n' | sed -n "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n1
 }
 
 json_array_field() {
   local field="$1"
   local body="${2:-}"
+  if have_cmd jq; then
+    printf '%s' "$body" | jq -c --arg field "$field" '(.[$field] // []) | arrays'
+    return 0
+  fi
+  if have_cmd python3; then
+    JSON_FIELD="$field" python3 -c 'import json, os, sys
+field = os.environ["JSON_FIELD"]
+try:
+    payload = json.load(sys.stdin)
+except Exception:
+    sys.stdout.write("[]")
+    sys.exit(0)
+value = payload.get(field, [])
+if isinstance(value, list):
+    sys.stdout.write(json.dumps(value))
+else:
+    sys.stdout.write("[]")' <<<"$body"
+    return 0
+  fi
   local value
   value="$(printf '%s' "$body" | tr -d '\n' | sed -n "s/.*\"$field\"[[:space:]]*:[[:space:]]*\\(\\[[^]]*\\]\\).*/\\1/p" | head -n1)"
   if [ -n "$value" ]; then
@@ -788,6 +824,25 @@ bootstrap_provider() {
 
   if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
     echo "==> Provider key was just created. Fund $(provider_addr) with aatom, then rerun bootstrap." >&2
+    return 1
+  fi
+
+  local missing=()
+  if [ -z "$PAIRING_ID" ]; then
+    missing+=("PAIRING_ID")
+  fi
+  if [ -z "${NIL_GATEWAY_SP_AUTH:-}" ]; then
+    missing+=("NIL_GATEWAY_SP_AUTH")
+  fi
+  if [ -z "$PROVIDER_ENDPOINTS_RAW" ]; then
+    missing+=("PROVIDER_ENDPOINT")
+  fi
+
+  if [ "${#missing[@]}" -gt 0 ] && [ "$BOOTSTRAP_ALLOW_PARTIAL" != "1" ]; then
+    echo "ERROR: bootstrap now fails fast unless website-managed prerequisites are present." >&2
+    echo "Missing: ${missing[*]}" >&2
+    echo "Provide the missing values and rerun bootstrap, or use the staged manual commands (pair/register/start)." >&2
+    echo "If you intentionally want a partial manual bootstrap, rerun with BOOTSTRAP_ALLOW_PARTIAL=1." >&2
     return 1
   fi
 

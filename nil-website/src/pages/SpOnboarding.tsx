@@ -21,6 +21,7 @@ import {
   lcdFetchProviders,
   lcdFetchProvidersByOperator,
 } from '../api/lcdClient'
+import { providerFetchPublicStatus, type ProviderPublicStatusResponse } from '../api/providerClient'
 import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
 import { PrimaryCtaAnchor } from '../components/PrimaryCta'
 import { useNetwork } from '../hooks/useNetwork'
@@ -48,6 +49,7 @@ const PROVIDER_PLAYBOOK_URL = 'https://github.com/Nil-Store/nil-store/blob/main/
 const REPO_URL = 'https://github.com/Nil-Store/nil-store'
 const LOCAL_HEALTH_URL = 'http://127.0.0.1:8091/health'
 const PROVIDER_DRAFT_KEY = 'nilstore.provider-onboarding.v2'
+const PROVIDER_AUTH_SESSION_KEY = 'nilstore.provider-onboarding.auth.v1'
 const PAIRING_TTL_BLOCKS = 120
 
 type PendingPairingState = Awaited<ReturnType<typeof lcdFetchPendingProviderPairing>>
@@ -59,6 +61,8 @@ type PublicHealthState =
   | { status: 'loading'; base: string }
   | { status: 'ok'; base: string; ms: number }
   | { status: 'error'; base: string; error: string }
+
+type ProviderPublicStatusState = ProviderPublicStatusResponse | null
 
 type StoredProviderDraft = {
   hostMode: ProviderHostMode
@@ -109,6 +113,15 @@ function loadStoredDraft(): StoredProviderDraft {
       pairingId: '',
       pairingTxHash: '',
     }
+  }
+}
+
+function loadSessionAuthToken(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return String(window.sessionStorage.getItem(PROVIDER_AUTH_SESSION_KEY) || '')
+  } catch {
+    return ''
   }
 }
 
@@ -192,7 +205,7 @@ export function SpOnboarding() {
   const [providerKey, setProviderKey] = useState(storedDraft.providerKey)
   const [pairingId, setPairingId] = useState(storedDraft.pairingId)
   const [pairingTxHash, setPairingTxHash] = useState(storedDraft.pairingTxHash)
-  const [authToken, setAuthToken] = useState('')
+  const [authToken, setAuthToken] = useState(loadSessionAuthToken)
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -201,6 +214,9 @@ export function SpOnboarding() {
   const [operatorPairings, setOperatorPairings] = useState<OperatorPairingsState>([])
   const [providers, setProviders] = useState<ProvidersState>([])
   const [loadingLiveState, setLoadingLiveState] = useState(false)
+  const [publicStatus, setPublicStatus] = useState<ProviderPublicStatusState>(null)
+  const [publicStatusError, setPublicStatusError] = useState<string | null>(null)
+  const [loadingPublicStatus, setLoadingPublicStatus] = useState(false)
   const [healthProbe, setHealthProbe] = useState<PublicHealthState>({ status: 'idle' })
 
   useEffect(() => {
@@ -223,6 +239,15 @@ export function SpOnboarding() {
     window.localStorage.setItem(PROVIDER_DRAFT_KEY, JSON.stringify(payload))
   }, [endpointMode, endpointValue, hostMode, pairingId, pairingTxHash, providerKey, publicPort])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (authToken.trim()) {
+      window.sessionStorage.setItem(PROVIDER_AUTH_SESSION_KEY, authToken)
+    } else {
+      window.sessionStorage.removeItem(PROVIDER_AUTH_SESSION_KEY)
+    }
+  }, [authToken])
+
   const endpointPlan = useMemo(
     () =>
       buildProviderEndpointPlan({
@@ -244,6 +269,9 @@ export function SpOnboarding() {
   )
   const onchainBases = useMemo(() => extractProviderHttpBases(providerRecord?.endpoints), [providerRecord?.endpoints])
   const effectivePublicBase = onchainBases[0] || endpointPlan?.publicBase || null
+  const providerStatusDetail = publicStatus?.provider ?? null
+  const providerDaemonStatusReady = String(publicStatus?.persona || '').trim().toLowerCase() === 'provider-daemon'
+  const authoritativePublicBase = providerStatusDetail?.public_base || effectivePublicBase
   const pairingRemainingBlocks = pairingBlocksRemaining(pendingPairing, latestHeight)
   const pairingIsExpired = pairingExpired(pendingPairing, latestHeight)
   const hasAuthToken = Boolean(authToken.trim())
@@ -264,7 +292,9 @@ export function SpOnboarding() {
   const pairingLinked = Boolean(pairingId)
   const pairingConfirmed = Boolean(confirmedPairing)
   const providerRegistered = Boolean(providerRecord)
-  const publicHealthReady = healthProbe.status === 'ok' && healthProbe.base === effectivePublicBase
+  const publicHealthReady = providerDaemonStatusReady
+    ? Boolean(providerStatusDetail?.public_health_ok)
+    : healthProbe.status === 'ok' && healthProbe.base === effectivePublicBase
 
   const bootstrapCommand = useMemo(
     () =>
@@ -279,7 +309,7 @@ export function SpOnboarding() {
       }),
     [authToken, endpointMode, endpointValue, hostMode, pairingId, providerKey, publicPort],
   )
-  const healthCommands = useMemo(() => buildProviderHealthCommands(effectivePublicBase), [effectivePublicBase])
+  const healthCommands = useMemo(() => buildProviderHealthCommands(authoritativePublicBase), [authoritativePublicBase])
   const pairCommand = useMemo(
     () => (pairingLinked ? buildProviderPairCommand(providerKey, pairingId) : ''),
     [pairingId, pairingLinked, providerKey],
@@ -289,10 +319,10 @@ export function SpOnboarding() {
       buildProviderAgentPrompt({
         pairingId,
         providerEndpoint: endpointPlan?.providerEndpoint,
-        publicBase: effectivePublicBase,
+        publicBase: authoritativePublicBase,
         providerKey,
       }),
-    [effectivePublicBase, endpointPlan?.providerEndpoint, pairingId, providerKey],
+    [authoritativePublicBase, endpointPlan?.providerEndpoint, pairingId, providerKey],
   )
 
   const handleCopy = useCallback(async (label: string, text: string) => {
@@ -329,6 +359,28 @@ export function SpOnboarding() {
       setLoadingLiveState(false)
     }
   }, [nilAddress, pairingId])
+
+  const refreshPublicStatus = useCallback(async (base: string) => {
+    const normalizedBase = String(base || '').trim().replace(/\/$/, '')
+    if (!normalizedBase) {
+      setPublicStatus(null)
+      setPublicStatusError(null)
+      setLoadingPublicStatus(false)
+      return
+    }
+
+    setLoadingPublicStatus(true)
+    try {
+      const status = await providerFetchPublicStatus(normalizedBase)
+      setPublicStatus(status)
+      setPublicStatusError(null)
+    } catch (statusError) {
+      setPublicStatus(null)
+      setPublicStatusError(statusError instanceof Error ? statusError.message : 'provider-daemon status unavailable')
+    } finally {
+      setLoadingPublicStatus(false)
+    }
+  }, [])
 
   const probePublicHealth = useCallback(async (base: string) => {
     const normalizedBase = String(base || '').trim().replace(/\/$/, '')
@@ -384,6 +436,21 @@ export function SpOnboarding() {
     }, 12000)
     return () => window.clearInterval(timer)
   }, [effectivePublicBase, pairingConfirmed, probePublicHealth])
+
+  useEffect(() => {
+    if (!authoritativePublicBase) {
+      setPublicStatus(null)
+      setPublicStatusError(null)
+      setLoadingPublicStatus(false)
+      return
+    }
+
+    void refreshPublicStatus(authoritativePublicBase)
+    const timer = window.setInterval(() => {
+      void refreshPublicStatus(authoritativePublicBase)
+    }, 12000)
+    return () => window.clearInterval(timer)
+  }, [authoritativePublicBase, refreshPublicStatus])
 
   const handleSwitchNetwork = async () => {
     setError(null)
@@ -528,8 +595,26 @@ export function SpOnboarding() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
               <div className="flex items-center gap-2 text-sm text-foreground">
                 <StatusPill
-                  label={publicHealthReady ? 'Healthy' : healthProbe.status === 'error' ? 'Unhealthy' : 'Waiting'}
-                  state={publicHealthReady ? 'ready' : healthProbe.status === 'error' ? 'action' : 'pending'}
+                  label={
+                    publicHealthReady
+                      ? providerDaemonStatusReady
+                        ? 'Healthy (daemon)'
+                        : 'Healthy (browser)'
+                      : providerDaemonStatusReady && providerStatusDetail && !providerStatusDetail.public_health_ok
+                        ? 'Unhealthy'
+                        : healthProbe.status === 'error'
+                          ? 'Unhealthy'
+                          : 'Waiting'
+                  }
+                  state={
+                    publicHealthReady
+                      ? 'ready'
+                      : providerDaemonStatusReady && providerStatusDetail && !providerStatusDetail.public_health_ok
+                        ? 'action'
+                        : healthProbe.status === 'error'
+                          ? 'action'
+                          : 'pending'
+                  }
                 />
               </div>
             </div>
@@ -704,7 +789,7 @@ export function SpOnboarding() {
                     {pairingId ? 'Open New Pairing' : 'Open Pairing'}
                   </button>
                   <div className="border border-border bg-background/40 px-3 py-3 text-xs text-muted-foreground">
-                    Pairing TTL: <span className="font-mono text-foreground">{PAIRING_TTL_BLOCKS}</span> blocks. Draft state is saved locally in this browser; the provider auth token is not.
+                    Pairing TTL: <span className="font-mono text-foreground">{PAIRING_TTL_BLOCKS}</span> blocks. Draft state is saved locally in this browser; the provider auth token is kept only in this browser session.
                   </div>
                 </div>
               </div>
@@ -809,6 +894,7 @@ export function SpOnboarding() {
                   <label className="space-y-2 text-sm">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Shared provider auth token</span>
                     <input
+                      data-testid="provider-auth-token"
                       value={authToken}
                       onChange={(event) => setAuthToken(event.target.value)}
                       placeholder="Paste token for provider host commands"
@@ -841,7 +927,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Verification</div>
                   <h2 className="text-2xl font-semibold text-foreground">Watch pairing, registration, and public health converge</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    After the provider host runs bootstrap, this page should move from pending pairing to paired provider, then to on-chain registration, then to a healthy public <span className="font-mono">/health</span> probe.
+                    After the provider host runs bootstrap, this page should move from pending pairing to paired provider, then to on-chain registration, then to healthy daemon-reported public reachability. The direct browser <span className="font-mono">/health</span> probe is only advisory.
                   </p>
                 </div>
                 <StatusPill label={publicHealthReady ? 'Healthy' : providerState === 'pending' ? 'In progress' : 'Waiting'} state={providerState} />
@@ -864,7 +950,7 @@ export function SpOnboarding() {
                   </div>
                 </div>
 
-                <div className="border border-border bg-background/40 p-4">
+                <div data-testid="provider-status-card" className="border border-border bg-background/40 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain registration</div>
@@ -880,24 +966,78 @@ export function SpOnboarding() {
                   </div>
                 </div>
 
-                <div className="border border-border bg-background/40 p-4">
+                <div data-testid="provider-daemon-status-card" className="border border-border bg-background/40 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health (browser probe)</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider-daemon status</div>
+                      <div className="mt-1 text-foreground">
+                        {providerDaemonStatusReady
+                          ? providerStatusDetail?.public_health_ok
+                            ? `${providerStatusDetail.public_health_url || `${authoritativePublicBase || effectivePublicBase}/health`} is reachable from the provider-daemon host`
+                            : `${providerStatusDetail?.public_health_url || `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'}/health`} is not reachable from the provider-daemon host`
+                          : authoritativePublicBase
+                            ? loadingPublicStatus
+                              ? `Polling ${authoritativePublicBase}/status`
+                              : publicStatusError
+                                ? `/status failed at ${authoritativePublicBase}: ${publicStatusError}`
+                                : `Waiting for ${authoritativePublicBase}/status to identify a provider-daemon`
+                            : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StatusPill
+                        label={
+                          providerDaemonStatusReady
+                            ? providerStatusDetail?.public_health_ok
+                              ? 'Healthy'
+                              : 'Failed'
+                            : loadingPublicStatus
+                              ? 'Polling'
+                              : publicStatusError
+                                ? 'Unavailable'
+                                : 'Waiting'
+                        }
+                        state={
+                          providerDaemonStatusReady
+                            ? providerStatusDetail?.public_health_ok
+                              ? 'ready'
+                              : 'action'
+                            : publicStatusError
+                              ? 'action'
+                              : 'pending'
+                        }
+                      />
+                      {authoritativePublicBase ? (
+                        <button
+                          type="button"
+                          onClick={() => void refreshPublicStatus(authoritativePublicBase)}
+                          className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${loadingPublicStatus ? 'animate-spin' : ''}`} /> Refresh
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div data-testid="provider-browser-health-card" className="border border-border bg-background/40 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Direct browser health probe</div>
                       <div className="mt-1 text-foreground">
                         {healthProbe.status === 'ok'
                           ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
                           : healthProbe.status === 'error'
                             ? `${healthProbe.base}/health failed: ${healthProbe.error}`
                             : effectivePublicBase
-                              ? `Polling ${effectivePublicBase}/health`
+                              ? `Waiting to probe ${effectivePublicBase}/health`
                               : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusPill
-                        label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Waiting'}
-                        state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'pending'}
+                        label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Idle'}
+                        state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'idle'}
                       />
                       {effectivePublicBase ? (
                         <button
@@ -911,6 +1051,17 @@ export function SpOnboarding() {
                     </div>
                   </div>
                 </div>
+
+                {publicStatus?.issues?.length ? (
+                  <div className="border border-destructive/30 bg-destructive/5 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Provider-daemon issues</div>
+                    <div className="mt-3 space-y-2 text-sm text-destructive">
+                      {publicStatus.issues.map((issue) => (
+                        <div key={issue}>{issue}</div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-5 grid gap-3 border-t border-border/60 pt-5 sm:grid-cols-2">
@@ -923,7 +1074,7 @@ export function SpOnboarding() {
                 <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
                   <div className="font-semibold text-foreground">When health is failing</div>
                   <div className="mt-2">
-                    Treat the browser probe as advisory. If the provider is on-chain but health is not reachable here, check tunnel or TLS configuration, then rely on the doctor, verify, and local curl commands from the command rail before assuming the provider itself is down.
+                    Treat the direct browser probe as advisory. Prioritize the provider-daemon <span className="font-mono">/status</span> view plus the doctor, verify, and local curl commands from the command rail before assuming the provider itself is down.
                   </div>
                 </div>
               </div>
@@ -938,11 +1089,11 @@ export function SpOnboarding() {
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Command rail</div>
                     <h2 className="mt-2 text-2xl font-semibold text-foreground">Provider host runbook</h2>
                   </div>
-                  <StatusPill label={bootstrapReady ? 'Command ready' : 'Waiting'} state={bootstrapReady ? 'ready' : 'pending'} />
-                </div>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  New provider keys need an init-and-fund step before bootstrap. The auth token stays local to this browser session and is never saved here.
-                </p>
+                <StatusPill label={bootstrapReady ? 'Command ready' : 'Waiting'} state={bootstrapReady ? 'ready' : 'pending'} />
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                  New provider keys need an init-and-fund step before bootstrap. The auth token is kept only in this browser session so refreshes can resume, but it is not written to the long-lived onboarding draft.
+              </p>
               </div>
 
               <div className="space-y-5 px-6 py-5">
@@ -978,7 +1129,7 @@ export function SpOnboarding() {
                         <div className="text-sm font-semibold text-foreground">Provider host commands</div>
                         <CopyButton label="Copy" onClick={() => void handleCopy('Provider host commands', bootstrapCommand)} />
                       </div>
-                      <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
+                      <pre data-testid="provider-host-commands" className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
                     </div>
 
                     {pairingLinked ? (

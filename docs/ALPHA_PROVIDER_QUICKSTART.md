@@ -37,7 +37,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 7. Let the agent:
    - initialize the provider key if needed
    - fund the printed `nil1...` address before pairing or registration when the key is new
-   - bootstrap, verify, and retry until healthy
+   - run strict website-managed bootstrap, verify, and retry until healthy
    - use `./scripts/run_devnet_provider.sh pair` for pairing-only repair when the host is already configured and only the on-chain link is missing
 8. Confirm:
    - local `http://127.0.0.1:8091/health`
@@ -45,7 +45,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
    - provider appears on `https://lcd.<domain>/nilchain/nilchain/v1/providers`
    - provider appears in the website `My Providers` dashboard at `https://nilstore.org/#/sp-dashboard`
 
-If you deliberately want to bootstrap without pairing, use the manual path in `docs/REMOTE_SP_JOIN_QUICKSTART.md`. Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unpaired provider.
+If you deliberately want partial bootstrap without pairing, use the manual path in `docs/REMOTE_SP_JOIN_QUICKSTART.md` or opt in with `BOOTSTRAP_ALLOW_PARTIAL=1`. Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unpaired provider.
 
 ## Manual references
 
