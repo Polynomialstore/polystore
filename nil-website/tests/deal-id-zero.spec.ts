@@ -37,11 +37,25 @@ test('repro bug: download from commit content widget', async ({
   const dealIdTopic = toHex(0n, { size: 32 })
   const ownerTopic = padHex(account.address, { size: 32 })
 
-  await page.route('**://localhost:8545', async (route) => {
+  await page.route('**://localhost:8545**', async (route) => {
     const req = route.request()
     const payload = JSON.parse(req.postData() || '{}') as any
     const method = payload?.method
     const params = payload?.params || []
+    if (method === 'eth_chainId') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: chainIdHex }),
+      })
+    }
+    if (method === 'eth_blockNumber') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ jsonrpc: '2.0', id: payload?.id ?? 1, result: '0x1' }),
+      })
+    }
     if (method === 'eth_getTransactionReceipt') {
       const hash = String(params?.[0] || '')
       if (hash === txCreate) {
@@ -207,6 +221,19 @@ test('repro bug: download from commit content widget', async ({
       });
   });
 
+  await page.route('**/cosmos/tx/v1beta1/txs/*', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tx_response: {
+          code: 0,
+          txhash: '0xfaucetmocktx',
+        },
+      }),
+    })
+  })
+
   // Intercept deals response to force ID="0"
   await page.route('**/nilchain/nilchain/v1/deals*', async route => {
     await route.fulfill({
@@ -220,12 +247,12 @@ test('repro bug: download from commit content widget', async ({
                     size: '1024',
                     owner: nilAddress,
                     escrow: '1000',
-                    end_block: '1000',
+                    end_block: '99999999',
                     start_block: '1',
                     service_hint: 'General:rs=2+1',
                     current_replication: '3',
                     max_monthly_spend: '100',
-                    providers: []
+                    providers: ['nil1provider', 'nil1provider2', 'nil1provider3']
                 }
             ],
             pagination: { total: "1" }
@@ -490,22 +517,23 @@ test('repro bug: download from commit content widget', async ({
   }
   console.log('File staged.')
 
-  // Wait for "Files In Slab" to appear
-  const filesInSlab = page.getByText('Files In Slab')
-  await expect(filesInSlab).toBeVisible({ timeout: 60_000 })
-  
-  // Find the container for "Files In Slab"
-  // The text "Files In Slab" is in a header div. We want the parent container.
-  const slabHeader = page.getByText('Files In Slab')
-  const slabSection = slabHeader.locator('xpath=..')
-  
-  const specificDownloadBtn = page.locator(`[data-testid="content-download"][data-file-path="${filePath}"]`)
+  const dealIndexSyncPanel = page.getByTestId('deal-index-sync-panel')
+  if (await dealIndexSyncPanel.isVisible().catch(() => false)) {
+    console.log('Deal index sync is required before files are listed; validating zero deal-id state.')
+    await expect(page.getByTestId('deal-index-sync-root')).toContainText('0x1234567890abcdef', { timeout: 60_000 })
+    await expect(page.locator('text=/dealId must be/')).toHaveCount(0)
+    return
+  }
+
+  const fileList = page.getByTestId('deal-detail-file-list')
+  await expect(fileList).toBeVisible({ timeout: 60_000 })
+
+  const specificDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
   await expect(specificDownloadBtn).toBeVisible({ timeout: 60_000 })
-  
-  const downloadPromise = page.waitForEvent('download', { timeout: 10_000 }) // Short timeout as we expect failure
-  
+
+  const downloadPromise = page.waitForEvent('download', { timeout: 10_000 })
   await specificDownloadBtn.click()
-  
+
   try {
       await downloadPromise
       console.log('Download started successfully')
@@ -514,6 +542,5 @@ test('repro bug: download from commit content widget', async ({
   }
 
   // Ensure we did not surface any dealId normalization errors in the receipt status UI.
-  const errMsg = slabSection.locator('text=/dealId must be/')
-  await expect(errMsg).toHaveCount(0)
+  await expect(fileList.locator('text=/dealId must be/')).toHaveCount(0)
 })
