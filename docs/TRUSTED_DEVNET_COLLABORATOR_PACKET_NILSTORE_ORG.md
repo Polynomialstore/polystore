@@ -8,7 +8,7 @@ Recommended public entry points:
 
 ## Live Endpoints
 
-- Website: `https://nilstore.org` (primary) / `https://web.nilstore.org` (if enabled)
+- Website: `https://nilstore.org/#/first-file` (primary onboarding route) / `https://web.nilstore.org/#/first-file` (if enabled)
 - EVM RPC: `https://evm.nilstore.org`
 - Hub RPC: `https://rpc.nilstore.org`
 - Hub LCD: `https://lcd.nilstore.org`
@@ -27,7 +27,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 
 ## Website Tester Quickstart
 
-1) Open `https://nilstore.org` (use `https://web.nilstore.org` only if you are explicitly testing that host).
+1) Open `https://nilstore.org/#/first-file` (use `https://web.nilstore.org/#/first-file` only if you are explicitly testing that host).
 2) Connect MetaMask and switch to:
 - RPC URL: `https://evm.nilstore.org`
 - Chain ID: `20260211`
@@ -36,7 +36,9 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 - Use website faucet flow (this deployment may include a preconfigured faucet token), or
 - POST to `https://faucet.nilstore.org/faucet` with header `X-Nil-Faucet-Auth: <token>`.
 4) Run the flow:
-- create deal → upload → commit → retrieve.
+- create the deal on `/#/first-file`
+- continue to `/#/dashboard`
+- upload → commit → retrieve
 
 Fast full-local repo onboarding:
 - Start Nil Gateway GUI on `http://localhost:8080`.
@@ -44,7 +46,7 @@ Fast full-local repo onboarding:
 - Use the repo-tracked public bootstrap defaults in `.env.testnet.public` unless you need explicit overrides.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file.
 - Import the exported keystore into MetaMask.
-- Continue browser verification on `https://nilstore.org/#/first-file` with that same wallet and local gateway.
+- Continue browser verification on `https://nilstore.org/#/dashboard` with that same wallet and local gateway after the first-file allocation step.
 
 Local gateway app (recommended for localhost gateway-assisted flows):
 - Start Nil Gateway GUI (or local `nil_gateway`) on `http://localhost:8080`.
@@ -62,17 +64,31 @@ Canonical docs:
 - `docs/REMOTE_SP_JOIN_QUICKSTART.md`
 - `docs/networking/PROVIDER_ENDPOINTS.md`
 
-Recommended env bootstrap:
+Recommended website-first bootstrap:
 
 ```bash
-export HUB_NODE="https://rpc.nilstore.org"
-export HUB_LCD="https://lcd.nilstore.org"
-export CHAIN_ID="20260211"
 export PROVIDER_KEY="provider1"
-export NIL_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
+./scripts/run_devnet_provider.sh init
 ```
 
-Use `scripts/run_devnet_provider.sh` for `init`, `register`, `start`, `print-config`, `doctor`, and `verify`.
+Fund the printed provider address with `aatom`, then run:
+
+```bash
+export PROVIDER_ENDPOINT="/dns4/sp1.nilstore.org/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
+export NIL_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
+export PAIRING_ID="<website-opened-pairing-id>"                 # optional but recommended
+
+./scripts/run_devnet_provider.sh bootstrap
+```
+
+Website-first operator flow:
+- open `/sp-onboarding`
+- connect the operator wallet
+- open pairing if you want website linking and `My Providers`
+- copy the `PAIRING_ID` into the provider host only when pairing was opened
+- finish verification from the website after bootstrap
+
+Use `scripts/run_devnet_provider.sh` for `init`, `bootstrap`, `print-config`, `doctor`, and `verify`.
 
 ## Healthcheck Commands
 

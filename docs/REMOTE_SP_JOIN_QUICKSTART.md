@@ -132,7 +132,7 @@ Confirm pairing explicitly:
 export PROVIDER_KEY="provider1"
 export PAIRING_ID="<website-opened-pairing-id>"
 
-./scripts/run_devnet_provider.sh bootstrap
+./scripts/run_devnet_provider.sh pair
 ```
 
 Start only the provider-daemon:

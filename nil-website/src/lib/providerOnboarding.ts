@@ -146,6 +146,17 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   ].join('\n')
 }
 
+export function buildProviderPairCommand(providerKey: string, pairingId: string): string {
+  const normalizedProviderKey = trimNonEmpty(providerKey) || DEFAULT_PROVIDER_KEY
+  const normalizedPairingId = trimNonEmpty(pairingId) || '<pairing-id-from-website>'
+
+  return [
+    `PAIRING_ID=${shellQuote(normalizedPairingId)} \\`,
+    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\`,
+    './scripts/run_devnet_provider.sh pair',
+  ].join('\n')
+}
+
 export function buildProviderHealthCommands(publicBase: string | null): string {
   const normalizedBase = trimNonEmpty(publicBase)
   const publicHealthUrl = normalizedBase ? `${normalizedBase.replace(/\/$/, '')}/health` : '<public-health-url>'
@@ -250,7 +261,10 @@ Your job:
    - fund the printed provider address with gas
    - then run \`./scripts/run_devnet_provider.sh bootstrap\`
    If the key already exists and is funded, \`bootstrap\` may be used directly.
-5. If \`PAIRING_ID\` is present, confirm the pending pairing on-chain during bootstrap before final verification. If the pairing is expired or not open, stop and tell the operator to open a fresh pairing from the website.
+5. If \`PAIRING_ID\` is present, either:
+   - let \`./scripts/run_devnet_provider.sh bootstrap\` confirm pairing on the full happy path, or
+   - run \`./scripts/run_devnet_provider.sh pair\` when you want pairing as a separate manual step.
+   If the pairing is expired or not open, stop and tell the operator to open a fresh pairing from the website.
 6. Register or update provider endpoints on-chain.
 7. Start the provider-daemon if it is not already running.
 8. Verify:
@@ -274,7 +288,11 @@ At the end, print:
    - \`local_health_ok\`
    - \`public_health_ok\`
    - \`lcd_visible\`
-   - \`provider_daemon_status\`
+   - \`provider_process_running\`
+   - \`provider_registered\`
+   - \`provider_paired\`
+   - \`pending_pairing_open\`
+   - \`sp_auth_present\`
    - \`commands_run\`
    - \`files_changed\`
 2. A short human-readable summary.`

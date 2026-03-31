@@ -38,6 +38,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
    - initialize the provider key if needed
    - fund the printed `nil1...` address before pairing or registration when the key is new
    - bootstrap, verify, and retry until healthy
+   - use `./scripts/run_devnet_provider.sh pair` for pairing-only repair when the host is already configured and only the on-chain link is missing
 8. Confirm:
    - local `http://127.0.0.1:8091/health`
    - public `https://sp.<domain>/health` for tunnel / hostname mode, or `http://<ip>:8091/health` for direct IPv4 mode

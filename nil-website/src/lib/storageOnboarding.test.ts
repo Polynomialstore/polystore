@@ -22,6 +22,7 @@ test('buildStorageAgentPrompt captures the current storage onboarding contract',
   assert.match(prompt, /https:\/\/nilstore\.org\/#\/first-file/)
   assert.match(prompt, /https:\/\/nilstore\.org\/#\/dashboard/)
   assert.match(prompt, /NIL_BURNER_KEYSTORE_PASSWORD/)
+  assert.match(prompt, /interactive password prompt/)
   assert.match(prompt, /create_tx_hash/)
   assert.match(prompt, /milestone_fast_bootstrap/)
   assert.match(prompt, /EVM_PRIVKEY/)
@@ -29,9 +30,16 @@ test('buildStorageAgentPrompt captures the current storage onboarding contract',
 
 test('storage quickstart points users at the current route map and password prerequisite', () => {
   const quickstart = readRepoFile('docs/ALPHA_STORAGE_USER_QUICKSTART.md')
+  const collaboratorPacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md')
+  const nilstorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md')
 
   assert.match(quickstart, /https:\/\/nilstore\.org\/#\/first-file/)
   assert.match(quickstart, /#\/dashboard/)
   assert.match(quickstart, /NIL_BURNER_KEYSTORE_PASSWORD/)
+  assert.match(quickstart, /interactive password prompt/)
   assert.match(quickstart, /EVM_PRIVKEY/)
+  assert.match(collaboratorPacket, /https:\/\/nilstore\.org\/#\/first-file/)
+  assert.match(collaboratorPacket, /https:\/\/nilstore\.org\/#\/dashboard/)
+  assert.match(nilstorePacket, /https:\/\/nilstore\.org\/#\/first-file/)
+  assert.match(nilstorePacket, /https:\/\/nilstore\.org\/#\/dashboard/)
 })

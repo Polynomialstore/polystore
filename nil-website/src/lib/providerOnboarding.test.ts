@@ -1,12 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 
 import {
   buildProviderAgentPrompt,
   buildProviderBootstrapCommand,
   buildProviderEndpointPlan,
   buildProviderHealthCommands,
+  buildProviderPairCommand,
   findConfirmedProviderPairing,
   findProviderByAddress,
   pairingBlocksRemaining,
@@ -94,6 +96,14 @@ test('buildProviderBootstrapCommand includes pairing when supplied', () => {
   assert.match(command, /PAIRING_ID='pair-123'/)
 })
 
+test('buildProviderPairCommand emits a standalone pairing command', () => {
+  const command = buildProviderPairCommand('provider-main', 'pair-123')
+
+  assert.match(command, /PAIRING_ID='pair-123'/)
+  assert.match(command, /PROVIDER_KEY='provider-main'/)
+  assert.match(command, /run_devnet_provider\.sh pair/)
+})
+
 test('buildProviderHealthCommands includes doctor, verify, config, and health probes', () => {
   const commands = buildProviderHealthCommands('https://sp.example.com')
   assert.match(commands, /doctor/)
@@ -110,7 +120,7 @@ test('buildProviderAgentPrompt matches the canonical repo prompt by default', ()
   assert.equal(prompt, canonical)
 })
 
-test('buildProviderAgentPrompt includes runtime values and provider_daemon_status', () => {
+test('buildProviderAgentPrompt includes runtime values and script-aligned status fields', () => {
   const prompt = buildProviderAgentPrompt({
     pairingId: 'pair-123',
     providerEndpoint: '/dns4/sp.example.com/tcp/443/https',
@@ -122,7 +132,9 @@ test('buildProviderAgentPrompt includes runtime values and provider_daemon_statu
   assert.match(prompt, /PROVIDER_KEY=provider-main/)
   assert.match(prompt, /PROVIDER_ENDPOINT=\/dns4\/sp\.example\.com\/tcp\/443\/https/)
   assert.match(prompt, /public health base `https:\/\/sp\.example\.com`/)
-  assert.match(prompt, /provider_daemon_status/)
+  assert.match(prompt, /run_devnet_provider\.sh pair/)
+  assert.match(prompt, /provider_process_running/)
+  assert.match(prompt, /pending_pairing_open/)
   assert.match(prompt, /update-aware on the current testnet build/)
 })
 
@@ -130,11 +142,31 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
   const quickstart = readRepoFile('docs/ALPHA_PROVIDER_QUICKSTART.md')
   const remote = readRepoFile('docs/REMOTE_SP_JOIN_QUICKSTART.md')
   const endpoints = readRepoFile('docs/networking/PROVIDER_ENDPOINTS.md')
+  const collaboratorPacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md')
+  const nilstorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md')
 
   assert.match(quickstart, /Treat `NIL_GATEWAY_SP_AUTH` as a secret/)
   assert.match(remote, /`bootstrap` can run without `PAIRING_ID`/)
+  assert.match(remote, /run_devnet_provider\.sh pair/)
   assert.match(endpoints, /update-provider-endpoints/)
   assert.doesNotMatch(endpoints, /Endpoint lists are \*\*not\*\* mutable/)
+  assert.match(collaboratorPacket, /website-first bootstrap/)
+  assert.match(collaboratorPacket, /run_devnet_provider\.sh bootstrap/)
+  assert.doesNotMatch(collaboratorPacket, /run_devnet_provider\.sh register/)
+  assert.doesNotMatch(collaboratorPacket, /run_devnet_provider\.sh start/)
+  assert.match(nilstorePacket, /website-first bootstrap/)
+  assert.match(nilstorePacket, /run_devnet_provider\.sh bootstrap/)
+})
+
+test('run_devnet_provider.sh help prints usage without requiring PROVIDER_KEY', () => {
+  const output = execFileSync('./scripts/run_devnet_provider.sh', ['help'], {
+    cwd: new URL('../../../', import.meta.url),
+    encoding: 'utf8',
+  })
+
+  assert.match(output, /Usage: \.\/scripts\/run_devnet_provider\.sh/)
+  assert.match(output, /pair/)
+  assert.match(output, /bootstrap/)
 })
 
 test('pairing helpers resolve confirmed providers and expiry state', () => {

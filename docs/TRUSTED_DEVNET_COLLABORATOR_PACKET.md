@@ -20,7 +20,7 @@ If you are the hub operator, also read: `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 ## What you need from the hub operator
 
 You should receive:
-- Website URL: `https://nilstore.org` (default public homepage) or deployment-specific `https://web.<domain>`
+- Website URL: `https://nilstore.org/#/first-file` (default public onboarding route) or deployment-specific `https://web.<domain>/#/first-file`
 - EVM RPC: `https://evm.<domain>`
 - Chain ID: `<chain-id>` (e.g. `20260211`)
 - Faucet URL (optional): `https://faucet.<domain>/faucet`
@@ -42,7 +42,7 @@ If you want the shorter testnet-facing version of this path, use `docs/ALPHA_STO
 
 ### 1) Open the website + connect wallet
 
-1. Open `https://nilstore.org` (or the deployment-specific website URL shared by the hub operator).
+1. Open `https://nilstore.org/#/first-file` (or the deployment-specific `https://web.<domain>/#/first-file` URL shared by the hub operator).
 2. Click **Connect wallet** (MetaMask).
 3. If prompted, add/switch to the NilStore devnet network using the RPC the hub operator gave you.
 
@@ -62,10 +62,11 @@ If the faucet UI is not enabled, ask the hub operator to fund your address.
 
 ### 3) Store your first file
 
-1. Create a deal (capacity container).
-2. Upload a small file (start with ~10–100 KiB).
-3. Commit the content (this updates the on-chain `manifest_root`).
-4. Retrieve the file back and confirm it matches what you uploaded.
+1. On `/#/first-file`, create a deal (capacity container).
+2. Continue to `/#/dashboard`.
+3. Upload a small file (start with ~10–100 KiB).
+4. Commit the content (this updates the on-chain `manifest_root`).
+5. Retrieve the file back and confirm it matches what you uploaded.
 
 Optional but recommended:
 - Install Nil Gateway GUI and run it locally (`http://localhost:8080`) for gateway-assisted workflows.
@@ -75,7 +76,7 @@ Fast full-local repo onboarding:
 - Start Nil Gateway GUI first and verify `curl -sf http://localhost:8080/health`.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file to establish one wallet, one deal, and the MetaMask keystore export.
 - Import that same keystore into MetaMask.
-- Continue browser verification on `https://nilstore.org` with the same wallet and local gateway.
+- Continue browser verification on `https://nilstore.org/#/dashboard` with the same wallet and local gateway after the first-file allocation step.
 
 Tip: if you test with a text file, change a line and re-upload to confirm the commit changes the retrieval.
 
@@ -128,34 +129,44 @@ In your tunnel config, point that hostname to the local provider listener (for e
 
 Cloudflare Tunnel setup reference (recommended for NAT): `docs/networking/PROVIDER_ENDPOINTS.md`.
 
-### 4) Register on-chain (uses the hub RPC/LCD)
+### 4) Recommended: website-first bootstrap
 
 ```bash
-export HUB_NODE="https://rpc.<domain>"
-export HUB_LCD="https://lcd.<domain>"
-export CHAIN_ID="<chain-id>"
 export PROVIDER_KEY="provider1"
-
-./scripts/run_devnet_provider.sh register
+./scripts/run_devnet_provider.sh init
 ```
 
-### 5) Start your provider gateway
-
-```bash
+# Fund the printed provider address with aatom, then:
+export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"   # or /ip4/<public-ip>/tcp/8091/http
 export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
-export NIL_LCD_BASE="$HUB_LCD"
-export NIL_NODE="$HUB_NODE"
-export NIL_CHAIN_ID="$CHAIN_ID"
-export PROVIDER_KEY="provider1"
-export PROVIDER_LISTEN=":8091"
+export PAIRING_ID="<website-opened-pairing-id>"              # optional but recommended
 
-./scripts/run_devnet_provider.sh start
+./scripts/run_devnet_provider.sh bootstrap
 ```
 
-Verify locally:
+Website-first operator flow:
+- open `/sp-onboarding`
+- connect the operator wallet
+- open pairing if you want website linking and `My Providers`
+- copy the resulting `PAIRING_ID` into the provider host only when pairing was opened
+- finish verification from the website after bootstrap
+
+The canonical provider docs for this are:
+- `docs/ALPHA_PROVIDER_QUICKSTART.md`
+- `docs/REMOTE_SP_JOIN_QUICKSTART.md`
+- `docs/networking/PROVIDER_ENDPOINTS.md`
+
+### 5) Verify provider health
 
 ```bash
 curl -sf http://127.0.0.1:8091/health
+```
+
+And:
+
+```bash
+./scripts/run_devnet_provider.sh doctor
+./scripts/run_devnet_provider.sh verify
 ```
 
 Recommended verification:
@@ -163,16 +174,8 @@ Recommended verification:
 ```bash
 scripts/devnet_healthcheck.sh provider \
   --provider http://127.0.0.1:8091 \
-  --hub-lcd "$HUB_LCD" \
+  --hub-lcd "https://lcd.<domain>" \
   --provider-addr <nil1...>
-```
-
-Agent-oriented helpers:
-
-```bash
-./scripts/run_devnet_provider.sh print-config
-./scripts/run_devnet_provider.sh doctor
-./scripts/run_devnet_provider.sh verify
 ```
 
 ### 6) Tell the hub operator

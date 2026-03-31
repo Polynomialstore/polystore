@@ -5,6 +5,7 @@ set -euo pipefail
 #
 # Usage:
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+#   PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh pair
 #   PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh bootstrap
 #   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
 #   PROVIDER_KEY=provider1 PROVIDER_LISTEN=":8091" ./scripts/run_devnet_provider.sh start
@@ -21,6 +22,31 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/load_testnet_public_env.sh"
 
 ACTION="${1:-start}"
+
+usage() {
+  cat <<'USAGE'
+Usage: ./scripts/run_devnet_provider.sh [init|pair|register|start|print-config|doctor|verify|bootstrap|stop|help]
+
+Examples:
+  PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+  PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh pair
+  PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh bootstrap
+  PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
+  PROVIDER_KEY=provider1 PROVIDER_LISTEN=":8091" ./scripts/run_devnet_provider.sh start
+  PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
+  PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh doctor
+  PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh verify
+  PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh stop
+  ./scripts/run_devnet_provider.sh help
+USAGE
+}
+
+case "$ACTION" in
+  help|-h|--help)
+    usage
+    exit 0
+    ;;
+esac
 
 PROVIDER_KEY="${PROVIDER_KEY:-}"
 if [ -z "$PROVIDER_KEY" ]; then
@@ -435,7 +461,7 @@ init_provider() {
   echo
   echo "Next:"
   echo "  - Ask the hub operator to fund this address with aatom (gas) if needed."
-  echo "  - Open pairing from the website, then rerun bootstrap with PAIRING_ID=<pairing-id>."
+  echo "  - Open pairing from the website, then run ./scripts/run_devnet_provider.sh pair with PAIRING_ID=<pairing-id> or rerun bootstrap."
   echo "  - Set PROVIDER_ENDPOINT if this host is public, then rerun bootstrap."
 }
 
@@ -646,6 +672,7 @@ stop_provider() {
 
 case "$ACTION" in
   init) init_provider ;;
+  pair) confirm_provider_pairing ;;
   register) register_provider ;;
   start) start_provider ;;
   print-config) print_config ;;
@@ -654,7 +681,7 @@ case "$ACTION" in
   bootstrap) bootstrap_provider ;;
   stop) stop_provider ;;
   *)
-    echo "Usage: $0 [init|register|start|print-config|doctor|verify|bootstrap|stop]" >&2
+    usage >&2
     exit 1
     ;;
 esac

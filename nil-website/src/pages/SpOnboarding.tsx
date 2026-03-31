@@ -31,6 +31,7 @@ import {
   buildProviderBootstrapCommand,
   buildProviderEndpointPlan,
   buildProviderHealthCommands,
+  buildProviderPairCommand,
   findConfirmedProviderPairing,
   findProviderByAddress,
   pairingBlocksRemaining,
@@ -268,6 +269,10 @@ export function SpOnboarding() {
     [authToken, endpointMode, endpointValue, hostMode, pairingId, providerKey, publicPort],
   )
   const healthCommands = useMemo(() => buildProviderHealthCommands(effectivePublicBase), [effectivePublicBase])
+  const pairCommand = useMemo(
+    () => (pairingLinked ? buildProviderPairCommand(providerKey, pairingId) : ''),
+    [pairingId, pairingLinked, providerKey],
+  )
   const agentPrompt = useMemo(
     () =>
       buildProviderAgentPrompt({
@@ -901,7 +906,7 @@ export function SpOnboarding() {
                 <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
                   <div className="font-semibold text-foreground">When pairing is still pending</div>
                   <div className="mt-2">
-                    The provider host has not confirmed the pairing request yet. Re-copy the provider host runbook if the pairing ID changed, then rerun <span className="font-mono">./scripts/run_devnet_provider.sh bootstrap</span> on the provider host once the key is funded.
+                    The provider host has not confirmed the pairing request yet. Re-copy the provider host runbook if the pairing ID changed, then rerun <span className="font-mono">./scripts/run_devnet_provider.sh pair</span> if the host is already configured, or rerun <span className="font-mono">./scripts/run_devnet_provider.sh bootstrap</span> on the provider host once the key is funded.
                   </div>
                 </div>
                 <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
@@ -954,6 +959,16 @@ export function SpOnboarding() {
                       </div>
                       <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
                     </div>
+
+                    {pairingLinked ? (
+                      <div className="space-y-3 border-t border-border/60 pt-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-foreground">Pair-only repair</div>
+                          <CopyButton label="Copy" onClick={() => void handleCopy('Pair-only repair', pairCommand)} />
+                        </div>
+                        <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{pairCommand}</pre>
+                      </div>
+                    ) : null}
 
                     <div className="space-y-3 border-t border-border/60 pt-5">
                       <div className="flex items-center justify-between gap-3">
