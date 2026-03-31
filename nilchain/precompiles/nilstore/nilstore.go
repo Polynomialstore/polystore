@@ -53,6 +53,16 @@ const nilstoreABIJSON = `[
   },
   {
     "type":"function",
+    "name":"openProviderPairing",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"pairingId","type":"string"},
+      {"name":"expiresAt","type":"uint64"}
+    ],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
     "name":"extendDeal",
     "stateMutability":"nonpayable",
     "inputs":[
@@ -296,6 +306,8 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runCreateDeal(ctx, evm, contract, method, input[4:])
 	case "updateDealContent":
 		return p.runUpdateDealContent(ctx, evm, contract, method, input[4:])
+	case "openProviderPairing":
+		return p.runOpenProviderPairing(ctx, evm, contract, method, input[4:])
 	case "extendDeal":
 		return p.runExtendDeal(ctx, evm, contract, method, input[4:])
 	case "updateDealRetrievalPolicy":
@@ -920,6 +932,40 @@ func (p *Precompile) runCreateDeal(ctx sdk.Context, evm *vm.EVM, contract *vm.Co
 	out, err := method.Outputs.Pack(res.DealId)
 	if err != nil {
 		return nil, fmt.Errorf("createDeal: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runOpenProviderPairing(ctx sdk.Context, _ *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("openProviderPairing: failed to unpack args: %w", err)
+	}
+
+	pairingID, err := asString(args["pairingId"])
+	if err != nil {
+		return nil, errors.New("openProviderPairing: invalid pairingId")
+	}
+	expiresAt, err := asUint64(args["expiresAt"])
+	if err != nil {
+		return nil, errors.New("openProviderPairing: invalid expiresAt")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	if _, err := msgServer.OpenProviderPairing(sdk.WrapSDKContext(ctx), &types.MsgOpenProviderPairing{
+		Creator:   creator,
+		PairingId: strings.TrimSpace(pairingID),
+		ExpiresAt: expiresAt,
+	}); err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("openProviderPairing: failed to pack outputs: %w", err)
 	}
 	return out, nil
 }

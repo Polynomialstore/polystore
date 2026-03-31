@@ -25,6 +25,20 @@ export interface LcdProvider {
   status?: string
 }
 
+export interface LcdProviderPairing {
+  provider: string
+  operator: string
+  pairing_id: string
+  paired_height: string
+}
+
+export interface LcdPendingProviderPairing {
+  pairing_id: string
+  operator: string
+  expires_at: string
+  opened_height: string
+}
+
 export interface LcdCoin {
   amount: string
   denom: string
@@ -117,6 +131,50 @@ export function normalizeLcdProvidersResponse(payload: unknown): LcdProvider[] {
     })
   }
   return out
+}
+
+export function normalizeLcdProviderPairing(input: unknown): LcdProviderPairing | null {
+  if (!isRecord(input)) return null
+  return {
+    provider: asString(input['provider']),
+    operator: asString(input['operator']),
+    pairing_id: asString(input['pairing_id']),
+    paired_height: asString(input['paired_height'], '0'),
+  }
+}
+
+export function normalizeLcdProviderPairingResponse(payload: unknown): LcdProviderPairing | null {
+  if (!isRecord(payload)) return null
+  return normalizeLcdProviderPairing(payload['pairing'])
+}
+
+export function normalizeLcdProviderPairingsResponse(payload: unknown): LcdProviderPairing[] {
+  if (!isRecord(payload)) return []
+  const pairings = payload['pairings']
+  if (!Array.isArray(pairings)) return []
+  const out: LcdProviderPairing[] = []
+  for (const item of pairings) {
+    const pairing = normalizeLcdProviderPairing(item)
+    if (pairing) out.push(pairing)
+  }
+  return out
+}
+
+export function normalizeLcdPendingProviderPairing(input: unknown): LcdPendingProviderPairing | null {
+  if (!isRecord(input)) return null
+  return {
+    pairing_id: asString(input['pairing_id']),
+    operator: asString(input['operator']),
+    expires_at: asString(input['expires_at'], '0'),
+    opened_height: asString(input['opened_height'], '0'),
+  }
+}
+
+export function normalizeLcdPendingProviderPairingResponse(
+  payload: unknown,
+): LcdPendingProviderPairing | null {
+  if (!isRecord(payload)) return null
+  return normalizeLcdPendingProviderPairing(payload['pairing'])
 }
 
 function normalizeLcdCoin(input: unknown): LcdCoin {

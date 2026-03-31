@@ -1,8 +1,17 @@
-import type { LcdDeal, LcdParams, LcdProvider } from '../domain/lcd'
+import type {
+  LcdDeal,
+  LcdParams,
+  LcdPendingProviderPairing,
+  LcdProvider,
+  LcdProviderPairing,
+} from '../domain/lcd'
 import {
   normalizeLcdDealResponse,
   normalizeLcdDealsResponse,
   normalizeLcdParamsResponse,
+  normalizeLcdPendingProviderPairingResponse,
+  normalizeLcdProviderPairingResponse,
+  normalizeLcdProviderPairingsResponse,
   normalizeLcdProvidersResponse,
 } from '../domain/lcd'
 
@@ -41,6 +50,54 @@ export async function lcdFetchProviders(
   }
   const json: unknown = await res.json().catch(() => null)
   return normalizeLcdProvidersResponse(json)
+}
+
+export async function lcdFetchProviderPairing(
+  lcdBase: string,
+  provider: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<LcdProviderPairing | null> {
+  const res = await fetchFn(
+    `${lcdBase}/nilchain/nilchain/v1/provider-pairings/${encodeURIComponent(provider)}`,
+  )
+  if (res.status === 404) return null
+  if (!res.ok) {
+    throw new Error(`LCD provider pairing returned ${res.status}`)
+  }
+  const json: unknown = await res.json().catch(() => null)
+  return normalizeLcdProviderPairingResponse(json)
+}
+
+export async function lcdFetchProvidersByOperator(
+  lcdBase: string,
+  operator: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<LcdProviderPairing[]> {
+  const res = await fetchFn(
+    `${lcdBase}/nilchain/nilchain/v1/provider-pairings/by-operator/${encodeURIComponent(operator)}`,
+  )
+  if (res.status === 404) return []
+  if (!res.ok) {
+    throw new Error(`LCD operator pairings returned ${res.status}`)
+  }
+  const json: unknown = await res.json().catch(() => null)
+  return normalizeLcdProviderPairingsResponse(json)
+}
+
+export async function lcdFetchPendingProviderPairing(
+  lcdBase: string,
+  pairingId: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<LcdPendingProviderPairing | null> {
+  const res = await fetchFn(
+    `${lcdBase}/nilchain/nilchain/v1/provider-pairings/pending/${encodeURIComponent(pairingId)}`,
+  )
+  if (res.status === 404) return null
+  if (!res.ok) {
+    throw new Error(`LCD pending provider pairing returned ${res.status}`)
+  }
+  const json: unknown = await res.json().catch(() => null)
+  return normalizeLcdPendingProviderPairingResponse(json)
 }
 
 export async function lcdFetchParams(

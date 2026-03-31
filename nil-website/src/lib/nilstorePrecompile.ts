@@ -29,6 +29,16 @@ export const NILSTORE_PRECOMPILE_ABI = [
   },
   {
     type: 'function',
+    name: 'openProviderPairing',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'pairingId', type: 'string' },
+      { name: 'expiresAt', type: 'uint64' },
+    ],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'extendDeal',
     stateMutability: 'nonpayable',
     inputs: [
@@ -362,6 +372,14 @@ export function encodeExtendDealData(dealId: bigint, additionalDurationBlocks: b
     abi: NILSTORE_PRECOMPILE_ABI,
     functionName: 'extendDeal',
     args: [dealId, additionalDurationBlocks],
+  })
+}
+
+export function encodeOpenProviderPairingData(pairingId: string, expiresAt: bigint): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'openProviderPairing',
+    args: [pairingId, expiresAt],
   })
 }
 
