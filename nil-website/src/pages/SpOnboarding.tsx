@@ -630,19 +630,25 @@ export function SpOnboarding() {
         </section>
 
         {pageError ? (
-          <div className="mt-6 border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="mt-6 border border-destructive/40 bg-background px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
             <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-4 w-4" />
-              <div>{pageError}</div>
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Onboarding blocked</div>
+                <p className="text-sm text-foreground">{pageError}</p>
+              </div>
             </div>
           </div>
         ) : null}
 
         {notice ? (
-          <div className="mt-6 border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+          <div className="mt-6 border border-primary/35 bg-background px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-4 w-4" />
-              <div>{notice}</div>
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Onboarding update</div>
+                <p className="text-sm text-foreground">{notice}</p>
+              </div>
             </div>
           </div>
         ) : null}
