@@ -278,6 +278,8 @@ export function SpOnboarding() {
   const pairingRemainingBlocks = pairingBlocksRemaining(pendingPairing, latestHeight)
   const pairingIsExpired = pairingExpired(pendingPairing, latestHeight)
   const hasAuthToken = Boolean(authToken.trim())
+  const providerKeyLabel = String(providerKey || '').trim()
+  const providerKeyReady = Boolean(providerKeyLabel)
   const runbookReadiness = useMemo(
     () =>
       evaluateProviderRunbookReadiness({
@@ -822,18 +824,18 @@ export function SpOnboarding() {
             <section className="glass-panel industrial-border p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Provider host</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Describe the public endpoint and provider-daemon key</h2>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Public reachability</div>
+                  <h2 className="text-2xl font-semibold text-foreground">How will browsers reach this provider?</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    The provider-host runbook is opinionated: canonical public testnet defaults are built in. You provide the endpoint, provider key, and the shared provider auth token from the hub operator. Pairing is required for this website-managed flow.
+                    Start with the public address shape. The website needs a real hostname, IP, or multiaddr before it can generate provider host commands or track public health.
                   </p>
                 </div>
-                <StatusPill label={endpointPlan ? 'Endpoint ready' : 'Need endpoint'} state={endpointPlan ? 'ready' : 'action'} />
+                <StatusPill label={endpointPlan ? 'Endpoint ready' : 'Missing endpoint'} state={endpointPlan ? 'ready' : 'action'} />
               </div>
 
               <div className="mt-6 space-y-5">
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Host type</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Where is this provider running?</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -850,10 +852,15 @@ export function SpOnboarding() {
                       Public VPS
                     </button>
                   </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {hostMode === 'home-tunnel'
+                      ? 'Use this when the provider-daemon is on a home server behind a tunnel or reverse proxy.'
+                      : 'Use this when the provider-daemon is already exposed from a public host.'}
+                  </p>
                 </div>
 
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Endpoint input</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">How will browsers reach it?</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -878,6 +885,13 @@ export function SpOnboarding() {
                       Full multiaddr
                     </button>
                   </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {endpointMode === 'multiaddr'
+                      ? 'Paste the full on-chain endpoint when you already know the exact advertised multiaddr.'
+                      : endpointMode === 'ipv4'
+                        ? 'Use a direct public IPv4 only when the provider is intentionally exposed without a hostname.'
+                        : 'Use the public hostname that operators and browsers should actually hit, for example sp.example.com.'}
+                  </p>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -906,40 +920,16 @@ export function SpOnboarding() {
                       className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
                     />
                   </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key name</span>
-                    <input
-                      value={providerKey}
-                      onChange={(event) => setProviderKey(event.target.value)}
-                      placeholder="provider1"
-                      className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Shared provider auth token</span>
-                    <input
-                      data-testid="provider-auth-token"
-                      value={authToken}
-                      onChange={(event) => setAuthToken(event.target.value)}
-                      placeholder="Paste token for provider host commands"
-                      type="password"
-                      className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </label>
                 </div>
 
-                <div className="grid gap-2 border border-border bg-background/40 p-4 text-sm text-muted-foreground sm:grid-cols-3">
+                <div className="grid gap-2 border border-border bg-background/40 p-4 text-sm text-muted-foreground sm:grid-cols-2">
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Derived provider endpoint</div>
                     <div className="mt-2 break-all font-mono-data text-foreground">{endpointPlan?.providerEndpoint || '—'}</div>
                   </div>
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health URL</div>
                     <div className="mt-2 break-all font-mono-data text-foreground">{endpointPlan?.publicHealthUrl || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local health</div>
-                    <div className="mt-2 break-all font-mono-data text-foreground">{LOCAL_HEALTH_URL}</div>
                   </div>
                 </div>
               </div>
@@ -948,7 +938,115 @@ export function SpOnboarding() {
             <section className="glass-panel industrial-border p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Verification</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Provider identity</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Which provider-daemon key should this host use?</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    This is the local key name on the provider host. The website will use it in the init, pair, and bootstrap commands that appear in the command rail.
+                  </p>
+                </div>
+                <StatusPill label={providerKeyReady ? 'Key ready' : 'Missing key'} state={providerKeyReady ? 'ready' : 'action'} />
+              </div>
+
+              <div className="mt-6 space-y-5">
+                <label className="block max-w-xl space-y-2 text-sm">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local provider key name</span>
+                  <input
+                    value={providerKey}
+                    onChange={(event) => setProviderKey(event.target.value)}
+                    placeholder="provider1"
+                    className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  />
+                </label>
+
+                <div className="grid gap-3 border border-border bg-background/40 p-4 text-sm text-muted-foreground md:grid-cols-2">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">What this key controls</div>
+                    <p className="mt-2">
+                      The provider-daemon signs pairing confirmation, registration, and endpoint updates with this server-side key.
+                    </p>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Before bootstrap</div>
+                    <p className="mt-2">
+                      Run <span className="font-mono">./scripts/run_devnet_provider.sh init</span>, then fund the printed nil1 address before pairing or bootstrap.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">5. Shared auth</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Unlock the provider host runbook</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Add the shared provider auth token from the hub operator. Once endpoint, pairing, and auth are all present, the command rail becomes run-ready.
+                  </p>
+                </div>
+                <StatusPill
+                  label={bootstrapReady ? 'Runbook ready' : hasAuthToken ? 'Waiting' : 'Missing auth'}
+                  state={bootstrapReady ? 'ready' : hasAuthToken ? 'pending' : 'action'}
+                />
+              </div>
+
+              <div className="mt-6 space-y-5">
+                <label className="block max-w-xl space-y-2 text-sm">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Shared auth token from hub</span>
+                  <input
+                    data-testid="provider-auth-token"
+                    value={authToken}
+                    onChange={(event) => setAuthToken(event.target.value)}
+                    placeholder="Paste token for provider host commands"
+                    type="password"
+                    className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  />
+                </label>
+
+                <div className="grid gap-3 border border-border bg-background/40 p-4 text-sm text-muted-foreground md:grid-cols-2">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Runbook gate</div>
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Pairing opened</span>
+                        <span className="font-mono-data text-foreground">{pairingLinked ? 'yes' : 'no'}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Endpoint defined</span>
+                        <span className="font-mono-data text-foreground">{endpointPlan ? 'yes' : 'no'}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Shared auth token</span>
+                        <span className="font-mono-data text-foreground">{hasAuthToken ? 'yes' : 'no'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Session handling</div>
+                    <p className="mt-2">
+                      This token is kept only in this browser session so refreshes can resume onboarding, but it is not saved into the long-lived onboarding draft.
+                    </p>
+                    <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local health target</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{LOCAL_HEALTH_URL}</div>
+                  </div>
+                </div>
+
+                {!bootstrapReady ? (
+                  <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                    {runbookReadiness.missing.includes('endpoint')
+                      ? 'Finish Step 3 so the website can derive the public provider endpoint.'
+                      : runbookReadiness.missing.includes('pairing')
+                        ? 'Finish Step 2 so the website can bind these commands to the on-chain pairing request.'
+                        : 'Add the shared auth token from the hub operator to unlock run-ready provider host commands.'}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">6. Verification</div>
                   <h2 className="text-2xl font-semibold text-foreground">Watch pairing, registration, and public health converge</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     After the provider host runs bootstrap, this page should move from pending pairing to paired provider, then to on-chain registration, then to healthy daemon-reported public reachability. The direct browser <span className="font-mono">/health</span> probe is only advisory.
