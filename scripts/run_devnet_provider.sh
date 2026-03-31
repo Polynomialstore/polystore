@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Provider launcher for a multi-machine devnet.
+# provider-daemon launcher for the shared NilStore testnet/devnet.
 #
 # Usage:
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+#   PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh bootstrap
 #   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
 #   PROVIDER_KEY=provider1 PROVIDER_LISTEN=":8091" ./scripts/run_devnet_provider.sh start
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
@@ -15,6 +16,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Load canonical public testnet defaults unless the operator has explicitly overridden them.
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/load_testnet_public_env.sh"
+
 ACTION="${1:-start}"
 
 PROVIDER_KEY="${PROVIDER_KEY:-}"
@@ -23,10 +28,12 @@ if [ -z "$PROVIDER_KEY" ]; then
   exit 1
 fi
 
-CHAIN_ID="${CHAIN_ID:-${NIL_CHAIN_ID:-31337}}"
-LCD_BASE="${HUB_LCD:-${NIL_LCD_BASE:-http://localhost:1317}}"
-NODE_ADDR="${HUB_NODE:-${NIL_NODE:-tcp://127.0.0.1:26657}}"
-GAS_PRICES="${NIL_GAS_PRICES:-0.001aatom}"
+PAIRING_ID="${PAIRING_ID:-${NIL_PROVIDER_PAIRING_ID:-}}"
+NETWORK_PROFILE="${NILSTORE_NETWORK_PROFILE:-nilstore-public-testnet}"
+CHAIN_ID="${CHAIN_ID:-${NIL_CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-20260211}}}"
+LCD_BASE="${HUB_LCD:-${NIL_LCD_BASE:-${NILSTORE_TESTNET_LCD_BASE:-https://lcd.nilstore.org}}}"
+NODE_ADDR="${HUB_NODE:-${NIL_NODE:-${NILSTORE_TESTNET_NODE:-https://rpc.nilstore.org}}}"
+GAS_PRICES="${NIL_GAS_PRICES:-${NILSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
 
 NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/nilchain/nilchaind}"
 NIL_CLI_BIN="${NIL_CLI_BIN:-$ROOT_DIR/nil_cli/target/release/nil_cli}"
@@ -213,6 +220,26 @@ provider_registered() {
   [ "$code" = "200" ]
 }
 
+provider_paired() {
+  local addr
+  addr="$(provider_addr)"
+  if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+    return 1
+  fi
+  local code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/$addr" 2>/dev/null || true)"
+  [ "$code" = "200" ]
+}
+
+pending_pairing_exists() {
+  if [ -z "$PAIRING_ID" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+    return 1
+  fi
+  local code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$PAIRING_ID" 2>/dev/null || true)"
+  [ "$code" = "200" ]
+}
+
 print_config() {
   local addr local_url public_url pid pid_file
   addr="$(provider_addr)"
@@ -226,8 +253,10 @@ print_config() {
 
   cat <<EOF
 {
+  "network_profile": "$(json_escape "$NETWORK_PROFILE")",
   "provider_key": "$(json_escape "$PROVIDER_KEY")",
   "provider_address": "$(json_escape "$addr")",
+  "pairing_id": "$(json_escape "$PAIRING_ID")",
   "chain_id": "$(json_escape "$CHAIN_ID")",
   "hub_lcd": "$(json_escape "$LCD_BASE")",
   "hub_node": "$(json_escape "$NODE_ADDR")",
@@ -247,6 +276,8 @@ print_config() {
   "pid": "$(json_escape "$pid")",
   "provider_running": $(provider_running && printf 'true' || printf 'false'),
   "provider_registered": $(provider_registered && printf 'true' || printf 'false'),
+  "provider_paired": $(provider_paired && printf 'true' || printf 'false'),
+  "pending_pairing_open": $(pending_pairing_exists && printf 'true' || printf 'false'),
   "sp_auth_present": $([ -n "${NIL_GATEWAY_SP_AUTH:-}" ] && printf 'true' || printf 'false')
 }
 EOF
@@ -260,7 +291,8 @@ doctor_provider() {
   public_url="$(provider_public_base_url || true)"
   pid_file="$(provider_pid_file)"
 
-  echo "==> Provider doctor"
+  echo "==> provider-daemon doctor"
+  echo "  profile: $NETWORK_PROFILE"
   echo "  key:    $PROVIDER_KEY"
   echo "  home:   $HOME_DIR"
   echo "  lcd:    $LCD_BASE"
@@ -297,6 +329,19 @@ doctor_provider() {
   else
     echo "FAIL: provider key missing; run ./scripts/run_devnet_provider.sh init"
     failures=$((failures + 1))
+  fi
+
+  if [ -n "$PAIRING_ID" ]; then
+    echo "OK: pairing id configured ($PAIRING_ID)"
+    if provider_paired; then
+      echo "OK: provider pairing is confirmed on-chain"
+    elif pending_pairing_exists; then
+      echo "WARN: pairing is still pending on-chain; rerun bootstrap after the website opens pairing"
+    else
+      echo "WARN: pairing id is not open on-chain yet; start from the website pairing step first"
+    fi
+  else
+    echo "WARN: PAIRING_ID is not set; website-driven onboarding and My Providers linking will be unavailable"
   fi
 
   if [ -n "$PROVIDER_ENDPOINTS_RAW" ]; then
@@ -382,10 +427,14 @@ init_provider() {
   echo "Provider key ready:"
   echo "  key:     $PROVIDER_KEY"
   echo "  address: $addr"
+  if [ -n "$PAIRING_ID" ]; then
+    echo "  pairing: $PAIRING_ID"
+  fi
   echo
   echo "Next:"
-  echo "  - Ask the hub operator to fund this address with aatom (gas)."
-  echo "  - Then register your endpoint: ./scripts/run_devnet_provider.sh register"
+  echo "  - Ask the hub operator to fund this address with aatom (gas) if needed."
+  echo "  - Open pairing from the website, then rerun bootstrap with PAIRING_ID=<pairing-id>."
+  echo "  - Set PROVIDER_ENDPOINT if this host is public, then rerun bootstrap."
 }
 
 register_provider() {
@@ -416,9 +465,68 @@ register_provider() {
     exit 1
   fi
 
-  echo "==> Registering provider on-chain..."
-  "$NILCHAIND_BIN" tx nilchain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
-    "${endpoint_args[@]}" \
+  if provider_registered; then
+    echo "==> Updating provider endpoints on-chain..."
+    "$NILCHAIND_BIN" tx nilchain update-provider-endpoints \
+      "${endpoint_args[@]}" \
+      --from "$PROVIDER_KEY" \
+      --chain-id "$CHAIN_ID" \
+      --node "$NODE_ADDR" \
+      --home "$HOME_DIR" \
+      --keyring-backend test \
+      --gas auto \
+      --gas-adjustment 1.6 \
+      --gas-prices "$GAS_PRICES" \
+      --yes >/dev/null
+    echo "Updated:"
+  else
+    echo "==> Registering provider on-chain..."
+    "$NILCHAIND_BIN" tx nilchain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
+      "${endpoint_args[@]}" \
+      --from "$PROVIDER_KEY" \
+      --chain-id "$CHAIN_ID" \
+      --node "$NODE_ADDR" \
+      --home "$HOME_DIR" \
+      --keyring-backend test \
+      --gas auto \
+      --gas-adjustment 1.6 \
+      --gas-prices "$GAS_PRICES" \
+      --yes >/dev/null
+    echo "Registered:"
+  fi
+
+  echo "  profile:   $NETWORK_PROFILE"
+  echo "  address:   $addr"
+  echo "  endpoints: $PROVIDER_ENDPOINTS_RAW"
+  echo "  lcd:       $LCD_BASE"
+}
+
+confirm_provider_pairing() {
+  ensure_nilchaind
+
+  if [ -z "$PAIRING_ID" ]; then
+    echo "ERROR: PAIRING_ID is required to confirm provider pairing" >&2
+    exit 1
+  fi
+
+  local addr
+  addr="$(provider_addr)"
+  if [ -z "$addr" ]; then
+    echo "ERROR: provider key not found; run: ./scripts/run_devnet_provider.sh init" >&2
+    exit 1
+  fi
+
+  if provider_paired; then
+    echo "==> Provider is already paired on-chain; skipping confirm."
+    return 0
+  fi
+  if ! pending_pairing_exists; then
+    echo "ERROR: pairing id $PAIRING_ID is not open on-chain; open pairing from the website first" >&2
+    exit 1
+  fi
+
+  echo "==> Confirming provider pairing on-chain..."
+  "$NILCHAIND_BIN" tx nilchain confirm-provider-pairing "$PAIRING_ID" \
     --from "$PROVIDER_KEY" \
     --chain-id "$CHAIN_ID" \
     --node "$NODE_ADDR" \
@@ -429,10 +537,9 @@ register_provider() {
     --gas-prices "$GAS_PRICES" \
     --yes >/dev/null
 
-  echo "Registered:"
-  echo "  address:   $addr"
-  echo "  endpoints: $PROVIDER_ENDPOINTS_RAW"
-  echo "  lcd:       $LCD_BASE"
+  echo "Paired:"
+  echo "  address:    $addr"
+  echo "  pairing_id: $PAIRING_ID"
 }
 
 start_provider() {
@@ -455,16 +562,20 @@ start_provider() {
   mkdir -p "$UPLOAD_DIR"
 
   local pid_file="$PID_DIR/provider.pid"
+  local local_url
+  local_url="$(provider_local_base_url)"
   if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
     echo "Provider already running (pid $(cat "$pid_file"))"
     return 0
   fi
 
-  echo "==> Starting provider gateway..."
+  echo "==> Starting provider-daemon..."
   (
     cd "$ROOT_DIR/nil_gateway"
     nohup env \
+      NIL_RUNTIME_PERSONA="provider-daemon" \
       NIL_LISTEN_ADDR="$PROVIDER_LISTEN" \
+      NIL_PROVIDER_BASE="$local_url" \
       NIL_CHAIN_ID="$CHAIN_ID" \
       NIL_NODE="$NODE_ADDR" \
       NIL_LCD_BASE="$LCD_BASE" \
@@ -474,35 +585,39 @@ start_provider() {
       NIL_TRUSTED_SETUP="$TRUSTED_SETUP" \
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_PROVIDER_KEY="$PROVIDER_KEY" \
+      NIL_PROVIDER_ENDPOINTS="$PROVIDER_ENDPOINTS_RAW" \
+      NIL_PROVIDER_PAIRING_ID="$PAIRING_ID" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
       "$GO_BIN" run . \
       >"$LOG_DIR/provider.log" 2>&1 &
     echo $! >"$pid_file"
   )
 
-  echo "Provider started:"
+  echo "provider-daemon started:"
   echo "  pid:   $(cat "$pid_file")"
-  echo "  http:  http://0.0.0.0${PROVIDER_LISTEN}"
+  echo "  http:  $local_url"
   echo "  logs:  $LOG_DIR/provider.log"
 }
 
 bootstrap_provider() {
   init_provider
 
-  if [ -n "$PROVIDER_ENDPOINTS_RAW" ]; then
-    if provider_registered; then
-      echo "==> Provider is already registered on-chain; skipping register."
-    else
-      register_provider
-    fi
+  if [ -n "$PAIRING_ID" ]; then
+    confirm_provider_pairing
   else
-    echo "==> Skipping register: PROVIDER_ENDPOINT is not set."
+    echo "==> Skipping pairing confirm: PAIRING_ID is not set."
   fi
 
   if [ -n "${NIL_GATEWAY_SP_AUTH:-}" ]; then
     start_provider
   else
     echo "==> Skipping start: NIL_GATEWAY_SP_AUTH is not set."
+  fi
+
+  if [ -n "$PROVIDER_ENDPOINTS_RAW" ]; then
+    register_provider
+  else
+    echo "==> Skipping register: PROVIDER_ENDPOINT is not set."
   fi
 
   doctor_provider

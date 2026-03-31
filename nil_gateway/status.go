@@ -3,25 +3,87 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"runtime/debug"
 	"strings"
 	"time"
 )
 
+var statusProcessStartedAt = time.Now()
+
 type gatewayStatusResponse struct {
-	Version       string            `json:"version"`
-	GitSHA        string            `json:"git_sha"`
-	BuildTime     string            `json:"build_time"`
-	Persona       string            `json:"persona"`
-	Mode          string            `json:"mode"`
-	RouteFamilies []string          `json:"allowed_route_families"`
-	ListeningAddr string            `json:"listening_addr"`
-	ProviderBase  string            `json:"provider_base,omitempty"`
-	P2PAddrs      []string          `json:"p2p_addrs,omitempty"`
-	Capabilities  map[string]bool   `json:"capabilities"`
-	Dependencies  map[string]bool   `json:"deps"`
-	Extra         map[string]string `json:"extra,omitempty"`
+	Version       string                      `json:"version"`
+	GitSHA        string                      `json:"git_sha"`
+	BuildTime     string                      `json:"build_time"`
+	Persona       string                      `json:"persona"`
+	Mode          string                      `json:"mode"`
+	RouteFamilies []string                    `json:"allowed_route_families"`
+	ListeningAddr string                      `json:"listening_addr"`
+	ProviderBase  string                      `json:"provider_base,omitempty"`
+	P2PAddrs      []string                    `json:"p2p_addrs,omitempty"`
+	Capabilities  map[string]bool             `json:"capabilities"`
+	Dependencies  map[string]bool             `json:"deps"`
+	Provider      *providerDaemonStatusDetail `json:"provider,omitempty"`
+	Issues        []string                    `json:"issues,omitempty"`
+	Extra         map[string]string           `json:"extra,omitempty"`
+}
+
+type providerDaemonStatusDetail struct {
+	KeyName            string   `json:"key_name,omitempty"`
+	Address            string   `json:"address,omitempty"`
+	PairingID          string   `json:"pairing_id,omitempty"`
+	PairingStatus      string   `json:"pairing_status,omitempty"`
+	PairedOperator     string   `json:"paired_operator,omitempty"`
+	PendingOperator    string   `json:"pending_operator,omitempty"`
+	PendingExpiresAt   uint64   `json:"pending_expires_at,omitempty"`
+	LatestHeight       uint64   `json:"latest_height,omitempty"`
+	RegistrationStatus string   `json:"registration_status,omitempty"`
+	OnchainStatus      string   `json:"onchain_status,omitempty"`
+	Draining           bool     `json:"draining"`
+	Endpoints          []string `json:"endpoints,omitempty"`
+	LocalBase          string   `json:"local_base,omitempty"`
+	PublicBase         string   `json:"public_base,omitempty"`
+	LocalHealthURL     string   `json:"local_health_url,omitempty"`
+	PublicHealthURL    string   `json:"public_health_url,omitempty"`
+	LocalHealthOK      bool     `json:"local_health_ok"`
+	PublicHealthOK     bool     `json:"public_health_ok"`
+	SpAuthPresent      bool     `json:"sp_auth_present"`
+	UploadDir          string   `json:"upload_dir,omitempty"`
+	NilHome            string   `json:"nil_home,omitempty"`
+	ChainID            string   `json:"chain_id,omitempty"`
+	LCDBase            string   `json:"lcd_base,omitempty"`
+	NodeAddr           string   `json:"node_addr,omitempty"`
+	UptimeSeconds      uint64   `json:"uptime_seconds"`
+}
+
+type lcdProviderStatusResponse struct {
+	Provider struct {
+		Address      string   `json:"address"`
+		Status       string   `json:"status"`
+		Capabilities string   `json:"capabilities"`
+		Endpoints    []string `json:"endpoints"`
+		Draining     bool     `json:"draining"`
+	} `json:"provider"`
+}
+
+type lcdProviderPairingResponse struct {
+	Pairing struct {
+		Provider     string `json:"provider"`
+		Operator     string `json:"operator"`
+		PairingID    string `json:"pairing_id"`
+		PairedHeight int64  `json:"paired_height"`
+	} `json:"pairing"`
+}
+
+type lcdPendingProviderPairingResponse struct {
+	Pairing struct {
+		PairingID    string          `json:"pairing_id"`
+		Operator     string          `json:"operator"`
+		ExpiresAtRaw json.RawMessage `json:"expires_at"`
+		OpenedHeight int64           `json:"opened_height"`
+	} `json:"pairing"`
 }
 
 func parseP2PAddrList(raw string) []string {
@@ -70,8 +132,17 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 		mode = "router"
 	}
 	persona := currentRuntimePersona()
-
 	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
+	lcdNodeInfoURL := statusLCDNodeInfoURL()
+	spHealthURL := strings.TrimRight(strings.TrimSpace(providerBase), "/") + "/health"
+	if persona == runtimePersonaProviderDaemon {
+		if localBase := localBaseURLFromListenAddr(listenAddr); localBase != "" {
+			spHealthURL = strings.TrimRight(localBase, "/") + "/health"
+		}
+	}
+	lcdReachable := pingURL(r.Context(), lcdNodeInfoURL)
+	spReachable := pingURL(r.Context(), spHealthURL)
+
 	status := gatewayStatusResponse{
 		Version:       version,
 		GitSHA:        gitSHA,
@@ -92,8 +163,8 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 			"mode2_rs_append": false,
 		},
 		Dependencies: map[string]bool{
-			"lcd_reachable": pingURL(r.Context(), lcdBase+"/cosmos/base/tendermint/v1beta1/node_info"),
-			"sp_reachable":  pingURL(r.Context(), strings.TrimRight(providerBase, "/")+"/health"),
+			"lcd_reachable": lcdReachable,
+			"sp_reachable":  spReachable,
 		},
 		Extra: map[string]string{
 			"artifact_spec": "mode2-artifacts-v1",
@@ -112,6 +183,16 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 	for k, v := range nilfsCASStatusSnapshotForStatus() {
 		status.Extra[k] = v
 	}
+
+	if persona == runtimePersonaProviderDaemon {
+		providerStatus, issues := buildProviderDaemonStatus(r.Context(), listenAddr, lcdReachable)
+		status.Provider = providerStatus
+		status.Issues = issues
+		if providerStatus != nil && strings.TrimSpace(status.ProviderBase) == "" {
+			status.ProviderBase = providerStatus.LocalBase
+		}
+	}
+
 	p2pAddrs := getP2PAnnounceAddrs()
 	if len(p2pAddrs) == 0 {
 		p2pAddrs = parseP2PAddrList(envDefault("NIL_P2P_ADDRS", ""))
@@ -129,6 +210,280 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(status)
+}
+
+func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReachable bool) (*providerDaemonStatusDetail, []string) {
+	detail := &providerDaemonStatusDetail{
+		KeyName:       strings.TrimSpace(os.Getenv("NIL_PROVIDER_KEY")),
+		PairingID:     strings.TrimSpace(os.Getenv("NIL_PROVIDER_PAIRING_ID")),
+		SpAuthPresent: strings.TrimSpace(os.Getenv("NIL_GATEWAY_SP_AUTH")) != "",
+		UploadDir:     uploadDir,
+		NilHome:       homeDir,
+		ChainID:       strings.TrimSpace(chainID),
+		LCDBase:       strings.TrimSpace(lcdBase),
+		NodeAddr:      strings.TrimSpace(nodeAddr),
+		UptimeSeconds: statusUptimeSeconds(),
+	}
+	issues := make([]string, 0, 8)
+
+	detail.LocalBase = localBaseURLFromListenAddr(listenAddr)
+	if detail.LocalBase != "" {
+		detail.LocalHealthURL = strings.TrimRight(detail.LocalBase, "/") + "/health"
+		detail.LocalHealthOK = pingURL(ctx, detail.LocalHealthURL)
+	}
+
+	if !detail.SpAuthPresent {
+		issues = append(issues, "NIL_GATEWAY_SP_AUTH is missing")
+	}
+	if strings.TrimSpace(detail.LCDBase) == "" {
+		issues = append(issues, "LCD base is not configured")
+	} else if !lcdReachable {
+		issues = append(issues, "LCD is unreachable")
+	}
+
+	detail.Address = strings.TrimSpace(cachedProviderAddress(ctx))
+	if detail.Address == "" {
+		issues = append(issues, "provider address could not be resolved from NIL_PROVIDER_KEY/NIL_PROVIDER_ADDRESS")
+		detail.PairingStatus = "unknown"
+		detail.RegistrationStatus = "unknown"
+		if !detail.LocalHealthOK {
+			issues = append(issues, "local provider health endpoint is unreachable")
+		}
+		return detail, dedupeIssues(issues)
+	}
+
+	detail.Endpoints = parseP2PAddrList(strings.TrimSpace(os.Getenv("NIL_PROVIDER_ENDPOINTS")))
+
+	record, registrationStatus, regErr := fetchProviderStatusFromLCD(ctx, detail.Address)
+	detail.RegistrationStatus = registrationStatus
+	if regErr == nil && record != nil {
+		detail.OnchainStatus = strings.TrimSpace(record.Provider.Status)
+		detail.Draining = record.Provider.Draining
+		if len(record.Provider.Endpoints) > 0 {
+			detail.Endpoints = append([]string(nil), record.Provider.Endpoints...)
+		}
+	}
+
+	pairing, pairingStatus, pairingErr := fetchProviderPairingFromLCD(ctx, detail.Address)
+	detail.PairingStatus = pairingStatus
+	if pairingErr == nil && pairing != nil {
+		detail.PairedOperator = strings.TrimSpace(pairing.Pairing.Operator)
+		if detail.PairingID == "" {
+			detail.PairingID = strings.TrimSpace(pairing.Pairing.PairingID)
+		}
+	}
+
+	if detail.PairingStatus != "paired" && detail.PairingID != "" {
+		pending, pendingStatus, pendingErr := fetchPendingProviderPairingFromLCD(ctx, detail.PairingID)
+		if pendingErr == nil && pending != nil {
+			detail.PairingStatus = pendingStatus
+			detail.PendingOperator = strings.TrimSpace(pending.Pairing.Operator)
+			if expiresAt, err := parseUint64Raw(pending.Pairing.ExpiresAtRaw); err == nil {
+				detail.PendingExpiresAt = expiresAt
+			}
+			if latestHeight, err := fetchLatestHeight(ctx, strings.TrimRight(detail.LCDBase, "/")); err == nil {
+				detail.LatestHeight = latestHeight
+			}
+		}
+	}
+	if detail.PairingStatus == "" {
+		detail.PairingStatus = "unknown"
+	}
+	if detail.RegistrationStatus == "" {
+		detail.RegistrationStatus = "unknown"
+	}
+
+	if publicBase := firstHTTPBaseFromEndpoints(detail.Endpoints); publicBase != "" {
+		detail.PublicBase = publicBase
+		detail.PublicHealthURL = strings.TrimRight(publicBase, "/") + "/health"
+		detail.PublicHealthOK = pingURL(ctx, detail.PublicHealthURL)
+	}
+
+	if !detail.LocalHealthOK {
+		issues = append(issues, "local provider health endpoint is unreachable")
+	}
+	switch detail.PairingStatus {
+	case "paired":
+	case "pending":
+		if detail.PendingExpiresAt != 0 && detail.LatestHeight != 0 && detail.PendingExpiresAt <= detail.LatestHeight {
+			issues = append(issues, "configured pairing id has expired on-chain")
+		} else {
+			issues = append(issues, "provider pairing is still pending confirmation on-chain")
+		}
+	case "not_found":
+		if detail.PairingID != "" {
+			issues = append(issues, "configured pairing id is not open on-chain")
+		} else {
+			issues = append(issues, "provider is not paired to an operator wallet")
+		}
+	case "unknown":
+		if pairingErr != nil && lcdReachable {
+			issues = append(issues, "provider pairing could not be queried from the LCD")
+		}
+	}
+	switch detail.RegistrationStatus {
+	case "registered":
+	case "unregistered":
+		issues = append(issues, "provider is not registered on-chain")
+	case "unknown":
+		if regErr != nil && lcdReachable {
+			issues = append(issues, "provider registration could not be queried from the LCD")
+		}
+	}
+	if len(detail.Endpoints) == 0 {
+		issues = append(issues, "provider endpoints are not configured")
+	}
+	if detail.PublicHealthURL != "" && !detail.PublicHealthOK {
+		issues = append(issues, "public provider health endpoint is unreachable")
+	}
+
+	return detail, dedupeIssues(issues)
+}
+
+func statusUptimeSeconds() uint64 {
+	if statusProcessStartedAt.IsZero() {
+		return 0
+	}
+	if d := time.Since(statusProcessStartedAt); d > 0 {
+		return uint64(d / time.Second)
+	}
+	return 0
+}
+
+func statusLCDNodeInfoURL() string {
+	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
+	if base == "" {
+		return ""
+	}
+	return base + "/cosmos/base/tendermint/v1beta1/node_info"
+}
+
+func localBaseURLFromListenAddr(listenAddr string) string {
+	switch trimmed := strings.TrimSpace(listenAddr); {
+	case trimmed == "":
+		return ""
+	case strings.HasPrefix(trimmed, "http://"), strings.HasPrefix(trimmed, "https://"):
+		return strings.TrimRight(trimmed, "/")
+	case strings.HasPrefix(trimmed, ":"):
+		return "http://127.0.0.1" + trimmed
+	case strings.HasPrefix(trimmed, "0.0.0.0:"):
+		return "http://127.0.0.1:" + strings.TrimPrefix(trimmed, "0.0.0.0:")
+	case strings.HasPrefix(trimmed, "localhost:"), strings.HasPrefix(trimmed, "127.0.0.1:"):
+		return "http://" + trimmed
+	default:
+		return "http://" + trimmed
+	}
+}
+
+func firstHTTPBaseFromEndpoints(endpoints []string) string {
+	for _, endpoint := range endpoints {
+		base, err := httpBaseURLFromMultiaddr(endpoint)
+		if err == nil && strings.TrimSpace(base) != "" {
+			return base
+		}
+	}
+	return ""
+}
+
+func fetchProviderStatusFromLCD(ctx context.Context, providerAddr string) (*lcdProviderStatusResponse, string, error) {
+	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
+	if base == "" || strings.TrimSpace(providerAddr) == "" {
+		return nil, "unknown", nil
+	}
+
+	var payload lcdProviderStatusResponse
+	statusCode, err := fetchStatusJSON(ctx, base+"/nilchain/nilchain/v1/providers/"+providerAddr, &payload)
+	switch statusCode {
+	case http.StatusOK:
+		return &payload, "registered", nil
+	case http.StatusNotFound:
+		return nil, "unregistered", nil
+	default:
+		return nil, "unknown", err
+	}
+}
+
+func fetchProviderPairingFromLCD(ctx context.Context, providerAddr string) (*lcdProviderPairingResponse, string, error) {
+	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
+	if base == "" || strings.TrimSpace(providerAddr) == "" {
+		return nil, "unknown", nil
+	}
+
+	var payload lcdProviderPairingResponse
+	statusCode, err := fetchStatusJSON(ctx, base+"/nilchain/nilchain/v1/provider-pairings/"+providerAddr, &payload)
+	switch statusCode {
+	case http.StatusOK:
+		return &payload, "paired", nil
+	case http.StatusNotFound:
+		return nil, "not_found", nil
+	default:
+		return nil, "unknown", err
+	}
+}
+
+func fetchPendingProviderPairingFromLCD(ctx context.Context, pairingID string) (*lcdPendingProviderPairingResponse, string, error) {
+	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
+	if base == "" || strings.TrimSpace(pairingID) == "" {
+		return nil, "unknown", nil
+	}
+
+	var payload lcdPendingProviderPairingResponse
+	statusCode, err := fetchStatusJSON(ctx, base+"/nilchain/nilchain/v1/provider-pairings/pending/"+pairingID, &payload)
+	switch statusCode {
+	case http.StatusOK:
+		return &payload, "pending", nil
+	case http.StatusNotFound:
+		return nil, "not_found", nil
+	default:
+		return nil, "unknown", err
+	}
+}
+
+func fetchStatusJSON(ctx context.Context, url string, dest any) (int, error) {
+	if strings.TrimSpace(url) == "" {
+		return 0, nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, err
+	}
+	client := http.Client{Timeout: 2 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return res.StatusCode, fmt.Errorf("unexpected status %d for %s", res.StatusCode, url)
+	}
+	if err := json.NewDecoder(res.Body).Decode(dest); err != nil {
+		return res.StatusCode, err
+	}
+	return res.StatusCode, nil
+}
+
+func dedupeIssues(issues []string) []string {
+	if len(issues) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(issues))
+	out := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		issue = strings.TrimSpace(issue)
+		if issue == "" {
+			continue
+		}
+		if _, ok := seen[issue]; ok {
+			continue
+		}
+		seen[issue] = struct{}{}
+		out = append(out, issue)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func pingURL(ctx context.Context, url string) bool {

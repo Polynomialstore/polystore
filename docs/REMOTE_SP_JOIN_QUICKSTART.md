@@ -6,10 +6,11 @@ If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 
 ## What you need from the hub operator
 
-- Hub RPC: `tcp://<hub-host>:26657` (or `https://rpc.<domain>`)
-- Hub LCD: `http://<hub-host>:1317` (or `https://lcd.<domain>`)
-- Shared chain ID: `<chain-id>`
 - Shared router↔provider auth token: `NIL_GATEWAY_SP_AUTH=...`
+- Optional but recommended: a website-opened `PAIRING_ID=...`
+
+The default provider flow now targets the canonical public NilStore testnet from `.env.testnet.public`.
+Only set `HUB_NODE`, `HUB_LCD`, or `CHAIN_ID` when you are intentionally joining a non-public hub.
 
 ## Provider machine prerequisites
 
@@ -65,33 +66,55 @@ In your tunnel ingress, route that hostname to the local provider listener (for 
 Cloudflare Tunnel setup and endpoint helper details:
 - `docs/networking/PROVIDER_ENDPOINTS.md`
 
-### 4) Register your provider on-chain
+### 4) Recommended: bootstrap the full provider-daemon flow
 
 ```bash
-export HUB_NODE="tcp://<hub-host>:26657"  # or https://rpc.<domain>
-export HUB_LCD="http://<hub-host>:1317"   # or https://lcd.<domain>
-export CHAIN_ID="<chain-id>"
 export PROVIDER_KEY="provider1"
+export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https" # or your /ip4/... endpoint
+export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
+export PAIRING_ID="<website-opened-pairing-id>"            # optional but recommended
+
+./scripts/run_devnet_provider.sh bootstrap
+```
+
+`bootstrap` now:
+
+- creates the provider key if needed
+- confirms on-chain pairing when `PAIRING_ID` is set
+- starts the provider-daemon when `NIL_GATEWAY_SP_AUTH` is set
+- registers the provider if it is new
+- updates provider endpoints if it is already registered
+- runs a doctor pass at the end
+
+If you are targeting a non-public hub, export `HUB_NODE`, `HUB_LCD`, and `CHAIN_ID` before running `bootstrap`.
+
+### 5) Advanced/manual path
+
+Use this only when you want to split pairing, registration, and process start into separate steps.
+
+Register or update endpoints:
+
+```bash
+export PROVIDER_KEY="provider1"
+export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"
 
 ./scripts/run_devnet_provider.sh register
 ```
 
-If you are letting a coding agent drive setup locally, you can also use:
+Confirm pairing explicitly:
 
 ```bash
+export PROVIDER_KEY="provider1"
+export PAIRING_ID="<website-opened-pairing-id>"
+
 ./scripts/run_devnet_provider.sh bootstrap
 ```
 
-`bootstrap` runs `init`, registers the provider if `PROVIDER_ENDPOINT` is set, starts the provider if `NIL_GATEWAY_SP_AUTH` is set, then runs a local doctor pass.
-
-### 5) Start your provider gateway
+Start only the provider-daemon:
 
 ```bash
-export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
-export NIL_LCD_BASE="$HUB_LCD"
-export NIL_NODE="$HUB_NODE"
-export NIL_CHAIN_ID="$CHAIN_ID"
 export PROVIDER_KEY="provider1"
+export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
 export PROVIDER_LISTEN=":8091"
 
 ./scripts/run_devnet_provider.sh start
@@ -110,7 +133,7 @@ curl -sf http://127.0.0.1:8091/health
 Or run the healthcheck script (recommended):
 
 ```bash
-scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd "$HUB_LCD" --provider-addr <nil1...>
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd "${HUB_LCD:-https://lcd.nilstore.org}" --provider-addr <nil1...>
 ```
 
 Agent-oriented diagnostics:
@@ -120,19 +143,21 @@ Agent-oriented diagnostics:
 ./scripts/run_devnet_provider.sh verify
 ```
 
-- `doctor` checks prerequisites, key state, endpoint configuration, local/public `/health`, and on-chain visibility when possible.
+- `doctor` checks prerequisites, key state, pairing configuration, endpoint configuration, local/public `/health`, and on-chain visibility when possible.
 - `verify` runs the repo healthcheck with the current provider and hub settings.
 
 From the hub (or anywhere with LCD access):
 
 ```bash
-curl -sf "$HUB_LCD/nilchain/nilchain/v1/providers" | jq '.providers | length'
+curl -sf "${HUB_LCD:-https://lcd.nilstore.org}/nilchain/nilchain/v1/providers" | jq '.providers | length'
 ```
 
 ## Common failures
 
 - Provider not visible on LCD:
   - the `register-provider` tx likely failed (often: not enough `aatom` for gas)
+- Pairing does not confirm:
+  - the `PAIRING_ID` was never opened on-chain, or it expired before the server confirmed it
 - Router can’t reach provider:
   - firewall/NAT; ensure your `PROVIDER_ENDPOINT` is reachable **from the hub**
   - confirm `NIL_GATEWAY_SP_AUTH` matches the hub router
