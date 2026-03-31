@@ -148,6 +148,17 @@ export const RetrievalRequestTypes = {
   ],
 } as const
 
+export const ProviderAdminActionTypes = {
+  EIP712Domain: EIP712DomainTypes,
+  ProviderAdminAction: [
+    { name: 'provider', type: 'string' },
+    { name: 'action', type: 'string' },
+    { name: 'endpoint', type: 'string' },
+    { name: 'nonce', type: 'uint64' },
+    { name: 'expires_at', type: 'uint64' },
+  ],
+} as const
+
 export interface RetrievalReceiptIntent {
   deal_id: number
   epoch_id: number
@@ -178,6 +189,14 @@ export interface RetrievalRequestIntent {
   file_path: string
   range_start: number
   range_len: number
+  nonce: number
+  expires_at: number
+}
+
+export interface ProviderAdminActionIntent {
+  provider: string
+  action: string
+  endpoint: string
   nonce: number
   expires_at: number
 }
@@ -224,6 +243,26 @@ export function buildRetrievalReceiptTypedData(intent: RetrievalReceiptIntent, c
       nonce: Number(intent.nonce),
       expires_at: Number(intent.expires_at),
       proof_hash: intent.proof_hash,
+    },
+  }
+}
+
+export function buildProviderAdminActionTypedData(intent: ProviderAdminActionIntent, chainId: number) {
+  return {
+    domain: {
+      name: EIP712_DOMAIN_NAME,
+      version: EIP712_DOMAIN_VERSION,
+      chainId,
+      verifyingContract: EIP712_VERIFYING_CONTRACT,
+    },
+    types: ProviderAdminActionTypes,
+    primaryType: 'ProviderAdminAction' as const,
+    message: {
+      provider: intent.provider,
+      action: intent.action,
+      endpoint: intent.endpoint,
+      nonce: Number(intent.nonce),
+      expires_at: Number(intent.expires_at),
     },
   }
 }

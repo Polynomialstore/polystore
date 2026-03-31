@@ -331,6 +331,9 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/retrieval/plan/{cid}", GatewayPlanRetrievalSession).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/mdu/{cid}/{index}", GatewayMdu).Methods("GET", "OPTIONS")
 	r.HandleFunc("/sp/retrieval/prove-retrieval", GatewayProveRetrieval).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/admin/status", SpAdminStatus).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/admin/doctor", SpAdminDoctor).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/admin/endpoint", SpAdminRotateEndpoint).Methods("POST", "OPTIONS")
 }
 
 // runCommand executes an external command, respecting mockCombinedOutput if set.

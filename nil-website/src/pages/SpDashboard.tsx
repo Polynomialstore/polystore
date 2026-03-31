@@ -14,8 +14,10 @@ import {
 
 import { appConfig } from '../config'
 import { lcdFetchProviders, lcdFetchProvidersByOperator } from '../api/lcdClient'
+import type { ProviderAdminResponse } from '../api/providerClient'
 import { StatusBar } from '../components/StatusBar'
 import { useNetwork } from '../hooks/useNetwork'
+import { useProviderAdmin } from '../hooks/useProviderAdmin'
 import { useSessionStatus } from '../hooks/useSessionStatus'
 import {
   buildOperatorProviderRecords,
@@ -87,6 +89,7 @@ function CopyButton({ label, onClick }: { label: string; onClick: () => void }) 
 export function SpDashboard() {
   const { openConnectModal } = useConnectModal()
   const { switchNetwork } = useNetwork()
+  const { pendingAction, refreshStatus, runDoctor, rotateEndpoint } = useProviderAdmin()
   const session = useSessionStatus()
   const {
     nilAddress,
@@ -94,7 +97,6 @@ export function SpDashboard() {
     isConnected,
     isWrongNetwork,
     genesisMismatch,
-    hasFunds,
     needsReconnect,
     refreshWalletNetwork,
   } = session
@@ -108,6 +110,8 @@ export function SpDashboard() {
   const [rotationProviderKey, setRotationProviderKey] = useState('provider1')
   const [rotationEndpoint, setRotationEndpoint] = useState('')
   const [healthProbe, setHealthProbe] = useState<PublicHealthState>({ status: 'idle' })
+  const [adminError, setAdminError] = useState<string | null>(null)
+  const [adminResponse, setAdminResponse] = useState<ProviderAdminResponse | null>(null)
 
   const load = useCallback(async () => {
     if (!nilAddress) {
@@ -177,9 +181,13 @@ export function SpDashboard() {
   useEffect(() => {
     if (!activeRecord) {
       setRotationEndpoint('')
+      setAdminResponse(null)
+      setAdminError(null)
       return
     }
     setRotationEndpoint(activeRecord.endpoints[0] || activeRecord.primaryBase || '')
+    setAdminResponse(null)
+    setAdminError(null)
   }, [activeRecord])
 
   const probePublicHealth = useCallback(async (record: OperatorProviderRecord | null) => {
@@ -243,6 +251,66 @@ export function SpDashboard() {
 
   const registeredCount = records.filter((record) => record.registered).length
   const healthyCurrent = healthProbe.status === 'ok' && healthProbe.base === activeRecord?.primaryBase
+  const adminStatus = adminResponse?.provider
+  const controlPlaneReady = Boolean(isConnected && !needsReconnect && activeRecord?.primaryBase)
+
+  const requireActiveProvider = useCallback(() => {
+    if (!activeRecord) {
+      throw new Error('Select a provider first')
+    }
+    if (!activeRecord.primaryBase) {
+      throw new Error('Selected provider does not expose a public HTTP base yet')
+    }
+    return activeRecord
+  }, [activeRecord])
+
+  const handleRefreshSnapshot = useCallback(async () => {
+    try {
+      const record = requireActiveProvider()
+      setAdminError(null)
+      const response = await refreshStatus({
+        providerBase: record.primaryBase!,
+        provider: record.provider,
+      })
+      setAdminResponse(response)
+    } catch (actionError) {
+      setAdminError(actionError instanceof Error ? actionError.message : 'Failed to refresh provider-daemon status')
+    }
+  }, [refreshStatus, requireActiveProvider])
+
+  const handleRunDoctor = useCallback(async () => {
+    try {
+      const record = requireActiveProvider()
+      setAdminError(null)
+      const response = await runDoctor({
+        providerBase: record.primaryBase!,
+        provider: record.provider,
+      })
+      setAdminResponse(response)
+    } catch (actionError) {
+      setAdminError(actionError instanceof Error ? actionError.message : 'Failed to run provider-daemon doctor')
+    }
+  }, [requireActiveProvider, runDoctor])
+
+  const handleRotateEndpoint = useCallback(async () => {
+    try {
+      const record = requireActiveProvider()
+      const endpoint = String(rotationEndpoint || '').trim()
+      if (!endpoint) {
+        throw new Error('Enter a provider endpoint first')
+      }
+      setAdminError(null)
+      const response = await rotateEndpoint({
+        providerBase: record.primaryBase!,
+        provider: record.provider,
+        endpoint,
+      })
+      setAdminResponse(response)
+      await load()
+    } catch (actionError) {
+      setAdminError(actionError instanceof Error ? actionError.message : 'Failed to rotate provider endpoint')
+    }
+  }, [load, requireActiveProvider, rotateEndpoint, rotationEndpoint])
 
   return (
     <div className="container mx-auto max-w-6xl px-4 pb-12 pt-24">
@@ -305,6 +373,15 @@ export function SpDashboard() {
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 h-4 w-4" />
             <div>{error}</div>
+          </div>
+        </div>
+      ) : null}
+
+      {adminError ? (
+        <div className="mt-6 border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-4 w-4" />
+            <div>{adminError}</div>
           </div>
         </div>
       ) : null}
@@ -465,6 +542,81 @@ export function SpDashboard() {
             <section className="glass-panel industrial-border p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Signed control plane</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Operate the provider-daemon from the browser</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    These actions are signed by the paired operator wallet and verified by the provider-daemon against on-chain pairing state. The provider key never leaves the server.
+                  </p>
+                </div>
+                <StatusPill
+                  label={controlPlaneReady ? 'Remote actions ready' : 'Public base required'}
+                  state={controlPlaneReady ? 'ready' : 'idle'}
+                />
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleRefreshSnapshot()}
+                  disabled={!controlPlaneReady || pendingAction !== null}
+                  className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40 disabled:opacity-50"
+                >
+                  {pendingAction === 'status_refresh' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Refresh daemon snapshot
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRunDoctor()}
+                  disabled={!controlPlaneReady || pendingAction !== null}
+                  className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40 disabled:opacity-50"
+                >
+                  {pendingAction === 'run_doctor' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+                  Run doctor
+                </button>
+              </div>
+
+              {adminStatus ? (
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="border border-border bg-background/40 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local base</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{adminStatus.local_base || '—'}</div>
+                  </div>
+                  <div className="border border-border bg-background/40 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local health</div>
+                    <div className="mt-2 font-mono-data text-foreground">{adminStatus.local_health_ok ? 'healthy' : 'unreachable'}</div>
+                  </div>
+                  <div className="border border-border bg-background/40 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Daemon uptime</div>
+                    <div className="mt-2 font-mono-data text-foreground">{adminStatus.uptime_seconds ?? 0}s</div>
+                  </div>
+                  <div className="border border-border bg-background/40 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Last refresh</div>
+                    <div className="mt-2 font-mono-data text-foreground">{adminResponse?.refreshed_at || '—'}</div>
+                  </div>
+                </div>
+              ) : null}
+
+              {adminResponse?.issues?.length ? (
+                <div className="mt-5 border border-destructive/30 bg-destructive/5 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Active issues</div>
+                  <div className="mt-3 space-y-2 text-sm text-destructive">
+                    {adminResponse.issues.map((issue) => (
+                      <div key={issue}>{issue}</div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {adminResponse?.doctor_output ? (
+                <pre className="mt-5 overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">
+                  {adminResponse.doctor_output}
+                </pre>
+              ) : null}
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain registration</div>
                   <h2 className="text-2xl font-semibold text-foreground">Endpoints and reachability</h2>
                 </div>
@@ -534,12 +686,12 @@ export function SpDashboard() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Endpoint rotation</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Generate the next register/update command</h2>
+                  <h2 className="text-2xl font-semibold text-foreground">Rotate or repair the public endpoint</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    The register path is now update-aware. First cut: generate the exact command you should run on the provider host to rotate or repair the public endpoint.
+                    The register path is now update-aware. Use the signed web action first; keep the generated shell command as the manual fallback if the provider host is unreachable from the browser.
                   </p>
                 </div>
-                <StatusPill label={hasFunds ? 'Operator funded' : 'Read-only mode'} state={hasFunds ? 'ready' : 'idle'} />
+                <StatusPill label={controlPlaneReady ? 'Signed action available' : 'Fallback only'} state={controlPlaneReady ? 'ready' : 'idle'} />
               </div>
 
               <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -564,6 +716,15 @@ export function SpDashboard() {
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleRotateEndpoint()}
+                  disabled={!controlPlaneReady || !rotationEndpoint.trim() || pendingAction !== null}
+                  className="inline-flex items-center gap-2 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {pendingAction === 'rotate_endpoint' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Apply signed rotation
+                </button>
                 <CopyButton label="Copy rotation command" onClick={() => void handleCopy('Rotation command', rotationCommand)} />
                 <a
                   href={PROVIDER_PLAYBOOK_URL}
@@ -577,8 +738,13 @@ export function SpDashboard() {
               </div>
 
               <pre className="mt-4 overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{rotationCommand}</pre>
+              {adminResponse?.action === 'rotate_endpoint' && adminResponse.tx_output ? (
+                <pre className="mt-4 overflow-x-auto border border-accent/40 bg-accent/5 p-4 text-xs text-accent">
+                  {adminResponse.tx_output}
+                </pre>
+              ) : null}
               <div className="mt-4 border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                Run the generated command on the provider host paired to <span className="font-mono text-foreground">{activeRecord?.provider}</span>. The browser wallet identifies the operator here; the server-side provider key still signs the chain update.
+                The signed action targets <span className="font-mono text-foreground">{activeRecord?.provider}</span> over its public provider-daemon base. The generated command remains the manual fallback when you need direct shell access.
               </div>
             </section>
           </div>

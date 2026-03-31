@@ -59,6 +59,12 @@ var (
 	// and byte-range.
 	RetrievalRequestTypeHash = crypto.Keccak256([]byte("RetrievalRequest(uint64 deal_id,string file_path,uint64 range_start,uint64 range_len,uint64 nonce,uint64 expires_at)"))
 
+	// keccak256("ProviderAdminAction(string provider,string action,string endpoint,uint64 nonce,uint64 expires_at)")
+	//
+	// This is an off-chain authorization envelope used by the provider-daemon
+	// control plane.
+	ProviderAdminActionTypeHash = crypto.Keccak256([]byte("ProviderAdminAction(string provider,string action,string endpoint,uint64 nonce,uint64 expires_at)"))
+
 	// keccak256("RetrievalVoucher(uint64 deal_id,bytes manifest_root,string provider,uint64 start_mdu_index,uint32 start_blob_index,uint64 blob_count,uint64 expires_at,uint64 nonce,address redeemer)")
 	//
 	// Voucher authorization for sponsored session opens.
@@ -311,6 +317,19 @@ func HashRetrievalRequest(dealID uint64, filePath string, rangeStart uint64, ran
 		math.PaddedBigBytes(rl, 32),
 		math.PaddedBigBytes(n, 32),
 		math.PaddedBigBytes(exp, 32),
+	)
+}
+
+// HashProviderAdminAction computes the struct hash for an off-chain provider
+// control-plane request.
+func HashProviderAdminAction(provider string, action string, endpoint string, nonce uint64, expiresAt uint64) common.Hash {
+	return crypto.Keccak256Hash(
+		ProviderAdminActionTypeHash,
+		keccak256String(strings.TrimSpace(provider)),
+		keccak256String(strings.TrimSpace(action)),
+		keccak256String(strings.TrimSpace(endpoint)),
+		math.PaddedBigBytes(new(big.Int).SetUint64(nonce), 32),
+		math.PaddedBigBytes(new(big.Int).SetUint64(expiresAt), 32),
 	)
 }
 

@@ -4,6 +4,46 @@ import type { GatewayPlanResponse, UploadResult } from './gatewayClient'
 
 type UnknownRecord = Record<string, unknown>
 
+export interface ProviderAdminStatusDetail {
+  key_name?: string
+  address?: string
+  pairing_id?: string
+  pairing_status?: string
+  paired_operator?: string
+  pending_operator?: string
+  pending_expires_at?: number
+  latest_height?: number
+  registration_status?: string
+  onchain_status?: string
+  draining?: boolean
+  endpoints?: string[]
+  local_base?: string
+  public_base?: string
+  local_health_url?: string
+  public_health_url?: string
+  local_health_ok?: boolean
+  public_health_ok?: boolean
+  sp_auth_present?: boolean
+  upload_dir?: string
+  nil_home?: string
+  chain_id?: string
+  lcd_base?: string
+  node_addr?: string
+  uptime_seconds?: number
+}
+
+export interface ProviderAdminResponse {
+  action?: string
+  provider?: ProviderAdminStatusDetail
+  issues?: string[]
+  authorized_operator?: string
+  authorized_operator_evm?: string
+  doctor_output?: string
+  tx_output?: string
+  endpoint?: string
+  refreshed_at?: string
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null
 }
@@ -61,6 +101,35 @@ function createUploadId(): string {
     return crypto.randomUUID()
   }
   return `sp-${Math.random().toString(16).slice(2)}-${Date.now()}`
+}
+
+async function postProviderAdmin(
+  providerBase: string,
+  path: string,
+  input: unknown,
+  fetchFn: typeof fetch = fetch,
+): Promise<ProviderAdminResponse> {
+  const url = `${providerBase}${path}`
+  const res = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+    20_000,
+    fetchFn,
+  )
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(txt || `Provider admin returned ${res.status}`)
+  }
+
+  const payload = (await res.json().catch(() => null)) as ProviderAdminResponse | null
+  if (!payload) {
+    throw new Error('Invalid provider admin JSON')
+  }
+  return payload
 }
 
 function normalizeProviderUploadResult(value: unknown): UploadResult {
@@ -482,4 +551,28 @@ export async function providerDownloadWithBundledSession(
     throw new Error(txt || `Provider bundled fetch returned ${fetchRes.status}`)
   }
   return new Uint8Array(await fetchRes.arrayBuffer())
+}
+
+export async function providerAdminRefreshStatus(
+  providerBase: string,
+  input: unknown,
+  fetchFn: typeof fetch = fetch,
+): Promise<ProviderAdminResponse> {
+  return postProviderAdmin(providerBase, '/sp/admin/status', input, fetchFn)
+}
+
+export async function providerAdminRunDoctor(
+  providerBase: string,
+  input: unknown,
+  fetchFn: typeof fetch = fetch,
+): Promise<ProviderAdminResponse> {
+  return postProviderAdmin(providerBase, '/sp/admin/doctor', input, fetchFn)
+}
+
+export async function providerAdminRotateEndpoint(
+  providerBase: string,
+  input: unknown,
+  fetchFn: typeof fetch = fetch,
+): Promise<ProviderAdminResponse> {
+  return postProviderAdmin(providerBase, '/sp/admin/endpoint', input, fetchFn)
 }
