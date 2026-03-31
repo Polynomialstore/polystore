@@ -33,6 +33,8 @@ Notes:
   - Testnet burner-key flow only. Not for production custody.
   - Private keys are never transmitted over the network by this script.
   - Requires a local Nil Gateway at GATEWAY_BASE (default: http://localhost:8080).
+  - Set NIL_BURNER_KEYSTORE_PASSWORD (or pass --keystore-password-env) to avoid an interactive keystore-password prompt.
+  - On first run, the script may install nil-website dependencies if nil-website/node_modules is missing.
   - Uses direct nilchaind submission for create/update by default so local gateway
     GUI setup does not also need local tx-relay configuration.
 USAGE

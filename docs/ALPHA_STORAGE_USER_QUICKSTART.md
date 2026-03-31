@@ -8,7 +8,7 @@ Recommended target:
 - fast local onboarding with one identity across CLI, MetaMask, browser, and local Gateway GUI
 
 Fallback target:
-- browser-only flow through `https://nilstore.org` when local gateway or CLI are unavailable
+- browser-only flow through `https://nilstore.org/#/first-file` when local gateway or CLI are unavailable
 
 ## Recommended Onboarding Order
 
@@ -17,9 +17,10 @@ Fallback target:
 - Reuse an already healthy local gateway on `http://localhost:8080` if one is running; otherwise install and open Nil Gateway GUI so it owns that address.
 - macOS: use the latest release `.dmg` for Apple Silicon or Intel, install `nil_gateway_gui.app`, and approve the first launch in Gatekeeper if prompted.
 - Linux: use the latest release `.deb` on Ubuntu or Debian, or `.rpm` on RPM-based systems, then launch `nil_gateway_gui` from the app menu or shell.
-- Confirm required tools are present (`curl`, `jq`, `npm`, and `nilchaind`; `gh` optional).
+- Confirm required tools are present (`bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind`; `gh` optional).
 - Confirm the hosted LCD and faucet are reachable.
 - Use the repo-tracked public testnet bootstrap defaults from `.env.testnet.public` unless you intentionally need overrides.
+- Before running the burner helper, set a keystore password in `NIL_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file (recommended: `10-100 KiB`); use `[deal_id] [nilfs_path]` only when resuming or overriding defaults.
 - Capture the generated EVM address, mapped `nil1...` address, keystore path, deal ID, manifest root, create tx hash, and commit tx hash.
 - Treat this as the first autonomous completion milestone, then preserve that same wallet and deal state through the rest of the run.
@@ -31,10 +32,11 @@ Fallback target:
 
 3. Verify Browser Continuity
 - Confirm the website and EVM RPC are reachable.
-- Open `https://nilstore.org`.
+- Open `https://nilstore.org/#/first-file`.
 - Connect the imported MetaMask wallet.
 - Verify the site sees the same address and the local gateway on `http://localhost:8080`.
-- Perform retrieval and/or a small browser upload/retrieve using that same wallet.
+- After deal allocation on `/#/first-file`, continue to `https://nilstore.org/#/dashboard` for upload, retrieval, and file listing.
+- Perform retrieval and/or a small browser upload/retrieve using that same wallet on `/#/dashboard`.
 
 4. Verify Gateway Large-File Flow
 - Re-run upload/commit/retrieve with a larger file (recommended: `64 MiB+`).
@@ -43,19 +45,21 @@ Fallback target:
 
 5. Run Advanced CLI Checks
 - Preferred local-gateway helper: `scripts/enterprise_upload_job.sh <file_path> [deal_id] [nilfs_path]`
+  - use it only after the burner flow or another step has already provided `EVM_PRIVKEY` and a healthy local gateway at `http://localhost:8080`
 - Testnet bootstrap helper: `scripts/testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]`
 - Wallet-first/public path (relay disabled): follow the `Public CLI smoke` section in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 - Capture evidence: command log, deal ID, manifest root, tx hash(es), retrieval match, and friction points.
 
 ## Browser-only fallback
 
-1. Open `https://nilstore.org`.
+1. Open `https://nilstore.org/#/first-file`.
 2. Connect MetaMask.
 3. Switch to the NilStore testnet network.
 4. Fund your wallet through the faucet if available.
-5. Create a deal.
-6. Upload a small file.
-7. Retrieve it back and confirm the bytes match.
+5. Create a deal on `/#/first-file`.
+6. Continue to `/#/dashboard`.
+7. Upload a small file.
+8. Retrieve it back and confirm the bytes match.
 
 ## Agent-assisted power-user flow
 
