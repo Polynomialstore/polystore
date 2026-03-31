@@ -215,12 +215,23 @@ ensure_nil_core_runtime() {
   if [ -f "$lib_dir/libnil_core.dylib" ]; then
     export DYLD_LIBRARY_PATH="$lib_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
   fi
+  if [ -d "$lib_dir" ]; then
+    if [ -n "${CGO_LDFLAGS:-}" ]; then
+      case " ${CGO_LDFLAGS} " in
+        *" -L${lib_dir} "*) ;;
+        *) export CGO_LDFLAGS="-L${lib_dir} ${CGO_LDFLAGS}" ;;
+      esac
+    else
+      export CGO_LDFLAGS="-L${lib_dir}"
+    fi
+  fi
 }
 
 ensure_nilchaind() {
   if [ -x "$NILCHAIND_BIN" ]; then
     return 0
   fi
+  ensure_nil_core_runtime
   local build_goflags="${GOFLAGS:-}"
   build_goflags="${build_goflags} -mod=mod"
   echo "==> Building nilchaind..."
