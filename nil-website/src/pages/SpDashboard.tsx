@@ -1,15 +1,39 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { Link } from 'react-router-dom'
-import { Copy, ExternalLink, RefreshCw, Server, Terminal } from 'lucide-react'
-import { appConfig } from '../config'
-import { lcdFetchProviders } from '../api/lcdClient'
-import type { LcdProvider } from '../domain/lcd'
-import { StatusBar } from '../components/StatusBar'
-import { DashboardCta } from '../components/DashboardCta'
-import { extractProviderHttpBases, isLocalDemoProvider, isLikelyLocalHttpBase } from '../lib/spDashboard'
+import {
+  AlertCircle,
+  Copy,
+  ExternalLink,
+  LoaderCircle,
+  RefreshCw,
+  Server,
+  Shield,
+  Wallet,
+} from 'lucide-react'
 
+import { appConfig } from '../config'
+import { lcdFetchProviders, lcdFetchProvidersByOperator } from '../api/lcdClient'
+import { StatusBar } from '../components/StatusBar'
+import { useNetwork } from '../hooks/useNetwork'
+import { useSessionStatus } from '../hooks/useSessionStatus'
+import {
+  buildOperatorProviderRecords,
+  buildProviderRegisterCommand,
+  findOperatorProviderRecord,
+  type OperatorProviderRecord,
+} from '../lib/providerConsole'
+import { buildProviderHealthCommands } from '../lib/providerOnboarding'
+
+const PROVIDER_PLAYBOOK_URL = 'https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md'
 const LOCAL_DEMO_STACK_CMD = './scripts/ensure_stack_local.sh'
 const LOCAL_DEMO_STOP_CMD = './scripts/run_local_stack.sh stop'
+
+type PublicHealthState =
+  | { status: 'idle' }
+  | { status: 'loading'; base: string }
+  | { status: 'ok'; base: string; ms: number }
+  | { status: 'error'; base: string; error: string }
 
 async function copyText(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -32,110 +56,242 @@ async function copyText(text: string) {
   document.body.removeChild(el)
 }
 
-type HealthProbeState =
-  | { status: 'idle' }
-  | { status: 'loading'; base: string }
-  | { status: 'ok'; base: string; ms: number }
-  | { status: 'error'; base: string; error: string }
+function statusTone(state: 'ready' | 'pending' | 'action' | 'idle'): string {
+  if (state === 'ready') return 'border-accent/40 bg-accent/10 text-accent'
+  if (state === 'pending') return 'border-primary/40 bg-primary/10 text-primary'
+  if (state === 'action') return 'border-destructive/40 bg-destructive/10 text-destructive'
+  return 'border-border bg-background/60 text-muted-foreground'
+}
+
+function StatusPill({ label, state }: { label: string; state: 'ready' | 'pending' | 'action' | 'idle' }) {
+  return (
+    <span className={`inline-flex items-center gap-2 border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${statusTone(state)}`}>
+      {label}
+    </span>
+  )
+}
+
+function CopyButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+    >
+      <Copy className="h-4 w-4" />
+      {label}
+    </button>
+  )
+}
 
 export function SpDashboard() {
-  const [providers, setProviders] = useState<LcdProvider[]>([])
+  const { openConnectModal } = useConnectModal()
+  const { switchNetwork } = useNetwork()
+  const session = useSessionStatus()
+  const {
+    nilAddress,
+    walletAddressShort,
+    isConnected,
+    isWrongNetwork,
+    genesisMismatch,
+    hasFunds,
+    needsReconnect,
+    refreshWalletNetwork,
+  } = session
+
+  const [pairings, setPairings] = useState<Awaited<ReturnType<typeof lcdFetchProvidersByOperator>>>([])
+  const [providers, setProviders] = useState<Awaited<ReturnType<typeof lcdFetchProviders>>>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [onlyLocal, setOnlyLocal] = useState(false)
-  const [search, setSearch] = useState('')
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
-  const [probe, setProbe] = useState<HealthProbeState>({ status: 'idle' })
-  const [myProviderAddress, setMyProviderAddress] = useState('')
-  const [myProviderBase, setMyProviderBase] = useState('')
+  const [selectedProvider, setSelectedProvider] = useState('')
+  const [rotationProviderKey, setRotationProviderKey] = useState('provider1')
+  const [rotationEndpoint, setRotationEndpoint] = useState('')
+  const [healthProbe, setHealthProbe] = useState<PublicHealthState>({ status: 'idle' })
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    if (!nilAddress) {
+      setPairings([])
+      setProviders([])
+      setError(null)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
-      const res = await lcdFetchProviders(appConfig.lcdBase)
-      setProviders(res)
-    } catch (e: unknown) {
+      const [nextPairings, nextProviders] = await Promise.all([
+        lcdFetchProvidersByOperator(appConfig.lcdBase, nilAddress),
+        lcdFetchProviders(appConfig.lcdBase),
+      ])
+      setPairings(nextPairings)
+      setProviders(nextProviders)
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load provider state')
+      setPairings([])
       setProviders([])
-      setError(e instanceof Error ? e.message : 'Failed to load providers')
     } finally {
       setLoading(false)
     }
-  }
+  }, [nilAddress])
 
   useEffect(() => {
+    if (!nilAddress) {
+      setPairings([])
+      setProviders([])
+      return
+    }
+
     void load()
+    const timer = window.setInterval(() => {
+      void load()
+    }, 10000)
+    return () => window.clearInterval(timer)
+  }, [load, nilAddress])
+
+  const records = useMemo(() => buildOperatorProviderRecords(pairings, providers), [pairings, providers])
+  const selectedRecord = useMemo(
+    () => findOperatorProviderRecord(records, selectedProvider),
+    [records, selectedProvider],
+  )
+  const activeRecord = selectedRecord ?? records[0] ?? null
+  const healthCommands = useMemo(
+    () => buildProviderHealthCommands(activeRecord?.primaryBase ?? null),
+    [activeRecord?.primaryBase],
+  )
+  const rotationCommand = useMemo(
+    () => buildProviderRegisterCommand({ providerKey: rotationProviderKey, providerEndpoint: rotationEndpoint }),
+    [rotationEndpoint, rotationProviderKey],
+  )
+
+  useEffect(() => {
+    if (records.length === 0) {
+      setSelectedProvider('')
+      return
+    }
+    if (!findOperatorProviderRecord(records, selectedProvider)) {
+      setSelectedProvider(records[0]?.provider ?? '')
+    }
+  }, [records, selectedProvider])
+
+  useEffect(() => {
+    if (!activeRecord) {
+      setRotationEndpoint('')
+      return
+    }
+    setRotationEndpoint(activeRecord.endpoints[0] || activeRecord.primaryBase || '')
+  }, [activeRecord])
+
+  const probePublicHealth = useCallback(async (record: OperatorProviderRecord | null) => {
+    const base = String(record?.primaryBase || '').trim().replace(/\/$/, '')
+    if (!base) {
+      setHealthProbe({ status: 'idle' })
+      return
+    }
+
+    const started = performance.now()
+    setHealthProbe({ status: 'loading', base })
+    try {
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 5000)
+      const res = await fetch(`${base}/health`, { signal: controller.signal })
+      window.clearTimeout(timeout)
+      if (!res.ok) {
+        setHealthProbe({ status: 'error', base, error: `HTTP ${res.status}` })
+        return
+      }
+      setHealthProbe({ status: 'ok', base, ms: Math.round(performance.now() - started) })
+    } catch (probeError) {
+      const message = probeError instanceof Error ? probeError.message : 'probe failed'
+      setHealthProbe({ status: 'error', base, error: message })
+    }
   }, [])
 
-  const filtered = useMemo(() => {
-    const s = search.trim().toLowerCase()
-    return providers.filter((p) => {
-      if (onlyLocal && !isLocalDemoProvider(p)) return false
-      if (!s) return true
-      return String(p.address || '').toLowerCase().includes(s)
-    })
-  }, [onlyLocal, providers, search])
+  useEffect(() => {
+    if (!activeRecord?.primaryBase) {
+      setHealthProbe({ status: 'idle' })
+      return
+    }
 
-  const localCount = useMemo(() => providers.filter(isLocalDemoProvider).length, [providers])
-  const myProvider = useMemo(() => {
-    const addr = myProviderAddress.trim()
-    if (!addr) return null
-    return providers.find((p) => String(p.address || '').trim() === addr) ?? null
-  }, [myProviderAddress, providers])
-  const myBases = useMemo(() => (myProvider ? extractProviderHttpBases(myProvider.endpoints) : []), [myProvider])
+    void probePublicHealth(activeRecord)
+    const timer = window.setInterval(() => {
+      void probePublicHealth(activeRecord)
+    }, 12000)
+    return () => window.clearInterval(timer)
+  }, [activeRecord, probePublicHealth])
 
-  const handleCopy = async (label: string, text: string) => {
+  const handleCopy = useCallback(async (label: string, text: string) => {
     try {
       await copyText(text)
       setCopyStatus(`${label} copied.`)
-      window.setTimeout(() => setCopyStatus(null), 1500)
+      window.setTimeout(() => setCopyStatus(null), 1800)
     } catch {
       setCopyStatus(`Could not copy ${label}.`)
-      window.setTimeout(() => setCopyStatus(null), 2000)
+      window.setTimeout(() => setCopyStatus(null), 2200)
+    }
+  }, [])
+
+  const handleSwitchNetwork = async () => {
+    setError(null)
+    try {
+      await switchNetwork({ forceAdd: genesisMismatch })
+      await refreshWalletNetwork()
+    } catch (switchError) {
+      setError(switchError instanceof Error ? switchError.message : 'Failed to switch network')
     }
   }
 
-  const probeHealth = async (base: string) => {
-    const started = performance.now()
-    setProbe({ status: 'loading', base })
-    try {
-      const ctrl = new AbortController()
-      const t = window.setTimeout(() => ctrl.abort(), 5_000)
-      const res = await fetch(`${base}/health`, { signal: ctrl.signal })
-      window.clearTimeout(t)
-      if (!res.ok) {
-        setProbe({ status: 'error', base, error: `HTTP ${res.status}` })
-        return
-      }
-      const ms = Math.round(performance.now() - started)
-      setProbe({ status: 'ok', base, ms })
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'probe failed'
-      setProbe({ status: 'error', base, error: msg })
-    }
-  }
+  const registeredCount = records.filter((record) => record.registered).length
+  const healthyCurrent = healthProbe.status === 'ok' && healthProbe.base === activeRecord?.primaryBase
 
   return (
-    <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
-      <section className="relative overflow-hidden glass-panel industrial-border p-8">
-        <div className="relative space-y-4">
-          <div className="inline-flex items-center gap-2 border border-border bg-background/40 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">
-            <Server className="h-4 w-4 text-primary" />
-            <span className="font-mono-data text-foreground/80">/sp/console</span>
+    <div className="container mx-auto max-w-6xl px-4 pb-12 pt-24">
+      <section className="glass-panel industrial-border overflow-hidden p-8">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="max-w-3xl space-y-4">
+            <div className="inline-flex items-center gap-2 border border-border bg-background/40 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+              <Server className="h-4 w-4 text-primary" />
+              <span className="font-mono-data text-foreground/80">/sp/dashboard</span>
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">My Providers</h1>
+            <p className="max-w-2xl text-muted-foreground">
+              The operator dashboard is now wallet-driven. Connect the operator wallet used for pairing and the website will load its provider-daemons directly from on-chain pairing state.
+            </p>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">Provider Console</h1>
-          <p className="max-w-3xl text-muted-foreground">
-            This is the SP-facing console. It focuses on on-chain provider registration, endpoint reachability, and health probes. The data-client UI lives in the regular Dashboard.
-          </p>
-          <div className="flex flex-wrap gap-3 pt-2">
-            <DashboardCta className="inline-flex" label="Dashboard" to="/dashboard" />
+          <div className="flex flex-wrap gap-3">
             <Link
               to="/sp-onboarding"
               className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
-              <ExternalLink className="h-4 w-4" />
-              Open SP Onboarding
+              <Shield className="h-4 w-4" />
+              Provider Onboarding
             </Link>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-4 border-t border-border/60 pt-6 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operator wallet</div>
+            <div className="font-mono-data text-foreground">{isConnected ? walletAddressShort : 'Not connected'}</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Nil operator</div>
+            <div className="break-all font-mono-data text-foreground">{nilAddress || '—'}</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Paired providers</div>
+            <div className="font-mono-data text-foreground">{records.length}</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Registered providers</div>
+            <div className="font-mono-data text-foreground">{registeredCount}</div>
           </div>
         </div>
       </section>
@@ -144,227 +300,294 @@ export function SpDashboard() {
         <StatusBar />
       </div>
 
-      <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="glass-panel industrial-border p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-foreground">My provider</h2>
+      {error ? (
+        <div className="mt-6 border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-4 w-4" />
+            <div>{error}</div>
+          </div>
+        </div>
+      ) : null}
+
+      {!isConnected ? (
+        <section className="mt-8 glass-panel industrial-border p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operator access</div>
+              <h2 className="text-2xl font-semibold text-foreground">Connect the operator wallet</h2>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                The dashboard lists providers by operator wallet ownership. Connect the same wallet used to open provider pairing from the onboarding flow.
+              </p>
+            </div>
             <button
               type="button"
-              onClick={() => void load()}
-              className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              onClick={() => openConnectModal?.()}
+              className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+              <Wallet className="h-4 w-4" />
+              Connect Wallet
             </button>
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Paste your provider address to find it in the on-chain registry, then probe your public <span className="font-mono-data">/health</span> endpoint.
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div>
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.2em]">Provider address</div>
-              <input
-                value={myProviderAddress}
-                onChange={(e) => setMyProviderAddress(e.target.value ?? '')}
-                placeholder="nil1…"
-                className="mt-2 w-full bg-background/60 border border-border px-3 py-2 text-foreground text-sm font-mono-data placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/60"
-              />
-              {myProvider ? (
-                <div className="mt-2 text-xs text-success">Registered on-chain</div>
-              ) : myProviderAddress.trim() ? (
-                <div className="mt-2 text-xs text-destructive">Not found in provider list (yet)</div>
-              ) : (
-                <div className="mt-2 text-xs text-muted-foreground">Tip: use `./scripts/run_devnet_provider.sh print-config`.</div>
-              )}
+        </section>
+      ) : null}
+
+      {isConnected && (needsReconnect || isWrongNetwork) ? (
+        <section className="mt-8 glass-panel industrial-border p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Wallet state</div>
+              <h2 className="text-2xl font-semibold text-foreground">Repair the wallet session before operating providers</h2>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                {needsReconnect
+                  ? 'MetaMask account permissions are stale. Reconnect the wallet used for provider pairing.'
+                  : 'Switch MetaMask onto the NilStore testnet before relying on the operator view.'}
+              </p>
             </div>
-            <div>
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.2em]">Health base URL</div>
-              <input
-                value={myProviderBase}
-                onChange={(e) => setMyProviderBase(e.target.value ?? '')}
-                placeholder="https://sp.example.com"
-                className="mt-2 w-full bg-background/60 border border-border px-3 py-2 text-foreground text-sm font-mono-data placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/60"
-              />
-              <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void handleSwitchNetwork()}
+              className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40"
+            >
+              <RefreshCw className="h-4 w-4" />
+              {genesisMismatch ? 'Repair Network Entry' : 'Switch To NilStore'}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {isConnected && records.length === 0 && !loading && !error ? (
+        <section className="mt-8 glass-panel industrial-border p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">No paired providers</div>
+              <h2 className="text-2xl font-semibold text-foreground">This wallet does not own any provider-daemons yet</h2>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Start in provider onboarding, open pairing from the browser, then bootstrap the remote provider host. The provider will appear here after the server confirms pairing on-chain.
+              </p>
+            </div>
+            <Link
+              to="/sp-onboarding"
+              className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            >
+              <Shield className="h-4 w-4" />
+              Open Provider Onboarding
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
+      {records.length > 0 ? (
+        <div className="mt-8 grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+            <section className="glass-panel industrial-border overflow-hidden">
+              <div className="border-b border-border/60 px-6 py-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">My Providers</div>
+                    <h2 className="mt-2 text-2xl font-semibold text-foreground">Owned provider-daemons</h2>
+                  </div>
+                  <StatusPill label={loading ? 'Syncing' : `${records.length} loaded`} state={loading ? 'pending' : 'ready'} />
+                </div>
+              </div>
+              <div className="divide-y divide-border/50">
+                {records.map((record) => {
+                  const selected = activeRecord?.provider === record.provider
+                  return (
+                    <button
+                      key={record.provider}
+                      type="button"
+                      onClick={() => setSelectedProvider(record.provider)}
+                      className={`block w-full px-6 py-4 text-left transition-colors ${selected ? 'bg-primary/10' : 'bg-transparent hover:bg-background/40'}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-2">
+                          <div className="break-all font-mono-data text-xs text-foreground">{record.provider}</div>
+                          <div className="text-xs text-muted-foreground">{record.primaryBase || 'No public base yet'}</div>
+                        </div>
+                        <StatusPill label={record.registered ? 'Registered' : 'Paired'} state={record.registered ? 'ready' : 'pending'} />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                        <span>pairing {record.pairingId}</span>
+                        <span>height {record.pairedHeightRaw || '—'}</span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+
+            <section className="glass-panel industrial-border p-5">
+              <div className="text-sm font-semibold text-foreground">Local demo stack</div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Single-machine local dev still uses the trusted <span className="font-mono">user-gateway</span> plus demo provider-daemons.
+              </p>
+              <pre className="mt-3 overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{LOCAL_DEMO_STACK_CMD}{'\n'}{LOCAL_DEMO_STOP_CMD}</pre>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <CopyButton label="Copy start" onClick={() => void handleCopy('Start command', LOCAL_DEMO_STACK_CMD)} />
+                <CopyButton label="Copy stop" onClick={() => void handleCopy('Stop command', LOCAL_DEMO_STOP_CMD)} />
+              </div>
+            </section>
+          </aside>
+
+          <div className="space-y-6">
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected provider</div>
+                  <h2 className="text-2xl font-semibold text-foreground">{activeRecord?.provider}</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Pairing, registration, and public health are derived directly from the operator wallet and on-chain provider state. Provider keys remain server-side.
+                  </p>
+                </div>
+                <StatusPill label={healthyCurrent ? 'Healthy' : activeRecord?.registered ? 'Registered' : 'Paired'} state={healthyCurrent ? 'ready' : activeRecord?.registered ? 'pending' : 'pending'} />
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="border border-border bg-background/40 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operator</div>
+                  <div className="mt-2 break-all font-mono-data text-foreground">{activeRecord?.operator || '—'}</div>
+                </div>
+                <div className="border border-border bg-background/40 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing ID</div>
+                  <div className="mt-2 break-all font-mono-data text-foreground">{activeRecord?.pairingId || '—'}</div>
+                </div>
+                <div className="border border-border bg-background/40 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Paired height</div>
+                  <div className="mt-2 font-mono-data text-foreground">{activeRecord?.pairedHeightRaw || '—'}</div>
+                </div>
+                <div className="border border-border bg-background/40 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain status</div>
+                  <div className="mt-2 font-mono-data text-foreground">{activeRecord?.registryStatus || (activeRecord?.registered ? 'registered' : 'not registered')}</div>
+                </div>
+              </div>
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain registration</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Endpoints and reachability</h2>
+                </div>
+                <StatusPill label={activeRecord?.registered ? 'Visible on-chain' : 'Waiting for registration'} state={activeRecord?.registered ? 'ready' : 'pending'} />
+              </div>
+
+              <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="space-y-4">
+                  <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                    <div className="font-semibold text-foreground">Public base</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{activeRecord?.primaryBase || 'No HTTP base found in on-chain endpoints'}</div>
+                  </div>
+                  <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                    <div className="font-semibold text-foreground">Registered endpoints</div>
+                    {activeRecord?.endpoints.length ? (
+                      <div className="mt-3 space-y-2">
+                        {activeRecord.endpoints.map((endpoint) => (
+                          <div key={endpoint} className="break-all font-mono-data text-foreground">
+                            {endpoint}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2">No on-chain endpoints yet. Run bootstrap or a register/update command on the provider host.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="min-w-[220px] space-y-3">
                   <button
                     type="button"
-                    disabled={!myProviderBase.trim()}
-                    onClick={() => void probeHealth(myProviderBase.trim().replace(/\/$/, ''))}
-                    className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40 disabled:opacity-50"
+                    onClick={() => void probePublicHealth(activeRecord)}
+                    disabled={!activeRecord?.primaryBase}
+                    className="inline-flex w-full items-center justify-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40 disabled:opacity-50"
                   >
-                    <RefreshCw className={`h-4 w-4 ${probe.status === 'loading' && probe.base === myProviderBase.trim().replace(/\/$/, '') ? 'animate-spin' : ''}`} />
+                    {healthProbe.status === 'loading' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                     Probe /health
                   </button>
-                {myBases.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setMyProviderBase(myBases[0])}
-                    className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-                  >
-                    Use on-chain URL
-                  </button>
-                ) : null}
+                  <CopyButton label="Copy health commands" onClick={() => void handleCopy('Health commands', healthCommands)} />
+                </div>
               </div>
-              {probe.status !== 'idle' && probe.base === myProviderBase.trim().replace(/\/$/, '') ? (
-                probe.status === 'ok' ? (
-                  <div className="mt-2 text-xs text-success font-mono-data">OK ({probe.ms}ms)</div>
-                ) : probe.status === 'error' ? (
-                  <div className="mt-2 text-xs text-destructive">{probe.error}</div>
-                ) : null
-              ) : null}
-            </div>
-          </div>
-          {copyStatus ? (
-            <div className="mt-3 border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
-              {copyStatus}
-            </div>
-          ) : null}
-          <details className="mt-6 border border-border bg-background/40 p-4">
-            <summary className="cursor-pointer text-sm font-semibold text-foreground">Local demo stack (optional)</summary>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Single-machine local dev: chain + faucet + demo providers + trusted <span className="font-mono-data">user-gateway</span> + web UI.
-            </p>
-            <pre className="mt-3 overflow-x-auto border border-border bg-background/40 p-4 text-xs text-muted-foreground font-mono-data">
-              {LOCAL_DEMO_STACK_CMD}
-              {'\n'}
-              {LOCAL_DEMO_STOP_CMD}
-            </pre>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void handleCopy('Start command', LOCAL_DEMO_STACK_CMD)}
-                className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-              >
-                <Copy className="h-4 w-4" /> Copy start
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleCopy('Stop command', LOCAL_DEMO_STOP_CMD)}
-                className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-              >
-                <Terminal className="h-4 w-4" /> Copy stop
-              </button>
-            </div>
-          </details>
-        </div>
 
-        <div className="glass-panel industrial-border p-6">
-          <h2 className="text-xl font-semibold text-foreground">Provider registry (on-chain)</h2>
-          <div className="mt-2 text-sm text-muted-foreground">
-            Total providers: <span className="font-mono-data text-foreground">{providers.length}</span> • Local endpoints:{' '}
-            <span className="font-mono-data text-foreground">{localCount}</span>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={onlyLocal}
-                onChange={(e) => setOnlyLocal(Boolean(e.target.checked))}
-              />
-              Show local only
-            </label>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value ?? '')}
-              placeholder="Filter by provider address…"
-              className="flex-1 min-w-[220px] bg-background/60 border border-border px-3 py-2 text-foreground text-sm font-mono-data placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/60"
-            />
-          </div>
-          {error ? (
-            <div className="mt-4 border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
-          <div className="mt-4 border border-border overflow-hidden">
-            <div className="max-h-[360px] overflow-auto">
-              <table className="w-full text-sm divide-y divide-border/40">
-                <thead className="sticky top-0 bg-background/40 backdrop-blur-md text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground">
-                  <tr>
-                    <th className="text-left px-3 py-2">Provider</th>
-                    <th className="text-left px-3 py-2">Endpoints</th>
-                    <th className="text-left px-3 py-2">Health</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((p) => {
-                    const bases = extractProviderHttpBases(p.endpoints)
-                    const primary = bases[0]
-                    const local = primary ? isLikelyLocalHttpBase(primary) : false
-                    const activeProbe = probe.status !== 'idle' && probe.base === primary
-                    return (
-                      <tr key={p.address} className="border-t border-border/40">
-                        <td className="px-3 py-2 align-top">
-                          <div className="font-mono-data text-xs text-foreground break-all">{p.address}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {local ? (
-                              <span className="border border-success/40 bg-success/10 px-2 py-0.5 text-success">
-                                local
-                              </span>
-                            ) : (
-                              <span className="border border-border bg-background/60 px-2 py-0.5">remote</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          {bases.length > 0 ? (
-                            <div className="space-y-1">
-                              {bases.slice(0, 3).map((b) => (
-                                <div key={b} className="font-mono-data text-xs text-foreground break-all">
-                                  {b}
-                                </div>
-                              ))}
-                              {bases.length > 3 ? (
-                                <div className="text-xs text-muted-foreground">+{bases.length - 3} more</div>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-muted-foreground">No HTTP endpoints</div>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          {primary ? (
-                            <div className="space-y-2">
-                              <button
-                                type="button"
-                                onClick={() => void probeHealth(primary)}
-                                className="inline-flex items-center gap-2 border border-border bg-background/60 px-2 py-1 text-xs font-semibold text-foreground hover:bg-secondary/40"
-                              >
-                                <RefreshCw className={`h-3.5 w-3.5 ${activeProbe && probe.status === 'loading' ? 'animate-spin' : ''}`} />
-                                Probe /health
-                              </button>
-                              {activeProbe && probe.status === 'ok' ? (
-                                <div className="text-xs text-success font-mono-data">
-                                  OK ({probe.ms}ms)
-                                </div>
-                              ) : null}
-                              {activeProbe && probe.status === 'error' ? (
-                                <div className="text-xs text-destructive">
-                                  {probe.error}
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-muted-foreground">n/a</div>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-3 py-6 text-sm text-muted-foreground">
-                        {providers.length === 0 ? 'No providers loaded yet.' : 'No providers match your filters.'}
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="mt-3 text-xs text-muted-foreground">
-            Note: health probes require provider endpoints to allow CORS from <span className="font-mono-data">http://localhost:5173</span>.
+              <div className="mt-5 border-t border-border/60 pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
+                    <div className="mt-1 text-sm text-foreground">
+                      {healthProbe.status === 'ok'
+                        ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
+                        : healthProbe.status === 'error'
+                          ? `${healthProbe.base}/health failed: ${healthProbe.error}`
+                          : activeRecord?.primaryBase
+                            ? `Polling ${activeRecord.primaryBase}/health`
+                            : 'No public base available yet'}
+                    </div>
+                  </div>
+                  <StatusPill
+                    label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Waiting'}
+                    state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'pending'}
+                  />
+                </div>
+                <pre className="mt-4 overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{healthCommands}</pre>
+              </div>
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Endpoint rotation</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Generate the next register/update command</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    The register path is now update-aware. First cut: generate the exact command you should run on the provider host to rotate or repair the public endpoint.
+                  </p>
+                </div>
+                <StatusPill label={hasFunds ? 'Operator funded' : 'Read-only mode'} state={hasFunds ? 'ready' : 'idle'} />
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 text-sm">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key name</span>
+                  <input
+                    value={rotationProviderKey}
+                    onChange={(event) => setRotationProviderKey(event.target.value)}
+                    placeholder="provider1"
+                    className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">New provider endpoint</span>
+                  <input
+                    value={rotationEndpoint}
+                    onChange={(event) => setRotationEndpoint(event.target.value)}
+                    placeholder="/dns4/sp.example.com/tcp/443/https"
+                    className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <CopyButton label="Copy rotation command" onClick={() => void handleCopy('Rotation command', rotationCommand)} />
+                <a
+                  href={PROVIDER_PLAYBOOK_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Operator Playbook
+                </a>
+              </div>
+
+              <pre className="mt-4 overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{rotationCommand}</pre>
+              <div className="mt-4 border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                Run the generated command on the provider host paired to <span className="font-mono text-foreground">{activeRecord?.provider}</span>. The browser wallet identifies the operator here; the server-side provider key still signs the chain update.
+              </div>
+            </section>
           </div>
         </div>
-      </section>
+      ) : null}
+
+      {copyStatus ? (
+        <div className="mt-6 border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent">{copyStatus}</div>
+      ) : null}
     </div>
   )
 }

@@ -51,13 +51,13 @@ export const Layout = () => {
   const isActive = (path: string) => location.pathname === path;
 
   // Navigation Hierarchy (Rich Data)
-  const navStructure: { type: "link" | "dropdown", name: "Store Data" | "Proivde Storage" | "Testnet Info", path?: string, items?: NavItem[] }[] = [
+  const navStructure: { type: "link" | "dropdown", name: "Store Data" | "Provide Storage" | "Testnet Info", path?: string, items?: NavItem[] }[] = [
     { 
       type: "dropdown", 
       name: "Store Data", 
       items: [
         { name: "First File", path: "/first-file", description: "Guided store + retrieve flow.", icon: <Server className="w-5 h-5" /> },
-        { name: "Dashboard", path: "/dashboard", description: "Provider ops console.", icon: <Rocket className="w-5 h-5" /> },
+        { name: "Dashboard", path: "/dashboard", description: "Store, sync, and inspect your data.", icon: <Rocket className="w-5 h-5" /> },
         //{ name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },
         //{ name: "Performance", path: "/performance", description: "Latency racing benchmarks.", icon: <Zap className="w-5 h-5" /> },
         //{ name: "Economy", path: "/economy", description: "Supply and inflation simulation.", icon: <Coins className="w-5 h-5" /> },
@@ -65,12 +65,12 @@ export const Layout = () => {
     },
     { 
       type: "dropdown", 
-      name: "Proivde Storage", 
+      name: "Provide Storage", 
       items: [
-        { name: "SP Dashboard", path: "/sp-dashboard", description: "Provider ops console.", icon: <Server className="w-5 h-5" /> },
+        { name: "My Providers", path: "/sp-dashboard", description: "Wallet-driven provider operations console.", icon: <Server className="w-5 h-5" /> },
         //{ name: "Architecture", path: "/technology", description: "Deep dive into the protocol.", icon: <Cpu className="w-5 h-5" /> },
         //{ name: "Security", path: "/security", description: "Threat model and verification layers.", icon: <Shield className="w-5 h-5" /> },
-        { name: "Provider Runbook", path: "/sp-onboarding", description: "Remote-first provider runbook with legacy local demo path.", icon: <Server className="w-5 h-5" /> },
+        { name: "Provider Onboarding", path: "/sp-onboarding", description: "Pair, bootstrap, and verify a provider-daemon.", icon: <Server className="w-5 h-5" /> },
         //{ name: "Testnet Guide", path: "/testnet", description: "Wallet-first setup and local stack.", icon: <Terminal className="w-5 h-5" /> },
         //{ name: "S3 Adapter", path: "/s3-adapter", description: "Web2 gateway and S3 API usage.", icon: <Terminal className="w-5 h-5" /> },
         { name: "Provider Debug", path: "/devnet", description: "Live provider list and low-level join diagnostics.", icon: <Terminal className="w-5 h-5" /> },
