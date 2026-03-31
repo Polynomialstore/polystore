@@ -177,6 +177,26 @@ function CopyButton({ onClick, label }: { onClick: () => void; label: string }) 
 const WALLET_ACCESS_REQUIRED_MESSAGE =
   'Wallet access is required. If you switched accounts in MetaMask, click Connect Wallet and approve access for the active account.'
 
+type FlowStepId = 'wallet' | 'pairing' | 'reachability' | 'identity' | 'auth' | 'verification'
+
+const FLOW_STEPS: Array<{ id: FlowStepId; label: string; anchor: string }> = [
+  { id: 'wallet', label: 'Operator wallet', anchor: 'step-wallet' },
+  { id: 'pairing', label: 'Pairing', anchor: 'step-pairing' },
+  { id: 'reachability', label: 'Public reachability', anchor: 'step-reachability' },
+  { id: 'identity', label: 'Provider identity', anchor: 'step-identity' },
+  { id: 'auth', label: 'Shared auth', anchor: 'step-auth' },
+  { id: 'verification', label: 'Verification', anchor: 'step-verification' },
+]
+
+const STEP_DONE_WHEN: Record<FlowStepId, string> = {
+  wallet: 'wallet is connected, on NilStore testnet, and funded',
+  pairing: 'pairing ID is open and confirmed by the provider host',
+  reachability: 'derived provider endpoint and public health URL are shown',
+  identity: 'local provider key name is set',
+  auth: 'shared provider auth token is present',
+  verification: 'pairing, registration, and health all report healthy',
+}
+
 export function SpOnboarding() {
   const storedDraft = useMemo(() => loadStoredDraft(), [])
   const { openConnectModal } = useConnectModal()
@@ -541,6 +561,51 @@ export function SpOnboarding() {
         : bootstrapReady
           ? 'action'
           : 'idle'
+  const stepReadyById: Record<FlowStepId, boolean> = {
+    wallet: walletReady && funded,
+    pairing: pairingConfirmed,
+    reachability: Boolean(endpointPlan),
+    identity: providerKeyReady,
+    auth: hasAuthToken,
+    verification: publicHealthReady && providerRegistered,
+  }
+  const commandReady = bootstrapReady && providerKeyReady
+  const currentStepId: FlowStepId = !stepReadyById.wallet
+    ? 'wallet'
+    : !stepReadyById.pairing
+      ? 'pairing'
+      : !stepReadyById.reachability
+        ? 'reachability'
+        : !stepReadyById.identity
+          ? 'identity'
+          : !stepReadyById.auth
+            ? 'auth'
+            : 'verification'
+  const currentStepIndex = FLOW_STEPS.findIndex((step) => step.id === currentStepId)
+  const currentStep = FLOW_STEPS[currentStepIndex]
+  const flowSteps = FLOW_STEPS.map((step, index) => {
+    const ready = stepReadyById[step.id]
+    const state: 'ready' | 'pending' | 'action' | 'idle' = ready
+      ? 'ready'
+      : index === currentStepIndex
+        ? 'action'
+        : index === currentStepIndex + 1
+          ? 'pending'
+          : 'idle'
+    return { ...step, ready, state, index }
+  })
+  const nextActionMessage =
+    currentStepId === 'wallet'
+      ? 'Connect the browser wallet, switch to NilStore testnet, and fund it before moving on.'
+      : currentStepId === 'pairing'
+        ? 'Open a pairing on-chain from this page, then wait for provider confirmation.'
+        : currentStepId === 'reachability'
+          ? 'Define the public endpoint so the website can derive the provider endpoint and health URL.'
+          : currentStepId === 'identity'
+            ? 'Set the local provider key name used for init, pair, and bootstrap.'
+            : currentStepId === 'auth'
+              ? 'Paste the shared provider auth token from the hub operator to unlock run-ready host commands.'
+              : 'Run the command rail, then monitor registration and health until the provider is fully healthy.'
 
   return (
     <div className="px-4 pb-12 pt-24">
@@ -631,6 +696,41 @@ export function SpOnboarding() {
           </div>
         </section>
 
+        <section className="mt-6 border border-border bg-background px-6 py-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Current step</div>
+              <h2 className="text-2xl font-semibold text-foreground">
+                Step {currentStepIndex + 1}. {currentStep.label}
+              </h2>
+              <p className="max-w-3xl text-sm text-muted-foreground">{nextActionMessage}</p>
+            </div>
+            <PrimaryCtaAnchor href={`#${currentStep.anchor}`} size="md">
+              Go To Step {currentStepIndex + 1}
+            </PrimaryCtaAnchor>
+          </div>
+
+          <div className="mt-5 grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2 xl:grid-cols-3">
+            {flowSteps.map((step) => (
+              <a key={step.id} href={`#${step.anchor}`} className="border border-border bg-background/40 p-3 transition-colors hover:bg-secondary/20">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    Step {step.index + 1}
+                  </div>
+                  <StatusPill
+                    label={step.ready ? 'Ready' : step.id === currentStepId ? 'Do now' : 'Queued'}
+                    state={step.state}
+                  />
+                </div>
+                <div className="mt-2 text-sm font-semibold text-foreground">{step.label}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Done when: <span className="font-medium text-foreground">{STEP_DONE_WHEN[step.id]}</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+
         {pageError ? (
           <div className="mt-6 border border-destructive/40 bg-background px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
             <div className="flex items-start gap-3">
@@ -657,13 +757,16 @@ export function SpOnboarding() {
 
         <div id="operator-flow" className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="space-y-6">
-            <section className="glass-panel industrial-border p-6">
+            <section id="step-wallet" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">1. Operator wallet</div>
                   <h2 className="text-2xl font-semibold text-foreground">Connect, switch, and fund the browser wallet</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     Pairing starts from the browser. The wallet must be connected to NilStore testnet and funded enough to send the pairing transaction.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Done when: <span className="font-semibold text-foreground">wallet is connected, on NilStore testnet, and funded</span>.
                   </p>
                 </div>
                 <StatusPill label={walletReady && funded ? 'Ready' : 'Action needed'} state={walletState} />
@@ -743,13 +846,16 @@ export function SpOnboarding() {
               {walletReady && !funded && faucetEnabled ? <FaucetAuthTokenInput className="mt-4" /> : null}
             </section>
 
-            <section className="glass-panel industrial-border p-6">
+            <section id="step-pairing" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Pairing</div>
                   <h2 className="text-2xl font-semibold text-foreground">Open pairing on-chain from the browser</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     Pairing is required for the website-managed onboarding flow on this page. If you want to bootstrap without pairing, use the manual quickstart and verify the provider outside the website first.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Done when: <span className="font-semibold text-foreground">pairing ID is open and confirmed by the provider host</span>.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -821,13 +927,16 @@ export function SpOnboarding() {
               </div>
             </section>
 
-            <section className="glass-panel industrial-border p-6">
+            <section id="step-reachability" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Public reachability</div>
                   <h2 className="text-2xl font-semibold text-foreground">How will browsers reach this provider?</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     Start with the public address shape. The website needs a real hostname, IP, or multiaddr before it can generate provider host commands or track public health.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Done when: <span className="font-semibold text-foreground">derived provider endpoint and public health URL are shown</span>.
                   </p>
                 </div>
                 <StatusPill label={endpointPlan ? 'Endpoint ready' : 'Missing endpoint'} state={endpointPlan ? 'ready' : 'action'} />
@@ -935,13 +1044,16 @@ export function SpOnboarding() {
               </div>
             </section>
 
-            <section className="glass-panel industrial-border p-6">
+            <section id="step-identity" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Provider identity</div>
                   <h2 className="text-2xl font-semibold text-foreground">Which provider-daemon key should this host use?</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     This is the local key name on the provider host. The website will use it in the init, pair, and bootstrap commands that appear in the command rail.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Done when: <span className="font-semibold text-foreground">local provider key name is set</span>.
                   </p>
                 </div>
                 <StatusPill label={providerKeyReady ? 'Key ready' : 'Missing key'} state={providerKeyReady ? 'ready' : 'action'} />
@@ -975,7 +1087,7 @@ export function SpOnboarding() {
               </div>
             </section>
 
-            <section className="glass-panel industrial-border p-6">
+            <section id="step-auth" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">5. Shared auth</div>
@@ -983,10 +1095,13 @@ export function SpOnboarding() {
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     Add the shared provider auth token from the hub operator. Once endpoint, pairing, and auth are all present, the command rail becomes run-ready.
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Done when: <span className="font-semibold text-foreground">shared provider auth token is present</span>.
+                  </p>
                 </div>
                 <StatusPill
-                  label={bootstrapReady ? 'Runbook ready' : hasAuthToken ? 'Waiting' : 'Missing auth'}
-                  state={bootstrapReady ? 'ready' : hasAuthToken ? 'pending' : 'action'}
+                  label={commandReady ? 'Runbook ready' : hasAuthToken ? 'Waiting' : 'Missing auth'}
+                  state={commandReady ? 'ready' : hasAuthToken ? 'pending' : 'action'}
                 />
               </div>
 
@@ -1031,9 +1146,11 @@ export function SpOnboarding() {
                   </div>
                 </div>
 
-                {!bootstrapReady ? (
+                {!commandReady ? (
                   <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                    {runbookReadiness.missing.includes('endpoint')
+                    {!providerKeyReady
+                      ? 'Finish Step 4 by setting the local provider key name used by provider host commands.'
+                      : runbookReadiness.missing.includes('endpoint')
                       ? 'Finish Step 3 so the website can derive the public provider endpoint.'
                       : runbookReadiness.missing.includes('pairing')
                         ? 'Finish Step 2 so the website can bind these commands to the on-chain pairing request.'
@@ -1043,13 +1160,16 @@ export function SpOnboarding() {
               </div>
             </section>
 
-            <section className="glass-panel industrial-border p-6">
+            <section id="step-verification" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">6. Verification</div>
                   <h2 className="text-2xl font-semibold text-foreground">Watch pairing, registration, and public health converge</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     After the provider host runs bootstrap, this page should move from pending pairing to paired provider, then to on-chain registration, then to healthy daemon-reported public reachability. The direct browser <span className="font-mono">/health</span> probe is only advisory.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Done when: <span className="font-semibold text-foreground">pairing, registration, and health all report healthy</span>.
                   </p>
                 </div>
                 <StatusPill label={publicHealthReady ? 'Healthy' : providerState === 'pending' ? 'In progress' : 'Waiting'} state={providerState} />
@@ -1208,13 +1328,13 @@ export function SpOnboarding() {
               <div className="border-b border-border/60 px-6 py-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Command rail</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Command rail (after step 5)</div>
                     <h2 className="mt-2 text-2xl font-semibold text-foreground">Provider host runbook</h2>
                   </div>
-                <StatusPill label={bootstrapReady ? 'Command ready' : 'Waiting'} state={bootstrapReady ? 'ready' : 'pending'} />
+                <StatusPill label={commandReady ? 'Command ready' : 'Waiting'} state={commandReady ? 'ready' : 'pending'} />
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
-                  New provider keys need an init-and-fund step before bootstrap. The auth token is kept only in this browser session so refreshes can resume, but it is not written to the long-lived onboarding draft.
+                  Complete Steps 1 through 5 first. This panel becomes run-ready only after pairing, public endpoint, provider key, and shared auth are all set.
               </p>
               </div>
 
@@ -1239,12 +1359,16 @@ export function SpOnboarding() {
                     <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{endpointPlan?.providerEndpoint || '—'}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span>Public health</span>
-                    <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{effectivePublicBase ? `${effectivePublicBase}/health` : '—'}</span>
+                    <span>Provider key</span>
+                    <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{providerKeyLabel || 'required'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Shared auth</span>
+                    <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{hasAuthToken ? 'present' : 'required'}</span>
                   </div>
                 </div>
 
-                {bootstrapReady ? (
+                {commandReady ? (
                   <>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
@@ -1285,7 +1409,9 @@ export function SpOnboarding() {
                   </>
                 ) : (
                   <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                    {runbookReadiness.missing.includes('endpoint')
+                    {!providerKeyReady
+                      ? 'Set the provider key name in Step 4 before generating host commands.'
+                      : runbookReadiness.missing.includes('endpoint')
                       ? 'Describe the public endpoint to generate the provider host runbook.'
                       : runbookReadiness.missing.includes('pairing')
                         ? 'Open pairing from the browser before this page will generate run-ready provider host commands.'
