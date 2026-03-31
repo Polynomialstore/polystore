@@ -23,7 +23,7 @@ import {
 } from '../api/lcdClient'
 import { providerFetchPublicStatus, type ProviderPublicStatusResponse } from '../api/providerClient'
 import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
-import { PrimaryCtaAnchor } from '../components/PrimaryCta'
+import { PrimaryCtaAnchor, PrimaryCtaButton } from '../components/PrimaryCta'
 import { useNetwork } from '../hooks/useNetwork'
 import { useOpenProviderPairing } from '../hooks/useOpenProviderPairing'
 import { useSessionStatus } from '../hooks/useSessionStatus'
@@ -588,7 +588,7 @@ export function SpOnboarding() {
     const state: 'ready' | 'pending' | 'action' | 'idle' = ready
       ? 'ready'
       : index === currentStepIndex
-        ? 'action'
+        ? 'ready'
         : index === currentStepIndex + 1
           ? 'pending'
           : 'idle'
@@ -606,6 +606,12 @@ export function SpOnboarding() {
             : currentStepId === 'auth'
               ? 'Paste the shared provider auth token from the hub operator to unlock run-ready host commands.'
               : 'Run the command rail, then monitor registration and health until the provider is fully healthy.'
+  const scrollToStep = useCallback((anchor: string) => {
+    if (typeof document === 'undefined') return
+    const target = document.getElementById(anchor)
+    if (!target) return
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
 
   return (
     <div className="px-4 pb-12 pt-24">
@@ -705,14 +711,19 @@ export function SpOnboarding() {
               </h2>
               <p className="max-w-3xl text-sm text-muted-foreground">{nextActionMessage}</p>
             </div>
-            <PrimaryCtaAnchor href={`#${currentStep.anchor}`} size="md">
+            <PrimaryCtaButton size="md" onClick={() => scrollToStep(currentStep.anchor)}>
               Go To Step {currentStepIndex + 1}
-            </PrimaryCtaAnchor>
+            </PrimaryCtaButton>
           </div>
 
           <div className="mt-5 grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2 xl:grid-cols-3">
             {flowSteps.map((step) => (
-              <a key={step.id} href={`#${step.anchor}`} className="border border-border bg-background/40 p-3 transition-colors hover:bg-secondary/20">
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => scrollToStep(step.anchor)}
+                className="border border-border bg-background/40 p-3 text-left transition-colors hover:bg-secondary/20"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                     Step {step.index + 1}
@@ -726,7 +737,7 @@ export function SpOnboarding() {
                 <div className="mt-1 text-xs text-muted-foreground">
                   Done when: <span className="font-medium text-foreground">{STEP_DONE_WHEN[step.id]}</span>
                 </div>
-              </a>
+              </button>
             ))}
           </div>
         </section>
