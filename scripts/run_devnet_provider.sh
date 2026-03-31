@@ -51,6 +51,7 @@ PID_DIR="$LOG_DIR/pids"
 
 GO_BIN="${GO_BIN:-$(command -v go)}"
 NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-}"
+PROVIDER_KEY_CREATED=0
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
@@ -420,6 +421,7 @@ init_provider() {
   if [ -z "$(provider_addr)" ]; then
     echo "==> Creating provider key: $PROVIDER_KEY"
     "$NILCHAIND_BIN" keys add "$PROVIDER_KEY" --home "$HOME_DIR" --keyring-backend test >/dev/null
+    PROVIDER_KEY_CREATED=1
   fi
 
   local addr
@@ -545,6 +547,7 @@ confirm_provider_pairing() {
 start_provider() {
   ensure_nilchaind
   ensure_nil_cli
+  ensure_nil_core_runtime
 
   if [ ! -f "$TRUSTED_SETUP" ]; then
     echo "ERROR: trusted setup not found at $TRUSTED_SETUP (set NIL_TRUSTED_SETUP)" >&2
@@ -602,6 +605,11 @@ start_provider() {
 bootstrap_provider() {
   init_provider
 
+  if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
+    echo "==> Provider key was just created. Fund $(provider_addr) with aatom, then rerun bootstrap." >&2
+    return 1
+  fi
+
   if [ -n "$PAIRING_ID" ]; then
     confirm_provider_pairing
   else
@@ -635,8 +643,6 @@ stop_provider() {
   rm -f "$pid_file"
   echo "Stopped provider (pid $pid)"
 }
-
-ensure_nil_core_runtime
 
 case "$ACTION" in
   init) init_provider ;;

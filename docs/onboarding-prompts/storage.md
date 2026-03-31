@@ -37,11 +37,26 @@ Context:
   - Linux releases are `.deb` and `.rpm` packages.
 - Never print secrets or private keys in full; redact sensitive values.
 
+Browser route map:
+- Open `https://nilstore.org/#/first-file` for wallet connect, network switch, faucet funding, and first deal allocation.
+- After deal allocation, continue to `https://nilstore.org/#/dashboard` for upload, commit, file listing, and retrieval.
+- Do not expect file upload on `/#/first-file`; that page ends by sending the user to `/#/dashboard`.
+
+Local prerequisites:
+- Required commands: `bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind`; `gh` is optional.
+- First run may execute `npm install` inside `nil-website/` if `nil-website/node_modules` is missing.
+- Before running the burner helper, set a keystore password in `NIL_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
+- Expect local artifacts to be created under the repo, including `nil-website/node_modules/`, a keystore JSON, and a `nilchaind` sender home in `_artifacts/`.
+
 Operating mode:
 - This is a guided onboarding run, not a test automation run.
-- Proceed autonomously through repo sync, local checks, Gateway GUI setup, temporary test-file creation, and CLI bootstrap.
+- Proceed autonomously through repo sync, local checks, Gateway GUI setup, temporary test-file creation, dependency install, and CLI bootstrap.
 - Pause only when the user must do something in the browser, MetaMask, OS security prompts, or a native file picker.
 - Keep a compact milestone ledger so the same wallet, deal, and gateway state are preserved without slowing the run with unnecessary transcript-style logging.
+
+Faucet note:
+- If browser funding returns `401 Unauthorized`, use the shared faucet bootstrap token from collaborator docs or repo defaults.
+- Never print the full faucet token in chat or logs.
 
 Avoid these detours unless debugging is required:
 - do not set up or run a local faucet
@@ -53,7 +68,7 @@ Avoid these detours unless debugging is required:
 Canonical onboarding milestones (run in order unless the user asks to skip):
 1. Fast Bootstrap
    - repo is synced
-   - required tools are present (`curl`, `jq`, `npm`, and `nilchaind`; `gh` is optional)
+   - required tools are present (`bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind`; `gh` is optional)
    - hosted LCD + faucet reachable
    - Nil Gateway GUI is installed or opened by the agent and the local gateway is healthy at `http://localhost:8080`
    - create a temporary local file (`10-100 KiB`) yourself
@@ -70,12 +85,12 @@ Canonical onboarding milestones (run in order unless the user asks to skip):
    - open `https://nilstore.org/#/first-file`
    - connect the imported MetaMask wallet
    - verify the site sees the same identity and local gateway
-   - perform retrieval and/or a small browser upload/retrieve with the same wallet
+   - continue to `https://nilstore.org/#/dashboard` for retrieval and/or a small browser upload/retrieve with the same wallet
 4. Gateway Large-File Check
    - re-run upload/commit/retrieve with a larger file (`64 MiB+`)
    - capture gateway health, cache or route behavior, and provider endpoint details if shown
 5. Advanced CLI Check
-   - local-gateway environments: use `scripts/enterprise_upload_job.sh <file_path> [deal_id] [nilfs_path]`
+   - local-gateway environments: use `scripts/enterprise_upload_job.sh <file_path> [deal_id] [nilfs_path]` only after the burner flow or another step has already provided `EVM_PRIVKEY` and a healthy local gateway at `http://localhost:8080`
    - wallet-first/public environments: follow `Public CLI smoke` in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
    - capture friction points and any remaining setup gaps
 
@@ -87,7 +102,7 @@ Your job:
    - `browser-only`: fallback only if local gateway or CLI cannot be brought up after bounded retries, or if the user explicitly asks for it
 3. Milestone 1, Fast Bootstrap:
    - verify hosted LCD + faucet reachable
-   - verify required local tools are installed: `curl`, `jq`, `npm`, and `nilchaind` (`gh` optional)
+   - verify required local tools are installed: `bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind` (`gh` optional)
    - check `http://localhost:8080/health` first; if it is already healthy, reuse the existing local gateway
    - otherwise install or open Nil Gateway GUI yourself; prefer the latest GitHub release artifact and only fall back to source-build/manual debugging if the release path is blocked
    - macOS setup path:
@@ -109,12 +124,12 @@ Your job:
    - verify EVM RPC reachable
    - only after wallet handoff, open the website and connect MetaMask
    - verify same wallet address, expected chain ID, and local gateway presence
-   - verify retrieval and/or browser upload/retrieve evidence
+   - verify retrieval and/or browser upload/retrieve evidence on `/#/dashboard`
 6. Milestone 4, Gateway Large-File Check:
    - run the larger-file gateway flow
    - capture gateway health, retrieval evidence, and cache behavior
 7. Milestone 5, Advanced CLI Check:
-   - use `scripts/enterprise_upload_job.sh` for advanced local-gateway CLI checks
+   - use `scripts/enterprise_upload_job.sh` for advanced local-gateway CLI checks only after `EVM_PRIVKEY` and a healthy local gateway are already present
    - otherwise use the public CLI smoke path
    - record UX friction and missing prerequisites
 8. Failure handling policy:

@@ -248,7 +248,8 @@ export function SpOnboarding() {
   const walletReady = isConnected && !isWrongNetwork && !needsReconnect
   const funded = hasFunds || faucetTxStatus === 'confirmed'
   const canOpenPairing = walletReady && funded && Boolean(address)
-  const bootstrapReady = Boolean(pairingId && endpointPlan)
+  const bootstrapReady = Boolean(endpointPlan)
+  const pairingLinked = Boolean(pairingId)
   const pairingConfirmed = Boolean(confirmedPairing)
   const providerRegistered = Boolean(providerRecord)
   const publicHealthReady = healthProbe.status === 'ok' && healthProbe.base === effectivePublicBase
@@ -416,7 +417,7 @@ export function SpOnboarding() {
         expires_at: String(expiresAt),
         opened_height: String(height),
       })
-      setNotice('Pairing request opened on-chain. Copy the bootstrap command to the provider host now.')
+      setNotice('Pairing request opened on-chain. Copy the provider host commands now if you want website linking.')
       await refreshLiveState()
     } catch (openError) {
       const message = openError instanceof Error ? openError.message : 'Could not open provider pairing'
@@ -461,8 +462,8 @@ export function SpOnboarding() {
               <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">First Healthy Provider</h1>
               <p className="max-w-2xl text-muted-foreground">
                 This is the web-first operator flow for bringing up a NilStore <span className="font-mono">provider-daemon</span>.
-                Open pairing from the browser, copy one bootstrap command to the provider host, then verify pairing,
-                registration, and public health from the same screen.
+                Describe the provider endpoint, initialize and fund the key, optionally open pairing from the browser,
+                then bootstrap and verify registration and public health from the same screen.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -621,7 +622,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Pairing</div>
                   <h2 className="text-2xl font-semibold text-foreground">Open pairing on-chain from the browser</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    The website opens a short-lived pairing session. The provider host confirms it during bootstrap with the same <span className="font-mono">PAIRING_ID</span>.
+                    Pairing is optional but recommended. Open it when you want the provider host to link back to this operator wallet and appear in <span className="font-mono">My Providers</span>.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -666,12 +667,12 @@ export function SpOnboarding() {
                   ) : pendingPairing ? (
                     <div className={`border px-4 py-3 text-sm ${pairingIsExpired ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-primary/30 bg-primary/10 text-primary'}`}>
                       {pairingIsExpired
-                        ? 'The pairing session expired before the provider host confirmed it. Open a new pairing and copy a fresh bootstrap command.'
-                        : 'Pairing is open on-chain. Run the bootstrap command on the provider host now so it can confirm pairing before expiry.'}
+                        ? 'The pairing session expired before the provider host confirmed it. Open a new pairing and copy a fresh provider host runbook.'
+                        : 'Pairing is open on-chain. Run the provider host commands now so bootstrap can confirm pairing before expiry.'}
                     </div>
                   ) : (
                     <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
-                      Open pairing once the wallet is connected, on the right chain, and funded.
+                      Open pairing once the wallet is connected, on the right chain, and funded if you want website linking and My Providers discovery.
                     </div>
                   )}
                 </div>
@@ -699,7 +700,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Provider host</div>
                   <h2 className="text-2xl font-semibold text-foreground">Describe the public endpoint and provider-daemon key</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    The bootstrap command is opinionated: canonical public testnet defaults are built in. You only provide pairing, endpoint, provider key, and the shared provider auth token.
+                    The provider-host runbook is opinionated: canonical public testnet defaults are built in. You provide the endpoint, provider key, shared provider auth token, and optionally pairing for website linking.
                   </p>
                 </div>
                 <StatusPill label={endpointPlan ? 'Endpoint ready' : 'Need endpoint'} state={endpointPlan ? 'ready' : 'action'} />
@@ -794,7 +795,7 @@ export function SpOnboarding() {
                     <input
                       value={authToken}
                       onChange={(event) => setAuthToken(event.target.value)}
-                      placeholder="Paste token for bootstrap command"
+                      placeholder="Paste token for provider host commands"
                       type="password"
                       className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
                     />
@@ -900,7 +901,7 @@ export function SpOnboarding() {
                 <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
                   <div className="font-semibold text-foreground">When pairing is still pending</div>
                   <div className="mt-2">
-                    The provider host has not confirmed the pairing request yet. Re-copy the bootstrap command if the pairing ID changed, then rerun <span className="font-mono">./scripts/run_devnet_provider.sh bootstrap</span> on the provider host.
+                    The provider host has not confirmed the pairing request yet. Re-copy the provider host runbook if the pairing ID changed, then rerun <span className="font-mono">./scripts/run_devnet_provider.sh bootstrap</span> on the provider host once the key is funded.
                   </div>
                 </div>
                 <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
@@ -919,12 +920,12 @@ export function SpOnboarding() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Command rail</div>
-                    <h2 className="mt-2 text-2xl font-semibold text-foreground">Bootstrap the provider host</h2>
+                    <h2 className="mt-2 text-2xl font-semibold text-foreground">Provider host runbook</h2>
                   </div>
                   <StatusPill label={bootstrapReady ? 'Command ready' : 'Waiting'} state={bootstrapReady ? 'ready' : 'pending'} />
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  This is the only server-side action in the happy path. The auth token stays local to this browser session and is never saved here.
+                  New provider keys need an init-and-fund step before bootstrap. The auth token stays local to this browser session and is never saved here.
                 </p>
               </div>
 
@@ -932,7 +933,7 @@ export function SpOnboarding() {
                 <div className="grid gap-3 border-b border-border/60 pb-5 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between gap-3">
                     <span>Pairing ID</span>
-                    <span className="font-mono-data text-foreground">{pairingId || '—'}</span>
+                    <span className="font-mono-data text-foreground">{pairingLinked ? pairingId : 'optional'}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span>Provider endpoint</span>
@@ -948,8 +949,8 @@ export function SpOnboarding() {
                   <>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-semibold text-foreground">Bootstrap command</div>
-                        <CopyButton label="Copy" onClick={() => void handleCopy('Bootstrap command', bootstrapCommand)} />
+                        <div className="text-sm font-semibold text-foreground">Provider host commands</div>
+                        <CopyButton label="Copy" onClick={() => void handleCopy('Provider host commands', bootstrapCommand)} />
                       </div>
                       <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
                     </div>
@@ -975,7 +976,7 @@ export function SpOnboarding() {
                   </>
                 ) : (
                   <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                    Open pairing and describe the public endpoint to generate the provider bootstrap command.
+                    Describe the public endpoint to generate the provider host runbook. Pairing can be added later if you want website linking and My Providers discovery.
                   </div>
                 )}
 

@@ -22,13 +22,12 @@ The chain stores endpoints as strings, expected to be **multiaddrs**, e.g.:
 The gateway router understands `/http` and `/https` and converts them to `http(s)://host:port`.
 
 Important (current protocol behavior):
-- `register-provider` is one-time per provider address.
-- Endpoint lists are **not** mutable after registration in the current devnet build.
-- If you accidentally register localhost endpoints (for example `/ip4/127.0.0.1/...`) and need public endpoints:
-  - Create/fund a new provider key.
-  - Register the new key with `/dns4/<public-host>/tcp/443/https`.
-  - Switch your provider gateway service to the new key.
-  - Mark the old provider as draining with `set-provider-draining --draining`.
+- `register-provider` is create-only per provider address.
+- Endpoint updates are supported with `update-provider-endpoints`.
+- If you accidentally register localhost endpoints (for example `/ip4/127.0.0.1/...`) or need to rotate to a better public endpoint:
+  - keep the existing provider key when possible
+  - update the endpoint list with `update-provider-endpoints`
+  - only create a new provider key if the chain explicitly rejects endpoint updates or you intentionally want a new identity
 
 ## Helper: Print Endpoint Multiaddrs
 
@@ -88,6 +87,16 @@ nilchaind tx nilchain register-provider General 1099511627776 \
   --endpoint "/dns4/sp.example.com/tcp/443/https"
 ```
 
+Rotate or correct endpoints later:
+
+```bash
+nilchaind tx nilchain update-provider-endpoints \
+  --from <your-key> \
+  --chain-id <chain-id> \
+  --yes \
+  --endpoint "/dns4/sp.example.com/tcp/443/https"
+```
+
 ## Type: cloudflare-tunnel (fallback)
 
 Goal: expose the provider at `https://sp.example.com` without opening inbound ports.
@@ -139,6 +148,16 @@ NIL_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints
 
 ```bash
 nilchaind tx nilchain register-provider General 1099511627776 \
+  --from <your-key> \
+  --chain-id <chain-id> \
+  --yes \
+  --endpoint "/dns4/sp.example.com/tcp/443/https"
+```
+
+Rotate or correct endpoints later with:
+
+```bash
+nilchaind tx nilchain update-provider-endpoints \
   --from <your-key> \
   --chain-id <chain-id> \
   --yes \
