@@ -738,8 +738,8 @@ export function SpOnboarding() {
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-                <div className="space-y-3">
+              <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
+                <div className="min-w-0 space-y-3">
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     <div className="border border-border bg-background/40 p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Latest height</div>
@@ -778,7 +778,7 @@ export function SpOnboarding() {
                   )}
                 </div>
 
-                <div className="flex min-w-[220px] flex-col gap-2">
+                <div className="flex flex-col gap-2 xl:min-w-[220px]">
                   <button
                     type="button"
                     onClick={() => void handleOpenPairing()}
