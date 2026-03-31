@@ -221,8 +221,10 @@ ensure_nilchaind() {
   if [ -x "$NILCHAIND_BIN" ]; then
     return 0
   fi
+  local build_goflags="${GOFLAGS:-}"
+  build_goflags="${build_goflags} -mod=mod"
   echo "==> Building nilchaind..."
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
+  (cd "$ROOT_DIR/nilchain" && GOFLAGS="$build_goflags" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
 }
 
 ensure_nil_cli() {
