@@ -647,10 +647,23 @@ init_provider() {
     echo "  pairing: $PAIRING_ID"
   fi
   echo
-  echo "Next:"
-  echo "  - Ask the hub operator to fund this address with aatom (gas) if needed."
-  echo "  - Open pairing from the website, then run ./scripts/run_devnet_provider.sh pair with PAIRING_ID=<pairing-id> or rerun bootstrap."
-  echo "  - Set PROVIDER_ENDPOINT if this host is public, then rerun bootstrap."
+  echo "Wizard status:"
+  echo "  - Step 4 (Provider key init + fund): complete on provider host."
+  if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
+    echo "  - New key created: backup the mnemonic shown above."
+  else
+    echo "  - Existing key reused: mnemonic was not regenerated."
+  fi
+  echo "  - Ensure this address has aatom for gas: $addr"
+  echo
+  echo "Next command (Wizard Step 5: confirm pairing from provider host):"
+  if [ -n "$PAIRING_ID" ]; then
+    echo "  PAIRING_ID='$PAIRING_ID' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh pair"
+  else
+    echo "  PAIRING_ID='<pairing-id-from-browser-step-2>' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh pair"
+  fi
+  echo
+  echo "After Step 5, return to the website for Step 6+ (endpoint, auth token, bootstrap, health)."
 }
 
 register_provider() {
