@@ -42,7 +42,8 @@
   }
 
   .nav-topbtn {
-    @apply relative px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] border transition-[color,background-color,border-color] duration-200 ease-out flex items-center gap-2;
+    @apply relative whitespace-nowrap border transition-[color,background-color,border-color] duration-200 ease-out flex items-center;
+    @apply px-2.5 py-2 text-[9px] font-bold uppercase tracking-[0.14em] gap-1.5 xl:px-3 xl:text-[10px] xl:tracking-[0.2em] xl:gap-2;
     font-family: "JetBrains Mono", monospace;
   }
 
@@ -59,7 +60,7 @@
   }
 
   .nav-topchev {
-    @apply w-3 h-3 transition-transform duration-200;
+    @apply w-3 h-3 shrink-0 transition-transform duration-200;
   }
 
   .nav-mega-item {

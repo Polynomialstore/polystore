@@ -143,7 +143,7 @@ export const Layout = () => {
 
           {/* 2. CENTER: Desktop Navigation */}
           <div className="min-w-0 flex-1 flex justify-center">
-            <div className="hidden lg:flex items-center gap-1 px-2 py-1 glass-panel industrial-border">
+            <div className="hidden lg:flex items-center gap-0.5 px-1.5 py-1 xl:gap-1 xl:px-2 glass-panel industrial-border">
               {navStructure.map((item) => (
                   <NavDropdown key={item.name} label={item.name} items={item.items!} />
               ))}
