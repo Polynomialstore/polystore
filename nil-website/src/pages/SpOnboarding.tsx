@@ -1,408 +1,1020 @@
-import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { AlertCircle, CheckCircle2, Copy, Download, ExternalLink, Globe, HardDrive, Rocket, Server, Shield, Terminal } from "lucide-react";
-import { DashboardCta } from "../components/DashboardCta";
-import { PrimaryCtaAnchor } from "../components/PrimaryCta";
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
+import { Link } from 'react-router-dom'
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  LoaderCircle,
+  RefreshCw,
+  Rocket,
+  Server,
+  Shield,
+  Wallet,
+} from 'lucide-react'
 
-type Step = {
-  id: string;
-  title: string;
-  detail: string;
-  successSignal: string;
-};
+import { appConfig } from '../config'
+import {
+  lcdFetchLatestHeight,
+  lcdFetchPendingProviderPairing,
+  lcdFetchProviders,
+  lcdFetchProvidersByOperator,
+} from '../api/lcdClient'
+import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
+import { PrimaryCtaAnchor } from '../components/PrimaryCta'
+import { useNetwork } from '../hooks/useNetwork'
+import { useOpenProviderPairing } from '../hooks/useOpenProviderPairing'
+import { useSessionStatus } from '../hooks/useSessionStatus'
+import {
+  buildProviderAgentPrompt,
+  buildProviderBootstrapCommand,
+  buildProviderEndpointPlan,
+  buildProviderHealthCommands,
+  findConfirmedProviderPairing,
+  findProviderByAddress,
+  pairingBlocksRemaining,
+  pairingExpired,
+  type ProviderEndpointInputMode,
+  type ProviderHostMode,
+} from '../lib/providerOnboarding'
+import { createProviderPairingId } from '../lib/providerPairing'
+import { extractProviderHttpBases } from '../lib/spDashboard'
 
-const repoRootUrl = "https://github.com/Nil-Store/nil-store";
-const gatewayDesktopReleaseUrl = "https://github.com/Nil-Store/nil-store/releases/latest";
-const devnetPlaybookUrl = "https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md";
+const PROVIDER_DOCS_URL = 'https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_PROVIDER_QUICKSTART.md'
+const PROVIDER_PLAYBOOK_URL = 'https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md'
+const REPO_URL = 'https://github.com/Nil-Store/nil-store'
+const LOCAL_HEALTH_URL = 'http://127.0.0.1:8091/health'
+const PROVIDER_DRAFT_KEY = 'nilstore.provider-onboarding.v2'
+const PAIRING_TTL_BLOCKS = 120
 
-const providerHappyPathSteps: Step[] = [
-  {
-    id: "inputs",
-    title: "Collect hub inputs",
-    detail: "Get your chain ID, hub RPC/LCD, shared provider auth token, and your public hostname from the hub operator.",
-    successSignal: "You have CHAIN_ID, HUB_NODE, HUB_LCD, NIL_GATEWAY_SP_AUTH, and a public hostname.",
-  },
-  {
-    id: "clone",
-    title: "Clone the repo on the provider host",
-    detail: "Run onboarding from the provider machine. The happy path is repo-first: clone, set env vars, run one bootstrap command.",
-    successSignal: "You can run ./scripts/run_devnet_provider.sh on the provider host.",
-  },
-  {
-    id: "bootstrap",
-    title: "Run the provider bootstrap script",
-    detail: "Initialize the provider key (if missing), register your public endpoint on-chain, start the provider gateway, and run a doctor snapshot.",
-    successSignal: "Local /health is reachable and the provider is visible in the LCD provider list.",
-  },
-  {
-    id: "verify",
-    title: "Verify in the Provider Console",
-    detail: "Use the Provider Console to confirm on-chain registration, endpoints, and /health reachability.",
-    successSignal: "Your provider shows up and probes OK in /sp-dashboard.",
-  },
-];
+type PendingPairingState = Awaited<ReturnType<typeof lcdFetchPendingProviderPairing>>
+type OperatorPairingsState = Awaited<ReturnType<typeof lcdFetchProvidersByOperator>>
+type ProvidersState = Awaited<ReturnType<typeof lcdFetchProviders>>
 
-const cloneScript = `git clone ${repoRootUrl}
-cd nil-store`;
+type PublicHealthState =
+  | { status: 'idle' }
+  | { status: 'loading'; base: string }
+  | { status: 'ok'; base: string; ms: number }
+  | { status: 'error'; base: string; error: string }
 
-const bootstrapScript = `# Happy path: initialize key + register + start + doctor
-PROVIDER_KEY=provider1 \\
-CHAIN_ID=<chain-id> \\
-HUB_LCD=https://lcd.<domain> \\
-HUB_NODE=https://rpc.<domain> \\
-PROVIDER_ENDPOINT=/dns4/sp.<domain>/tcp/443/https \\
-NIL_GATEWAY_SP_AUTH=<shared-auth-token> \\
-./scripts/run_devnet_provider.sh bootstrap
+type StoredProviderDraft = {
+  hostMode: ProviderHostMode
+  endpointMode: ProviderEndpointInputMode
+  endpointValue: string
+  publicPort: string
+  providerKey: string
+  pairingId: string
+  pairingTxHash: string
+}
 
-# Optional: print current config as JSON
-PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config`;
+function loadStoredDraft(): StoredProviderDraft {
+  if (typeof window === 'undefined') {
+    return {
+      hostMode: 'home-tunnel',
+      endpointMode: 'domain',
+      endpointValue: '',
+      publicPort: '443',
+      providerKey: 'provider1',
+      pairingId: '',
+      pairingTxHash: '',
+    }
+  }
 
-const healthCheckScript = `# Provider and chain health checks
-scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd https://lcd.<domain>
-curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers | jq '.providers | length'
-curl -sf https://sp.<domain>/health
+  try {
+    const raw = window.localStorage.getItem(PROVIDER_DRAFT_KEY)
+    if (!raw) throw new Error('missing draft')
+    const parsed = JSON.parse(raw) as Partial<StoredProviderDraft>
+    return {
+      hostMode: parsed.hostMode === 'public-vps' ? 'public-vps' : 'home-tunnel',
+      endpointMode:
+        parsed.endpointMode === 'ipv4' || parsed.endpointMode === 'multiaddr' || parsed.endpointMode === 'domain'
+          ? parsed.endpointMode
+          : 'domain',
+      endpointValue: String(parsed.endpointValue || ''),
+      publicPort: String(parsed.publicPort || '443'),
+      providerKey: String(parsed.providerKey || 'provider1'),
+      pairingId: String(parsed.pairingId || ''),
+      pairingTxHash: String(parsed.pairingTxHash || ''),
+    }
+  } catch {
+    return {
+      hostMode: 'home-tunnel',
+      endpointMode: 'domain',
+      endpointValue: '',
+      publicPort: '443',
+      providerKey: 'provider1',
+      pairingId: '',
+      pairingTxHash: '',
+    }
+  }
+}
 
-# Gateway download path verification
-# Dashboard -> Deal -> Download via gateway
-# Expect gateway path + successful receipt pipeline`;
+async function copyText(text: string) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  if (typeof document === 'undefined') {
+    throw new Error('clipboard unavailable')
+  }
+  const el = document.createElement('textarea')
+  el.value = text
+  el.setAttribute('readonly', 'true')
+  el.style.position = 'fixed'
+  el.style.top = '0'
+  el.style.left = '0'
+  el.style.opacity = '0'
+  document.body.appendChild(el)
+  el.select()
+  document.execCommand('copy')
+  document.body.removeChild(el)
+}
 
-const agentBrief = `You are setting up this machine as a NilStore testnet Storage Provider.
+function statusTone(state: 'ready' | 'pending' | 'action' | 'idle'): string {
+  if (state === 'ready') return 'border-accent/40 bg-accent/10 text-accent'
+  if (state === 'pending') return 'border-primary/40 bg-primary/10 text-primary'
+  if (state === 'action') return 'border-destructive/40 bg-destructive/10 text-destructive'
+  return 'border-border bg-background/60 text-muted-foreground'
+}
 
-Repo bootstrap (required unless already inside a fresh nil-store checkout):
-1. If repo is missing:
-   - git clone https://github.com/Nil-Store/nil-store.git
-   - cd nil-store
-2. Refresh checkout:
-   - git fetch origin --prune
-   - git checkout main
-   - git pull --ff-only origin main
+function StatusPill({ label, state }: { label: string; state: 'ready' | 'pending' | 'action' | 'idle' }) {
+  return (
+    <span className={`inline-flex items-center gap-2 border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${statusTone(state)}`}>
+      {label}
+    </span>
+  )
+}
 
-Context:
-- Preferred mode: home server behind NAT with Cloudflare Tunnel.
-- Use docs/ALPHA_PROVIDER_QUICKSTART.md, docs/REMOTE_SP_JOIN_QUICKSTART.md, and docs/networking/PROVIDER_ENDPOINTS.md.
-- Use hub-supplied values for CHAIN_ID, HUB_NODE, HUB_LCD, NIL_GATEWAY_SP_AUTH, and provider hostname.
-- Never print secrets/private keys in full; redact sensitive values (especially NIL_GATEWAY_SP_AUTH).
-
-Your job:
-1. Verify toolchains and repo prerequisites.
-2. Create or import provider key.
-3. Configure the public endpoint and local listener.
-4. Register the provider on-chain.
-5. Start provider service.
-6. Verify:
-   - ./scripts/run_devnet_provider.sh doctor
-   - local http://127.0.0.1:8091/health
-   - public https://sp.<domain>/health
-   - LCD provider visibility
-7. If anything fails, inspect logs, repair, and retry until healthy.
-
-Final output:
-1. JSON summary with:
-   - provider_address
-   - registered_endpoint
-   - local_health_url
-   - public_health_url
-   - local_health_ok
-   - public_health_ok
-   - lcd_visible
-   - service_status
-   - commands_run
-   - files_changed
-2. A short human-readable summary.`;
-
-function CopyButton({ onClick }: { onClick: () => void }) {
+function CopyButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-none border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/40"
+      className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
     >
-      <span className="inline-flex items-center gap-2">
-        <Copy className="h-3.5 w-3.5" /> Copy
-      </span>
+      <Copy className="h-4 w-4" />
+      {label}
     </button>
-  );
-}
-
-function PrimaryLinkButton({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-2 rounded-none bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
-    >
-      {children}
-      <ExternalLink className="h-3.5 w-3.5" />
-    </a>
-  );
+  )
 }
 
 export function SpOnboarding() {
-  const [checkedSteps, setCheckedSteps] = useState<Record<string, boolean>>({});
-  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const storedDraft = useMemo(() => loadStoredDraft(), [])
+  const { openConnectModal } = useConnectModal()
+  const { switchNetwork } = useNetwork()
+  const { openPairing, loading: openingPairing } = useOpenProviderPairing()
+  const session = useSessionStatus()
+  const {
+    address,
+    nilAddress,
+    walletAddressShort,
+    isConnected,
+    hasFunds,
+    balanceLabel,
+    isWrongNetwork,
+    walletChainId,
+    genesisMismatch,
+    needsReconnect,
+    refreshWalletNetwork,
+    faucetEnabled,
+    faucetBusy,
+    faucetTxStatus,
+    requestFunds,
+  } = session
 
-  const steps = providerHappyPathSteps;
-  const checkedCount = useMemo(() => steps.filter((step) => checkedSteps[step.id]).length, [steps, checkedSteps]);
-  const completionPercent = steps.length === 0 ? 0 : Math.round((checkedCount / steps.length) * 100);
+  const [hostMode, setHostMode] = useState<ProviderHostMode>(storedDraft.hostMode)
+  const [endpointMode, setEndpointMode] = useState<ProviderEndpointInputMode>(storedDraft.endpointMode)
+  const [endpointValue, setEndpointValue] = useState(storedDraft.endpointValue)
+  const [publicPort, setPublicPort] = useState(storedDraft.publicPort)
+  const [providerKey, setProviderKey] = useState(storedDraft.providerKey)
+  const [pairingId, setPairingId] = useState(storedDraft.pairingId)
+  const [pairingTxHash, setPairingTxHash] = useState(storedDraft.pairingTxHash)
+  const [authToken, setAuthToken] = useState('')
+  const [copyStatus, setCopyStatus] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [latestHeight, setLatestHeight] = useState<number | null>(null)
+  const [pendingPairing, setPendingPairing] = useState<PendingPairingState>(null)
+  const [operatorPairings, setOperatorPairings] = useState<OperatorPairingsState>([])
+  const [providers, setProviders] = useState<ProvidersState>([])
+  const [loadingLiveState, setLoadingLiveState] = useState(false)
+  const [healthProbe, setHealthProbe] = useState<PublicHealthState>({ status: 'idle' })
 
-  const toggleStep = (id: string) => {
-    setCheckedSteps((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const copyText = async (label: string, text: string) => {
-    try {
-      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
-        setCopyStatus(`Clipboard not available for ${label}.`);
-        return;
-      }
-      await navigator.clipboard.writeText(text);
-      setCopyStatus(`${label} copied.`);
-      window.setTimeout(() => setCopyStatus(null), 2000);
-    } catch {
-      setCopyStatus(`Could not copy ${label}.`);
+  useEffect(() => {
+    if (hostMode === 'home-tunnel' && endpointMode === 'ipv4') {
+      setEndpointMode('domain')
     }
-  };
+  }, [hostMode, endpointMode])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const payload: StoredProviderDraft = {
+      hostMode,
+      endpointMode,
+      endpointValue,
+      publicPort,
+      providerKey,
+      pairingId,
+      pairingTxHash,
+    }
+    window.localStorage.setItem(PROVIDER_DRAFT_KEY, JSON.stringify(payload))
+  }, [endpointMode, endpointValue, hostMode, pairingId, pairingTxHash, providerKey, publicPort])
+
+  const endpointPlan = useMemo(
+    () =>
+      buildProviderEndpointPlan({
+        hostMode,
+        endpointMode,
+        endpointValue,
+        publicPort: Number(publicPort),
+      }),
+    [endpointMode, endpointValue, hostMode, publicPort],
+  )
+
+  const confirmedPairing = useMemo(
+    () => findConfirmedProviderPairing(operatorPairings, pairingId),
+    [operatorPairings, pairingId],
+  )
+  const providerRecord = useMemo(
+    () => findProviderByAddress(providers, confirmedPairing?.provider ?? ''),
+    [confirmedPairing?.provider, providers],
+  )
+  const onchainBases = useMemo(() => extractProviderHttpBases(providerRecord?.endpoints), [providerRecord?.endpoints])
+  const effectivePublicBase = onchainBases[0] || endpointPlan?.publicBase || null
+  const pairingRemainingBlocks = pairingBlocksRemaining(pendingPairing, latestHeight)
+  const pairingIsExpired = pairingExpired(pendingPairing, latestHeight)
+
+  const walletReady = isConnected && !isWrongNetwork && !needsReconnect
+  const funded = hasFunds || faucetTxStatus === 'confirmed'
+  const canOpenPairing = walletReady && funded && Boolean(address)
+  const bootstrapReady = Boolean(pairingId && endpointPlan)
+  const pairingConfirmed = Boolean(confirmedPairing)
+  const providerRegistered = Boolean(providerRecord)
+  const publicHealthReady = healthProbe.status === 'ok' && healthProbe.base === effectivePublicBase
+
+  const bootstrapCommand = useMemo(
+    () =>
+      buildProviderBootstrapCommand({
+        hostMode,
+        endpointMode,
+        endpointValue,
+        publicPort: Number(publicPort),
+        pairingId,
+        providerKey,
+        authToken,
+      }),
+    [authToken, endpointMode, endpointValue, hostMode, pairingId, providerKey, publicPort],
+  )
+  const healthCommands = useMemo(() => buildProviderHealthCommands(effectivePublicBase), [effectivePublicBase])
+  const agentPrompt = useMemo(
+    () =>
+      buildProviderAgentPrompt({
+        pairingId,
+        providerEndpoint: endpointPlan?.providerEndpoint,
+        publicBase: effectivePublicBase,
+        providerKey,
+      }),
+    [effectivePublicBase, endpointPlan?.providerEndpoint, pairingId, providerKey],
+  )
+
+  const handleCopy = useCallback(async (label: string, text: string) => {
+    try {
+      await copyText(text)
+      setCopyStatus(`${label} copied.`)
+      window.setTimeout(() => setCopyStatus(null), 1800)
+    } catch {
+      setCopyStatus(`Could not copy ${label}.`)
+      window.setTimeout(() => setCopyStatus(null), 2200)
+    }
+  }, [])
+
+  const refreshLiveState = useCallback(async () => {
+    setLoadingLiveState(true)
+    try {
+      const [height, pending, pairings] = await Promise.all([
+        lcdFetchLatestHeight(appConfig.lcdBase).catch(() => null),
+        pairingId ? lcdFetchPendingProviderPairing(appConfig.lcdBase, pairingId).catch(() => null) : Promise.resolve(null),
+        nilAddress ? lcdFetchProvidersByOperator(appConfig.lcdBase, nilAddress).catch(() => []) : Promise.resolve([]),
+      ])
+
+      setLatestHeight(height)
+      setPendingPairing(pending)
+      setOperatorPairings(pairings)
+
+      if (pairings.length > 0) {
+        const registryProviders = await lcdFetchProviders(appConfig.lcdBase).catch(() => [])
+        setProviders(registryProviders)
+      } else {
+        setProviders([])
+      }
+    } finally {
+      setLoadingLiveState(false)
+    }
+  }, [nilAddress, pairingId])
+
+  const probePublicHealth = useCallback(async (base: string) => {
+    const normalizedBase = String(base || '').trim().replace(/\/$/, '')
+    if (!normalizedBase) {
+      setHealthProbe({ status: 'idle' })
+      return
+    }
+
+    const started = performance.now()
+    setHealthProbe({ status: 'loading', base: normalizedBase })
+    try {
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 5000)
+      const res = await fetch(`${normalizedBase}/health`, { signal: controller.signal })
+      window.clearTimeout(timeout)
+      if (!res.ok) {
+        setHealthProbe({ status: 'error', base: normalizedBase, error: `HTTP ${res.status}` })
+        return
+      }
+      setHealthProbe({ status: 'ok', base: normalizedBase, ms: Math.round(performance.now() - started) })
+    } catch (probeError) {
+      const message = probeError instanceof Error ? probeError.message : 'probe failed'
+      setHealthProbe({ status: 'error', base: normalizedBase, error: message })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!pairingId && !nilAddress) {
+      setPendingPairing(null)
+      setOperatorPairings([])
+      setProviders([])
+      setLatestHeight(null)
+      return
+    }
+
+    void refreshLiveState()
+    const timer = window.setInterval(() => {
+      void refreshLiveState()
+    }, 8000)
+
+    return () => window.clearInterval(timer)
+  }, [nilAddress, pairingId, refreshLiveState])
+
+  useEffect(() => {
+    if (!effectivePublicBase || !pairingConfirmed) {
+      setHealthProbe({ status: 'idle' })
+      return
+    }
+
+    void probePublicHealth(effectivePublicBase)
+    const timer = window.setInterval(() => {
+      void probePublicHealth(effectivePublicBase)
+    }, 12000)
+    return () => window.clearInterval(timer)
+  }, [effectivePublicBase, pairingConfirmed, probePublicHealth])
+
+  const handleSwitchNetwork = async () => {
+    setError(null)
+    setNotice(null)
+    try {
+      await switchNetwork({ forceAdd: genesisMismatch })
+      await refreshWalletNetwork()
+    } catch (switchError) {
+      const message = switchError instanceof Error ? switchError.message : 'Failed to switch network'
+      setError(message)
+    }
+  }
+
+  const handleOpenPairing = async () => {
+    setError(null)
+    setNotice(null)
+
+    if (!address) {
+      setError('Connect the operator wallet first.')
+      return
+    }
+    if (!walletReady) {
+      setError('Switch the wallet onto NilStore testnet before opening pairing.')
+      return
+    }
+    if (!funded) {
+      setError('Fund the operator wallet before opening pairing.')
+      return
+    }
+
+    const height = latestHeight ?? (await lcdFetchLatestHeight(appConfig.lcdBase).catch(() => null))
+    if (!height) {
+      setError('Could not load the latest chain height from the LCD.')
+      return
+    }
+
+    const nextPairingId = createProviderPairingId()
+    const expiresAt = height + PAIRING_TTL_BLOCKS
+
+    try {
+      const result = await openPairing({ creator: address, pairingId: nextPairingId, expiresAt })
+      setPairingId(result.pairing_id)
+      setPairingTxHash(result.tx_hash)
+      setPendingPairing({
+        pairing_id: result.pairing_id,
+        operator: nilAddress || result.operator,
+        expires_at: String(expiresAt),
+        opened_height: String(height),
+      })
+      setNotice('Pairing request opened on-chain. Copy the bootstrap command to the provider host now.')
+      await refreshLiveState()
+    } catch (openError) {
+      const message = openError instanceof Error ? openError.message : 'Could not open provider pairing'
+      setError(message)
+    }
+  }
+
+  const walletState: 'ready' | 'pending' | 'action' | 'idle' = !isConnected
+    ? 'action'
+    : needsReconnect || isWrongNetwork
+      ? 'action'
+      : funded
+        ? 'ready'
+        : 'pending'
+  const pairingState: 'ready' | 'pending' | 'action' | 'idle' = pairingConfirmed
+    ? 'ready'
+    : pairingIsExpired
+      ? 'action'
+      : pendingPairing || openingPairing || (pairingId && !pairingConfirmed)
+        ? 'pending'
+        : 'idle'
+  const providerState: 'ready' | 'pending' | 'action' | 'idle' = publicHealthReady
+    ? 'ready'
+    : providerRegistered
+      ? 'pending'
+      : pairingConfirmed
+        ? 'pending'
+        : bootstrapReady
+          ? 'action'
+          : 'idle'
 
   return (
-    <div className="pt-24 pb-12 px-4 container mx-auto max-w-6xl">
-      <section className="glass-panel industrial-border p-8">
-        <div className="relative space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">Become A Storage Provider</h1>
-          <p className="max-w-3xl text-muted-foreground">
-            The recommended testnet setup is a dedicated provider host with a stable public endpoint. Most operators use a home server behind Cloudflare Tunnel or a small VPS with direct HTTPS.
-          </p>
-          <div className="flex flex-wrap gap-3 pt-2">
-            <PrimaryCtaAnchor href="#setup" size="md" leftIcon={<Rocket className="h-4 w-4" />}>
-              Start Setup
-            </PrimaryCtaAnchor>
-            <PrimaryLinkButton href={repoRootUrl}>
-              <Terminal className="h-4 w-4" />
-              Open Repo
-            </PrimaryLinkButton>
-            <Link
-              to="/alpha/provider"
-              className="inline-flex items-center gap-2 rounded-none border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-            >
-              <Rocket className="h-4 w-4" />
-              Testnet Provider Path
-            </Link>
-            <a
-              href={devnetPlaybookUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-none border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-            >
-              <Globe className="h-4 w-4" />
-              Operator Playbook
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <section id="setup" className="mt-8 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
-        <div className="glass-panel industrial-border p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-foreground">Guided onboarding flow</h2>
-            <div className="text-sm font-medium text-muted-foreground">{checkedCount}/{steps.length} complete ({completionPercent}%)</div>
-          </div>
-
-          <div className="mt-3 glass-panel industrial-border p-3 text-xs text-muted-foreground">
-            <div className="font-semibold text-foreground">Scope</div>
-            <div className="mt-1">
-              This page targets <span className="font-mono text-foreground">remote/headless testnet provider onboarding</span>. Cloudflare Tunnel and a public VPS are configuration details of the same flow.
+    <div className="px-4 pb-12 pt-24">
+      <div className="container mx-auto max-w-6xl">
+        <section className="overflow-hidden glass-panel industrial-border p-8">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="max-w-3xl space-y-4">
+              <div className="inline-flex items-center gap-2 border border-border bg-background/40 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                <Server className="h-4 w-4 text-primary" />
+                <span className="font-mono-data text-foreground/80">/sp/onboarding</span>
+              </div>
+              <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">First Healthy Provider</h1>
+              <p className="max-w-2xl text-muted-foreground">
+                This is the web-first operator flow for bringing up a NilStore <span className="font-mono">provider-daemon</span>.
+                Open pairing from the browser, copy one bootstrap command to the provider host, then verify pairing,
+                registration, and public health from the same screen.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <PrimaryCtaAnchor href="#operator-flow" size="md" leftIcon={<Rocket className="h-4 w-4" />}>
+                Start Flow
+              </PrimaryCtaAnchor>
+              <Link
+                to="/sp-dashboard"
+                className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              >
+                <Shield className="h-4 w-4" />
+                Provider Console
+              </Link>
+              <a
+                href={PROVIDER_DOCS_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Quickstart
+              </a>
             </div>
           </div>
 
-          <div className="mt-5 space-y-3">
-            {steps.map((step, index) => {
-              const checked = Boolean(checkedSteps[step.id]);
-              return (
-                <div
-                  key={step.id}
-                  className={`glass-panel industrial-border p-4 transition-colors ${checked ? "border-accent/40 bg-accent/5" : ""}`}
-                >
-                  <div className="flex items-start gap-3">
+          <div className="mt-8 grid gap-4 border-t border-border/60 pt-6 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operator wallet</div>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <StatusPill label={walletReady && funded ? 'Ready' : !isConnected ? 'Connect' : funded ? 'Ready' : 'Fund'} state={walletState} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing</div>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <StatusPill label={pairingConfirmed ? 'Confirmed' : pairingId ? 'Pending' : 'Idle'} state={pairingState} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider registration</div>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <StatusPill label={providerRegistered ? 'On-chain' : pairingConfirmed ? 'Waiting' : 'Idle'} state={providerRegistered ? 'ready' : pairingConfirmed ? 'pending' : 'idle'} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <StatusPill
+                  label={publicHealthReady ? 'Healthy' : healthProbe.status === 'error' ? 'Unhealthy' : 'Waiting'}
+                  state={publicHealthReady ? 'ready' : healthProbe.status === 'error' ? 'action' : 'pending'}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {error ? (
+          <div className="mt-6 border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-4 w-4" />
+              <div>{error}</div>
+            </div>
+          </div>
+        ) : null}
+
+        {notice ? (
+          <div className="mt-6 border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 h-4 w-4" />
+              <div>{notice}</div>
+            </div>
+          </div>
+        ) : null}
+
+        <div id="operator-flow" className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <div className="space-y-6">
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">1. Operator wallet</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Connect, switch, and fund the browser wallet</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Pairing starts from the browser. The wallet must be connected to NilStore testnet and funded enough to send the pairing transaction.
+                  </p>
+                </div>
+                <StatusPill label={walletReady && funded ? 'Ready' : 'Action needed'} state={walletState} />
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="border border-border bg-background/40 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Wallet</div>
+                      <div className="mt-2 font-mono-data text-foreground">{isConnected ? walletAddressShort : 'Not connected'}</div>
+                    </div>
+                    <div className="border border-border bg-background/40 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Nil address</div>
+                      <div className="mt-2 break-all font-mono-data text-foreground">{nilAddress || '—'}</div>
+                    </div>
+                    <div className="border border-border bg-background/40 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Balance</div>
+                      <div className="mt-2 font-mono-data text-foreground">{balanceLabel}</div>
+                    </div>
+                    <div className="border border-border bg-background/40 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Wallet chain</div>
+                      <div className="mt-2 font-mono-data text-foreground">{walletChainId ?? '—'}</div>
+                    </div>
+                  </div>
+                  {needsReconnect ? (
+                    <div className="border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
+                      MetaMask account permissions are stale. Reconnect the wallet before continuing.
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex min-w-[220px] flex-col gap-2">
+                  {!isConnected ? (
                     <button
                       type="button"
-                      onClick={() => toggleStep(step.id)}
-                        className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center border ${
-                          checked
-                            ? "border-accent/50 bg-accent/20 text-accent"
-                            : "border-border bg-card text-muted-foreground"
-                        }`}
+                      onClick={() => openConnectModal?.()}
+                      className="inline-flex items-center justify-center gap-2 bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
                     >
-                      {checked ? <CheckCircle2 className="h-4 w-4" /> : <span className="text-xs font-bold">{index + 1}</span>}
+                      <Wallet className="h-4 w-4" />
+                      Connect Wallet
                     </button>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-foreground">{step.title}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">{step.detail}</p>
-                      <p className="mt-2 text-xs font-medium text-accent">
-                        Success: {step.successSignal}
-                      </p>
+                  ) : null}
+                  {isWrongNetwork ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleSwitchNetwork()}
+                      className="inline-flex items-center justify-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      {genesisMismatch ? 'Repair Network Entry' : 'Switch To NilStore'}
+                    </button>
+                  ) : null}
+                  {walletReady && !funded && faucetEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => void requestFunds()}
+                      disabled={faucetBusy}
+                      className="inline-flex items-center justify-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40 disabled:opacity-50"
+                    >
+                      {faucetBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                      {faucetBusy ? 'Funding…' : 'Request Faucet Funds'}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {walletReady && !funded && faucetEnabled ? <FaucetAuthTokenInput className="mt-4" /> : null}
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Pairing</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Open pairing on-chain from the browser</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    The website opens a short-lived pairing session. The provider host confirms it during bootstrap with the same <span className="font-mono">PAIRING_ID</span>.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusPill label={pairingConfirmed ? 'Confirmed' : pendingPairing ? 'Pending' : 'Not opened'} state={pairingState} />
+                  <button
+                    type="button"
+                    onClick={() => void refreshLiveState()}
+                    className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loadingLiveState ? 'animate-spin' : ''}`} /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="space-y-3">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="border border-border bg-background/40 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Latest height</div>
+                      <div className="mt-2 font-mono-data text-foreground">{latestHeight ?? '—'}</div>
+                    </div>
+                    <div className="border border-border bg-background/40 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing ID</div>
+                      <div className="mt-2 break-all font-mono-data text-foreground">{pairingId || '—'}</div>
+                    </div>
+                    <div className="border border-border bg-background/40 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Expires in</div>
+                      <div className="mt-2 font-mono-data text-foreground">
+                        {pairingRemainingBlocks === null ? '—' : `${pairingRemainingBlocks} blocks`}
+                      </div>
+                    </div>
+                    <div className="border border-border bg-background/40 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing tx</div>
+                      <div className="mt-2 break-all font-mono-data text-foreground">{pairingTxHash || '—'}</div>
+                    </div>
+                  </div>
+
+                  {pairingConfirmed ? (
+                    <div className="border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
+                      Provider pairing confirmed. The operator wallet now owns <span className="font-mono">{confirmedPairing?.provider}</span>.
+                    </div>
+                  ) : pendingPairing ? (
+                    <div className={`border px-4 py-3 text-sm ${pairingIsExpired ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-primary/30 bg-primary/10 text-primary'}`}>
+                      {pairingIsExpired
+                        ? 'The pairing session expired before the provider host confirmed it. Open a new pairing and copy a fresh bootstrap command.'
+                        : 'Pairing is open on-chain. Run the bootstrap command on the provider host now so it can confirm pairing before expiry.'}
+                    </div>
+                  ) : (
+                    <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
+                      Open pairing once the wallet is connected, on the right chain, and funded.
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex min-w-[220px] flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleOpenPairing()}
+                    disabled={!canOpenPairing || openingPairing}
+                    className="inline-flex items-center justify-center gap-2 bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                  >
+                    {openingPairing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                    {pairingId ? 'Open New Pairing' : 'Open Pairing'}
+                  </button>
+                  <div className="border border-border bg-background/40 px-3 py-3 text-xs text-muted-foreground">
+                    Pairing TTL: <span className="font-mono text-foreground">{PAIRING_TTL_BLOCKS}</span> blocks. Draft state is saved locally in this browser; the provider auth token is not.
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Provider host</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Describe the public endpoint and provider-daemon key</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    The bootstrap command is opinionated: canonical public testnet defaults are built in. You only provide pairing, endpoint, provider key, and the shared provider auth token.
+                  </p>
+                </div>
+                <StatusPill label={endpointPlan ? 'Endpoint ready' : 'Need endpoint'} state={endpointPlan ? 'ready' : 'action'} />
+              </div>
+
+              <div className="mt-6 space-y-5">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Host type</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setHostMode('home-tunnel')}
+                      className={`border px-3 py-2 text-sm font-semibold ${hostMode === 'home-tunnel' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'}`}
+                    >
+                      Home server + tunnel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHostMode('public-vps')}
+                      className={`border px-3 py-2 text-sm font-semibold ${hostMode === 'public-vps' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'}`}
+                    >
+                      Public VPS
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Endpoint input</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEndpointMode('domain')}
+                      className={`border px-3 py-2 text-sm font-semibold ${endpointMode === 'domain' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'}`}
+                    >
+                      Hostname
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEndpointMode('ipv4')}
+                      disabled={hostMode === 'home-tunnel'}
+                      className={`border px-3 py-2 text-sm font-semibold ${endpointMode === 'ipv4' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'} disabled:opacity-40`}
+                    >
+                      IPv4
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEndpointMode('multiaddr')}
+                      className={`border px-3 py-2 text-sm font-semibold ${endpointMode === 'multiaddr' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'}`}
+                    >
+                      Full multiaddr
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      {endpointMode === 'multiaddr'
+                        ? 'Provider endpoint'
+                        : endpointMode === 'ipv4'
+                          ? 'Public IPv4'
+                          : 'Public hostname'}
+                    </span>
+                    <input
+                      value={endpointValue}
+                      onChange={(event) => setEndpointValue(event.target.value)}
+                      placeholder={endpointMode === 'multiaddr' ? '/dns4/sp.example.com/tcp/443/https' : endpointMode === 'ipv4' ? '203.0.113.10' : 'sp.example.com'}
+                      className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public port</span>
+                    <input
+                      value={publicPort}
+                      onChange={(event) => setPublicPort(event.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="443"
+                      disabled={endpointMode === 'multiaddr'}
+                      className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key name</span>
+                    <input
+                      value={providerKey}
+                      onChange={(event) => setProviderKey(event.target.value)}
+                      placeholder="provider1"
+                      className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Shared provider auth token</span>
+                    <input
+                      value={authToken}
+                      onChange={(event) => setAuthToken(event.target.value)}
+                      placeholder="Paste token for bootstrap command"
+                      type="password"
+                      className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-2 border border-border bg-background/40 p-4 text-sm text-muted-foreground sm:grid-cols-3">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Derived provider endpoint</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{endpointPlan?.providerEndpoint || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{endpointPlan?.publicHealthUrl || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local health</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{LOCAL_HEALTH_URL}</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Verification</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Watch pairing, registration, and public health converge</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    After the provider host runs bootstrap, this page should move from pending pairing to paired provider, then to on-chain registration, then to a healthy public <span className="font-mono">/health</span> probe.
+                  </p>
+                </div>
+                <StatusPill label={publicHealthReady ? 'Healthy' : providerState === 'pending' ? 'In progress' : 'Waiting'} state={providerState} />
+              </div>
+
+              <div className="mt-6 space-y-4 text-sm">
+                <div className="border border-border bg-background/40 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing confirmation</div>
+                      <div className="mt-1 text-foreground">
+                        {confirmedPairing
+                          ? `Confirmed for provider ${confirmedPairing.provider}`
+                          : pairingId
+                            ? 'Waiting for provider host to confirm pairing'
+                            : 'Open pairing first'}
+                      </div>
+                    </div>
+                    <StatusPill label={confirmedPairing ? 'Confirmed' : pairingId ? 'Waiting' : 'Idle'} state={confirmedPairing ? 'ready' : pairingId ? 'pending' : 'idle'} />
+                  </div>
+                </div>
+
+                <div className="border border-border bg-background/40 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain registration</div>
+                      <div className="mt-1 text-foreground">
+                        {providerRecord
+                          ? providerRecord.endpoints?.join(', ') || 'Provider exists without endpoints'
+                          : confirmedPairing
+                            ? 'Pairing confirmed. Waiting for bootstrap to register or update endpoints.'
+                            : 'Registration will appear after pairing confirmation.'}
+                      </div>
+                    </div>
+                    <StatusPill label={providerRecord ? 'Visible' : confirmedPairing ? 'Waiting' : 'Idle'} state={providerRecord ? 'ready' : confirmedPairing ? 'pending' : 'idle'} />
+                  </div>
+                </div>
+
+                <div className="border border-border bg-background/40 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
+                      <div className="mt-1 text-foreground">
+                        {healthProbe.status === 'ok'
+                          ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
+                          : healthProbe.status === 'error'
+                            ? `${healthProbe.base}/health failed: ${healthProbe.error}`
+                            : effectivePublicBase
+                              ? `Polling ${effectivePublicBase}/health`
+                              : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StatusPill
+                        label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Waiting'}
+                        state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'pending'}
+                      />
+                      {effectivePublicBase ? (
+                        <button
+                          type="button"
+                          onClick={() => void probePublicHealth(effectivePublicBase)}
+                          className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${healthProbe.status === 'loading' ? 'animate-spin' : ''}`} /> Probe
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <div className="glass-panel industrial-border p-4 text-sm text-muted-foreground">
-              <div className="font-semibold text-foreground">Endpoint examples</div>
-              <div className="mt-2 space-y-2">
-                <details className="border border-border bg-card px-3 py-2">
-                  <summary className="cursor-pointer font-semibold text-foreground">Home server + Cloudflare Tunnel</summary>
-                  <div className="mt-2 font-mono-data text-xs text-muted-foreground">
-                    PROVIDER_ENDPOINT=/dns4/sp.&lt;domain&gt;/tcp/443/https
+              <div className="mt-5 grid gap-3 border-t border-border/60 pt-5 sm:grid-cols-2">
+                <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                  <div className="font-semibold text-foreground">When pairing is still pending</div>
+                  <div className="mt-2">
+                    The provider host has not confirmed the pairing request yet. Re-copy the bootstrap command if the pairing ID changed, then rerun <span className="font-mono">./scripts/run_devnet_provider.sh bootstrap</span> on the provider host.
                   </div>
-                </details>
-                <details className="border border-border bg-card px-3 py-2">
-                  <summary className="cursor-pointer font-semibold text-foreground">Public VPS (direct HTTPS)</summary>
-                  <div className="mt-2 font-mono-data text-xs text-muted-foreground">
-                    PROVIDER_ENDPOINT=/ip4/&lt;public-ip&gt;/tcp/443/https
+                </div>
+                <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                  <div className="font-semibold text-foreground">When health is failing</div>
+                  <div className="mt-2">
+                    If the provider is on-chain but health is not reachable, check tunnel or TLS configuration, then run the doctor and local health commands from the command rail. The provider-daemon status endpoint exposes richer diagnostics once CORS is in place.
                   </div>
-                </details>
+                </div>
               </div>
-            </div>
-            <div className="glass-panel industrial-border p-4 text-sm text-muted-foreground">
-              <div className="font-semibold text-foreground">Where to verify</div>
-              <div className="mt-2">
-                After bootstrap, open the Provider Console to confirm registration and probe your endpoint.
-              </div>
-              <div className="mt-3">
-                <Link
-                  to="/sp-dashboard"
-                  className="inline-flex items-center gap-2 rounded-none border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open Provider Console
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="glass-panel industrial-border p-6">
-          <h2 className="text-xl font-semibold text-foreground">Download + assets</h2>
-          <div className="mt-4 space-y-3 text-sm">
-            <a
-              href={gatewayDesktopReleaseUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="block glass-panel industrial-border p-4 hover:border-primary/50"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold text-foreground">Gateway Desktop GUI</div>
-                <Download className="h-4 w-4 text-primary" />
-              </div>
-              <p className="mt-1 text-muted-foreground">Recommended for local onboarding, health checks, and diagnostics.</p>
-            </a>
-            <a
-              href={repoRootUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="block glass-panel industrial-border p-4 hover:border-primary/50"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold text-foreground">Repo source + scripts</div>
-                <Terminal className="h-4 w-4 text-primary" />
-              </div>
-              <p className="mt-1 text-muted-foreground">Use scripts for remote/headless provider bootstrap and automation.</p>
-            </a>
-            <a
-              href={devnetPlaybookUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="block glass-panel industrial-border p-4 hover:border-primary/50"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold text-foreground">Multi-provider playbook</div>
-                <ExternalLink className="h-4 w-4 text-primary" />
-              </div>
-              <p className="mt-1 text-muted-foreground">Canonical operator playbook and environment details.</p>
-            </a>
+            </section>
           </div>
 
-          <div className="mt-6 rounded-none border border-primary/30 bg-primary/10 p-4 text-sm text-primary">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4" />
-              <div>
-                Recommended launch posture: <span className="font-mono">home server + Cloudflare Tunnel</span>. A public VPS with direct HTTPS works too if you have a stable endpoint.
+          <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+            <section className="glass-panel industrial-border overflow-hidden">
+              <div className="border-b border-border/60 px-6 py-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Command rail</div>
+                    <h2 className="mt-2 text-2xl font-semibold text-foreground">Bootstrap the provider host</h2>
+                  </div>
+                  <StatusPill label={bootstrapReady ? 'Command ready' : 'Waiting'} state={bootstrapReady ? 'ready' : 'pending'} />
+                </div>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  This is the only server-side action in the happy path. The auth token stays local to this browser session and is never saved here.
+                </p>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="glass-panel industrial-border p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-foreground">Clone + bootstrap</h2>
-            <CopyButton onClick={() => void copyText("Clone + bootstrap", `${cloneScript}\n\n${bootstrapScript}`)} />
-          </div>
-          <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">{cloneScript}</pre>
-          <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">{bootstrapScript}</pre>
-        </div>
+              <div className="space-y-5 px-6 py-5">
+                <div className="grid gap-3 border-b border-border/60 pb-5 text-sm text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Pairing ID</span>
+                    <span className="font-mono-data text-foreground">{pairingId || '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Provider endpoint</span>
+                    <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{endpointPlan?.providerEndpoint || '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Public health</span>
+                    <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{effectivePublicBase ? `${effectivePublicBase}/health` : '—'}</span>
+                  </div>
+                </div>
 
-        <div className="glass-panel industrial-border p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-foreground">Health + download verification</h2>
-            <CopyButton onClick={() => void copyText("Health script", healthCheckScript)} />
-          </div>
-          <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
-            {healthCheckScript}
-          </pre>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <DashboardCta className="inline-flex justify-center" label="Dashboard" to="/dashboard" />
-            <Link
-              to="/sp-dashboard"
-              className="rounded-none border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-            >
-              Open Provider Console
-            </Link>
-          </div>
-        </div>
-      </section>
+                {bootstrapReady ? (
+                  <>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-foreground">Bootstrap command</div>
+                        <CopyButton label="Copy" onClick={() => void handleCopy('Bootstrap command', bootstrapCommand)} />
+                      </div>
+                      <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
+                    </div>
 
-      <section className="mt-8 glass-panel industrial-border p-6">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-foreground">Agent bootstrap brief</h2>
-          <CopyButton onClick={() => void copyText("Agent bootstrap brief", agentBrief)} />
-        </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          If the operator has a coding agent on the provider machine, this is the recommended starting prompt.
-        </p>
-        <pre className="mt-4 overflow-x-auto rounded-none border border-border bg-secondary/20 p-4 text-xs text-muted-foreground">
-          {agentBrief}
-        </pre>
-      </section>
+                    <div className="space-y-3 border-t border-border/60 pt-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-foreground">Verification commands</div>
+                        <CopyButton label="Copy" onClick={() => void handleCopy('Verification commands', healthCommands)} />
+                      </div>
+                      <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{healthCommands}</pre>
+                    </div>
 
-      <section className="mt-8 glass-panel industrial-border p-6">
-        <h2 className="text-xl font-semibold text-foreground">Operational UX model</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className="glass-panel industrial-border p-4">
-            <div className="flex items-center gap-2 font-semibold text-foreground"><Shield className="h-4 w-4 text-accent" /> Healthy</div>
-            <p className="mt-2 text-sm text-muted-foreground">All critical checks pass: chain connectivity, service availability, endpoint reachability, auth compatibility.</p>
-          </div>
-          <div className="glass-panel industrial-border p-4">
-            <div className="flex items-center gap-2 font-semibold text-foreground"><Server className="h-4 w-4 text-primary" /> Degraded</div>
-            <p className="mt-2 text-sm text-muted-foreground">Provider is reachable but drift or partial check failures exist. Review remediation actions before serving production traffic.</p>
-          </div>
-          <div className="glass-panel industrial-border p-4">
-            <div className="flex items-center gap-2 font-semibold text-foreground"><HardDrive className="h-4 w-4 text-destructive" /> Critical</div>
-            <p className="mt-2 text-sm text-muted-foreground">Service down, chain mismatch, auth mismatch, or endpoint failure. Upload/download reliability is blocked until fixed.</p>
-          </div>
-        </div>
-      </section>
+                    <details className="border-t border-border/60 pt-5">
+                      <summary className="cursor-pointer text-sm font-semibold text-foreground">Agent prompt</summary>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Use this when a coding agent is running on the provider host and you want it to execute the bootstrap and repair loop directly.
+                      </p>
+                      <div className="mt-3 flex justify-end">
+                        <CopyButton label="Copy" onClick={() => void handleCopy('Agent prompt', agentPrompt)} />
+                      </div>
+                      <pre className="mt-3 overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{agentPrompt}</pre>
+                    </details>
+                  </>
+                ) : (
+                  <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                    Open pairing and describe the public endpoint to generate the provider bootstrap command.
+                  </div>
+                )}
 
-      {copyStatus ? (
-        <div className="mt-5 rounded-none border border-accent/40 bg-accent/10 px-4 py-2 text-sm text-accent">
-          {copyStatus}
+                <div className="flex flex-wrap gap-3 border-t border-border/60 pt-5">
+                  <Link
+                    to="/sp-dashboard"
+                    className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                  >
+                    <Shield className="h-4 w-4" />
+                    Provider Console
+                  </Link>
+                  <a
+                    href={PROVIDER_PLAYBOOK_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Operator Playbook
+                  </a>
+                  <a
+                    href={REPO_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Repo
+                  </a>
+                </div>
+              </div>
+            </section>
+
+            {copyStatus ? (
+              <div className="border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent">{copyStatus}</div>
+            ) : null}
+          </aside>
         </div>
-      ) : null}
+      </div>
     </div>
-  );
+  )
 }

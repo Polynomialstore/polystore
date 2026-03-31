@@ -100,6 +100,26 @@ export async function lcdFetchPendingProviderPairing(
   return normalizeLcdPendingProviderPairingResponse(json)
 }
 
+export async function lcdFetchLatestHeight(
+  lcdBase: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<number | null> {
+  const res = await fetchFn(`${lcdBase}/cosmos/base/tendermint/v1beta1/blocks/latest`)
+  if (!res.ok) {
+    throw new Error(`LCD latest height returned ${res.status}`)
+  }
+  const json: unknown = await res.json().catch(() => null)
+  const heightValue =
+    typeof json === 'object' &&
+    json !== null &&
+    typeof (json as { block?: { header?: { height?: unknown } } }).block?.header?.height !== 'undefined'
+      ? (json as { block?: { header?: { height?: unknown } } }).block?.header?.height
+      : null
+  const height = Number(heightValue)
+  if (!Number.isFinite(height) || height <= 0) return null
+  return Math.floor(height)
+}
+
 export async function lcdFetchParams(
   lcdBase: string,
   fetchFn: typeof fetch = fetch,
