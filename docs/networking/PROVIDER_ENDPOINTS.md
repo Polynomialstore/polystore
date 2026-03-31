@@ -4,8 +4,8 @@ NilStore providers (SPs) must register at least one reachable **endpoint multiad
 
 This doc defines the two supported endpoint "types" for testnet onboarding:
 
-- `direct` (recommended): provider has an open inbound port (public IP or port-forward).
-- `cloudflare-tunnel` (fallback): provider cannot open inbound ports; expose HTTPS via Cloudflare Tunnel.
+- `cloudflare-tunnel` (recommended for the trusted soft-launch / home-server path): expose HTTPS via Cloudflare Tunnel.
+- `direct` (recommended when you already control stable public ingress): provider has an open inbound port or reverse proxy.
 
 Future (not testnet-blocking):
 
@@ -48,7 +48,7 @@ Environment variables used by the helper:
 - `NIL_CLOUDFLARE_TUNNEL_HOSTNAME`: if set, prints `/dns4/<host>/tcp/443/https` and labels as `cloudflare-tunnel`
 - `NIL_PUBLIC_HTTP_HOST` / `NIL_PUBLIC_HTTP_PORT` / `NIL_PUBLIC_HTTP_SCHEME`: used for `direct` derivation (falls back to `NIL_LISTEN_ADDR`)
 
-## Type: direct (recommended)
+## Type: direct (recommended when public ingress is already available)
 
 Goal: make the provider reachable at `https://sp.example.com` and register:
 
@@ -97,7 +97,7 @@ nilchaind tx nilchain update-provider-endpoints \
   --endpoint "/dns4/sp.example.com/tcp/443/https"
 ```
 
-## Type: cloudflare-tunnel (fallback)
+## Type: cloudflare-tunnel (recommended soft-launch default)
 
 Goal: expose the provider at `https://sp.example.com` without opening inbound ports.
 

@@ -25,6 +25,11 @@ export interface ProviderBootstrapDraft extends ProviderEndpointDraft {
   authToken?: string
 }
 
+export interface ProviderRunbookReadiness {
+  ready: boolean
+  missing: Array<'endpoint' | 'pairing' | 'auth'>
+}
+
 const PROVIDER_BOOTSTRAP_REPO = 'https://github.com/Nil-Store/nil-store.git'
 const DEFAULT_PROVIDER_KEY = 'provider1'
 const DEFAULT_DOMAIN_PORT = 443
@@ -124,7 +129,8 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
     `PROVIDER_KEY=${shellQuote(providerKey)} ./scripts/run_devnet_provider.sh init`,
     '',
     '# 2. If init created a new key, fund the printed nil1 address with aatom before continuing.',
-    '# 3. Bootstrap once the key is funded. Pairing is optional but enables website linking and My Providers:',
+    '# 3. Website-tracked onboarding expects PAIRING_ID and NIL_GATEWAY_SP_AUTH before bootstrap.',
+    '#    For a manual bootstrap without website tracking, use docs/REMOTE_SP_JOIN_QUICKSTART.md.',
   ]
 
   const envLines = [
@@ -143,6 +149,34 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
     '# Canonical public testnet defaults are built in:',
     ...bootstrapLines,
     ...envLines,
+  ].join('\n')
+}
+
+export function evaluateProviderRunbookReadiness(input: {
+  endpointPlan: ProviderEndpointPlan | null
+  pairingId?: string
+  authToken?: string
+}): ProviderRunbookReadiness {
+  const missing: ProviderRunbookReadiness['missing'] = []
+
+  if (!input.endpointPlan) missing.push('endpoint')
+  if (!trimNonEmpty(input.pairingId)) missing.push('pairing')
+  if (!trimNonEmpty(input.authToken)) missing.push('auth')
+
+  return {
+    ready: missing.length === 0,
+    missing,
+  }
+}
+
+export function buildProviderPairCommand(providerKey: string, pairingId: string): string {
+  const normalizedProviderKey = trimNonEmpty(providerKey) || DEFAULT_PROVIDER_KEY
+  const normalizedPairingId = trimNonEmpty(pairingId) || '<pairing-id-from-website>'
+
+  return [
+    `PAIRING_ID=${shellQuote(normalizedPairingId)} \\`,
+    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\`,
+    './scripts/run_devnet_provider.sh pair',
   ].join('\n')
 }
 
@@ -231,7 +265,7 @@ ${providerContext}
 
 Operating mode:
 - This is a guided provider-host run, not a loose advisory chat.
-- Proceed autonomously through repo sync, toolchain checks, provider key setup, funding preflight, bootstrap, and verification.
+- Proceed autonomously through repo sync, toolchain checks, provider key setup, pairing, funding preflight, bootstrap, and verification.
 - Pause only when the operator must supply \`NIL_GATEWAY_SP_AUTH\`, \`PAIRING_ID\`, DNS/Tunnel configuration, or approve an OS/service-manager action.
 - Reuse an existing healthy provider key and registration when possible; do not rotate identity unless the operator explicitly asks.
 
@@ -250,7 +284,10 @@ Your job:
    - fund the printed provider address with gas
    - then run \`./scripts/run_devnet_provider.sh bootstrap\`
    If the key already exists and is funded, \`bootstrap\` may be used directly.
-5. If \`PAIRING_ID\` is present, confirm the pending pairing on-chain during bootstrap before final verification. If the pairing is expired or not open, stop and tell the operator to open a fresh pairing from the website.
+5. The website-managed flow requires a fresh website-opened \`PAIRING_ID\`.
+   - let \`./scripts/run_devnet_provider.sh bootstrap\` confirm pairing on the full happy path, or
+   - run \`./scripts/run_devnet_provider.sh pair\` when you want pairing as a separate manual step.
+   If the pairing is expired, missing, or already bound to a different provider pairing, stop and tell the operator to open a fresh pairing from the website.
 6. Register or update provider endpoints on-chain.
 7. Start the provider-daemon if it is not already running.
 8. Verify:
@@ -260,6 +297,7 @@ Your job:
    - ${publicHealthTarget}
    - LCD provider visibility
    - pairing status when \`PAIRING_ID\` is supplied
+   Browser-side public \`/health\` probing is advisory; rely on CLI/local checks first when diagnosing failures.
 9. If anything fails, inspect logs, repair, and retry until healthy.
 10. Endpoint rotation is update-aware on the current testnet build. Prefer updating endpoints for an existing provider instead of creating a new key, unless the chain explicitly rejects endpoint updates.
 
@@ -274,7 +312,11 @@ At the end, print:
    - \`local_health_ok\`
    - \`public_health_ok\`
    - \`lcd_visible\`
-   - \`provider_daemon_status\`
+   - \`provider_process_running\`
+   - \`provider_registered\`
+   - \`provider_paired\`
+   - \`pending_pairing_open\`
+   - \`sp_auth_present\`
    - \`commands_run\`
    - \`files_changed\`
 2. A short human-readable summary.`
