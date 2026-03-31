@@ -247,6 +247,15 @@ provider_registered() {
   [ "$code" = "200" ]
 }
 
+provider_json() {
+  local addr
+  addr="$(provider_addr)"
+  if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+    return 1
+  fi
+  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/providers/$addr" 2>/dev/null
+}
+
 provider_paired() {
   local addr
   addr="$(provider_addr)"
@@ -258,6 +267,15 @@ provider_paired() {
   [ "$code" = "200" ]
 }
 
+provider_pairing_json() {
+  local addr
+  addr="$(provider_addr)"
+  if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+    return 1
+  fi
+  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/$addr" 2>/dev/null
+}
+
 pending_pairing_exists() {
   if [ -z "$PAIRING_ID" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
@@ -267,11 +285,111 @@ pending_pairing_exists() {
   [ "$code" = "200" ]
 }
 
+pending_pairing_json() {
+  if [ -z "$PAIRING_ID" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+    return 1
+  fi
+  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$PAIRING_ID" 2>/dev/null
+}
+
+json_string_field() {
+  local field="$1"
+  local body="${2:-}"
+  printf '%s' "$body" | tr -d '\n' | sed -n "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n1
+}
+
+json_array_field() {
+  local field="$1"
+  local body="${2:-}"
+  local value
+  value="$(printf '%s' "$body" | tr -d '\n' | sed -n "s/.*\"$field\"[[:space:]]*:[[:space:]]*\\(\\[[^]]*\\]\\).*/\\1/p" | head -n1)"
+  if [ -n "$value" ]; then
+    printf '%s' "$value"
+  else
+    printf '[]'
+  fi
+}
+
+provider_pairing_id() {
+  local body
+  body="$(provider_pairing_json)" || return 1
+  json_string_field "pairing_id" "$body"
+}
+
+provider_pairing_operator() {
+  local body
+  body="$(provider_pairing_json)" || return 1
+  json_string_field "operator" "$body"
+}
+
+pending_pairing_operator() {
+  local body
+  body="$(pending_pairing_json)" || return 1
+  json_string_field "operator" "$body"
+}
+
+provider_registered_endpoints_json() {
+  local body
+  body="$(provider_json)" || {
+    printf '[]'
+    return 0
+  }
+  json_array_field "endpoints" "$body"
+}
+
+local_health_ok() {
+  local local_url
+  local_url="$(provider_local_base_url)"
+  have_cmd curl && curl -fsS --max-time 5 "$local_url/health" >/dev/null 2>&1
+}
+
+public_health_ok() {
+  local public_url
+  public_url="$(provider_public_base_url || true)"
+  [ -n "$public_url" ] && have_cmd curl && curl -fsS --max-time 5 "$public_url/health" >/dev/null 2>&1
+}
+
+provider_pairing_status() {
+  local confirmed_pairing_id confirmed_operator pending_operator
+  confirmed_pairing_id="$(provider_pairing_id || true)"
+  confirmed_operator="$(provider_pairing_operator || true)"
+  pending_operator="$(pending_pairing_operator || true)"
+
+  if [ -n "$PAIRING_ID" ]; then
+    if [ -n "$confirmed_pairing_id" ] && [ "$confirmed_pairing_id" = "$PAIRING_ID" ]; then
+      printf 'confirmed'
+      return 0
+    fi
+    if [ -n "$confirmed_pairing_id" ]; then
+      if [ -n "$pending_operator" ] && [ -n "$confirmed_operator" ] && [ "$pending_operator" != "$confirmed_operator" ]; then
+        printf 'paired-to-different-operator'
+      else
+        printf 'paired-to-different-pairing'
+      fi
+      return 0
+    fi
+    if [ -n "$pending_operator" ]; then
+      printf 'pending'
+      return 0
+    fi
+    printf 'not-open'
+    return 0
+  fi
+
+  if [ -n "$confirmed_pairing_id" ]; then
+    printf 'paired-untracked'
+  else
+    printf 'not-requested'
+  fi
+}
+
 print_config() {
-  local addr local_url public_url pid pid_file
+  local addr local_url public_url pid pid_file registered_endpoints pairing_status
   addr="$(provider_addr)"
   local_url="$(provider_local_base_url)"
   public_url="$(provider_public_base_url || true)"
+  registered_endpoints="$(provider_registered_endpoints_json)"
+  pairing_status="$(provider_pairing_status)"
   pid_file="$(provider_pid_file)"
   pid=""
   if [ -f "$pid_file" ]; then
@@ -291,6 +409,7 @@ print_config() {
   "provider_local_url": "$(json_escape "$local_url")",
   "provider_endpoint": "$(json_escape "$PROVIDER_ENDPOINTS_RAW")",
   "provider_public_url": "$(json_escape "$public_url")",
+  "registered_endpoints": $registered_endpoints,
   "provider_capabilities": "$(json_escape "$PROVIDER_CAPABILITIES")",
   "provider_total_storage": "$(json_escape "$PROVIDER_TOTAL_STORAGE")",
   "nil_home": "$(json_escape "$HOME_DIR")",
@@ -301,6 +420,13 @@ print_config() {
   "go_bin": "$(json_escape "$GO_BIN")",
   "pid_file": "$(json_escape "$pid_file")",
   "pid": "$(json_escape "$pid")",
+  "pairing_status": "$(json_escape "$pairing_status")",
+  "local_health_url": "$(json_escape "$local_url/health")",
+  "public_health_url": "$(json_escape "${public_url:+$public_url/health}")",
+  "local_health_ok": $(local_health_ok && printf 'true' || printf 'false'),
+  "public_health_ok": $(public_health_ok && printf 'true' || printf 'false'),
+  "lcd_visible": $(provider_registered && printf 'true' || printf 'false'),
+  "provider_process_running": $(provider_running && printf 'true' || printf 'false'),
   "provider_running": $(provider_running && printf 'true' || printf 'false'),
   "provider_registered": $(provider_registered && printf 'true' || printf 'false'),
   "provider_paired": $(provider_paired && printf 'true' || printf 'false'),
@@ -359,9 +485,22 @@ doctor_provider() {
   fi
 
   if [ -n "$PAIRING_ID" ]; then
+    local current_pairing_id current_operator requested_operator
+    current_pairing_id="$(provider_pairing_id || true)"
+    current_operator="$(provider_pairing_operator || true)"
+    requested_operator="$(pending_pairing_operator || true)"
     echo "OK: pairing id configured ($PAIRING_ID)"
-    if provider_paired; then
-      echo "OK: provider pairing is confirmed on-chain"
+    if [ -n "$current_pairing_id" ] && [ "$current_pairing_id" = "$PAIRING_ID" ]; then
+      echo "OK: provider pairing is confirmed on-chain for the requested pairing id"
+    elif [ -n "$current_pairing_id" ]; then
+      echo "FAIL: provider is already paired on-chain to a different pairing id ($current_pairing_id)"
+      if [ -n "$current_operator" ]; then
+        echo "  current operator: $current_operator"
+      fi
+      if [ -n "$requested_operator" ]; then
+        echo "  requested operator: $requested_operator"
+      fi
+      failures=$((failures + 1))
     elif pending_pairing_exists; then
       echo "WARN: pairing is still pending on-chain; rerun bootstrap after the website opens pairing"
     else
@@ -537,16 +676,32 @@ confirm_provider_pairing() {
     exit 1
   fi
 
-  local addr
+  local addr current_pairing_id current_operator requested_operator
   addr="$(provider_addr)"
   if [ -z "$addr" ]; then
     echo "ERROR: provider key not found; run: ./scripts/run_devnet_provider.sh init" >&2
     exit 1
   fi
 
-  if provider_paired; then
-    echo "==> Provider is already paired on-chain; skipping confirm."
+  current_pairing_id="$(provider_pairing_id || true)"
+  current_operator="$(provider_pairing_operator || true)"
+  requested_operator="$(pending_pairing_operator || true)"
+
+  if [ -n "$current_pairing_id" ] && [ "$current_pairing_id" = "$PAIRING_ID" ]; then
+    echo "==> Provider is already paired on-chain for the requested pairing id; skipping confirm."
     return 0
+  fi
+
+  if [ -n "$current_pairing_id" ]; then
+    echo "ERROR: provider is already paired on-chain to a different pairing id ($current_pairing_id)" >&2
+    if [ -n "$current_operator" ]; then
+      echo "  current operator: $current_operator" >&2
+    fi
+    if [ -n "$requested_operator" ]; then
+      echo "  requested operator: $requested_operator" >&2
+    fi
+    echo "Use a fresh provider key or unlink the existing pairing before continuing." >&2
+    exit 1
   fi
   if ! pending_pairing_exists; then
     echo "ERROR: pairing id $PAIRING_ID is not open on-chain; open pairing from the website first" >&2

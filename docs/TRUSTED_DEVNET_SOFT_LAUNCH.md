@@ -13,14 +13,14 @@ Related:
 
 - **Hub** runs (either public VPS or home server behind NAT):
   - `nilchaind` (CometBFT RPC + LCD + EVM JSON-RPC)
-  - `nil_gateway` in **router** mode
+  - `user-gateway` (legacy runtime alias: `nil_gateway` in router mode)
   - `nil_faucet` (enabled, rate-limited; collaborator-only)
   - `nil-website` (static build behind HTTPS)
 - **Providers (remote SPs)** run (direct endpoint or Cloudflare Tunnel endpoint):
-  - `nil_gateway` in **provider** mode (one per SP)
+  - `provider-daemon` (legacy runtime alias: `nil_gateway` in provider mode, one per SP)
 - **Users** interact via:
   - Website + MetaMask (wallet-first), or curl for debugging
-  - Optional local Gateway app (`nil_gateway_gui` / `nil_gateway`) on `http://localhost:8080`
+  - Optional local `user-gateway` app (`nil_gateway_gui`, legacy runtime alias `nil_gateway`) on `http://localhost:8080`
 
 Security posture:
 - This is **trusted** and **invite-only** (not Sybil resistant).

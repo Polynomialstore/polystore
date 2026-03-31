@@ -9,6 +9,7 @@ import {
   buildProviderEndpointPlan,
   buildProviderHealthCommands,
   buildProviderPairCommand,
+  evaluateProviderRunbookReadiness,
   findConfirmedProviderPairing,
   findProviderByAddress,
   pairingBlocksRemaining,
@@ -84,6 +85,28 @@ test('buildProviderBootstrapCommand stages init before bootstrap and omits pairi
   assert.match(command, /run_devnet_provider\.sh bootstrap/)
 })
 
+test('evaluateProviderRunbookReadiness requires endpoint, pairing, and auth for website-managed onboarding', () => {
+  const endpointPlan = buildProviderEndpointPlan({
+    hostMode: 'public-vps',
+    endpointMode: 'ipv4',
+    endpointValue: '203.0.113.10',
+    publicPort: 8091,
+  })
+
+  assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan, pairingId: '', authToken: '' }), {
+    ready: false,
+    missing: ['pairing', 'auth'],
+  })
+  assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan: null, pairingId: 'pair-123', authToken: 'secret' }), {
+    ready: false,
+    missing: ['endpoint'],
+  })
+  assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan, pairingId: 'pair-123', authToken: 'secret' }), {
+    ready: true,
+    missing: [],
+  })
+})
+
 test('buildProviderBootstrapCommand includes pairing when supplied', () => {
   const command = buildProviderBootstrapCommand({
     hostMode: 'home-tunnel',
@@ -146,7 +169,10 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
   const nilstorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md')
 
   assert.match(quickstart, /Treat `NIL_GATEWAY_SP_AUTH` as a secret/)
+  assert.match(quickstart, /https:\/\/nilstore\.org\/#\/sp-onboarding/)
   assert.match(remote, /`bootstrap` can run without `PAIRING_ID`/)
+  assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-onboarding/)
+  assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-dashboard/)
   assert.match(remote, /run_devnet_provider\.sh pair/)
   assert.match(endpoints, /update-provider-endpoints/)
   assert.doesNotMatch(endpoints, /Endpoint lists are \*\*not\*\* mutable/)
@@ -167,6 +193,30 @@ test('run_devnet_provider.sh help prints usage without requiring PROVIDER_KEY', 
   assert.match(output, /Usage: \.\/scripts\/run_devnet_provider\.sh/)
   assert.match(output, /pair/)
   assert.match(output, /bootstrap/)
+})
+
+test('provider prompt summary keys are backed by run_devnet_provider print-config fields', () => {
+  const script = readRepoFile('scripts/run_devnet_provider.sh')
+  const requiredKeys = [
+    'provider_address',
+    'pairing_id',
+    'pairing_status',
+    'registered_endpoints',
+    'local_health_url',
+    'public_health_url',
+    'local_health_ok',
+    'public_health_ok',
+    'lcd_visible',
+    'provider_process_running',
+    'provider_registered',
+    'provider_paired',
+    'pending_pairing_open',
+    'sp_auth_present',
+  ]
+
+  for (const key of requiredKeys) {
+    assert.match(script, new RegExp(`"${key}"\\s*:`))
+  }
 })
 
 test('pairing helpers resolve confirmed providers and expiry state', () => {

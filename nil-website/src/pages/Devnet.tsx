@@ -52,7 +52,7 @@ export function Devnet() {
   const joinSnippet = useMemo(() => {
     return [
       '# Website-first provider flow:',
-      '# 1. Open /sp-onboarding, connect the operator wallet, and optionally open pairing.',
+      '# 1. Open https://nilstore.org/#/sp-onboarding, connect the operator wallet, and open pairing.',
       '# 2. On the provider host (repo checked out):',
       'PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init',
       '',
@@ -63,7 +63,7 @@ export function Devnet() {
       'NIL_GATEWAY_SP_AUTH="<shared-from-hub>" \\',
       './scripts/run_devnet_provider.sh bootstrap',
       '',
-      '# Pairing is optional; bootstrap can run without PAIRING_ID if website linking is not needed.',
+      '# Manual bootstrap without pairing is possible, but the website onboarding flow will not track it.',
     ].join('\n')
   }, [])
 
@@ -114,7 +114,7 @@ export function Devnet() {
             Join As A Provider
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Providers should start from the web onboarding flow, then run the staged host bootstrap: init the key, fund it, and only then bootstrap the provider-daemon. The hub operator must share a `NIL_GATEWAY_SP_AUTH` token. User gateways are optional; direct-to-provider flows are supported for browser clients.
+            Providers should start from the web onboarding flow, then run the staged host bootstrap: init the key, fund it, open pairing, and only then bootstrap the provider-daemon. The hub operator must share a `NIL_GATEWAY_SP_AUTH` token. User gateways are optional; direct-to-provider flows are supported for browser clients.
           </p>
           <pre className="mt-4 text-xs bg-secondary/20 border border-border rounded-none p-4 overflow-x-auto text-muted-foreground">
             {joinSnippet}

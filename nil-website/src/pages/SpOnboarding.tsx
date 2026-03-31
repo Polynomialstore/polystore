@@ -32,6 +32,7 @@ import {
   buildProviderEndpointPlan,
   buildProviderHealthCommands,
   buildProviderPairCommand,
+  evaluateProviderRunbookReadiness,
   findConfirmedProviderPairing,
   findProviderByAddress,
   pairingBlocksRemaining,
@@ -245,11 +246,21 @@ export function SpOnboarding() {
   const effectivePublicBase = onchainBases[0] || endpointPlan?.publicBase || null
   const pairingRemainingBlocks = pairingBlocksRemaining(pendingPairing, latestHeight)
   const pairingIsExpired = pairingExpired(pendingPairing, latestHeight)
+  const hasAuthToken = Boolean(authToken.trim())
+  const runbookReadiness = useMemo(
+    () =>
+      evaluateProviderRunbookReadiness({
+        endpointPlan,
+        pairingId,
+        authToken,
+      }),
+    [authToken, endpointPlan, pairingId],
+  )
 
   const walletReady = isConnected && !isWrongNetwork && !needsReconnect
   const funded = hasFunds || faucetTxStatus === 'confirmed'
   const canOpenPairing = walletReady && funded && Boolean(address)
-  const bootstrapReady = Boolean(endpointPlan)
+  const bootstrapReady = runbookReadiness.ready
   const pairingLinked = Boolean(pairingId)
   const pairingConfirmed = Boolean(confirmedPairing)
   const providerRegistered = Boolean(providerRecord)
@@ -422,7 +433,7 @@ export function SpOnboarding() {
         expires_at: String(expiresAt),
         opened_height: String(height),
       })
-      setNotice('Pairing request opened on-chain. Copy the provider host commands now if you want website linking.')
+      setNotice('Pairing request opened on-chain. Copy the provider host commands now and finish the website-managed bootstrap flow.')
       await refreshLiveState()
     } catch (openError) {
       const message = openError instanceof Error ? openError.message : 'Could not open provider pairing'
@@ -467,7 +478,7 @@ export function SpOnboarding() {
               <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">First Healthy Provider</h1>
               <p className="max-w-2xl text-muted-foreground">
                 This is the web-first operator flow for bringing up a NilStore <span className="font-mono">provider-daemon</span>.
-                Describe the provider endpoint, initialize and fund the key, optionally open pairing from the browser,
+                Describe the provider endpoint, initialize and fund the key, open pairing from the browser,
                 then bootstrap and verify registration and public health from the same screen.
               </p>
             </div>
@@ -627,7 +638,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Pairing</div>
                   <h2 className="text-2xl font-semibold text-foreground">Open pairing on-chain from the browser</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Pairing is optional but recommended. Open it when you want the provider host to link back to this operator wallet and appear in <span className="font-mono">My Providers</span>.
+                    Pairing is required for the website-managed onboarding flow on this page. If you want to bootstrap without pairing, use the manual quickstart and verify the provider outside the website first.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -677,7 +688,7 @@ export function SpOnboarding() {
                     </div>
                   ) : (
                     <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
-                      Open pairing once the wallet is connected, on the right chain, and funded if you want website linking and My Providers discovery.
+                      Open pairing once the wallet is connected, on the right chain, and funded. This page does not track unpaired providers.
                     </div>
                   )}
                 </div>
@@ -705,7 +716,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Provider host</div>
                   <h2 className="text-2xl font-semibold text-foreground">Describe the public endpoint and provider-daemon key</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    The provider-host runbook is opinionated: canonical public testnet defaults are built in. You provide the endpoint, provider key, shared provider auth token, and optionally pairing for website linking.
+                    The provider-host runbook is opinionated: canonical public testnet defaults are built in. You provide the endpoint, provider key, and the shared provider auth token from the hub operator. Pairing is required for this website-managed flow.
                   </p>
                 </div>
                 <StatusPill label={endpointPlan ? 'Endpoint ready' : 'Need endpoint'} state={endpointPlan ? 'ready' : 'action'} />
@@ -837,7 +848,7 @@ export function SpOnboarding() {
               </div>
 
               <div className="mt-6 space-y-4 text-sm">
-                <div className="border border-border bg-background/40 p-4">
+                  <div className="border border-border bg-background/40 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing confirmation</div>
@@ -846,7 +857,7 @@ export function SpOnboarding() {
                           ? `Confirmed for provider ${confirmedPairing.provider}`
                           : pairingId
                             ? 'Waiting for provider host to confirm pairing'
-                            : 'Open pairing first'}
+                            : 'Open pairing first; unpaired providers are not tracked on this page'}
                       </div>
                     </div>
                     <StatusPill label={confirmedPairing ? 'Confirmed' : pairingId ? 'Waiting' : 'Idle'} state={confirmedPairing ? 'ready' : pairingId ? 'pending' : 'idle'} />
@@ -862,7 +873,7 @@ export function SpOnboarding() {
                           ? providerRecord.endpoints?.join(', ') || 'Provider exists without endpoints'
                           : confirmedPairing
                             ? 'Pairing confirmed. Waiting for bootstrap to register or update endpoints.'
-                            : 'Registration will appear after pairing confirmation.'}
+                            : 'Website registration tracking starts after pairing confirmation.'}
                       </div>
                     </div>
                     <StatusPill label={providerRecord ? 'Visible' : confirmedPairing ? 'Waiting' : 'Idle'} state={providerRecord ? 'ready' : confirmedPairing ? 'pending' : 'idle'} />
@@ -872,7 +883,7 @@ export function SpOnboarding() {
                 <div className="border border-border bg-background/40 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health (browser probe)</div>
                       <div className="mt-1 text-foreground">
                         {healthProbe.status === 'ok'
                           ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
@@ -912,7 +923,7 @@ export function SpOnboarding() {
                 <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
                   <div className="font-semibold text-foreground">When health is failing</div>
                   <div className="mt-2">
-                    If the provider is on-chain but health is not reachable, check tunnel or TLS configuration, then run the doctor and local health commands from the command rail. The provider-daemon status endpoint exposes richer diagnostics once CORS is in place.
+                    Treat the browser probe as advisory. If the provider is on-chain but health is not reachable here, check tunnel or TLS configuration, then rely on the doctor, verify, and local curl commands from the command rail before assuming the provider itself is down.
                   </div>
                 </div>
               </div>
@@ -935,10 +946,20 @@ export function SpOnboarding() {
               </div>
 
               <div className="space-y-5 px-6 py-5">
+                {!hasAuthToken ? (
+                  <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    Add the shared provider auth token from the hub operator before copying provider host commands.
+                  </div>
+                ) : null}
+                {!pairingLinked ? (
+                  <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                    Open pairing first. This website-managed flow only generates run-ready commands after pairing is opened.
+                  </div>
+                ) : null}
                 <div className="grid gap-3 border-b border-border/60 pb-5 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between gap-3">
                     <span>Pairing ID</span>
-                    <span className="font-mono-data text-foreground">{pairingLinked ? pairingId : 'optional'}</span>
+                    <span className="font-mono-data text-foreground">{pairingLinked ? pairingId : 'required'}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span>Provider endpoint</span>
@@ -991,7 +1012,11 @@ export function SpOnboarding() {
                   </>
                 ) : (
                   <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                    Describe the public endpoint to generate the provider host runbook. Pairing can be added later if you want website linking and My Providers discovery.
+                    {runbookReadiness.missing.includes('endpoint')
+                      ? 'Describe the public endpoint to generate the provider host runbook.'
+                      : runbookReadiness.missing.includes('pairing')
+                        ? 'Open pairing from the browser before this page will generate run-ready provider host commands.'
+                        : 'Add the shared provider auth token from the hub operator before this page will generate run-ready provider host commands.'}
                   </div>
                 )}
 

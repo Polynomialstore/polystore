@@ -24,8 +24,8 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 
 ## Fast path
 
-1. Open the NilStore website and go to `/sp-onboarding`.
-2. Connect the operator wallet. Open pairing if you want website linking and `My Providers`; bootstrap can still run without pairing.
+1. Open the NilStore website and go to `https://nilstore.org/#/sp-onboarding`.
+2. Connect the operator wallet and open pairing. The website-managed flow assumes pairing is part of the happy path.
 3. Clone the repo on the provider machine.
 4. Optional: open your coding agent locally in the repo.
 5. Paste the provider prompt from:
@@ -33,7 +33,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 6. Give the agent:
    - `NIL_GATEWAY_SP_AUTH`
    - your public hostname or multiaddr
-   - `PAIRING_ID` if you opened pairing from the website
+   - `PAIRING_ID` from the website onboarding flow
 7. Let the agent:
    - initialize the provider key if needed
    - fund the printed `nil1...` address before pairing or registration when the key is new
@@ -43,7 +43,9 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
    - local `http://127.0.0.1:8091/health`
    - public `https://sp.<domain>/health` for tunnel / hostname mode, or `http://<ip>:8091/health` for direct IPv4 mode
    - provider appears on `https://lcd.<domain>/nilchain/nilchain/v1/providers`
-   - provider appears in the website `My Providers` dashboard when pairing was supplied
+   - provider appears in the website `My Providers` dashboard at `https://nilstore.org/#/sp-dashboard`
+
+If you deliberately want to bootstrap without pairing, use the manual path in `docs/REMOTE_SP_JOIN_QUICKSTART.md`. Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unpaired provider.
 
 ## Manual references
 
