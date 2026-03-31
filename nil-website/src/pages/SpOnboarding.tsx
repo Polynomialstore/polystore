@@ -174,6 +174,9 @@ function CopyButton({ onClick, label }: { onClick: () => void; label: string }) 
   )
 }
 
+const WALLET_ACCESS_REQUIRED_MESSAGE =
+  'Wallet access is required. If you switched accounts in MetaMask, click Connect Wallet and approve access for the active account.'
+
 export function SpOnboarding() {
   const storedDraft = useMemo(() => loadStoredDraft(), [])
   const { openConnectModal } = useConnectModal()
@@ -287,6 +290,11 @@ export function SpOnboarding() {
 
   const walletReady = isConnected && !isWrongNetwork && !needsReconnect
   const funded = hasFunds || faucetTxStatus === 'confirmed'
+  const walletInlineError =
+    needsReconnect || String(error || '').includes('Wallet access is required.')
+      ? WALLET_ACCESS_REQUIRED_MESSAGE
+      : null
+  const pageError = walletInlineError && error === walletInlineError ? null : error
   const canOpenPairing = walletReady && funded && Boolean(address)
   const bootstrapReady = runbookReadiness.ready
   const pairingLinked = Boolean(pairingId)
@@ -621,11 +629,11 @@ export function SpOnboarding() {
           </div>
         </section>
 
-        {error ? (
+        {pageError ? (
           <div className="mt-6 border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <div className="flex items-start gap-3">
               <AlertCircle className="mt-0.5 h-4 w-4" />
-              <div>{error}</div>
+              <div>{pageError}</div>
             </div>
           </div>
         ) : null}
@@ -653,6 +661,21 @@ export function SpOnboarding() {
                 <StatusPill label={walletReady && funded ? 'Ready' : 'Action needed'} state={walletState} />
               </div>
 
+              {walletInlineError ? (
+                <div className="mt-6 border border-destructive/40 bg-background px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Wallet permission required</div>
+                      <p className="text-sm text-foreground">{walletInlineError}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Reconnect the active MetaMask account in this step before trying pairing or funding again.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="space-y-3 text-sm text-muted-foreground">
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -673,11 +696,6 @@ export function SpOnboarding() {
                       <div className="mt-2 font-mono-data text-foreground">{walletChainId ?? '—'}</div>
                     </div>
                   </div>
-                  {needsReconnect ? (
-                    <div className="border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-                      MetaMask account permissions are stale. Reconnect the wallet before continuing.
-                    </div>
-                  ) : null}
                 </div>
                 <div className="flex min-w-[220px] flex-col gap-2">
                   {!isConnected ? (
