@@ -88,7 +88,7 @@ The application uses Vite for building and handling environment variables. Confi
 *   **Vite (`vite.config.ts`):** Standard React plugin setup.
 *   **TypeScript (`tsconfig.json`):** Strict mode enabled, Target ES2020.
 *   **Tailwind (`tailwind.config.js`):** Configured for CSS variable-based theming (HSL values) with `darkMode: 'class'`.
-*   **WASM (`nil_core`):** `npm run dev` and `npm run build` run `wasm-pack build` via `predev`/`prebuild`, outputting artifacts to `public/wasm/`. This requires `wasm-pack` + a Rust toolchain on the machine/CI runner.
+*   **WASM (`nil_core`):** `npm run dev` first runs `wasm:ensure`, which reuses `public/wasm/` when `nil_core.js` and `nil_core_bg.wasm` are already present and only falls back to `wasm-pack build` when the bundle is missing or `NIL_FORCE_WASM_BUILD=1` is set. `npm run build:full` still performs a fresh `wasm-pack build`. Fresh WASM builds require `wasm-pack` + a Rust toolchain on the machine/CI runner.
 
 ### 1.3 Key Dependencies
 *   **Web3:** `wagmi`, `viem`

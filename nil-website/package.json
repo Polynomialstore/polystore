@@ -6,7 +6,8 @@
   "scripts": {
     "brand:generate": "bash scripts/generate-brand-assets.sh",
     "wasm:build": "command -v wasm-pack >/dev/null 2>&1 || { echo \"wasm-pack not found\"; exit 1; }; cd ../nil_core && wasm-pack build --release --target web --no-opt --out-dir ../nil-website/public/wasm --out-name nil_core && node ../nil-website/scripts/fix-wasm-gitignore.mjs",
-    "predev": "npm run wasm:build",
+    "wasm:ensure": "if [ \"${NIL_FORCE_WASM_BUILD:-0}\" = \"1\" ] || [ ! -f public/wasm/nil_core_bg.wasm ] || [ ! -f public/wasm/nil_core.js ]; then npm run wasm:build; else echo 'Using existing wasm bundle'; fi",
+    "predev": "npm run wasm:ensure",
     "dev": "node scripts/dev.mjs",
     "build": "npm run build:app",
     "build:full": "npm run wasm:build && npm run build:app",
