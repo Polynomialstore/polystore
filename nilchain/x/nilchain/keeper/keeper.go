@@ -32,16 +32,19 @@ type Keeper struct {
 	Proofs     collections.Map[uint64, types.Proof]
 
 	// New collections for Deals and Providers
-	DealCount               collections.Sequence
-	Deals                   collections.Map[uint64, types.Deal]
-	Providers               collections.Map[string, types.Provider] // Key by address string
-	DealProviderStatus      collections.Map[collections.Pair[uint64, string], uint64]
-	DealProviderFailures    collections.Map[collections.Pair[uint64, string], uint64]
-	ProviderRewards         collections.Map[string, math.Int]
-	ReceiptNonces           collections.Map[string, uint64]
-	ReceiptNoncesByDealFile collections.Map[collections.Pair[uint64, string], uint64]
-	EvmNonces               collections.Map[string, uint64]
-	DealHeatStates          collections.Map[uint64, types.DealHeatState]
+	DealCount                  collections.Sequence
+	Deals                      collections.Map[uint64, types.Deal]
+	Providers                  collections.Map[string, types.Provider] // Key by address string
+	DealProviderStatus         collections.Map[collections.Pair[uint64, string], uint64]
+	DealProviderFailures       collections.Map[collections.Pair[uint64, string], uint64]
+	ProviderRewards            collections.Map[string, math.Int]
+	ProviderPairings           collections.Map[string, types.ProviderPairing]
+	ProviderPairingsByOperator collections.Map[collections.Pair[string, string], bool]
+	PendingProviderPairings    collections.Map[string, types.PendingProviderPairing]
+	ReceiptNonces              collections.Map[string, uint64]
+	ReceiptNoncesByDealFile    collections.Map[collections.Pair[uint64, string], uint64]
+	EvmNonces                  collections.Map[string, uint64]
+	DealHeatStates             collections.Map[uint64, types.DealHeatState]
 
 	RetrievalSessions             collections.Map[[]byte, types.RetrievalSession]
 	RetrievalSessionsByOwner      collections.Map[collections.Pair[string, []byte], uint64]
@@ -96,16 +99,19 @@ func NewKeeper(
 		ProofCount: collections.NewSequence(sb, types.ProofCountKey, "proof_count"),
 		Proofs:     collections.NewMap(sb, types.ProofsKey, "proofs", collections.Uint64Key, codec.CollValue[types.Proof](cdc)),
 
-		DealCount:               collections.NewSequence(sb, types.DealCountKey, "deal_count"),
-		Deals:                   collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
-		Providers:               collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
-		DealProviderStatus:      collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
-		DealProviderFailures:    collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
-		ProviderRewards:         collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
-		ReceiptNonces:           collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
-		ReceiptNoncesByDealFile: collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
-		EvmNonces:               collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
-		DealHeatStates:          collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
+		DealCount:                  collections.NewSequence(sb, types.DealCountKey, "deal_count"),
+		Deals:                      collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
+		Providers:                  collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
+		DealProviderStatus:         collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		DealProviderFailures:       collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		ProviderRewards:            collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
+		ProviderPairings:           collections.NewMap(sb, types.ProviderPairingsKey, "provider_pairings", collections.StringKey, codec.CollValue[types.ProviderPairing](cdc)),
+		ProviderPairingsByOperator: collections.NewMap(sb, types.ProviderPairingsByOperatorKey, "provider_pairings_by_operator", collections.PairKeyCodec(collections.StringKey, collections.StringKey), collections.BoolValue),
+		PendingProviderPairings:    collections.NewMap(sb, types.PendingProviderPairingsKey, "pending_provider_pairings", collections.StringKey, codec.CollValue[types.PendingProviderPairing](cdc)),
+		ReceiptNonces:              collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
+		ReceiptNoncesByDealFile:    collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		EvmNonces:                  collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
+		DealHeatStates:             collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
 
 		RetrievalSessions:           collections.NewMap(sb, types.RetrievalSessionsKey, "retrieval_sessions", collections.BytesKey, codec.CollValue[types.RetrievalSession](cdc)),
 		RetrievalSessionsByOwner:    collections.NewMap(sb, types.RetrievalSessionsByOwnerKey, "retrieval_sessions_by_owner", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),

@@ -93,6 +93,81 @@ func CmdUpdateProviderEndpoints() *cobra.Command {
 	return cmd
 }
 
+func CmdOpenProviderPairing() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "open-provider-pairing [pairing-id] [expires-at]",
+		Short: "Open a pending provider pairing for an operator wallet",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			expiresAt, err := strconv.ParseUint(args[1], 10, 64)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgOpenProviderPairing{
+				Creator:   clientCtx.GetFromAddress().String(),
+				PairingId: args[0],
+				ExpiresAt: expiresAt,
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdConfirmProviderPairing() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "confirm-provider-pairing [pairing-id]",
+		Short: "Confirm a pending provider pairing from the provider key",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgConfirmProviderPairing{
+				Creator:   clientCtx.GetFromAddress().String(),
+				PairingId: args[0],
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdUnpairProvider() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "unpair-provider [provider]",
+		Short: "Remove an existing provider/operator pairing",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgUnpairProvider{
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
 func CmdCreateDeal() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create-deal [duration-seconds] [initial-escrow] [max-monthly-spend]",

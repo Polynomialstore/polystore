@@ -108,6 +108,20 @@ message Provider {
   bool draining = 8; // If true, provider will not receive new assignments (see RFC provider exit/draining).
 }
 
+message ProviderPairing {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string operator = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string pairing_id = 3;
+  int64 paired_height = 4;
+}
+
+message PendingProviderPairing {
+  string pairing_id = 1;
+  string operator = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 expires_at = 3;
+  int64 opened_height = 4;
+}
+
 // VirtualStripe tracks overlay replicas for a deal, used for elasticity.
 message VirtualStripe {
   uint64 deal_id = 1;

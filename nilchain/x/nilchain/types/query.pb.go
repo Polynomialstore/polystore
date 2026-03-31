@@ -578,6 +578,272 @@ func (m *QueryGetProviderResponse) GetProvider() *Provider {
 	return nil
 }
 
+type QueryGetProviderPairingRequest struct {
+	Provider string `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+}
+
+func (m *QueryGetProviderPairingRequest) Reset()         { *m = QueryGetProviderPairingRequest{} }
+func (m *QueryGetProviderPairingRequest) String() string { return proto.CompactTextString(m) }
+func (*QueryGetProviderPairingRequest) ProtoMessage()    {}
+func (*QueryGetProviderPairingRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{12}
+}
+func (m *QueryGetProviderPairingRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryGetProviderPairingRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryGetProviderPairingRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryGetProviderPairingRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryGetProviderPairingRequest.Merge(m, src)
+}
+func (m *QueryGetProviderPairingRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryGetProviderPairingRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryGetProviderPairingRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryGetProviderPairingRequest proto.InternalMessageInfo
+
+func (m *QueryGetProviderPairingRequest) GetProvider() string {
+	if m != nil {
+		return m.Provider
+	}
+	return ""
+}
+
+type QueryGetProviderPairingResponse struct {
+	Pairing ProviderPairing `protobuf:"bytes,1,opt,name=pairing,proto3" json:"pairing"`
+}
+
+func (m *QueryGetProviderPairingResponse) Reset()         { *m = QueryGetProviderPairingResponse{} }
+func (m *QueryGetProviderPairingResponse) String() string { return proto.CompactTextString(m) }
+func (*QueryGetProviderPairingResponse) ProtoMessage()    {}
+func (*QueryGetProviderPairingResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{13}
+}
+func (m *QueryGetProviderPairingResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryGetProviderPairingResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryGetProviderPairingResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryGetProviderPairingResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryGetProviderPairingResponse.Merge(m, src)
+}
+func (m *QueryGetProviderPairingResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryGetProviderPairingResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryGetProviderPairingResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryGetProviderPairingResponse proto.InternalMessageInfo
+
+func (m *QueryGetProviderPairingResponse) GetPairing() ProviderPairing {
+	if m != nil {
+		return m.Pairing
+	}
+	return ProviderPairing{}
+}
+
+type QueryListProvidersByOperatorRequest struct {
+	Operator string `protobuf:"bytes,1,opt,name=operator,proto3" json:"operator,omitempty"`
+}
+
+func (m *QueryListProvidersByOperatorRequest) Reset()         { *m = QueryListProvidersByOperatorRequest{} }
+func (m *QueryListProvidersByOperatorRequest) String() string { return proto.CompactTextString(m) }
+func (*QueryListProvidersByOperatorRequest) ProtoMessage()    {}
+func (*QueryListProvidersByOperatorRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{14}
+}
+func (m *QueryListProvidersByOperatorRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryListProvidersByOperatorRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryListProvidersByOperatorRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryListProvidersByOperatorRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryListProvidersByOperatorRequest.Merge(m, src)
+}
+func (m *QueryListProvidersByOperatorRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryListProvidersByOperatorRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryListProvidersByOperatorRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryListProvidersByOperatorRequest proto.InternalMessageInfo
+
+func (m *QueryListProvidersByOperatorRequest) GetOperator() string {
+	if m != nil {
+		return m.Operator
+	}
+	return ""
+}
+
+type QueryListProvidersByOperatorResponse struct {
+	Pairings []ProviderPairing `protobuf:"bytes,1,rep,name=pairings,proto3" json:"pairings"`
+}
+
+func (m *QueryListProvidersByOperatorResponse) Reset()         { *m = QueryListProvidersByOperatorResponse{} }
+func (m *QueryListProvidersByOperatorResponse) String() string { return proto.CompactTextString(m) }
+func (*QueryListProvidersByOperatorResponse) ProtoMessage()    {}
+func (*QueryListProvidersByOperatorResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{15}
+}
+func (m *QueryListProvidersByOperatorResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryListProvidersByOperatorResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryListProvidersByOperatorResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryListProvidersByOperatorResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryListProvidersByOperatorResponse.Merge(m, src)
+}
+func (m *QueryListProvidersByOperatorResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryListProvidersByOperatorResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryListProvidersByOperatorResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryListProvidersByOperatorResponse proto.InternalMessageInfo
+
+func (m *QueryListProvidersByOperatorResponse) GetPairings() []ProviderPairing {
+	if m != nil {
+		return m.Pairings
+	}
+	return nil
+}
+
+type QueryGetPendingProviderPairingRequest struct {
+	PairingId string `protobuf:"bytes,1,opt,name=pairing_id,json=pairingId,proto3" json:"pairing_id,omitempty"`
+}
+
+func (m *QueryGetPendingProviderPairingRequest) Reset()         { *m = QueryGetPendingProviderPairingRequest{} }
+func (m *QueryGetPendingProviderPairingRequest) String() string { return proto.CompactTextString(m) }
+func (*QueryGetPendingProviderPairingRequest) ProtoMessage()    {}
+func (*QueryGetPendingProviderPairingRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{16}
+}
+func (m *QueryGetPendingProviderPairingRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryGetPendingProviderPairingRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryGetPendingProviderPairingRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryGetPendingProviderPairingRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryGetPendingProviderPairingRequest.Merge(m, src)
+}
+func (m *QueryGetPendingProviderPairingRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryGetPendingProviderPairingRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryGetPendingProviderPairingRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryGetPendingProviderPairingRequest proto.InternalMessageInfo
+
+func (m *QueryGetPendingProviderPairingRequest) GetPairingId() string {
+	if m != nil {
+		return m.PairingId
+	}
+	return ""
+}
+
+type QueryGetPendingProviderPairingResponse struct {
+	Pairing PendingProviderPairing `protobuf:"bytes,1,opt,name=pairing,proto3" json:"pairing"`
+}
+
+func (m *QueryGetPendingProviderPairingResponse) Reset() {
+	*m = QueryGetPendingProviderPairingResponse{}
+}
+func (m *QueryGetPendingProviderPairingResponse) String() string { return proto.CompactTextString(m) }
+func (*QueryGetPendingProviderPairingResponse) ProtoMessage()    {}
+func (*QueryGetPendingProviderPairingResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{17}
+}
+func (m *QueryGetPendingProviderPairingResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryGetPendingProviderPairingResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryGetPendingProviderPairingResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryGetPendingProviderPairingResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryGetPendingProviderPairingResponse.Merge(m, src)
+}
+func (m *QueryGetPendingProviderPairingResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryGetPendingProviderPairingResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryGetPendingProviderPairingResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryGetPendingProviderPairingResponse proto.InternalMessageInfo
+
+func (m *QueryGetPendingProviderPairingResponse) GetPairing() PendingProviderPairing {
+	if m != nil {
+		return m.Pairing
+	}
+	return PendingProviderPairing{}
+}
+
 type QueryGetDealHeatRequest struct {
 	DealId uint64 `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
 }
@@ -586,7 +852,7 @@ func (m *QueryGetDealHeatRequest) Reset()         { *m = QueryGetDealHeatRequest
 func (m *QueryGetDealHeatRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryGetDealHeatRequest) ProtoMessage()    {}
 func (*QueryGetDealHeatRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{12}
+	return fileDescriptor_02e1757e30754457, []int{18}
 }
 func (m *QueryGetDealHeatRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -630,7 +896,7 @@ func (m *QueryGetDealHeatResponse) Reset()         { *m = QueryGetDealHeatRespon
 func (m *QueryGetDealHeatResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryGetDealHeatResponse) ProtoMessage()    {}
 func (*QueryGetDealHeatResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{13}
+	return fileDescriptor_02e1757e30754457, []int{19}
 }
 func (m *QueryGetDealHeatResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -675,7 +941,7 @@ func (m *QueryGetReceiptNonceRequest) Reset()         { *m = QueryGetReceiptNonc
 func (m *QueryGetReceiptNonceRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryGetReceiptNonceRequest) ProtoMessage()    {}
 func (*QueryGetReceiptNonceRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{14}
+	return fileDescriptor_02e1757e30754457, []int{20}
 }
 func (m *QueryGetReceiptNonceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -726,7 +992,7 @@ func (m *QueryGetReceiptNonceResponse) Reset()         { *m = QueryGetReceiptNon
 func (m *QueryGetReceiptNonceResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryGetReceiptNonceResponse) ProtoMessage()    {}
 func (*QueryGetReceiptNonceResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{15}
+	return fileDescriptor_02e1757e30754457, []int{21}
 }
 func (m *QueryGetReceiptNonceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -770,7 +1036,7 @@ func (m *QueryGetRetrievalSessionRequest) Reset()         { *m = QueryGetRetriev
 func (m *QueryGetRetrievalSessionRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryGetRetrievalSessionRequest) ProtoMessage()    {}
 func (*QueryGetRetrievalSessionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{16}
+	return fileDescriptor_02e1757e30754457, []int{22}
 }
 func (m *QueryGetRetrievalSessionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -814,7 +1080,7 @@ func (m *QueryGetRetrievalSessionResponse) Reset()         { *m = QueryGetRetrie
 func (m *QueryGetRetrievalSessionResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryGetRetrievalSessionResponse) ProtoMessage()    {}
 func (*QueryGetRetrievalSessionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{17}
+	return fileDescriptor_02e1757e30754457, []int{23}
 }
 func (m *QueryGetRetrievalSessionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -861,7 +1127,7 @@ func (m *QueryListRetrievalSessionsByOwnerRequest) Reset() {
 func (m *QueryListRetrievalSessionsByOwnerRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryListRetrievalSessionsByOwnerRequest) ProtoMessage()    {}
 func (*QueryListRetrievalSessionsByOwnerRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{18}
+	return fileDescriptor_02e1757e30754457, []int{24}
 }
 func (m *QueryListRetrievalSessionsByOwnerRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -917,7 +1183,7 @@ func (m *QueryListRetrievalSessionsByOwnerResponse) String() string {
 }
 func (*QueryListRetrievalSessionsByOwnerResponse) ProtoMessage() {}
 func (*QueryListRetrievalSessionsByOwnerResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{19}
+	return fileDescriptor_02e1757e30754457, []int{25}
 }
 func (m *QueryListRetrievalSessionsByOwnerResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -973,7 +1239,7 @@ func (m *QueryListRetrievalSessionsByProviderRequest) String() string {
 }
 func (*QueryListRetrievalSessionsByProviderRequest) ProtoMessage() {}
 func (*QueryListRetrievalSessionsByProviderRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{20}
+	return fileDescriptor_02e1757e30754457, []int{26}
 }
 func (m *QueryListRetrievalSessionsByProviderRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1029,7 +1295,7 @@ func (m *QueryListRetrievalSessionsByProviderResponse) String() string {
 }
 func (*QueryListRetrievalSessionsByProviderResponse) ProtoMessage() {}
 func (*QueryListRetrievalSessionsByProviderResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{21}
+	return fileDescriptor_02e1757e30754457, []int{27}
 }
 func (m *QueryListRetrievalSessionsByProviderResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1085,6 +1351,12 @@ func init() {
 	proto.RegisterType((*QueryListProvidersResponse)(nil), "nilchain.nilchain.v1.QueryListProvidersResponse")
 	proto.RegisterType((*QueryGetProviderRequest)(nil), "nilchain.nilchain.v1.QueryGetProviderRequest")
 	proto.RegisterType((*QueryGetProviderResponse)(nil), "nilchain.nilchain.v1.QueryGetProviderResponse")
+	proto.RegisterType((*QueryGetProviderPairingRequest)(nil), "nilchain.nilchain.v1.QueryGetProviderPairingRequest")
+	proto.RegisterType((*QueryGetProviderPairingResponse)(nil), "nilchain.nilchain.v1.QueryGetProviderPairingResponse")
+	proto.RegisterType((*QueryListProvidersByOperatorRequest)(nil), "nilchain.nilchain.v1.QueryListProvidersByOperatorRequest")
+	proto.RegisterType((*QueryListProvidersByOperatorResponse)(nil), "nilchain.nilchain.v1.QueryListProvidersByOperatorResponse")
+	proto.RegisterType((*QueryGetPendingProviderPairingRequest)(nil), "nilchain.nilchain.v1.QueryGetPendingProviderPairingRequest")
+	proto.RegisterType((*QueryGetPendingProviderPairingResponse)(nil), "nilchain.nilchain.v1.QueryGetPendingProviderPairingResponse")
 	proto.RegisterType((*QueryGetDealHeatRequest)(nil), "nilchain.nilchain.v1.QueryGetDealHeatRequest")
 	proto.RegisterType((*QueryGetDealHeatResponse)(nil), "nilchain.nilchain.v1.QueryGetDealHeatResponse")
 	proto.RegisterType((*QueryGetReceiptNonceRequest)(nil), "nilchain.nilchain.v1.QueryGetReceiptNonceRequest")
@@ -1100,79 +1372,94 @@ func init() {
 func init() { proto.RegisterFile("nilchain/nilchain/v1/query.proto", fileDescriptor_02e1757e30754457) }
 
 var fileDescriptor_02e1757e30754457 = []byte{
-	// 1152 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x98, 0xcf, 0x6f, 0xe3, 0x44,
-	0x14, 0xc7, 0x3b, 0xa5, 0xbf, 0xf2, 0x0a, 0x8b, 0x98, 0x2d, 0x6c, 0xd7, 0x6d, 0xd3, 0xae, 0x17,
-	0xd8, 0xf4, 0x47, 0xec, 0x4d, 0xaa, 0x82, 0x60, 0x29, 0xa5, 0x11, 0x6a, 0x77, 0x25, 0x04, 0xc5,
-	0x95, 0x56, 0x82, 0x4b, 0x99, 0x26, 0xb3, 0xa9, 0x51, 0x6a, 0x7b, 0x63, 0x6f, 0xa0, 0x8a, 0x72,
-	0x81, 0x0b, 0x82, 0x03, 0xa0, 0x15, 0x27, 0x0e, 0x20, 0x71, 0xe1, 0xc8, 0x85, 0x2b, 0x12, 0xe2,
-	0xb2, 0xc7, 0x95, 0xb8, 0x70, 0x42, 0xa8, 0x45, 0xe2, 0x8c, 0xc4, 0x1f, 0x80, 0x3c, 0x7e, 0xb6,
-	0x13, 0xd7, 0xb1, 0x9d, 0x25, 0x07, 0x2e, 0xed, 0x78, 0xf2, 0xde, 0x9b, 0xcf, 0xf7, 0xcd, 0x3c,
-	0xcf, 0x93, 0x61, 0xc9, 0xd0, 0x1b, 0xd5, 0x23, 0xa6, 0x1b, 0x6a, 0x30, 0x68, 0x95, 0xd4, 0xbb,
-	0xf7, 0x78, 0xf3, 0x44, 0xb1, 0x9a, 0xa6, 0x63, 0xd2, 0x19, 0xff, 0x07, 0x25, 0x18, 0xb4, 0x4a,
-	0xd2, 0x53, 0xec, 0x58, 0x37, 0x4c, 0x55, 0xfc, 0xf5, 0x0c, 0xa5, 0x99, 0xba, 0x59, 0x37, 0xc5,
-	0x50, 0x75, 0x47, 0x38, 0x3b, 0x5f, 0x37, 0xcd, 0x7a, 0x83, 0xab, 0xcc, 0xd2, 0x55, 0x66, 0x18,
-	0xa6, 0xc3, 0x1c, 0xdd, 0x34, 0x6c, 0xfc, 0x75, 0xa5, 0x6a, 0xda, 0xc7, 0xa6, 0xad, 0x1e, 0x32,
-	0x9b, 0x7b, 0xab, 0xaa, 0xad, 0xd2, 0x21, 0x77, 0x58, 0x49, 0xb5, 0x58, 0x5d, 0x37, 0x84, 0x31,
-	0xda, 0x5e, 0x89, 0x45, 0xb5, 0x58, 0x93, 0x1d, 0xfb, 0xe1, 0xe2, 0xd5, 0x58, 0x4d, 0xd3, 0xbc,
-	0x93, 0x68, 0xe1, 0x9c, 0x58, 0x1c, 0x63, 0xc8, 0x33, 0x40, 0xdf, 0x76, 0x41, 0xf6, 0x44, 0x60,
-	0x8d, 0xdf, 0xbd, 0xc7, 0x6d, 0x47, 0xbe, 0x0d, 0x17, 0x7b, 0x66, 0x6d, 0xcb, 0x34, 0x6c, 0x4e,
-	0xb7, 0x60, 0xc2, 0x03, 0x98, 0x25, 0x4b, 0xa4, 0x30, 0x5d, 0x9e, 0x57, 0xe2, 0xb2, 0xa5, 0x78,
-	0x5e, 0x95, 0xdc, 0x83, 0xdf, 0x17, 0x47, 0xbe, 0xff, 0xeb, 0x87, 0x15, 0xa2, 0xa1, 0x9b, 0xfc,
-	0x1e, 0x3c, 0x23, 0xe2, 0xbe, 0xa1, 0xdb, 0xce, 0x9e, 0xcb, 0xe9, 0xaf, 0x48, 0x77, 0x00, 0xc2,
-	0x14, 0x60, 0xf8, 0xe7, 0x15, 0x2f, 0x5f, 0x8a, 0x9b, 0x2f, 0xc5, 0xdb, 0x25, 0xcc, 0x97, 0xb2,
-	0xc7, 0xea, 0x1c, 0x7d, 0xb5, 0x2e, 0x4f, 0xf9, 0x2b, 0x02, 0x97, 0xce, 0x2d, 0x81, 0xf8, 0x25,
-	0x18, 0x17, 0xc9, 0x99, 0x25, 0x4b, 0x8f, 0x15, 0xa6, 0xcb, 0x73, 0x7d, 0xe8, 0x5d, 0x13, 0xcd,
-	0xb3, 0xa4, 0xbb, 0x3d, 0x58, 0xa3, 0x02, 0xeb, 0x5a, 0x2a, 0x96, 0xb7, 0x5e, 0x0f, 0xd7, 0x01,
-	0x3c, 0x1d, 0x60, 0xbd, 0xce, 0x59, 0x63, 0xe8, 0xc2, 0xef, 0x93, 0xae, 0xdc, 0xe2, 0x0a, 0xa8,
-	0xfb, 0x3a, 0x8c, 0xd7, 0xdc, 0x09, 0xd4, 0x2d, 0xc5, 0xeb, 0x76, 0x7d, 0x34, 0xcf, 0x70, 0x78,
-	0xb2, 0x9f, 0xc3, 0x83, 0xb4, 0xcb, 0x05, 0x93, 0x2f, 0xfa, 0x02, 0x8c, 0xea, 0x35, 0x21, 0x76,
-	0x4c, 0x1b, 0xd5, 0x6b, 0xf2, 0x0e, 0xcc, 0xf4, 0x9a, 0x21, 0xb9, 0x02, 0x63, 0x2e, 0x10, 0xa6,
-	0x25, 0x09, 0x5c, 0xd8, 0xc9, 0x55, 0xb8, 0xdc, 0xbd, 0xf9, 0x2d, 0xbd, 0xc6, 0x9b, 0x43, 0xcf,
-	0xf4, 0x77, 0x04, 0xa4, 0xb8, 0x55, 0x90, 0xf9, 0x15, 0xc8, 0x59, 0xfe, 0x24, 0x66, 0x3c, 0xdf,
-	0xf7, 0xa4, 0x09, 0x33, 0x2d, 0x74, 0x18, 0x5e, 0xe6, 0xd7, 0xb1, 0x0e, 0x76, 0x79, 0xc0, 0xe8,
-	0x27, 0x62, 0x16, 0x26, 0x59, 0xad, 0xd6, 0xe4, 0xb6, 0x57, 0xc7, 0x39, 0xcd, 0x7f, 0x94, 0x6f,
-	0xc3, 0xec, 0x79, 0x27, 0xd4, 0xf5, 0x32, 0x4c, 0xf9, 0x98, 0x98, 0xbc, 0x34, 0x59, 0x81, 0xbd,
-	0x5c, 0x0e, 0x61, 0xdc, 0xdd, 0xba, 0xc9, 0x99, 0xe3, 0xc3, 0x5c, 0x82, 0x49, 0x77, 0xeb, 0x0e,
-	0x82, 0xf3, 0x30, 0xe1, 0x3e, 0xde, 0xaa, 0xc9, 0xef, 0x84, 0x2c, 0xa1, 0x0f, 0xb2, 0x6c, 0xc2,
-	0xd8, 0x11, 0x67, 0x0e, 0x72, 0x5c, 0xed, 0x7f, 0x2e, 0x5c, 0xaf, 0x7d, 0x87, 0x39, 0xbc, 0x32,
-	0xe6, 0xbe, 0x8d, 0x34, 0xe1, 0x26, 0xef, 0xc3, 0x9c, 0x1f, 0x5a, 0xe3, 0x55, 0xae, 0x5b, 0xce,
-	0x9b, 0xa6, 0x51, 0xe5, 0x69, 0x48, 0x74, 0x0e, 0x72, 0x77, 0xf4, 0x06, 0x3f, 0xb0, 0x98, 0x73,
-	0x24, 0xf6, 0x26, 0xa7, 0x4d, 0xb9, 0x13, 0x7b, 0xcc, 0x39, 0x92, 0x37, 0x61, 0x3e, 0x3e, 0x28,
-	0x32, 0x2f, 0x00, 0x34, 0x98, 0xed, 0x1c, 0x18, 0xee, 0x2c, 0x06, 0xce, 0xb9, 0x33, 0xc2, 0x4c,
-	0x7e, 0x0d, 0x16, 0x43, 0x77, 0xa7, 0xa9, 0xf3, 0x16, 0x6b, 0xec, 0x73, 0xdb, 0xd6, 0x4d, 0xc3,
-	0xe7, 0x5a, 0x00, 0xb0, 0xbd, 0x19, 0x1f, 0xed, 0x71, 0x2d, 0x87, 0x33, 0xb7, 0x6a, 0xf2, 0xfb,
-	0xb0, 0xd4, 0x3f, 0x02, 0x42, 0xec, 0xc0, 0x24, 0x3a, 0x04, 0x05, 0x10, 0x9b, 0xbb, 0x68, 0x00,
-	0x4c, 0x9f, 0xef, 0x2c, 0x7f, 0x42, 0xa0, 0x10, 0xd4, 0x40, 0xd4, 0xd8, 0xae, 0x9c, 0xbc, 0xf5,
-	0x81, 0x11, 0x9e, 0xb7, 0x19, 0x18, 0x37, 0xdd, 0x67, 0x3c, 0x6d, 0xde, 0x43, 0xa4, 0x1c, 0x47,
-	0x1f, 0xb9, 0x1c, 0x7f, 0x22, 0xb0, 0x9c, 0x01, 0x05, 0x13, 0x70, 0x13, 0xa6, 0x50, 0x83, 0x5f,
-	0x9c, 0x83, 0x65, 0x20, 0xf0, 0x1e, 0x5e, 0xa5, 0x7e, 0x49, 0x60, 0x35, 0x49, 0x40, 0xb4, 0x7c,
-	0xa5, 0x48, 0x21, 0xe6, 0xc2, 0x42, 0x1b, 0x5a, 0x52, 0x7f, 0x26, 0xb0, 0x96, 0x8d, 0xe9, 0x7f,
-	0x9b, 0xd7, 0xf2, 0x3f, 0x17, 0x60, 0x5c, 0x68, 0xa0, 0x1f, 0x13, 0x98, 0xf0, 0x9a, 0x12, 0x5a,
-	0x88, 0xa7, 0x3a, 0xdf, 0x03, 0x49, 0xcb, 0x19, 0x2c, 0xbd, 0x55, 0xe5, 0x67, 0x3f, 0xfa, 0xf5,
-	0xcf, 0xfb, 0xa3, 0x79, 0x3a, 0xaf, 0x26, 0x34, 0x6d, 0xf4, 0x73, 0x02, 0x10, 0x76, 0x25, 0x74,
-	0x2d, 0x21, 0xfe, 0xb9, 0xfe, 0x48, 0x2a, 0x66, 0xb4, 0xce, 0x48, 0xe4, 0x21, 0x7c, 0x46, 0x20,
-	0x17, 0xb4, 0x0b, 0x74, 0x35, 0x65, 0x89, 0xee, 0xb6, 0x45, 0x5a, 0xcb, 0x66, 0x8c, 0x38, 0x57,
-	0x05, 0xce, 0x02, 0x9d, 0x8b, 0xc7, 0xf1, 0x9a, 0x8e, 0x4f, 0x09, 0x4c, 0xe2, 0xcb, 0x9e, 0x26,
-	0x25, 0xbf, 0xb7, 0x97, 0x90, 0x56, 0xb2, 0x98, 0x22, 0x47, 0x41, 0x70, 0xc8, 0x74, 0x29, 0x81,
-	0x43, 0x6d, 0xeb, 0xb5, 0x0e, 0xfd, 0x9a, 0xc0, 0x13, 0x3d, 0xf7, 0x3b, 0x55, 0xd3, 0x77, 0xa0,
-	0xa7, 0xdf, 0x90, 0xae, 0x67, 0x77, 0x40, 0xbc, 0x6b, 0x02, 0xef, 0x0a, 0x5d, 0xec, 0xbb, 0x6b,
-	0xc8, 0xf2, 0x0d, 0x81, 0xe9, 0xae, 0x3b, 0x9a, 0x16, 0x93, 0x73, 0x10, 0x79, 0x83, 0x48, 0x4a,
-	0x56, 0x73, 0xe4, 0x2a, 0x09, 0xae, 0x55, 0xba, 0x9c, 0xc2, 0xa5, 0xb6, 0xb1, 0x91, 0xe8, 0xd0,
-	0x6f, 0x3d, 0x42, 0xff, 0x0e, 0x4e, 0x23, 0x8c, 0x74, 0x05, 0x69, 0x84, 0xd1, 0x86, 0x40, 0x2e,
-	0x0b, 0xc2, 0x35, 0xba, 0x92, 0xb8, 0xb1, 0x78, 0xab, 0x77, 0x54, 0xb7, 0x0b, 0xa0, 0x3f, 0x12,
-	0x78, 0x32, 0x72, 0x59, 0xd3, 0x52, 0xf2, 0xba, 0x31, 0xdd, 0x82, 0x54, 0x1e, 0xc4, 0x05, 0x71,
-	0x6f, 0x08, 0xdc, 0x0d, 0xba, 0x9e, 0x0d, 0xb7, 0xe9, 0xc5, 0x28, 0x8a, 0xd6, 0x81, 0xfe, 0x42,
-	0xe0, 0x62, 0xcc, 0x1d, 0x4f, 0x37, 0xd2, 0x40, 0x62, 0xbb, 0x0a, 0xe9, 0x85, 0x41, 0xdd, 0x50,
-	0xc3, 0xa6, 0xd0, 0xf0, 0x22, 0xdd, 0x88, 0xd7, 0xd0, 0xf4, 0xfd, 0x8a, 0xfe, 0x9b, 0x5d, 0x6d,
-	0x87, 0xdd, 0x4b, 0x87, 0x9e, 0x12, 0x98, 0x4f, 0xba, 0xb1, 0xe9, 0xab, 0x29, 0xe5, 0x93, 0xd2,
-	0x75, 0x48, 0x5b, 0x8f, 0xec, 0x8f, 0x02, 0xb7, 0x85, 0xc0, 0x1b, 0xf4, 0xa5, 0xcc, 0x02, 0x0f,
-	0x4f, 0x8a, 0xa2, 0xb7, 0x51, 0xdb, 0xe2, 0x5f, 0x87, 0xfe, 0x4d, 0x60, 0x31, 0xe5, 0x06, 0xa5,
-	0xdb, 0x83, 0x73, 0x46, 0xeb, 0xb9, 0xf2, 0x5f, 0x42, 0xa0, 0xda, 0x5d, 0xa1, 0x76, 0x9b, 0x6e,
-	0x0d, 0xa2, 0xd6, 0xaf, 0x7c, 0xb5, 0xed, 0x8f, 0x3a, 0x95, 0xf5, 0x07, 0xa7, 0x79, 0xf2, 0xf0,
-	0x34, 0x4f, 0xfe, 0x38, 0xcd, 0x93, 0x2f, 0xce, 0xf2, 0x23, 0x0f, 0xcf, 0xf2, 0x23, 0xbf, 0x9d,
-	0xe5, 0x47, 0xde, 0xbd, 0x1c, 0x04, 0xfc, 0x30, 0x8c, 0x2d, 0x3e, 0x46, 0x1c, 0x4e, 0x88, 0xaf,
-	0x11, 0xeb, 0xff, 0x06, 0x00, 0x00, 0xff, 0xff, 0x30, 0x4e, 0xbc, 0xed, 0xa1, 0x11, 0x00, 0x00,
+	// 1379 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x98, 0xcb, 0x6f, 0x1b, 0xd5,
+	0x17, 0xc7, 0x73, 0xf3, 0xcb, 0xcb, 0xa7, 0x3f, 0x40, 0xdc, 0x06, 0x9a, 0x4e, 0x52, 0x27, 0x9d,
+	0xbe, 0xd2, 0x34, 0xf6, 0xd4, 0x4e, 0x03, 0x6a, 0xf3, 0x6a, 0xa2, 0x92, 0x34, 0x52, 0x05, 0x61,
+	0x22, 0x55, 0x82, 0x4d, 0x98, 0xc4, 0xb7, 0xce, 0x20, 0x67, 0x66, 0x3a, 0x33, 0x35, 0x44, 0x96,
+	0x37, 0xb0, 0x41, 0xb0, 0x00, 0x54, 0xb1, 0x62, 0x01, 0x12, 0x1b, 0x96, 0x6c, 0x58, 0x82, 0x84,
+	0xd8, 0x74, 0x59, 0x89, 0x4d, 0x17, 0x08, 0xa1, 0x04, 0x89, 0x1d, 0x12, 0xff, 0x01, 0x9a, 0x3b,
+	0xe7, 0x8e, 0xed, 0xf1, 0x78, 0x66, 0x1c, 0xbc, 0x60, 0x93, 0xcc, 0x5c, 0x9f, 0x73, 0xee, 0xe7,
+	0x9c, 0x7b, 0xcf, 0xf1, 0x57, 0x86, 0x29, 0x43, 0xaf, 0xec, 0xed, 0x6b, 0xba, 0xa1, 0x04, 0x0f,
+	0xd5, 0x82, 0xf2, 0xf0, 0x11, 0xb3, 0x0f, 0xf3, 0x96, 0x6d, 0xba, 0x26, 0x1d, 0x15, 0x1f, 0xe4,
+	0x83, 0x87, 0x6a, 0x41, 0x7a, 0x51, 0x3b, 0xd0, 0x0d, 0x53, 0xe1, 0x7f, 0x7d, 0x43, 0x69, 0xb4,
+	0x6c, 0x96, 0x4d, 0xfe, 0xa8, 0x78, 0x4f, 0xb8, 0x3a, 0x51, 0x36, 0xcd, 0x72, 0x85, 0x29, 0x9a,
+	0xa5, 0x2b, 0x9a, 0x61, 0x98, 0xae, 0xe6, 0xea, 0xa6, 0xe1, 0xe0, 0xa7, 0x33, 0x7b, 0xa6, 0x73,
+	0x60, 0x3a, 0xca, 0xae, 0xe6, 0x30, 0x7f, 0x57, 0xa5, 0x5a, 0xd8, 0x65, 0xae, 0x56, 0x50, 0x2c,
+	0xad, 0xac, 0x1b, 0xdc, 0x18, 0x6d, 0xcf, 0x47, 0xa2, 0x5a, 0x9a, 0xad, 0x1d, 0x88, 0x70, 0xd1,
+	0xd9, 0x58, 0xb6, 0x69, 0x3e, 0x88, 0xb5, 0x70, 0x0f, 0x2d, 0x86, 0x31, 0xe4, 0x51, 0xa0, 0x6f,
+	0x7a, 0x20, 0x5b, 0x3c, 0xb0, 0xca, 0x1e, 0x3e, 0x62, 0x8e, 0x2b, 0xdf, 0x87, 0xd3, 0x2d, 0xab,
+	0x8e, 0x65, 0x1a, 0x0e, 0xa3, 0x2b, 0x30, 0xe4, 0x03, 0x8c, 0x91, 0x29, 0x32, 0x7d, 0xaa, 0x38,
+	0x91, 0x8f, 0xaa, 0x56, 0xde, 0xf7, 0x5a, 0xcb, 0x3c, 0xf9, 0x6d, 0xb2, 0xef, 0xdb, 0x3f, 0xbf,
+	0x9b, 0x21, 0x2a, 0xba, 0xc9, 0xef, 0xc0, 0xcb, 0x3c, 0xee, 0x3d, 0xdd, 0x71, 0xb7, 0x3c, 0x4e,
+	0xb1, 0x23, 0x5d, 0x07, 0x68, 0x94, 0x00, 0xc3, 0x5f, 0xce, 0xfb, 0xf5, 0xca, 0x7b, 0xf5, 0xca,
+	0xfb, 0xa7, 0x84, 0xf5, 0xca, 0x6f, 0x69, 0x65, 0x86, 0xbe, 0x6a, 0x93, 0xa7, 0xfc, 0x05, 0x81,
+	0x33, 0x6d, 0x5b, 0x20, 0x7e, 0x01, 0x06, 0x79, 0x71, 0xc6, 0xc8, 0xd4, 0xff, 0xa6, 0x4f, 0x15,
+	0xc7, 0x3b, 0xd0, 0x7b, 0x26, 0xaa, 0x6f, 0x49, 0x37, 0x5a, 0xb0, 0xfa, 0x39, 0xd6, 0x95, 0x44,
+	0x2c, 0x7f, 0xbf, 0x16, 0xae, 0x1d, 0x78, 0x29, 0xc0, 0xba, 0xc3, 0xb4, 0x4a, 0xcf, 0x13, 0x7f,
+	0x4c, 0x9a, 0x6a, 0x8b, 0x3b, 0x60, 0xde, 0xd7, 0x61, 0xb0, 0xe4, 0x2d, 0x60, 0xde, 0x52, 0x74,
+	0xde, 0x9e, 0x8f, 0xea, 0x1b, 0xf6, 0x2e, 0xed, 0x4b, 0x78, 0x91, 0x36, 0x18, 0x67, 0x12, 0x49,
+	0x3f, 0x0f, 0xfd, 0x7a, 0x89, 0x27, 0x3b, 0xa0, 0xf6, 0xeb, 0x25, 0x79, 0x1d, 0x46, 0x5b, 0xcd,
+	0x90, 0x3c, 0x0f, 0x03, 0x1e, 0x10, 0x96, 0x25, 0x0e, 0x9c, 0xdb, 0xc9, 0x7b, 0x70, 0xb6, 0xf9,
+	0xf0, 0xab, 0x7a, 0x89, 0xd9, 0x3d, 0xaf, 0xf4, 0x37, 0x04, 0xa4, 0xa8, 0x5d, 0x90, 0x79, 0x11,
+	0x32, 0x96, 0x58, 0xc4, 0x8a, 0x67, 0x3b, 0xde, 0x34, 0x6e, 0xa6, 0x36, 0x1c, 0x7a, 0x57, 0xf9,
+	0x39, 0xec, 0x83, 0x0d, 0x16, 0x30, 0x8a, 0x42, 0x8c, 0xc1, 0xb0, 0x56, 0x2a, 0xd9, 0xcc, 0xf1,
+	0xfb, 0x38, 0xa3, 0x8a, 0x57, 0xf9, 0x3e, 0x8c, 0xb5, 0x3b, 0x61, 0x5e, 0xb7, 0x60, 0x44, 0x60,
+	0x62, 0xf1, 0x92, 0xd2, 0x0a, 0xec, 0xe5, 0x45, 0xc8, 0x86, 0xe3, 0x6e, 0x69, 0xba, 0xad, 0x1b,
+	0x65, 0xc1, 0x24, 0x85, 0xa2, 0x67, 0x9a, 0xbc, 0xf7, 0x61, 0xb2, 0xa3, 0x37, 0xc2, 0xbd, 0x06,
+	0xc3, 0x96, 0xbf, 0x84, 0x6c, 0x97, 0xe2, 0xd9, 0xd0, 0x7f, 0x6d, 0xc0, 0x9b, 0x51, 0xaa, 0xf0,
+	0x95, 0x57, 0xe1, 0x42, 0xfb, 0xc9, 0xae, 0x1d, 0xbe, 0x61, 0x31, 0x5b, 0x73, 0x4d, 0xbb, 0x09,
+	0xd6, 0xc4, 0x25, 0x01, 0x2b, 0xde, 0x65, 0x13, 0x2e, 0xc6, 0x87, 0x40, 0xe2, 0x0d, 0x18, 0xc1,
+	0x5d, 0xc5, 0x2d, 0xe9, 0x0a, 0x39, 0x70, 0x96, 0xd7, 0xe1, 0x52, 0x50, 0x1d, 0x66, 0x94, 0x74,
+	0xa3, 0xdc, 0xa1, 0xc4, 0xe7, 0xbc, 0xab, 0xc5, 0x57, 0x76, 0xb0, 0xf9, 0x32, 0x6a, 0x06, 0x57,
+	0x36, 0x4b, 0x72, 0x15, 0x2e, 0x27, 0xc5, 0x41, 0xf4, 0x7b, 0xe1, 0x62, 0xcf, 0x76, 0x20, 0x8f,
+	0x0c, 0x13, 0xae, 0x79, 0xb1, 0x71, 0x51, 0xbd, 0x4e, 0xbe, 0xcb, 0x34, 0x57, 0x10, 0x9f, 0x81,
+	0x61, 0xaf, 0xad, 0x77, 0x82, 0x59, 0x31, 0xe4, 0xbd, 0x6e, 0x96, 0xe4, 0xb7, 0x1a, 0xf7, 0xb4,
+	0xe1, 0x83, 0x74, 0x4b, 0x30, 0xb0, 0xcf, 0x34, 0x17, 0xd1, 0x2e, 0x74, 0x9e, 0x19, 0x9e, 0xd7,
+	0xb6, 0xab, 0xb9, 0x0c, 0x89, 0xb8, 0x9b, 0xbc, 0x0d, 0xe3, 0x22, 0xb4, 0xca, 0xf6, 0x98, 0x6e,
+	0xb9, 0xaf, 0x9b, 0xc6, 0x1e, 0x4b, 0x42, 0xa2, 0xe3, 0x90, 0x79, 0xa0, 0x57, 0xd8, 0x8e, 0xa5,
+	0xb9, 0xfb, 0xbc, 0x6f, 0x33, 0xea, 0x88, 0xb7, 0xb0, 0xa5, 0xb9, 0xfb, 0xf2, 0x12, 0x4c, 0x44,
+	0x07, 0x45, 0xe6, 0x73, 0x00, 0x15, 0xcd, 0x71, 0x77, 0x0c, 0x6f, 0x15, 0x03, 0x67, 0xbc, 0x15,
+	0x6e, 0x26, 0xdf, 0x6e, 0x34, 0x80, 0xca, 0x5c, 0x5b, 0x67, 0x55, 0xad, 0xb2, 0xcd, 0x1c, 0x47,
+	0x37, 0x8d, 0xa6, 0xc3, 0x75, 0xfc, 0x15, 0x81, 0xf6, 0x7f, 0x35, 0x83, 0x2b, 0x9b, 0x25, 0xf9,
+	0x5d, 0x98, 0xea, 0x1c, 0x01, 0x21, 0xd6, 0x61, 0x18, 0x1d, 0x82, 0xe1, 0x18, 0x59, 0xbb, 0x70,
+	0x00, 0x71, 0xa0, 0xe8, 0x2c, 0x7f, 0x44, 0x60, 0x3a, 0x68, 0x81, 0xb0, 0xb1, 0xd7, 0x0a, 0xef,
+	0x19, 0x8d, 0x59, 0x34, 0x0a, 0x83, 0xa6, 0xf7, 0x8e, 0xf7, 0xd1, 0x7f, 0x09, 0x8d, 0xea, 0xfe,
+	0x13, 0x8f, 0xea, 0x1f, 0x09, 0x5c, 0x4d, 0x81, 0x82, 0x05, 0xb8, 0x0b, 0x23, 0x98, 0x83, 0x68,
+	0xc9, 0xee, 0x2a, 0x10, 0x78, 0xf7, 0x6e, 0x8a, 0x7f, 0x4e, 0xe0, 0x5a, 0x5c, 0x02, 0xe1, 0xd1,
+	0x1e, 0x33, 0x46, 0x7b, 0x56, 0xd4, 0x9f, 0x08, 0xcc, 0xa6, 0x63, 0xfa, 0xcf, 0xd6, 0xb5, 0xf8,
+	0xd7, 0x69, 0x18, 0xe4, 0x39, 0xd0, 0x0f, 0x09, 0x0c, 0xf9, 0x82, 0x95, 0x4e, 0x47, 0x53, 0xb5,
+	0xeb, 0x63, 0xe9, 0x6a, 0x0a, 0x4b, 0x7f, 0x57, 0xf9, 0xe2, 0x07, 0xbf, 0xfc, 0xf1, 0xb8, 0x3f,
+	0x4b, 0x27, 0x94, 0x18, 0x41, 0x4f, 0x3f, 0x25, 0x00, 0x0d, 0xc5, 0x4a, 0x67, 0x63, 0xe2, 0xb7,
+	0x69, 0x67, 0x29, 0x97, 0xd2, 0x3a, 0x25, 0x91, 0x8f, 0xf0, 0x09, 0x81, 0x4c, 0x20, 0x25, 0xe9,
+	0xb5, 0x84, 0x2d, 0x9a, 0x25, 0xad, 0x34, 0x9b, 0xce, 0x18, 0x71, 0x2e, 0x70, 0x9c, 0x73, 0x74,
+	0x3c, 0x1a, 0xc7, 0x17, 0xa4, 0x1f, 0x13, 0x18, 0xc6, 0x61, 0x4f, 0xe3, 0x8a, 0xdf, 0xaa, 0x33,
+	0xa5, 0x99, 0x34, 0xa6, 0xc8, 0x31, 0xcd, 0x39, 0x64, 0x3a, 0x15, 0xc3, 0xa1, 0xd4, 0xf4, 0x52,
+	0x9d, 0x7e, 0x49, 0xe0, 0xb9, 0x96, 0xaf, 0x77, 0xaa, 0x24, 0x9f, 0x40, 0x8b, 0x16, 0x95, 0xae,
+	0xa7, 0x77, 0x40, 0xbc, 0x2b, 0x1c, 0xef, 0x3c, 0x9d, 0xec, 0x78, 0x6a, 0xc8, 0xf2, 0x15, 0x81,
+	0x53, 0x4d, 0x4a, 0x89, 0xe6, 0xe2, 0x6b, 0x10, 0x9a, 0x20, 0x52, 0x3e, 0xad, 0x39, 0x72, 0x15,
+	0x38, 0xd7, 0x35, 0x7a, 0x35, 0x81, 0x4b, 0xa9, 0xa1, 0xc8, 0xac, 0xd3, 0x1f, 0x08, 0xd0, 0x76,
+	0x2d, 0x47, 0x6f, 0xa4, 0xdb, 0xb9, 0x55, 0xd5, 0x48, 0xf3, 0x5d, 0x7a, 0x21, 0xf6, 0x2d, 0x8e,
+	0x7d, 0x83, 0x16, 0xe3, 0xb1, 0x73, 0x42, 0x66, 0x29, 0x35, 0xb1, 0x54, 0xa7, 0xcf, 0x08, 0x9c,
+	0xe9, 0x20, 0xef, 0xe8, 0xcd, 0xb4, 0x07, 0xdb, 0xa6, 0x2a, 0xa5, 0x5b, 0x27, 0x71, 0xc5, 0x74,
+	0xd6, 0x79, 0x3a, 0xb7, 0xe9, 0x72, 0xda, 0x74, 0x76, 0x0f, 0x73, 0x42, 0xb2, 0x2a, 0x35, 0xf1,
+	0x54, 0xa7, 0xbf, 0x12, 0x38, 0xdb, 0x51, 0x00, 0xd2, 0x85, 0x84, 0x5a, 0xc7, 0xc9, 0x4f, 0x69,
+	0xf1, 0x64, 0xce, 0x98, 0xe0, 0x1d, 0x9e, 0xe0, 0x32, 0x5d, 0x4c, 0x9b, 0xa0, 0xe5, 0xc7, 0x53,
+	0x6a, 0x0d, 0xcd, 0x5b, 0xa7, 0x5f, 0xfb, 0xbd, 0x21, 0xd4, 0x5f, 0x52, 0x6f, 0x84, 0xf4, 0x68,
+	0x52, 0x6f, 0x84, 0xa5, 0xa8, 0x5c, 0xe4, 0xd0, 0xb3, 0x74, 0x26, 0x76, 0xa4, 0xa0, 0x9e, 0xac,
+	0x2b, 0x9e, 0xfe, 0xa4, 0xdf, 0x13, 0x78, 0x21, 0x24, 0x13, 0x69, 0x21, 0x7e, 0xdf, 0x08, 0x9d,
+	0x2a, 0x15, 0xbb, 0x71, 0x41, 0xdc, 0x05, 0x8e, 0x3b, 0x4f, 0xe7, 0xd2, 0xe1, 0xda, 0x7e, 0x8c,
+	0x1c, 0x17, 0xad, 0xf4, 0x67, 0x02, 0xa7, 0x23, 0xd4, 0x25, 0x9d, 0x4f, 0x02, 0x89, 0xd4, 0xb3,
+	0xd2, 0x2b, 0xdd, 0xba, 0x61, 0x0e, 0x4b, 0x3c, 0x87, 0x57, 0xe9, 0x7c, 0x74, 0x0e, 0xb6, 0xf0,
+	0xcb, 0x09, 0x4d, 0xa1, 0xd4, 0x1a, 0xba, 0xb9, 0x4e, 0x8f, 0x08, 0x4c, 0xc4, 0x69, 0x45, 0xba,
+	0x9c, 0xd0, 0xa4, 0x09, 0x7a, 0x57, 0x5a, 0x39, 0xb1, 0x3f, 0x26, 0xb8, 0xca, 0x13, 0x5c, 0xa0,
+	0x37, 0x53, 0x27, 0xe8, 0xb5, 0xba, 0x17, 0x42, 0xa9, 0xf1, 0x7f, 0x75, 0xfa, 0x37, 0x81, 0xc9,
+	0x04, 0xed, 0x46, 0x57, 0xbb, 0xe7, 0x0c, 0x7f, 0x93, 0xac, 0xfd, 0x9b, 0x10, 0x98, 0xed, 0x06,
+	0xcf, 0x76, 0x95, 0xae, 0x74, 0x93, 0xad, 0x18, 0x06, 0x4d, 0x33, 0x7b, 0x6d, 0xee, 0xc9, 0x51,
+	0x96, 0x3c, 0x3d, 0xca, 0x92, 0xdf, 0x8f, 0xb2, 0xe4, 0xb3, 0xe3, 0x6c, 0xdf, 0xd3, 0xe3, 0x6c,
+	0xdf, 0xb3, 0xe3, 0x6c, 0xdf, 0xdb, 0x67, 0x83, 0x80, 0xef, 0x37, 0x62, 0xf3, 0x9f, 0x48, 0x77,
+	0x87, 0xf8, 0x6f, 0xa4, 0x73, 0xff, 0x04, 0x00, 0x00, 0xff, 0xff, 0x51, 0xf6, 0x85, 0x67, 0x37,
+	0x16, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1199,6 +1486,12 @@ type QueryClient interface {
 	ListProviders(ctx context.Context, in *QueryListProvidersRequest, opts ...grpc.CallOption) (*QueryListProvidersResponse, error)
 	// Queries a Provider by address.
 	GetProvider(ctx context.Context, in *QueryGetProviderRequest, opts ...grpc.CallOption) (*QueryGetProviderResponse, error)
+	// Queries the operator pairing for a provider address.
+	GetProviderPairing(ctx context.Context, in *QueryGetProviderPairingRequest, opts ...grpc.CallOption) (*QueryGetProviderPairingResponse, error)
+	// Lists paired providers for an operator address.
+	ListProvidersByOperator(ctx context.Context, in *QueryListProvidersByOperatorRequest, opts ...grpc.CallOption) (*QueryListProvidersByOperatorResponse, error)
+	// Queries a pending provider pairing by pairing_id.
+	GetPendingProviderPairing(ctx context.Context, in *QueryGetPendingProviderPairingRequest, opts ...grpc.CallOption) (*QueryGetPendingProviderPairingResponse, error)
 	// Queries the Heat State for a Deal.
 	GetDealHeat(ctx context.Context, in *QueryGetDealHeatRequest, opts ...grpc.CallOption) (*QueryGetDealHeatResponse, error)
 	// Queries the last accepted retrieval receipt nonce for a specific (deal_id, file_path).
@@ -1273,6 +1566,33 @@ func (c *queryClient) GetProvider(ctx context.Context, in *QueryGetProviderReque
 	return out, nil
 }
 
+func (c *queryClient) GetProviderPairing(ctx context.Context, in *QueryGetProviderPairingRequest, opts ...grpc.CallOption) (*QueryGetProviderPairingResponse, error) {
+	out := new(QueryGetProviderPairingResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/GetProviderPairing", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryClient) ListProvidersByOperator(ctx context.Context, in *QueryListProvidersByOperatorRequest, opts ...grpc.CallOption) (*QueryListProvidersByOperatorResponse, error) {
+	out := new(QueryListProvidersByOperatorResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/ListProvidersByOperator", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryClient) GetPendingProviderPairing(ctx context.Context, in *QueryGetPendingProviderPairingRequest, opts ...grpc.CallOption) (*QueryGetPendingProviderPairingResponse, error) {
+	out := new(QueryGetPendingProviderPairingResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/GetPendingProviderPairing", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *queryClient) GetDealHeat(ctx context.Context, in *QueryGetDealHeatRequest, opts ...grpc.CallOption) (*QueryGetDealHeatResponse, error) {
 	out := new(QueryGetDealHeatResponse)
 	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/GetDealHeat", in, out, opts...)
@@ -1332,6 +1652,12 @@ type QueryServer interface {
 	ListProviders(context.Context, *QueryListProvidersRequest) (*QueryListProvidersResponse, error)
 	// Queries a Provider by address.
 	GetProvider(context.Context, *QueryGetProviderRequest) (*QueryGetProviderResponse, error)
+	// Queries the operator pairing for a provider address.
+	GetProviderPairing(context.Context, *QueryGetProviderPairingRequest) (*QueryGetProviderPairingResponse, error)
+	// Lists paired providers for an operator address.
+	ListProvidersByOperator(context.Context, *QueryListProvidersByOperatorRequest) (*QueryListProvidersByOperatorResponse, error)
+	// Queries a pending provider pairing by pairing_id.
+	GetPendingProviderPairing(context.Context, *QueryGetPendingProviderPairingRequest) (*QueryGetPendingProviderPairingResponse, error)
 	// Queries the Heat State for a Deal.
 	GetDealHeat(context.Context, *QueryGetDealHeatRequest) (*QueryGetDealHeatResponse, error)
 	// Queries the last accepted retrieval receipt nonce for a specific (deal_id, file_path).
@@ -1365,6 +1691,15 @@ func (*UnimplementedQueryServer) ListProviders(ctx context.Context, req *QueryLi
 }
 func (*UnimplementedQueryServer) GetProvider(ctx context.Context, req *QueryGetProviderRequest) (*QueryGetProviderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetProvider not implemented")
+}
+func (*UnimplementedQueryServer) GetProviderPairing(ctx context.Context, req *QueryGetProviderPairingRequest) (*QueryGetProviderPairingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetProviderPairing not implemented")
+}
+func (*UnimplementedQueryServer) ListProvidersByOperator(ctx context.Context, req *QueryListProvidersByOperatorRequest) (*QueryListProvidersByOperatorResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListProvidersByOperator not implemented")
+}
+func (*UnimplementedQueryServer) GetPendingProviderPairing(ctx context.Context, req *QueryGetPendingProviderPairingRequest) (*QueryGetPendingProviderPairingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPendingProviderPairing not implemented")
 }
 func (*UnimplementedQueryServer) GetDealHeat(ctx context.Context, req *QueryGetDealHeatRequest) (*QueryGetDealHeatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDealHeat not implemented")
@@ -1494,6 +1829,60 @@ func _Query_GetProvider_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Query_GetProviderPairing_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryGetProviderPairingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).GetProviderPairing(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Query/GetProviderPairing",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).GetProviderPairing(ctx, req.(*QueryGetProviderPairingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_ListProvidersByOperator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryListProvidersByOperatorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).ListProvidersByOperator(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Query/ListProvidersByOperator",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).ListProvidersByOperator(ctx, req.(*QueryListProvidersByOperatorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_GetPendingProviderPairing_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryGetPendingProviderPairingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).GetPendingProviderPairing(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Query/GetPendingProviderPairing",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).GetPendingProviderPairing(ctx, req.(*QueryGetPendingProviderPairingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Query_GetDealHeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryGetDealHeatRequest)
 	if err := dec(in); err != nil {
@@ -1612,6 +2001,18 @@ var _Query_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetProvider",
 			Handler:    _Query_GetProvider_Handler,
+		},
+		{
+			MethodName: "GetProviderPairing",
+			Handler:    _Query_GetProviderPairing_Handler,
+		},
+		{
+			MethodName: "ListProvidersByOperator",
+			Handler:    _Query_ListProvidersByOperator_Handler,
+		},
+		{
+			MethodName: "GetPendingProviderPairing",
+			Handler:    _Query_GetPendingProviderPairing_Handler,
 		},
 		{
 			MethodName: "GetDealHeat",
@@ -2071,6 +2472,199 @@ func (m *QueryGetProviderResponse) MarshalToSizedBuffer(dAtA []byte) (int, error
 		i--
 		dAtA[i] = 0xa
 	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryGetProviderPairingRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryGetProviderPairingRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryGetProviderPairingRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryGetProviderPairingResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryGetProviderPairingResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryGetProviderPairingResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.Pairing.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintQuery(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryListProvidersByOperatorRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryListProvidersByOperatorRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryListProvidersByOperatorRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Operator) > 0 {
+		i -= len(m.Operator)
+		copy(dAtA[i:], m.Operator)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Operator)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryListProvidersByOperatorResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryListProvidersByOperatorResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryListProvidersByOperatorResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Pairings) > 0 {
+		for iNdEx := len(m.Pairings) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Pairings[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintQuery(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryGetPendingProviderPairingRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryGetPendingProviderPairingRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryGetPendingProviderPairingRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.PairingId) > 0 {
+		i -= len(m.PairingId)
+		copy(dAtA[i:], m.PairingId)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.PairingId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryGetPendingProviderPairingResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryGetPendingProviderPairingResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryGetPendingProviderPairingResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.Pairing.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintQuery(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -2618,6 +3212,82 @@ func (m *QueryGetProviderResponse) Size() (n int) {
 		l = m.Provider.Size()
 		n += 1 + l + sovQuery(uint64(l))
 	}
+	return n
+}
+
+func (m *QueryGetProviderPairingRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *QueryGetProviderPairingResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.Pairing.Size()
+	n += 1 + l + sovQuery(uint64(l))
+	return n
+}
+
+func (m *QueryListProvidersByOperatorRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Operator)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *QueryListProvidersByOperatorResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Pairings) > 0 {
+		for _, e := range m.Pairings {
+			l = e.Size()
+			n += 1 + l + sovQuery(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *QueryGetPendingProviderPairingRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.PairingId)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *QueryGetPendingProviderPairingResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.Pairing.Size()
+	n += 1 + l + sovQuery(uint64(l))
 	return n
 }
 
@@ -3824,6 +4494,502 @@ func (m *QueryGetProviderResponse) Unmarshal(dAtA []byte) error {
 				m.Provider = &Provider{}
 			}
 			if err := m.Provider.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryGetProviderPairingRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryGetProviderPairingRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryGetProviderPairingRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryGetProviderPairingResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryGetProviderPairingResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryGetProviderPairingResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pairing", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Pairing.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryListProvidersByOperatorRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryListProvidersByOperatorRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryListProvidersByOperatorRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Operator", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Operator = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryListProvidersByOperatorResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryListProvidersByOperatorResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryListProvidersByOperatorResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pairings", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Pairings = append(m.Pairings, ProviderPairing{})
+			if err := m.Pairings[len(m.Pairings)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryGetPendingProviderPairingRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryGetPendingProviderPairingRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryGetPendingProviderPairingRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PairingId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PairingId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryGetPendingProviderPairingResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryGetPendingProviderPairingResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryGetPendingProviderPairingResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pairing", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Pairing.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

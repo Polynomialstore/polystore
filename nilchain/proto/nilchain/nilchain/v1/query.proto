@@ -43,6 +43,21 @@ service Query {
     option (google.api.http).get = "/nilchain/nilchain/v1/providers/{address}";
   }
 
+  // Queries the operator pairing for a provider address.
+  rpc GetProviderPairing(QueryGetProviderPairingRequest) returns (QueryGetProviderPairingResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/provider-pairings/{provider}";
+  }
+
+  // Lists paired providers for an operator address.
+  rpc ListProvidersByOperator(QueryListProvidersByOperatorRequest) returns (QueryListProvidersByOperatorResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/provider-pairings/by-operator/{operator}";
+  }
+
+  // Queries a pending provider pairing by pairing_id.
+  rpc GetPendingProviderPairing(QueryGetPendingProviderPairingRequest) returns (QueryGetPendingProviderPairingResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/provider-pairings/pending/{pairing_id}";
+  }
+
   // Queries the Heat State for a Deal.
   rpc GetDealHeat(QueryGetDealHeatRequest) returns (QueryGetDealHeatResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/heat";
@@ -122,6 +137,30 @@ message QueryGetProviderRequest {
 
 message QueryGetProviderResponse {
   Provider provider = 1;
+}
+
+message QueryGetProviderPairingRequest {
+  string provider = 1;
+}
+
+message QueryGetProviderPairingResponse {
+  ProviderPairing pairing = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryListProvidersByOperatorRequest {
+  string operator = 1;
+}
+
+message QueryListProvidersByOperatorResponse {
+  repeated ProviderPairing pairings = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryGetPendingProviderPairingRequest {
+  string pairing_id = 1;
+}
+
+message QueryGetPendingProviderPairingResponse {
+  PendingProviderPairing pairing = 1 [(gogoproto.nullable) = false];
 }
 
 message QueryGetDealHeatRequest {

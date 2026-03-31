@@ -10,27 +10,50 @@ import (
 )
 
 const maxProviderEndpoints = 8
+const maxPairingIDLen = 128
 
-func canonicalProviderAddress(raw string) (string, error) {
+func canonicalAddress(raw string, field string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
-		return "", sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+		return "", sdkerrors.ErrInvalidRequest.Wrapf("%s is required", field)
 	}
 	addr, err := sdk.AccAddressFromBech32(raw)
 	if err != nil {
-		return "", sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
+		return "", sdkerrors.ErrInvalidAddress.Wrapf("invalid %s address: %s", field, err)
 	}
 	return addr.String(), nil
 }
 
-func requireCanonicalProviderCreator(raw string) (string, error) {
-	canonical, err := canonicalProviderAddress(raw)
+func requireCanonicalAddress(raw string, field string) (string, error) {
+	canonical, err := canonicalAddress(raw, field)
 	if err != nil {
 		return "", err
 	}
 	if raw != canonical {
-		return "", sdkerrors.ErrInvalidRequest.Wrapf("creator must use canonical address string %q", canonical)
+		return "", sdkerrors.ErrInvalidRequest.Wrapf("%s must use canonical address string %q", field, canonical)
 	}
 	return canonical, nil
+}
+
+func canonicalProviderAddress(raw string) (string, error) {
+	return canonicalAddress(raw, "creator")
+}
+
+func requireCanonicalProviderCreator(raw string) (string, error) {
+	return requireCanonicalAddress(raw, "creator")
+}
+
+func validatePairingID(raw string) (string, error) {
+	pairingID := strings.TrimSpace(raw)
+	if pairingID == "" {
+		return "", sdkerrors.ErrInvalidRequest.Wrap("pairing_id is required")
+	}
+	if len(pairingID) > maxPairingIDLen {
+		return "", sdkerrors.ErrInvalidRequest.Wrapf("pairing_id too long (max %d)", maxPairingIDLen)
+	}
+	if strings.IndexFunc(pairingID, func(r rune) bool { return unicode.IsSpace(r) || r < 0x20 }) != -1 {
+		return "", sdkerrors.ErrInvalidRequest.Wrap("pairing_id contains whitespace/control characters")
+	}
+	return pairingID, nil
 }
 
 func validateAndCanonicalizeProviderEndpoints(rawEndpoints []string) ([]string, error) {
