@@ -5,7 +5,7 @@ import { AlertTriangle, CircleUserRound, Copy, LogOut, Wallet, X } from 'lucide-
 import { appConfig } from '../config'
 import { useNetwork } from '../hooks/useNetwork'
 
-export function ConnectWallet({ className = '', compact = false }: { className?: string; compact?: boolean }) {
+export function ConnectWallet({ className = '', compact = false, responsive = false }: { className?: string; compact?: boolean; responsive?: boolean }) {
   const { switchNetwork } = useNetwork()
   const { disconnect } = useDisconnect()
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -52,16 +52,25 @@ export function ConnectWallet({ className = '', compact = false }: { className?:
         const wrongNetwork = Boolean(chain && (chain.unsupported || chain.id !== appConfig.chainId))
 
         if (!connected) {
+          const buttonClass = responsive
+            ? 'px-3 py-2 text-[11px] uppercase tracking-[0.18em] font-mono-data 2xl:px-4 2xl:text-sm 2xl:normal-case 2xl:tracking-normal 2xl:font-sans'
+            : compact
+              ? 'px-3 py-2 text-[11px] uppercase tracking-[0.18em] font-mono-data'
+              : 'px-4 py-2 text-sm'
+
           return (
             <button
               onClick={openConnectModal}
               data-testid="connect-wallet"
-              className={`inline-flex items-center gap-2 border border-transparent bg-secondary/50 text-foreground font-semibold transition-colors hover:border-border hover:bg-secondary ${
-                compact ? 'px-3 py-2 text-[11px] uppercase tracking-[0.18em] font-mono-data' : 'px-4 py-2 text-sm'
-              } ${className}`}
+              className={`inline-flex items-center gap-2 border border-transparent bg-secondary/50 text-foreground font-semibold transition-colors hover:border-border hover:bg-secondary ${buttonClass} ${className}`}
             >
               <Wallet className="w-4 h-4" />
-              {compact ? 'Connect' : 'Connect Wallet'}
+              {responsive ? (
+                <>
+                  <span className="2xl:hidden">Connect</span>
+                  <span className="hidden 2xl:inline">Connect Wallet</span>
+                </>
+              ) : compact ? 'Connect' : 'Connect Wallet'}
             </button>
           )
         }
@@ -84,14 +93,24 @@ export function ConnectWallet({ className = '', compact = false }: { className?:
               onClick={() => setAccountMenuOpen((open) => !open)}
               data-testid="wallet-address"
               className={`inline-flex items-center gap-2 border border-primary/30 bg-primary/10 text-primary transition-colors hover:bg-primary/15 ${
-                compact ? 'max-w-[9.75rem] px-2.5 py-2' : 'px-3 py-2'
+                responsive
+                  ? 'max-w-[9.75rem] px-2.5 py-2 2xl:max-w-none 2xl:px-3'
+                  : compact
+                    ? 'max-w-[9.75rem] px-2.5 py-2'
+                    : 'px-3 py-2'
               }`}
               title={currentAccount.address}
             >
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-primary">
                 <CircleUserRound className="h-3.5 w-3.5" />
               </span>
-              <span className={`font-mono-data font-bold text-primary ${compact ? 'max-w-[6.75rem] truncate text-[11px]' : 'text-xs'}`}>
+              <span className={`font-mono-data font-bold text-primary ${
+                responsive
+                  ? 'max-w-[6.75rem] truncate text-[11px] 2xl:max-w-none 2xl:text-xs'
+                  : compact
+                    ? 'max-w-[6.75rem] truncate text-[11px]'
+                    : 'text-xs'
+              }`}>
                 {accountLabel}
               </span>
               <span className="sr-only" data-testid="wallet-address-full">{currentAccount.address}</span>

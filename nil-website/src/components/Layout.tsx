@@ -152,8 +152,7 @@ export const Layout = () => {
 
           {/* 3. RIGHT: Actions (Console CTA) */}
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-              <NavSessionStatus className="hidden 2xl:flex" />
-              <NavSessionStatus compact className="hidden lg:flex 2xl:hidden" />
+              <NavSessionStatus responsive className="hidden lg:flex" />
 
               {/* Desktop GitHub */}
               <a 
@@ -167,8 +166,7 @@ export const Layout = () => {
 
               <ModeToggle />
 
-              <DashboardCta className="hidden 2xl:flex" label="Dashboard" to="/dashboard" />
-              <DashboardCta compact className="hidden lg:flex 2xl:hidden" label="App" to="/dashboard" />
+              <DashboardCta responsive compactLabel="App" className="hidden lg:flex" label="Dashboard" to="/dashboard" />
               
               {/* Mobile Toggle */}
               <button 

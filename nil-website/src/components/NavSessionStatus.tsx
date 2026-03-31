@@ -22,15 +22,37 @@ const SESSION_BADGE_LABELS: Record<string, string> = {
   'ready-gateway': 'Gateway Ready',
 }
 
-export function NavSessionStatus({ className = '', compact = false }: { className?: string; compact?: boolean }) {
+function renderResponsiveLabel(compactText: string, fullText: string) {
+  return (
+    <>
+      <span className="2xl:hidden">{compactText}</span>
+      <span className="hidden 2xl:inline">{fullText}</span>
+    </>
+  )
+}
+
+export function NavSessionStatus({
+  className = '',
+  compact = false,
+  responsive = false,
+}: {
+  className?: string
+  compact?: boolean
+  responsive?: boolean
+}) {
   const session = useSessionStatus()
   const stakeBalanceLabel = session.lcdStakeBalance ? `${session.lcdStakeBalance} stake` : '—'
 
   const shouldShowFaucet = session.faucetEnabled && session.isConnected
+  const faucetClassName = responsive
+    ? 'px-2.5 py-2 text-[9px] 2xl:px-3 2xl:text-[10px]'
+    : compact
+      ? 'px-2.5 py-2 text-[9px]'
+      : 'px-3 py-2 text-[10px]'
 
   return (
-    <div className={cn('flex items-center gap-2', compact && 'gap-1.5', className)}>
-      <ConnectWallet compact={compact} />
+    <div className={cn('flex items-center gap-2', (compact || responsive) && 'gap-1.5', responsive && '2xl:gap-2', className)}>
+      <ConnectWallet compact={compact} responsive={responsive} />
       {session.isConnected ? (
         <div className="sr-only" aria-hidden="true">
           <span data-testid="cosmos-identity">{session.nilAddress}</span>
@@ -61,7 +83,7 @@ export function NavSessionStatus({ className = '', compact = false }: { classNam
           disabled={!session.address || session.faucetBusy}
           className={cn(
             'inline-flex items-center gap-2 border font-bold uppercase tracking-[0.2em] font-mono-data transition-colors disabled:opacity-60',
-            compact ? 'px-2.5 py-2 text-[9px]' : 'px-3 py-2 text-[10px]',
+            faucetClassName,
             session.faucetTxStatus === 'confirmed'
               ? 'border-success/30 bg-success/10 text-success'
               : session.faucetTxStatus === 'failed'
@@ -75,14 +97,18 @@ export function NavSessionStatus({ className = '', compact = false }: { classNam
             : session.faucetTxStatus === 'confirmed'
               ? 'Funded'
             : session.faucetTxStatus === 'failed'
-                ? compact
-                  ? 'Retry'
-                  : 'Retry Faucet'
+                ? responsive
+                  ? renderResponsiveLabel('Retry', 'Retry Faucet')
+                  : compact
+                    ? 'Retry'
+                    : 'Retry Faucet'
                 : session.primarySessionState === 'needs-funds'
                   ? 'Get NIL'
-                  : compact
-                    ? 'Top Up'
-                    : 'Top Up NIL'}
+                  : responsive
+                    ? renderResponsiveLabel('Top Up', 'Top Up NIL')
+                    : compact
+                      ? 'Top Up'
+                      : 'Top Up NIL'}
         </button>
       ) : null}
     </div>
