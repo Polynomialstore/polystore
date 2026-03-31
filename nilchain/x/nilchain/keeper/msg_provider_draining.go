@@ -3,7 +3,6 @@ package keeper
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
@@ -16,9 +15,9 @@ func (k msgServer) SetProviderDraining(goCtx context.Context, msg *types.MsgSetP
 	if msg == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
 	}
-	creator := strings.TrimSpace(msg.Creator)
-	if creator == "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	creator, err := requireCanonicalProviderCreator(msg.Creator)
+	if err != nil {
+		return nil, err
 	}
 
 	provider, err := k.Providers.Get(ctx, creator)
@@ -41,4 +40,3 @@ func (k msgServer) SetProviderDraining(goCtx context.Context, msg *types.MsgSetP
 
 	return &types.MsgSetProviderDrainingResponse{Success: true}, nil
 }
-

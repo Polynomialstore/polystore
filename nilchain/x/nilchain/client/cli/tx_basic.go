@@ -16,13 +16,18 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
+var (
+	getClientTxContextFn       = client.GetClientTxContext
+	generateOrBroadcastTxCLIFn = tx.GenerateOrBroadcastTxCLI
+)
+
 func CmdRegisterProvider() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "register-provider [capabilities] [total-storage]",
 		Short: "Register a new storage provider",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
-			clientCtx, err := client.GetClientTxContext(cmd)
+			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
 			}
@@ -48,7 +53,39 @@ func CmdRegisterProvider() *cobra.Command {
 				Endpoints:    endpoints,
 			}
 
-			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	cmd.Flags().StringArray("endpoint", nil, "Provider endpoint multiaddr (repeatable), e.g. /dns4/host/tcp/8080/http")
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdUpdateProviderEndpoints() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update-provider-endpoints",
+		Short: "Update the registered endpoints for an existing storage provider",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			endpoints, err := cmd.Flags().GetStringArray("endpoint")
+			if err != nil {
+				return err
+			}
+			if len(endpoints) == 0 {
+				return fmt.Errorf("at least one --endpoint multiaddr is required")
+			}
+
+			msg := types.MsgUpdateProviderEndpoints{
+				Creator:   clientCtx.GetFromAddress().String(),
+				Endpoints: endpoints,
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 	cmd.Flags().StringArray("endpoint", nil, "Provider endpoint multiaddr (repeatable), e.g. /dns4/host/tcp/8080/http")
@@ -62,7 +99,7 @@ func CmdCreateDeal() *cobra.Command {
 		Short: "Create a new storage deal (allocate capacity with dynamic sizing)",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
-			clientCtx, err := client.GetClientTxContext(cmd)
+			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
 			}
@@ -96,7 +133,7 @@ func CmdCreateDeal() *cobra.Command {
 				MaxMonthlySpend:     maxMonthly,
 			}
 
-			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 	cmd.Flags().String("service-hint", "General", "Service hint for placement (e.g. General[:owner=<nilAddress>][:rs=K+M]). replicas-only hints are deprecated; omit rs= to auto-select Mode 2.")
@@ -110,7 +147,7 @@ func CmdUpdateDealContent() *cobra.Command {
 		Short: "Update/Commit content for an existing deal",
 		Args:  cobra.NoArgs, // No positional arguments
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
-			clientCtx, err := client.GetClientTxContext(cmd)
+			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
 			}
@@ -154,7 +191,7 @@ func CmdUpdateDealContent() *cobra.Command {
 				WitnessMdus:          witnessMdus,
 			}
 
-			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 	cmd.Flags().Uint64("deal-id", 0, "ID of the deal to update")
@@ -182,7 +219,7 @@ func CmdCreateDealFromEvm() *cobra.Command {
 		Short: "Create a storage deal from an EVM-signed intent",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			clientCtx, err := client.GetClientTxContext(cmd)
+			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
 			}
@@ -216,7 +253,7 @@ func CmdCreateDealFromEvm() *cobra.Command {
 				EvmSignature: sigBz,
 			}
 
-			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 	flags.AddTxFlagsToCmd(cmd)
@@ -230,7 +267,7 @@ func CmdUpdateDealContentFromEvm() *cobra.Command {
 		Short: "Update deal content from an EVM-signed intent",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			clientCtx, err := client.GetClientTxContext(cmd)
+			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
 			}
@@ -264,7 +301,7 @@ func CmdUpdateDealContentFromEvm() *cobra.Command {
 				EvmSignature: sigBz,
 			}
 
-			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 	flags.AddTxFlagsToCmd(cmd)

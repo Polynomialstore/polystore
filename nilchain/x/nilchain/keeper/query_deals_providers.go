@@ -55,7 +55,11 @@ func (k queryServer) GetProvider(goCtx context.Context, req *types.QueryGetProvi
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	val, err := k.k.Providers.Get(ctx, req.Address)
+	address, err := canonicalProviderAddress(req.Address)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	val, err := k.k.Providers.Get(ctx, address)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return nil, status.Error(codes.NotFound, "provider not found")

@@ -1,0 +1,81 @@
+package keeper
+
+import (
+	"strings"
+	"unicode"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	ma "github.com/multiformats/go-multiaddr"
+)
+
+const maxProviderEndpoints = 8
+
+func canonicalProviderAddress(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	}
+	addr, err := sdk.AccAddressFromBech32(raw)
+	if err != nil {
+		return "", sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
+	}
+	return addr.String(), nil
+}
+
+func requireCanonicalProviderCreator(raw string) (string, error) {
+	canonical, err := canonicalProviderAddress(raw)
+	if err != nil {
+		return "", err
+	}
+	if raw != canonical {
+		return "", sdkerrors.ErrInvalidRequest.Wrapf("creator must use canonical address string %q", canonical)
+	}
+	return canonical, nil
+}
+
+func validateAndCanonicalizeProviderEndpoints(rawEndpoints []string) ([]string, error) {
+	if len(rawEndpoints) == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoints is required (at least one Multiaddr)")
+	}
+	if len(rawEndpoints) > maxProviderEndpoints {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("too many endpoints (max %d)", maxProviderEndpoints)
+	}
+
+	endpoints := make([]string, 0, len(rawEndpoints))
+	seenEndpoints := make(map[string]struct{}, len(rawEndpoints))
+	hasHTTP := false
+	for _, raw := range rawEndpoints {
+		ep := strings.TrimSpace(raw)
+		if ep == "" {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint must be non-empty")
+		}
+		if len(ep) > 256 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint too long")
+		}
+		if !strings.HasPrefix(ep, "/") {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid endpoint multiaddr: %q", ep)
+		}
+		if strings.IndexFunc(ep, func(r rune) bool { return unicode.IsSpace(r) || r < 0x20 }) != -1 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint contains whitespace/control characters")
+		}
+		parsed, err := ma.NewMultiaddr(ep)
+		if err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid endpoint multiaddr: %q", ep)
+		}
+		for _, proto := range parsed.Protocols() {
+			if proto.Code == ma.P_HTTP || proto.Code == ma.P_HTTPS {
+				hasHTTP = true
+			}
+		}
+		canonical := parsed.String()
+		if _, ok := seenEndpoints[canonical]; ok {
+			continue
+		}
+		seenEndpoints[canonical] = struct{}{}
+		endpoints = append(endpoints, canonical)
+	}
+	if !hasHTTP {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("at least one HTTP or HTTPS endpoint is required")
+	}
+	return endpoints, nil
+}

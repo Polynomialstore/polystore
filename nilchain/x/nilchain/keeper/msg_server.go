@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-	"unicode"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
@@ -18,7 +17,6 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	gethCommon "github.com/ethereum/go-ethereum/common"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
-	ma "github.com/multiformats/go-multiaddr"
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
 )
@@ -314,61 +312,23 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegisterProvider) (*types.MsgRegisterProviderResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	creatorAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+	canonicalCreator, err := requireCanonicalProviderCreator(msg.Creator)
 	if err != nil {
-		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid creator address: %s", err)
+		return nil, err
 	}
 
 	if msg.Capabilities != "Archive" && msg.Capabilities != "General" && msg.Capabilities != "Edge" {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid capabilities: %s", msg.Capabilities)
 	}
 
-	if len(msg.Endpoints) == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoints is required (at least one Multiaddr)")
-	}
-	if len(msg.Endpoints) > 8 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("too many endpoints (max 8)")
-	}
-	endpoints := make([]string, 0, len(msg.Endpoints))
-	seenEndpoints := make(map[string]struct{}, len(msg.Endpoints))
-	hasHTTP := false
-	for _, raw := range msg.Endpoints {
-		ep := strings.TrimSpace(raw)
-		if ep == "" {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint must be non-empty")
-		}
-		if len(ep) > 256 {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint too long")
-		}
-		if !strings.HasPrefix(ep, "/") {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid endpoint multiaddr: %q", ep)
-		}
-		if strings.IndexFunc(ep, func(r rune) bool { return unicode.IsSpace(r) || r < 0x20 }) != -1 {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("endpoint contains whitespace/control characters")
-		}
-		parsed, err := ma.NewMultiaddr(ep)
-		if err != nil {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid endpoint multiaddr: %q", ep)
-		}
-		for _, proto := range parsed.Protocols() {
-			if proto.Code == ma.P_HTTP || proto.Code == ma.P_HTTPS {
-				hasHTTP = true
-			}
-		}
-		canonical := parsed.String()
-		if _, ok := seenEndpoints[canonical]; ok {
-			continue
-		}
-		seenEndpoints[canonical] = struct{}{}
-		endpoints = append(endpoints, canonical)
-	}
-	if !hasHTTP {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("at least one HTTP or HTTPS endpoint is required")
+	endpoints, err := validateAndCanonicalizeProviderEndpoints(msg.Endpoints)
+	if err != nil {
+		return nil, err
 	}
 
-	_, err = k.Providers.Get(ctx, msg.Creator)
+	_, err = k.Providers.Get(ctx, canonicalCreator)
 	if err == nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("provider %s already registered", msg.Creator)
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("provider %s already registered", canonicalCreator)
 	}
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {
 		return nil, err
@@ -376,7 +336,7 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 
 	// Create new Provider object
 	provider := types.Provider{
-		Address:         creatorAddr.String(),
+		Address:         canonicalCreator,
 		TotalStorage:    msg.TotalStorage,
 		UsedStorage:     0, // Initially 0
 		Capabilities:    msg.Capabilities,
@@ -399,6 +359,43 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 	)
 
 	return &types.MsgRegisterProviderResponse{Success: true}, nil
+}
+
+func (k msgServer) UpdateProviderEndpoints(goCtx context.Context, msg *types.MsgUpdateProviderEndpoints) (*types.MsgUpdateProviderEndpointsResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+
+	canonicalCreator, err := requireCanonicalProviderCreator(msg.Creator)
+	if err != nil {
+		return nil, err
+	}
+	endpoints, err := validateAndCanonicalizeProviderEndpoints(msg.Endpoints)
+	if err != nil {
+		return nil, err
+	}
+
+	provider, err := k.Providers.Get(ctx, canonicalCreator)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrNotFound.Wrap("provider not found")
+		}
+		return nil, err
+	}
+	provider.Endpoints = endpoints
+	if err := k.Providers.Set(ctx, canonicalCreator, provider); err != nil {
+		return nil, fmt.Errorf("failed to update provider endpoints: %w", err)
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgUpdateProviderEndpoints,
+			sdk.NewAttribute(types.AttributeKeyProvider, canonicalCreator),
+		),
+	)
+
+	return &types.MsgUpdateProviderEndpointsResponse{Success: true}, nil
 }
 
 // CreateDeal handles MsgCreateDeal to create a new storage deal.
@@ -922,14 +919,14 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
 	}
 
-	creator := strings.TrimSpace(msg.Creator)
-	if creator == "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	creator, err := requireCanonicalProviderCreator(msg.Creator)
+	if err != nil {
+		return nil, err
 	}
 	// Outer guardrail for deputy flows: only a registered provider may submit proofs.
 	if _, err := k.Providers.Get(ctx, creator); err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
-			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not registered", msg.Creator)
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not registered", creator)
 		}
 		return nil, err
 	}
@@ -960,11 +957,11 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			}
 		}
 		if !isAssignedProvider {
-			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", msg.Creator, msg.DealId)
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", creator, msg.DealId)
 		}
 
 		if stripe.mode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 {
-			slotIdx, ok := providerSlotIndex(deal, msg.Creator)
+			slotIdx, ok := providerSlotIndex(deal, creator)
 			if ok && int(slotIdx) < len(deal.Mode2Slots) {
 				slot := deal.Mode2Slots[slotIdx]
 				if slot != nil && slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
@@ -1110,10 +1107,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	// Update reputation for success
 	if tier < 3 {
-		provider, errGet := k.Providers.Get(ctx, msg.Creator)
+		provider, errGet := k.Providers.Get(ctx, creator)
 		if errGet == nil {
 			provider.ReputationScore += 1
-			if errSet := k.Providers.Set(ctx, msg.Creator, provider); errSet != nil {
+			if errSet := k.Providers.Set(ctx, creator, provider); errSet != nil {
 				ctx.Logger().Error("Failed to update provider reputation", "error", errSet)
 			}
 		}
@@ -1158,7 +1155,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if receipt.EpochId != msg.EpochId {
 			return sdkerrors.ErrInvalidRequest.Wrap("receipt.epoch_id must match msg.epoch_id")
 		}
-		if receipt.Provider != msg.Creator {
+		if receipt.Provider != creator {
 			return sdkerrors.ErrUnauthorized.Wrap("receipt.provider must match msg.creator")
 		}
 
@@ -1269,7 +1266,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			ctx.Logger().Error("failed to increment heat", "error", err)
 		}
 
-		if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, msg.Creator, receipt.ProofDetails.MduIndex, receipt.ProofDetails.BlobIndex); err != nil {
+		if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, creator, receipt.ProofDetails.MduIndex, receipt.ProofDetails.BlobIndex); err != nil {
 			return err
 		}
 
@@ -1285,21 +1282,21 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 		if !ok {
 			// Track health for system proofs that fail verification.
-			k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
+			k.trackProviderHealth(ctx, msg.DealId, creator, false)
 			if pt.SystemProof != nil {
 				extra := make([]byte, 0, 8+4)
 				extra = binary.BigEndian.AppendUint64(extra, pt.SystemProof.MduIndex)
 				extra = binary.BigEndian.AppendUint32(extra, pt.SystemProof.BlobIndex)
 				kind := "system_proof_invalid"
 				eid := deriveEvidenceID(kind, msg.DealId, msg.EpochId, extra)
-				if err := k.recordEvidenceSummary(ctx, msg.DealId, msg.Creator, kind, eid[:], "chain", false); err != nil {
+				if err := k.recordEvidenceSummary(ctx, msg.DealId, creator, kind, eid[:], "chain", false); err != nil {
 					ctx.Logger().Error("failed to record evidence summary", "error", err)
 				}
 			}
 			return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
 		}
 		if pt.SystemProof != nil {
-			if err := k.validateAndRecordSystemProof(ctx, msg.EpochId, epochSeed, params, deal, stripe, msg.Creator, pt.SystemProof.MduIndex, pt.SystemProof.BlobIndex); err != nil {
+			if err := k.validateAndRecordSystemProof(ctx, msg.EpochId, epochSeed, params, deal, stripe, creator, pt.SystemProof.MduIndex, pt.SystemProof.BlobIndex); err != nil {
 				// For system proofs, policy failures should not revert the tx: we want
 				// the chain to record evidence and track health deterministically.
 				if sdkerrors.ErrInvalidRequest.Is(err) {
@@ -1329,10 +1326,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 						kind = "system_proof_wrong_provider"
 					}
 					if penalize {
-						k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
+						k.trackProviderHealth(ctx, msg.DealId, creator, false)
 					}
 					eid := deriveEvidenceID(kind, msg.DealId, msg.EpochId, extra)
-					if errEvidence := k.recordEvidenceSummary(ctx, msg.DealId, msg.Creator, kind, eid[:], "chain", evidenceOK); errEvidence != nil {
+					if errEvidence := k.recordEvidenceSummary(ctx, msg.DealId, creator, kind, eid[:], "chain", evidenceOK); errEvidence != nil {
 						ctx.Logger().Error("failed to record evidence summary", "error", errEvidence)
 					}
 
@@ -1371,7 +1368,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if receipt.EpochId != msg.EpochId {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_receipt.epoch_id must match msg.epoch_id")
 		}
-		if receipt.Provider != msg.Creator {
+		if receipt.Provider != creator {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("session_receipt.provider must match msg.creator")
 		}
 
@@ -1479,7 +1476,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 				ctx.Logger().Error("failed to increment heat", "error", err)
 			}
 
-			if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, msg.Creator, chunk.ProofDetails.MduIndex, chunk.ProofDetails.BlobIndex); err != nil {
+			if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, creator, chunk.ProofDetails.MduIndex, chunk.ProofDetails.BlobIndex); err != nil {
 				return nil, err
 			}
 		}
@@ -1524,7 +1521,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	// --- REWARD ACCUMULATION ---
 	if totalReward.IsPositive() {
 		// Accumulate to ProviderRewards store
-		currentRewards, err := k.ProviderRewards.Get(ctx, msg.Creator)
+		currentRewards, err := k.ProviderRewards.Get(ctx, creator)
 		if err != nil {
 			if !errors.Is(err, collections.ErrNotFound) {
 				return nil, err
@@ -1533,7 +1530,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 
 		newRewards := currentRewards.Add(totalReward)
-		if err := k.ProviderRewards.Set(ctx, msg.Creator, newRewards); err != nil {
+		if err := k.ProviderRewards.Set(ctx, creator, newRewards); err != nil {
 			return nil, fmt.Errorf("failed to set provider rewards: %w", err)
 		}
 
@@ -1555,14 +1552,14 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, fmt.Errorf("failed to update deal state: %w", err)
 	}
 
-	if err := k.DealProviderStatus.Set(ctx, collections.Join(msg.DealId, msg.Creator), uint64(ctx.BlockHeight())); err != nil {
+	if err := k.DealProviderStatus.Set(ctx, collections.Join(msg.DealId, creator), uint64(ctx.BlockHeight())); err != nil {
 		return nil, fmt.Errorf("failed to update proof status: %w", err)
 	}
 
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(
 			types.TypeMsgProveLiveness,
-			sdk.NewAttribute(types.AttributeKeyProvider, msg.Creator),
+			sdk.NewAttribute(types.AttributeKeyProvider, creator),
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", msg.DealId)),
 			sdk.NewAttribute(types.AttributeKeySuccess, "true"),
 			sdk.NewAttribute(types.AttributeKeyTier, tierName),
@@ -1571,13 +1568,13 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	)
 
 	// Record successful proof for liveness/performance observability.
-	if err := k.recordProofSummary(ctx, msg, deal, tierName, true); err != nil {
+	if err := k.recordProofSummary(ctx, creator, msg, deal, tierName, true); err != nil {
 		ctx.Logger().Error("failed to record proof summary", "error", err)
 	}
 
 	// Update minimal health stub: successful proof resets failure counters for
 	// this (deal, provider) pair and logs health as "OK" for devnet.
-	k.trackProviderHealth(ctx, msg.DealId, msg.Creator, true)
+	k.trackProviderHealth(ctx, msg.DealId, creator, true)
 
 	return &types.MsgProveLivenessResponse{Success: true, Tier: tier, RewardAmount: totalReward.String()}, nil
 }
@@ -1585,7 +1582,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 // recordProofSummary stores a lightweight Proof summary in state so that the
 // web UI can render recent liveness/performance events via the existing
 // ListProofs query.
-func (k msgServer) recordProofSummary(ctx sdk.Context, msg *types.MsgProveLiveness, deal types.Deal, tierName string, ok bool) error {
+func (k msgServer) recordProofSummary(ctx sdk.Context, creator string, msg *types.MsgProveLiveness, deal types.Deal, tierName string, ok bool) error {
 	proofID, err := k.ProofCount.Next(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get next proof id: %w", err)
@@ -1593,7 +1590,7 @@ func (k msgServer) recordProofSummary(ctx sdk.Context, msg *types.MsgProveLivene
 
 	summary := types.Proof{
 		Id:          proofID,
-		Creator:     msg.Creator,
+		Creator:     creator,
 		Commitment:  fmt.Sprintf("deal:%d/epoch:%d/tier:%s", msg.DealId, msg.EpochId, tierName),
 		Valid:       ok,
 		BlockHeight: ctx.BlockHeight(),
@@ -1910,12 +1907,16 @@ func (k msgServer) ExtendDeal(goCtx context.Context, msg *types.MsgExtendDeal) (
 func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdrawRewards) (*types.MsgWithdrawRewardsResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	providerAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+	creator, err := requireCanonicalProviderCreator(msg.Creator)
+	if err != nil {
+		return nil, err
+	}
+	providerAddr, err := sdk.AccAddressFromBech32(creator)
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid provider address: %s", err)
 	}
 
-	rewards, err := k.ProviderRewards.Get(ctx, msg.Creator)
+	rewards, err := k.ProviderRewards.Get(ctx, creator)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return nil, sdkerrors.ErrNotFound.Wrap("no rewards found")
@@ -1978,7 +1979,7 @@ func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdraw
 	}
 
 	// Reset rewards
-	if err := k.ProviderRewards.Set(ctx, msg.Creator, math.ZeroInt()); err != nil {
+	if err := k.ProviderRewards.Set(ctx, creator, math.ZeroInt()); err != nil {
 		return nil, err
 	}
 
@@ -2556,9 +2557,9 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("max_total_fee must be >= 0")
 	}
 
-	creator := strings.TrimSpace(msg.Creator)
-	if creator == "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	creator, err := requireCanonicalProviderCreator(msg.Creator)
+	if err != nil {
+		return nil, err
 	}
 	// Protocol sessions are opened by protocol actors (providers) and should not be open to arbitrary accounts.
 	if _, err := k.Providers.Get(ctx, creator); err != nil {
@@ -3107,14 +3108,14 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrap("retrieval session not found")
 	}
-	creator := strings.TrimSpace(msg.Creator)
-	if creator == "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	creator, err := requireCanonicalProviderCreator(msg.Creator)
+	if err != nil {
+		return nil, err
 	}
 	// Deputy/P2P flows: allow any registered provider to submit a valid session proof.
 	if _, err := k.Providers.Get(ctx, creator); err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
-			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not registered", msg.Creator)
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not registered", creator)
 		}
 		return nil, err
 	}

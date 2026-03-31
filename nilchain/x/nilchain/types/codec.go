@@ -10,6 +10,8 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 	registrar.RegisterImplementations((*sdk.Msg)(nil),
 		&MsgUpdateParams{},
 		&MsgRegisterProvider{},
+		&MsgSetProviderDraining{},
+		&MsgUpdateProviderEndpoints{},
 		&MsgCreateDeal{},
 		&MsgUpdateDealContent{},
 		&MsgCreateDealFromEvm{},
