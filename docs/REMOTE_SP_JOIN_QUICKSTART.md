@@ -9,14 +9,16 @@ If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 - Shared `user-gateway` to `provider-daemon` auth token: `NIL_GATEWAY_SP_AUTH=...`
 - Optional but recommended: a website-opened `PAIRING_ID=...`
 
+Treat `NIL_GATEWAY_SP_AUTH` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
+
 The default provider flow now targets the canonical public NilStore testnet from `.env.testnet.public`.
 Only set `HUB_NODE`, `HUB_LCD`, or `CHAIN_ID` when you are intentionally joining a non-public hub.
 
 The web-first operator flow is:
 1. Open `/sp-onboarding` on the website.
-2. Connect the operator wallet and open pairing.
-3. Copy the generated `PAIRING_ID` into the provider host bootstrap command.
-4. Finish verification from the website `My Providers` dashboard.
+2. Connect the operator wallet and open pairing if you want website linking and `My Providers`.
+3. Copy the generated `PAIRING_ID` into the provider host bootstrap command when pairing was opened.
+4. Finish verification from the website `My Providers` dashboard when pairing was supplied.
 
 ## Provider machine prerequisites
 
@@ -83,6 +85,21 @@ export PAIRING_ID="<website-opened-pairing-id>"            # optional but recomm
 ./scripts/run_devnet_provider.sh bootstrap
 ```
 
+Safer new-key order:
+
+```bash
+export PROVIDER_KEY="provider1"
+./scripts/run_devnet_provider.sh init
+
+# Fund the printed nil1... address with aatom before continuing.
+
+export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
+export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
+export PAIRING_ID="<website-opened-pairing-id>"            # optional but recommended
+
+./scripts/run_devnet_provider.sh bootstrap
+```
+
 `bootstrap` now:
 
 - creates the provider key if needed
@@ -91,6 +108,8 @@ export PAIRING_ID="<website-opened-pairing-id>"            # optional but recomm
 - registers the provider if it is new
 - updates provider endpoints if it is already registered
 - runs a doctor pass at the end
+
+`bootstrap` can run without `PAIRING_ID`, but website linking and `My Providers` discovery will be unavailable until pairing is supplied.
 
 If you are targeting a non-public hub, export `HUB_NODE`, `HUB_LCD`, and `CHAIN_ID` before running `bootstrap`.
 
@@ -134,6 +153,18 @@ On the provider:
 
 ```bash
 curl -sf http://127.0.0.1:8091/health
+```
+
+For direct IPv4 deployments, also verify the public endpoint with:
+
+```bash
+curl -sf http://<public-ip>:8091/health
+```
+
+For tunnel / hostname deployments, verify:
+
+```bash
+curl -sf https://sp.<domain>/health
 ```
 
 Or run the healthcheck script (recommended):

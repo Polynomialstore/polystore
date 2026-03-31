@@ -51,25 +51,19 @@ export function Devnet() {
 
   const joinSnippet = useMemo(() => {
     return [
-      '# On your provider machine (repo checked out):',
+      '# Website-first provider flow:',
+      '# 1. Open /sp-onboarding, connect the operator wallet, and optionally open pairing.',
+      '# 2. On the provider host (repo checked out):',
       'PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init',
       '',
-      '# Ask the hub operator to fund your nil1 address with stake (gas), then:',
-      `HUB_NODE="tcp://<hub-host>:26657" \\`,
-      `HUB_LCD="${appConfig.lcdBase}" \\`,
-      `CHAIN_ID="${appConfig.cosmosChainId}" \\`,
+      '# Fund the printed nil1 address with aatom before bootstrap, then:',
+      'PAIRING_ID="<website-opened-pairing-id>" \\',
       'PROVIDER_KEY="provider1" \\',
       'PROVIDER_ENDPOINT="/ip4/<public-ip>/tcp/8091/http" \\',
-      './scripts/run_devnet_provider.sh register',
-      '',
-      '# Start the provider gateway:',
       'NIL_GATEWAY_SP_AUTH="<shared-from-hub>" \\',
-      `NIL_LCD_BASE="${appConfig.lcdBase}" \\`,
-      'NIL_NODE="tcp://<hub-host>:26657" \\',
-      `NIL_CHAIN_ID="${appConfig.cosmosChainId}" \\`,
-      'PROVIDER_KEY="provider1" \\',
-      'PROVIDER_LISTEN=":8091" \\',
-      './scripts/run_devnet_provider.sh start',
+      './scripts/run_devnet_provider.sh bootstrap',
+      '',
+      '# Pairing is optional; bootstrap can run without PAIRING_ID if website linking is not needed.',
     ].join('\n')
   }, [])
 
@@ -120,8 +114,7 @@ export function Devnet() {
             Join As A Provider
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Providers must register reachable HTTP endpoints (Multiaddr) and run the provider gateway. The hub operator must
-            share a `NIL_GATEWAY_SP_AUTH` token. User gateways are optional; direct-to-provider flows are supported for browser clients.
+            Providers should start from the web onboarding flow, then run the staged host bootstrap: init the key, fund it, and only then bootstrap the provider-daemon. The hub operator must share a `NIL_GATEWAY_SP_AUTH` token. User gateways are optional; direct-to-provider flows are supported for browser clients.
           </p>
           <pre className="mt-4 text-xs bg-secondary/20 border border-border rounded-none p-4 overflow-x-auto text-muted-foreground">
             {joinSnippet}

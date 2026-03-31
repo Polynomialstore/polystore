@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import {
   buildProviderAgentPrompt,
@@ -11,6 +12,10 @@ import {
   pairingBlocksRemaining,
   pairingExpired,
 } from './providerOnboarding'
+
+function readRepoFile(relativePath: string): string {
+  return readFileSync(new URL(`../../../${relativePath}`, import.meta.url), 'utf8').trim()
+}
 
 test('buildProviderEndpointPlan creates a tunnel endpoint from a hostname', () => {
   const plan = buildProviderEndpointPlan({
@@ -29,6 +34,23 @@ test('buildProviderEndpointPlan creates a tunnel endpoint from a hostname', () =
   })
 })
 
+test('buildProviderEndpointPlan creates a direct http endpoint from an ipv4 host', () => {
+  const plan = buildProviderEndpointPlan({
+    hostMode: 'public-vps',
+    endpointMode: 'ipv4',
+    endpointValue: '203.0.113.10',
+    publicPort: 8091,
+  })
+
+  assert.deepEqual(plan, {
+    providerEndpoint: '/ip4/203.0.113.10/tcp/8091/http',
+    publicBase: 'http://203.0.113.10:8091',
+    publicHealthUrl: 'http://203.0.113.10:8091/health',
+    normalizedHost: '203.0.113.10',
+    publicPort: 8091,
+  })
+})
+
 test('buildProviderEndpointPlan keeps an explicit multiaddr intact', () => {
   const plan = buildProviderEndpointPlan({
     hostMode: 'public-vps',
@@ -41,31 +63,54 @@ test('buildProviderEndpointPlan keeps an explicit multiaddr intact', () => {
   assert.equal(plan?.publicHealthUrl, 'https://203.0.113.10:8443/health')
 })
 
-test('buildProviderBootstrapCommand uses canonical runtime defaults with quoted values', () => {
+test('buildProviderBootstrapCommand stages init before bootstrap and omits pairing when absent', () => {
+  const command = buildProviderBootstrapCommand({
+    hostMode: 'public-vps',
+    endpointMode: 'ipv4',
+    endpointValue: '203.0.113.10',
+    pairingId: '',
+    providerKey: 'provider-main',
+    authToken: "shh it's secret",
+  })
+
+  assert.match(command, /run_devnet_provider\.sh init/)
+  assert.match(command, /fund the printed nil1 address with aatom/)
+  assert.doesNotMatch(command, /PAIRING_ID=/)
+  assert.match(command, /PROVIDER_KEY='provider-main'/)
+  assert.match(command, /PROVIDER_ENDPOINT='\/ip4\/203\.0\.113\.10\/tcp\/8091\/http'/)
+  assert.match(command, /NIL_GATEWAY_SP_AUTH='shh it'\\''s secret'/)
+  assert.match(command, /run_devnet_provider\.sh bootstrap/)
+})
+
+test('buildProviderBootstrapCommand includes pairing when supplied', () => {
   const command = buildProviderBootstrapCommand({
     hostMode: 'home-tunnel',
     endpointMode: 'domain',
     endpointValue: 'sp.example.com',
     pairingId: 'pair-123',
     providerKey: 'provider-main',
-    authToken: "shh it's secret",
   })
 
   assert.match(command, /PAIRING_ID='pair-123'/)
-  assert.match(command, /PROVIDER_KEY='provider-main'/)
-  assert.match(command, /PROVIDER_ENDPOINT='\/dns4\/sp\.example\.com\/tcp\/443\/https'/)
-  assert.match(command, /NIL_GATEWAY_SP_AUTH='shh it'\\''s secret'/)
-  assert.match(command, /run_devnet_provider\.sh bootstrap/)
 })
 
-test('buildProviderHealthCommands includes local and public verification commands', () => {
+test('buildProviderHealthCommands includes doctor, verify, config, and health probes', () => {
   const commands = buildProviderHealthCommands('https://sp.example.com')
+  assert.match(commands, /doctor/)
+  assert.match(commands, /verify/)
   assert.match(commands, /print-config/)
   assert.match(commands, /127\.0\.0\.1:8091\/health/)
   assert.match(commands, /https:\/\/sp\.example\.com\/health/)
 })
 
-test('buildProviderAgentPrompt includes pairing, endpoint, and health base context', () => {
+test('buildProviderAgentPrompt matches the canonical repo prompt by default', () => {
+  const prompt = buildProviderAgentPrompt().trim()
+  const canonical = readRepoFile('docs/onboarding-prompts/provider.md')
+
+  assert.equal(prompt, canonical)
+})
+
+test('buildProviderAgentPrompt includes runtime values and provider_daemon_status', () => {
   const prompt = buildProviderAgentPrompt({
     pairingId: 'pair-123',
     providerEndpoint: '/dns4/sp.example.com/tcp/443/https',
@@ -76,9 +121,20 @@ test('buildProviderAgentPrompt includes pairing, endpoint, and health base conte
   assert.match(prompt, /PAIRING_ID=pair-123/)
   assert.match(prompt, /PROVIDER_KEY=provider-main/)
   assert.match(prompt, /PROVIDER_ENDPOINT=\/dns4\/sp\.example\.com\/tcp\/443\/https/)
-  assert.match(prompt, /website-first flow is primary/)
-  assert.match(prompt, /provider-daemon/)
-  assert.match(prompt, /public https:\/\/sp\.example\.com\/health/)
+  assert.match(prompt, /public health base `https:\/\/sp\.example\.com`/)
+  assert.match(prompt, /provider_daemon_status/)
+  assert.match(prompt, /update-aware on the current testnet build/)
+})
+
+test('provider onboarding docs reflect update-aware endpoints and the web-first flow', () => {
+  const quickstart = readRepoFile('docs/ALPHA_PROVIDER_QUICKSTART.md')
+  const remote = readRepoFile('docs/REMOTE_SP_JOIN_QUICKSTART.md')
+  const endpoints = readRepoFile('docs/networking/PROVIDER_ENDPOINTS.md')
+
+  assert.match(quickstart, /Treat `NIL_GATEWAY_SP_AUTH` as a secret/)
+  assert.match(remote, /`bootstrap` can run without `PAIRING_ID`/)
+  assert.match(endpoints, /update-provider-endpoints/)
+  assert.doesNotMatch(endpoints, /Endpoint lists are \*\*not\*\* mutable/)
 })
 
 test('pairing helpers resolve confirmed providers and expiry state', () => {
