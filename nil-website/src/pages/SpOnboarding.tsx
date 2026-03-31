@@ -47,9 +47,10 @@ import { extractProviderHttpBases } from '../lib/spDashboard'
 const PROVIDER_DOCS_URL = 'https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_PROVIDER_QUICKSTART.md'
 const PROVIDER_PLAYBOOK_URL = 'https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md'
 const REPO_URL = 'https://github.com/Nil-Store/nil-store'
-const REPO_CLONE_HTTPS = 'git clone https://github.com/Nil-Store/nil-store.git\ncd nil-store'
-const REPO_CLONE_SSH = 'git clone git@github.com:Nil-Store/nil-store.git\ncd nil-store'
-const REPO_CLONE_GH = 'gh repo clone Nil-Store/nil-store\ncd nil-store'
+const REPO_CLONE_HTTPS = 'git clone https://github.com/Nil-Store/nil-store.git'
+const REPO_CLONE_SSH = 'git clone git@github.com:Nil-Store/nil-store.git'
+const REPO_CLONE_GH = 'gh repo clone Nil-Store/nil-store'
+const REPO_ENTER_DIR = 'cd nil-store'
 const LOCAL_HEALTH_URL = 'http://127.0.0.1:8091/health'
 const PROVIDER_DRAFT_KEY = 'nilstore.provider-onboarding.v2'
 const PROVIDER_AUTH_SESSION_KEY = 'nilstore.provider-onboarding.auth.v1'
@@ -189,6 +190,18 @@ const WALLET_ACCESS_REQUIRED_MESSAGE =
   'Wallet access is required. If you switched accounts in MetaMask, click Connect Wallet and approve access for the active account.'
 
 type FlowStepId = 'wallet' | 'pairing_open' | 'clone_repo' | 'provider_key' | 'pairing_host' | 'reachability' | 'auth' | 'verification'
+type CloneMethod = 'https' | 'ssh' | 'gh'
+
+const CLONE_METHOD_OPTIONS: Array<{
+  id: CloneMethod
+  label: string
+  command: string
+  description: string
+}> = [
+  { id: 'https', label: 'HTTPS', command: REPO_CLONE_HTTPS, description: 'Clone using the web URL.' },
+  { id: 'ssh', label: 'SSH', command: REPO_CLONE_SSH, description: 'Use an SSH key configured for GitHub.' },
+  { id: 'gh', label: 'GitHub CLI', command: REPO_CLONE_GH, description: 'Clone quickly using the GitHub CLI.' },
+]
 
 const FLOW_STEPS: Array<{ id: FlowStepId; label: string; anchor: string }> = [
   { id: 'wallet', label: 'Operator wallet', anchor: 'step-wallet' },
@@ -243,6 +256,7 @@ export function SpOnboarding() {
   const [providerKey, setProviderKey] = useState(storedDraft.providerKey)
   const [providerRepoReady, setProviderRepoReady] = useState(storedDraft.providerRepoReady)
   const [providerKeyInitialized, setProviderKeyInitialized] = useState(storedDraft.providerKeyInitialized)
+  const [cloneMethod, setCloneMethod] = useState<CloneMethod>('https')
   const [pairingId, setPairingId] = useState(storedDraft.pairingId)
   const [pairingTxHash, setPairingTxHash] = useState(storedDraft.pairingTxHash)
   const [authToken, setAuthToken] = useState(loadSessionAuthToken)
@@ -319,6 +333,7 @@ export function SpOnboarding() {
   const hasAuthToken = Boolean(authToken.trim())
   const providerKeyLabel = String(providerKey || '').trim()
   const providerKeyReady = Boolean(providerKeyLabel)
+  const selectedCloneOption = CLONE_METHOD_OPTIONS.find((option) => option.id === cloneMethod) ?? CLONE_METHOD_OPTIONS[0]
   const runbookReadiness = useMemo(
     () =>
       evaluateProviderRunbookReadiness({
@@ -1022,27 +1037,63 @@ export function SpOnboarding() {
               </div>
 
               <div className="mt-6 space-y-5">
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-foreground">HTTPS clone</div>
-                      <CopyButton label="Copy" onClick={() => void handleCopy('HTTPS clone command', REPO_CLONE_HTTPS)} />
+                <div className="border border-border bg-background/60">
+                  <div className="border-b border-border p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Server className="h-4 w-4 text-muted-foreground" />
+                      Clone
                     </div>
-                    <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{REPO_CLONE_HTTPS}</pre>
+                    <div className="mt-3 flex items-end gap-6 border-b border-border">
+                      {CLONE_METHOD_OPTIONS.map((option) => {
+                        const active = cloneMethod === option.id
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => setCloneMethod(option.id)}
+                            className={`-mb-px border-b-2 px-1 pb-2 text-base font-semibold transition-colors ${
+                              active
+                                ? 'border-primary text-foreground'
+                                : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                            aria-pressed={active}
+                          >
+                            {option.label}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-foreground">SSH clone</div>
-                      <CopyButton label="Copy" onClick={() => void handleCopy('SSH clone command', REPO_CLONE_SSH)} />
+
+                  <div className="space-y-4 p-4">
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1 overflow-x-auto border border-border bg-background/80 px-3 py-2 font-mono text-sm text-foreground">
+                        {selectedCloneOption.command}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleCopy(`${selectedCloneOption.label} clone command`, selectedCloneOption.command)}
+                        className="inline-flex h-10 w-10 items-center justify-center border border-border bg-background/70 text-foreground hover:bg-secondary/40"
+                        aria-label={`Copy ${selectedCloneOption.label} clone command`}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
                     </div>
-                    <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{REPO_CLONE_SSH}</pre>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-foreground">GitHub CLI clone</div>
-                      <CopyButton label="Copy" onClick={() => void handleCopy('GitHub CLI clone command', REPO_CLONE_GH)} />
+                    <div className="text-sm text-muted-foreground">{selectedCloneOption.description}</div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1 overflow-x-auto border border-border bg-background/80 px-3 py-2 font-mono text-sm text-foreground">
+                        {REPO_ENTER_DIR}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleCopy('Change directory command', REPO_ENTER_DIR)}
+                        className="inline-flex h-10 w-10 items-center justify-center border border-border bg-background/70 text-foreground hover:bg-secondary/40"
+                        aria-label="Copy change directory command"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
                     </div>
-                    <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{REPO_CLONE_GH}</pre>
                   </div>
                 </div>
 
