@@ -47,6 +47,9 @@ import { extractProviderHttpBases } from '../lib/spDashboard'
 const PROVIDER_DOCS_URL = 'https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_PROVIDER_QUICKSTART.md'
 const PROVIDER_PLAYBOOK_URL = 'https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md'
 const REPO_URL = 'https://github.com/Nil-Store/nil-store'
+const REPO_CLONE_HTTPS = 'git clone https://github.com/Nil-Store/nil-store.git\ncd nil-store'
+const REPO_CLONE_SSH = 'git clone git@github.com:Nil-Store/nil-store.git\ncd nil-store'
+const REPO_CLONE_GH = 'gh repo clone Nil-Store/nil-store\ncd nil-store'
 const LOCAL_HEALTH_URL = 'http://127.0.0.1:8091/health'
 const PROVIDER_DRAFT_KEY = 'nilstore.provider-onboarding.v2'
 const PROVIDER_AUTH_SESSION_KEY = 'nilstore.provider-onboarding.auth.v1'
@@ -70,6 +73,8 @@ type StoredProviderDraft = {
   endpointValue: string
   publicPort: string
   providerKey: string
+  providerRepoReady: boolean
+  providerKeyInitialized: boolean
   pairingId: string
   pairingTxHash: string
 }
@@ -82,6 +87,8 @@ function loadStoredDraft(): StoredProviderDraft {
       endpointValue: '',
       publicPort: '443',
       providerKey: 'provider1',
+      providerRepoReady: false,
+      providerKeyInitialized: false,
       pairingId: '',
       pairingTxHash: '',
     }
@@ -100,6 +107,8 @@ function loadStoredDraft(): StoredProviderDraft {
       endpointValue: String(parsed.endpointValue || ''),
       publicPort: String(parsed.publicPort || '443'),
       providerKey: String(parsed.providerKey || 'provider1'),
+      providerRepoReady: Boolean(parsed.providerRepoReady),
+      providerKeyInitialized: Boolean(parsed.providerKeyInitialized),
       pairingId: String(parsed.pairingId || ''),
       pairingTxHash: String(parsed.pairingTxHash || ''),
     }
@@ -110,6 +119,8 @@ function loadStoredDraft(): StoredProviderDraft {
       endpointValue: '',
       publicPort: '443',
       providerKey: 'provider1',
+      providerRepoReady: false,
+      providerKeyInitialized: false,
       pairingId: '',
       pairingTxHash: '',
     }
@@ -177,11 +188,13 @@ function CopyButton({ onClick, label }: { onClick: () => void; label: string }) 
 const WALLET_ACCESS_REQUIRED_MESSAGE =
   'Wallet access is required. If you switched accounts in MetaMask, click Connect Wallet and approve access for the active account.'
 
-type FlowStepId = 'wallet' | 'pairing_open' | 'pairing_host' | 'reachability' | 'auth' | 'verification'
+type FlowStepId = 'wallet' | 'pairing_open' | 'clone_repo' | 'provider_key' | 'pairing_host' | 'reachability' | 'auth' | 'verification'
 
 const FLOW_STEPS: Array<{ id: FlowStepId; label: string; anchor: string }> = [
   { id: 'wallet', label: 'Operator wallet', anchor: 'step-wallet' },
   { id: 'pairing_open', label: 'Browser pairing', anchor: 'step-pairing-open' },
+  { id: 'clone_repo', label: 'Clone nil-store repo', anchor: 'step-clone-repo' },
+  { id: 'provider_key', label: 'Provider key init', anchor: 'step-provider-key' },
   { id: 'pairing_host', label: 'Provider-host pairing', anchor: 'step-pairing-host' },
   { id: 'reachability', label: 'Public reachability', anchor: 'step-reachability' },
   { id: 'auth', label: 'Shared auth', anchor: 'step-auth' },
@@ -191,7 +204,9 @@ const FLOW_STEPS: Array<{ id: FlowStepId; label: string; anchor: string }> = [
 const STEP_DONE_WHEN: Record<FlowStepId, string> = {
   wallet: 'wallet is connected, on NilStore testnet, and funded',
   pairing_open: 'pairing ID exists on-chain with an active TTL',
-  pairing_host: 'provider key is set and provider host confirms pairing on-chain',
+  clone_repo: 'provider host has a local nil-store checkout',
+  provider_key: 'provider key is initialized and funded (or already funded)',
+  pairing_host: 'provider host confirms pairing on-chain',
   reachability: 'derived provider endpoint and public health URL are shown',
   auth: 'shared provider auth token is present',
   verification: 'pairing, registration, and health all report healthy',
@@ -226,6 +241,8 @@ export function SpOnboarding() {
   const [endpointValue, setEndpointValue] = useState(storedDraft.endpointValue)
   const [publicPort, setPublicPort] = useState(storedDraft.publicPort)
   const [providerKey, setProviderKey] = useState(storedDraft.providerKey)
+  const [providerRepoReady, setProviderRepoReady] = useState(storedDraft.providerRepoReady)
+  const [providerKeyInitialized, setProviderKeyInitialized] = useState(storedDraft.providerKeyInitialized)
   const [pairingId, setPairingId] = useState(storedDraft.pairingId)
   const [pairingTxHash, setPairingTxHash] = useState(storedDraft.pairingTxHash)
   const [authToken, setAuthToken] = useState(loadSessionAuthToken)
@@ -256,11 +273,13 @@ export function SpOnboarding() {
       endpointValue,
       publicPort,
       providerKey,
+      providerRepoReady,
+      providerKeyInitialized,
       pairingId,
       pairingTxHash,
     }
     window.localStorage.setItem(PROVIDER_DRAFT_KEY, JSON.stringify(payload))
-  }, [endpointMode, endpointValue, hostMode, pairingId, pairingTxHash, providerKey, publicPort])
+  }, [endpointMode, endpointValue, hostMode, pairingId, pairingTxHash, providerKey, providerRepoReady, providerKeyInitialized, publicPort])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -531,7 +550,7 @@ export function SpOnboarding() {
         expires_at: String(expiresAt),
         opened_height: String(height),
       })
-      setNotice('Pairing request opened on-chain. Continue to Step 3 to run provider-host pairing confirmation.')
+      setNotice('Pairing request opened on-chain. Continue to Step 3 on the provider host, then complete pairing in Step 5.')
       await refreshLiveState()
     } catch (openError) {
       const message = openError instanceof Error ? openError.message : 'Could not open provider pairing'
@@ -562,9 +581,15 @@ export function SpOnboarding() {
       : pendingPairing || openingPairing || (pairingId && !pairingConfirmed)
         ? 'pending'
         : 'idle'
-  const pairingHostState: 'ready' | 'pending' | 'action' | 'idle' = pairingConfirmed && providerKeyReady
+  const cloneRepoState: 'ready' | 'pending' | 'action' | 'idle' = providerRepoReady ? 'ready' : 'action'
+  const providerKeyState: 'ready' | 'pending' | 'action' | 'idle' = providerKeyReady && providerKeyInitialized
     ? 'ready'
-    : !providerKeyReady || !pairingLinked || pairingIsExpired
+    : providerKeyReady
+      ? 'pending'
+      : 'action'
+  const pairingHostState: 'ready' | 'pending' | 'action' | 'idle' = pairingConfirmed
+    ? 'ready'
+    : !providerRepoReady || !providerKeyReady || !providerKeyInitialized || !pairingLinked || pairingIsExpired
       ? 'action'
       : pairingState === 'pending'
         ? 'pending'
@@ -581,19 +606,25 @@ export function SpOnboarding() {
   const stepReadyById: Record<FlowStepId, boolean> = {
     wallet: walletReady && funded,
     pairing_open: pairingLinked && !pairingIsExpired,
-    pairing_host: pairingConfirmed && providerKeyReady,
+    clone_repo: providerRepoReady,
+    provider_key: providerKeyReady && providerKeyInitialized,
+    pairing_host: pairingConfirmed,
     reachability: Boolean(endpointPlan),
     auth: hasAuthToken,
     verification: publicHealthReady && providerRegistered,
   }
-  const commandReady = bootstrapReady && providerKeyReady
+  const commandReady = bootstrapReady && providerRepoReady && providerKeyReady && providerKeyInitialized
   const currentStepId: FlowStepId = !stepReadyById.wallet
     ? 'wallet'
     : !stepReadyById.pairing_open
       ? 'pairing_open'
+      : !stepReadyById.clone_repo
+        ? 'clone_repo'
+        : !stepReadyById.provider_key
+          ? 'provider_key'
       : !stepReadyById.pairing_host
         ? 'pairing_host'
-      : !stepReadyById.reachability
+        : !stepReadyById.reachability
         ? 'reachability'
         : !stepReadyById.auth
           ? 'auth'
@@ -616,6 +647,10 @@ export function SpOnboarding() {
       ? 'Connect the browser wallet, switch to NilStore testnet, and fund it before moving on.'
       : currentStepId === 'pairing_open'
         ? 'Open a pairing on-chain from this page to create the pairing ID and TTL.'
+        : currentStepId === 'clone_repo'
+          ? 'Clone the nil-store repository on the provider host and change into the repo directory.'
+          : currentStepId === 'provider_key'
+            ? 'Run provider key init on the provider host, then fund the printed nil1 address if needed.'
         : currentStepId === 'pairing_host'
           ? 'Run provider-host pairing confirmation with the pairing ID and provider key, then refresh until confirmed.'
         : currentStepId === 'reachability'
@@ -682,8 +717,10 @@ export function SpOnboarding() {
               <div className="flex items-center gap-2 text-sm text-foreground">
                 <StatusPill
                   label={
-                    !providerKeyReady
-                      ? 'Set key in step 3'
+                    !providerRepoReady
+                      ? 'Clone repo step 3'
+                      : !providerKeyReady || !providerKeyInitialized
+                        ? 'Prep key step 4'
                       : pairingConfirmed
                         ? 'Confirmed'
                         : pairingLinked
@@ -943,7 +980,7 @@ export function SpOnboarding() {
                     <div className={`border px-4 py-3 text-sm ${pairingIsExpired ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-primary/30 bg-primary/10 text-primary'}`}>
                       {pairingIsExpired
                         ? 'The pairing session expired before the provider host confirmed it. Open a new pairing and copy a fresh provider host runbook.'
-                        : 'Pairing is open on-chain. Continue to Step 3 and run provider-host pairing confirmation before expiry.'}
+                        : 'Pairing is open on-chain. Continue with Steps 3-5 on the provider host before expiry.'}
                     </div>
                   ) : (
                     <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
@@ -969,29 +1006,79 @@ export function SpOnboarding() {
               </div>
             </section>
 
-            <section id="step-pairing-host" className="glass-panel industrial-border scroll-mt-28 p-6">
+            <section id="step-clone-repo" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Provider-host pairing</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Confirm pairing from the provider host</h2>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Clone nil-store on provider host</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Prepare the provider host workspace</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    This is the server-side half of pairing. Use the pairing ID from Step 2 and the local provider key to run the pair command on the provider host.
+                    Pick one clone method and run it on the provider host. This is required before init, pair, bootstrap, or verify commands.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">provider host confirms the pairing on-chain</span>.
+                    Done when: <span className="font-semibold text-foreground">provider host has a local nil-store checkout</span>.
+                  </p>
+                </div>
+                <StatusPill label={providerRepoReady ? 'Repo ready' : 'Clone required'} state={cloneRepoState} />
+              </div>
+
+              <div className="mt-6 space-y-5">
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-foreground">HTTPS clone</div>
+                      <CopyButton label="Copy" onClick={() => void handleCopy('HTTPS clone command', REPO_CLONE_HTTPS)} />
+                    </div>
+                    <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{REPO_CLONE_HTTPS}</pre>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-foreground">SSH clone</div>
+                      <CopyButton label="Copy" onClick={() => void handleCopy('SSH clone command', REPO_CLONE_SSH)} />
+                    </div>
+                    <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{REPO_CLONE_SSH}</pre>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-foreground">GitHub CLI clone</div>
+                      <CopyButton label="Copy" onClick={() => void handleCopy('GitHub CLI clone command', REPO_CLONE_GH)} />
+                    </div>
+                    <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{REPO_CLONE_GH}</pre>
+                  </div>
+                </div>
+
+                <label className="inline-flex items-start gap-3 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={providerRepoReady}
+                    onChange={(event) => setProviderRepoReady(event.target.checked)}
+                    className="mt-1 h-4 w-4 border border-border bg-background"
+                  />
+                  <span>I cloned the repo on the provider host and I am running commands inside the `nil-store` directory.</span>
+                </label>
+
+                {!providerRepoReady ? (
+                  <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
+                    Complete this first. Steps 4 and 5 assume the provider host can run `./scripts/run_devnet_provider.sh ...`.
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <section id="step-provider-key" className="glass-panel industrial-border scroll-mt-28 p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Provider key init + fund</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Initialize and fund the provider key</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    This is a separate server-side step from pairing. Run init first, then ensure the key has funds before host pairing.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Done when: <span className="font-semibold text-foreground">provider key is initialized and funded (or already funded)</span>.
                   </p>
                 </div>
                 <StatusPill
-                  label={
-                    !providerKeyReady
-                      ? 'Missing key'
-                      : pairingConfirmed
-                        ? 'Confirmed'
-                        : pairingLinked
-                          ? 'Awaiting host pair'
-                          : 'Missing pairing ID'
-                  }
-                  state={pairingHostState}
+                  label={!providerKeyReady ? 'Missing key name' : providerKeyInitialized ? 'Key prepared' : 'Run init + fund'}
+                  state={providerKeyState}
                 />
               </div>
 
@@ -1006,6 +1093,69 @@ export function SpOnboarding() {
                   />
                 </label>
 
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-foreground">Provider key init command (provider host)</div>
+                    <CopyButton label="Copy" onClick={() => void handleCopy('Provider init command', providerInitCommand)} />
+                  </div>
+                  <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{providerInitCommand}</pre>
+                  <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                    Run this command once for the key name above. If the key is new, fund the printed nil1 address. If the key already exists and is funded, continue directly to Step 5.
+                  </div>
+                </div>
+
+                <label className="inline-flex items-start gap-3 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={providerKeyInitialized}
+                    onChange={(event) => setProviderKeyInitialized(event.target.checked)}
+                    className="mt-1 h-4 w-4 border border-border bg-background"
+                    disabled={!providerKeyReady || !providerRepoReady}
+                  />
+                  <span>I ran init for this key (or confirmed it already existed) and the key is funded for pairing.</span>
+                </label>
+
+                {!providerRepoReady ? (
+                  <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                    Finish Step 3 first so host scripts are available in a local repo checkout.
+                  </div>
+                ) : !providerKeyReady ? (
+                  <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    Set the local provider key name above before running init on the provider host.
+                  </div>
+                ) : !providerKeyInitialized ? (
+                  <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
+                    Run init and ensure key funding, then check the confirmation box to continue.
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <section id="step-pairing-host" className="glass-panel industrial-border scroll-mt-28 p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">5. Provider-host pairing</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Confirm pairing from the provider host</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Now run the pair command on the provider host. This confirms the browser-opened pairing request on-chain.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Done when: <span className="font-semibold text-foreground">provider host confirms pairing on-chain</span>.
+                  </p>
+                </div>
+                <StatusPill
+                  label={
+                    pairingConfirmed
+                      ? 'Confirmed'
+                      : pairingLinked
+                        ? 'Awaiting host pair'
+                        : 'Missing pairing ID'
+                  }
+                  state={pairingHostState}
+                />
+              </div>
+
+              <div className="mt-6 space-y-5">
                 <div className="grid gap-3 border border-border bg-background/40 p-4 text-sm text-muted-foreground md:grid-cols-3">
                   <div className="flex items-center justify-between gap-3 md:block">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing ID</div>
@@ -1013,7 +1163,7 @@ export function SpOnboarding() {
                   </div>
                   <div className="flex items-center justify-between gap-3 md:block">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key</div>
-                    <div className="mt-1 font-mono-data text-foreground">{providerKeyLabel || 'provider1'}</div>
+                    <div className="mt-1 font-mono-data text-foreground">{providerKeyLabel || 'required from Step 4'}</div>
                   </div>
                   <div className="flex items-center justify-between gap-3 md:block">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain status</div>
@@ -1021,32 +1171,24 @@ export function SpOnboarding() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-foreground">First-time key init (provider host)</div>
-                      <CopyButton label="Copy" onClick={() => void handleCopy('Provider init command', providerInitCommand)} />
-                    </div>
-                    <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{providerInitCommand}</pre>
-                    <p className="text-xs text-muted-foreground">
-                      If this creates a new key, fund the printed nil1 address before running pair.
-                    </p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-foreground">Pair command (provider host)</div>
+                    <CopyButton label="Copy" onClick={() => void handleCopy('Pair command', pairCommand)} />
                   </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-foreground">Pair command (provider host)</div>
-                      <CopyButton label="Copy" onClick={() => void handleCopy('Pair command', pairCommand)} />
-                    </div>
-                    <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{pairCommand}</pre>
-                    <p className="text-xs text-muted-foreground">
-                      Run this on the provider host, then click refresh until status changes to confirmed.
-                    </p>
-                  </div>
+                  <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{pairCommand}</pre>
+                  <p className="text-xs text-muted-foreground">
+                    Run this on the provider host, then click refresh until status changes to confirmed.
+                  </p>
                 </div>
 
-                {!providerKeyReady ? (
-                  <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                    Set the local provider key name above before running init or pair on the provider host.
+                {!providerRepoReady ? (
+                  <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                    Finish Step 3 first (repo clone), then return to pairing.
+                  </div>
+                ) : !providerKeyReady || !providerKeyInitialized ? (
+                  <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                    Finish Step 4 first (provider key init + funding), then run pair.
                   </div>
                 ) : !pairingLinked ? (
                   <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
@@ -1058,7 +1200,7 @@ export function SpOnboarding() {
                   </div>
                 ) : pairingConfirmed ? (
                   <div className="border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
-                    Provider pairing confirmed. Continue to Step 4 for public endpoint setup.
+                    Provider pairing confirmed. Continue to Step 6 for public endpoint setup.
                   </div>
                 ) : (
                   <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
@@ -1071,7 +1213,7 @@ export function SpOnboarding() {
             <section id="step-reachability" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Public reachability</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">6. Public reachability</div>
                   <h2 className="text-2xl font-semibold text-foreground">How will browsers reach this provider?</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     Start with the public address shape. The website needs a real hostname, IP, or multiaddr before it can generate provider host commands or track public health.
@@ -1188,7 +1330,7 @@ export function SpOnboarding() {
             <section id="step-auth" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">5. Shared auth</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">7. Shared auth</div>
                   <h2 className="text-2xl font-semibold text-foreground">Unlock the provider host runbook</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     Add the shared provider auth token from the hub operator. Once endpoint, pairing, and auth are all present, the command rail becomes run-ready.
@@ -1225,6 +1367,14 @@ export function SpOnboarding() {
                         <span className="font-mono-data text-foreground">{pairingLinked ? 'yes' : 'no'}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
+                        <span>Repo cloned on host</span>
+                        <span className="font-mono-data text-foreground">{providerRepoReady ? 'yes' : 'no'}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Provider key prepared</span>
+                        <span className="font-mono-data text-foreground">{providerKeyReady && providerKeyInitialized ? 'yes' : 'no'}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
                         <span>Endpoint defined</span>
                         <span className="font-mono-data text-foreground">{endpointPlan ? 'yes' : 'no'}</span>
                       </div>
@@ -1246,10 +1396,14 @@ export function SpOnboarding() {
 
                 {!commandReady ? (
                   <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                    {!providerKeyReady
-                      ? 'Finish Step 3 by setting the local provider key name used by provider host commands.'
+                    {!providerRepoReady
+                      ? 'Finish Step 3 by cloning nil-store on the provider host.'
+                      : !providerKeyReady
+                        ? 'Finish Step 4 by setting the local provider key name used by provider host commands.'
+                      : !providerKeyInitialized
+                        ? 'Finish Step 4 by running provider key init and funding before unlock.'
                       : runbookReadiness.missing.includes('endpoint')
-                      ? 'Finish Step 4 so the website can derive the public provider endpoint.'
+                      ? 'Finish Step 6 so the website can derive the public provider endpoint.'
                       : runbookReadiness.missing.includes('pairing')
                         ? 'Finish Step 2 so the website can bind these commands to the on-chain pairing request.'
                         : 'Add the shared auth token from the hub operator to unlock run-ready provider host commands.'}
@@ -1261,7 +1415,7 @@ export function SpOnboarding() {
             <section id="step-verification" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">6. Verification</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">8. Verification</div>
                   <h2 className="text-2xl font-semibold text-foreground">Watch pairing, registration, and public health converge</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
                     After the provider host runs bootstrap, this page should move from pending pairing to paired provider, then to on-chain registration, then to healthy daemon-reported public reachability. The direct browser <span className="font-mono">/health</span> probe is only advisory.
@@ -1426,13 +1580,13 @@ export function SpOnboarding() {
               <div className="border-b border-border/60 px-6 py-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Command rail (after step 5)</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Command rail (after step 7)</div>
                     <h2 className="mt-2 text-2xl font-semibold text-foreground">Provider host runbook</h2>
                   </div>
                 <StatusPill label={commandReady ? 'Command ready' : 'Waiting'} state={commandReady ? 'ready' : 'pending'} />
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
-                  Complete Steps 1 through 5 first. This panel becomes run-ready only after pairing, public endpoint, provider key, and shared auth are all set.
+                  Complete Steps 1 through 7 first. This panel becomes run-ready only after pairing, host setup, key init, public endpoint, and shared auth are all set.
               </p>
               </div>
 
@@ -1507,10 +1661,14 @@ export function SpOnboarding() {
                   </>
                 ) : (
                   <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                    {!providerKeyReady
-                      ? 'Set the provider key name in Step 3 before generating host commands.'
+                    {!providerRepoReady
+                      ? 'Complete Step 3 (clone nil-store on the provider host) before generating host commands.'
+                      : !providerKeyReady
+                        ? 'Set the provider key name in Step 4 before generating host commands.'
+                      : !providerKeyInitialized
+                        ? 'Run provider key init + funding in Step 4 before generating host commands.'
                       : runbookReadiness.missing.includes('endpoint')
-                      ? 'Describe the public endpoint to generate the provider host runbook.'
+                      ? 'Describe the public endpoint in Step 6 to generate the provider host runbook.'
                       : runbookReadiness.missing.includes('pairing')
                         ? 'Open pairing from the browser before this page will generate run-ready provider host commands.'
                         : 'Add the shared provider auth token from the hub operator before this page will generate run-ready provider host commands.'}
