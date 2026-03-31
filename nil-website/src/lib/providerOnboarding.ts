@@ -146,7 +146,7 @@ export function buildProviderAgentPrompt(input: {
   const providerEndpoint = trimNonEmpty(input.providerEndpoint) || '<provider-endpoint>'
   const publicBase = trimNonEmpty(input.publicBase ?? '') || 'https://sp.<domain>'
 
-  return `You are setting up this machine as a NilStore testnet Storage Provider.
+  return `You are setting up this machine as a NilStore testnet provider-daemon for an operator who already started onboarding from the website.
 
 Repo bootstrap (required unless already inside a fresh nil-store checkout):
 1. If repo is missing:
@@ -158,6 +158,7 @@ Repo bootstrap (required unless already inside a fresh nil-store checkout):
    - git pull --ff-only origin main
 
 Context:
+- The website-first flow is primary. This agent run is the assistive path for the provider host.
 - Preferred mode: home server behind NAT with Cloudflare Tunnel.
 - Use docs/ALPHA_PROVIDER_QUICKSTART.md, docs/REMOTE_SP_JOIN_QUICKSTART.md, and docs/networking/PROVIDER_ENDPOINTS.md.
 - The happy path uses the canonical public testnet defaults already baked into scripts/run_devnet_provider.sh.
@@ -175,7 +176,7 @@ Your job:
 2. Create or import provider key.
 3. Configure local listener and public endpoint.
 4. Prefer ./scripts/run_devnet_provider.sh bootstrap for the main flow.
-5. Confirm pairing on-chain using PAIRING_ID.
+5. Confirm pairing on-chain using PAIRING_ID when it is supplied.
 6. Register or update provider endpoints on-chain.
 7. Start the provider-daemon if it is not already running.
 8. Verify:

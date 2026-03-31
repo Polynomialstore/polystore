@@ -1,16 +1,22 @@
-# Remote Storage Provider (SP) Join — Quickstart
+# Remote Provider-Daemon Join — Quickstart
 
-This is the **fast path** for a trusted collaborator to join a shared devnet as a Storage Provider.
+This is the **fast path** for a trusted collaborator to join a shared devnet as a NilStore provider-daemon operator.
 
 If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 
 ## What you need from the hub operator
 
-- Shared router↔provider auth token: `NIL_GATEWAY_SP_AUTH=...`
+- Shared `user-gateway` to `provider-daemon` auth token: `NIL_GATEWAY_SP_AUTH=...`
 - Optional but recommended: a website-opened `PAIRING_ID=...`
 
 The default provider flow now targets the canonical public NilStore testnet from `.env.testnet.public`.
 Only set `HUB_NODE`, `HUB_LCD`, or `CHAIN_ID` when you are intentionally joining a non-public hub.
+
+The web-first operator flow is:
+1. Open `/sp-onboarding` on the website.
+2. Connect the operator wallet and open pairing.
+3. Copy the generated `PAIRING_ID` into the provider host bootstrap command.
+4. Finish verification from the website `My Providers` dashboard.
 
 ## Provider machine prerequisites
 
@@ -160,4 +166,4 @@ curl -sf "${HUB_LCD:-https://lcd.nilstore.org}/nilchain/nilchain/v1/providers" |
   - the `PAIRING_ID` was never opened on-chain, or it expired before the server confirmed it
 - Router can’t reach provider:
   - firewall/NAT; ensure your `PROVIDER_ENDPOINT` is reachable **from the hub**
-  - confirm `NIL_GATEWAY_SP_AUTH` matches the hub router
+  - confirm `NIL_GATEWAY_SP_AUTH` matches the hub `user-gateway`

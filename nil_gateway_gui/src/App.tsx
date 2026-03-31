@@ -982,7 +982,7 @@ export default function App() {
                 className="control-btn h-8 px-3"
                 onClick={() => setWorkspace("sp")}
               >
-                SP LAUNCHPAD
+                PROVIDER TOOLS
               </button>
             </div>
           </div>

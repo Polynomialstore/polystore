@@ -76,6 +76,8 @@ test('buildProviderAgentPrompt includes pairing, endpoint, and health base conte
   assert.match(prompt, /PAIRING_ID=pair-123/)
   assert.match(prompt, /PROVIDER_KEY=provider-main/)
   assert.match(prompt, /PROVIDER_ENDPOINT=\/dns4\/sp\.example\.com\/tcp\/443\/https/)
+  assert.match(prompt, /website-first flow is primary/)
+  assert.match(prompt, /provider-daemon/)
   assert.match(prompt, /public https:\/\/sp\.example\.com\/health/)
 })
 

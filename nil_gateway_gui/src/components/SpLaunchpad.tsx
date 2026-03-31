@@ -145,7 +145,9 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
   const [sharedAuth, setSharedAuth] = useState("");
 
   const [stepStatus, setStepStatus] = useState<StepStatusRecord>(initialStepStatus);
-  const [statusMessage, setStatusMessage] = useState("Start onboarding by loading defaults.");
+  const [statusMessage, setStatusMessage] = useState(
+    "Website-first onboarding is recommended. Use these local tools when you need a desktop-managed provider-daemon for demos, testing, or diagnostics.",
+  );
   const [busy, setBusy] = useState(false);
 
   const [balanceCheck, setBalanceCheck] = useState<SpBalanceCheckResponse | null>(null);
@@ -372,7 +374,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
         if (!response.ok) {
           throw new Error(response.stderr || response.stdout || "provider start failed");
         }
-        setStep("service", "done", "Local provider started.");
+        setStep("service", "done", "Local provider-daemon started.");
         setStatusMessage("Provider started. Run health confirmation next.");
         addLog("sp.onboarding.service: local provider started");
       } else {
@@ -559,10 +561,10 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
     <div className="glass-panel industrial-border p-5">
       <div className="sp-topbar">
         <div>
-          <p className="soft-label">Storage Provider</p>
-          <h2 className="text-2xl font-semibold text-foreground">SP Launchpad</h2>
+          <p className="soft-label">Advanced Local Ops</p>
+          <h2 className="text-2xl font-semibold text-foreground">Provider Tools</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Guided onboarding and operations for NilStore Storage Providers.
+            Advanced local onboarding and diagnostics for NilStore provider-daemons. The primary operator path lives on the website.
           </p>
         </div>
         <div className="sp-topbar-actions">
@@ -572,7 +574,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
               className="control-btn control-btn-inline"
               onClick={onBack}
             >
-              Back to Local Gateway
+              Back to user-gateway
             </button>
           ) : null}
           <span className={statusBadgeClass(healthStatus)}>
@@ -587,7 +589,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
           className={["panel-tab", tab === "onboarding" ? "panel-tab-active" : ""].join(" ")}
           onClick={() => setTab("onboarding")}
         >
-          Guided setup
+          Local setup
         </button>
         <button
           type="button"
@@ -661,7 +663,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 <div className="sp-summary-cell border-border/40">
                   <span className="text-muted-foreground">Deployment</span>
-                  <strong className="text-foreground">{deploymentMode === "local" ? "Local provider" : "Remote provider"}</strong>
+                  <strong className="text-foreground">{deploymentMode === "local" ? "Local provider-daemon" : "Remote provider-daemon"}</strong>
                 </div>
                 <div className="sp-summary-cell border-border/40">
                   <span className="text-muted-foreground">Endpoint mode</span>
@@ -734,7 +736,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                   onClick={() => setDeploymentMode("local")}
                   disabled={busy}
                 >
-                  Local provider
+                  Local provider-daemon
                 </button>
                 <button
                   type="button"
@@ -745,7 +747,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                   onClick={() => setDeploymentMode("remote")}
                   disabled={busy}
                 >
-                  Remote provider
+                  Remote provider-daemon
                 </button>
                 <button
                   type="button"

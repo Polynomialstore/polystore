@@ -1,6 +1,6 @@
-# Provider Prompt
+# Provider-Daemon Prompt
 
-You are setting up this machine as a NilStore testnet Storage Provider.
+You are setting up this machine as a NilStore testnet provider-daemon for an operator who already initiated onboarding from the website.
 
 Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
 1. If repo is missing:
@@ -12,6 +12,7 @@ Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
    - `git pull --ff-only origin main`
 
 Context:
+- The website-first flow is primary. This agent run is the assistive path for the provider host.
 - Preferred mode: home server behind NAT with Cloudflare Tunnel.
 - Use `docs/ALPHA_PROVIDER_QUICKSTART.md`, `docs/REMOTE_SP_JOIN_QUICKSTART.md`, and `docs/networking/PROVIDER_ENDPOINTS.md`.
 - The happy path uses the canonical public testnet defaults already baked into `scripts/run_devnet_provider.sh`.
@@ -27,7 +28,7 @@ Your job:
 2. Create or import provider key.
 3. Configure local listener and public endpoint.
 4. Prefer `./scripts/run_devnet_provider.sh bootstrap` for the main flow.
-5. If `PAIRING_ID` is present, confirm the provider is paired on-chain.
+5. If `PAIRING_ID` is present, confirm the provider is paired on-chain before continuing.
 6. Register or update provider endpoints on-chain.
 7. Start the provider-daemon if it is not already running.
 8. Verify:
@@ -49,7 +50,7 @@ At the end, print:
    - `local_health_ok`
    - `public_health_ok`
    - `lcd_visible`
-   - `service_status`
+   - `provider_daemon_status`
    - `commands_run`
    - `files_changed`
 2. A short human-readable summary.

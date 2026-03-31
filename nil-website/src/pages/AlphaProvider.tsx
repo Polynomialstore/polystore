@@ -30,8 +30,8 @@ export function AlphaProvider() {
           <AgentPromptCard
             className="mx-auto max-w-2xl"
             badge="/alpha/provider/agent"
-            title="Alternatively: Onboard with a coding agent"
-            description="If you have a coding agent on the provider host, copy the bootstrap prompt and let it run the full provider setup and verification loop."
+            title="Optional: bootstrap with a coding agent"
+            description="The primary path is the website wizard. If you already have a coding agent on the provider host, copy this prompt to automate bootstrap and verification."
             prompt={providerAgentPrompt}
           />
         </section>

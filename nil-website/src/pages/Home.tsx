@@ -46,7 +46,7 @@ export const Home = () => {
           <TrackCard
             icon={<Server className="w-6 h-6 text-accent" />}
             title="Provide Storage"
-            description="Set up a provider host, expose a public endpoint, register on-chain, and verify health. This path is being optimized for local coding agents."
+            description="Open pairing from the website, generate one bootstrap command, bring up a provider-daemon on a public or tunneled host, and manage it from My Providers."
             iconFrameClassName="industrial-border-accent"
             action={
               <PrimaryCtaLink
