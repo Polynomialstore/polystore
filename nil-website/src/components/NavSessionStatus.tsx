@@ -22,15 +22,15 @@ const SESSION_BADGE_LABELS: Record<string, string> = {
   'ready-gateway': 'Gateway Ready',
 }
 
-export function NavSessionStatus({ className = '' }: { className?: string }) {
+export function NavSessionStatus({ className = '', compact = false }: { className?: string; compact?: boolean }) {
   const session = useSessionStatus()
   const stakeBalanceLabel = session.lcdStakeBalance ? `${session.lcdStakeBalance} stake` : '—'
 
   const shouldShowFaucet = session.faucetEnabled && session.isConnected
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
-      <ConnectWallet />
+    <div className={cn('flex items-center gap-2', compact && 'gap-1.5', className)}>
+      <ConnectWallet compact={compact} />
       {session.isConnected ? (
         <div className="sr-only" aria-hidden="true">
           <span data-testid="cosmos-identity">{session.nilAddress}</span>
@@ -44,7 +44,7 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
         <>
           <span
             className={cn(
-              'hidden xl:inline-flex items-center border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data',
+              'hidden 2xl:inline-flex items-center border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data',
               SESSION_BADGE_STYLES[session.primarySessionState],
             )}
           >
@@ -60,7 +60,8 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
           data-testid="faucet-request"
           disabled={!session.address || session.faucetBusy}
           className={cn(
-            'inline-flex items-center gap-2 border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors disabled:opacity-60',
+            'inline-flex items-center gap-2 border font-bold uppercase tracking-[0.2em] font-mono-data transition-colors disabled:opacity-60',
+            compact ? 'px-2.5 py-2 text-[9px]' : 'px-3 py-2 text-[10px]',
             session.faucetTxStatus === 'confirmed'
               ? 'border-success/30 bg-success/10 text-success'
               : session.faucetTxStatus === 'failed'
@@ -73,11 +74,15 @@ export function NavSessionStatus({ className = '' }: { className?: string }) {
             ? 'Pending'
             : session.faucetTxStatus === 'confirmed'
               ? 'Funded'
-              : session.faucetTxStatus === 'failed'
-                ? 'Retry Faucet'
+            : session.faucetTxStatus === 'failed'
+                ? compact
+                  ? 'Retry'
+                  : 'Retry Faucet'
                 : session.primarySessionState === 'needs-funds'
                   ? 'Get NIL'
-                  : 'Top Up NIL'}
+                  : compact
+                    ? 'Top Up'
+                    : 'Top Up NIL'}
         </button>
       ) : null}
     </div>

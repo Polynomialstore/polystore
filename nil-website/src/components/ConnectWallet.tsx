@@ -5,7 +5,7 @@ import { AlertTriangle, CircleUserRound, Copy, LogOut, Wallet, X } from 'lucide-
 import { appConfig } from '../config'
 import { useNetwork } from '../hooks/useNetwork'
 
-export function ConnectWallet({ className = '' }: { className?: string }) {
+export function ConnectWallet({ className = '', compact = false }: { className?: string; compact?: boolean }) {
   const { switchNetwork } = useNetwork()
   const { disconnect } = useDisconnect()
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -56,10 +56,12 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
             <button
               onClick={openConnectModal}
               data-testid="connect-wallet"
-              className={`inline-flex items-center gap-2 px-4 py-2 bg-secondary/50 hover:bg-secondary border border-transparent hover:border-border text-foreground text-sm font-semibold transition-colors ${className}`}
+              className={`inline-flex items-center gap-2 border border-transparent bg-secondary/50 text-foreground font-semibold transition-colors hover:border-border hover:bg-secondary ${
+                compact ? 'px-3 py-2 text-[11px] uppercase tracking-[0.18em] font-mono-data' : 'px-4 py-2 text-sm'
+              } ${className}`}
             >
               <Wallet className="w-4 h-4" />
-              Connect Wallet
+              {compact ? 'Connect' : 'Connect Wallet'}
             </button>
           )
         }
@@ -81,13 +83,17 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
               type="button"
               onClick={() => setAccountMenuOpen((open) => !open)}
               data-testid="wallet-address"
-              className="inline-flex items-center gap-2 border border-primary/30 bg-primary/10 px-3 py-2 text-primary transition-colors hover:bg-primary/15"
+              className={`inline-flex items-center gap-2 border border-primary/30 bg-primary/10 text-primary transition-colors hover:bg-primary/15 ${
+                compact ? 'max-w-[9.75rem] px-2.5 py-2' : 'px-3 py-2'
+              }`}
               title={currentAccount.address}
             >
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-primary">
                 <CircleUserRound className="h-3.5 w-3.5" />
               </span>
-              <span className="font-mono-data text-xs font-bold text-primary">{accountLabel}</span>
+              <span className={`font-mono-data font-bold text-primary ${compact ? 'max-w-[6.75rem] truncate text-[11px]' : 'text-xs'}`}>
+                {accountLabel}
+              </span>
               <span className="sr-only" data-testid="wallet-address-full">{currentAccount.address}</span>
             </button>
 
