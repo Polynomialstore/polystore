@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Copy,
   ExternalLink,
+  Link2Off,
   LoaderCircle,
   RefreshCw,
   Server,
@@ -14,16 +15,16 @@ import {
 
 import { appConfig } from '../config'
 import { lcdFetchProviders, lcdFetchProvidersByOperator } from '../api/lcdClient'
-import type { ProviderAdminResponse } from '../api/providerClient'
+import { providerFetchPublicStatus, type ProviderAdminResponse, type ProviderPublicStatusResponse } from '../api/providerClient'
 import { StatusBar } from '../components/StatusBar'
 import { useNetwork } from '../hooks/useNetwork'
 import { useProviderAdmin } from '../hooks/useProviderAdmin'
 import { useSessionStatus } from '../hooks/useSessionStatus'
+import { useUnpairProvider } from '../hooks/useUnpairProvider'
 import {
   buildOperatorProviderRecords,
   buildProviderRegisterCommand,
   findOperatorProviderRecord,
-  type OperatorProviderRecord,
 } from '../lib/providerConsole'
 import { buildProviderHealthCommands } from '../lib/providerOnboarding'
 
@@ -36,6 +37,8 @@ type PublicHealthState =
   | { status: 'loading'; base: string }
   | { status: 'ok'; base: string; ms: number }
   | { status: 'error'; base: string; error: string }
+
+type ProviderPublicStatusState = ProviderPublicStatusResponse | null
 
 async function copyText(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -90,6 +93,7 @@ export function SpDashboard() {
   const { openConnectModal } = useConnectModal()
   const { switchNetwork } = useNetwork()
   const { pendingAction, refreshStatus, runDoctor, rotateEndpoint } = useProviderAdmin()
+  const { unpairProvider, loading: unpairingProvider } = useUnpairProvider()
   const session = useSessionStatus()
   const {
     nilAddress,
@@ -109,6 +113,10 @@ export function SpDashboard() {
   const [selectedProvider, setSelectedProvider] = useState('')
   const [rotationProviderKey, setRotationProviderKey] = useState('provider1')
   const [rotationEndpoint, setRotationEndpoint] = useState('')
+  const [selectedControlBase, setSelectedControlBase] = useState('')
+  const [publicStatus, setPublicStatus] = useState<ProviderPublicStatusState>(null)
+  const [publicStatusError, setPublicStatusError] = useState<string | null>(null)
+  const [loadingPublicStatus, setLoadingPublicStatus] = useState(false)
   const [healthProbe, setHealthProbe] = useState<PublicHealthState>({ status: 'idle' })
   const [adminError, setAdminError] = useState<string | null>(null)
   const [adminResponse, setAdminResponse] = useState<ProviderAdminResponse | null>(null)
@@ -159,9 +167,12 @@ export function SpDashboard() {
     [records, selectedProvider],
   )
   const activeRecord = selectedRecord ?? records[0] ?? null
+  const providerDaemonStatusReady = String(publicStatus?.persona || '').trim().toLowerCase() === 'provider-daemon'
+  const providerStatusDetail = publicStatus?.provider ?? null
+  const effectiveControlBase = providerStatusDetail?.public_base || selectedControlBase || activeRecord?.primaryBase || null
   const healthCommands = useMemo(
-    () => buildProviderHealthCommands(activeRecord?.primaryBase ?? null),
-    [activeRecord?.primaryBase],
+    () => buildProviderHealthCommands(providerStatusDetail?.public_base || activeRecord?.primaryBase || null),
+    [activeRecord?.primaryBase, providerStatusDetail?.public_base],
   )
   const rotationCommand = useMemo(
     () => buildProviderRegisterCommand({ providerKey: rotationProviderKey, providerEndpoint: rotationEndpoint }),
@@ -181,17 +192,35 @@ export function SpDashboard() {
   useEffect(() => {
     if (!activeRecord) {
       setRotationEndpoint('')
+      setSelectedControlBase('')
+      setPublicStatus(null)
+      setPublicStatusError(null)
       setAdminResponse(null)
       setAdminError(null)
       return
     }
     setRotationEndpoint(activeRecord.endpoints[0] || activeRecord.primaryBase || '')
+    setSelectedControlBase(activeRecord.primaryBase || activeRecord.httpBases[0] || '')
+    setPublicStatus(null)
+    setPublicStatusError(null)
     setAdminResponse(null)
     setAdminError(null)
   }, [activeRecord])
 
-  const probePublicHealth = useCallback(async (record: OperatorProviderRecord | null) => {
-    const base = String(record?.primaryBase || '').trim().replace(/\/$/, '')
+  useEffect(() => {
+    const discoveredKeyName = String(adminResponse?.provider?.key_name || providerStatusDetail?.key_name || '').trim()
+    if (!discoveredKeyName) return
+    setRotationProviderKey((current) => {
+      const normalized = String(current || '').trim()
+      if (!normalized || normalized === 'provider1') {
+        return discoveredKeyName
+      }
+      return current
+    })
+  }, [adminResponse?.provider?.key_name, providerStatusDetail?.key_name])
+
+  const probePublicHealth = useCallback(async (baseInput: string | null | undefined) => {
+    const base = String(baseInput || '').trim().replace(/\/$/, '')
     if (!base) {
       setHealthProbe({ status: 'idle' })
       return
@@ -215,18 +244,55 @@ export function SpDashboard() {
     }
   }, [])
 
+  const loadPublicStatus = useCallback(async (base: string) => {
+    const normalizedBase = String(base || '').trim().replace(/\/$/, '')
+    if (!normalizedBase) {
+      setPublicStatus(null)
+      setPublicStatusError(null)
+      setLoadingPublicStatus(false)
+      return
+    }
+
+    setLoadingPublicStatus(true)
+    try {
+      const status = await providerFetchPublicStatus(normalizedBase)
+      setPublicStatus(status)
+      setPublicStatusError(null)
+    } catch (statusError) {
+      setPublicStatus(null)
+      setPublicStatusError(statusError instanceof Error ? statusError.message : 'provider-daemon status unavailable')
+    } finally {
+      setLoadingPublicStatus(false)
+    }
+  }, [])
+
   useEffect(() => {
-    if (!activeRecord?.primaryBase) {
+    if (!effectiveControlBase) {
       setHealthProbe({ status: 'idle' })
       return
     }
 
-    void probePublicHealth(activeRecord)
+    void probePublicHealth(effectiveControlBase)
     const timer = window.setInterval(() => {
-      void probePublicHealth(activeRecord)
+      void probePublicHealth(effectiveControlBase)
     }, 12000)
     return () => window.clearInterval(timer)
-  }, [activeRecord, probePublicHealth])
+  }, [effectiveControlBase, probePublicHealth])
+
+  useEffect(() => {
+    if (!effectiveControlBase) {
+      setPublicStatus(null)
+      setPublicStatusError(null)
+      setLoadingPublicStatus(false)
+      return
+    }
+
+    void loadPublicStatus(effectiveControlBase)
+    const timer = window.setInterval(() => {
+      void loadPublicStatus(effectiveControlBase)
+    }, 12000)
+    return () => window.clearInterval(timer)
+  }, [effectiveControlBase, loadPublicStatus])
 
   const handleCopy = useCallback(async (label: string, text: string) => {
     try {
@@ -250,19 +316,21 @@ export function SpDashboard() {
   }
 
   const registeredCount = records.filter((record) => record.registered).length
-  const healthyCurrent = healthProbe.status === 'ok' && healthProbe.base === activeRecord?.primaryBase
+  const healthyCurrent = providerDaemonStatusReady
+    ? Boolean(providerStatusDetail?.public_health_ok)
+    : healthProbe.status === 'ok' && healthProbe.base === effectiveControlBase
   const adminStatus = adminResponse?.provider
-  const controlPlaneReady = Boolean(isConnected && !needsReconnect && activeRecord?.primaryBase)
+  const controlPlaneReady = Boolean(isConnected && !needsReconnect && effectiveControlBase)
 
   const requireActiveProvider = useCallback(() => {
     if (!activeRecord) {
       throw new Error('Select a provider first')
     }
-    if (!activeRecord.primaryBase) {
+    if (!effectiveControlBase) {
       throw new Error('Selected provider does not expose a public HTTP base yet')
     }
-    return activeRecord
-  }, [activeRecord])
+    return { ...activeRecord, primaryBase: effectiveControlBase }
+  }, [activeRecord, effectiveControlBase])
 
   const handleRefreshSnapshot = useCallback(async () => {
     try {
@@ -311,6 +379,23 @@ export function SpDashboard() {
       setAdminError(actionError instanceof Error ? actionError.message : 'Failed to rotate provider endpoint')
     }
   }, [load, requireActiveProvider, rotateEndpoint, rotationEndpoint])
+
+  const handleUnpairProvider = useCallback(async () => {
+    if (!activeRecord) {
+      setAdminError('Select a provider first')
+      return
+    }
+    try {
+      setAdminError(null)
+      await unpairProvider({ provider: activeRecord.provider })
+      setAdminResponse(null)
+      setPublicStatus(null)
+      setPublicStatusError(null)
+      await load()
+    } catch (actionError) {
+      setAdminError(actionError instanceof Error ? actionError.message : 'Failed to unpair provider')
+    }
+  }, [activeRecord, load, unpairProvider])
 
   return (
     <div className="container mx-auto max-w-6xl px-4 pb-12 pt-24">
@@ -537,6 +622,27 @@ export function SpDashboard() {
                   <div className="mt-2 font-mono-data text-foreground">{activeRecord?.registryStatus || (activeRecord?.registered ? 'registered' : 'not registered')}</div>
                 </div>
               </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                  <div className="font-semibold text-foreground">Selected control base</div>
+                  <div className="mt-2 break-all font-mono-data text-foreground">{effectiveControlBase || 'No HTTP base selected yet'}</div>
+                </div>
+                <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                  <div className="font-semibold text-foreground">HTTP bases advertised on-chain</div>
+                  {activeRecord?.httpBases?.length ? (
+                    <div className="mt-2 space-y-1">
+                      {activeRecord.httpBases.map((base) => (
+                        <div key={base} className="break-all font-mono-data text-foreground">
+                          {base}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2">No HTTP bases derived from the current on-chain endpoint set.</div>
+                  )}
+                </div>
+              </div>
             </section>
 
             <section className="glass-panel industrial-border p-6">
@@ -545,13 +651,39 @@ export function SpDashboard() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Signed control plane</div>
                   <h2 className="text-2xl font-semibold text-foreground">Operate the provider-daemon from the browser</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    These actions are signed by the paired operator wallet and verified by the provider-daemon against on-chain pairing state. The provider key never leaves the server.
+                    These actions are signed by the paired operator wallet and verified by the provider-daemon against on-chain pairing state. The provider key never leaves the server. Health below defaults to the provider-daemon&apos;s own <span className="font-mono">/status</span> view; the browser <span className="font-mono">/health</span> probe stays advisory.
                   </p>
                 </div>
                 <StatusPill
                   label={controlPlaneReady ? 'Remote actions ready' : 'Public base required'}
                   state={controlPlaneReady ? 'ready' : 'idle'}
                 />
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.9fr)]">
+                <div data-testid="provider-public-status-card" className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                  <div className="font-semibold text-foreground">Provider-daemon public status</div>
+                  <div className="mt-2 break-all font-mono-data text-foreground">{effectiveControlBase ? `${effectiveControlBase}/status` : 'No control base selected yet'}</div>
+                  <div className="mt-2 text-xs">
+                    {providerDaemonStatusReady
+                      ? 'Provider-daemon status is live and authoritative for pairing, registration, and public health.'
+                      : loadingPublicStatus
+                        ? 'Polling provider-daemon status.'
+                        : publicStatusError
+                          ? `Provider-daemon status is unavailable: ${publicStatusError}`
+                          : 'Waiting for a reachable provider-daemon status endpoint.'}
+                  </div>
+                </div>
+                <label className="space-y-2 text-sm">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Control-plane base</span>
+                  <input
+                    data-testid="provider-control-base"
+                    value={selectedControlBase}
+                    onChange={(event) => setSelectedControlBase(event.target.value)}
+                    placeholder="https://sp.example.com"
+                    className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  />
+                </label>
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
@@ -573,34 +705,45 @@ export function SpDashboard() {
                   {pendingAction === 'run_doctor' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
                   Run doctor
                 </button>
+                <button
+                  type="button"
+                  onClick={() => void loadPublicStatus(effectiveControlBase || '')}
+                  disabled={!effectiveControlBase || loadingPublicStatus || pendingAction !== null}
+                  className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40 disabled:opacity-50"
+                >
+                  {loadingPublicStatus ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Refresh public status
+                </button>
               </div>
 
-              {adminStatus ? (
+              {(providerStatusDetail || adminStatus) ? (
                 <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="border border-border bg-background/40 p-4">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local base</div>
-                    <div className="mt-2 break-all font-mono-data text-foreground">{adminStatus.local_base || '—'}</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{providerStatusDetail?.local_base || adminStatus?.local_base || '—'}</div>
                   </div>
                   <div className="border border-border bg-background/40 p-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local health</div>
-                    <div className="mt-2 font-mono-data text-foreground">{adminStatus.local_health_ok ? 'healthy' : 'unreachable'}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
+                    <div className="mt-2 font-mono-data text-foreground">
+                      {(providerStatusDetail?.public_health_ok ?? adminStatus?.public_health_ok) ? 'healthy' : 'unreachable'}
+                    </div>
                   </div>
                   <div className="border border-border bg-background/40 p-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Daemon uptime</div>
-                    <div className="mt-2 font-mono-data text-foreground">{adminStatus.uptime_seconds ?? 0}s</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing status</div>
+                    <div className="mt-2 font-mono-data text-foreground">{providerStatusDetail?.pairing_status || adminStatus?.pairing_status || '—'}</div>
                   </div>
                   <div className="border border-border bg-background/40 p-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Last refresh</div>
-                    <div className="mt-2 font-mono-data text-foreground">{adminResponse?.refreshed_at || '—'}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Registration status</div>
+                    <div className="mt-2 font-mono-data text-foreground">{providerStatusDetail?.registration_status || adminStatus?.registration_status || '—'}</div>
                   </div>
                 </div>
               ) : null}
 
-              {adminResponse?.issues?.length ? (
+              {(publicStatus?.issues?.length || adminResponse?.issues?.length) ? (
                 <div className="mt-5 border border-destructive/30 bg-destructive/5 p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Active issues</div>
                   <div className="mt-3 space-y-2 text-sm text-destructive">
-                    {adminResponse.issues.map((issue) => (
+                    {[...(publicStatus?.issues || []), ...(adminResponse?.issues || [])].map((issue) => (
                       <div key={issue}>{issue}</div>
                     ))}
                   </div>
@@ -626,8 +769,8 @@ export function SpDashboard() {
               <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="space-y-4">
                   <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                    <div className="font-semibold text-foreground">Public base</div>
-                    <div className="mt-2 break-all font-mono-data text-foreground">{activeRecord?.primaryBase || 'No HTTP base found in on-chain endpoints'}</div>
+                    <div className="font-semibold text-foreground">Authoritative public base</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{providerStatusDetail?.public_base || activeRecord?.primaryBase || 'No HTTP base found in on-chain endpoints'}</div>
                   </div>
                   <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
                     <div className="font-semibold text-foreground">Registered endpoints</div>
@@ -648,37 +791,40 @@ export function SpDashboard() {
                 <div className="min-w-[220px] space-y-3">
                   <button
                     type="button"
-                    onClick={() => void probePublicHealth(activeRecord)}
-                    disabled={!activeRecord?.primaryBase}
+                    onClick={() => void probePublicHealth(effectiveControlBase)}
+                    disabled={!effectiveControlBase}
                     className="inline-flex w-full items-center justify-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40 disabled:opacity-50"
                   >
                     {healthProbe.status === 'loading' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                    Probe /health
+                    Probe /health from browser
                   </button>
                   <CopyButton label="Copy health commands" onClick={() => void handleCopy('Health commands', healthCommands)} />
                 </div>
               </div>
 
-              <div className="mt-5 border-t border-border/60 pt-5">
+                <div data-testid="provider-browser-health-card" className="mt-5 border-t border-border/60 pt-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Direct browser health probe</div>
                     <div className="mt-1 text-sm text-foreground">
                       {healthProbe.status === 'ok'
                         ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
                         : healthProbe.status === 'error'
                           ? `${healthProbe.base}/health failed: ${healthProbe.error}`
-                          : activeRecord?.primaryBase
-                            ? `Polling ${activeRecord.primaryBase}/health`
+                          : effectiveControlBase
+                            ? `Polling ${effectiveControlBase}/health`
                             : 'No public base available yet'}
                     </div>
                   </div>
                   <StatusPill
-                    label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Waiting'}
-                    state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'pending'}
+                    label={healthProbe.status === 'ok' ? 'Reachable' : healthProbe.status === 'error' ? 'Failed' : 'Idle'}
+                    state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'idle'}
                   />
                 </div>
                 <pre className="mt-4 overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{healthCommands}</pre>
+                <div className="mt-4 border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                  Use the provider-daemon <span className="font-mono">/status</span> result above as the authoritative public-health signal. This direct browser probe only reflects the current browser network path and CORS conditions.
+                </div>
               </div>
             </section>
 
@@ -696,7 +842,7 @@ export function SpDashboard() {
 
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <label className="space-y-2 text-sm">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key name</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key name (manual fallback only)</span>
                   <input
                     value={rotationProviderKey}
                     onChange={(event) => setRotationProviderKey(event.target.value)}
@@ -744,7 +890,44 @@ export function SpDashboard() {
                 </pre>
               ) : null}
               <div className="mt-4 border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                The signed action targets <span className="font-mono text-foreground">{activeRecord?.provider}</span> over its public provider-daemon base. The generated command remains the manual fallback when you need direct shell access.
+                The signed action targets <span className="font-mono text-foreground">{activeRecord?.provider}</span> over <span className="font-mono text-foreground">{effectiveControlBase || activeRecord?.primaryBase || 'no selected base'}</span>. The key name is only needed for the generated shell fallback.
+              </div>
+            </section>
+
+            <section className="glass-panel industrial-border p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing recovery</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Unpair and relink when the provider host is wrong</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Use this when the selected provider-daemon was paired from the wrong machine, the provider key was rotated intentionally, or you need the website to forget this host before relinking a replacement.
+                  </p>
+                </div>
+                <StatusPill label={activeRecord ? 'Available' : 'Select provider'} state={activeRecord ? 'pending' : 'idle'} />
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  data-testid="unpair-provider"
+                  onClick={() => void handleUnpairProvider()}
+                  disabled={!activeRecord || unpairingProvider || pendingAction !== null}
+                  className="inline-flex items-center gap-2 bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {unpairingProvider ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Link2Off className="h-4 w-4" />}
+                  Unpair provider on-chain
+                </button>
+                <Link
+                  to="/sp-onboarding"
+                  className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                >
+                  <Shield className="h-4 w-4" />
+                  Open relink flow
+                </Link>
+              </div>
+
+              <div className="mt-4 border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                Unpairing removes the operator-to-provider link on-chain. It does not delete the provider key or stop the provider-daemon process on the host; it only clears ownership so you can relink cleanly from the website.
               </div>
             </section>
           </div>

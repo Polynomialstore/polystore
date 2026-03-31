@@ -78,7 +78,7 @@ function planFromMultiaddr(raw: string): ProviderEndpointPlan {
   const providerEndpoint = trimNonEmpty(raw)
   const publicBase = normalizeHttpBase(providerEndpoint)
   const normalizedUrl = publicBase ? new URL(publicBase) : null
-  const fallbackPort = providerEndpoint.includes('/http') ? DEFAULT_IPV4_PORT : DEFAULT_DOMAIN_PORT
+  const fallbackPort = /(^|\/)http($|\/)/i.test(providerEndpoint) ? DEFAULT_IPV4_PORT : DEFAULT_DOMAIN_PORT
 
   return {
     providerEndpoint,
@@ -123,17 +123,19 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   const endpointPlan = buildProviderEndpointPlan(draft)
   const providerEndpoint = endpointPlan?.providerEndpoint || '<provider-endpoint>'
   const authToken = trimNonEmpty(draft.authToken) || AUTH_PLACEHOLDER
+  const websiteReady = Boolean(endpointPlan && pairingId && trimNonEmpty(draft.authToken))
 
   const bootstrapLines = [
     '# 1. Initialize the provider key if it does not already exist:',
     `PROVIDER_KEY=${shellQuote(providerKey)} ./scripts/run_devnet_provider.sh init`,
     '',
     '# 2. If init created a new key, fund the printed nil1 address with aatom before continuing.',
-    '# 3. Website-tracked onboarding expects PAIRING_ID and NIL_GATEWAY_SP_AUTH before bootstrap.',
-    '#    For a manual bootstrap without website tracking, use docs/REMOTE_SP_JOIN_QUICKSTART.md.',
+    '# 3. Website-managed bootstrap now fails fast unless PAIRING_ID, PROVIDER_ENDPOINT, and NIL_GATEWAY_SP_AUTH are present.',
+    '#    For a partial/manual bootstrap, either use staged pair/register/start commands or opt in with BOOTSTRAP_ALLOW_PARTIAL=1.',
   ]
 
   const envLines = [
+    ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\'] : []),
     ...(pairingId ? [`PAIRING_ID=${shellQuote(pairingId)} \\`] : []),
     `PROVIDER_KEY=${shellQuote(providerKey)} \\`,
     `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\`,
@@ -142,7 +144,7 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   ]
 
   return [
-    '# If the repo is missing on the provider host:',
+   '# If the repo is missing on the provider host:',
     `git clone ${PROVIDER_BOOTSTRAP_REPO}`,
     'cd nil-store',
     '',
@@ -284,9 +286,11 @@ Your job:
    - fund the printed provider address with gas
    - then run \`./scripts/run_devnet_provider.sh bootstrap\`
    If the key already exists and is funded, \`bootstrap\` may be used directly.
-5. The website-managed flow requires a fresh website-opened \`PAIRING_ID\`.
+5. The website-managed flow requires a fresh website-opened \`PAIRING_ID\`, a real \`PROVIDER_ENDPOINT\`, and \`NIL_GATEWAY_SP_AUTH\`.
+   - \`./scripts/run_devnet_provider.sh bootstrap\` now fails fast unless all three are present
    - let \`./scripts/run_devnet_provider.sh bootstrap\` confirm pairing on the full happy path, or
-   - run \`./scripts/run_devnet_provider.sh pair\` when you want pairing as a separate manual step.
+   - run \`./scripts/run_devnet_provider.sh pair\` when you want pairing as a separate manual step
+   - if you intentionally want a partial manual bootstrap, use staged \`pair\`, \`register\`, and \`start\` commands, or explicitly opt in with \`BOOTSTRAP_ALLOW_PARTIAL=1\`
    If the pairing is expired, missing, or already bound to a different provider pairing, stop and tell the operator to open a fresh pairing from the website.
 6. Register or update provider endpoints on-chain.
 7. Start the provider-daemon if it is not already running.
@@ -297,7 +301,7 @@ Your job:
    - ${publicHealthTarget}
    - LCD provider visibility
    - pairing status when \`PAIRING_ID\` is supplied
-   Browser-side public \`/health\` probing is advisory; rely on CLI/local checks first when diagnosing failures.
+   Browser-side public \`/status\` and \`/health\` probing is advisory; rely on CLI/local checks first when diagnosing failures.
 9. If anything fails, inspect logs, repair, and retry until healthy.
 10. Endpoint rotation is update-aware on the current testnet build. Prefer updating endpoints for an existing provider instead of creating a new key, unless the chain explicitly rejects endpoint updates.
 

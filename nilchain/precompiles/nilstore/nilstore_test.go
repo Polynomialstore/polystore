@@ -94,6 +94,18 @@ func TestPrecompileIncludesOpenProviderPairingMethod(t *testing.T) {
 	require.Len(t, method.Outputs, 1)
 }
 
+func TestPrecompileIncludesUnpairProviderMethod(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	method, ok := precompile.abi.Methods["unpairProvider"]
+	require.True(t, ok)
+	require.Equal(t, "unpairProvider", method.Name)
+	require.Len(t, method.Inputs, 1)
+	require.Len(t, method.Outputs, 1)
+}
+
 func TestRunOpenProviderPairingCreatesPendingPairingFromEvmCaller(t *testing.T) {
 	f := initFixture(t)
 	precompile, err := New(&f.keeper)
@@ -142,4 +154,49 @@ func TestRunOpenProviderPairingRejectsExpiredHeight(t *testing.T) {
 	_, err = precompile.runOpenProviderPairing(sdkCtx, nil, contract, &method, input)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expires_at must be in the future")
+}
+
+func TestRunUnpairProviderRemovesPairingForEvmCaller(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(10)
+	msgServer := nilkeeper.NewMsgServerImpl(f.keeper)
+	caller := common.HexToAddress("0x00000000000000000000000000000000000000ef")
+	operator := sdk.AccAddress(caller.Bytes()).String()
+	providerAddr := common.HexToAddress("0x00000000000000000000000000000000000000f1")
+	provider := sdk.AccAddress(providerAddr.Bytes()).String()
+
+	_, err = msgServer.OpenProviderPairing(sdk.WrapSDKContext(sdkCtx), &types.MsgOpenProviderPairing{
+		Creator:   operator,
+		PairingId: "pair-unpair",
+		ExpiresAt: 25,
+	})
+	require.NoError(t, err)
+	_, err = msgServer.ConfirmProviderPairing(sdk.WrapSDKContext(sdkCtx), &types.MsgConfirmProviderPairing{
+		Creator:   provider,
+		PairingId: "pair-unpair",
+	})
+	require.NoError(t, err)
+
+	method := precompile.abi.Methods["unpairProvider"]
+	input, err := method.Inputs.Pack(provider)
+	require.NoError(t, err)
+
+	contract := vm.NewPrecompile(caller, Address, uint256.NewInt(0), 5_000_000)
+	contract.Input = append(method.ID, input...)
+
+	out, err := precompile.runUnpairProvider(sdkCtx, nil, contract, &method, input)
+	require.NoError(t, err)
+
+	decoded, err := method.Outputs.Unpack(out)
+	require.NoError(t, err)
+	require.Len(t, decoded, 1)
+	ok, cast := decoded[0].(bool)
+	require.True(t, cast)
+	require.True(t, ok)
+
+	_, err = f.keeper.ProviderPairings.Get(sdkCtx, provider)
+	require.Error(t, err)
 }

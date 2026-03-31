@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,17 +20,9 @@ import (
 
 const providerAdminTestPrivKey = "4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1"
 
-func resetProviderAdminNonceCacheForTest(t *testing.T) {
+func configureProviderAdminNonceStoreForTest(t *testing.T) {
 	t.Helper()
-	providerAdminNonceCache.mu.Lock()
-	prev := providerAdminNonceCache.used
-	providerAdminNonceCache.used = make(map[string]map[uint64]uint64)
-	providerAdminNonceCache.mu.Unlock()
-	t.Cleanup(func() {
-		providerAdminNonceCache.mu.Lock()
-		providerAdminNonceCache.used = prev
-		providerAdminNonceCache.mu.Unlock()
-	})
+	t.Setenv("NIL_PROVIDER_ADMIN_NONCES_PATH", filepath.Join(t.TempDir(), "provider_admin_nonces.json"))
 }
 
 func providerAdminTestKey(t *testing.T) *ecdsa.PrivateKey {
@@ -82,7 +75,7 @@ func newProviderAdminBody(t *testing.T, provider string, action string, endpoint
 func setupProviderAdminStatusEnv(t *testing.T, providerAddress string, localURL string, lcdURL string) {
 	t.Helper()
 	resetProviderAddressCacheForTest(t)
-	resetProviderAdminNonceCacheForTest(t)
+	configureProviderAdminNonceStoreForTest(t)
 	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
 	t.Setenv("NIL_PROVIDER_KEY", "provider-admin")
 	t.Setenv("NIL_PROVIDER_ADDRESS", providerAddress)

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,12 +51,11 @@ type providerAdminResponse struct {
 	RefreshedAt           string                      `json:"refreshed_at"`
 }
 
-var providerAdminNonceCache = struct {
-	mu   sync.Mutex
-	used map[string]map[uint64]uint64
-}{
-	used: make(map[string]map[uint64]uint64),
+type providerAdminNonceStore struct {
+	Operators map[string]map[string]uint64 `json:"operators"`
 }
+
+var providerAdminNonceStoreMu sync.Mutex
 
 func decodeProviderAdminRequest(r *http.Request) (*providerAdminRequest, error) {
 	if r == nil || r.Body == nil {
@@ -71,6 +72,80 @@ func decodeProviderAdminRequest(r *http.Request) (*providerAdminRequest, error) 
 	return &req, nil
 }
 
+func providerAdminNonceStorePath() string {
+	if path := strings.TrimSpace(os.Getenv("NIL_PROVIDER_ADMIN_NONCES_PATH")); path != "" {
+		return path
+	}
+	if home := strings.TrimSpace(os.Getenv("NIL_HOME")); home != "" {
+		return filepath.Join(home, "provider_admin_nonces.json")
+	}
+	if upload := strings.TrimSpace(uploadDir); upload != "" {
+		return filepath.Join(upload, ".provider_admin_nonces.json")
+	}
+	return filepath.Join(os.TempDir(), "nilstore-provider-admin-nonces.json")
+}
+
+func loadProviderAdminNonceStore(path string) (*providerAdminNonceStore, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &providerAdminNonceStore{Operators: make(map[string]map[string]uint64)}, nil
+		}
+		return nil, err
+	}
+	store := &providerAdminNonceStore{Operators: make(map[string]map[string]uint64)}
+	if len(raw) == 0 {
+		return store, nil
+	}
+	if err := json.Unmarshal(raw, store); err != nil {
+		return nil, fmt.Errorf("invalid nonce store: %w", err)
+	}
+	if store.Operators == nil {
+		store.Operators = make(map[string]map[string]uint64)
+	}
+	return store, nil
+}
+
+func persistProviderAdminNonceStore(path string, store *providerAdminNonceStore) error {
+	if store == nil {
+		store = &providerAdminNonceStore{Operators: make(map[string]map[string]uint64)}
+	}
+	if store.Operators == nil {
+		store.Operators = make(map[string]map[string]uint64)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	payload, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "provider-admin-nonces-*.json")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(payload); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
+}
+
 func consumeProviderAdminNonce(operator string, nonce uint64, expiresAt uint64) error {
 	operator = strings.TrimSpace(operator)
 	if operator == "" {
@@ -78,29 +153,39 @@ func consumeProviderAdminNonce(operator string, nonce uint64, expiresAt uint64) 
 	}
 	now := uint64(time.Now().Unix())
 
-	providerAdminNonceCache.mu.Lock()
-	defer providerAdminNonceCache.mu.Unlock()
+	providerAdminNonceStoreMu.Lock()
+	defer providerAdminNonceStoreMu.Unlock()
 
-	for addr, nonces := range providerAdminNonceCache.used {
+	path := providerAdminNonceStorePath()
+	store, err := loadProviderAdminNonceStore(path)
+	if err != nil {
+		return fmt.Errorf("load provider admin nonce store: %w", err)
+	}
+
+	for addr, nonces := range store.Operators {
 		for value, expiry := range nonces {
 			if expiry <= now {
 				delete(nonces, value)
 			}
 		}
 		if len(nonces) == 0 {
-			delete(providerAdminNonceCache.used, addr)
+			delete(store.Operators, addr)
 		}
 	}
 
-	nonces := providerAdminNonceCache.used[operator]
+	nonceKey := strconv.FormatUint(nonce, 10)
+	nonces := store.Operators[operator]
 	if nonces == nil {
-		nonces = make(map[uint64]uint64)
-		providerAdminNonceCache.used[operator] = nonces
+		nonces = make(map[string]uint64)
+		store.Operators[operator] = nonces
 	}
-	if expiry, ok := nonces[nonce]; ok && expiry > now {
+	if expiry, ok := nonces[nonceKey]; ok && expiry > now {
 		return fmt.Errorf("provider admin request nonce has already been used")
 	}
-	nonces[nonce] = expiresAt
+	nonces[nonceKey] = expiresAt
+	if err := persistProviderAdminNonceStore(path, store); err != nil {
+		return fmt.Errorf("persist provider admin nonce store: %w", err)
+	}
 	return nil
 }
 

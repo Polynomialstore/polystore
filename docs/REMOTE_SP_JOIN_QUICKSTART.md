@@ -103,13 +103,21 @@ export PAIRING_ID="<website-opened-pairing-id>"
 `bootstrap` now:
 
 - creates the provider key if needed
-- confirms on-chain pairing when `PAIRING_ID` is set
-- starts the provider-daemon when `NIL_GATEWAY_SP_AUTH` is set
+- confirms on-chain pairing
+- starts the provider-daemon
 - registers the provider if it is new
 - updates provider endpoints if it is already registered
 - runs a doctor pass at the end
 
-`bootstrap` can run without `PAIRING_ID`, but that is a manual fallback path. Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track the provider until pairing is opened and confirmed.
+Website-managed `bootstrap` now fails fast unless `PAIRING_ID`, `NIL_GATEWAY_SP_AUTH`, and `PROVIDER_ENDPOINT` are all present.
+
+If you intentionally want a partial manual bootstrap, use the staged commands below (`pair`, `register`, `start`) or opt in explicitly with:
+
+```bash
+BOOTSTRAP_ALLOW_PARTIAL=1 ./scripts/run_devnet_provider.sh bootstrap
+```
+
+Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unpaired provider until pairing is opened and confirmed.
 
 If you are targeting a non-public hub, export `HUB_NODE`, `HUB_LCD`, and `CHAIN_ID` before running `bootstrap`.
 
