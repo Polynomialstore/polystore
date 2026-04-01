@@ -93,26 +93,20 @@ func CmdUpdateProviderEndpoints() *cobra.Command {
 	return cmd
 }
 
-func CmdOpenProviderPairing() *cobra.Command {
+func CmdRequestProviderLink() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "open-provider-pairing [pairing-id] [expires-at]",
-		Short: "Open a pending provider pairing for an operator wallet",
-		Args:  cobra.ExactArgs(2),
+		Use:   "request-provider-link [operator]",
+		Short: "Request linking this provider key to an operator wallet",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
 			}
 
-			expiresAt, err := strconv.ParseUint(args[1], 10, 64)
-			if err != nil {
-				return err
-			}
-
-			msg := types.MsgOpenProviderPairing{
-				Creator:   clientCtx.GetFromAddress().String(),
-				PairingId: args[0],
-				ExpiresAt: expiresAt,
+			msg := types.MsgRequestProviderLink{
+				Creator:  clientCtx.GetFromAddress().String(),
+				Operator: args[0],
 			}
 
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
@@ -122,10 +116,10 @@ func CmdOpenProviderPairing() *cobra.Command {
 	return cmd
 }
 
-func CmdConfirmProviderPairing() *cobra.Command {
+func CmdApproveProviderLink() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "confirm-provider-pairing [pairing-id]",
-		Short: "Confirm a pending provider pairing from the provider key",
+		Use:   "approve-provider-link [provider]",
+		Short: "Approve a pending provider link request as the operator wallet",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			clientCtx, err := getClientTxContextFn(cmd)
@@ -133,9 +127,31 @@ func CmdConfirmProviderPairing() *cobra.Command {
 				return err
 			}
 
-			msg := types.MsgConfirmProviderPairing{
+			msg := types.MsgApproveProviderLink{
 				Creator:   clientCtx.GetFromAddress().String(),
-				PairingId: args[0],
+				Provider:  args[0],
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdCancelProviderLink() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cancel-provider-link",
+		Short: "Cancel this provider key's pending provider link request",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgCancelProviderLink{
+				Creator: clientCtx.GetFromAddress().String(),
 			}
 
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)

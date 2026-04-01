@@ -17,31 +17,29 @@ import {
 import { appConfig } from '../config'
 import {
   lcdFetchLatestHeight,
-  lcdFetchPendingProviderPairing,
+  lcdFetchPendingProviderLinksByOperator,
   lcdFetchProviders,
   lcdFetchProvidersByOperator,
 } from '../api/lcdClient'
 import { providerFetchPublicStatus, type ProviderPublicStatusResponse } from '../api/providerClient'
 import { FaucetAuthTokenInput } from '../components/FaucetAuthTokenInput'
 import { PrimaryCtaAnchor, PrimaryCtaButton } from '../components/PrimaryCta'
+import { useApproveProviderLink } from '../hooks/useApproveProviderLink'
 import { useNetwork } from '../hooks/useNetwork'
-import { useOpenProviderPairing } from '../hooks/useOpenProviderPairing'
 import { useSessionStatus } from '../hooks/useSessionStatus'
 import {
   buildProviderAgentPrompt,
   buildProviderBootstrapCommand,
   buildProviderEndpointPlan,
   buildProviderHealthCommands,
-  buildProviderPairCommand,
+  buildProviderLinkCommand,
   evaluateProviderRunbookReadiness,
   findConfirmedProviderPairing,
+  findMostRecentPendingProviderLink,
   findProviderByAddress,
-  pairingBlocksRemaining,
-  pairingExpired,
   type ProviderEndpointInputMode,
   type ProviderHostMode,
 } from '../lib/providerOnboarding'
-import { createProviderPairingId } from '../lib/providerPairing'
 import { extractProviderHttpBases } from '../lib/spDashboard'
 
 const PROVIDER_DOCS_URL = 'https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_PROVIDER_QUICKSTART.md'
@@ -54,9 +52,8 @@ const REPO_ENTER_DIR = 'cd nil-store'
 const LOCAL_HEALTH_URL = 'http://127.0.0.1:8091/health'
 const PROVIDER_DRAFT_KEY = 'nilstore.provider-onboarding.v2'
 const PROVIDER_AUTH_SESSION_KEY = 'nilstore.provider-onboarding.auth.v1'
-const PAIRING_TTL_BLOCKS = 120
 
-type PendingPairingState = Awaited<ReturnType<typeof lcdFetchPendingProviderPairing>>
+type PendingLinksState = Awaited<ReturnType<typeof lcdFetchPendingProviderLinksByOperator>>
 type OperatorPairingsState = Awaited<ReturnType<typeof lcdFetchProvidersByOperator>>
 type ProvidersState = Awaited<ReturnType<typeof lcdFetchProviders>>
 
@@ -76,8 +73,8 @@ type StoredProviderDraft = {
   providerKey: string
   providerRepoReady: boolean
   providerKeyInitialized: boolean
-  pairingId: string
-  pairingTxHash: string
+  providerAddress: string
+  linkTxHash: string
 }
 
 function loadStoredDraft(): StoredProviderDraft {
@@ -90,8 +87,8 @@ function loadStoredDraft(): StoredProviderDraft {
       providerKey: 'provider1',
       providerRepoReady: false,
       providerKeyInitialized: false,
-      pairingId: '',
-      pairingTxHash: '',
+      providerAddress: '',
+      linkTxHash: '',
     }
   }
 
@@ -110,8 +107,8 @@ function loadStoredDraft(): StoredProviderDraft {
       providerKey: String(parsed.providerKey || 'provider1'),
       providerRepoReady: Boolean(parsed.providerRepoReady),
       providerKeyInitialized: Boolean(parsed.providerKeyInitialized),
-      pairingId: String(parsed.pairingId || ''),
-      pairingTxHash: String(parsed.pairingTxHash || ''),
+      providerAddress: String(parsed.providerAddress || ''),
+      linkTxHash: String(parsed.linkTxHash || ''),
     }
   } catch {
     return {
@@ -122,8 +119,8 @@ function loadStoredDraft(): StoredProviderDraft {
       providerKey: 'provider1',
       providerRepoReady: false,
       providerKeyInitialized: false,
-      pairingId: '',
-      pairingTxHash: '',
+      providerAddress: '',
+      linkTxHash: '',
     }
   }
 }
@@ -205,10 +202,10 @@ const CLONE_METHOD_OPTIONS: Array<{
 
 const FLOW_STEPS: Array<{ id: FlowStepId; label: string; anchor: string }> = [
   { id: 'wallet', label: 'Operator wallet', anchor: 'step-wallet' },
-  { id: 'pairing_open', label: 'Browser pairing', anchor: 'step-pairing-open' },
+  { id: 'pairing_open', label: 'Operator approval', anchor: 'step-pairing-open' },
   { id: 'clone_repo', label: 'Clone nil-store repo', anchor: 'step-clone-repo' },
   { id: 'provider_key', label: 'Provider key init', anchor: 'step-provider-key' },
-  { id: 'pairing_host', label: 'Provider-host pairing', anchor: 'step-pairing-host' },
+  { id: 'pairing_host', label: 'Provider-host link request', anchor: 'step-pairing-host' },
   { id: 'reachability', label: 'Public reachability', anchor: 'step-reachability' },
   { id: 'auth', label: 'Shared auth', anchor: 'step-auth' },
   { id: 'verification', label: 'Verification', anchor: 'step-verification' },
@@ -216,20 +213,20 @@ const FLOW_STEPS: Array<{ id: FlowStepId; label: string; anchor: string }> = [
 
 const STEP_DONE_WHEN: Record<FlowStepId, string> = {
   wallet: 'wallet is connected, on NilStore testnet, and funded',
-  pairing_open: 'pairing ID exists on-chain with an active TTL',
+  pairing_open: 'operator wallet approves the pending provider link',
   clone_repo: 'provider host has a local nil-store checkout',
   provider_key: 'provider key is initialized and funded (or already funded)',
-  pairing_host: 'provider host confirms pairing on-chain',
+  pairing_host: 'provider host opens a pending provider link request on-chain',
   reachability: 'derived provider endpoint and public health URL are shown',
   auth: 'shared provider auth token is present',
-  verification: 'pairing, registration, and health all report healthy',
+  verification: 'link approval, registration, and health all report healthy',
 }
 
 export function SpOnboarding() {
   const storedDraft = useMemo(() => loadStoredDraft(), [])
   const { openConnectModal } = useConnectModal()
   const { switchNetwork } = useNetwork()
-  const { openPairing, loading: openingPairing } = useOpenProviderPairing()
+  const { approveProviderLink, loading: approvingLink } = useApproveProviderLink()
   const session = useSessionStatus()
   const {
     address,
@@ -257,14 +254,14 @@ export function SpOnboarding() {
   const [providerRepoReady, setProviderRepoReady] = useState(storedDraft.providerRepoReady)
   const [providerKeyInitialized, setProviderKeyInitialized] = useState(storedDraft.providerKeyInitialized)
   const [cloneMethod, setCloneMethod] = useState<CloneMethod>('https')
-  const [pairingId, setPairingId] = useState(storedDraft.pairingId)
-  const [pairingTxHash, setPairingTxHash] = useState(storedDraft.pairingTxHash)
+  const [providerAddress, setProviderAddress] = useState(storedDraft.providerAddress)
+  const [linkTxHash, setLinkTxHash] = useState(storedDraft.linkTxHash)
   const [authToken, setAuthToken] = useState(loadSessionAuthToken)
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [latestHeight, setLatestHeight] = useState<number | null>(null)
-  const [pendingPairing, setPendingPairing] = useState<PendingPairingState>(null)
+  const [pendingLinks, setPendingLinks] = useState<PendingLinksState>([])
   const [operatorPairings, setOperatorPairings] = useState<OperatorPairingsState>([])
   const [providers, setProviders] = useState<ProvidersState>([])
   const [loadingLiveState, setLoadingLiveState] = useState(false)
@@ -289,11 +286,11 @@ export function SpOnboarding() {
       providerKey,
       providerRepoReady,
       providerKeyInitialized,
-      pairingId,
-      pairingTxHash,
+      providerAddress,
+      linkTxHash,
     }
     window.localStorage.setItem(PROVIDER_DRAFT_KEY, JSON.stringify(payload))
-  }, [endpointMode, endpointValue, hostMode, pairingId, pairingTxHash, providerKey, providerRepoReady, providerKeyInitialized, publicPort])
+  }, [endpointMode, endpointValue, hostMode, linkTxHash, providerAddress, providerKey, providerRepoReady, providerKeyInitialized, publicPort])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -316,21 +313,32 @@ export function SpOnboarding() {
   )
 
   const confirmedPairing = useMemo(
-    () => findConfirmedProviderPairing(operatorPairings, pairingId),
-    [operatorPairings, pairingId],
+    () => findConfirmedProviderPairing(operatorPairings, nilAddress || ''),
+    [nilAddress, operatorPairings],
+  )
+  const pendingLink = useMemo(
+    () => findMostRecentPendingProviderLink(pendingLinks, nilAddress || ''),
+    [nilAddress, pendingLinks],
+  )
+  const activeProviderAddress = useMemo(
+    () =>
+      String(providerAddress || '').trim() ||
+      confirmedPairing?.provider ||
+      pendingLink?.provider ||
+      '',
+    [confirmedPairing?.provider, pendingLink?.provider, providerAddress],
   )
   const providerRecord = useMemo(
-    () => findProviderByAddress(providers, confirmedPairing?.provider ?? ''),
-    [confirmedPairing?.provider, providers],
+    () => findProviderByAddress(providers, activeProviderAddress),
+    [activeProviderAddress, providers],
   )
   const onchainBases = useMemo(() => extractProviderHttpBases(providerRecord?.endpoints), [providerRecord?.endpoints])
   const effectivePublicBase = onchainBases[0] || endpointPlan?.publicBase || null
   const providerStatusDetail = publicStatus?.provider ?? null
   const providerDaemonStatusReady = String(publicStatus?.persona || '').trim().toLowerCase() === 'provider-daemon'
   const authoritativePublicBase = providerStatusDetail?.public_base || effectivePublicBase
-  const pairingRemainingBlocks = pairingBlocksRemaining(pendingPairing, latestHeight)
-  const pairingIsExpired = pairingExpired(pendingPairing, latestHeight)
   const hasAuthToken = Boolean(authToken.trim())
+  const hasOperatorAddress = Boolean(String(nilAddress || '').trim())
   const providerKeyLabel = String(providerKey || '').trim()
   const providerKeyReady = Boolean(providerKeyLabel)
   const selectedCloneOption = CLONE_METHOD_OPTIONS.find((option) => option.id === cloneMethod) ?? CLONE_METHOD_OPTIONS[0]
@@ -338,10 +346,10 @@ export function SpOnboarding() {
     () =>
       evaluateProviderRunbookReadiness({
         endpointPlan,
-        pairingId,
+        operatorAddress: nilAddress || '',
         authToken,
       }),
-    [authToken, endpointPlan, pairingId],
+    [authToken, endpointPlan, nilAddress],
   )
 
   const walletReady = isConnected && !isWrongNetwork && !needsReconnect
@@ -351,9 +359,9 @@ export function SpOnboarding() {
       ? WALLET_ACCESS_REQUIRED_MESSAGE
       : null
   const pageError = walletInlineError && error === walletInlineError ? null : error
-  const canOpenPairing = walletReady && funded && Boolean(address)
+  const canApproveLink = walletReady && funded && Boolean(address) && Boolean(pendingLink?.provider) && !confirmedPairing
   const bootstrapReady = runbookReadiness.ready
-  const pairingLinked = Boolean(pairingId)
+  const pairingLinked = Boolean(pendingLink)
   const pairingConfirmed = Boolean(confirmedPairing)
   const providerRegistered = Boolean(providerRecord)
   const publicHealthReady = providerDaemonStatusReady
@@ -367,14 +375,17 @@ export function SpOnboarding() {
         endpointMode,
         endpointValue,
         publicPort: Number(publicPort),
-        pairingId,
+        operatorAddress: nilAddress || '',
         providerKey,
         authToken,
       }),
-    [authToken, endpointMode, endpointValue, hostMode, pairingId, providerKey, publicPort],
+    [authToken, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
   )
   const healthCommands = useMemo(() => buildProviderHealthCommands(authoritativePublicBase), [authoritativePublicBase])
-  const pairCommand = useMemo(() => buildProviderPairCommand(providerKey, pairingId), [pairingId, providerKey])
+  const pairCommand = useMemo(
+    () => buildProviderLinkCommand(providerKey, nilAddress || ''),
+    [nilAddress, providerKey],
+  )
   const providerInitCommand = useMemo(
     () => `PROVIDER_KEY='${providerKeyLabel || 'provider1'}' ./scripts/run_devnet_provider.sh init`,
     [providerKeyLabel],
@@ -382,12 +393,12 @@ export function SpOnboarding() {
   const agentPrompt = useMemo(
     () =>
       buildProviderAgentPrompt({
-        pairingId,
+        operatorAddress: nilAddress || '',
         providerEndpoint: endpointPlan?.providerEndpoint,
         publicBase: authoritativePublicBase,
         providerKey,
       }),
-    [authoritativePublicBase, endpointPlan?.providerEndpoint, pairingId, providerKey],
+    [authoritativePublicBase, endpointPlan?.providerEndpoint, nilAddress, providerKey],
   )
 
   const handleCopy = useCallback(async (label: string, text: string) => {
@@ -406,15 +417,15 @@ export function SpOnboarding() {
     try {
       const [height, pending, pairings] = await Promise.all([
         lcdFetchLatestHeight(appConfig.lcdBase).catch(() => null),
-        pairingId ? lcdFetchPendingProviderPairing(appConfig.lcdBase, pairingId).catch(() => null) : Promise.resolve(null),
+        nilAddress ? lcdFetchPendingProviderLinksByOperator(appConfig.lcdBase, nilAddress).catch(() => []) : Promise.resolve([]),
         nilAddress ? lcdFetchProvidersByOperator(appConfig.lcdBase, nilAddress).catch(() => []) : Promise.resolve([]),
       ])
 
       setLatestHeight(height)
-      setPendingPairing(pending)
+      setPendingLinks(pending)
       setOperatorPairings(pairings)
 
-      if (pairings.length > 0) {
+      if (pairings.length > 0 || pending.length > 0) {
         const registryProviders = await lcdFetchProviders(appConfig.lcdBase).catch(() => [])
         setProviders(registryProviders)
       } else {
@@ -423,7 +434,7 @@ export function SpOnboarding() {
     } finally {
       setLoadingLiveState(false)
     }
-  }, [nilAddress, pairingId])
+  }, [nilAddress])
 
   const refreshPublicStatus = useCallback(async (base: string) => {
     const normalizedBase = String(base || '').trim().replace(/\/$/, '')
@@ -473,8 +484,8 @@ export function SpOnboarding() {
   }, [])
 
   useEffect(() => {
-    if (!pairingId && !nilAddress) {
-      setPendingPairing(null)
+    if (!nilAddress) {
+      setPendingLinks([])
       setOperatorPairings([])
       setProviders([])
       setLatestHeight(null)
@@ -487,7 +498,7 @@ export function SpOnboarding() {
     }, 8000)
 
     return () => window.clearInterval(timer)
-  }, [nilAddress, pairingId, refreshLiveState])
+  }, [nilAddress, refreshLiveState])
 
   useEffect(() => {
     if (!effectivePublicBase || !pairingConfirmed) {
@@ -529,7 +540,7 @@ export function SpOnboarding() {
     }
   }
 
-  const handleOpenPairing = async () => {
+  const handleApproveLink = async () => {
     setError(null)
     setNotice(null)
 
@@ -538,37 +549,26 @@ export function SpOnboarding() {
       return
     }
     if (!walletReady) {
-      setError('Switch the wallet onto NilStore testnet before opening pairing.')
+      setError('Switch the wallet onto NilStore testnet before approving provider link.')
       return
     }
     if (!funded) {
-      setError('Fund the operator wallet before opening pairing.')
+      setError('Fund the operator wallet before approving provider link.')
       return
     }
-
-    const height = latestHeight ?? (await lcdFetchLatestHeight(appConfig.lcdBase).catch(() => null))
-    if (!height) {
-      setError('Could not load the latest chain height from the LCD.')
+    if (!pendingLink?.provider) {
+      setError('No pending provider link was found for this operator wallet yet.')
       return
     }
-
-    const nextPairingId = createProviderPairingId()
-    const expiresAt = height + PAIRING_TTL_BLOCKS
 
     try {
-      const result = await openPairing({ creator: address, pairingId: nextPairingId, expiresAt })
-      setPairingId(result.pairing_id)
-      setPairingTxHash(result.tx_hash)
-      setPendingPairing({
-        pairing_id: result.pairing_id,
-        operator: nilAddress || result.operator,
-        expires_at: String(expiresAt),
-        opened_height: String(height),
-      })
-      setNotice('Pairing request opened on-chain. Continue to Step 3 on the provider host, then complete pairing in Step 5.')
+      const result = await approveProviderLink({ creator: address, provider: pendingLink.provider })
+      setProviderAddress(pendingLink.provider)
+      setLinkTxHash(result.tx_hash)
+      setNotice('Provider link approved on-chain. Continue with endpoint, auth token, bootstrap, and health checks.')
       await refreshLiveState()
     } catch (openError) {
-      const message = openError instanceof Error ? openError.message : 'Could not open provider pairing'
+      const message = openError instanceof Error ? openError.message : 'Could not approve provider link'
       setError(message)
     }
   }
@@ -580,22 +580,15 @@ export function SpOnboarding() {
       : funded
         ? 'ready'
         : 'pending'
-  const pairingOpenState: 'ready' | 'pending' | 'action' | 'idle' = pairingIsExpired
-    ? 'action'
-    : pairingLinked
+  const pairingOpenState: 'ready' | 'pending' | 'action' | 'idle' = pairingConfirmed
     ? 'ready'
-    : openingPairing
+    : approvingLink
       ? 'pending'
-      : canOpenPairing
+      : canApproveLink
         ? 'action'
-        : 'idle'
-  const pairingState: 'ready' | 'pending' | 'action' | 'idle' = pairingConfirmed
-    ? 'ready'
-    : pairingIsExpired
-      ? 'action'
-      : pendingPairing || openingPairing || (pairingId && !pairingConfirmed)
-        ? 'pending'
-        : 'idle'
+        : hasOperatorAddress
+          ? 'pending'
+          : 'idle'
   const cloneRepoState: 'ready' | 'pending' | 'action' | 'idle' = providerRepoReady ? 'ready' : 'action'
   const providerKeyState: 'ready' | 'pending' | 'action' | 'idle' = providerKeyReady && providerKeyInitialized
     ? 'ready'
@@ -604,11 +597,11 @@ export function SpOnboarding() {
       : 'action'
   const pairingHostState: 'ready' | 'pending' | 'action' | 'idle' = pairingConfirmed
     ? 'ready'
-    : !providerRepoReady || !providerKeyReady || !providerKeyInitialized || !pairingLinked || pairingIsExpired
+    : !providerRepoReady || !providerKeyReady || !providerKeyInitialized || !hasOperatorAddress
       ? 'action'
-      : pairingState === 'pending'
+      : pairingLinked
         ? 'pending'
-        : 'idle'
+        : 'action'
   const providerState: 'ready' | 'pending' | 'action' | 'idle' = publicHealthReady
     ? 'ready'
     : providerRegistered
@@ -620,10 +613,10 @@ export function SpOnboarding() {
           : 'idle'
   const stepReadyById: Record<FlowStepId, boolean> = {
     wallet: walletReady && funded,
-    pairing_open: pairingLinked && !pairingIsExpired,
+    pairing_open: pairingConfirmed,
     clone_repo: providerRepoReady,
     provider_key: providerKeyReady && providerKeyInitialized,
-    pairing_host: pairingConfirmed,
+    pairing_host: pairingLinked || pairingConfirmed,
     reachability: Boolean(endpointPlan),
     auth: hasAuthToken,
     verification: publicHealthReady && providerRegistered,
@@ -661,13 +654,13 @@ export function SpOnboarding() {
     currentStepId === 'wallet'
       ? 'Connect the browser wallet, switch to NilStore testnet, and fund it before moving on.'
       : currentStepId === 'pairing_open'
-        ? 'Open a pairing on-chain from this page to create the pairing ID and TTL.'
+        ? 'Approve the pending provider link from this page after the provider host has requested it.'
         : currentStepId === 'clone_repo'
           ? 'Clone the nil-store repository on the provider host and change into the repo directory.'
           : currentStepId === 'provider_key'
             ? 'Run provider key init on the provider host, then fund the printed nil1 address if needed.'
         : currentStepId === 'pairing_host'
-          ? 'Run provider-host pairing confirmation with the pairing ID and provider key, then refresh until confirmed.'
+          ? 'Run provider-host link request with OPERATOR_ADDRESS and provider key, then refresh until pending appears.'
         : currentStepId === 'reachability'
           ? 'Define the public endpoint so the website can derive the provider endpoint and health URL.'
           : currentStepId === 'auth'
@@ -693,8 +686,8 @@ export function SpOnboarding() {
               <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">First Healthy Provider</h1>
               <p className="max-w-2xl text-muted-foreground">
                 This is the web-first operator flow for bringing up a NilStore <span className="font-mono">provider-daemon</span>.
-                Describe the provider endpoint, initialize and fund the key, open pairing from the browser,
-                then bootstrap and verify registration and public health from the same screen.
+                Describe the provider endpoint, initialize and fund the key, request provider link from the host,
+                approve it from the browser wallet, then bootstrap and verify registration and public health from the same screen.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -728,7 +721,7 @@ export function SpOnboarding() {
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Host pairing</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Host link</div>
               <div className="flex items-center gap-2 text-sm text-foreground">
                 <StatusPill
                   label={
@@ -739,8 +732,8 @@ export function SpOnboarding() {
                       : pairingConfirmed
                         ? 'Confirmed'
                         : pairingLinked
-                          ? 'Awaiting host pair'
-                          : 'Open in step 2'
+                          ? 'Awaiting browser approval'
+                          : 'Request in step 5'
                   }
                   state={pairingHostState}
                 />
@@ -854,7 +847,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">1. Operator wallet</div>
                   <h2 className="text-2xl font-semibold text-foreground">Connect, switch, and fund the browser wallet</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Pairing starts from the browser. The wallet must be connected to NilStore testnet and funded enough to send the pairing transaction.
+                    Browser approval happens in Step 2. The wallet must be connected to NilStore testnet and funded enough to approve the provider link transaction.
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Done when: <span className="font-semibold text-foreground">wallet is connected, on NilStore testnet, and funded</span>.
@@ -940,18 +933,18 @@ export function SpOnboarding() {
             <section id="step-pairing-open" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Browser pairing</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Open pairing on-chain from the browser</h2>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Operator approval</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Approve provider link from the browser wallet</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Create a pairing request on-chain first. This generates the pairing ID and TTL that the provider host must confirm in the next step.
+                    This is the browser-side transaction. After Step 5 opens the provider-host link request, approve that pending request from the operator wallet here.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">pairing ID exists on-chain with an active TTL</span>.
+                    Done when: <span className="font-semibold text-foreground">operator wallet approves the pending provider link</span>.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusPill
-                    label={pairingIsExpired ? 'Expired' : pairingLinked ? 'Opened' : openingPairing ? 'Opening' : 'Not opened'}
+                    label={pairingConfirmed ? 'Approved' : pairingLinked ? 'Pending approval' : approvingLink ? 'Approving' : 'Waiting on host'}
                     state={pairingOpenState}
                   />
                   <button
@@ -972,34 +965,32 @@ export function SpOnboarding() {
                       <div className="mt-2 font-mono-data text-foreground">{latestHeight ?? '—'}</div>
                     </div>
                     <div className="border border-border bg-background/40 p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing ID</div>
-                      <div className="mt-2 break-all font-mono-data text-foreground">{pairingId || '—'}</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pending provider</div>
+                      <div className="mt-2 break-all font-mono-data text-foreground">{pendingLink?.provider || activeProviderAddress || '—'}</div>
                     </div>
                     <div className="border border-border bg-background/40 p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Expires in</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Requested height</div>
                       <div className="mt-2 font-mono-data text-foreground">
-                        {pairingRemainingBlocks === null ? '—' : `${pairingRemainingBlocks} blocks`}
+                        {pendingLink?.requested_height || '—'}
                       </div>
                     </div>
                     <div className="border border-border bg-background/40 p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing tx</div>
-                      <div className="mt-2 break-all font-mono-data text-foreground">{pairingTxHash || '—'}</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Approval tx</div>
+                      <div className="mt-2 break-all font-mono-data text-foreground">{linkTxHash || '—'}</div>
                     </div>
                   </div>
 
                   {pairingConfirmed ? (
                     <div className="border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
-                      Pairing request is already confirmed. Continue with the remaining onboarding steps on this page.
+                      Provider link is approved on-chain. Continue with the remaining onboarding steps on this page.
                     </div>
-                  ) : pendingPairing ? (
-                    <div className={`border px-4 py-3 text-sm ${pairingIsExpired ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-primary/30 bg-primary/10 text-primary'}`}>
-                      {pairingIsExpired
-                        ? 'The pairing session expired before the provider host confirmed it. Open a new pairing and copy a fresh provider host runbook.'
-                        : 'Pairing is open on-chain. Continue with Steps 3-5 on the provider host before expiry.'}
+                  ) : pendingLink ? (
+                    <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                      Pending provider link found on-chain. Approve it from this wallet now.
                     </div>
                   ) : (
                     <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
-                      Open pairing once the wallet is connected, on the right chain, and funded. This page does not track unpaired providers.
+                      No pending provider link is open for this operator yet. Complete Step 5 on the provider host first, then refresh.
                     </div>
                   )}
                 </div>
@@ -1007,15 +998,15 @@ export function SpOnboarding() {
                 <div className="flex flex-col gap-2 xl:min-w-[220px]">
                   <button
                     type="button"
-                    onClick={() => void handleOpenPairing()}
-                    disabled={!canOpenPairing || openingPairing}
+                    onClick={() => void handleApproveLink()}
+                    disabled={!canApproveLink || approvingLink}
                     className="inline-flex items-center justify-center gap-2 bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
                   >
-                    {openingPairing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                    {pairingId ? 'Open New Pairing' : 'Open Pairing'}
+                    {approvingLink ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                    {pairingConfirmed ? 'Approve Again' : 'Approve Link'}
                   </button>
                   <div className="border border-border bg-background/40 px-3 py-3 text-xs text-muted-foreground">
-                    Pairing TTL: <span className="font-mono text-foreground">{PAIRING_TTL_BLOCKS}</span> blocks. Draft state is saved locally in this browser; the provider auth token is kept only in this browser session.
+                    Draft state is saved locally in this browser; the provider auth token is kept only in this browser session.
                   </div>
                 </div>
               </div>
@@ -1027,7 +1018,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Clone nil-store on provider host</div>
                   <h2 className="text-2xl font-semibold text-foreground">Prepare the provider host workspace</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Pick one clone method and run it on the provider host. This is required before init, pair, bootstrap, or verify commands.
+                    Pick one clone method and run it on the provider host. This is required before init, link, bootstrap, or verify commands.
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Done when: <span className="font-semibold text-foreground">provider host has a local nil-store checkout</span>.
@@ -1121,7 +1112,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Provider key init + fund</div>
                   <h2 className="text-2xl font-semibold text-foreground">Initialize and fund the provider key</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    This is a separate server-side step from pairing. Run init first, then ensure the key has funds before host pairing.
+                    This is a separate server-side step from link request. Run init first, then ensure the key has funds before requesting link from the host.
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Done when: <span className="font-semibold text-foreground">provider key is initialized and funded (or already funded)</span>.
@@ -1163,7 +1154,7 @@ export function SpOnboarding() {
                     className="mt-1 h-4 w-4 border border-border bg-background"
                     disabled={!providerKeyReady || !providerRepoReady}
                   />
-                  <span>I ran init for this key (or confirmed it already existed) and the key is funded for pairing.</span>
+                  <span>I ran init for this key (or confirmed it already existed) and the key is funded for link request.</span>
                 </label>
 
                 {!providerRepoReady ? (
@@ -1185,22 +1176,24 @@ export function SpOnboarding() {
             <section id="step-pairing-host" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">5. Provider-host pairing</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Confirm pairing from the provider host</h2>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">5. Provider-host link request</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Open provider link request from the provider host</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Now run the pair command on the provider host. This confirms the browser-opened pairing request on-chain.
+                    Run the link command on the provider host with the operator wallet address. Then return to Step 2 and approve from the browser wallet.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">provider host confirms pairing on-chain</span>.
+                    Done when: <span className="font-semibold text-foreground">provider host opens a pending provider link request on-chain</span>.
                   </p>
                 </div>
                 <StatusPill
                   label={
                     pairingConfirmed
-                      ? 'Confirmed'
+                      ? 'Approved'
                       : pairingLinked
-                        ? 'Awaiting host pair'
-                        : 'Missing pairing ID'
+                        ? 'Awaiting browser approval'
+                        : hasOperatorAddress
+                          ? 'Request not opened'
+                          : 'Missing operator address'
                   }
                   state={pairingHostState}
                 />
@@ -1209,8 +1202,8 @@ export function SpOnboarding() {
               <div className="mt-6 space-y-5">
                 <div className="grid gap-3 border border-border bg-background/40 p-4 text-sm text-muted-foreground md:grid-cols-3">
                   <div className="flex items-center justify-between gap-3 md:block">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing ID</div>
-                    <div className="mt-1 font-mono-data text-foreground">{pairingLinked ? pairingId : 'required from Step 2'}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operator address</div>
+                    <div className="mt-1 font-mono-data text-foreground">{nilAddress || 'required from Step 1'}</div>
                   </div>
                   <div className="flex items-center justify-between gap-3 md:block">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key</div>
@@ -1218,44 +1211,44 @@ export function SpOnboarding() {
                   </div>
                   <div className="flex items-center justify-between gap-3 md:block">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain status</div>
-                    <div className="mt-1 font-mono-data text-foreground">{pairingConfirmed ? 'confirmed' : 'pending host pair'}</div>
+                    <div className="mt-1 font-mono-data text-foreground">{pairingConfirmed ? 'approved' : pairingLinked ? 'pending browser approval' : 'not requested'}</div>
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-foreground">Pair command (provider host)</div>
-                    <CopyButton label="Copy" onClick={() => void handleCopy('Pair command', pairCommand)} />
+                    <div className="text-sm font-semibold text-foreground">Link command (provider host)</div>
+                    <CopyButton label="Copy" onClick={() => void handleCopy('Link command', pairCommand)} />
                   </div>
                   <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{pairCommand}</pre>
                   <p className="text-xs text-muted-foreground">
-                    Run this on the provider host, then click refresh until status changes to confirmed.
+                    Run this on the provider host, then click refresh until a pending link appears in Step 2.
                   </p>
                 </div>
 
                 {!providerRepoReady ? (
                   <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                    Finish Step 3 first (repo clone), then return to pairing.
+                    Finish Step 3 first (repo clone), then return to provider-host link request.
                   </div>
                 ) : !providerKeyReady || !providerKeyInitialized ? (
                   <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                    Finish Step 4 first (provider key init + funding), then run pair.
+                    Finish Step 4 first (provider key init + funding), then run link.
                   </div>
-                ) : !pairingLinked ? (
+                ) : !hasOperatorAddress ? (
                   <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                    Finish Step 2 first so this step has a pairing ID to confirm.
-                  </div>
-                ) : pairingIsExpired ? (
-                  <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                    This pairing session expired. Open a new pairing in Step 2, then rerun provider-host pair.
+                    Finish Step 1 first so this page has the operator wallet nil address.
                   </div>
                 ) : pairingConfirmed ? (
                   <div className="border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
-                    Provider pairing confirmed. Continue to Step 6 for public endpoint setup.
+                    Provider link approved. Continue to Step 6 for public endpoint setup.
+                  </div>
+                ) : pairingLinked ? (
+                  <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                    Pending provider link request is open. Return to Step 2 and approve it from the browser wallet.
                   </div>
                 ) : (
                   <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
-                    Pending confirmation from the provider host. Use the pair command above, then refresh this page state.
+                    No pending provider link request was found yet. Use the link command above, then refresh this page state.
                   </div>
                 )}
               </div>
@@ -1384,7 +1377,7 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">7. Shared auth</div>
                   <h2 className="text-2xl font-semibold text-foreground">Unlock the provider host runbook</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Add the shared provider auth token from the hub operator. Once endpoint, pairing, and auth are all present, the command rail becomes run-ready.
+                    Add the shared provider auth token from the hub operator. Once endpoint, operator address, and auth are all present, the command rail becomes run-ready.
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Done when: <span className="font-semibold text-foreground">shared provider auth token is present</span>.
@@ -1414,7 +1407,7 @@ export function SpOnboarding() {
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Runbook gate</div>
                     <div className="mt-2 space-y-2">
                       <div className="flex items-center justify-between gap-3">
-                        <span>Pairing opened</span>
+                        <span>Link request opened</span>
                         <span className="font-mono-data text-foreground">{pairingLinked ? 'yes' : 'no'}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
@@ -1455,8 +1448,8 @@ export function SpOnboarding() {
                         ? 'Finish Step 4 by running provider key init and funding before unlock.'
                       : runbookReadiness.missing.includes('endpoint')
                       ? 'Finish Step 6 so the website can derive the public provider endpoint.'
-                      : runbookReadiness.missing.includes('pairing')
-                        ? 'Finish Step 2 so the website can bind these commands to the on-chain pairing request.'
+                      : runbookReadiness.missing.includes('operator')
+                        ? 'Finish Step 1 so the website can capture the connected operator wallet nil address.'
                         : 'Add the shared auth token from the hub operator to unlock run-ready provider host commands.'}
                   </div>
                 ) : null}
@@ -1467,12 +1460,12 @@ export function SpOnboarding() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">8. Verification</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Watch pairing, registration, and public health converge</h2>
+                  <h2 className="text-2xl font-semibold text-foreground">Watch link approval, registration, and public health converge</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    After the provider host runs bootstrap, this page should move from pending pairing to paired provider, then to on-chain registration, then to healthy daemon-reported public reachability. The direct browser <span className="font-mono">/health</span> probe is only advisory.
+                    After the provider host runs bootstrap, this page should move from pending link request to approved provider, then to on-chain registration, then to healthy daemon-reported public reachability. The direct browser <span className="font-mono">/health</span> probe is only advisory.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">pairing, registration, and health all report healthy</span>.
+                    Done when: <span className="font-semibold text-foreground">link approval, registration, and health all report healthy</span>.
                   </p>
                 </div>
                 <StatusPill label={publicHealthReady ? 'Healthy' : providerState === 'pending' ? 'In progress' : 'Waiting'} state={providerState} />
@@ -1482,16 +1475,16 @@ export function SpOnboarding() {
                   <div className="border border-border bg-background/40 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing confirmation</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider link approval</div>
                       <div className="mt-1 text-foreground">
                         {confirmedPairing
-                          ? `Confirmed for provider ${confirmedPairing.provider}`
-                          : pairingId
-                            ? 'Waiting for provider host to confirm pairing'
-                            : 'Open pairing first; unpaired providers are not tracked on this page'}
+                          ? `Approved for provider ${confirmedPairing.provider}`
+                          : pairingLinked
+                            ? 'Waiting for operator wallet to approve the pending provider link'
+                            : 'No pending provider link found yet; run Step 5 first'}
                       </div>
                     </div>
-                    <StatusPill label={confirmedPairing ? 'Confirmed' : pairingId ? 'Waiting' : 'Idle'} state={confirmedPairing ? 'ready' : pairingId ? 'pending' : 'idle'} />
+                    <StatusPill label={confirmedPairing ? 'Approved' : pairingLinked ? 'Waiting' : 'Idle'} state={confirmedPairing ? 'ready' : pairingLinked ? 'pending' : 'idle'} />
                   </div>
                 </div>
 
@@ -1503,8 +1496,8 @@ export function SpOnboarding() {
                         {providerRecord
                           ? providerRecord.endpoints?.join(', ') || 'Provider exists without endpoints'
                           : confirmedPairing
-                            ? 'Pairing confirmed. Waiting for bootstrap to register or update endpoints.'
-                            : 'Website registration tracking starts after pairing confirmation.'}
+                            ? 'Provider link approved. Waiting for bootstrap to register or update endpoints.'
+                            : 'Website registration tracking starts after link approval.'}
                       </div>
                     </div>
                     <StatusPill label={providerRecord ? 'Visible' : confirmedPairing ? 'Waiting' : 'Idle'} state={providerRecord ? 'ready' : confirmedPairing ? 'pending' : 'idle'} />
@@ -1611,9 +1604,9 @@ export function SpOnboarding() {
 
               <div className="mt-5 grid gap-3 border-t border-border/60 pt-5 sm:grid-cols-2">
                 <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                  <div className="font-semibold text-foreground">When pairing is still pending</div>
+                  <div className="font-semibold text-foreground">When link approval is still pending</div>
                   <div className="mt-2">
-                    The provider host has not confirmed the pairing request yet. Re-copy the provider host runbook if the pairing ID changed, then rerun <span className="font-mono">./scripts/run_devnet_provider.sh pair</span> if the host is already configured, or rerun <span className="font-mono">./scripts/run_devnet_provider.sh bootstrap</span> on the provider host once the key is funded.
+                    The operator wallet has not approved the pending provider link yet. Rerun <span className="font-mono">./scripts/run_devnet_provider.sh link</span> if the host needs to reopen the request, or rerun <span className="font-mono">./scripts/run_devnet_provider.sh bootstrap</span> on the provider host once the key is funded.
                   </div>
                 </div>
                 <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
@@ -1637,7 +1630,7 @@ export function SpOnboarding() {
                 <StatusPill label={commandReady ? 'Command ready' : 'Waiting'} state={commandReady ? 'ready' : 'pending'} />
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
-                  Complete Steps 1 through 7 first. This panel becomes run-ready only after pairing, host setup, key init, public endpoint, and shared auth are all set.
+                  Complete Steps 1 through 7 first. This panel becomes run-ready only after link request, host setup, key init, public endpoint, and shared auth are all set.
               </p>
               </div>
 
@@ -1649,13 +1642,17 @@ export function SpOnboarding() {
                 ) : null}
                 {!pairingLinked ? (
                   <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                    Open pairing first. This website-managed flow only generates run-ready commands after pairing is opened.
+                    Open a provider link request first. This website-managed flow generates run-ready commands after Step 5 requests link on-chain.
                   </div>
                 ) : null}
                 <div className="grid gap-3 border-b border-border/60 pb-5 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between gap-3">
-                    <span>Pairing ID</span>
-                    <span className="font-mono-data text-foreground">{pairingLinked ? pairingId : 'required'}</span>
+                    <span>Pending provider</span>
+                    <span className="font-mono-data text-foreground">{pendingLink?.provider || activeProviderAddress || 'required'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Operator address</span>
+                    <span className="font-mono-data text-foreground">{nilAddress || 'required'}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span>Provider endpoint</span>
@@ -1684,8 +1681,8 @@ export function SpOnboarding() {
                     {pairingLinked ? (
                       <div className="space-y-3 border-t border-border/60 pt-5">
                         <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-foreground">Pair-only repair</div>
-                          <CopyButton label="Copy" onClick={() => void handleCopy('Pair-only repair', pairCommand)} />
+                          <div className="text-sm font-semibold text-foreground">Link-only repair</div>
+                          <CopyButton label="Copy" onClick={() => void handleCopy('Link-only repair', pairCommand)} />
                         </div>
                         <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{pairCommand}</pre>
                       </div>
@@ -1720,8 +1717,8 @@ export function SpOnboarding() {
                         ? 'Run provider key init + funding in Step 4 before generating host commands.'
                       : runbookReadiness.missing.includes('endpoint')
                       ? 'Describe the public endpoint in Step 6 to generate the provider host runbook.'
-                      : runbookReadiness.missing.includes('pairing')
-                        ? 'Open pairing from the browser before this page will generate run-ready provider host commands.'
+                      : runbookReadiness.missing.includes('operator')
+                        ? 'Connect the operator wallet in Step 1 so this page can populate OPERATOR_ADDRESS.'
                         : 'Add the shared provider auth token from the hub operator before this page will generate run-ready provider host commands.'}
                   </div>
                 )}

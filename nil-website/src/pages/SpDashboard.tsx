@@ -524,7 +524,7 @@ export function SpDashboard() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">No paired providers</div>
               <h2 className="text-2xl font-semibold text-foreground">This wallet does not own any provider-daemons yet</h2>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Start in provider onboarding, open pairing from the browser, then bootstrap the remote provider host. The provider will appear here after the server confirms pairing on-chain.
+                Start in provider onboarding, request provider link from the host, approve it in the browser wallet, then bootstrap the remote provider host. The provider appears here after on-chain link approval.
               </p>
             </div>
             <Link
@@ -569,7 +569,7 @@ export function SpDashboard() {
                         <StatusPill label={record.registered ? 'Registered' : 'Paired'} state={record.registered ? 'ready' : 'pending'} />
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                        <span>pairing {record.pairingId}</span>
+                        <span>linked</span>
                         <span>height {record.pairedHeightRaw || '—'}</span>
                       </div>
                     </button>
@@ -610,8 +610,8 @@ export function SpDashboard() {
                   <div className="mt-2 break-all font-mono-data text-foreground">{activeRecord?.operator || '—'}</div>
                 </div>
                 <div className="border border-border bg-background/40 p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing ID</div>
-                  <div className="mt-2 break-all font-mono-data text-foreground">{activeRecord?.pairingId || '—'}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider</div>
+                  <div className="mt-2 break-all font-mono-data text-foreground">{activeRecord?.provider || '—'}</div>
                 </div>
                 <div className="border border-border bg-background/40 p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Paired height</div>

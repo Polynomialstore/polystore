@@ -398,61 +398,7 @@ func (k msgServer) UpdateProviderEndpoints(goCtx context.Context, msg *types.Msg
 	return &types.MsgUpdateProviderEndpointsResponse{Success: true}, nil
 }
 
-func (k msgServer) OpenProviderPairing(goCtx context.Context, msg *types.MsgOpenProviderPairing) (*types.MsgOpenProviderPairingResponse, error) {
-	ctx := sdk.UnwrapSDKContext(goCtx)
-	if msg == nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
-	}
-
-	operator, err := requireCanonicalAddress(msg.Creator, "creator")
-	if err != nil {
-		return nil, err
-	}
-	pairingID, err := validatePairingID(msg.PairingId)
-	if err != nil {
-		return nil, err
-	}
-
-	currentHeight := uint64(ctx.BlockHeight())
-	if msg.ExpiresAt <= currentHeight {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be in the future")
-	}
-
-	existing, err := k.PendingProviderPairings.Get(ctx, pairingID)
-	if err == nil {
-		if existing.ExpiresAt > currentHeight {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("pairing %q is already open", pairingID)
-		}
-		if err := k.PendingProviderPairings.Remove(ctx, pairingID); err != nil {
-			return nil, err
-		}
-	} else if !errors.Is(err, collections.ErrNotFound) {
-		return nil, err
-	}
-
-	pending := types.PendingProviderPairing{
-		PairingId:    pairingID,
-		Operator:     operator,
-		ExpiresAt:    msg.ExpiresAt,
-		OpenedHeight: ctx.BlockHeight(),
-	}
-	if err := k.PendingProviderPairings.Set(ctx, pairingID, pending); err != nil {
-		return nil, fmt.Errorf("failed to open provider pairing: %w", err)
-	}
-
-	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			types.TypeMsgOpenProviderPairing,
-			sdk.NewAttribute("pairing_id", pairingID),
-			sdk.NewAttribute("operator", operator),
-			sdk.NewAttribute("expires_at", fmt.Sprintf("%d", msg.ExpiresAt)),
-		),
-	)
-
-	return &types.MsgOpenProviderPairingResponse{Success: true}, nil
-}
-
-func (k msgServer) ConfirmProviderPairing(goCtx context.Context, msg *types.MsgConfirmProviderPairing) (*types.MsgConfirmProviderPairingResponse, error) {
+func (k msgServer) RequestProviderLink(goCtx context.Context, msg *types.MsgRequestProviderLink) (*types.MsgRequestProviderLinkResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	if msg == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
@@ -462,7 +408,7 @@ func (k msgServer) ConfirmProviderPairing(goCtx context.Context, msg *types.MsgC
 	if err != nil {
 		return nil, err
 	}
-	pairingID, err := validatePairingID(msg.PairingId)
+	operator, err := canonicalAddress(msg.Operator, "operator")
 	if err != nil {
 		return nil, err
 	}
@@ -473,26 +419,61 @@ func (k msgServer) ConfirmProviderPairing(goCtx context.Context, msg *types.MsgC
 		return nil, err
 	}
 
-	pending, err := k.PendingProviderPairings.Get(ctx, pairingID)
+	pending := types.PendingProviderLink{
+		Provider:     provider,
+		Operator:     operator,
+		RequestedHeight: ctx.BlockHeight(),
+	}
+	if err := k.PendingProviderLinks.Set(ctx, provider, pending); err != nil {
+		return nil, fmt.Errorf("failed to request provider link: %w", err)
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgRequestProviderLink,
+			sdk.NewAttribute(types.AttributeKeyProvider, provider),
+			sdk.NewAttribute("operator", operator),
+		),
+	)
+
+	return &types.MsgRequestProviderLinkResponse{Success: true}, nil
+}
+
+func (k msgServer) ApproveProviderLink(goCtx context.Context, msg *types.MsgApproveProviderLink) (*types.MsgApproveProviderLinkResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+
+	operator, err := requireCanonicalAddress(msg.Creator, "creator")
 	if err != nil {
-		if errors.Is(err, collections.ErrNotFound) {
-			return nil, sdkerrors.ErrNotFound.Wrap("pending pairing not found")
-		}
+		return nil, err
+	}
+	provider, err := canonicalAddress(msg.Provider, "provider")
+	if err != nil {
 		return nil, err
 	}
 
-	currentHeight := uint64(ctx.BlockHeight())
-	if pending.ExpiresAt <= currentHeight {
-		if err := k.PendingProviderPairings.Remove(ctx, pairingID); err != nil {
-			return nil, err
+	if _, err := k.ProviderPairings.Get(ctx, provider); err == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("provider %s is already paired", provider)
+	} else if !errors.Is(err, collections.ErrNotFound) {
+		return nil, err
+	}
+
+	pending, err := k.PendingProviderLinks.Get(ctx, provider)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrNotFound.Wrap("pending provider link not found")
 		}
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("pending pairing expired")
+		return nil, err
+	}
+	if pending.Operator != operator {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s requested a different operator", provider)
 	}
 
 	pairing := types.ProviderPairing{
 		Provider:     provider,
 		Operator:     pending.Operator,
-		PairingId:    pairingID,
 		PairedHeight: ctx.BlockHeight(),
 	}
 	if err := k.ProviderPairings.Set(ctx, provider, pairing); err != nil {
@@ -501,20 +482,53 @@ func (k msgServer) ConfirmProviderPairing(goCtx context.Context, msg *types.MsgC
 	if err := k.ProviderPairingsByOperator.Set(ctx, collections.Join(pending.Operator, provider), true); err != nil {
 		return nil, fmt.Errorf("failed to index provider pairing: %w", err)
 	}
-	if err := k.PendingProviderPairings.Remove(ctx, pairingID); err != nil {
+	if err := k.PendingProviderLinks.Remove(ctx, provider); err != nil {
 		return nil, err
 	}
 
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(
-			types.TypeMsgConfirmProviderPairing,
-			sdk.NewAttribute("pairing_id", pairingID),
+			types.TypeMsgApproveProviderLink,
 			sdk.NewAttribute(types.AttributeKeyProvider, provider),
 			sdk.NewAttribute("operator", pending.Operator),
 		),
 	)
 
-	return &types.MsgConfirmProviderPairingResponse{Success: true}, nil
+	return &types.MsgApproveProviderLinkResponse{Success: true}, nil
+}
+
+func (k msgServer) CancelProviderLink(goCtx context.Context, msg *types.MsgCancelProviderLink) (*types.MsgCancelProviderLinkResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+
+	provider, err := requireCanonicalAddress(msg.Creator, "creator")
+	if err != nil {
+		return nil, err
+	}
+
+	pending, err := k.PendingProviderLinks.Get(ctx, provider)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrNotFound.Wrap("pending provider link not found")
+		}
+		return nil, err
+	}
+
+	if err := k.PendingProviderLinks.Remove(ctx, provider); err != nil {
+		return nil, err
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgCancelProviderLink,
+			sdk.NewAttribute(types.AttributeKeyProvider, provider),
+			sdk.NewAttribute("operator", pending.Operator),
+		),
+	)
+
+	return &types.MsgCancelProviderLinkResponse{Success: true}, nil
 }
 
 func (k msgServer) UnpairProvider(goCtx context.Context, msg *types.MsgUnpairProvider) (*types.MsgUnpairProviderResponse, error) {

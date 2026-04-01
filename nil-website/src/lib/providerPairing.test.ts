@@ -3,7 +3,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  fetchPendingProviderPairing,
+  fetchPendingProviderLink,
+  fetchPendingProviderLinksByOperator,
   fetchProviderPairing,
   fetchProvidersByOperator,
   fetchProvidersByWallet,
@@ -34,7 +35,6 @@ test('fetchProviderPairing loads a provider pairing from LCD', async () => {
       pairing: {
         provider: 'nil1provider',
         operator: 'nil1operator',
-        pairing_id: 'pair-123',
         paired_height: '42',
       },
     })
@@ -49,7 +49,6 @@ test('fetchProviderPairing loads a provider pairing from LCD', async () => {
   assert.deepEqual(pairing, {
     provider: 'nil1provider',
     operator: 'nil1operator',
-    pairing_id: 'pair-123',
     paired_height: '42',
   })
 })
@@ -64,13 +63,11 @@ test('fetchProvidersByWallet resolves the operator address and lists paired prov
         {
           provider: 'nil1providera',
           operator: 'nil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp3x4xu4',
-          pairing_id: 'pair-a',
           paired_height: '10',
         },
         {
           provider: 'nil1providerb',
           operator: 'nil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp3x4xu4',
-          pairing_id: 'pair-b',
           paired_height: 11,
         },
       ],
@@ -102,13 +99,39 @@ test('fetchProvidersByOperator returns an empty list for blank operator input', 
   assert.equal(called, false)
 })
 
-test('fetchPendingProviderPairing returns null when pairing is missing', async () => {
+test('fetchPendingProviderLink returns null when link is missing', async () => {
   const fetchFn = async () => jsonResponse(404, { message: 'not found' })
 
-  const pairing = await fetchPendingProviderPairing('pair-missing', {
+  const link = await fetchPendingProviderLink('nil1provider', {
     lcdBase: 'http://lcd.test',
     fetchFn: fetchFn as any,
   })
 
-  assert.equal(pairing, null)
+  assert.equal(link, null)
+})
+
+test('fetchPendingProviderLinksByOperator loads pending links list', async () => {
+  const fetchFn = async () =>
+    jsonResponse(200, {
+      links: [
+        {
+          provider: 'nil1provider',
+          operator: 'nil1operator',
+          requested_height: '99',
+        },
+      ],
+    })
+
+  const links = await fetchPendingProviderLinksByOperator('nil1operator', {
+    lcdBase: 'http://lcd.test',
+    fetchFn: fetchFn as any,
+  })
+
+  assert.deepEqual(links, [
+    {
+      provider: 'nil1provider',
+      operator: 'nil1operator',
+      requested_height: '99',
+    },
+  ])
 })

@@ -4,8 +4,9 @@ package types
 const (
 	TypeMsgRegisterProvider        = "register_provider"
 	TypeMsgUpdateProviderEndpoints = "update_provider_endpoints"
-	TypeMsgOpenProviderPairing     = "open_provider_pairing"
-	TypeMsgConfirmProviderPairing  = "confirm_provider_pairing"
+	TypeMsgRequestProviderLink     = "request_provider_link"
+	TypeMsgApproveProviderLink     = "approve_provider_link"
+	TypeMsgCancelProviderLink      = "cancel_provider_link"
 	TypeMsgUnpairProvider          = "unpair_provider"
 	TypeMsgCreateDeal              = "create_deal"
 	TypeMsgProveLiveness           = "prove_liveness"

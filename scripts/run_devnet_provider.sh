@@ -5,8 +5,8 @@ set -euo pipefail
 #
 # Usage:
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
-#   PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh pair
-#   PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh bootstrap
+#   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh link
+#   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh bootstrap
 #   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
 #   PROVIDER_KEY=provider1 PROVIDER_LISTEN=":8091" ./scripts/run_devnet_provider.sh start
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
@@ -25,12 +25,12 @@ ACTION="${1:-start}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/run_devnet_provider.sh [init|pair|register|start|print-config|doctor|verify|bootstrap|stop|help]
+Usage: ./scripts/run_devnet_provider.sh [init|link|register|start|print-config|doctor|verify|bootstrap|stop|help]
 
 Examples:
   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
-  PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh pair
-  PROVIDER_KEY=provider1 PAIRING_ID=<pairing-id> ./scripts/run_devnet_provider.sh bootstrap
+  PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh link
+  PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh bootstrap
   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
   PROVIDER_KEY=provider1 PROVIDER_LISTEN=":8091" ./scripts/run_devnet_provider.sh start
   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
@@ -54,7 +54,7 @@ if [ -z "$PROVIDER_KEY" ]; then
   exit 1
 fi
 
-PAIRING_ID="${PAIRING_ID:-${NIL_PROVIDER_PAIRING_ID:-}}"
+OPERATOR_ADDRESS_RAW="${OPERATOR_ADDRESS:-${NIL_OPERATOR_ADDRESS:-}}"
 NETWORK_PROFILE="${NILSTORE_NETWORK_PROFILE:-nilstore-public-testnet}"
 CHAIN_ID="${CHAIN_ID:-${NIL_CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-20260211}}}"
 LCD_BASE="${HUB_LCD:-${NIL_LCD_BASE:-${NILSTORE_TESTNET_LCD_BASE:-https://lcd.nilstore.org}}}"
@@ -94,6 +94,89 @@ json_escape() {
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+eth_to_nil_bech32() {
+  local eth_addr="$1"
+  python3 - "$eth_addr" <<'PY'
+import sys
+
+CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+def bech32_polymod(values):
+    gen = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3]
+    chk = 1
+    for v in values:
+        b = chk >> 25
+        chk = ((chk & 0x1ffffff) << 5) ^ v
+        for i in range(5):
+            chk ^= gen[i] if ((b >> i) & 1) else 0
+    return chk
+
+def bech32_hrp_expand(hrp):
+    return [ord(x) >> 5 for x in hrp] + [0] + [ord(x) & 31 for x in hrp]
+
+def bech32_create_checksum(hrp, data):
+    values = bech32_hrp_expand(hrp) + data
+    polymod = bech32_polymod(values + [0, 0, 0, 0, 0, 0]) ^ 1
+    return [(polymod >> 5 * (5 - i)) & 31 for i in range(6)]
+
+def bech32_encode(hrp, data):
+    combined = data + bech32_create_checksum(hrp, data)
+    return hrp + "1" + "".join(CHARSET[d] for d in combined)
+
+def convertbits(data, frombits, tobits, pad=True):
+    acc = 0
+    bits = 0
+    ret = []
+    maxv = (1 << tobits) - 1
+    max_acc = (1 << (frombits + tobits - 1)) - 1
+    for value in data:
+        if value < 0 or (value >> frombits):
+            return None
+        acc = ((acc << frombits) | value) & max_acc
+        bits += frombits
+        while bits >= tobits:
+            bits -= tobits
+            ret.append((acc >> bits) & maxv)
+    if pad:
+        if bits:
+            ret.append((acc << (tobits - bits)) & maxv)
+    elif bits >= frombits or ((acc << (tobits - bits)) & maxv):
+        return None
+    return ret
+
+addr = sys.argv[1].strip()
+if addr.startswith("0x") or addr.startswith("0X"):
+    addr = addr[2:]
+addr = addr.strip()
+if len(addr) != 40:
+    raise SystemExit("invalid eth address length")
+
+raw = bytes.fromhex(addr)
+data5 = convertbits(raw, 8, 5, True)
+print(bech32_encode("nil", data5))
+PY
+}
+
+normalize_operator_address() {
+  local raw="${1:-}"
+  raw="$(echo "$raw" | xargs)"
+  if [ -z "$raw" ]; then
+    return 1
+  fi
+  if [[ "$raw" == nil1* ]]; then
+    printf '%s' "$raw"
+    return 0
+  fi
+  if [[ "$raw" == 0x* || "$raw" == 0X* ]]; then
+    if ! have_cmd python3; then
+      return 1
+    fi
+    eth_to_nil_bech32 "$raw" 2>/dev/null
+    return $?
+  fi
+  return 1
 }
 
 provider_pid_file() {
@@ -290,20 +373,24 @@ provider_pairing_json() {
   curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/$addr" 2>/dev/null
 }
 
-pending_pairing_exists() {
-  if [ -z "$PAIRING_ID" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+pending_link_exists() {
+  local addr
+  addr="$(provider_addr)"
+  if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
   fi
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$PAIRING_ID" 2>/dev/null || true)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$addr" 2>/dev/null || true)"
   [ "$code" = "200" ]
 }
 
-pending_pairing_json() {
-  if [ -z "$PAIRING_ID" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+pending_link_json() {
+  local addr
+  addr="$(provider_addr)"
+  if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
   fi
-  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$PAIRING_ID" 2>/dev/null
+  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$addr" 2>/dev/null
 }
 
 json_string_field() {
@@ -359,22 +446,20 @@ else:
   fi
 }
 
-provider_pairing_id() {
-  local body
-  body="$(provider_pairing_json)" || return 1
-  json_string_field "pairing_id" "$body"
-}
-
 provider_pairing_operator() {
   local body
   body="$(provider_pairing_json)" || return 1
   json_string_field "operator" "$body"
 }
 
-pending_pairing_operator() {
+pending_link_operator() {
   local body
-  body="$(pending_pairing_json)" || return 1
+  body="$(pending_link_json)" || return 1
   json_string_field "operator" "$body"
+}
+
+configured_operator_address() {
+  normalize_operator_address "$OPERATOR_ADDRESS_RAW"
 }
 
 provider_registered_endpoints_json() {
@@ -399,36 +484,33 @@ public_health_ok() {
 }
 
 provider_pairing_status() {
-  local confirmed_pairing_id confirmed_operator pending_operator
-  confirmed_pairing_id="$(provider_pairing_id || true)"
+  local configured_operator confirmed_operator pending_operator
+  configured_operator="$(configured_operator_address || true)"
   confirmed_operator="$(provider_pairing_operator || true)"
-  pending_operator="$(pending_pairing_operator || true)"
+  pending_operator="$(pending_link_operator || true)"
 
-  if [ -n "$PAIRING_ID" ]; then
-    if [ -n "$confirmed_pairing_id" ] && [ "$confirmed_pairing_id" = "$PAIRING_ID" ]; then
+  if [ -n "$confirmed_operator" ]; then
+    if [ -n "$configured_operator" ] && [ "$confirmed_operator" != "$configured_operator" ]; then
+      printf 'paired-to-different-operator'
+    else
       printf 'confirmed'
-      return 0
     fi
-    if [ -n "$confirmed_pairing_id" ]; then
-      if [ -n "$pending_operator" ] && [ -n "$confirmed_operator" ] && [ "$pending_operator" != "$confirmed_operator" ]; then
-        printf 'paired-to-different-operator'
-      else
-        printf 'paired-to-different-pairing'
-      fi
-      return 0
-    fi
-    if [ -n "$pending_operator" ]; then
-      printf 'pending'
-      return 0
-    fi
-    printf 'not-open'
     return 0
   fi
 
-  if [ -n "$confirmed_pairing_id" ]; then
-    printf 'paired-untracked'
-  else
+  if [ -n "$pending_operator" ]; then
+    if [ -n "$configured_operator" ] && [ "$pending_operator" != "$configured_operator" ]; then
+      printf 'pending-different-operator'
+    else
+      printf 'pending-operator-approval'
+    fi
+    return 0
+  fi
+
+  if [ -n "$configured_operator" ]; then
     printf 'not-requested'
+  else
+    printf 'unconfigured'
   fi
 }
 
@@ -450,7 +532,8 @@ print_config() {
   "network_profile": "$(json_escape "$NETWORK_PROFILE")",
   "provider_key": "$(json_escape "$PROVIDER_KEY")",
   "provider_address": "$(json_escape "$addr")",
-  "pairing_id": "$(json_escape "$PAIRING_ID")",
+  "configured_operator": "$(json_escape "$(configured_operator_address || true)")",
+  "operator_address": "$(json_escape "$(configured_operator_address || true)")",
   "chain_id": "$(json_escape "$CHAIN_ID")",
   "hub_lcd": "$(json_escape "$LCD_BASE")",
   "hub_node": "$(json_escape "$NODE_ADDR")",
@@ -479,7 +562,7 @@ print_config() {
   "provider_running": $(provider_running && printf 'true' || printf 'false'),
   "provider_registered": $(provider_registered && printf 'true' || printf 'false'),
   "provider_paired": $(provider_paired && printf 'true' || printf 'false'),
-  "pending_pairing_open": $(pending_pairing_exists && printf 'true' || printf 'false'),
+  "pending_link_open": $(pending_link_exists && printf 'true' || printf 'false'),
   "sp_auth_present": $([ -n "${NIL_GATEWAY_SP_AUTH:-}" ] && printf 'true' || printf 'false')
 }
 EOF
@@ -533,30 +616,30 @@ doctor_provider() {
     failures=$((failures + 1))
   fi
 
-  if [ -n "$PAIRING_ID" ]; then
-    local current_pairing_id current_operator requested_operator
-    current_pairing_id="$(provider_pairing_id || true)"
+  local configured_operator current_operator requested_operator
+  configured_operator="$(configured_operator_address || true)"
+  if [ -n "$configured_operator" ]; then
     current_operator="$(provider_pairing_operator || true)"
-    requested_operator="$(pending_pairing_operator || true)"
-    echo "OK: pairing id configured ($PAIRING_ID)"
-    if [ -n "$current_pairing_id" ] && [ "$current_pairing_id" = "$PAIRING_ID" ]; then
-      echo "OK: provider pairing is confirmed on-chain for the requested pairing id"
-    elif [ -n "$current_pairing_id" ]; then
-      echo "FAIL: provider is already paired on-chain to a different pairing id ($current_pairing_id)"
+    requested_operator="$(pending_link_operator || true)"
+    echo "OK: operator address configured ($configured_operator)"
+    if [ -n "$current_operator" ] && [ "$current_operator" = "$configured_operator" ]; then
+      echo "OK: provider pairing is confirmed on-chain for the configured operator"
+    elif [ -n "$current_operator" ]; then
+      echo "FAIL: provider is already paired on-chain to a different operator ($current_operator)"
       if [ -n "$current_operator" ]; then
         echo "  current operator: $current_operator"
       fi
-      if [ -n "$requested_operator" ]; then
-        echo "  requested operator: $requested_operator"
-      fi
       failures=$((failures + 1))
-    elif pending_pairing_exists; then
-      echo "WARN: pairing is still pending on-chain; rerun bootstrap after the website opens pairing"
+    elif [ -n "$requested_operator" ] && [ "$requested_operator" = "$configured_operator" ]; then
+      echo "WARN: provider link request is pending on-chain; approve it from the website operator wallet"
+    elif [ -n "$requested_operator" ]; then
+      echo "FAIL: pending provider link targets a different operator ($requested_operator)"
+      failures=$((failures + 1))
     else
-      echo "WARN: pairing id is not open on-chain yet; start from the website pairing step first"
+      echo "WARN: no provider link request is open on-chain; run ./scripts/run_devnet_provider.sh link"
     fi
   else
-    echo "WARN: PAIRING_ID is not set; website-driven onboarding and My Providers linking will be unavailable"
+    echo "WARN: OPERATOR_ADDRESS is not set; website-driven onboarding and My Providers linking will be unavailable"
   fi
 
   if [ -n "$PROVIDER_ENDPOINTS_RAW" ]; then
@@ -643,9 +726,6 @@ init_provider() {
   echo "Provider key ready:"
   echo "  key:     $PROVIDER_KEY"
   echo "  address: $addr"
-  if [ -n "$PAIRING_ID" ]; then
-    echo "  pairing: $PAIRING_ID"
-  fi
   echo
   echo "Wizard status:"
   echo "  - Step 4 (Provider key init + fund): complete on provider host."
@@ -655,15 +735,18 @@ init_provider() {
     echo "  - Existing key reused: mnemonic was not regenerated."
   fi
   echo "  - Ensure this address has aatom for gas: $addr"
-  echo
-  echo "Next command (Wizard Step 5: confirm pairing from provider host):"
-  if [ -n "$PAIRING_ID" ]; then
-    echo "  PAIRING_ID='$PAIRING_ID' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh pair"
-  else
-    echo "  PAIRING_ID='<pairing-id-from-browser-step-2>' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh pair"
+  if [ -n "$OPERATOR_ADDRESS_RAW" ]; then
+    echo "  - Target operator wallet: $(configured_operator_address || printf '%s' "$OPERATOR_ADDRESS_RAW")"
   fi
   echo
-  echo "After Step 5, return to the website for Step 6+ (endpoint, auth token, bootstrap, health)."
+  echo "Next command (Wizard Step 5: request provider link from provider host):"
+  if [ -n "$OPERATOR_ADDRESS_RAW" ]; then
+    echo "  OPERATOR_ADDRESS='$OPERATOR_ADDRESS_RAW' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh link"
+  else
+    echo "  OPERATOR_ADDRESS='<operator-0x-or-nil-address>' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh link"
+  fi
+  echo
+  echo "After Step 5, return to the website for Step 6+ (approve link, endpoint, auth token, bootstrap, health)."
 }
 
 register_provider() {
@@ -730,48 +813,46 @@ register_provider() {
   echo "  lcd:       $LCD_BASE"
 }
 
-confirm_provider_pairing() {
+request_provider_link() {
   ensure_nilchaind
 
-  if [ -z "$PAIRING_ID" ]; then
-    echo "ERROR: PAIRING_ID is required to confirm provider pairing" >&2
+  local operator
+  operator="$(configured_operator_address || true)"
+  if [ -z "$operator" ]; then
+    echo "ERROR: OPERATOR_ADDRESS is required (use nil1... or 0x...)" >&2
     exit 1
   fi
 
-  local addr current_pairing_id current_operator requested_operator
+  local addr current_operator requested_operator
   addr="$(provider_addr)"
   if [ -z "$addr" ]; then
     echo "ERROR: provider key not found; run: ./scripts/run_devnet_provider.sh init" >&2
     exit 1
   fi
 
-  current_pairing_id="$(provider_pairing_id || true)"
   current_operator="$(provider_pairing_operator || true)"
-  requested_operator="$(pending_pairing_operator || true)"
+  requested_operator="$(pending_link_operator || true)"
 
-  if [ -n "$current_pairing_id" ] && [ "$current_pairing_id" = "$PAIRING_ID" ]; then
-    echo "==> Provider is already paired on-chain for the requested pairing id; skipping confirm."
+  if [ -n "$current_operator" ] && [ "$current_operator" = "$operator" ]; then
+    echo "==> Provider is already paired on-chain for the configured operator; skipping link request."
     return 0
   fi
 
-  if [ -n "$current_pairing_id" ]; then
-    echo "ERROR: provider is already paired on-chain to a different pairing id ($current_pairing_id)" >&2
+  if [ -n "$current_operator" ]; then
+    echo "ERROR: provider is already paired on-chain to a different operator ($current_operator)" >&2
     if [ -n "$current_operator" ]; then
       echo "  current operator: $current_operator" >&2
-    fi
-    if [ -n "$requested_operator" ]; then
-      echo "  requested operator: $requested_operator" >&2
     fi
     echo "Use a fresh provider key or unlink the existing pairing before continuing." >&2
     exit 1
   fi
-  if ! pending_pairing_exists; then
-    echo "ERROR: pairing id $PAIRING_ID is not open on-chain; open pairing from the website first" >&2
-    exit 1
+  if [ -n "$requested_operator" ] && [ "$requested_operator" = "$operator" ]; then
+    echo "==> Provider link request is already pending for the configured operator; skipping request."
+    return 0
   fi
 
-  echo "==> Confirming provider pairing on-chain..."
-  "$NILCHAIND_BIN" tx nilchain confirm-provider-pairing "$PAIRING_ID" \
+  echo "==> Requesting provider link on-chain..."
+  "$NILCHAIND_BIN" tx nilchain request-provider-link "$operator" \
     --from "$PROVIDER_KEY" \
     --chain-id "$CHAIN_ID" \
     --node "$NODE_ADDR" \
@@ -782,9 +863,25 @@ confirm_provider_pairing() {
     --gas-prices "$GAS_PRICES" \
     --yes >/dev/null
 
-  echo "Paired:"
-  echo "  address:    $addr"
-  echo "  pairing_id: $PAIRING_ID"
+  echo "Link requested:"
+  echo "  provider: $addr"
+  echo "  operator: $operator"
+}
+
+link_provider() {
+  init_provider
+
+  if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
+    echo "==> Provider key was just created. Fund $(provider_addr) with aatom, then rerun link." >&2
+    return 1
+  fi
+
+  request_provider_link
+
+  echo
+  echo "Next step (website operator wallet): approve this provider link request."
+  echo "  provider: $(provider_addr)"
+  echo "  operator: $(configured_operator_address || true)"
 }
 
 start_provider() {
@@ -832,7 +929,7 @@ start_provider() {
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_PROVIDER_KEY="$PROVIDER_KEY" \
       NIL_PROVIDER_ENDPOINTS="$PROVIDER_ENDPOINTS_RAW" \
-      NIL_PROVIDER_PAIRING_ID="$PAIRING_ID" \
+      NIL_OPERATOR_ADDRESS="$(configured_operator_address || true)" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
       "$GO_BIN" run . \
       >"$LOG_DIR/provider.log" 2>&1 &
@@ -854,8 +951,8 @@ bootstrap_provider() {
   fi
 
   local missing=()
-  if [ -z "$PAIRING_ID" ]; then
-    missing+=("PAIRING_ID")
+  if [ -z "$OPERATOR_ADDRESS_RAW" ]; then
+    missing+=("OPERATOR_ADDRESS")
   fi
   if [ -z "${NIL_GATEWAY_SP_AUTH:-}" ]; then
     missing+=("NIL_GATEWAY_SP_AUTH")
@@ -867,15 +964,15 @@ bootstrap_provider() {
   if [ "${#missing[@]}" -gt 0 ] && [ "$BOOTSTRAP_ALLOW_PARTIAL" != "1" ]; then
     echo "ERROR: bootstrap now fails fast unless website-managed prerequisites are present." >&2
     echo "Missing: ${missing[*]}" >&2
-    echo "Provide the missing values and rerun bootstrap, or use the staged manual commands (pair/register/start)." >&2
+    echo "Provide the missing values and rerun bootstrap, or use the staged manual commands (link/register/start)." >&2
     echo "If you intentionally want a partial manual bootstrap, rerun with BOOTSTRAP_ALLOW_PARTIAL=1." >&2
     return 1
   fi
 
-  if [ -n "$PAIRING_ID" ]; then
-    confirm_provider_pairing
+  if [ -n "$OPERATOR_ADDRESS_RAW" ]; then
+    request_provider_link
   else
-    echo "==> Skipping pairing confirm: PAIRING_ID is not set."
+    echo "==> Skipping link request: OPERATOR_ADDRESS is not set."
   fi
 
   if [ -n "${NIL_GATEWAY_SP_AUTH:-}" ]; then
@@ -908,7 +1005,7 @@ stop_provider() {
 
 case "$ACTION" in
   init) init_provider ;;
-  pair) confirm_provider_pairing ;;
+  link) link_provider ;;
   register) register_provider ;;
   start) start_provider ;;
   print-config) print_config ;;

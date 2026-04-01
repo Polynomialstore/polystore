@@ -125,26 +125,52 @@ func (k queryServer) ListProvidersByOperator(goCtx context.Context, req *types.Q
 	return &types.QueryListProvidersByOperatorResponse{Pairings: pairings}, nil
 }
 
-func (k queryServer) GetPendingProviderPairing(goCtx context.Context, req *types.QueryGetPendingProviderPairingRequest) (*types.QueryGetPendingProviderPairingResponse, error) {
+func (k queryServer) GetPendingProviderLink(goCtx context.Context, req *types.QueryGetPendingProviderLinkRequest) (*types.QueryGetPendingProviderLinkResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	pairingID, err := validatePairingID(req.PairingId)
+	provider, err := canonicalAddress(req.Provider, "provider")
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	pending, err := k.k.PendingProviderPairings.Get(ctx, pairingID)
+	pending, err := k.k.PendingProviderLinks.Get(ctx, provider)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
-			return nil, status.Error(codes.NotFound, "pending provider pairing not found")
+			return nil, status.Error(codes.NotFound, "pending provider link not found")
 		}
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 
-	return &types.QueryGetPendingProviderPairingResponse{Pairing: pending}, nil
+	return &types.QueryGetPendingProviderLinkResponse{Link: pending}, nil
+}
+
+func (k queryServer) ListPendingProviderLinksByOperator(goCtx context.Context, req *types.QueryListPendingProviderLinksByOperatorRequest) (*types.QueryListPendingProviderLinksByOperatorResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	operator, err := canonicalAddress(req.Operator, "operator")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	links := make([]types.PendingProviderLink, 0)
+	err = k.k.PendingProviderLinks.Walk(ctx, nil, func(_ string, pending types.PendingProviderLink) (bool, error) {
+		if pending.Operator != operator {
+			return false, nil
+		}
+		links = append(links, pending)
+		return false, nil
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListPendingProviderLinksByOperatorResponse{Links: links}, nil
 }
 
 func (k queryServer) ListProviders(goCtx context.Context, req *types.QueryListProvidersRequest) (*types.QueryListProvidersResponse, error) {

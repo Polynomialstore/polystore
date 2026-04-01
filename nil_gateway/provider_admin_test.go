@@ -125,7 +125,6 @@ func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
 				"pairing": map[string]any{
 					"provider":      provider,
 					"operator":      operator,
-					"pairing_id":    "pair-admin-001",
 					"paired_height": "42",
 				},
 			})
@@ -197,7 +196,6 @@ func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
 				"pairing": map[string]any{
 					"provider":      provider,
 					"operator":      operator,
-					"pairing_id":    "pair-admin-002",
 					"paired_height": "50",
 				},
 			})
@@ -261,7 +259,6 @@ func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
 				"pairing": map[string]any{
 					"provider":      provider,
 					"operator":      operator,
-					"pairing_id":    "pair-admin-003",
 					"paired_height": "60",
 				},
 			})

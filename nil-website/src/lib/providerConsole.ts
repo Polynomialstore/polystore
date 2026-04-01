@@ -4,7 +4,6 @@ import { extractProviderHttpBases } from './spDashboard'
 export interface OperatorProviderRecord {
   provider: string
   operator: string
-  pairingId: string
   pairedHeight: number
   pairedHeightRaw: string
   endpoints: string[]
@@ -35,7 +34,6 @@ export function buildOperatorProviderRecords(
       return {
         provider: pairing.provider,
         operator: pairing.operator,
-        pairingId: pairing.pairing_id,
         pairedHeight: parseHeight(pairing.paired_height),
         pairedHeightRaw: pairing.paired_height,
         endpoints,

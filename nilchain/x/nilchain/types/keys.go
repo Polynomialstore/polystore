@@ -33,7 +33,7 @@ var (
 	ProviderRewardsKey               = collections.NewPrefix("ProviderRewards/value/")
 	ProviderPairingsKey              = collections.NewPrefix("ProviderPairings/value/")
 	ProviderPairingsByOperatorKey    = collections.NewPrefix("ProviderPairingsByOperator/value/")
-	PendingProviderPairingsKey       = collections.NewPrefix("PendingProviderPairings/value/")
+	PendingProviderLinksKey          = collections.NewPrefix("PendingProviderLinks/value/")
 	ReceiptNonceKey                  = collections.NewPrefix("ReceiptNonce/value/")
 	ReceiptNonceDealFileKey          = collections.NewPrefix("ReceiptNonceDealFile/value/")
 	EvmNonceKey                      = collections.NewPrefix("EvmNonce/value/")

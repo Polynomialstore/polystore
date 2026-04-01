@@ -1,21 +1,15 @@
 import {
-  lcdFetchPendingProviderPairing,
+  lcdFetchPendingProviderLink,
+  lcdFetchPendingProviderLinksByOperator,
   lcdFetchProviderPairing,
   lcdFetchProvidersByOperator,
 } from '../api/lcdClient'
 import { appConfig } from '../config'
-import type { LcdPendingProviderPairing, LcdProviderPairing } from '../domain/lcd'
+import type { LcdPendingProviderLink, LcdProviderPairing } from '../domain/lcd'
 import { ethToNil } from './address'
 
 function normalizeNonEmpty(input: string): string {
   return String(input || '').trim()
-}
-
-export function createProviderPairingId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `pair-${crypto.randomUUID()}`
-  }
-  return `pair-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 export function operatorAddressFromWalletAddress(walletAddress: string): string | null {
@@ -52,11 +46,20 @@ export async function fetchProvidersByWallet(
   return fetchProvidersByOperator(operator, { lcdBase, fetchFn })
 }
 
-export async function fetchPendingProviderPairing(
-  pairingId: string,
+export async function fetchPendingProviderLink(
+  providerAddress: string,
   { lcdBase = appConfig.lcdBase, fetchFn = fetch }: { lcdBase?: string; fetchFn?: typeof fetch } = {},
-): Promise<LcdPendingProviderPairing | null> {
-  const normalized = normalizeNonEmpty(pairingId)
+): Promise<LcdPendingProviderLink | null> {
+  const normalized = normalizeNonEmpty(providerAddress)
   if (!normalized) return null
-  return lcdFetchPendingProviderPairing(lcdBase, normalized, fetchFn)
+  return lcdFetchPendingProviderLink(lcdBase, normalized, fetchFn)
+}
+
+export async function fetchPendingProviderLinksByOperator(
+  operator: string,
+  { lcdBase = appConfig.lcdBase, fetchFn = fetch }: { lcdBase?: string; fetchFn?: typeof fetch } = {},
+): Promise<LcdPendingProviderLink[]> {
+  const normalized = normalizeNonEmpty(operator)
+  if (!normalized) return []
+  return lcdFetchPendingProviderLinksByOperator(lcdBase, normalized, fetchFn)
 }

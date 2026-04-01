@@ -33,12 +33,10 @@ type gatewayStatusResponse struct {
 type providerDaemonStatusDetail struct {
 	KeyName            string   `json:"key_name,omitempty"`
 	Address            string   `json:"address,omitempty"`
-	PairingID          string   `json:"pairing_id,omitempty"`
+	ConfiguredOperator string   `json:"configured_operator,omitempty"`
 	PairingStatus      string   `json:"pairing_status,omitempty"`
 	PairedOperator     string   `json:"paired_operator,omitempty"`
 	PendingOperator    string   `json:"pending_operator,omitempty"`
-	PendingExpiresAt   uint64   `json:"pending_expires_at,omitempty"`
-	LatestHeight       uint64   `json:"latest_height,omitempty"`
 	RegistrationStatus string   `json:"registration_status,omitempty"`
 	OnchainStatus      string   `json:"onchain_status,omitempty"`
 	Draining           bool     `json:"draining"`
@@ -72,18 +70,16 @@ type lcdProviderPairingResponse struct {
 	Pairing struct {
 		Provider     string `json:"provider"`
 		Operator     string `json:"operator"`
-		PairingID    string `json:"pairing_id"`
 		PairedHeight int64  `json:"paired_height"`
 	} `json:"pairing"`
 }
 
-type lcdPendingProviderPairingResponse struct {
-	Pairing struct {
-		PairingID    string          `json:"pairing_id"`
-		Operator     string          `json:"operator"`
-		ExpiresAtRaw json.RawMessage `json:"expires_at"`
-		OpenedHeight int64           `json:"opened_height"`
-	} `json:"pairing"`
+type lcdPendingProviderLinkResponse struct {
+	Link struct {
+		Provider        string `json:"provider"`
+		Operator        string `json:"operator"`
+		RequestedHeight int64  `json:"requested_height"`
+	} `json:"link"`
 }
 
 func parseP2PAddrList(raw string) []string {
@@ -215,7 +211,7 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReachable bool) (*providerDaemonStatusDetail, []string) {
 	detail := &providerDaemonStatusDetail{
 		KeyName:       strings.TrimSpace(os.Getenv("NIL_PROVIDER_KEY")),
-		PairingID:     strings.TrimSpace(os.Getenv("NIL_PROVIDER_PAIRING_ID")),
+		ConfiguredOperator: strings.TrimSpace(os.Getenv("NIL_OPERATOR_ADDRESS")),
 		SpAuthPresent: strings.TrimSpace(os.Getenv("NIL_GATEWAY_SP_AUTH")) != "",
 		UploadDir:     uploadDir,
 		NilHome:       homeDir,
@@ -268,22 +264,13 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 	detail.PairingStatus = pairingStatus
 	if pairingErr == nil && pairing != nil {
 		detail.PairedOperator = strings.TrimSpace(pairing.Pairing.Operator)
-		if detail.PairingID == "" {
-			detail.PairingID = strings.TrimSpace(pairing.Pairing.PairingID)
-		}
 	}
 
-	if detail.PairingStatus != "paired" && detail.PairingID != "" {
-		pending, pendingStatus, pendingErr := fetchPendingProviderPairingFromLCD(ctx, detail.PairingID)
+	if detail.PairingStatus != "paired" {
+		pending, pendingStatus, pendingErr := fetchPendingProviderLinkFromLCD(ctx, detail.Address)
 		if pendingErr == nil && pending != nil {
 			detail.PairingStatus = pendingStatus
-			detail.PendingOperator = strings.TrimSpace(pending.Pairing.Operator)
-			if expiresAt, err := parseUint64Raw(pending.Pairing.ExpiresAtRaw); err == nil {
-				detail.PendingExpiresAt = expiresAt
-			}
-			if latestHeight, err := fetchLatestHeight(ctx, strings.TrimRight(detail.LCDBase, "/")); err == nil {
-				detail.LatestHeight = latestHeight
-			}
+			detail.PendingOperator = strings.TrimSpace(pending.Link.Operator)
 		}
 	}
 	if detail.PairingStatus == "" {
@@ -305,14 +292,10 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 	switch detail.PairingStatus {
 	case "paired":
 	case "pending":
-		if detail.PendingExpiresAt != 0 && detail.LatestHeight != 0 && detail.PendingExpiresAt <= detail.LatestHeight {
-			issues = append(issues, "configured pairing id has expired on-chain")
-		} else {
-			issues = append(issues, "provider pairing is still pending confirmation on-chain")
-		}
+		issues = append(issues, "provider link request is still pending operator approval on-chain")
 	case "not_found":
-		if detail.PairingID != "" {
-			issues = append(issues, "configured pairing id is not open on-chain")
+		if strings.TrimSpace(detail.ConfiguredOperator) != "" {
+			issues = append(issues, "configured provider link request is not open on-chain")
 		} else {
 			issues = append(issues, "provider is not paired to an operator wallet")
 		}
@@ -421,14 +404,14 @@ func fetchProviderPairingFromLCD(ctx context.Context, providerAddr string) (*lcd
 	}
 }
 
-func fetchPendingProviderPairingFromLCD(ctx context.Context, pairingID string) (*lcdPendingProviderPairingResponse, string, error) {
+func fetchPendingProviderLinkFromLCD(ctx context.Context, providerAddr string) (*lcdPendingProviderLinkResponse, string, error) {
 	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
-	if base == "" || strings.TrimSpace(pairingID) == "" {
+	if base == "" || strings.TrimSpace(providerAddr) == "" {
 		return nil, "unknown", nil
 	}
 
-	var payload lcdPendingProviderPairingResponse
-	statusCode, err := fetchStatusJSON(ctx, base+"/nilchain/nilchain/v1/provider-pairings/pending/"+pairingID, &payload)
+	var payload lcdPendingProviderLinkResponse
+	statusCode, err := fetchStatusJSON(ctx, base+"/nilchain/nilchain/v1/provider-pairings/pending/"+providerAddr, &payload)
 	switch statusCode {
 	case http.StatusOK:
 		return &payload, "pending", nil

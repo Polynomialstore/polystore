@@ -1,46 +1,40 @@
 import { useState } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import type { Hex } from 'viem'
+
 import { appConfig } from '../config'
-import { ethToNil } from '../lib/address'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
-import { encodeOpenProviderPairingData } from '../lib/nilstorePrecompile'
+import { encodeApproveProviderLinkData } from '../lib/nilstorePrecompile'
 import { resolveActiveEvmAddress } from '../lib/walletAddress'
 import { classifyWalletError } from '../lib/walletErrors'
 
-export interface OpenProviderPairingInput {
+export interface ApproveProviderLinkInput {
   creator?: string
-  pairingId: string
-  expiresAt: number
+  provider: string
 }
 
-export function useOpenProviderPairing() {
+export function useApproveProviderLink() {
   const { address: connectedAddress } = useAccount()
   const { data: walletClient } = useWalletClient()
   const [loading, setLoading] = useState(false)
   const [lastTx, setLastTx] = useState<string | null>(null)
 
-  async function openPairing(input: OpenProviderPairingInput) {
+  async function approveProviderLink(input: ApproveProviderLinkInput) {
     setLoading(true)
     setLastTx(null)
     try {
       if (!walletClient) throw new Error('Wallet not connected')
 
-      const pairingId = String(input.pairingId || '').trim()
-      if (!pairingId) {
-        throw new Error('pairingId is required')
-      }
-
-      const expiresAt = Math.max(0, Math.floor(Number(input.expiresAt) || 0))
-      if (expiresAt <= 0) {
-        throw new Error('expiresAt must be greater than 0')
+      const provider = String(input.provider || '').trim()
+      if (!provider) {
+        throw new Error('provider is required')
       }
 
       const evmAddress = resolveActiveEvmAddress({ connectedAddress, creator: input.creator })
       const txHash = await walletClient.sendTransaction({
         account: evmAddress as Hex,
         to: appConfig.nilstorePrecompile as Hex,
-        data: encodeOpenProviderPairingData(pairingId, BigInt(expiresAt)),
+        data: encodeApproveProviderLinkData(provider),
         gas: 2_000_000n,
       })
 
@@ -50,8 +44,7 @@ export function useOpenProviderPairing() {
       return {
         status: 'success' as const,
         tx_hash: txHash,
-        pairing_id: pairingId,
-        operator: ethToNil(evmAddress),
+        provider,
         operator_evm: evmAddress,
       }
     } catch (error) {
@@ -65,5 +58,5 @@ export function useOpenProviderPairing() {
     }
   }
 
-  return { openPairing, loading, lastTx }
+  return { approveProviderLink, loading, lastTx }
 }

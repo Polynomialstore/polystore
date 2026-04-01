@@ -139,7 +139,7 @@ export PROVIDER_KEY="provider1"
 # Fund the printed provider address with aatom, then:
 export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"   # or /ip4/<public-ip>/tcp/8091/http
 export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
-export PAIRING_ID="<website-opened-pairing-id>"              # optional but recommended
+export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"      # from website wallet step
 
 ./scripts/run_devnet_provider.sh bootstrap
 ```
@@ -147,8 +147,8 @@ export PAIRING_ID="<website-opened-pairing-id>"              # optional but reco
 Website-first operator flow:
 - open `/sp-onboarding`
 - connect the operator wallet
-- open pairing if you want website linking and `My Providers`
-- copy the resulting `PAIRING_ID` into the provider host only when pairing was opened
+- run provider-host link request with `OPERATOR_ADDRESS`
+- approve the pending link from the operator wallet
 - finish verification from the website after bootstrap
 
 The canonical provider docs for this are:

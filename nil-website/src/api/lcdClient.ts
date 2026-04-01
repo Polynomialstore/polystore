@@ -1,7 +1,7 @@
 import type {
   LcdDeal,
   LcdParams,
-  LcdPendingProviderPairing,
+  LcdPendingProviderLink,
   LcdProvider,
   LcdProviderPairing,
 } from '../domain/lcd'
@@ -9,7 +9,8 @@ import {
   normalizeLcdDealResponse,
   normalizeLcdDealsResponse,
   normalizeLcdParamsResponse,
-  normalizeLcdPendingProviderPairingResponse,
+  normalizeLcdPendingProviderLinkResponse,
+  normalizeLcdPendingProviderLinksByOperatorResponse,
   normalizeLcdProviderPairingResponse,
   normalizeLcdProviderPairingsResponse,
   normalizeLcdProvidersResponse,
@@ -84,20 +85,36 @@ export async function lcdFetchProvidersByOperator(
   return normalizeLcdProviderPairingsResponse(json)
 }
 
-export async function lcdFetchPendingProviderPairing(
+export async function lcdFetchPendingProviderLink(
   lcdBase: string,
-  pairingId: string,
+  provider: string,
   fetchFn: typeof fetch = fetch,
-): Promise<LcdPendingProviderPairing | null> {
+): Promise<LcdPendingProviderLink | null> {
   const res = await fetchFn(
-    `${lcdBase}/nilchain/nilchain/v1/provider-pairings/pending/${encodeURIComponent(pairingId)}`,
+    `${lcdBase}/nilchain/nilchain/v1/provider-pairings/pending/${encodeURIComponent(provider)}`,
   )
   if (res.status === 404) return null
   if (!res.ok) {
-    throw new Error(`LCD pending provider pairing returned ${res.status}`)
+    throw new Error(`LCD pending provider link returned ${res.status}`)
   }
   const json: unknown = await res.json().catch(() => null)
-  return normalizeLcdPendingProviderPairingResponse(json)
+  return normalizeLcdPendingProviderLinkResponse(json)
+}
+
+export async function lcdFetchPendingProviderLinksByOperator(
+  lcdBase: string,
+  operator: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<LcdPendingProviderLink[]> {
+  const res = await fetchFn(
+    `${lcdBase}/nilchain/nilchain/v1/provider-pairings/pending-by-operator/${encodeURIComponent(operator)}`,
+  )
+  if (res.status === 404) return []
+  if (!res.ok) {
+    throw new Error(`LCD pending provider links returned ${res.status}`)
+  }
+  const json: unknown = await res.json().catch(() => null)
+  return normalizeLcdPendingProviderLinksByOperatorResponse(json)
 }
 
 export async function lcdFetchLatestHeight(
