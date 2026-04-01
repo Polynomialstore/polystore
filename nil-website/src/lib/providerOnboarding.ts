@@ -144,6 +144,7 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   const websiteReady = Boolean(endpointPlan && operatorAddress)
   const envLines = [
     '# Run this from the nil-store checkout on the provider host after pairing is approved.',
+    '# This command starts (or restarts) the provider-daemon, then registers endpoints and runs health checks.',
     '# The happy path requires OPERATOR_ADDRESS and PROVIDER_ENDPOINT.',
     ...(usingDefaultAuth
       ? ['# Using devnet default NIL_GATEWAY_SP_AUTH. Override it if your hub uses a custom secret.']

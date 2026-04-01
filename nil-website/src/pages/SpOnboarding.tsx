@@ -392,6 +392,14 @@ export function SpOnboarding() {
     [authTokenOverride, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
   )
   const healthCommands = useMemo(() => buildProviderHealthCommands(authoritativePublicBase), [authoritativePublicBase])
+  const providerDaemonRestartCommand = useMemo(
+    () => [
+      '# Start or restart provider-daemon only.',
+      './scripts/run_devnet_provider.sh stop || true',
+      './scripts/run_devnet_provider.sh start',
+    ].join('\n'),
+    [],
+  )
   const cloudflareTunnelCommand = useMemo(
     () =>
       buildCloudflareTunnelBootstrapCommand({
@@ -1428,15 +1436,19 @@ export function SpOnboarding() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">5. Bootstrap and verify</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Run bootstrap, then watch registration and health converge</h2>
+                  <h2 className="text-2xl font-semibold text-foreground">Run bootstrap on the provider host (starts daemon), then verify</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Once the provider host runs bootstrap from the command rail, this page should move from approved pairing to on-chain registration and finally to healthy daemon-reported public reachability. The direct browser <span className="font-mono">/health</span> probe is only advisory.
+                    Run the bootstrap command in a terminal on the provider host. It starts or restarts the <span className="font-mono">provider-daemon</span>, registers endpoints, and runs checks. This page then moves from approved pairing to on-chain registration and healthy public reachability.
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Done when: <span className="font-semibold text-foreground">bootstrap is run and registration plus health both report healthy</span>.
                   </p>
                 </div>
                 <StatusPill label={publicHealthReady ? 'Healthy' : providerState === 'pending' ? 'In progress' : 'Waiting'} state={providerState} />
+              </div>
+
+              <div className="mt-4 border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                Run Step 5 commands on the provider host machine, not in the browser. The daemon must be running for this step to complete.
               </div>
 
               <div className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -1569,6 +1581,9 @@ export function SpOnboarding() {
                     If pairing is pending, rerun <span className="font-mono">./scripts/run_devnet_provider.sh pair</span>, then approve from Step 3.
                   </div>
                   <div>
+                    If the process died or never started, run <span className="font-mono">./scripts/run_devnet_provider.sh start</span> on the provider host.
+                  </div>
+                  <div>
                     If health is failing, trust provider-side checks first: <span className="font-mono">doctor</span>, <span className="font-mono">verify</span>, and local <span className="font-mono">curl</span> from the command rail.
                   </div>
                 </div>
@@ -1630,6 +1645,14 @@ export function SpOnboarding() {
                         <CopyButton label="Copy" onClick={() => void handleCopy('Provider host commands', bootstrapCommand)} />
                       </div>
                       <pre data-testid="provider-host-commands" className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
+                    </div>
+
+                    <div className="space-y-3 border-t border-border/60 pt-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-foreground">Start or restart daemon only</div>
+                        <CopyButton label="Copy" onClick={() => void handleCopy('Provider daemon restart command', providerDaemonRestartCommand)} />
+                      </div>
+                      <pre className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{providerDaemonRestartCommand}</pre>
                     </div>
 
                     {pairingLinked ? (
