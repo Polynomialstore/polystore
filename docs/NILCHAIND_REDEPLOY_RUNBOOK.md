@@ -2,7 +2,7 @@
 
 Use this runbook whenever you need to rebuild and roll out a new `nilchaind` binary for a systemd-managed hub node.
 
-Primary tool: [`scripts/redeploy_nilchaind.sh`](/home/mikers/dev/nil-store/nil-store/scripts/redeploy_nilchaind.sh)
+Primary tool: [`scripts/redeploy_nilchaind.sh`](/scripts/redeploy_nilchaind.sh)
 
 ## What the script does
 
@@ -41,7 +41,7 @@ Then verify:
 # Verify only (no build/install)
 ./scripts/redeploy_nilchaind.sh --verify-only
 
-# Include provider-link endpoint probe for a specific operator
+# Include pending-by-operator endpoint probe for a specific operator
 ./scripts/redeploy_nilchaind.sh --verify-only \
   --operator-address nil19lnnwjulnxadhe05vwh7knsarz7ftgavw49tn7
 
@@ -61,7 +61,7 @@ Then verify:
 - `systemctl is-active` for the target service (default `nilchaind`)
 - LCD syncing endpoint (`/cosmos/base/tendermint/v1beta1/syncing`)
 - Latest block height progression over a short interval
-- Optional provider-link route (if `--operator-address` provided):
+- Optional pending-by-operator route (if `--operator-address` provided):
   - `/nilchain/nilchain/v1/provider-pairings/pending-by-operator/{operator}`
 
 ## Rollback
@@ -77,7 +77,7 @@ ls -1t /opt/nilstore/nilchain/nilchaind.bak.* | head -n 1
 2. Restore and restart:
 
 ```bash
-cp /opt/nilstore/nilchain/nilchaind.bak.<timestamp> /opt/nilstore/nilchain/nilchaind
+sudo cp -p /opt/nilstore/nilchain/nilchaind.bak.<timestamp> /opt/nilstore/nilchain/nilchaind
 sudo systemctl restart nilchaind
 ./scripts/redeploy_nilchaind.sh --verify-only
 ```

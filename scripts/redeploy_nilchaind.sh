@@ -328,8 +328,13 @@ install_nilchaind() {
 restart_or_handoff() {
   if [ "$WITH_RESTART" -eq 1 ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
-      print_cmd sudo systemctl restart "$SERVICE_NAME"
-      print_cmd sudo systemctl status --no-pager "$SERVICE_NAME"
+      if [ "$(id -u)" -eq 0 ]; then
+        print_cmd systemctl restart "$SERVICE_NAME"
+        print_cmd systemctl status --no-pager "$SERVICE_NAME"
+      else
+        print_cmd sudo systemctl restart "$SERVICE_NAME"
+        print_cmd sudo systemctl status --no-pager "$SERVICE_NAME"
+      fi
       return 0
     fi
 
