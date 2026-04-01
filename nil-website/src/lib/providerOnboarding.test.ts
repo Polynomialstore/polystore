@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process'
 import {
   buildProviderAgentPrompt,
   buildProviderBootstrapCommand,
+  buildCloudflareTunnelBootstrapCommand,
   buildProviderEndpointPlan,
   buildProviderHealthCommands,
   buildProviderLinkCommand,
@@ -83,6 +84,23 @@ test('buildProviderBootstrapCommand stages init before bootstrap and opts into p
   assert.match(command, /PROVIDER_ENDPOINT='\/ip4\/203\.0\.113\.10\/tcp\/8091\/http'/)
   assert.match(command, /NIL_GATEWAY_SP_AUTH='shh it'\\''s secret'/)
   assert.match(command, /run_devnet_provider\.sh bootstrap/)
+})
+
+test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tunnel hosts', () => {
+  const command = buildCloudflareTunnelBootstrapCommand({
+    hostMode: 'home-tunnel',
+    endpointMode: 'domain',
+    endpointValue: 'https://sp.example.com/path',
+    tunnelName: 'nilstore-sp1',
+  })
+
+  assert.match(command, /CF_TUNNEL_NAME='nilstore-sp1'/)
+  assert.match(command, /CF_TUNNEL_HOSTNAME='sp\.example\.com'/)
+  assert.match(command, /CF_TUNNEL_SERVICE_URL='http:\/\/127\.0\.0\.1:8091'/)
+  assert.match(command, /cloudflared tunnel login/)
+  assert.match(command, /cloudflared tunnel create "\$CF_TUNNEL_NAME"/)
+  assert.match(command, /cloudflared tunnel route dns "\$CF_TUNNEL_NAME" "\$CF_TUNNEL_HOSTNAME"/)
+  assert.match(command, /cloudflared tunnel run "\$CF_TUNNEL_NAME"/)
 })
 
 test('evaluateProviderRunbookReadiness requires endpoint, operator, and auth for website-managed onboarding', () => {

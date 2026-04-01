@@ -25,6 +25,11 @@ export interface ProviderBootstrapDraft extends ProviderEndpointDraft {
   authToken?: string
 }
 
+export interface ProviderTunnelBootstrapDraft extends ProviderEndpointDraft {
+  tunnelName?: string
+  localServiceUrl?: string
+}
+
 export interface ProviderRunbookReadiness {
   ready: boolean
   missing: Array<'endpoint' | 'operator' | 'auth'>
@@ -35,6 +40,8 @@ const DEFAULT_PROVIDER_KEY = 'provider1'
 const DEFAULT_DOMAIN_PORT = 443
 const DEFAULT_IPV4_PORT = 8091
 const AUTH_PLACEHOLDER = '<shared-provider-auth-token>'
+const DEFAULT_TUNNEL_NAME = 'nilstore-sp'
+const DEFAULT_TUNNEL_LOCAL_SERVICE_URL = 'http://127.0.0.1:8091'
 
 function trimNonEmpty(input: unknown): string {
   return String(input || '').trim()
@@ -46,6 +53,16 @@ function shellQuote(input: string): string {
 
 function defaultPortForMode(endpointMode: ProviderEndpointInputMode): number {
   return endpointMode === 'ipv4' ? DEFAULT_IPV4_PORT : DEFAULT_DOMAIN_PORT
+}
+
+function suggestTunnelNameFromHost(hostname: string): string {
+  const slug = trimNonEmpty(hostname)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  if (!slug) return DEFAULT_TUNNEL_NAME
+  const suggested = `nilstore-${slug}`
+  return suggested.length <= 63 ? suggested : suggested.slice(0, 63).replace(/-+$/g, '')
 }
 
 function parsePort(input: number | undefined, endpointMode: ProviderEndpointInputMode): number {
@@ -151,6 +168,55 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
     '# Canonical public testnet defaults are built in:',
     ...bootstrapLines,
     ...envLines,
+  ].join('\n')
+}
+
+export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBootstrapDraft): string {
+  const endpointPlan = buildProviderEndpointPlan(draft)
+  const normalizedHost =
+    endpointPlan?.normalizedHost ||
+    (draft.endpointMode === 'multiaddr' ? '' : stripSchemeAndPath(draft.endpointValue))
+  const hostname = normalizedHost || '<public-hostname>'
+  const tunnelName = trimNonEmpty(draft.tunnelName) || suggestTunnelNameFromHost(normalizedHost)
+  const localServiceUrl = trimNonEmpty(draft.localServiceUrl) || DEFAULT_TUNNEL_LOCAL_SERVICE_URL
+
+  return [
+    '# Easy mode: bootstrap a Cloudflare Tunnel for this provider host.',
+    '# This is safe to rerun; it creates route/config when missing and then starts cloudflared.',
+    `CF_TUNNEL_NAME=${shellQuote(tunnelName)} \\`,
+    `CF_TUNNEL_HOSTNAME=${shellQuote(hostname)} \\`,
+    `CF_TUNNEL_SERVICE_URL=${shellQuote(localServiceUrl)} \\`,
+    "bash -lc '",
+    'set -euo pipefail',
+    '',
+    'if ! command -v cloudflared >/dev/null 2>&1; then',
+    '  echo "cloudflared is required. Install it first: https://developers.cloudflare.com/tunnel/setup/"',
+    '  exit 1',
+    'fi',
+    '',
+    'cloudflared tunnel login',
+    'cloudflared tunnel create "$CF_TUNNEL_NAME" >/dev/null 2>&1 || true',
+    'cloudflared tunnel route dns "$CF_TUNNEL_NAME" "$CF_TUNNEL_HOSTNAME"',
+    '',
+    'TUNNEL_ID="$(cloudflared tunnel list | awk -v name=\\"$CF_TUNNEL_NAME\\" \\"\\$2 == name { print \\$1; exit }\\")"',
+    'if [ -z "$TUNNEL_ID" ]; then',
+    '  echo "Could not resolve tunnel id for $CF_TUNNEL_NAME"',
+    '  exit 1',
+    'fi',
+    '',
+    'mkdir -p "$HOME/.cloudflared"',
+    'cat > "$HOME/.cloudflared/config.yml" <<EOF',
+    'tunnel: ${TUNNEL_ID}',
+    'credentials-file: ${HOME}/.cloudflared/${TUNNEL_ID}.json',
+    'ingress:',
+    '  - hostname: ${CF_TUNNEL_HOSTNAME}',
+    '    service: ${CF_TUNNEL_SERVICE_URL}',
+    '  - service: http_status:404',
+    'EOF',
+    '',
+    'echo "Tunnel config written to $HOME/.cloudflared/config.yml"',
+    'cloudflared tunnel run "$CF_TUNNEL_NAME"',
+    "'",
   ].join('\n')
 }
 

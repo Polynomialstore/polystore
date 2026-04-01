@@ -30,6 +30,7 @@ import { useSessionStatus } from '../hooks/useSessionStatus'
 import {
   buildProviderAgentPrompt,
   buildProviderBootstrapCommand,
+  buildCloudflareTunnelBootstrapCommand,
   buildProviderEndpointPlan,
   buildProviderHealthCommands,
   buildProviderLinkCommand,
@@ -70,6 +71,7 @@ type StoredProviderDraft = {
   endpointMode: ProviderEndpointInputMode
   endpointValue: string
   publicPort: string
+  tunnelName: string
   providerKey: string
   providerRepoReady: boolean
   providerKeyInitialized: boolean
@@ -84,6 +86,7 @@ function loadStoredDraft(): StoredProviderDraft {
       endpointMode: 'domain',
       endpointValue: '',
       publicPort: '443',
+      tunnelName: 'nilstore-sp',
       providerKey: 'provider1',
       providerRepoReady: false,
       providerKeyInitialized: false,
@@ -104,6 +107,7 @@ function loadStoredDraft(): StoredProviderDraft {
           : 'domain',
       endpointValue: String(parsed.endpointValue || ''),
       publicPort: String(parsed.publicPort || '443'),
+      tunnelName: String(parsed.tunnelName || 'nilstore-sp'),
       providerKey: String(parsed.providerKey || 'provider1'),
       providerRepoReady: Boolean(parsed.providerRepoReady),
       providerKeyInitialized: Boolean(parsed.providerKeyInitialized),
@@ -116,6 +120,7 @@ function loadStoredDraft(): StoredProviderDraft {
       endpointMode: 'domain',
       endpointValue: '',
       publicPort: '443',
+      tunnelName: 'nilstore-sp',
       providerKey: 'provider1',
       providerRepoReady: false,
       providerKeyInitialized: false,
@@ -188,6 +193,7 @@ const WALLET_ACCESS_REQUIRED_MESSAGE =
 
 type FlowStepId = 'wallet' | 'pairing_open' | 'clone_repo' | 'provider_key' | 'pairing_host' | 'reachability' | 'auth' | 'verification'
 type CloneMethod = 'https' | 'ssh' | 'gh'
+type TunnelSetupMode = 'easy' | 'manual'
 
 const CLONE_METHOD_OPTIONS: Array<{
   id: CloneMethod
@@ -250,6 +256,8 @@ export function SpOnboarding() {
   const [endpointMode, setEndpointMode] = useState<ProviderEndpointInputMode>(storedDraft.endpointMode)
   const [endpointValue, setEndpointValue] = useState(storedDraft.endpointValue)
   const [publicPort, setPublicPort] = useState(storedDraft.publicPort)
+  const [tunnelName, setTunnelName] = useState(storedDraft.tunnelName)
+  const [tunnelSetupMode, setTunnelSetupMode] = useState<TunnelSetupMode>('easy')
   const [providerKey, setProviderKey] = useState(storedDraft.providerKey)
   const [providerRepoReady, setProviderRepoReady] = useState(storedDraft.providerRepoReady)
   const [providerKeyInitialized, setProviderKeyInitialized] = useState(storedDraft.providerKeyInitialized)
@@ -283,6 +291,7 @@ export function SpOnboarding() {
       endpointMode,
       endpointValue,
       publicPort,
+      tunnelName,
       providerKey,
       providerRepoReady,
       providerKeyInitialized,
@@ -290,7 +299,7 @@ export function SpOnboarding() {
       linkTxHash,
     }
     window.localStorage.setItem(PROVIDER_DRAFT_KEY, JSON.stringify(payload))
-  }, [endpointMode, endpointValue, hostMode, linkTxHash, providerAddress, providerKey, providerRepoReady, providerKeyInitialized, publicPort])
+  }, [endpointMode, endpointValue, hostMode, linkTxHash, providerAddress, providerKey, providerRepoReady, providerKeyInitialized, publicPort, tunnelName])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -382,6 +391,27 @@ export function SpOnboarding() {
     [authToken, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
   )
   const healthCommands = useMemo(() => buildProviderHealthCommands(authoritativePublicBase), [authoritativePublicBase])
+  const cloudflareTunnelCommand = useMemo(
+    () =>
+      buildCloudflareTunnelBootstrapCommand({
+        hostMode,
+        endpointMode,
+        endpointValue,
+        publicPort: Number(publicPort),
+        tunnelName,
+      }),
+    [endpointMode, endpointValue, hostMode, publicPort, tunnelName],
+  )
+  const cloudflareTunnelManualCommands = useMemo(() => {
+    const normalizedHost = endpointPlan?.normalizedHost || '<public-hostname>'
+    const normalizedTunnelName = String(tunnelName || '').trim() || 'nilstore-sp'
+    return [
+      `cloudflared tunnel login`,
+      `cloudflared tunnel create ${normalizedTunnelName}`,
+      `cloudflared tunnel route dns ${normalizedTunnelName} ${normalizedHost}`,
+      `cloudflared tunnel run ${normalizedTunnelName}`,
+    ].join('\n')
+  }, [endpointPlan?.normalizedHost, tunnelName])
   const pairCommand = useMemo(
     () => buildProviderLinkCommand(providerKey, nilAddress || ''),
     [nilAddress, providerKey],
@@ -1294,6 +1324,72 @@ export function SpOnboarding() {
                       : 'Use this when the provider-daemon is already exposed from a public host.'}
                   </p>
                 </div>
+
+                {hostMode === 'home-tunnel' ? (
+                  <div className="space-y-4 border border-primary/30 bg-primary/5 p-4">
+                    <div className="space-y-1">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Cloudflare tunnel setup</div>
+                      <div className="text-sm text-muted-foreground">
+                        Easy mode generates one run-ready command that logs in, creates/routes the tunnel, writes config, and starts <span className="font-mono">cloudflared</span>.
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTunnelSetupMode('easy')}
+                        className={`border px-3 py-2 text-sm font-semibold ${tunnelSetupMode === 'easy' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'}`}
+                      >
+                        Easy automatic
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTunnelSetupMode('manual')}
+                        className={`border px-3 py-2 text-sm font-semibold ${tunnelSetupMode === 'manual' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'}`}
+                      >
+                        Manual commands
+                      </button>
+                    </div>
+
+                    <label className="block max-w-md space-y-2 text-sm">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tunnel name</span>
+                      <input
+                        value={tunnelName}
+                        onChange={(event) => setTunnelName(event.target.value)}
+                        placeholder="nilstore-sp"
+                        className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                      />
+                    </label>
+
+                    {endpointMode !== 'domain' ? (
+                      <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                        Switch endpoint input to <span className="font-semibold">Hostname</span> to use Cloudflare tunnel bootstrap commands.
+                      </div>
+                    ) : tunnelSetupMode === 'easy' ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-foreground">Cloudflare bootstrap command</div>
+                          <CopyButton label="Copy" onClick={() => void handleCopy('Cloudflare bootstrap command', cloudflareTunnelCommand)} />
+                        </div>
+                        <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{cloudflareTunnelCommand}</pre>
+                        <p className="text-xs text-muted-foreground">
+                          This command opens Cloudflare login on first run and starts <span className="font-mono">cloudflared</span> in the foreground. Keep it running, or convert to a system service once verified.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-foreground">Cloudflare manual commands</div>
+                          <CopyButton label="Copy" onClick={() => void handleCopy('Cloudflare manual commands', cloudflareTunnelManualCommands)} />
+                        </div>
+                        <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{cloudflareTunnelManualCommands}</pre>
+                        <p className="text-xs text-muted-foreground">
+                          Manual mode matches the docs flow when you want to run each Cloudflare command separately.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
 
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">How will browsers reach it?</div>

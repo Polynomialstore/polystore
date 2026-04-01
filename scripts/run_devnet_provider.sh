@@ -38,6 +38,11 @@ Examples:
   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh verify
   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh stop
   ./scripts/run_devnet_provider.sh help
+
+Notes:
+  - link/register submit on-chain tx and require provider aatom gas balance.
+  - By default, link/register will auto-request faucet funds when NIL_PROVIDER_AUTO_FAUCET=1
+    and NIL_FAUCET_URL (or NILSTORE_TESTNET_FAUCET_URL) is configured.
 USAGE
 }
 
@@ -60,6 +65,11 @@ CHAIN_ID="${CHAIN_ID:-${NIL_CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-20260211}}}"
 LCD_BASE="${HUB_LCD:-${NIL_LCD_BASE:-${NILSTORE_TESTNET_LCD_BASE:-https://lcd.nilstore.org}}}"
 NODE_ADDR="${HUB_NODE:-${NIL_NODE:-${NILSTORE_TESTNET_NODE:-https://rpc.nilstore.org}}}"
 GAS_PRICES="${NIL_GAS_PRICES:-${NILSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
+FAUCET_URL="${NIL_FAUCET_URL:-${NILSTORE_TESTNET_FAUCET_URL:-}}"
+FAUCET_AUTH_TOKEN="${NIL_FAUCET_AUTH_TOKEN:-${NILSTORE_TESTNET_FAUCET_AUTH_TOKEN:-}}"
+PROVIDER_AUTO_FAUCET="${NIL_PROVIDER_AUTO_FAUCET:-1}"
+PROVIDER_FUNDING_WAIT_SECS="${NIL_PROVIDER_FUNDING_WAIT_SECS:-45}"
+PROVIDER_FUNDING_POLL_SECS="${NIL_PROVIDER_FUNDING_POLL_SECS:-2}"
 
 NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/nilchain/nilchaind}"
 NIL_CLI_BIN="${NIL_CLI_BIN:-$ROOT_DIR/nil_cli/target/release/nil_cli}"
@@ -94,6 +104,17 @@ json_escape() {
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+amount_is_positive() {
+  local amount="${1:-}"
+  if [ -z "$amount" ] || [[ ! "$amount" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+  if [ "$amount" = "0" ]; then
+    return 1
+  fi
+  return 0
 }
 
 eth_to_nil_bech32() {
@@ -351,6 +372,168 @@ provider_json() {
     return 1
   fi
   curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/providers/$addr" 2>/dev/null
+}
+
+provider_aatom_amount() {
+  local addr body amount
+  addr="$(provider_addr)"
+  if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
+    return 1
+  fi
+
+  body="$(curl -fsS --max-time 5 "$LCD_BASE/cosmos/bank/v1beta1/balances/$addr/by_denom?denom=aatom" 2>/dev/null || true)"
+  if [ -z "$body" ]; then
+    return 1
+  fi
+
+  if have_cmd jq; then
+    amount="$(printf '%s' "$body" | jq -r '.balance.amount // empty')"
+  elif have_cmd python3; then
+    amount="$(python3 - "$body" <<'PY'
+import json
+import sys
+
+try:
+    payload = json.loads(sys.argv[1])
+except Exception:
+    print("", end="")
+    raise SystemExit(0)
+
+balance = payload.get("balance")
+if isinstance(balance, dict):
+    value = balance.get("amount")
+    if isinstance(value, str):
+        print(value, end="")
+PY
+)"
+  else
+    amount="$(printf '%s' "$body" | tr -d '\n' | sed -n 's/.*"amount"[[:space:]]*:[[:space:]]*"\([0-9]\+\)".*/\1/p' | head -n1)"
+  fi
+
+  if [[ "$amount" =~ ^[0-9]+$ ]]; then
+    printf '%s' "$amount"
+    return 0
+  fi
+
+  return 1
+}
+
+request_provider_faucet_funds() {
+  local addr="$1"
+  local payload faucet_resp http_code faucet_body attempt
+
+  if [ -z "$FAUCET_URL" ] || ! have_cmd curl; then
+    return 1
+  fi
+
+  payload="$(printf '{"address":"%s"}' "$addr")"
+  for attempt in 1 2 3; do
+    if [ -n "$FAUCET_AUTH_TOKEN" ]; then
+      faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" \
+        -H "Content-Type: application/json" \
+        -H "X-Nil-Faucet-Auth: $FAUCET_AUTH_TOKEN" \
+        --data "$payload" 2>/dev/null || true)"
+    else
+      faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" \
+        -H "Content-Type: application/json" \
+        --data "$payload" 2>/dev/null || true)"
+    fi
+
+    http_code="$(printf '%s' "$faucet_resp" | tail -n1)"
+    faucet_body="$(printf '%s' "$faucet_resp" | sed '$d')"
+
+    if [ "$http_code" = "200" ] || [ "$http_code" = "202" ]; then
+      echo "==> Faucet funding request accepted for $addr"
+      return 0
+    fi
+
+    if [ "$http_code" = "429" ] && [ "$attempt" -lt 3 ]; then
+      echo "==> Faucet is rate-limited; retrying funding request (${attempt}/3)..."
+      sleep 2
+      continue
+    fi
+
+    echo "WARN: faucet request failed (HTTP ${http_code:-unknown}): ${faucet_body:-<empty>}" >&2
+    return 1
+  done
+
+  return 1
+}
+
+wait_for_provider_funding() {
+  local deadline amount
+  if ! [[ "$PROVIDER_FUNDING_WAIT_SECS" =~ ^[0-9]+$ ]]; then
+    PROVIDER_FUNDING_WAIT_SECS=45
+  fi
+  if ! [[ "$PROVIDER_FUNDING_POLL_SECS" =~ ^[0-9]+$ ]] || [ "$PROVIDER_FUNDING_POLL_SECS" -le 0 ]; then
+    PROVIDER_FUNDING_POLL_SECS=2
+  fi
+
+  deadline=$(( $(date +%s) + PROVIDER_FUNDING_WAIT_SECS ))
+  while [ "$(date +%s)" -le "$deadline" ]; do
+    amount="$(provider_aatom_amount || true)"
+    if amount_is_positive "$amount"; then
+      printf '%s' "$amount"
+      return 0
+    fi
+    sleep "$PROVIDER_FUNDING_POLL_SECS"
+  done
+
+  return 1
+}
+
+print_provider_funding_help() {
+  local addr="$1"
+  local operator
+  operator="$(configured_operator_address || true)"
+
+  echo "Fund this provider address with aatom, then rerun the command:" >&2
+  echo "  $addr" >&2
+  echo >&2
+  if [ -n "$FAUCET_URL" ]; then
+    if [ -n "$FAUCET_AUTH_TOKEN" ]; then
+      echo "Faucet request:" >&2
+      echo "  curl -sS -X POST '$FAUCET_URL' -H 'Content-Type: application/json' -H 'X-Nil-Faucet-Auth: $FAUCET_AUTH_TOKEN' --data '{\"address\":\"$addr\"}'" >&2
+    else
+      echo "Faucet request:" >&2
+      echo "  curl -sS -X POST '$FAUCET_URL' -H 'Content-Type: application/json' --data '{\"address\":\"$addr\"}'" >&2
+    fi
+    echo >&2
+  fi
+
+  echo "Manual transfer from any funded key:" >&2
+  echo "  $NILCHAIND_BIN tx bank send <funded-key-or-address> $addr 1000000aatom --from <funded-key-or-address> --chain-id '$CHAIN_ID' --node '$NODE_ADDR' --home '$HOME_DIR' --keyring-backend test --gas auto --gas-adjustment 1.6 --gas-prices '$GAS_PRICES' --yes" >&2
+  if [ -n "$operator" ]; then
+    echo >&2
+    echo "Configured operator wallet for this run: $operator" >&2
+  fi
+}
+
+ensure_provider_account_funded() {
+  local addr="$1"
+  local amount
+
+  amount="$(provider_aatom_amount || true)"
+  if amount_is_positive "$amount"; then
+    return 0
+  fi
+
+  echo "==> Provider account is not funded on-chain yet:"
+  echo "  $addr"
+
+  if [ "$PROVIDER_AUTO_FAUCET" = "1" ] && request_provider_faucet_funds "$addr"; then
+    echo "==> Waiting up to ${PROVIDER_FUNDING_WAIT_SECS}s for aatom balance on-chain..."
+    amount="$(wait_for_provider_funding || true)"
+    if amount_is_positive "$amount"; then
+      echo "==> Provider account funded ($amount aatom)."
+      return 0
+    fi
+    echo "WARN: faucet request was sent but aatom balance is still zero after waiting." >&2
+  fi
+
+  echo "ERROR: provider account has no spendable aatom; cannot submit on-chain tx." >&2
+  print_provider_funding_help "$addr"
+  return 1
 }
 
 provider_paired() {
@@ -712,20 +895,30 @@ verify_provider() {
   "$ROOT_DIR/scripts/devnet_healthcheck.sh" "${args[@]}"
 }
 
-init_provider() {
+ensure_provider_key() {
   ensure_nilchaind
   mkdir -p "$HOME_DIR"
   if [ -z "$(provider_addr)" ]; then
     echo "==> Creating provider key: $PROVIDER_KEY"
     "$NILCHAIND_BIN" keys add "$PROVIDER_KEY" --home "$HOME_DIR" --keyring-backend test >/dev/null
     PROVIDER_KEY_CREATED=1
+  else
+    PROVIDER_KEY_CREATED=0
   fi
+}
 
-  local addr
-  addr="$(provider_addr)"
+print_provider_key_summary() {
+  local addr="$1"
   echo "Provider key ready:"
   echo "  key:     $PROVIDER_KEY"
   echo "  address: $addr"
+}
+
+init_provider() {
+  ensure_provider_key
+  local addr
+  addr="$(provider_addr)"
+  print_provider_key_summary "$addr"
   echo
   echo "Wizard status:"
   echo "  - Step 4 (Provider key init + fund): complete on provider host."
@@ -735,6 +928,9 @@ init_provider() {
     echo "  - Existing key reused: mnemonic was not regenerated."
   fi
   echo "  - Ensure this address has aatom for gas: $addr"
+  if [ "$PROVIDER_AUTO_FAUCET" = "1" ] && [ -n "$FAUCET_URL" ]; then
+    echo "  - Step 5 can auto-request faucet funds from: $FAUCET_URL"
+  fi
   if [ -n "$OPERATOR_ADDRESS_RAW" ]; then
     echo "  - Target operator wallet: $(configured_operator_address || printf '%s' "$OPERATOR_ADDRESS_RAW")"
   fi
@@ -750,7 +946,7 @@ init_provider() {
 }
 
 register_provider() {
-  ensure_nilchaind
+  ensure_provider_key
 
   if [ -z "$PROVIDER_ENDPOINTS_RAW" ]; then
     echo "ERROR: set PROVIDER_ENDPOINT (or PROVIDER_ENDPOINTS) to a reachable multiaddr, e.g. /ip4/1.2.3.4/tcp/8091/http" >&2
@@ -763,6 +959,8 @@ register_provider() {
     echo "ERROR: provider key not found; run: ./scripts/run_devnet_provider.sh init" >&2
     exit 1
   fi
+
+  ensure_provider_account_funded "$addr"
 
   IFS=',' read -r -a endpoints <<<"$PROVIDER_ENDPOINTS_RAW"
   local endpoint_args=()
@@ -814,7 +1012,7 @@ register_provider() {
 }
 
 request_provider_link() {
-  ensure_nilchaind
+  ensure_provider_key
 
   local operator
   operator="$(configured_operator_address || true)"
@@ -851,6 +1049,8 @@ request_provider_link() {
     return 0
   fi
 
+  ensure_provider_account_funded "$addr"
+
   echo "==> Requesting provider link on-chain..."
   "$NILCHAIND_BIN" tx nilchain request-provider-link "$operator" \
     --from "$PROVIDER_KEY" \
@@ -869,10 +1069,14 @@ request_provider_link() {
 }
 
 link_provider() {
-  init_provider
+  ensure_provider_key
+  local addr
+  addr="$(provider_addr)"
+  print_provider_key_summary "$addr"
 
   if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
-    echo "==> Provider key was just created. Fund $(provider_addr) with aatom, then rerun link." >&2
+    echo "==> Provider key was just created. Fund $addr with aatom, then rerun link." >&2
+    print_provider_funding_help "$addr"
     return 1
   fi
 
@@ -943,10 +1147,15 @@ start_provider() {
 }
 
 bootstrap_provider() {
-  init_provider
+  ensure_provider_key
+  local addr
+  addr="$(provider_addr)"
+  print_provider_key_summary "$addr"
+  echo
 
   if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
-    echo "==> Provider key was just created. Fund $(provider_addr) with aatom, then rerun bootstrap." >&2
+    echo "==> Provider key was just created. Fund $addr with aatom, then rerun bootstrap." >&2
+    print_provider_funding_help "$addr"
     return 1
   fi
 
