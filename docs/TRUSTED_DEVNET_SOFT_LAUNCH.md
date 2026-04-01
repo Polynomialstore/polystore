@@ -539,6 +539,10 @@ Use the env templates under `ops/systemd/env/` and make sure:
 - All hub services share the same `NIL_HOME` (chain home directory).
 - `nil-gateway-router` and all providers share the same `NIL_GATEWAY_SP_AUTH`.
 
+For repeatable `nilchaind` binary rollouts on systemd hosts, use:
+- `scripts/redeploy_nilchaind.sh`
+- `docs/NILCHAIND_REDEPLOY_RUNBOOK.md`
+
 ## Provider onboarding
 
 Send each collaborator:

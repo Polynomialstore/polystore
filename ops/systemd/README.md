@@ -33,6 +33,21 @@ sudo systemctl enable --now nil-gateway-router
 sudo systemctl enable --now nil-faucet
 ```
 
+### Nilchaind redeploy workflow
+
+For recurring chain binary updates (build -> backup/install -> restart -> verify), use:
+
+- runbook: `docs/NILCHAIND_REDEPLOY_RUNBOOK.md`
+- script: `scripts/redeploy_nilchaind.sh`
+
+Typical flow:
+
+```bash
+./scripts/redeploy_nilchaind.sh
+sudo systemctl restart nilchaind && sudo systemctl status --no-pager nilchaind
+./scripts/redeploy_nilchaind.sh --verify-only
+```
+
 4) Tail logs:
 
 ```bash
