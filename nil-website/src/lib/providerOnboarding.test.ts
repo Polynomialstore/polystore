@@ -87,6 +87,13 @@ test('buildProviderBootstrapCommand emits a focused bootstrap command and opts i
   assert.match(command, /run_devnet_provider\.sh bootstrap/)
   assert.doesNotMatch(command, /git clone/)
   assert.doesNotMatch(command, /run_devnet_provider\.sh init/)
+  const continuationLines = command
+    .split('\n')
+    .filter((line) => /(BOOTSTRAP_ALLOW_PARTIAL|PROVIDER_KEY|PROVIDER_ENDPOINT|NIL_GATEWAY_SP_AUTH)=/.test(line))
+  for (const line of continuationLines) {
+    assert.match(line, / \\$/)
+    assert.doesNotMatch(line, / \\\\$/)
+  }
 })
 
 test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tunnel hosts', () => {
@@ -156,6 +163,10 @@ test('buildProviderLinkCommand emits a standalone provider-link command', () => 
 
   assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
   assert.match(command, /PROVIDER_KEY='provider-main'/)
+  assert.match(command, /OPERATOR_ADDRESS='nil1operator123' \\$/m)
+  assert.match(command, /PROVIDER_KEY='provider-main' \\$/m)
+  assert.doesNotMatch(command, /OPERATOR_ADDRESS='nil1operator123' \\\\$/m)
+  assert.doesNotMatch(command, /PROVIDER_KEY='provider-main' \\\\$/m)
   assert.match(command, /run_devnet_provider\.sh link/)
 })
 

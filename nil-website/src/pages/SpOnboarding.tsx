@@ -1609,7 +1609,7 @@ export function SpOnboarding() {
               <div className="space-y-5 px-6 py-5">
                 {!pairingConfirmed ? (
                   <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                    Finish Step 3 first. The happy-path bootstrap command is gated on an approved provider link.
+                    Finish Step 3 first. The bootstrap command is gated on an approved provider link.
                   </div>
                 ) : null}
                 <div className="grid gap-3 border-b border-border/60 pb-5 text-sm text-muted-foreground">
@@ -1641,7 +1641,7 @@ export function SpOnboarding() {
                   <>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-semibold text-foreground">Happy-path bootstrap command</div>
+                        <div className="text-sm font-semibold text-foreground">Bootstrap command</div>
                         <CopyButton label="Copy" onClick={() => void handleCopy('Provider host commands', bootstrapCommand)} />
                       </div>
                       <pre data-testid="provider-host-commands" className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
@@ -1691,7 +1691,7 @@ export function SpOnboarding() {
                       : !providerKeyReady
                         ? 'Set the provider key name in Step 3 before generating bootstrap commands.'
                       : !pairingConfirmed
-                        ? 'Run the pair command and approve the provider link in Step 3 before generating the happy-path bootstrap command.'
+                        ? 'Run the pair command and approve the provider link in Step 3 before generating the bootstrap command.'
                       : !hasOperatorAddress
                         ? 'Connect the operator wallet in Step 1 so this page can populate OPERATOR_ADDRESS.'
                       : !endpointPlan

@@ -145,15 +145,15 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   const envLines = [
     '# Run this from the nil-store checkout on the provider host after pairing is approved.',
     '# This command starts (or restarts) the provider-daemon, then registers endpoints and runs health checks.',
-    '# The happy path requires OPERATOR_ADDRESS and PROVIDER_ENDPOINT.',
+    '# This command requires OPERATOR_ADDRESS and PROVIDER_ENDPOINT.',
     ...(usingDefaultAuth
       ? ['# Using devnet default NIL_GATEWAY_SP_AUTH. Override it if your hub uses a custom secret.']
       : []),
-    ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\\\'] : []),
-    ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\\\`] : []),
-    `PROVIDER_KEY=${shellQuote(providerKey)} \\\\`,
-    `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\\\`,
-    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken || AUTH_PLACEHOLDER)} \\\\`,
+    ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\'] : []),
+    ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\`] : []),
+    `PROVIDER_KEY=${shellQuote(providerKey)} \\`,
+    `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\`,
+    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken || AUTH_PLACEHOLDER)} \\`,
     './scripts/run_devnet_provider.sh bootstrap',
   ]
 
@@ -245,8 +245,8 @@ export function buildProviderLinkCommand(providerKey: string, operatorAddress: s
   const normalizedOperatorAddress = trimNonEmpty(operatorAddress) || '<operator-nil1-or-0x-address>'
 
   return [
-    `OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} \\\\`,
-    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\\\`,
+    `OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} \\`,
+    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\`,
     './scripts/run_devnet_provider.sh link',
   ].join('\n')
 }
