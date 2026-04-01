@@ -20,6 +20,7 @@ SKIP_BACKUP=0
 NILCHAIND_BIN=""
 NIL_HOME=""
 LAST_BACKUP=""
+SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
 
 usage() {
   cat <<USAGE
@@ -348,7 +349,7 @@ restart_or_handoff() {
   echo >&2
   echo "Then verify with:" >&2
   printf '  %q --verify-only --service %q --env-file %q --lcd-base %q' \
-    "$SCRIPT_NAME" "$SERVICE_NAME" "$ENV_FILE" "$LCD_BASE" >&2
+    "$SCRIPT_PATH" "$SERVICE_NAME" "$ENV_FILE" "$LCD_BASE" >&2
   if [ -n "$OPERATOR_ADDRESS" ]; then
     printf ' --operator-address %q' "$OPERATOR_ADDRESS" >&2
   fi
