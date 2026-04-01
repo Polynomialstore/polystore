@@ -17,8 +17,10 @@ Only set `HUB_NODE`, `HUB_LCD`, or `CHAIN_ID` when you are intentionally joining
 The web-first operator flow is:
 1. Open `https://nilstore.org/#/sp-onboarding` on the website.
 2. Connect the operator wallet and copy the operator address (`nil1...`).
-3. Run provider-host link request with `OPERATOR_ADDRESS`, then approve from the website wallet step.
-4. Finish verification from `https://nilstore.org/#/sp-dashboard`.
+3. Prepare the provider host checkout on the machine that will run the provider-daemon.
+4. Pair provider identity: run provider key init, fund it if new, request the provider link from the host, then approve it from the website wallet step.
+5. Configure public access: set the provider endpoint and paste `NIL_GATEWAY_SP_AUTH` from the hub operator.
+6. Run bootstrap from the website command rail, then finish verification from `https://nilstore.org/#/sp-dashboard`.
 
 ## Provider machine prerequisites
 

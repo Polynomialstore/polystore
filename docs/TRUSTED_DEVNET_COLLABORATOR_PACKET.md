@@ -147,9 +147,10 @@ export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"      # from website wall
 Website-first operator flow:
 - open `/sp-onboarding`
 - connect the operator wallet
-- run provider-host link request with `OPERATOR_ADDRESS`
-- approve the pending link from the operator wallet
-- finish verification from the website after bootstrap
+- prepare the provider host checkout
+- pair provider identity (init, fund if new, request link from host, approve from wallet)
+- configure public access (endpoint + `NIL_GATEWAY_SP_AUTH`)
+- run bootstrap and finish verification from the website
 
 The canonical provider docs for this are:
 - `docs/ALPHA_PROVIDER_QUICKSTART.md`

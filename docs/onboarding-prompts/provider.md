@@ -13,6 +13,7 @@ Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
 
 Context:
 - The website-first flow is primary. This agent run is the assistive path for the provider host.
+- The current website steps are: connect operator wallet, prepare provider host, pair provider identity, configure public access, then bootstrap and verify.
 - Supported endpoint modes:
   - direct public HTTP/HTTPS endpoint
   - home server behind NAT with Cloudflare Tunnel

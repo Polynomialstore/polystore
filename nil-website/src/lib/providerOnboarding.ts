@@ -35,7 +35,6 @@ export interface ProviderRunbookReadiness {
   missing: Array<'endpoint' | 'operator' | 'auth'>
 }
 
-const PROVIDER_BOOTSTRAP_REPO = 'https://github.com/Nil-Store/nil-store.git'
 const DEFAULT_PROVIDER_KEY = 'provider1'
 const DEFAULT_DOMAIN_PORT = 443
 const DEFAULT_IPV4_PORT = 8091
@@ -141,17 +140,9 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   const providerEndpoint = endpointPlan?.providerEndpoint || '<provider-endpoint>'
   const authToken = trimNonEmpty(draft.authToken) || AUTH_PLACEHOLDER
   const websiteReady = Boolean(endpointPlan && operatorAddress && trimNonEmpty(draft.authToken))
-
-  const bootstrapLines = [
-    '# 1. Initialize the provider key if it does not already exist:',
-    `PROVIDER_KEY=${shellQuote(providerKey)} ./scripts/run_devnet_provider.sh init`,
-    '',
-    '# 2. If init created a new key, fund the printed nil1 address with aatom before continuing.',
-    '# 3. Website-managed bootstrap now fails fast unless OPERATOR_ADDRESS, PROVIDER_ENDPOINT, and NIL_GATEWAY_SP_AUTH are present.',
-    '#    For a partial/manual bootstrap, either use staged link/register/start commands or opt in with BOOTSTRAP_ALLOW_PARTIAL=1.',
-  ]
-
   const envLines = [
+    '# Run this from the nil-store checkout on the provider host after pairing is approved.',
+    '# The happy path requires OPERATOR_ADDRESS, PROVIDER_ENDPOINT, and NIL_GATEWAY_SP_AUTH.',
     ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\\\'] : []),
     ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\\\`] : []),
     `PROVIDER_KEY=${shellQuote(providerKey)} \\\\`,
@@ -161,12 +152,6 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   ]
 
   return [
-    '# If the repo is missing on the provider host:',
-    `git clone ${PROVIDER_BOOTSTRAP_REPO}`,
-    'cd nil-store',
-    '',
-    '# Canonical public testnet defaults are built in:',
-    ...bootstrapLines,
     ...envLines,
   ].join('\n')
 }
@@ -318,6 +303,7 @@ Repo bootstrap (required unless already inside a fresh \`nil-store\` checkout):
 
 Context:
 - The website-first flow is primary. This agent run is the assistive path for the provider host.
+- The current website steps are: connect operator wallet, prepare provider host, pair provider identity, configure public access, then bootstrap and verify.
 - Supported endpoint modes:
   - direct public HTTP/HTTPS endpoint
   - home server behind NAT with Cloudflare Tunnel

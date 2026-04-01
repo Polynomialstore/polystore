@@ -26,7 +26,11 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 
 1. Open the NilStore website and go to `https://nilstore.org/#/sp-onboarding`.
 2. Connect the operator wallet and copy the operator address (`nil1...`).
-3. Clone the repo on the provider machine.
+3. Follow the website flow in order:
+   - Prepare provider host: clone the repo on the provider machine.
+   - Pair provider identity: initialize the provider key, fund it if new, request the provider link from the host, and approve it from the website wallet.
+   - Configure public access: enter the provider hostname or multiaddr and paste `NIL_GATEWAY_SP_AUTH`.
+   - Bootstrap and verify: run the generated provider-host bootstrap command, then watch registration and health converge.
 4. Optional: open your coding agent locally in the repo.
 5. Paste the provider prompt from:
    - `docs/onboarding-prompts/provider.md`

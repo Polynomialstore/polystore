@@ -66,7 +66,7 @@ test('buildProviderEndpointPlan keeps an explicit multiaddr intact', () => {
   assert.equal(plan?.publicHealthUrl, 'https://203.0.113.10:8443/health')
 })
 
-test('buildProviderBootstrapCommand stages init before bootstrap and opts into partial mode when operator address is absent', () => {
+test('buildProviderBootstrapCommand emits a focused bootstrap command and opts into partial mode when operator data is absent', () => {
   const command = buildProviderBootstrapCommand({
     hostMode: 'public-vps',
     endpointMode: 'ipv4',
@@ -76,14 +76,15 @@ test('buildProviderBootstrapCommand stages init before bootstrap and opts into p
     authToken: "shh it's secret",
   })
 
-  assert.match(command, /run_devnet_provider\.sh init/)
-  assert.match(command, /fund the printed nil1 address with aatom/)
+  assert.match(command, /Run this from the nil-store checkout on the provider host after pairing is approved\./)
   assert.match(command, /BOOTSTRAP_ALLOW_PARTIAL=1/)
   assert.doesNotMatch(command, /OPERATOR_ADDRESS=/)
   assert.match(command, /PROVIDER_KEY='provider-main'/)
   assert.match(command, /PROVIDER_ENDPOINT='\/ip4\/203\.0\.113\.10\/tcp\/8091\/http'/)
   assert.match(command, /NIL_GATEWAY_SP_AUTH='shh it'\\''s secret'/)
   assert.match(command, /run_devnet_provider\.sh bootstrap/)
+  assert.doesNotMatch(command, /git clone/)
+  assert.doesNotMatch(command, /run_devnet_provider\.sh init/)
 })
 
 test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tunnel hosts', () => {
