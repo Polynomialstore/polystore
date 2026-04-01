@@ -156,6 +156,19 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   ].join('\n')
 }
 
+export function buildProviderPairCommand(providerKey: string, operatorAddress: string): string {
+  const normalizedProviderKey = trimNonEmpty(providerKey) || DEFAULT_PROVIDER_KEY
+  const normalizedOperatorAddress = trimNonEmpty(operatorAddress) || '<operator-nil1-or-0x-address>'
+
+  return [
+    '# Run this once on the provider host to create the key if needed and open the link request.',
+    '# If the key is unfunded and faucet autofunding is unavailable, fund the printed nil1 address and rerun this same command.',
+    `OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} \\`,
+    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\`,
+    './scripts/run_devnet_provider.sh pair',
+  ].join('\n')
+}
+
 export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBootstrapDraft): string {
   const endpointPlan = buildProviderEndpointPlan(draft)
   const normalizedHost =
@@ -327,21 +340,20 @@ Before running any on-chain step, confirm:
 - \`go\`, \`cargo\`, and \`curl\` are installed.
 - the repo checkout is current (\`git fetch origin --prune && git checkout main && git pull --ff-only origin main\`) if this is not a fresh clone.
 - if using Cloudflare Tunnel, the hostname already resolves and tunnel ingress points to the local provider listener.
-- if the provider key is new, run \`PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh init\`, print the provider \`nil1...\` address, and make sure it has \`aatom\` for gas before requesting link or registration.
+- if the provider key is new, prefer \`OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh pair\`; if autofunding is unavailable, fund the printed provider \`nil1...\` address and rerun the same command before registration.
 
 Your job:
 1. Verify toolchains and repo prerequisites.
 2. Create or import provider key.
 3. Configure local listener and public endpoint.
 4. For a new provider key, use this order:
-   - \`PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh init\`
-   - fund the printed provider address with gas
-   - then run \`OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh link\`
+   - run \`OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh pair\`
+   - if the key is new and auto-funding is unavailable, fund the printed provider address with gas and rerun the same \`pair\` command
 5. The website-managed flow requires \`OPERATOR_ADDRESS\`, a real \`PROVIDER_ENDPOINT\`, and \`NIL_GATEWAY_SP_AUTH\`.
    - \`./scripts/run_devnet_provider.sh bootstrap\` now fails fast unless all three are present
    - let \`./scripts/run_devnet_provider.sh bootstrap\` request link and continue the full happy path, or
-   - run \`./scripts/run_devnet_provider.sh link\` when you want link request as a separate manual step
-   - if you intentionally want a partial manual bootstrap, use staged \`link\`, \`register\`, and \`start\` commands, or explicitly opt in with \`BOOTSTRAP_ALLOW_PARTIAL=1\`
+   - run \`./scripts/run_devnet_provider.sh link\` when you want link request as a separate repair step after key setup
+   - if you intentionally want a partial manual bootstrap, use staged \`pair\`, \`register\`, and \`start\` commands, or explicitly opt in with \`BOOTSTRAP_ALLOW_PARTIAL=1\`
 6. Ask the operator to approve the pending provider link in the website wallet step.
 7. Register or update provider endpoints on-chain.
 8. Start the provider-daemon if it is not already running.

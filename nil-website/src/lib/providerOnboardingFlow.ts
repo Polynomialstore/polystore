@@ -7,7 +7,6 @@ export interface ProviderOnboardingFlowInput {
   hasOperatorAddress: boolean
   providerRepoReady: boolean
   providerKeyReady: boolean
-  providerKeyInitialized: boolean
   pairingLinked: boolean
   pairingConfirmed: boolean
   endpointReady: boolean
@@ -57,7 +56,7 @@ export const PROVIDER_ONBOARDING_STEPS: ProviderOnboardingStepDefinition[] = [
     id: 'pairing',
     label: 'Pair Provider Identity',
     anchor: 'step-pairing',
-    doneWhen: 'provider key is prepared and the provider link is approved on-chain',
+    doneWhen: 'provider key name is set and the provider link is approved on-chain',
   },
   {
     id: 'public_access',
@@ -117,13 +116,10 @@ function hostNextAction(input: ProviderOnboardingFlowInput): string {
 
 function pairingNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.providerRepoReady) {
-    return 'Finish Step 2 first so the provider host can run init and link commands.'
+    return 'Finish Step 2 first so the provider host can run the pair command.'
   }
   if (!input.providerKeyReady) {
     return 'Set the provider key name that the provider host commands should use.'
-  }
-  if (!input.providerKeyInitialized) {
-    return 'Run provider key init on the provider host and fund the printed nil1 address if this key is new.'
   }
   if (!input.hasOperatorAddress) {
     return 'Finish Step 1 so this page has the operator wallet Nil address for pairing.'
@@ -132,7 +128,7 @@ function pairingNextAction(input: ProviderOnboardingFlowInput): string {
     return 'Approve the pending provider link from the browser wallet in this step.'
   }
   if (!input.pairingConfirmed) {
-    return 'Run the provider-host link request with OPERATOR_ADDRESS and the provider key, then refresh until the pending link appears.'
+    return 'Run the provider-host pair command, then refresh until the pending link appears.'
   }
   return 'Provider identity is paired and approved on-chain.'
 }
@@ -154,8 +150,8 @@ function bootstrapNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.providerRepoReady) {
     return 'Finish Step 2 so the provider host commands can run from a local nil-store checkout.'
   }
-  if (!input.providerKeyReady || !input.providerKeyInitialized || !input.pairingConfirmed) {
-    return 'Finish Step 3 by preparing the provider key and approving the provider link before bootstrap.'
+  if (!input.providerKeyReady || !input.pairingConfirmed) {
+    return 'Finish Step 3 by setting the provider key name, running the pair command, and approving the provider link before bootstrap.'
   }
   if (!input.endpointReady || !input.hasAuthToken) {
     return 'Finish Step 4 so the bootstrap command has the public endpoint and shared auth token.'
@@ -189,7 +185,7 @@ export function buildProviderOnboardingFlow(
   const stepReadyById: Record<ProviderOnboardingStepId, boolean> = {
     wallet: input.walletReady && input.funded && input.hasOperatorAddress,
     host: input.providerRepoReady,
-    pairing: input.providerKeyReady && input.providerKeyInitialized && input.pairingConfirmed,
+    pairing: input.providerKeyReady && input.pairingConfirmed,
     public_access: input.endpointReady && input.hasAuthToken,
     bootstrap: input.pairingConfirmed && input.providerRegistered && input.publicHealthReady,
   }
@@ -220,7 +216,6 @@ export function buildProviderOnboardingFlow(
   const commandReady = input.hasOperatorAddress
     && input.providerRepoReady
     && input.providerKeyReady
-    && input.providerKeyInitialized
     && input.pairingConfirmed
     && input.endpointReady
     && input.hasAuthToken

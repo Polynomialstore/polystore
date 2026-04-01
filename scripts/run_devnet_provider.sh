@@ -5,6 +5,7 @@ set -euo pipefail
 #
 # Usage:
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+#   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh pair
 #   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh link
 #   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh bootstrap
 #   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
@@ -25,10 +26,11 @@ ACTION="${1:-start}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/run_devnet_provider.sh [init|link|register|start|print-config|doctor|verify|bootstrap|stop|help]
+Usage: ./scripts/run_devnet_provider.sh [init|pair|link|register|start|print-config|doctor|verify|bootstrap|stop|help]
 
 Examples:
   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+  PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh pair
   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh link
   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh bootstrap
   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
@@ -40,8 +42,8 @@ Examples:
   ./scripts/run_devnet_provider.sh help
 
 Notes:
-  - link/register submit on-chain tx and require provider aatom gas balance.
-  - By default, link/register will auto-request faucet funds when NIL_PROVIDER_AUTO_FAUCET=1
+  - pair/link/register submit on-chain tx and require provider aatom gas balance.
+  - By default, pair/link/register will auto-request faucet funds when NIL_PROVIDER_AUTO_FAUCET=1
     and NIL_FAUCET_URL (or NILSTORE_TESTNET_FAUCET_URL) is configured.
 USAGE
 }
@@ -920,29 +922,50 @@ init_provider() {
   addr="$(provider_addr)"
   print_provider_key_summary "$addr"
   echo
-  echo "Wizard status:"
-  echo "  - Step 4 (Provider key init + fund): complete on provider host."
+  echo "Manual key preparation status:"
+  echo "  - Provider key exists on the provider host."
   if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
-    echo "  - New key created: backup the mnemonic shown above."
+    echo "  - New key created for this local keyring."
   else
-    echo "  - Existing key reused: mnemonic was not regenerated."
+    echo "  - Existing key reused."
   fi
   echo "  - Ensure this address has aatom for gas: $addr"
   if [ "$PROVIDER_AUTO_FAUCET" = "1" ] && [ -n "$FAUCET_URL" ]; then
-    echo "  - Step 5 can auto-request faucet funds from: $FAUCET_URL"
+    echo "  - pair/link can auto-request faucet funds from: $FAUCET_URL"
   fi
   if [ -n "$OPERATOR_ADDRESS_RAW" ]; then
     echo "  - Target operator wallet: $(configured_operator_address || printf '%s' "$OPERATOR_ADDRESS_RAW")"
   fi
   echo
-  echo "Next command (Wizard Step 5: request provider link from provider host):"
+  echo "Next command (manual link request after key setup):"
   if [ -n "$OPERATOR_ADDRESS_RAW" ]; then
     echo "  OPERATOR_ADDRESS='$OPERATOR_ADDRESS_RAW' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh link"
   else
     echo "  OPERATOR_ADDRESS='<operator-0x-or-nil-address>' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh link"
   fi
   echo
-  echo "After Step 5, return to the website for Step 6+ (approve link, endpoint, auth token, bootstrap, health)."
+  echo "For the website-first flow, prefer OPERATOR_ADDRESS=... PROVIDER_KEY=... ./scripts/run_devnet_provider.sh pair."
+}
+
+pair_provider() {
+  ensure_provider_key
+  local addr
+  addr="$(provider_addr)"
+  print_provider_key_summary "$addr"
+  echo
+  if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
+    echo "==> Provider key was created for this run."
+    echo "==> Continuing with funding check and provider link request."
+  else
+    echo "==> Reusing existing provider key."
+  fi
+
+  request_provider_link
+
+  echo
+  echo "Next step (website operator wallet): approve this provider link request."
+  echo "  provider: $(provider_addr)"
+  echo "  operator: $(configured_operator_address || true)"
 }
 
 register_provider() {
@@ -1075,7 +1098,8 @@ link_provider() {
   print_provider_key_summary "$addr"
 
   if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
-    echo "==> Provider key was just created. Fund $addr with aatom, then rerun link." >&2
+    echo "==> Provider key was just created. For website onboarding, rerun with ./scripts/run_devnet_provider.sh pair." >&2
+    echo "==> Otherwise fund $addr with aatom, then rerun link." >&2
     print_provider_funding_help "$addr"
     return 1
   fi
@@ -1214,6 +1238,7 @@ stop_provider() {
 
 case "$ACTION" in
   init) init_provider ;;
+  pair) pair_provider ;;
   link) link_provider ;;
   register) register_provider ;;
   start) start_provider ;;

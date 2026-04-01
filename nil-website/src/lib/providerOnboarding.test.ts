@@ -9,6 +9,7 @@ import {
   buildCloudflareTunnelBootstrapCommand,
   buildProviderEndpointPlan,
   buildProviderHealthCommands,
+  buildProviderPairCommand,
   buildProviderLinkCommand,
   evaluateProviderRunbookReadiness,
   findConfirmedProviderPairing,
@@ -138,6 +139,17 @@ test('buildProviderBootstrapCommand includes operator address when supplied', ()
   assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
 })
 
+test('buildProviderPairCommand emits a single provider-host pairing command', () => {
+  const command = buildProviderPairCommand('provider-main', 'nil1operator123')
+
+  assert.match(command, /create the key if needed and open the link request/i)
+  assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
+  assert.match(command, /PROVIDER_KEY='provider-main'/)
+  assert.match(command, /run_devnet_provider\.sh pair/)
+  assert.doesNotMatch(command, /run_devnet_provider\.sh init/)
+  assert.doesNotMatch(command, /run_devnet_provider\.sh link/)
+})
+
 test('buildProviderLinkCommand emits a standalone provider-link command', () => {
   const command = buildProviderLinkCommand('provider-main', 'nil1operator123')
 
@@ -174,6 +186,7 @@ test('buildProviderAgentPrompt includes runtime values and script-aligned status
   assert.match(prompt, /PROVIDER_KEY=provider-main/)
   assert.match(prompt, /PROVIDER_ENDPOINT=\/dns4\/sp\.example\.com\/tcp\/443\/https/)
   assert.match(prompt, /public health base `https:\/\/sp\.example\.com`/)
+  assert.match(prompt, /run_devnet_provider\.sh pair/)
   assert.match(prompt, /run_devnet_provider\.sh link/)
   assert.match(prompt, /bootstrap` now fails fast unless all three are present/)
   assert.match(prompt, /provider_process_running/)
@@ -193,14 +206,17 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
   assert.match(remote, /BOOTSTRAP_ALLOW_PARTIAL=1/)
   assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-onboarding/)
   assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-dashboard/)
+  assert.match(remote, /run_devnet_provider\.sh pair/)
   assert.match(remote, /run_devnet_provider\.sh link/)
   assert.match(endpoints, /update-provider-endpoints/)
   assert.doesNotMatch(endpoints, /Endpoint lists are \*\*not\*\* mutable/)
   assert.match(collaboratorPacket, /website-first bootstrap/)
+  assert.match(collaboratorPacket, /run_devnet_provider\.sh pair/)
   assert.match(collaboratorPacket, /run_devnet_provider\.sh bootstrap/)
   assert.doesNotMatch(collaboratorPacket, /run_devnet_provider\.sh register/)
   assert.doesNotMatch(collaboratorPacket, /run_devnet_provider\.sh start/)
   assert.match(nilstorePacket, /website-first bootstrap/)
+  assert.match(nilstorePacket, /run_devnet_provider\.sh pair/)
   assert.match(nilstorePacket, /run_devnet_provider\.sh bootstrap/)
 })
 
@@ -211,6 +227,7 @@ test('run_devnet_provider.sh help prints usage without requiring PROVIDER_KEY', 
   })
 
   assert.match(output, /Usage: \.\/scripts\/run_devnet_provider\.sh/)
+  assert.match(output, /pair/)
   assert.match(output, /link/)
   assert.match(output, /bootstrap/)
 })

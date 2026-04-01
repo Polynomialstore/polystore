@@ -14,7 +14,6 @@ function baseInput(): ProviderOnboardingFlowInput {
     hasOperatorAddress: true,
     providerRepoReady: true,
     providerKeyReady: true,
-    providerKeyInitialized: true,
     pairingLinked: true,
     pairingConfirmed: true,
     endpointReady: true,
@@ -74,7 +73,6 @@ test('provider onboarding flow advances to host setup when the wallet is ready b
   const flow = buildProviderOnboardingFlow({
     ...baseInput(),
     providerRepoReady: false,
-    providerKeyInitialized: false,
     pairingLinked: false,
     pairingConfirmed: false,
     endpointReady: false,
@@ -93,7 +91,6 @@ test('provider onboarding flow blocks pairing on key setup and approval state in
   const missingKeyName = buildProviderOnboardingFlow({
     ...baseInput(),
     providerKeyReady: false,
-    providerKeyInitialized: false,
     pairingLinked: false,
     pairingConfirmed: false,
   })
@@ -104,13 +101,12 @@ test('provider onboarding flow blocks pairing on key setup and approval state in
 
   const needsInit = buildProviderOnboardingFlow({
     ...baseInput(),
-    providerKeyInitialized: false,
     pairingLinked: false,
     pairingConfirmed: false,
   })
 
   assert.equal(needsInit.currentStepId, 'pairing')
-  assert.match(needsInit.nextActionMessage, /Run provider key init/i)
+  assert.match(needsInit.nextActionMessage, /Run the provider-host pair command/i)
 
   const needsLinkRequest = buildProviderOnboardingFlow({
     ...baseInput(),
@@ -119,7 +115,7 @@ test('provider onboarding flow blocks pairing on key setup and approval state in
   })
 
   assert.equal(needsLinkRequest.currentStepId, 'pairing')
-  assert.match(needsLinkRequest.nextActionMessage, /Run the provider-host link request/i)
+  assert.match(needsLinkRequest.nextActionMessage, /Run the provider-host pair command/i)
 
   const needsBrowserApproval = buildProviderOnboardingFlow({
     ...baseInput(),

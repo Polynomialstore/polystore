@@ -18,7 +18,6 @@ type SpOnboardingFixtureOptions = {
     publicPort: string
     providerKey: string
     providerRepoReady: boolean
-    providerKeyInitialized: boolean
     providerAddress: string
     linkTxHash: string
   }>
@@ -74,7 +73,6 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
     publicPort: '443',
     providerKey: 'provider-main',
     providerRepoReady: true,
-    providerKeyInitialized: true,
     providerAddress,
     linkTxHash: '0xlinktx',
     ...options.draft,
@@ -271,6 +269,9 @@ test('provider onboarding renders the revised five-step happy path and preserves
   await expect(page.getByRole('button', { name: /Configure Public Access/i })).toBeVisible()
   await expect(page.getByRole('button', { name: /Bootstrap And Verify/i })).toBeVisible()
   await expect(page.getByRole('heading', { name: /Step 5\. Bootstrap And Verify/i })).toBeVisible()
+  await expect(page.getByTestId('provider-pair-command')).toContainText("./scripts/run_devnet_provider.sh pair")
+  await expect(page.locator('#step-pairing')).not.toContainText('Provider key init command')
+  await expect(page.locator('#step-pairing')).not.toContainText('I ran init for this key')
 
   await expect(page.getByTestId('provider-auth-token')).toHaveValue('shared-provider-secret')
   const hostCommands = await page.getByTestId('provider-host-commands').textContent()

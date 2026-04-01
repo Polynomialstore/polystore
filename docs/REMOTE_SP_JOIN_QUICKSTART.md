@@ -18,7 +18,7 @@ The web-first operator flow is:
 1. Open `https://nilstore.org/#/sp-onboarding` on the website.
 2. Connect the operator wallet and copy the operator address (`nil1...`).
 3. Prepare the provider host checkout on the machine that will run the provider-daemon.
-4. Pair provider identity: run provider key init, fund it if new, request the provider link from the host, then approve it from the website wallet step.
+4. Pair provider identity: run one `pair` command on the provider host, let it create the key if needed, fund it and rerun if auto-funding is unavailable, then approve it from the website wallet step.
 5. Configure public access: set the provider endpoint and paste `NIL_GATEWAY_SP_AUTH` from the hub operator.
 6. Run bootstrap from the website command rail, then finish verification from `https://nilstore.org/#/sp-dashboard`.
 
@@ -33,13 +33,13 @@ The web-first operator flow is:
 
 ## Step-by-step
 
-### 1) Create your provider key (local keyring)
+### 1) Choose a provider key name
 
 ```bash
-PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+export PROVIDER_KEY="provider1"
 ```
 
-This prints your provider address (`nil1...`).
+The website pairing step will create this key if it does not already exist.
 
 Optional: print the resolved provider config in machine-readable form:
 
@@ -47,11 +47,7 @@ Optional: print the resolved provider config in machine-readable form:
 PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
 ```
 
-### 2) Get funded for gas
-
-Ask the hub operator to send you some `aatom` (gas) via the faucet or a direct bank send.
-
-### 3) Pick an endpoint multiaddr
+### 2) Pick an endpoint multiaddr
 
 Option A (direct/public endpoint): register an IP+port endpoint:
 
@@ -76,26 +72,22 @@ In your tunnel ingress, route that hostname to the local provider listener (for 
 Cloudflare Tunnel setup and endpoint helper details:
 - `docs/networking/PROVIDER_ENDPOINTS.md`
 
-### 4) Recommended: website-managed bootstrap for a new provider key
+### 3) Pair in the website flow, then bootstrap
 
 ```bash
 export PROVIDER_KEY="provider1"
-./scripts/run_devnet_provider.sh init
-
-# Fund the printed nil1... address with aatom before continuing.
-
-export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https" # or your /ip4/... endpoint
-export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
-./scripts/run_devnet_provider.sh bootstrap
+./scripts/run_devnet_provider.sh pair
 ```
 
-Existing funded key shortcut:
+If the key is new and the command prints a provider `nil1...` address that still needs gas, fund that address with `aatom` and rerun the same `pair` command.
+
+Approve the pending provider link in `https://nilstore.org/#/sp-onboarding`, then continue with:
 
 ```bash
 export PROVIDER_KEY="provider1"
-export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
+export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https" # or your /ip4/... endpoint
 export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
@@ -123,7 +115,7 @@ Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unlinked provi
 
 If you are targeting a non-public hub, export `HUB_NODE`, `HUB_LCD`, and `CHAIN_ID` before running `bootstrap`.
 
-### 5) Advanced/manual path
+### 4) Advanced/manual path
 
 Use this only when you want to split link request, registration, and process start into separate steps.
 
@@ -157,7 +149,7 @@ export PROVIDER_LISTEN=":8091"
 
 Long-running (recommended): use the systemd templates in `ops/systemd/` and copy/edit `ops/systemd/env/nil-gateway-provider.env`.
 
-### 6) Verify
+### 5) Verify
 
 On the provider:
 

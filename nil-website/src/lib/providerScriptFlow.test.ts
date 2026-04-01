@@ -13,9 +13,11 @@ function writeExecutable(path: string, content: string) {
 }
 
 function runProviderScriptTest(opts: {
+  command: 'link' | 'pair'
   scenario: 'missing-no-faucet' | 'missing-then-funded'
   autoFaucet: '0' | '1'
   faucetUrl?: string
+  keyState?: 'present' | 'missing'
 }) {
   const tempDir = mkdtempSync(join(tmpdir(), 'nil-provider-script-test-'))
   const binDir = join(tempDir, 'bin')
@@ -24,8 +26,13 @@ function runProviderScriptTest(opts: {
   mkdirSync(stateDir, { recursive: true })
 
   const txLog = join(stateDir, 'tx.log')
+  const keyFlag = join(stateDir, 'provider-key.ready')
   const nilchaindStub = join(binDir, 'nilchaind')
   const curlStub = join(binDir, 'curl')
+
+  if ((opts.keyState ?? 'present') === 'present') {
+    writeFileSync(keyFlag, 'ready\n', { encoding: 'utf8' })
+  }
 
   writeExecutable(
     nilchaindStub,
@@ -44,9 +51,13 @@ case "$cmd" in
     shift
     case "$sub" in
       show)
+        if [ ! -f "\${NIL_TEST_KEY_FLAG:?}" ]; then
+          exit 1
+        fi
         printf '%s\\n' "\${NIL_TEST_PROVIDER_ADDR:-nil1providerstubaddr0000000000000000000000000}"
         ;;
       add)
+        : >"\${NIL_TEST_KEY_FLAG:?}"
         echo "stub mnemonic words words words" >&2
         ;;
       *)
@@ -150,6 +161,7 @@ printf '%s' "$body"
     OPERATOR_ADDRESS: 'nil1operatorstub0000000000000000000000000000',
     NILCHAIND_BIN: nilchaindStub,
     NIL_TEST_PROVIDER_ADDR: 'nil1providerstub0000000000000000000000000',
+    NIL_TEST_KEY_FLAG: keyFlag,
     NIL_TEST_TX_LOG: txLog,
     NIL_TEST_CURL_SCENARIO: opts.scenario,
     NIL_TEST_STATE_DIR: stateDir,
@@ -162,7 +174,7 @@ printf '%s' "$body"
     NILSTORE_TESTNET_ENV_FILE: '/dev/null',
   }
 
-  const result = spawnSync('./scripts/run_devnet_provider.sh', ['link'], {
+  const result = spawnSync('./scripts/run_devnet_provider.sh', [opts.command], {
     cwd: repoRoot,
     encoding: 'utf8',
     env,
@@ -185,6 +197,7 @@ printf '%s' "$body"
 
 test('run_devnet_provider link fails with actionable funding guidance when provider has no gas funds', () => {
   const result = runProviderScriptTest({
+    command: 'link',
     scenario: 'missing-no-faucet',
     autoFaucet: '0',
   })
@@ -198,12 +211,31 @@ test('run_devnet_provider link fails with actionable funding guidance when provi
 
 test('run_devnet_provider link auto-funds from faucet then submits provider-link tx', () => {
   const result = runProviderScriptTest({
+    command: 'link',
     scenario: 'missing-then-funded',
     autoFaucet: '1',
     faucetUrl: 'https://faucet.nilstore.test/faucet',
   })
 
   assert.equal(result.status, 0)
+  assert.match(result.combinedOutput, /Faucet funding request accepted/i)
+  assert.match(result.combinedOutput, /Provider account funded/i)
+  assert.match(result.combinedOutput, /Requesting provider link on-chain/i)
+  assert.match(result.txLogContent, /tx nilchain request-provider-link nil1operatorstub/)
+})
+
+test('run_devnet_provider pair creates a missing key, auto-funds it, and submits provider-link tx', () => {
+  const result = runProviderScriptTest({
+    command: 'pair',
+    scenario: 'missing-then-funded',
+    autoFaucet: '1',
+    faucetUrl: 'https://faucet.nilstore.test/faucet',
+    keyState: 'missing',
+  })
+
+  assert.equal(result.status, 0)
+  assert.match(result.combinedOutput, /Creating provider key: provider1/i)
+  assert.match(result.combinedOutput, /Provider key was created for this run/i)
   assert.match(result.combinedOutput, /Faucet funding request accepted/i)
   assert.match(result.combinedOutput, /Provider account funded/i)
   assert.match(result.combinedOutput, /Requesting provider link on-chain/i)
