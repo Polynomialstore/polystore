@@ -7,7 +7,7 @@ If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 ## What you need from the hub operator
 
 - Shared `user-gateway` to `provider-daemon` auth token: `NIL_GATEWAY_SP_AUTH=...`
-- Optional but recommended: a website-opened `PAIRING_ID=...`
+- Operator wallet address from website onboarding: `OPERATOR_ADDRESS=nil1...` (or `0x...`)
 
 Treat `NIL_GATEWAY_SP_AUTH` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
 
@@ -16,8 +16,8 @@ Only set `HUB_NODE`, `HUB_LCD`, or `CHAIN_ID` when you are intentionally joining
 
 The web-first operator flow is:
 1. Open `https://nilstore.org/#/sp-onboarding` on the website.
-2. Connect the operator wallet and open pairing.
-3. Copy the generated `PAIRING_ID` into the provider host bootstrap command.
+2. Connect the operator wallet and copy the operator address (`nil1...`).
+3. Run provider-host link request with `OPERATOR_ADDRESS`, then approve from the website wallet step.
 4. Finish verification from `https://nilstore.org/#/sp-dashboard`.
 
 ## Provider machine prerequisites
@@ -84,7 +84,7 @@ export PROVIDER_KEY="provider1"
 
 export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https" # or your /ip4/... endpoint
 export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
-export PAIRING_ID="<website-opened-pairing-id>"
+export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
 ./scripts/run_devnet_provider.sh bootstrap
 ```
@@ -95,7 +95,7 @@ Existing funded key shortcut:
 export PROVIDER_KEY="provider1"
 export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
 export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
-export PAIRING_ID="<website-opened-pairing-id>"
+export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
 ./scripts/run_devnet_provider.sh bootstrap
 ```
@@ -103,13 +103,13 @@ export PAIRING_ID="<website-opened-pairing-id>"
 `bootstrap` now:
 
 - creates the provider key if needed
-- confirms on-chain pairing
+- opens provider link request on-chain (when needed)
 - starts the provider-daemon
 - registers the provider if it is new
 - updates provider endpoints if it is already registered
 - runs a doctor pass at the end
 
-Website-managed `bootstrap` now fails fast unless `PAIRING_ID`, `NIL_GATEWAY_SP_AUTH`, and `PROVIDER_ENDPOINT` are all present.
+Website-managed `bootstrap` now fails fast unless `OPERATOR_ADDRESS`, `NIL_GATEWAY_SP_AUTH`, and `PROVIDER_ENDPOINT` are all present.
 
 If you intentionally want a partial manual bootstrap, use the staged commands below (`pair`, `register`, `start`) or opt in explicitly with:
 
@@ -117,13 +117,13 @@ If you intentionally want a partial manual bootstrap, use the staged commands be
 BOOTSTRAP_ALLOW_PARTIAL=1 ./scripts/run_devnet_provider.sh bootstrap
 ```
 
-Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unpaired provider until pairing is opened and confirmed.
+Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unlinked provider until link request is opened and approved.
 
 If you are targeting a non-public hub, export `HUB_NODE`, `HUB_LCD`, and `CHAIN_ID` before running `bootstrap`.
 
 ### 5) Advanced/manual path
 
-Use this only when you want to split pairing, registration, and process start into separate steps.
+Use this only when you want to split link request, registration, and process start into separate steps.
 
 Register or update endpoints:
 
@@ -134,13 +134,13 @@ export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"
 ./scripts/run_devnet_provider.sh register
 ```
 
-Confirm pairing explicitly:
+Request provider link explicitly:
 
 ```bash
 export PROVIDER_KEY="provider1"
-export PAIRING_ID="<website-opened-pairing-id>"
+export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
-./scripts/run_devnet_provider.sh pair
+./scripts/run_devnet_provider.sh link
 ```
 
 Start only the provider-daemon:
@@ -188,7 +188,7 @@ Agent-oriented diagnostics:
 ./scripts/run_devnet_provider.sh verify
 ```
 
-- `doctor` checks prerequisites, key state, pairing configuration, endpoint configuration, local/public `/health`, and on-chain visibility when possible.
+- `doctor` checks prerequisites, key state, link configuration, endpoint configuration, local/public `/health`, and on-chain visibility when possible.
 - `verify` runs the repo healthcheck with the current provider and hub settings.
 
 From the hub (or anywhere with LCD access):
@@ -201,8 +201,8 @@ curl -sf "${HUB_LCD:-https://lcd.nilstore.org}/nilchain/nilchain/v1/providers" |
 
 - Provider not visible on LCD:
   - the `register-provider` tx likely failed (often: not enough `aatom` for gas)
-- Pairing does not confirm:
-  - the `PAIRING_ID` was never opened on-chain, or it expired before the server confirmed it
+- Provider link is still missing:
+  - `OPERATOR_ADDRESS` was wrong, or the operator wallet has not approved the pending provider link
 - Router can’t reach provider:
   - firewall/NAT; ensure your `PROVIDER_ENDPOINT` is reachable **from the hub**
   - confirm `NIL_GATEWAY_SP_AUTH` matches the hub `user-gateway`

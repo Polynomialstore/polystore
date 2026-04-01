@@ -14,7 +14,6 @@ test('provider onboarding resumes auth token after refresh and prefers provider-
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
   const nilAddress = ethToNil(account.address)
-  const pairingId = 'pair-onboarding-123'
   const providerAddress = 'nil1provideronboarding0000000000000000000000000'
   const publicBase = 'https://sp.example.com'
   let gatewayProbeCalls = 0
@@ -25,8 +24,10 @@ test('provider onboarding resumes auth token after refresh and prefers provider-
     endpointValue: 'sp.example.com',
     publicPort: '443',
     providerKey: 'provider-main',
-    pairingId,
-    pairingTxHash: '0xpairtx',
+    providerRepoReady: true,
+    providerKeyInitialized: true,
+    providerAddress,
+    linkTxHash: '0xlinktx',
   }
 
   await page.addInitScript(({ address, chainIdHex, draft }) => {
@@ -129,11 +130,19 @@ test('provider onboarding resumes auth token after refresh and prefers provider-
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/provider-pairings/pending/${pairingId}`, async (route) => {
+  await page.route(`**/nilchain/nilchain/v1/provider-pairings/pending-by-operator/${nilAddress}`, async (route) => {
     await route.fulfill({
-      status: 404,
+      status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ code: 5, message: 'not found' }),
+      body: JSON.stringify({
+        links: [
+          {
+            provider: providerAddress,
+            operator: nilAddress,
+            requested_height: '95',
+          },
+        ],
+      }),
     })
   })
 
@@ -143,7 +152,7 @@ test('provider onboarding resumes auth token after refresh and prefers provider-
       contentType: 'application/json',
       body: JSON.stringify({
         pairings: [
-          { provider: providerAddress, operator: nilAddress, pairing_id: pairingId, paired_height: '90' },
+          { provider: providerAddress, operator: nilAddress, paired_height: '90' },
         ],
       }),
     })
@@ -206,7 +215,7 @@ test('provider onboarding resumes auth token after refresh and prefers provider-
 
   await expect(page.getByTestId('provider-auth-token')).toHaveValue('shared-provider-secret')
   const hostCommands = await page.getByTestId('provider-host-commands').textContent()
-  expect(hostCommands).toContain("PAIRING_ID='pair-onboarding-123'")
+  expect(hostCommands).toContain(`OPERATOR_ADDRESS='${nilAddress}'`)
   expect(hostCommands).toContain("./scripts/run_devnet_provider.sh bootstrap")
   expect(hostCommands).not.toMatch(/BOOTSTRAP_ALLOW_PARTIAL=1\s*\\/i)
   await expect(page.getByTestId('provider-daemon-status-card')).toContainText('reachable from the provider-daemon host')

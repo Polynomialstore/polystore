@@ -40,7 +40,7 @@ type Keeper struct {
 	ProviderRewards            collections.Map[string, math.Int]
 	ProviderPairings           collections.Map[string, types.ProviderPairing]
 	ProviderPairingsByOperator collections.Map[collections.Pair[string, string], bool]
-	PendingProviderPairings    collections.Map[string, types.PendingProviderPairing]
+	PendingProviderLinks       collections.Map[string, types.PendingProviderLink]
 	ReceiptNonces              collections.Map[string, uint64]
 	ReceiptNoncesByDealFile    collections.Map[collections.Pair[uint64, string], uint64]
 	EvmNonces                  collections.Map[string, uint64]
@@ -107,7 +107,7 @@ func NewKeeper(
 		ProviderRewards:            collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
 		ProviderPairings:           collections.NewMap(sb, types.ProviderPairingsKey, "provider_pairings", collections.StringKey, codec.CollValue[types.ProviderPairing](cdc)),
 		ProviderPairingsByOperator: collections.NewMap(sb, types.ProviderPairingsByOperatorKey, "provider_pairings_by_operator", collections.PairKeyCodec(collections.StringKey, collections.StringKey), collections.BoolValue),
-		PendingProviderPairings:    collections.NewMap(sb, types.PendingProviderPairingsKey, "pending_provider_pairings", collections.StringKey, codec.CollValue[types.PendingProviderPairing](cdc)),
+		PendingProviderLinks:       collections.NewMap(sb, types.PendingProviderLinksKey, "pending_provider_links", collections.StringKey, codec.CollValue[types.PendingProviderLink](cdc)),
 		ReceiptNonces:              collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
 		ReceiptNoncesByDealFile:    collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		EvmNonces:                  collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),

@@ -10,7 +10,6 @@ import (
 )
 
 const maxProviderEndpoints = 8
-const maxPairingIDLen = 128
 
 func canonicalAddress(raw string, field string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
@@ -40,20 +39,6 @@ func canonicalProviderAddress(raw string) (string, error) {
 
 func requireCanonicalProviderCreator(raw string) (string, error) {
 	return requireCanonicalAddress(raw, "creator")
-}
-
-func validatePairingID(raw string) (string, error) {
-	pairingID := strings.TrimSpace(raw)
-	if pairingID == "" {
-		return "", sdkerrors.ErrInvalidRequest.Wrap("pairing_id is required")
-	}
-	if len(pairingID) > maxPairingIDLen {
-		return "", sdkerrors.ErrInvalidRequest.Wrapf("pairing_id too long (max %d)", maxPairingIDLen)
-	}
-	if strings.IndexFunc(pairingID, func(r rune) bool { return unicode.IsSpace(r) || r < 0x20 }) != -1 {
-		return "", sdkerrors.ErrInvalidRequest.Wrap("pairing_id contains whitespace/control characters")
-	}
-	return pairingID, nil
 }
 
 func validateAndCanonicalizeProviderEndpoints(rawEndpoints []string) ([]string, error) {

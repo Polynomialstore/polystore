@@ -53,11 +53,27 @@ const nilstoreABIJSON = `[
   },
   {
     "type":"function",
-    "name":"openProviderPairing",
+    "name":"requestProviderLink",
     "stateMutability":"nonpayable",
     "inputs":[
-      {"name":"pairingId","type":"string"},
-      {"name":"expiresAt","type":"uint64"}
+      {"name":"operator","type":"string"}
+    ],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
+    "name":"approveProviderLink",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"provider","type":"string"}
+    ],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
+    "name":"cancelProviderLink",
+    "stateMutability":"nonpayable",
+    "inputs":[
     ],
     "outputs":[{"name":"ok","type":"bool"}]
   },
@@ -315,8 +331,12 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runCreateDeal(ctx, evm, contract, method, input[4:])
 	case "updateDealContent":
 		return p.runUpdateDealContent(ctx, evm, contract, method, input[4:])
-	case "openProviderPairing":
-		return p.runOpenProviderPairing(ctx, evm, contract, method, input[4:])
+	case "requestProviderLink":
+		return p.runRequestProviderLink(ctx, evm, contract, method, input[4:])
+	case "approveProviderLink":
+		return p.runApproveProviderLink(ctx, evm, contract, method, input[4:])
+	case "cancelProviderLink":
+		return p.runCancelProviderLink(ctx, evm, contract, method, input[4:])
 	case "unpairProvider":
 		return p.runUnpairProvider(ctx, evm, contract, method, input[4:])
 	case "extendDeal":
@@ -947,36 +967,86 @@ func (p *Precompile) runCreateDeal(ctx sdk.Context, evm *vm.EVM, contract *vm.Co
 	return out, nil
 }
 
-func (p *Precompile) runOpenProviderPairing(ctx sdk.Context, _ *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+func (p *Precompile) runRequestProviderLink(ctx sdk.Context, _ *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
 	args := make(map[string]any)
 	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
-		return nil, fmt.Errorf("openProviderPairing: failed to unpack args: %w", err)
+		return nil, fmt.Errorf("requestProviderLink: failed to unpack args: %w", err)
 	}
 
-	pairingID, err := asString(args["pairingId"])
+	operator, err := asString(args["operator"])
 	if err != nil {
-		return nil, errors.New("openProviderPairing: invalid pairingId")
-	}
-	expiresAt, err := asUint64(args["expiresAt"])
-	if err != nil {
-		return nil, errors.New("openProviderPairing: invalid expiresAt")
+		return nil, errors.New("requestProviderLink: invalid operator")
 	}
 
 	caller := contract.Caller()
 	creator := sdk.AccAddress(caller.Bytes()).String()
 
 	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
-	if _, err := msgServer.OpenProviderPairing(sdk.WrapSDKContext(ctx), &types.MsgOpenProviderPairing{
-		Creator:   creator,
-		PairingId: strings.TrimSpace(pairingID),
-		ExpiresAt: expiresAt,
+	if _, err := msgServer.RequestProviderLink(sdk.WrapSDKContext(ctx), &types.MsgRequestProviderLink{
+		Creator:  creator,
+		Operator: strings.TrimSpace(operator),
 	}); err != nil {
 		return nil, err
 	}
 
 	out, err := method.Outputs.Pack(true)
 	if err != nil {
-		return nil, fmt.Errorf("openProviderPairing: failed to pack outputs: %w", err)
+		return nil, fmt.Errorf("requestProviderLink: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runApproveProviderLink(ctx sdk.Context, _ *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("approveProviderLink: failed to unpack args: %w", err)
+	}
+
+	provider, err := asString(args["provider"])
+	if err != nil {
+		return nil, errors.New("approveProviderLink: invalid provider")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	if _, err := msgServer.ApproveProviderLink(sdk.WrapSDKContext(ctx), &types.MsgApproveProviderLink{
+		Creator:  creator,
+		Provider: strings.TrimSpace(provider),
+	}); err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("approveProviderLink: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
+func (p *Precompile) runCancelProviderLink(ctx sdk.Context, _ *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("cancelProviderLink: failed to unpack args: %w", err)
+	}
+	if len(args) != 0 {
+		return nil, errors.New("cancelProviderLink: unexpected arguments")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	if _, err := msgServer.CancelProviderLink(sdk.WrapSDKContext(ctx), &types.MsgCancelProviderLink{
+		Creator: creator,
+	}); err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("cancelProviderLink: failed to pack outputs: %w", err)
 	}
 	return out, nil
 }

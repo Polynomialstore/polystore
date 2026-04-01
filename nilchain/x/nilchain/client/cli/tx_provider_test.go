@@ -79,7 +79,7 @@ func TestCmdUpdateProviderEndpointsBuildsMessageAndBroadcasts(t *testing.T) {
 	require.Equal(t, endpoints, captured.Endpoints)
 }
 
-func TestCmdOpenProviderPairingBuildsMessageAndBroadcasts(t *testing.T) {
+func TestCmdRequestProviderLinkBuildsMessageAndBroadcasts(t *testing.T) {
 	originalGetClientTxContext := getClientTxContextFn
 	originalBroadcast := generateOrBroadcastTxCLIFn
 	t.Cleanup(func() {
@@ -92,26 +92,25 @@ func TestCmdOpenProviderPairingBuildsMessageAndBroadcasts(t *testing.T) {
 		return client.Context{FromAddress: from}, nil
 	}
 
-	var captured types.MsgOpenProviderPairing
+	var captured types.MsgRequestProviderLink
 	generateOrBroadcastTxCLIFn = func(clientCtx client.Context, flags *pflag.FlagSet, msgs ...sdk.Msg) error {
 		require.Len(t, msgs, 1)
-		msg, ok := msgs[0].(*types.MsgOpenProviderPairing)
+		msg, ok := msgs[0].(*types.MsgRequestProviderLink)
 		require.True(t, ok)
 		captured = *msg
 		return nil
 	}
 
-	cmd := CmdOpenProviderPairing()
-	cmd.SetArgs([]string{"pairing-123", "77"})
+	cmd := CmdRequestProviderLink()
+	cmd.SetArgs([]string{"nil1operatoraddress"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
 	require.Equal(t, from.String(), captured.Creator)
-	require.Equal(t, "pairing-123", captured.PairingId)
-	require.Equal(t, uint64(77), captured.ExpiresAt)
+	require.Equal(t, "nil1operatoraddress", captured.Operator)
 }
 
-func TestCmdConfirmProviderPairingBuildsMessageAndBroadcasts(t *testing.T) {
+func TestCmdApproveProviderLinkBuildsMessageAndBroadcasts(t *testing.T) {
 	originalGetClientTxContext := getClientTxContextFn
 	originalBroadcast := generateOrBroadcastTxCLIFn
 	t.Cleanup(func() {
@@ -124,22 +123,52 @@ func TestCmdConfirmProviderPairingBuildsMessageAndBroadcasts(t *testing.T) {
 		return client.Context{FromAddress: from}, nil
 	}
 
-	var captured types.MsgConfirmProviderPairing
+	var captured types.MsgApproveProviderLink
 	generateOrBroadcastTxCLIFn = func(clientCtx client.Context, flags *pflag.FlagSet, msgs ...sdk.Msg) error {
 		require.Len(t, msgs, 1)
-		msg, ok := msgs[0].(*types.MsgConfirmProviderPairing)
+		msg, ok := msgs[0].(*types.MsgApproveProviderLink)
 		require.True(t, ok)
 		captured = *msg
 		return nil
 	}
 
-	cmd := CmdConfirmProviderPairing()
-	cmd.SetArgs([]string{"pairing-456"})
+	cmd := CmdApproveProviderLink()
+	cmd.SetArgs([]string{"nil1provideraddress"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
 	require.Equal(t, from.String(), captured.Creator)
-	require.Equal(t, "pairing-456", captured.PairingId)
+	require.Equal(t, "nil1provideraddress", captured.Provider)
+}
+
+func TestCmdCancelProviderLinkBuildsMessageAndBroadcasts(t *testing.T) {
+	originalGetClientTxContext := getClientTxContextFn
+	originalBroadcast := generateOrBroadcastTxCLIFn
+	t.Cleanup(func() {
+		getClientTxContextFn = originalGetClientTxContext
+		generateOrBroadcastTxCLIFn = originalBroadcast
+	})
+
+	from := sdk.AccAddress(bytes20(6))
+	getClientTxContextFn = func(cmd *cobra.Command) (client.Context, error) {
+		return client.Context{FromAddress: from}, nil
+	}
+
+	var captured types.MsgCancelProviderLink
+	generateOrBroadcastTxCLIFn = func(clientCtx client.Context, flags *pflag.FlagSet, msgs ...sdk.Msg) error {
+		require.Len(t, msgs, 1)
+		msg, ok := msgs[0].(*types.MsgCancelProviderLink)
+		require.True(t, ok)
+		captured = *msg
+		return nil
+	}
+
+	cmd := CmdCancelProviderLink()
+	cmd.SetArgs(nil)
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	require.Equal(t, from.String(), captured.Creator)
 }
 
 func TestCmdUnpairProviderBuildsMessageAndBroadcasts(t *testing.T) {

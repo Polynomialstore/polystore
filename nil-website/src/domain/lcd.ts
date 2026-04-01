@@ -28,15 +28,13 @@ export interface LcdProvider {
 export interface LcdProviderPairing {
   provider: string
   operator: string
-  pairing_id: string
   paired_height: string
 }
 
-export interface LcdPendingProviderPairing {
-  pairing_id: string
+export interface LcdPendingProviderLink {
+  provider: string
   operator: string
-  expires_at: string
-  opened_height: string
+  requested_height: string
 }
 
 export interface LcdCoin {
@@ -138,7 +136,6 @@ export function normalizeLcdProviderPairing(input: unknown): LcdProviderPairing 
   return {
     provider: asString(input['provider']),
     operator: asString(input['operator']),
-    pairing_id: asString(input['pairing_id']),
     paired_height: asString(input['paired_height'], '0'),
   }
 }
@@ -160,21 +157,30 @@ export function normalizeLcdProviderPairingsResponse(payload: unknown): LcdProvi
   return out
 }
 
-export function normalizeLcdPendingProviderPairing(input: unknown): LcdPendingProviderPairing | null {
+export function normalizeLcdPendingProviderLink(input: unknown): LcdPendingProviderLink | null {
   if (!isRecord(input)) return null
   return {
-    pairing_id: asString(input['pairing_id']),
+    provider: asString(input['provider']),
     operator: asString(input['operator']),
-    expires_at: asString(input['expires_at'], '0'),
-    opened_height: asString(input['opened_height'], '0'),
+    requested_height: asString(input['requested_height'], '0'),
   }
 }
 
-export function normalizeLcdPendingProviderPairingResponse(
-  payload: unknown,
-): LcdPendingProviderPairing | null {
+export function normalizeLcdPendingProviderLinkResponse(payload: unknown): LcdPendingProviderLink | null {
   if (!isRecord(payload)) return null
-  return normalizeLcdPendingProviderPairing(payload['pairing'])
+  return normalizeLcdPendingProviderLink(payload['link'])
+}
+
+export function normalizeLcdPendingProviderLinksByOperatorResponse(payload: unknown): LcdPendingProviderLink[] {
+  if (!isRecord(payload)) return []
+  const links = payload['links']
+  if (!Array.isArray(links)) return []
+  const out: LcdPendingProviderLink[] = []
+  for (const item of links) {
+    const link = normalizeLcdPendingProviderLink(item)
+    if (link) out.push(link)
+  }
+  return out
 }
 
 function normalizeLcdCoin(input: unknown): LcdCoin {

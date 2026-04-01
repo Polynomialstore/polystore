@@ -75,7 +75,7 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
 	t.Setenv("NIL_PROVIDER_KEY", "provider-status")
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1providerstatus")
-	t.Setenv("NIL_PROVIDER_PAIRING_ID", "pair-status-001")
+	t.Setenv("NIL_OPERATOR_ADDRESS", "nil1operatorstatus")
 	t.Setenv("NIL_GATEWAY_SP_AUTH", "shared-secret")
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +119,6 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 				"pairing": map[string]any{
 					"provider":      "nil1providerstatus",
 					"operator":      "nil1operatorstatus",
-					"pairing_id":    "pair-status-001",
 					"paired_height": "88",
 				},
 			})
@@ -193,7 +192,7 @@ func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
 	t.Setenv("NIL_PROVIDER_KEY", "provider-pending")
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1providerpending")
-	t.Setenv("NIL_PROVIDER_PAIRING_ID", "pair-pending-001")
+	t.Setenv("NIL_OPERATOR_ADDRESS", "nil1pendingoperator")
 	t.Setenv("NIL_GATEWAY_SP_AUTH", "shared-secret")
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -230,13 +229,12 @@ func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 			})
 		case "/nilchain/nilchain/v1/provider-pairings/nil1providerpending":
 			http.NotFound(w, r)
-		case "/nilchain/nilchain/v1/provider-pairings/pending/pair-pending-001":
+		case "/nilchain/nilchain/v1/provider-pairings/pending/nil1providerpending":
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"pairing": map[string]any{
-					"pairing_id":    "pair-pending-001",
-					"operator":      "nil1pendingoperator",
-					"expires_at":    "55",
-					"opened_height": "22",
+				"link": map[string]any{
+					"provider":         "nil1providerpending",
+					"operator":         "nil1pendingoperator",
+					"requested_height": "22",
 				},
 			})
 		default:
@@ -268,13 +266,7 @@ func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 	if status.Provider.PendingOperator != "nil1pendingoperator" {
 		t.Fatalf("unexpected pending operator: got=%q", status.Provider.PendingOperator)
 	}
-	if status.Provider.PendingExpiresAt != 55 {
-		t.Fatalf("unexpected pending expiry: got=%d want=%d", status.Provider.PendingExpiresAt, 55)
-	}
-	if status.Provider.LatestHeight != 40 {
-		t.Fatalf("unexpected latest height: got=%d want=%d", status.Provider.LatestHeight, 40)
-	}
-	requireIssueContains(t, status.Issues, "pending confirmation")
+	requireIssueContains(t, status.Issues, "pending operator approval")
 }
 
 func TestGatewayStatusReportsProviderDaemonIssues(t *testing.T) {
@@ -282,7 +274,7 @@ func TestGatewayStatusReportsProviderDaemonIssues(t *testing.T) {
 	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
 	t.Setenv("NIL_PROVIDER_KEY", "provider-issues")
 	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1providerissues")
-	t.Setenv("NIL_PROVIDER_PAIRING_ID", "pair-missing-001")
+	t.Setenv("NIL_OPERATOR_ADDRESS", "nil1operatorissues")
 	t.Setenv("NIL_GATEWAY_SP_AUTH", "")
 	t.Setenv("NIL_LISTEN_ADDR", "http://127.0.0.1:1")
 	t.Setenv("NIL_PROVIDER_ENDPOINTS", "")
@@ -295,7 +287,7 @@ func TestGatewayStatusReportsProviderDaemonIssues(t *testing.T) {
 			http.NotFound(w, r)
 		case "/nilchain/nilchain/v1/provider-pairings/nil1providerissues":
 			http.NotFound(w, r)
-		case "/nilchain/nilchain/v1/provider-pairings/pending/pair-missing-001":
+		case "/nilchain/nilchain/v1/provider-pairings/pending/nil1providerissues":
 			http.NotFound(w, r)
 		default:
 			http.NotFound(w, r)
@@ -330,7 +322,7 @@ func TestGatewayStatusReportsProviderDaemonIssues(t *testing.T) {
 		t.Fatal("expected sp_reachable=false")
 	}
 	requireIssueContains(t, status.Issues, "NIL_GATEWAY_SP_AUTH is missing")
-	requireIssueContains(t, status.Issues, "configured pairing id is not open on-chain")
+	requireIssueContains(t, status.Issues, "configured provider link request is not open on-chain")
 	requireIssueContains(t, status.Issues, "provider is not registered on-chain")
 	requireIssueContains(t, status.Issues, "provider endpoints are not configured")
 	requireIssueContains(t, status.Issues, "local provider health endpoint is unreachable")

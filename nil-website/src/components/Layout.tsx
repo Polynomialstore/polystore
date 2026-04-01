@@ -113,7 +113,7 @@ export const Layout = () => {
         <div className="absolute inset-0 bg-card border-b border-border" />
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-40" />
 
-        <div className="container mx-auto px-4 h-16 flex items-center gap-4 relative z-10">
+        <div className="container mx-auto px-4 h-16 flex items-center gap-3 relative z-10">
           
           {/* 1. LEFT: Logo */}
           <div className="flex-shrink-0 flex items-center gap-2 group cursor-pointer">
@@ -142,8 +142,8 @@ export const Layout = () => {
           </div>
 
           {/* 2. CENTER: Desktop Navigation */}
-          <div className="flex-1 flex justify-center">
-            <div className="hidden lg:flex items-center gap-1 px-2 py-1 glass-panel industrial-border">
+          <div className="min-w-0 flex-1 flex justify-center">
+            <div className="hidden lg:flex items-center gap-0.5 px-1.5 py-1 xl:gap-1 xl:px-2 glass-panel industrial-border">
               {navStructure.map((item) => (
                   <NavDropdown key={item.name} label={item.name} items={item.items!} />
               ))}
@@ -151,22 +151,22 @@ export const Layout = () => {
           </div>
 
           {/* 3. RIGHT: Actions (Console CTA) */}
-          <div className="flex items-center gap-3 sm:gap-4">
-              <NavSessionStatus className="hidden xl:flex" />
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              <NavSessionStatus responsive className="hidden lg:flex" />
 
               {/* Desktop GitHub */}
               <a 
                 href="https://github.com/Nil-Store/nil-store" 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="hidden sm:flex items-center justify-center w-9 h-9 glass-panel industrial-border text-muted-foreground hover:text-foreground transition-[transform,color] duration-200 ease-out hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+                className="hidden 2xl:flex items-center justify-center w-9 h-9 glass-panel industrial-border text-muted-foreground hover:text-foreground transition-[transform,color] duration-200 ease-out hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
               >
                 <Github className="w-5 h-5" />
               </a>
 
               <ModeToggle />
 
-              <DashboardCta className="hidden sm:flex" label="Dashboard" to="/dashboard" />
+              <DashboardCta responsive compactLabel="App" className="hidden lg:flex" label="Dashboard" to="/dashboard" />
               
               {/* Mobile Toggle */}
               <button 
@@ -190,19 +190,31 @@ export const Layout = () => {
               className="lg:hidden fixed inset-0 top-16 z-50 overflow-y-auto bg-background border-t border-border pb-24"
             >
               <div className="flex flex-col p-6 space-y-6">
-                <div className="flex flex-col gap-3">
-                  <NavSessionStatus />
+                <div className="glass-panel industrial-border p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground font-mono-data">Session</div>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <NavSessionStatus className="flex-wrap" />
+                  </div>
                 </div>
                 
-                {/* Mobile CTA */}
-                <Link 
-                    to="/alpha/storage" 
-                    onClick={() => setIsOpen(false)}
-                    className="block w-full py-4 bg-primary text-primary-foreground font-bold text-center text-[11px] uppercase tracking-[0.2em] shadow-[0_0_24px_rgba(0,0,0,0.08)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] active:translate-x-[2px] active:translate-y-[2px] transition-transform flex items-center justify-center gap-3"
-                  >
-                    <Database className="w-6 h-6 fill-current" />
-                    Start Storing
-                </Link>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Link 
+                      to="/alpha/storage" 
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center justify-center gap-3 bg-primary px-4 py-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-primary-foreground shadow-[0_0_24px_rgba(0,0,0,0.08)] transition-transform active:translate-x-[2px] active:translate-y-[2px] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)]"
+                    >
+                      <Database className="w-5 h-5 fill-current" />
+                      Start Storing
+                  </Link>
+                  <Link 
+                      to="/alpha/provider" 
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center justify-center gap-3 bg-accent px-4 py-4 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-accent-foreground shadow-[0_0_24px_rgba(0,0,0,0.08)] transition-transform active:translate-x-[2px] active:translate-y-[2px]"
+                    >
+                      <Server className="w-5 h-5" />
+                      Run Provider
+                  </Link>
+                </div>
 
                 <div className="h-[1px] bg-border/50"></div>
 

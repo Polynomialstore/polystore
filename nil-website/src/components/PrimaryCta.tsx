@@ -72,8 +72,17 @@ export function PrimaryCtaAnchor({
   leftIcon?: ReactNode;
   withArrow?: boolean;
 }) {
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!href.startsWith("#")) return
+    event.preventDefault()
+    if (typeof document === "undefined") return
+    const target = document.getElementById(href.slice(1))
+    if (!target) return
+    target.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
   return (
-    <a href={href} className={primaryCtaClassName({ className, fullWidth, size })}>
+    <a href={href} onClick={handleClick} className={primaryCtaClassName({ className, fullWidth, size })}>
       {leftIcon}
       {children}
       {withArrow ? <ArrowRight className="w-4 h-4" /> : null}

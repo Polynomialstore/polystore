@@ -15,7 +15,7 @@ Fallback target:
 - Repo URL: `https://github.com/Nil-Store/nil-store`
 - Shared `user-gateway` to `provider-daemon` auth token: `NIL_GATEWAY_SP_AUTH=...`
 - Recommended hostname: `sp.<domain>` or `spN.<domain>`
-- Optional but recommended: a website-opened `PAIRING_ID=...` so the provider can be linked to your browser wallet on-chain
+- Operator wallet address from website onboarding: `OPERATOR_ADDRESS=nil1...` (or `0x...`)
 
 Treat `NIL_GATEWAY_SP_AUTH` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
 
@@ -25,7 +25,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 ## Fast path
 
 1. Open the NilStore website and go to `https://nilstore.org/#/sp-onboarding`.
-2. Connect the operator wallet and open pairing. The website-managed flow assumes pairing is part of the happy path.
+2. Connect the operator wallet and copy the operator address (`nil1...`).
 3. Clone the repo on the provider machine.
 4. Optional: open your coding agent locally in the repo.
 5. Paste the provider prompt from:
@@ -33,19 +33,19 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 6. Give the agent:
    - `NIL_GATEWAY_SP_AUTH`
    - your public hostname or multiaddr
-   - `PAIRING_ID` from the website onboarding flow
+   - `OPERATOR_ADDRESS` from the website onboarding flow
 7. Let the agent:
    - initialize the provider key if needed
-   - fund the printed `nil1...` address before pairing or registration when the key is new
+   - fund the printed `nil1...` address before link request or registration when the key is new
    - run strict website-managed bootstrap, verify, and retry until healthy
-   - use `./scripts/run_devnet_provider.sh pair` for pairing-only repair when the host is already configured and only the on-chain link is missing
+   - use `./scripts/run_devnet_provider.sh link` for link-only repair when the host is already configured and only the on-chain link request is missing
 8. Confirm:
    - local `http://127.0.0.1:8091/health`
    - public `https://sp.<domain>/health` for tunnel / hostname mode, or `http://<ip>:8091/health` for direct IPv4 mode
    - provider appears on `https://lcd.<domain>/nilchain/nilchain/v1/providers`
    - provider appears in the website `My Providers` dashboard at `https://nilstore.org/#/sp-dashboard`
 
-If you deliberately want partial bootstrap without pairing, use the manual path in `docs/REMOTE_SP_JOIN_QUICKSTART.md` or opt in with `BOOTSTRAP_ALLOW_PARTIAL=1`. Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unpaired provider.
+If you deliberately want partial bootstrap without provider link, use the manual path in `docs/REMOTE_SP_JOIN_QUICKSTART.md` or opt in with `BOOTSTRAP_ALLOW_PARTIAL=1`. Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unlinked provider.
 
 ## Manual references
 
@@ -56,7 +56,7 @@ If you deliberately want partial bootstrap without pairing, use the manual path 
 ## Success criteria
 
 - Provider key exists and is funded
-- Provider is paired to the intended operator wallet when `PAIRING_ID` is supplied
+- Provider is linked to the intended operator wallet when `OPERATOR_ADDRESS` is supplied
 - Provider endpoint is registered on-chain and can be rotated later if needed
 - Local `/health` returns `200`
 - Public endpoint returns `200` for the chosen shape (`https://sp.<domain>/health` or `http://<ip>:8091/health`)

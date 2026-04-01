@@ -27,11 +27,14 @@ service Msg {
   // MsgUpdateProviderEndpoints allows a provider to update its registered endpoints.
   rpc UpdateProviderEndpoints(MsgUpdateProviderEndpoints) returns (MsgUpdateProviderEndpointsResponse);
 
-  // MsgOpenProviderPairing allows an operator wallet to open a pending pairing session.
-  rpc OpenProviderPairing(MsgOpenProviderPairing) returns (MsgOpenProviderPairingResponse);
+  // MsgRequestProviderLink allows a provider key to request linking to an operator wallet.
+  rpc RequestProviderLink(MsgRequestProviderLink) returns (MsgRequestProviderLinkResponse);
 
-  // MsgConfirmProviderPairing allows a provider key to confirm a pending pairing session.
-  rpc ConfirmProviderPairing(MsgConfirmProviderPairing) returns (MsgConfirmProviderPairingResponse);
+  // MsgApproveProviderLink allows an operator wallet to approve a pending provider link request.
+  rpc ApproveProviderLink(MsgApproveProviderLink) returns (MsgApproveProviderLinkResponse);
+
+  // MsgCancelProviderLink allows a provider key to cancel its pending provider link request.
+  rpc CancelProviderLink(MsgCancelProviderLink) returns (MsgCancelProviderLinkResponse);
 
   // MsgUnpairProvider removes an existing provider<->operator link.
   rpc UnpairProvider(MsgUnpairProvider) returns (MsgUnpairProviderResponse);
@@ -156,28 +159,38 @@ message MsgUpdateProviderEndpointsResponse {
   bool success = 1;
 }
 
-message MsgOpenProviderPairing {
+message MsgRequestProviderLink {
   option (cosmos.msg.v1.signer) = "creator";
-  option (amino.name) = "nilchain/x/nilchain/MsgOpenProviderPairing";
+  option (amino.name) = "nilchain/x/nilchain/MsgRequestProviderLink";
 
   string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
-  string pairing_id = 2;
-  uint64 expires_at = 3;
+  string operator = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
 }
 
-message MsgOpenProviderPairingResponse {
+message MsgRequestProviderLinkResponse {
   bool success = 1;
 }
 
-message MsgConfirmProviderPairing {
+message MsgApproveProviderLink {
   option (cosmos.msg.v1.signer) = "creator";
-  option (amino.name) = "nilchain/x/nilchain/MsgConfirmProviderPairing";
+  option (amino.name) = "nilchain/x/nilchain/MsgApproveProviderLink";
 
   string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
-  string pairing_id = 2;
+  string provider = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
 }
 
-message MsgConfirmProviderPairingResponse {
+message MsgApproveProviderLinkResponse {
+  bool success = 1;
+}
+
+message MsgCancelProviderLink {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgCancelProviderLink";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+}
+
+message MsgCancelProviderLinkResponse {
   bool success = 1;
 }
 

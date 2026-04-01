@@ -53,9 +53,14 @@ service Query {
     option (google.api.http).get = "/nilchain/nilchain/v1/provider-pairings/by-operator/{operator}";
   }
 
-  // Queries a pending provider pairing by pairing_id.
-  rpc GetPendingProviderPairing(QueryGetPendingProviderPairingRequest) returns (QueryGetPendingProviderPairingResponse) {
-    option (google.api.http).get = "/nilchain/nilchain/v1/provider-pairings/pending/{pairing_id}";
+  // Queries a pending provider link by provider address.
+  rpc GetPendingProviderLink(QueryGetPendingProviderLinkRequest) returns (QueryGetPendingProviderLinkResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/provider-pairings/pending/{provider}";
+  }
+
+  // Lists pending provider links for an operator address.
+  rpc ListPendingProviderLinksByOperator(QueryListPendingProviderLinksByOperatorRequest) returns (QueryListPendingProviderLinksByOperatorResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/provider-pairings/pending-by-operator/{operator}";
   }
 
   // Queries the Heat State for a Deal.
@@ -155,12 +160,20 @@ message QueryListProvidersByOperatorResponse {
   repeated ProviderPairing pairings = 1 [(gogoproto.nullable) = false];
 }
 
-message QueryGetPendingProviderPairingRequest {
-  string pairing_id = 1;
+message QueryGetPendingProviderLinkRequest {
+  string provider = 1;
 }
 
-message QueryGetPendingProviderPairingResponse {
-  PendingProviderPairing pairing = 1 [(gogoproto.nullable) = false];
+message QueryGetPendingProviderLinkResponse {
+  PendingProviderLink link = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryListPendingProviderLinksByOperatorRequest {
+  string operator = 1;
+}
+
+message QueryListPendingProviderLinksByOperatorResponse {
+  repeated PendingProviderLink links = 1 [(gogoproto.nullable) = false];
 }
 
 message QueryGetDealHeatRequest {

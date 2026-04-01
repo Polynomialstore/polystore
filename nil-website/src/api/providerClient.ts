@@ -7,11 +7,10 @@ type UnknownRecord = Record<string, unknown>
 export interface ProviderAdminStatusDetail {
   key_name?: string
   address?: string
-  pairing_id?: string
+  configured_operator?: string
   pairing_status?: string
   paired_operator?: string
   pending_operator?: string
-  pending_expires_at?: number
   latest_height?: number
   registration_status?: string
   onchain_status?: string

@@ -82,15 +82,39 @@ func initFixture(t *testing.T) *testFixture {
 	}
 }
 
-func TestPrecompileIncludesOpenProviderPairingMethod(t *testing.T) {
+func TestPrecompileIncludesRequestProviderLinkMethod(t *testing.T) {
 	f := initFixture(t)
 	precompile, err := New(&f.keeper)
 	require.NoError(t, err)
 
-	method, ok := precompile.abi.Methods["openProviderPairing"]
+	method, ok := precompile.abi.Methods["requestProviderLink"]
 	require.True(t, ok)
-	require.Equal(t, "openProviderPairing", method.Name)
-	require.Len(t, method.Inputs, 2)
+	require.Equal(t, "requestProviderLink", method.Name)
+	require.Len(t, method.Inputs, 1)
+	require.Len(t, method.Outputs, 1)
+}
+
+func TestPrecompileIncludesApproveProviderLinkMethod(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	method, ok := precompile.abi.Methods["approveProviderLink"]
+	require.True(t, ok)
+	require.Equal(t, "approveProviderLink", method.Name)
+	require.Len(t, method.Inputs, 1)
+	require.Len(t, method.Outputs, 1)
+}
+
+func TestPrecompileIncludesCancelProviderLinkMethod(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	method, ok := precompile.abi.Methods["cancelProviderLink"]
+	require.True(t, ok)
+	require.Equal(t, "cancelProviderLink", method.Name)
+	require.Len(t, method.Inputs, 0)
 	require.Len(t, method.Outputs, 1)
 }
 
@@ -106,21 +130,22 @@ func TestPrecompileIncludesUnpairProviderMethod(t *testing.T) {
 	require.Len(t, method.Outputs, 1)
 }
 
-func TestRunOpenProviderPairingCreatesPendingPairingFromEvmCaller(t *testing.T) {
+func TestRunRequestProviderLinkCreatesPendingLinkFromEvmCaller(t *testing.T) {
 	f := initFixture(t)
 	precompile, err := New(&f.keeper)
 	require.NoError(t, err)
 
 	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(10)
-	method := precompile.abi.Methods["openProviderPairing"]
-	input, err := method.Inputs.Pack("pair-123", uint64(25))
+	method := precompile.abi.Methods["requestProviderLink"]
+	operator := sdk.AccAddress(common.HexToAddress("0x00000000000000000000000000000000000000ac").Bytes()).String()
+	input, err := method.Inputs.Pack(operator)
 	require.NoError(t, err)
 
 	caller := common.HexToAddress("0x00000000000000000000000000000000000000ab")
 	contract := vm.NewPrecompile(caller, Address, uint256.NewInt(0), 5_000_000)
 	contract.Input = append(method.ID, input...)
 
-	out, err := precompile.runOpenProviderPairing(sdkCtx, nil, contract, &method, input)
+	out, err := precompile.runRequestProviderLink(sdkCtx, nil, contract, &method, input)
 	require.NoError(t, err)
 
 	decoded, err := method.Outputs.Unpack(out)
@@ -130,30 +155,86 @@ func TestRunOpenProviderPairingCreatesPendingPairingFromEvmCaller(t *testing.T) 
 	require.True(t, cast)
 	require.True(t, ok)
 
-	operator := sdk.AccAddress(caller.Bytes()).String()
-	pending, err := f.keeper.PendingProviderPairings.Get(sdkCtx, "pair-123")
+	provider := sdk.AccAddress(caller.Bytes()).String()
+	pending, err := f.keeper.PendingProviderLinks.Get(sdkCtx, provider)
 	require.NoError(t, err)
 	require.Equal(t, operator, pending.Operator)
-	require.Equal(t, uint64(25), pending.ExpiresAt)
-	require.Equal(t, int64(10), pending.OpenedHeight)
+	require.Equal(t, provider, pending.Provider)
+	require.Equal(t, int64(10), pending.RequestedHeight)
 }
 
-func TestRunOpenProviderPairingRejectsExpiredHeight(t *testing.T) {
+func TestRunApproveProviderLinkPairsProviderFromEvmCaller(t *testing.T) {
 	f := initFixture(t)
 	precompile, err := New(&f.keeper)
 	require.NoError(t, err)
 
 	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(20)
-	method := precompile.abi.Methods["openProviderPairing"]
-	input, err := method.Inputs.Pack("pair-expired", uint64(20))
+	msgServer := nilkeeper.NewMsgServerImpl(f.keeper)
+	provider := sdk.AccAddress(common.HexToAddress("0x00000000000000000000000000000000000000ce").Bytes()).String()
+	operatorCaller := common.HexToAddress("0x00000000000000000000000000000000000000cd")
+	operator := sdk.AccAddress(operatorCaller.Bytes()).String()
+	_, err = msgServer.RequestProviderLink(sdk.WrapSDKContext(sdkCtx), &types.MsgRequestProviderLink{
+		Creator:  provider,
+		Operator: operator,
+	})
 	require.NoError(t, err)
 
-	caller := common.HexToAddress("0x00000000000000000000000000000000000000cd")
-	contract := vm.NewPrecompile(caller, Address, uint256.NewInt(0), 5_000_000)
+	method := precompile.abi.Methods["approveProviderLink"]
+	input, err := method.Inputs.Pack(provider)
+	require.NoError(t, err)
 
-	_, err = precompile.runOpenProviderPairing(sdkCtx, nil, contract, &method, input)
+	contract := vm.NewPrecompile(operatorCaller, Address, uint256.NewInt(0), 5_000_000)
+	contract.Input = append(method.ID, input...)
+
+	out, err := precompile.runApproveProviderLink(sdkCtx, nil, contract, &method, input)
+	require.NoError(t, err)
+	decoded, err := method.Outputs.Unpack(out)
+	require.NoError(t, err)
+	require.Len(t, decoded, 1)
+	ok, cast := decoded[0].(bool)
+	require.True(t, cast)
+	require.True(t, ok)
+
+	pairing, err := f.keeper.ProviderPairings.Get(sdkCtx, provider)
+	require.NoError(t, err)
+	require.Equal(t, operator, pairing.Operator)
+}
+
+func TestRunCancelProviderLinkRemovesPendingLinkForEvmCaller(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(11)
+	msgServer := nilkeeper.NewMsgServerImpl(f.keeper)
+	providerCaller := common.HexToAddress("0x00000000000000000000000000000000000000da")
+	provider := sdk.AccAddress(providerCaller.Bytes()).String()
+	operator := sdk.AccAddress(common.HexToAddress("0x00000000000000000000000000000000000000db").Bytes()).String()
+
+	_, err = msgServer.RequestProviderLink(sdk.WrapSDKContext(sdkCtx), &types.MsgRequestProviderLink{
+		Creator:  provider,
+		Operator: operator,
+	})
+	require.NoError(t, err)
+
+	method := precompile.abi.Methods["cancelProviderLink"]
+	input, err := method.Inputs.Pack()
+	require.NoError(t, err)
+
+	contract := vm.NewPrecompile(providerCaller, Address, uint256.NewInt(0), 5_000_000)
+	contract.Input = append(method.ID, input...)
+
+	out, err := precompile.runCancelProviderLink(sdkCtx, nil, contract, &method, input)
+	require.NoError(t, err)
+	decoded, err := method.Outputs.Unpack(out)
+	require.NoError(t, err)
+	require.Len(t, decoded, 1)
+	ok, cast := decoded[0].(bool)
+	require.True(t, cast)
+	require.True(t, ok)
+
+	_, err = f.keeper.PendingProviderLinks.Get(sdkCtx, provider)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "expires_at must be in the future")
 }
 
 func TestRunUnpairProviderRemovesPairingForEvmCaller(t *testing.T) {
@@ -168,15 +249,14 @@ func TestRunUnpairProviderRemovesPairingForEvmCaller(t *testing.T) {
 	providerAddr := common.HexToAddress("0x00000000000000000000000000000000000000f1")
 	provider := sdk.AccAddress(providerAddr.Bytes()).String()
 
-	_, err = msgServer.OpenProviderPairing(sdk.WrapSDKContext(sdkCtx), &types.MsgOpenProviderPairing{
-		Creator:   operator,
-		PairingId: "pair-unpair",
-		ExpiresAt: 25,
+	_, err = msgServer.RequestProviderLink(sdk.WrapSDKContext(sdkCtx), &types.MsgRequestProviderLink{
+		Creator:  provider,
+		Operator: operator,
 	})
 	require.NoError(t, err)
-	_, err = msgServer.ConfirmProviderPairing(sdk.WrapSDKContext(sdkCtx), &types.MsgConfirmProviderPairing{
-		Creator:   provider,
-		PairingId: "pair-unpair",
+	_, err = msgServer.ApproveProviderLink(sdk.WrapSDKContext(sdkCtx), &types.MsgApproveProviderLink{
+		Creator:  operator,
+		Provider: provider,
 	})
 	require.NoError(t, err)
 

@@ -139,7 +139,6 @@ test('provider dashboard uses provider-daemon status and can unpair a provider',
               {
                 provider: providerAddress,
                 operator: nilAddress,
-                pairing_id: 'pair-dashboard-123',
                 paired_height: '91',
               },
             ],

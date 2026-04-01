@@ -1,4 +1,4 @@
-import type { LcdPendingProviderPairing, LcdProvider, LcdProviderPairing } from '../domain/lcd'
+import type { LcdPendingProviderLink, LcdProvider, LcdProviderPairing } from '../domain/lcd'
 import { normalizeHttpBase } from './spDashboard'
 
 export type ProviderHostMode = 'home-tunnel' | 'public-vps'
@@ -20,14 +20,14 @@ export interface ProviderEndpointPlan {
 }
 
 export interface ProviderBootstrapDraft extends ProviderEndpointDraft {
-  pairingId: string
+  operatorAddress?: string
   providerKey?: string
   authToken?: string
 }
 
 export interface ProviderRunbookReadiness {
   ready: boolean
-  missing: Array<'endpoint' | 'pairing' | 'auth'>
+  missing: Array<'endpoint' | 'operator' | 'auth'>
 }
 
 const PROVIDER_BOOTSTRAP_REPO = 'https://github.com/Nil-Store/nil-store.git'
@@ -119,32 +119,32 @@ export function buildProviderEndpointPlan(draft: ProviderEndpointDraft): Provide
 
 export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): string {
   const providerKey = trimNonEmpty(draft.providerKey) || DEFAULT_PROVIDER_KEY
-  const pairingId = trimNonEmpty(draft.pairingId)
+  const operatorAddress = trimNonEmpty(draft.operatorAddress)
   const endpointPlan = buildProviderEndpointPlan(draft)
   const providerEndpoint = endpointPlan?.providerEndpoint || '<provider-endpoint>'
   const authToken = trimNonEmpty(draft.authToken) || AUTH_PLACEHOLDER
-  const websiteReady = Boolean(endpointPlan && pairingId && trimNonEmpty(draft.authToken))
+  const websiteReady = Boolean(endpointPlan && operatorAddress && trimNonEmpty(draft.authToken))
 
   const bootstrapLines = [
     '# 1. Initialize the provider key if it does not already exist:',
     `PROVIDER_KEY=${shellQuote(providerKey)} ./scripts/run_devnet_provider.sh init`,
     '',
     '# 2. If init created a new key, fund the printed nil1 address with aatom before continuing.',
-    '# 3. Website-managed bootstrap now fails fast unless PAIRING_ID, PROVIDER_ENDPOINT, and NIL_GATEWAY_SP_AUTH are present.',
-    '#    For a partial/manual bootstrap, either use staged pair/register/start commands or opt in with BOOTSTRAP_ALLOW_PARTIAL=1.',
+    '# 3. Website-managed bootstrap now fails fast unless OPERATOR_ADDRESS, PROVIDER_ENDPOINT, and NIL_GATEWAY_SP_AUTH are present.',
+    '#    For a partial/manual bootstrap, either use staged link/register/start commands or opt in with BOOTSTRAP_ALLOW_PARTIAL=1.',
   ]
 
   const envLines = [
-    ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\'] : []),
-    ...(pairingId ? [`PAIRING_ID=${shellQuote(pairingId)} \\`] : []),
-    `PROVIDER_KEY=${shellQuote(providerKey)} \\`,
-    `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\`,
-    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken)} \\`,
+    ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\\\'] : []),
+    ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\\\`] : []),
+    `PROVIDER_KEY=${shellQuote(providerKey)} \\\\`,
+    `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\\\`,
+    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken)} \\\\`,
     './scripts/run_devnet_provider.sh bootstrap',
   ]
 
   return [
-   '# If the repo is missing on the provider host:',
+    '# If the repo is missing on the provider host:',
     `git clone ${PROVIDER_BOOTSTRAP_REPO}`,
     'cd nil-store',
     '',
@@ -156,13 +156,13 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
 
 export function evaluateProviderRunbookReadiness(input: {
   endpointPlan: ProviderEndpointPlan | null
-  pairingId?: string
+  operatorAddress?: string
   authToken?: string
 }): ProviderRunbookReadiness {
   const missing: ProviderRunbookReadiness['missing'] = []
 
   if (!input.endpointPlan) missing.push('endpoint')
-  if (!trimNonEmpty(input.pairingId)) missing.push('pairing')
+  if (!trimNonEmpty(input.operatorAddress)) missing.push('operator')
   if (!trimNonEmpty(input.authToken)) missing.push('auth')
 
   return {
@@ -171,14 +171,14 @@ export function evaluateProviderRunbookReadiness(input: {
   }
 }
 
-export function buildProviderPairCommand(providerKey: string, pairingId: string): string {
+export function buildProviderLinkCommand(providerKey: string, operatorAddress: string): string {
   const normalizedProviderKey = trimNonEmpty(providerKey) || DEFAULT_PROVIDER_KEY
-  const normalizedPairingId = trimNonEmpty(pairingId) || '<pairing-id-from-website>'
+  const normalizedOperatorAddress = trimNonEmpty(operatorAddress) || '<operator-nil1-or-0x-address>'
 
   return [
-    `PAIRING_ID=${shellQuote(normalizedPairingId)} \\`,
-    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\`,
-    './scripts/run_devnet_provider.sh pair',
+    `OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} \\\\`,
+    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\\\`,
+    './scripts/run_devnet_provider.sh link',
   ].join('\n')
 }
 
@@ -196,28 +196,28 @@ export function buildProviderHealthCommands(publicBase: string | null): string {
 }
 
 function providerOperatorContextLines(input: {
-  pairingId?: string
+  operatorAddress?: string
   providerEndpoint?: string
   publicBase?: string | null
   providerKey?: string
 }): string[] {
   const providerKey = trimNonEmpty(input.providerKey)
-  const pairingId = trimNonEmpty(input.pairingId)
+  const operatorAddress = trimNonEmpty(input.operatorAddress)
   const providerEndpoint = trimNonEmpty(input.providerEndpoint)
   const publicBase = trimNonEmpty(input.publicBase ?? '')
 
-  if (!providerKey && !pairingId && !providerEndpoint && !publicBase) {
+  if (!providerKey && !operatorAddress && !providerEndpoint && !publicBase) {
     return [
       '- Ask for or use these operator-supplied values when available:',
       '  - `NIL_GATEWAY_SP_AUTH`',
-      '  - `PAIRING_ID` if the operator opened pairing from the website',
+      '  - `OPERATOR_ADDRESS` as nil1... or 0x... for provider-link request',
       '  - provider key name such as `provider1`',
       '  - public hostname such as `sp.<domain>` or a full provider multiaddr',
     ]
   }
 
   const lines = ['- Use these operator values for this run:']
-  lines.push(pairingId ? `  - \`PAIRING_ID=${pairingId}\`` : '  - `PAIRING_ID` only if the operator opened pairing from the website')
+  lines.push(operatorAddress ? `  - \`OPERATOR_ADDRESS=${operatorAddress}\`` : '  - `OPERATOR_ADDRESS` as nil1... or 0x...')
   lines.push(providerKey ? `  - \`PROVIDER_KEY=${providerKey}\`` : '  - provider key name such as `provider1`')
   lines.push(providerEndpoint ? `  - \`PROVIDER_ENDPOINT=${providerEndpoint}\`` : '  - public hostname such as `sp.<domain>` or a full provider multiaddr')
   if (publicBase) {
@@ -228,7 +228,7 @@ function providerOperatorContextLines(input: {
 }
 
 export function buildProviderAgentPrompt(input: {
-  pairingId?: string
+  operatorAddress?: string
   providerEndpoint?: string
   publicBase?: string | null
   providerKey?: string
@@ -267,15 +267,15 @@ ${providerContext}
 
 Operating mode:
 - This is a guided provider-host run, not a loose advisory chat.
-- Proceed autonomously through repo sync, toolchain checks, provider key setup, pairing, funding preflight, bootstrap, and verification.
-- Pause only when the operator must supply \`NIL_GATEWAY_SP_AUTH\`, \`PAIRING_ID\`, DNS/Tunnel configuration, or approve an OS/service-manager action.
+- Proceed autonomously through repo sync, toolchain checks, provider key setup, provider-link request, funding preflight, bootstrap, and verification.
+- Pause only when the operator must supply \`NIL_GATEWAY_SP_AUTH\`, \`OPERATOR_ADDRESS\`, DNS/Tunnel configuration, or approve an OS/service-manager action.
 - Reuse an existing healthy provider key and registration when possible; do not rotate identity unless the operator explicitly asks.
 
 Before running any on-chain step, confirm:
 - \`go\`, \`cargo\`, and \`curl\` are installed.
 - the repo checkout is current (\`git fetch origin --prune && git checkout main && git pull --ff-only origin main\`) if this is not a fresh clone.
 - if using Cloudflare Tunnel, the hostname already resolves and tunnel ingress points to the local provider listener.
-- if the provider key is new, run \`PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh init\`, print the provider \`nil1...\` address, and make sure it has \`aatom\` for gas before pairing or registration.
+- if the provider key is new, run \`PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh init\`, print the provider \`nil1...\` address, and make sure it has \`aatom\` for gas before requesting link or registration.
 
 Your job:
 1. Verify toolchains and repo prerequisites.
@@ -284,31 +284,30 @@ Your job:
 4. For a new provider key, use this order:
    - \`PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh init\`
    - fund the printed provider address with gas
-   - then run \`./scripts/run_devnet_provider.sh bootstrap\`
-   If the key already exists and is funded, \`bootstrap\` may be used directly.
-5. The website-managed flow requires a fresh website-opened \`PAIRING_ID\`, a real \`PROVIDER_ENDPOINT\`, and \`NIL_GATEWAY_SP_AUTH\`.
+   - then run \`OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh link\`
+5. The website-managed flow requires \`OPERATOR_ADDRESS\`, a real \`PROVIDER_ENDPOINT\`, and \`NIL_GATEWAY_SP_AUTH\`.
    - \`./scripts/run_devnet_provider.sh bootstrap\` now fails fast unless all three are present
-   - let \`./scripts/run_devnet_provider.sh bootstrap\` confirm pairing on the full happy path, or
-   - run \`./scripts/run_devnet_provider.sh pair\` when you want pairing as a separate manual step
-   - if you intentionally want a partial manual bootstrap, use staged \`pair\`, \`register\`, and \`start\` commands, or explicitly opt in with \`BOOTSTRAP_ALLOW_PARTIAL=1\`
-   If the pairing is expired, missing, or already bound to a different provider pairing, stop and tell the operator to open a fresh pairing from the website.
-6. Register or update provider endpoints on-chain.
-7. Start the provider-daemon if it is not already running.
-8. Verify:
+   - let \`./scripts/run_devnet_provider.sh bootstrap\` request link and continue the full happy path, or
+   - run \`./scripts/run_devnet_provider.sh link\` when you want link request as a separate manual step
+   - if you intentionally want a partial manual bootstrap, use staged \`link\`, \`register\`, and \`start\` commands, or explicitly opt in with \`BOOTSTRAP_ALLOW_PARTIAL=1\`
+6. Ask the operator to approve the pending provider link in the website wallet step.
+7. Register or update provider endpoints on-chain.
+8. Start the provider-daemon if it is not already running.
+9. Verify:
    - \`./scripts/run_devnet_provider.sh doctor\`
    - \`./scripts/run_devnet_provider.sh verify\`
    - local \`http://127.0.0.1:8091/health\`
    - ${publicHealthTarget}
    - LCD provider visibility
-   - pairing status when \`PAIRING_ID\` is supplied
+   - provider link status for the configured operator
    Browser-side public \`/status\` and \`/health\` probing is advisory; rely on CLI/local checks first when diagnosing failures.
-9. If anything fails, inspect logs, repair, and retry until healthy.
-10. Endpoint rotation is update-aware on the current testnet build. Prefer updating endpoints for an existing provider instead of creating a new key, unless the chain explicitly rejects endpoint updates.
+10. If anything fails, inspect logs, repair, and retry until healthy.
+11. Endpoint rotation is update-aware on the current testnet build. Prefer updating endpoints for an existing provider instead of creating a new key, unless the chain explicitly rejects endpoint updates.
 
 At the end, print:
 1. A JSON summary with fields:
    - \`provider_address\`
-   - \`pairing_id\`
+   - \`configured_operator\`
    - \`pairing_status\`
    - \`registered_endpoints\`
    - \`local_health_url\`
@@ -319,20 +318,45 @@ At the end, print:
    - \`provider_process_running\`
    - \`provider_registered\`
    - \`provider_paired\`
-   - \`pending_pairing_open\`
+   - \`pending_link_open\`
    - \`sp_auth_present\`
    - \`commands_run\`
    - \`files_changed\`
 2. A short human-readable summary.`
 }
 
+function parseHeight(input: string): number {
+  const value = Number(input)
+  if (!Number.isFinite(value) || value < 0) return 0
+  return Math.floor(value)
+}
+
 export function findConfirmedProviderPairing(
   pairings: LcdProviderPairing[],
-  pairingId: string,
+  operatorAddress: string,
 ): LcdProviderPairing | null {
-  const normalizedPairingId = trimNonEmpty(pairingId)
-  if (!normalizedPairingId) return null
-  return pairings.find((pairing) => trimNonEmpty(pairing.pairing_id) === normalizedPairingId) ?? null
+  const normalizedOperator = trimNonEmpty(operatorAddress)
+  if (!normalizedOperator) return null
+
+  const candidates = pairings
+    .filter((pairing) => trimNonEmpty(pairing.operator) === normalizedOperator)
+    .sort((a, b) => parseHeight(b.paired_height) - parseHeight(a.paired_height))
+
+  return candidates[0] ?? null
+}
+
+export function findMostRecentPendingProviderLink(
+  links: LcdPendingProviderLink[],
+  operatorAddress: string,
+): LcdPendingProviderLink | null {
+  const normalizedOperator = trimNonEmpty(operatorAddress)
+  if (!normalizedOperator) return null
+
+  const candidates = links
+    .filter((link) => trimNonEmpty(link.operator) === normalizedOperator)
+    .sort((a, b) => parseHeight(b.requested_height) - parseHeight(a.requested_height))
+
+  return candidates[0] ?? null
 }
 
 export function findProviderByAddress(
@@ -342,24 +366,4 @@ export function findProviderByAddress(
   const normalizedProvider = trimNonEmpty(providerAddress)
   if (!normalizedProvider) return null
   return providers.find((provider) => trimNonEmpty(provider.address) === normalizedProvider) ?? null
-}
-
-export function pairingBlocksRemaining(
-  pendingPairing: LcdPendingProviderPairing | null,
-  latestHeight: number | null,
-): number | null {
-  if (!pendingPairing) return null
-  const expiresAt = Number(pendingPairing.expires_at)
-  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return null
-  if (!Number.isFinite(latestHeight ?? Number.NaN)) return null
-  return Math.max(0, expiresAt - Number(latestHeight))
-}
-
-export function pairingExpired(
-  pendingPairing: LcdPendingProviderPairing | null,
-  latestHeight: number | null,
-): boolean {
-  const remaining = pairingBlocksRemaining(pendingPairing, latestHeight)
-  if (remaining === null) return false
-  return remaining === 0
 }

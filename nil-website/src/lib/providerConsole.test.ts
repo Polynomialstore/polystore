@@ -10,8 +10,8 @@ import {
 test('buildOperatorProviderRecords merges pairings with provider registry data and sorts newest first', () => {
   const records = buildOperatorProviderRecords(
     [
-      { provider: 'nil1older', operator: 'nil1op', pairing_id: 'pair-old', paired_height: '10' },
-      { provider: 'nil1newer', operator: 'nil1op', pairing_id: 'pair-new', paired_height: '25' },
+      { provider: 'nil1older', operator: 'nil1op', paired_height: '10' },
+      { provider: 'nil1newer', operator: 'nil1op', paired_height: '25' },
     ],
     [
       { address: 'nil1newer', status: 'active', endpoints: ['/dns4/sp.example.com/tcp/443/https'] },
@@ -28,13 +28,13 @@ test('buildOperatorProviderRecords merges pairings with provider registry data a
 test('findOperatorProviderRecord resolves a selected provider address', () => {
   const record = findOperatorProviderRecord(
     buildOperatorProviderRecords(
-      [{ provider: 'nil1provider', operator: 'nil1op', pairing_id: 'pair-1', paired_height: '7' }],
+      [{ provider: 'nil1provider', operator: 'nil1op', paired_height: '7' }],
       [{ address: 'nil1provider', endpoints: ['/dns4/sp.example.com/tcp/443/https'] }],
     ),
     'nil1provider',
   )
 
-  assert.equal(record?.pairingId, 'pair-1')
+  assert.equal(record?.provider, 'nil1provider')
   assert.equal(record?.primaryBase, 'https://sp.example.com:443')
 })
 

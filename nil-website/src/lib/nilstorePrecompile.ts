@@ -29,12 +29,23 @@ export const NILSTORE_PRECOMPILE_ABI = [
   },
   {
     type: 'function',
-    name: 'openProviderPairing',
+    name: 'requestProviderLink',
     stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'pairingId', type: 'string' },
-      { name: 'expiresAt', type: 'uint64' },
-    ],
+    inputs: [{ name: 'operator', type: 'string' }],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'approveProviderLink',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'provider', type: 'string' }],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'cancelProviderLink',
+    stateMutability: 'nonpayable',
+    inputs: [],
     outputs: [{ name: 'ok', type: 'bool' }],
   },
   {
@@ -382,11 +393,27 @@ export function encodeExtendDealData(dealId: bigint, additionalDurationBlocks: b
   })
 }
 
-export function encodeOpenProviderPairingData(pairingId: string, expiresAt: bigint): Hex {
+export function encodeRequestProviderLinkData(operator: string): Hex {
   return encodeFunctionData({
     abi: NILSTORE_PRECOMPILE_ABI,
-    functionName: 'openProviderPairing',
-    args: [pairingId, expiresAt],
+    functionName: 'requestProviderLink',
+    args: [operator],
+  })
+}
+
+export function encodeApproveProviderLinkData(provider: string): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'approveProviderLink',
+    args: [provider],
+  })
+}
+
+export function encodeCancelProviderLinkData(): Hex {
+  return encodeFunctionData({
+    abi: NILSTORE_PRECOMPILE_ABI,
+    functionName: 'cancelProviderLink',
+    args: [],
   })
 }
 
