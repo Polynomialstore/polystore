@@ -17,7 +17,6 @@ function baseInput(): ProviderOnboardingFlowInput {
     pairingLinked: true,
     pairingConfirmed: true,
     endpointReady: true,
-    hasAuthToken: true,
     providerRegistered: true,
     publicHealthReady: true,
   }
@@ -76,7 +75,6 @@ test('provider onboarding flow advances to host setup when the wallet is ready b
     pairingLinked: false,
     pairingConfirmed: false,
     endpointReady: false,
-    hasAuthToken: false,
     providerRegistered: false,
     publicHealthReady: false,
   })
@@ -127,16 +125,7 @@ test('provider onboarding flow blocks pairing on key setup and approval state in
   assert.match(needsBrowserApproval.nextActionMessage, /Approve the pending provider link/i)
 })
 
-test('provider onboarding flow gates public access on endpoint then shared auth', () => {
-  const missingBoth = buildProviderOnboardingFlow({
-    ...baseInput(),
-    endpointReady: false,
-    hasAuthToken: false,
-  })
-
-  assert.equal(missingBoth.currentStepId, 'public_access')
-  assert.match(missingBoth.nextActionMessage, /Describe the public provider endpoint and paste the shared provider auth token/i)
-
+test('provider onboarding flow gates public access on endpoint readiness', () => {
   const missingEndpoint = buildProviderOnboardingFlow({
     ...baseInput(),
     endpointReady: false,
@@ -144,14 +133,6 @@ test('provider onboarding flow gates public access on endpoint then shared auth'
 
   assert.equal(missingEndpoint.currentStepId, 'public_access')
   assert.match(missingEndpoint.nextActionMessage, /Describe the public endpoint/i)
-
-  const missingAuth = buildProviderOnboardingFlow({
-    ...baseInput(),
-    hasAuthToken: false,
-  })
-
-  assert.equal(missingAuth.currentStepId, 'public_access')
-  assert.match(missingAuth.nextActionMessage, /Paste the shared provider auth token/i)
 })
 
 test('provider onboarding flow only marks bootstrap step ready after registration and health converge', () => {
@@ -187,7 +168,6 @@ test('provider onboarding flow keeps bootstrap command unavailable until pairing
     ...baseInput(),
     pairingConfirmed: false,
     endpointReady: false,
-    hasAuthToken: false,
   })
 
   assert.equal(flow.commandReady, false)

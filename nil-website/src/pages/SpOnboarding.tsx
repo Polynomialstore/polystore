@@ -28,6 +28,7 @@ import { useApproveProviderLink } from '../hooks/useApproveProviderLink'
 import { useNetwork } from '../hooks/useNetwork'
 import { useSessionStatus } from '../hooks/useSessionStatus'
 import {
+  DEVNET_SHARED_GATEWAY_AUTH_TOKEN,
   buildProviderAgentPrompt,
   buildProviderBootstrapCommand,
   buildCloudflareTunnelBootstrapCommand,
@@ -238,6 +239,7 @@ export function SpOnboarding() {
   const [providerAddress, setProviderAddress] = useState(storedDraft.providerAddress)
   const [linkTxHash, setLinkTxHash] = useState(storedDraft.linkTxHash)
   const [authToken, setAuthToken] = useState(loadSessionAuthToken)
+  const [cloudflareModalOpen, setCloudflareModalOpen] = useState(false)
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -282,6 +284,15 @@ export function SpOnboarding() {
     }
   }, [authToken])
 
+  useEffect(() => {
+    if (!cloudflareModalOpen || typeof window === 'undefined') return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCloudflareModalOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [cloudflareModalOpen])
+
   const endpointPlan = useMemo(
     () =>
       buildProviderEndpointPlan({
@@ -318,7 +329,8 @@ export function SpOnboarding() {
   const providerStatusDetail = publicStatus?.provider ?? null
   const providerDaemonStatusReady = String(publicStatus?.persona || '').trim().toLowerCase() === 'provider-daemon'
   const authoritativePublicBase = providerStatusDetail?.public_base || effectivePublicBase
-  const hasAuthToken = Boolean(authToken.trim())
+  const authTokenOverride = String(authToken || '').trim()
+  const hasCustomAuthToken = Boolean(authTokenOverride)
   const hasOperatorAddress = Boolean(String(nilAddress || '').trim())
   const providerKeyLabel = String(providerKey || '').trim()
   const providerKeyReady = Boolean(providerKeyLabel)
@@ -349,13 +361,11 @@ export function SpOnboarding() {
         pairingLinked,
         pairingConfirmed,
         endpointReady: Boolean(endpointPlan),
-        hasAuthToken,
         providerRegistered,
         publicHealthReady,
       }),
     [
       funded,
-      hasAuthToken,
       hasOperatorAddress,
       pairingConfirmed,
       pairingLinked,
@@ -377,9 +387,9 @@ export function SpOnboarding() {
         publicPort: Number(publicPort),
         operatorAddress: nilAddress || '',
         providerKey,
-        authToken,
+        authToken: authTokenOverride,
       }),
-    [authToken, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
+    [authTokenOverride, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
   )
   const healthCommands = useMemo(() => buildProviderHealthCommands(authoritativePublicBase), [authoritativePublicBase])
   const cloudflareTunnelCommand = useMemo(
@@ -586,7 +596,7 @@ export function SpOnboarding() {
       const result = await approveProviderLink({ creator: address, provider: pendingLink.provider })
       setProviderAddress(pendingLink.provider)
       setLinkTxHash(result.tx_hash)
-      setNotice('Provider link approved on-chain. Continue with endpoint, auth token, bootstrap, and health checks.')
+      setNotice('Provider link approved on-chain. Continue with endpoint, bootstrap, and health checks.')
       await refreshLiveState()
     } catch (openError) {
       const message = openError instanceof Error ? openError.message : 'Could not approve provider link'
@@ -609,11 +619,7 @@ export function SpOnboarding() {
       : pairingLinked
         ? 'pending'
         : 'action'
-  const publicAccessState: 'ready' | 'pending' | 'action' | 'idle' = endpointPlan && hasAuthToken
-    ? 'ready'
-    : endpointPlan || hasAuthToken
-      ? 'pending'
-      : 'action'
+  const publicAccessState: 'ready' | 'pending' | 'action' | 'idle' = endpointPlan ? 'ready' : 'action'
   const providerState: 'ready' | 'pending' | 'action' | 'idle' = publicHealthReady
     ? 'ready'
     : providerRegistered
@@ -700,7 +706,7 @@ export function SpOnboarding() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public access</div>
               <div className="flex items-center gap-2 text-sm text-foreground">
                 <StatusPill
-                  label={endpointPlan && hasAuthToken ? 'Ready' : endpointPlan ? 'Missing auth' : hasAuthToken ? 'Missing endpoint' : 'Configure'}
+                  label={endpointPlan ? 'Ready' : 'Configure'}
                   state={publicAccessState}
                 />
               </div>
@@ -1026,24 +1032,24 @@ export function SpOnboarding() {
                       <div className="text-sm font-semibold text-foreground">Provider-host pair command</div>
                       <CopyButton label="Copy" onClick={() => void handleCopy('Provider pair command', pairCommand)} />
                     </div>
-                    <pre data-testid="provider-pair-command" className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{pairCommand}</pre>
+                    <pre data-testid="provider-pair-command" className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{pairCommand}</pre>
                     <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
                       Run this once on the provider host. It creates the key if it is missing, auto-requests faucet funds when available, and opens the provider link request. If gas funding is still missing, the same command prints the provider <span className="font-mono">nil1...</span> address; fund it and rerun this exact command.
                     </div>
                   </div>
 
-                  <div className="grid gap-3 border border-border bg-background/40 p-4 text-sm text-muted-foreground md:grid-cols-3">
-                    <div className="flex items-center justify-between gap-3 md:block">
+                  <div className="grid gap-3 border border-border bg-background p-4 text-sm text-muted-foreground md:grid-cols-3">
+                    <div className="min-w-0">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operator address</div>
-                      <div className="mt-1 font-mono-data text-foreground">{nilAddress || 'required from Step 1'}</div>
+                      <div className="mt-1 break-all font-mono-data text-foreground">{nilAddress || 'required from Step 1'}</div>
                     </div>
-                    <div className="flex items-center justify-between gap-3 md:block">
+                    <div className="min-w-0">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key</div>
-                      <div className="mt-1 font-mono-data text-foreground">{providerKeyLabel || 'required in this step'}</div>
+                      <div className="mt-1 break-all font-mono-data text-foreground">{providerKeyLabel || 'required in this step'}</div>
                     </div>
-                    <div className="flex items-center justify-between gap-3 md:block">
+                    <div className="min-w-0">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing status</div>
-                      <div className="mt-1 font-mono-data text-foreground">{pairingConfirmed ? 'approved' : pairingLinked ? 'pending browser approval' : 'not requested'}</div>
+                      <div className="mt-1 break-words font-mono-data text-foreground">{pairingConfirmed ? 'approved' : pairingLinked ? 'pending browser approval' : 'not requested'}</div>
                     </div>
                   </div>
 
@@ -1060,8 +1066,8 @@ export function SpOnboarding() {
                       Finish Step 1 first so this page has the operator wallet Nil address.
                     </div>
                   ) : pairingConfirmed ? (
-                    <div className="border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
-                      Provider link approved. Continue to Step 4 for public endpoint and shared auth.
+                    <div className="border border-accent/40 bg-background px-4 py-3 text-sm text-accent">
+                      Provider link approved. Continue to Step 4 to define public endpoint.
                     </div>
                   ) : pairingLinked ? (
                     <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
@@ -1113,7 +1119,7 @@ export function SpOnboarding() {
 
                     <div className="mt-4">
                       {pairingConfirmed ? (
-                        <div className="border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
+                        <div className="border border-accent/40 bg-background px-4 py-3 text-sm text-accent">
                           Provider link is approved on-chain. Public access and bootstrap can proceed.
                         </div>
                       ) : pendingLink ? (
@@ -1139,7 +1145,7 @@ export function SpOnboarding() {
                       {pairingConfirmed ? 'Approve Again' : 'Approve Link'}
                     </button>
                     <div className="text-xs text-muted-foreground">
-                      Draft state is saved locally in this browser. The shared auth token stays only in this browser session and is not written into the long-lived draft.
+                      Draft state is saved locally in this browser. Optional gateway auth override stays in this browser session only.
                     </div>
                   </div>
                 </div>
@@ -1150,16 +1156,16 @@ export function SpOnboarding() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Configure public access</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Describe public access and add the shared hub auth token</h2>
+                  <h2 className="text-2xl font-semibold text-foreground">Set the public provider endpoint</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    This step tells NilStore how browsers should reach the provider and adds the shared token that the hub uses when talking to the provider-daemon.
+                    Keep this simple: choose how browsers should reach your provider, then confirm the derived endpoint and health URL.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">public endpoint is defined and the shared provider auth token is present</span>.
+                    Done when: <span className="font-semibold text-foreground">public endpoint is defined</span>.
                   </p>
                 </div>
                 <StatusPill
-                  label={endpointPlan && hasAuthToken ? 'Ready' : endpointPlan || hasAuthToken ? 'In progress' : 'Action needed'}
+                  label={endpointPlan ? 'Ready' : 'Action needed'}
                   state={publicAccessState}
                 />
               </div>
@@ -1191,68 +1197,19 @@ export function SpOnboarding() {
                 </div>
 
                 {hostMode === 'home-tunnel' ? (
-                  <div className="space-y-4 border border-primary/30 bg-primary/5 p-4">
-                    <div className="space-y-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Cloudflare tunnel setup</div>
+                  <div className="border border-border bg-background p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-sm text-muted-foreground">
-                        Easy mode generates one run-ready command that logs in, creates/routes the tunnel, writes config, and starts <span className="font-mono">cloudflared</span>.
+                        Tunnel mode selected. Use the Cloudflare helper if you want one-click tunnel commands.
                       </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => setTunnelSetupMode('easy')}
-                        className={`border px-3 py-2 text-sm font-semibold ${tunnelSetupMode === 'easy' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'}`}
+                        onClick={() => setCloudflareModalOpen(true)}
+                        className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
                       >
-                        Easy automatic
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTunnelSetupMode('manual')}
-                        className={`border px-3 py-2 text-sm font-semibold ${tunnelSetupMode === 'manual' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background/60 text-foreground hover:bg-secondary/40'}`}
-                      >
-                        Manual commands
+                        Cloudflare helper
                       </button>
                     </div>
-
-                    <label className="block max-w-md space-y-2 text-sm">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tunnel name</span>
-                      <input
-                        value={tunnelName}
-                        onChange={(event) => setTunnelName(event.target.value)}
-                        placeholder="nilstore-sp"
-                        className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
-                      />
-                    </label>
-
-                    {endpointMode !== 'domain' ? (
-                      <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                        Switch endpoint input to <span className="font-semibold">Hostname</span> to use Cloudflare tunnel bootstrap commands.
-                      </div>
-                    ) : tunnelSetupMode === 'easy' ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-foreground">Cloudflare bootstrap command</div>
-                          <CopyButton label="Copy" onClick={() => void handleCopy('Cloudflare bootstrap command', cloudflareTunnelCommand)} />
-                        </div>
-                        <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{cloudflareTunnelCommand}</pre>
-                        <p className="text-xs text-muted-foreground">
-                          This command opens Cloudflare login on first run and starts <span className="font-mono">cloudflared</span> in the foreground. Keep it running, or convert to a system service once verified.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-foreground">Cloudflare manual commands</div>
-                          <CopyButton label="Copy" onClick={() => void handleCopy('Cloudflare manual commands', cloudflareTunnelManualCommands)} />
-                        </div>
-                        <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{cloudflareTunnelManualCommands}</pre>
-                        <p className="text-xs text-muted-foreground">
-                          Manual mode matches the docs flow when you want to run each Cloudflare command separately.
-                        </p>
-                      </div>
-                    )}
                   </div>
                 ) : null}
 
@@ -1330,66 +1287,41 @@ export function SpOnboarding() {
                   </div>
                 </div>
 
-                <label className="block max-w-xl space-y-2 text-sm">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Shared auth token from hub</span>
-                  <input
-                    data-testid="provider-auth-token"
-                    value={authToken}
-                    onChange={(event) => setAuthToken(event.target.value)}
-                    placeholder="Paste token for provider host commands"
-                    type="password"
-                    className="w-full border border-border bg-background/60 px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
-                  />
-                </label>
-
-                <div className="grid gap-3 border border-border bg-background/40 p-4 text-sm text-muted-foreground md:grid-cols-2">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Bootstrap gate</div>
-                    <div className="mt-2 space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Pairing approved</span>
-                        <span className="font-mono-data text-foreground">{pairingConfirmed ? 'yes' : 'no'}</span>
+                <details className="border border-border bg-background p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-foreground">Advanced: gateway auth override</summary>
+                  <div className="mt-3 space-y-4 text-sm text-muted-foreground">
+                    <p>
+                      Bootstrap commands include <span className="font-mono">NIL_GATEWAY_SP_AUTH</span> automatically using the devnet default value.
+                      Only override it if your hub operator gave you a custom secret.
+                    </p>
+                    <label className="block max-w-xl space-y-2 text-sm">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Gateway auth override (optional)</span>
+                      <input
+                        data-testid="provider-auth-token"
+                        value={authToken}
+                        onChange={(event) => setAuthToken(event.target.value)}
+                        placeholder="Leave blank to use devnet default"
+                        type="password"
+                        className="w-full border border-border bg-background px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                      />
+                    </label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="border border-border bg-background p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Gateway auth source</div>
+                        <div className="mt-2 break-all font-mono-data text-foreground">
+                          {hasCustomAuthToken ? 'custom override' : `devnet default (${DEVNET_SHARED_GATEWAY_AUTH_TOKEN})`}
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Repo cloned on host</span>
-                        <span className="font-mono-data text-foreground">{providerRepoReady ? 'yes' : 'no'}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Provider key named</span>
-                        <span className="font-mono-data text-foreground">{providerKeyReady ? 'yes' : 'no'}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Endpoint defined</span>
-                        <span className="font-mono-data text-foreground">{endpointPlan ? 'yes' : 'no'}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Shared auth token</span>
-                        <span className="font-mono-data text-foreground">{hasAuthToken ? 'yes' : 'no'}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Command rail ready</span>
-                        <span className="font-mono-data text-foreground">{flow.commandReady ? 'yes' : 'no'}</span>
+                      <div className="border border-border bg-background p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local health target</div>
+                        <div className="mt-2 break-all font-mono-data text-foreground">{LOCAL_HEALTH_URL}</div>
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Session handling</div>
-                    <p className="mt-2">
-                      This token is kept only in this browser session so refreshes can resume onboarding, but it is not saved into the long-lived onboarding draft.
-                    </p>
-                    <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local health target</div>
-                    <div className="mt-2 break-all font-mono-data text-foreground">{LOCAL_HEALTH_URL}</div>
-                  </div>
-                </div>
-
-                {!hasAuthToken ? (
-                  <div className="border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-                    If you do not already have this token, stop here and ask the hub operator for <span className="font-mono">NIL_GATEWAY_SP_AUTH</span>. The website cannot generate a usable bootstrap command without it.
-                  </div>
-                ) : null}
+                </details>
 
                 {!flow.commandReady ? (
-                  <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                  <div className="border border-border bg-background p-4 text-sm text-muted-foreground">
                     {!providerRepoReady
                       ? 'Finish Step 2 by cloning nil-store on the provider host.'
                       : !providerKeyReady
@@ -1398,13 +1330,99 @@ export function SpOnboarding() {
                         ? 'Finish Step 3 by running the pair command and approving the provider link before bootstrap.'
                       : !hasOperatorAddress
                         ? 'Finish Step 1 so the website can capture the connected operator wallet nil address.'
-                      : !endpointPlan
+                        : !endpointPlan
                         ? 'Describe the public endpoint so the website can derive the provider endpoint and health URL.'
-                        : 'Add the shared auth token from the hub operator to unlock run-ready provider host commands.'}
+                        : 'Step 4 is complete. Continue to bootstrap and verification.'}
                   </div>
                 ) : null}
               </div>
             </section>
+
+            {cloudflareModalOpen ? (
+              <div
+                className="fixed inset-0 z-[140]"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) setCloudflareModalOpen(false)
+                }}
+              >
+                <div className="absolute inset-0 bg-black/45" />
+                <div className="absolute inset-0 overflow-y-auto">
+                  <div className="flex min-h-full items-center justify-center px-4 py-8">
+                    <div role="dialog" aria-modal="true" className="w-full max-w-4xl">
+                      <div className="industrial-border border border-border bg-background p-6 shadow-lg">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="min-w-0 space-y-2">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Cloudflare helper</div>
+                            <h3 className="text-xl font-semibold text-foreground">Tunnel bootstrap commands</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Keep Cloudflare details here so Step 4 stays clean. Choose easy or manual commands, then copy and run on the provider host.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCloudflareModalOpen(false)}
+                            className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                          >
+                            Close
+                          </button>
+                        </div>
+
+                        <div className="mt-5 space-y-4">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setTunnelSetupMode('easy')}
+                              className={`border px-3 py-2 text-sm font-semibold ${tunnelSetupMode === 'easy' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-foreground hover:bg-secondary/40'}`}
+                            >
+                              Easy automatic
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTunnelSetupMode('manual')}
+                              className={`border px-3 py-2 text-sm font-semibold ${tunnelSetupMode === 'manual' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-foreground hover:bg-secondary/40'}`}
+                            >
+                              Manual commands
+                            </button>
+                          </div>
+
+                          <label className="block max-w-md space-y-2 text-sm">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tunnel name</span>
+                            <input
+                              value={tunnelName}
+                              onChange={(event) => setTunnelName(event.target.value)}
+                              placeholder="nilstore-sp"
+                              className="w-full border border-border bg-background px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
+                            />
+                          </label>
+
+                          {endpointMode !== 'domain' ? (
+                            <div className="border border-destructive/40 bg-background px-4 py-3 text-sm text-destructive">
+                              Use <span className="font-semibold">Hostname</span> endpoint mode for Cloudflare tunnel commands.
+                            </div>
+                          ) : tunnelSetupMode === 'easy' ? (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm font-semibold text-foreground">Cloudflare bootstrap command</div>
+                                <CopyButton label="Copy" onClick={() => void handleCopy('Cloudflare bootstrap command', cloudflareTunnelCommand)} />
+                              </div>
+                              <pre className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{cloudflareTunnelCommand}</pre>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm font-semibold text-foreground">Cloudflare manual commands</div>
+                                <CopyButton label="Copy" onClick={() => void handleCopy('Cloudflare manual commands', cloudflareTunnelManualCommands)} />
+                              </div>
+                              <pre className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{cloudflareTunnelManualCommands}</pre>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <section id="step-bootstrap" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1421,151 +1439,140 @@ export function SpOnboarding() {
                 <StatusPill label={publicHealthReady ? 'Healthy' : providerState === 'pending' ? 'In progress' : 'Waiting'} state={providerState} />
               </div>
 
-              <div className="mt-6 space-y-4 text-sm">
-                  <div className="border border-border bg-background/40 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider link approval</div>
-                      <div className="mt-1 text-foreground">
-                        {confirmedPairing
-                          ? `Approved for provider ${confirmedPairing.provider}`
-                          : pairingLinked
-                            ? 'Waiting for operator wallet to approve the pending provider link'
-                            : 'No pending provider link found yet; finish Step 3 first'}
-                      </div>
-                    </div>
+              <div className="mt-6 grid gap-4 lg:grid-cols-3">
+                <div className="border border-border bg-background p-4 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing</div>
                     <StatusPill label={confirmedPairing ? 'Approved' : pairingLinked ? 'Waiting' : 'Idle'} state={confirmedPairing ? 'ready' : pairingLinked ? 'pending' : 'idle'} />
                   </div>
+                  <div className="mt-2 break-all text-foreground">
+                    {confirmedPairing
+                      ? `Approved for provider ${confirmedPairing.provider}`
+                      : pairingLinked
+                        ? 'Pending link exists. Approve it from Step 3.'
+                        : 'No pending link yet. Run the pair command in Step 3.'}
+                  </div>
                 </div>
 
-                <div data-testid="provider-status-card" className="border border-border bg-background/40 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain registration</div>
-                      <div className="mt-1 text-foreground">
-                        {providerRecord
-                          ? providerRecord.endpoints?.join(', ') || 'Provider exists without endpoints'
-                          : confirmedPairing
-                            ? 'Provider link approved. Waiting for bootstrap to register or update endpoints.'
-                            : 'Website registration tracking starts after link approval.'}
-                      </div>
-                    </div>
+                <div data-testid="provider-status-card" className="border border-border bg-background p-4 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain registration</div>
                     <StatusPill label={providerRecord ? 'Visible' : confirmedPairing ? 'Waiting' : 'Idle'} state={providerRecord ? 'ready' : confirmedPairing ? 'pending' : 'idle'} />
                   </div>
+                  <div className="mt-2 break-all text-foreground">
+                    {providerRecord
+                      ? providerRecord.endpoints?.join(', ') || 'Provider exists without endpoints'
+                      : confirmedPairing
+                        ? 'Waiting for bootstrap to register or update endpoints.'
+                        : 'Registration starts after link approval.'}
+                  </div>
                 </div>
 
-                <div data-testid="provider-daemon-status-card" className="border border-border bg-background/40 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider-daemon status</div>
-                      <div className="mt-1 text-foreground">
-                        {providerDaemonStatusReady
+                <div data-testid="provider-daemon-status-card" className="border border-border bg-background p-4 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider-daemon health</div>
+                    <StatusPill
+                      label={
+                        providerDaemonStatusReady
                           ? providerStatusDetail?.public_health_ok
-                            ? `${providerStatusDetail.public_health_url || `${authoritativePublicBase || effectivePublicBase}/health`} is reachable from the provider-daemon host`
-                            : `${providerStatusDetail?.public_health_url || `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'}/health`} is not reachable from the provider-daemon host`
-                          : authoritativePublicBase
-                            ? loadingPublicStatus
-                              ? `Polling ${authoritativePublicBase}/status`
-                              : publicStatusError
-                                ? `/status failed at ${authoritativePublicBase}: ${publicStatusError}`
-                                : `Waiting for ${authoritativePublicBase}/status to identify a provider-daemon`
-                            : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusPill
-                        label={
-                          providerDaemonStatusReady
-                            ? providerStatusDetail?.public_health_ok
-                              ? 'Healthy'
-                              : 'Failed'
-                            : loadingPublicStatus
-                              ? 'Polling'
-                              : publicStatusError
-                                ? 'Unavailable'
-                                : 'Waiting'
-                        }
-                        state={
-                          providerDaemonStatusReady
-                            ? providerStatusDetail?.public_health_ok
-                              ? 'ready'
-                              : 'action'
+                            ? 'Healthy'
+                            : 'Failed'
+                          : loadingPublicStatus
+                            ? 'Polling'
                             : publicStatusError
-                              ? 'action'
-                              : 'pending'
-                        }
-                      />
-                      {authoritativePublicBase ? (
-                        <button
-                          type="button"
-                          onClick={() => void refreshPublicStatus(authoritativePublicBase)}
-                          className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-                        >
-                          <RefreshCw className={`h-4 w-4 ${loadingPublicStatus ? 'animate-spin' : ''}`} /> Refresh
-                        </button>
-                      ) : null}
+                              ? 'Unavailable'
+                              : 'Waiting'
+                      }
+                      state={
+                        providerDaemonStatusReady
+                          ? providerStatusDetail?.public_health_ok
+                            ? 'ready'
+                            : 'action'
+                          : publicStatusError
+                            ? 'action'
+                            : 'pending'
+                      }
+                    />
+                  </div>
+                  <div className="mt-2 break-all text-foreground">
+                    {providerDaemonStatusReady
+                      ? providerStatusDetail?.public_health_ok
+                        ? `${providerStatusDetail.public_health_url || `${authoritativePublicBase || effectivePublicBase}/health`} is reachable from the provider host`
+                        : `${providerStatusDetail?.public_health_url || `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'}/health`} is not reachable from the provider host`
+                      : authoritativePublicBase
+                        ? loadingPublicStatus
+                          ? `Polling ${authoritativePublicBase}/status`
+                          : publicStatusError
+                            ? `/status failed at ${authoritativePublicBase}: ${publicStatusError}`
+                            : `Waiting for ${authoritativePublicBase}/status to identify provider-daemon`
+                        : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
+                  </div>
+                  {authoritativePublicBase ? (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => void refreshPublicStatus(authoritativePublicBase)}
+                        className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${loadingPublicStatus ? 'animate-spin' : ''}`} /> Refresh
+                      </button>
                     </div>
-                  </div>
-                </div>
-
-                <div data-testid="provider-browser-health-card" className="border border-border bg-background/40 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Direct browser health probe</div>
-                      <div className="mt-1 text-foreground">
-                        {healthProbe.status === 'ok'
-                          ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
-                          : healthProbe.status === 'error'
-                            ? `${healthProbe.base}/health failed: ${healthProbe.error}`
-                            : effectivePublicBase
-                              ? `Waiting to probe ${effectivePublicBase}/health`
-                              : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusPill
-                        label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Idle'}
-                        state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'idle'}
-                      />
-                      {effectivePublicBase ? (
-                        <button
-                          type="button"
-                          onClick={() => void probePublicHealth(effectivePublicBase)}
-                          className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-                        >
-                          <RefreshCw className={`h-4 w-4 ${healthProbe.status === 'loading' ? 'animate-spin' : ''}`} /> Probe
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                {publicStatus?.issues?.length ? (
-                  <div className="border border-destructive/30 bg-destructive/5 p-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Provider-daemon issues</div>
-                    <div className="mt-3 space-y-2 text-sm text-destructive">
-                      {publicStatus.issues.map((issue) => (
-                        <div key={issue}>{issue}</div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-5 grid gap-3 border-t border-border/60 pt-5 sm:grid-cols-2">
-                <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                  <div className="font-semibold text-foreground">When link approval is still pending</div>
-                  <div className="mt-2">
-                    The operator wallet has not approved the pending provider link yet. Rerun <span className="font-mono">./scripts/run_devnet_provider.sh pair</span> if the host needs to reopen the request from the happy path, or use <span className="font-mono">./scripts/run_devnet_provider.sh link</span> for link-only repair once the key already exists and is funded.
-                  </div>
-                </div>
-                <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-                  <div className="font-semibold text-foreground">When health is failing</div>
-                  <div className="mt-2">
-                    Treat the direct browser probe as advisory. Prioritize the provider-daemon <span className="font-mono">/status</span> view plus the doctor, verify, and local curl commands from the command rail before assuming the provider itself is down.
-                  </div>
+                  ) : null}
                 </div>
               </div>
+
+              <div data-testid="provider-browser-health-card" className="mt-4 border border-border bg-background p-4 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Direct browser health probe (optional)</div>
+                  <div className="flex items-center gap-2">
+                    <StatusPill
+                      label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Idle'}
+                      state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'idle'}
+                    />
+                    {effectivePublicBase ? (
+                      <button
+                        type="button"
+                        onClick={() => void probePublicHealth(effectivePublicBase)}
+                        className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${healthProbe.status === 'loading' ? 'animate-spin' : ''}`} /> Probe
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="mt-2 break-all text-foreground">
+                  {healthProbe.status === 'ok'
+                    ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
+                    : healthProbe.status === 'error'
+                      ? `${healthProbe.base}/health failed: ${healthProbe.error}`
+                      : effectivePublicBase
+                        ? `Waiting to probe ${effectivePublicBase}/health`
+                        : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
+                </div>
+              </div>
+
+              {publicStatus?.issues?.length ? (
+                <div className="mt-4 border border-destructive/40 bg-background p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Provider-daemon issues</div>
+                  <div className="mt-3 space-y-2 text-sm text-destructive">
+                    {publicStatus.issues.map((issue) => (
+                      <div key={issue}>{issue}</div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <details className="mt-5 border-t border-border/60 pt-4 text-sm text-muted-foreground">
+                <summary className="cursor-pointer font-semibold text-foreground">If verification is stuck</summary>
+                <div className="mt-3 space-y-2">
+                  <div>
+                    If pairing is pending, rerun <span className="font-mono">./scripts/run_devnet_provider.sh pair</span>, then approve from Step 3.
+                  </div>
+                  <div>
+                    If health is failing, trust provider-side checks first: <span className="font-mono">doctor</span>, <span className="font-mono">verify</span>, and local <span className="font-mono">curl</span> from the command rail.
+                  </div>
+                </div>
+              </details>
             </section>
           </div>
 
@@ -1580,41 +1587,38 @@ export function SpOnboarding() {
                 <StatusPill label={flow.commandReady ? 'Command ready' : 'Waiting'} state={flow.commandReady ? 'ready' : 'pending'} />
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
-                  This panel becomes run-ready after the operator wallet is connected, the host checkout is ready, a provider key name is set, pairing is approved, and public access plus shared auth are both set.
+                  This panel becomes run-ready after wallet, host prep, pairing approval, and public endpoint setup are complete.
               </p>
               </div>
 
               <div className="space-y-5 px-6 py-5">
-                {!hasAuthToken ? (
-                  <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                    Add the shared provider auth token from the hub operator before copying provider host commands.
-                  </div>
-                ) : null}
                 {!pairingConfirmed ? (
                   <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
                     Finish Step 3 first. The happy-path bootstrap command is gated on an approved provider link.
                   </div>
                 ) : null}
                 <div className="grid gap-3 border-b border-border/60 pb-5 text-sm text-muted-foreground">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <span>Pending provider</span>
-                    <span className="font-mono-data text-foreground">{pendingLink?.provider || activeProviderAddress || 'required'}</span>
+                    <div className="mt-1 break-all font-mono-data text-foreground">{pendingLink?.provider || activeProviderAddress || 'required'}</div>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <span>Operator address</span>
-                    <span className="font-mono-data text-foreground">{nilAddress || 'required'}</span>
+                    <div className="mt-1 break-all font-mono-data text-foreground">{nilAddress || 'required'}</div>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <span>Provider endpoint</span>
-                    <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{endpointPlan?.providerEndpoint || '—'}</span>
+                    <div className="mt-1 break-all font-mono-data text-foreground">{endpointPlan?.providerEndpoint || '—'}</div>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <span>Provider key</span>
-                    <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{providerKeyLabel || 'required'}</span>
+                    <div className="mt-1 break-all font-mono-data text-foreground">{providerKeyLabel || 'required'}</div>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Shared auth</span>
-                    <span className="max-w-[240px] break-all text-right font-mono-data text-foreground">{hasAuthToken ? 'present' : 'required'}</span>
+                  <div className="min-w-0">
+                    <span>Gateway auth</span>
+                    <div className="mt-1 break-all font-mono-data text-foreground">
+                      {hasCustomAuthToken ? 'custom override' : `devnet default (${DEVNET_SHARED_GATEWAY_AUTH_TOKEN})`}
+                    </div>
                   </div>
                 </div>
 
@@ -1625,7 +1629,7 @@ export function SpOnboarding() {
                         <div className="text-sm font-semibold text-foreground">Happy-path bootstrap command</div>
                         <CopyButton label="Copy" onClick={() => void handleCopy('Provider host commands', bootstrapCommand)} />
                       </div>
-                      <pre data-testid="provider-host-commands" className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
+                      <pre data-testid="provider-host-commands" className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{bootstrapCommand}</pre>
                     </div>
 
                     {pairingLinked ? (
@@ -1634,7 +1638,7 @@ export function SpOnboarding() {
                           <div className="text-sm font-semibold text-foreground">Link-only repair</div>
                           <CopyButton label="Copy" onClick={() => void handleCopy('Link-only repair', linkRepairCommand)} />
                         </div>
-                        <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{linkRepairCommand}</pre>
+                        <pre className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{linkRepairCommand}</pre>
                       </div>
                     ) : null}
 
@@ -1643,7 +1647,7 @@ export function SpOnboarding() {
                         <div className="text-sm font-semibold text-foreground">Verification commands</div>
                         <CopyButton label="Copy" onClick={() => void handleCopy('Verification commands', healthCommands)} />
                       </div>
-                      <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{healthCommands}</pre>
+                      <pre className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{healthCommands}</pre>
                     </div>
 
                     <details className="border-t border-border/60 pt-5">
@@ -1654,11 +1658,11 @@ export function SpOnboarding() {
                       <div className="mt-3 flex justify-end">
                         <CopyButton label="Copy" onClick={() => void handleCopy('Agent prompt', agentPrompt)} />
                       </div>
-                      <pre className="mt-3 overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{agentPrompt}</pre>
+                      <pre className="mt-3 overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{agentPrompt}</pre>
                     </details>
                   </>
                 ) : (
-                  <div className="border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+                  <div className="border border-border bg-background p-4 text-sm text-muted-foreground">
                     {!providerRepoReady
                       ? 'Complete Step 2 by cloning nil-store on the provider host before generating bootstrap commands.'
                       : !providerKeyReady
@@ -1669,7 +1673,7 @@ export function SpOnboarding() {
                         ? 'Connect the operator wallet in Step 1 so this page can populate OPERATOR_ADDRESS.'
                       : !endpointPlan
                         ? 'Describe the public endpoint in Step 4 to generate the provider host runbook.'
-                        : 'Add the shared provider auth token from the hub operator before this page will generate run-ready provider host commands.'}
+                        : 'Runbook is ready.'}
                   </div>
                 )}
 
@@ -1704,7 +1708,7 @@ export function SpOnboarding() {
             </section>
 
             {copyStatus ? (
-              <div className="border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent">{copyStatus}</div>
+              <div className="border border-accent/50 bg-background px-4 py-3 text-sm text-accent">{copyStatus}</div>
             ) : null}
           </aside>
         </div>

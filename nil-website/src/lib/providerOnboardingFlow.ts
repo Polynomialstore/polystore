@@ -10,7 +10,6 @@ export interface ProviderOnboardingFlowInput {
   pairingLinked: boolean
   pairingConfirmed: boolean
   endpointReady: boolean
-  hasAuthToken: boolean
   providerRegistered: boolean
   publicHealthReady: boolean
 }
@@ -62,7 +61,7 @@ export const PROVIDER_ONBOARDING_STEPS: ProviderOnboardingStepDefinition[] = [
     id: 'public_access',
     label: 'Configure Public Access',
     anchor: 'step-public-access',
-    doneWhen: 'public endpoint is defined and shared hub auth token is present',
+    doneWhen: 'public endpoint is defined',
   },
   {
     id: 'bootstrap',
@@ -134,16 +133,10 @@ function pairingNextAction(input: ProviderOnboardingFlowInput): string {
 }
 
 function publicAccessNextAction(input: ProviderOnboardingFlowInput): string {
-  if (!input.endpointReady && !input.hasAuthToken) {
-    return 'Describe the public provider endpoint and paste the shared provider auth token from the hub operator.'
-  }
   if (!input.endpointReady) {
     return 'Describe the public endpoint so the website can derive the provider endpoint and health URL.'
   }
-  if (!input.hasAuthToken) {
-    return 'Paste the shared provider auth token from the hub operator to unlock bootstrap.'
-  }
-  return 'Public endpoint and shared auth are ready.'
+  return 'Public endpoint is ready.'
 }
 
 function bootstrapNextAction(input: ProviderOnboardingFlowInput): string {
@@ -153,8 +146,8 @@ function bootstrapNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.providerKeyReady || !input.pairingConfirmed) {
     return 'Finish Step 3 by setting the provider key name, running the pair command, and approving the provider link before bootstrap.'
   }
-  if (!input.endpointReady || !input.hasAuthToken) {
-    return 'Finish Step 4 so the bootstrap command has the public endpoint and shared auth token.'
+  if (!input.endpointReady) {
+    return 'Finish Step 4 so the bootstrap command has the public endpoint.'
   }
   if (!input.providerRegistered && !input.publicHealthReady) {
     return 'Run the provider host bootstrap command, then watch registration and public health converge.'
@@ -186,7 +179,7 @@ export function buildProviderOnboardingFlow(
     wallet: input.walletReady && input.funded && input.hasOperatorAddress,
     host: input.providerRepoReady,
     pairing: input.providerKeyReady && input.pairingConfirmed,
-    public_access: input.endpointReady && input.hasAuthToken,
+    public_access: input.endpointReady,
     bootstrap: input.pairingConfirmed && input.providerRegistered && input.publicHealthReady,
   }
 
@@ -218,7 +211,6 @@ export function buildProviderOnboardingFlow(
     && input.providerKeyReady
     && input.pairingConfirmed
     && input.endpointReady
-    && input.hasAuthToken
 
   return {
     steps,

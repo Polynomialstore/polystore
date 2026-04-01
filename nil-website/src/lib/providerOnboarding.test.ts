@@ -105,7 +105,7 @@ test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tun
   assert.match(command, /cloudflared tunnel run "\$CF_TUNNEL_NAME"/)
 })
 
-test('evaluateProviderRunbookReadiness requires endpoint, operator, and auth for website-managed onboarding', () => {
+test('evaluateProviderRunbookReadiness requires endpoint and operator for website-managed onboarding', () => {
   const endpointPlan = buildProviderEndpointPlan({
     hostMode: 'public-vps',
     endpointMode: 'ipv4',
@@ -115,13 +115,13 @@ test('evaluateProviderRunbookReadiness requires endpoint, operator, and auth for
 
   assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan, operatorAddress: '', authToken: '' }), {
     ready: false,
-    missing: ['operator', 'auth'],
+    missing: ['operator'],
   })
   assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan: null, operatorAddress: 'nil1op', authToken: 'secret' }), {
     ready: false,
     missing: ['endpoint'],
   })
-  assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan, operatorAddress: 'nil1op', authToken: 'secret' }), {
+  assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan, operatorAddress: 'nil1op', authToken: '' }), {
     ready: true,
     missing: [],
   })

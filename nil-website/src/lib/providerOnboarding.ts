@@ -32,12 +32,13 @@ export interface ProviderTunnelBootstrapDraft extends ProviderEndpointDraft {
 
 export interface ProviderRunbookReadiness {
   ready: boolean
-  missing: Array<'endpoint' | 'operator' | 'auth'>
+  missing: Array<'endpoint' | 'operator'>
 }
 
 const DEFAULT_PROVIDER_KEY = 'provider1'
 const DEFAULT_DOMAIN_PORT = 443
 const DEFAULT_IPV4_PORT = 8091
+export const DEVNET_SHARED_GATEWAY_AUTH_TOKEN = 'nilstore-devnet-shared-gateway-auth'
 const AUTH_PLACEHOLDER = '<shared-provider-auth-token>'
 const DEFAULT_TUNNEL_NAME = 'nilstore-sp'
 const DEFAULT_TUNNEL_LOCAL_SERVICE_URL = 'http://127.0.0.1:8091'
@@ -138,16 +139,20 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   const operatorAddress = trimNonEmpty(draft.operatorAddress)
   const endpointPlan = buildProviderEndpointPlan(draft)
   const providerEndpoint = endpointPlan?.providerEndpoint || '<provider-endpoint>'
-  const authToken = trimNonEmpty(draft.authToken) || AUTH_PLACEHOLDER
-  const websiteReady = Boolean(endpointPlan && operatorAddress && trimNonEmpty(draft.authToken))
+  const authToken = trimNonEmpty(draft.authToken) || DEVNET_SHARED_GATEWAY_AUTH_TOKEN
+  const usingDefaultAuth = !trimNonEmpty(draft.authToken)
+  const websiteReady = Boolean(endpointPlan && operatorAddress)
   const envLines = [
     '# Run this from the nil-store checkout on the provider host after pairing is approved.',
-    '# The happy path requires OPERATOR_ADDRESS, PROVIDER_ENDPOINT, and NIL_GATEWAY_SP_AUTH.',
+    '# The happy path requires OPERATOR_ADDRESS and PROVIDER_ENDPOINT.',
+    ...(usingDefaultAuth
+      ? ['# Using devnet default NIL_GATEWAY_SP_AUTH. Override it if your hub uses a custom secret.']
+      : []),
     ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\\\'] : []),
     ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\\\`] : []),
     `PROVIDER_KEY=${shellQuote(providerKey)} \\\\`,
     `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\\\`,
-    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken)} \\\\`,
+    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken || AUTH_PLACEHOLDER)} \\\\`,
     './scripts/run_devnet_provider.sh bootstrap',
   ]
 
@@ -227,7 +232,6 @@ export function evaluateProviderRunbookReadiness(input: {
 
   if (!input.endpointPlan) missing.push('endpoint')
   if (!trimNonEmpty(input.operatorAddress)) missing.push('operator')
-  if (!trimNonEmpty(input.authToken)) missing.push('auth')
 
   return {
     ready: missing.length === 0,
