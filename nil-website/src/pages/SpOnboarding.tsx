@@ -33,6 +33,7 @@ import {
   buildProviderBootstrapCommand,
   buildCloudflareTunnelBootstrapCommand,
   buildProviderEndpointPlan,
+  deriveEndpointInputPrefillFromProviderEndpoint,
   buildProviderHealthCommands,
   buildProviderPairCommand,
   buildProviderLinkCommand,
@@ -252,6 +253,7 @@ export function SpOnboarding() {
   const [publicStatusError, setPublicStatusError] = useState<string | null>(null)
   const [loadingPublicStatus, setLoadingPublicStatus] = useState(false)
   const [healthProbe, setHealthProbe] = useState<PublicHealthState>({ status: 'idle' })
+  const [endpointPrefillInitialized, setEndpointPrefillInitialized] = useState(false)
 
   useEffect(() => {
     if (hostMode === 'home-tunnel' && endpointMode === 'ipv4') {
@@ -324,15 +326,36 @@ export function SpOnboarding() {
     () => findProviderByAddress(providers, activeProviderAddress),
     [activeProviderAddress, providers],
   )
+  const firstOnchainEndpoint = useMemo(
+    () => String(providerRecord?.endpoints?.[0] || '').trim(),
+    [providerRecord?.endpoints],
+  )
+  const onchainEndpointInputPrefill = useMemo(
+    () => deriveEndpointInputPrefillFromProviderEndpoint(firstOnchainEndpoint),
+    [firstOnchainEndpoint],
+  )
   const onchainEndpointPlan = useMemo(() => {
-    const firstEndpoint = String(providerRecord?.endpoints?.[0] || '').trim()
-    if (!firstEndpoint) return null
+    if (!firstOnchainEndpoint) return null
     return buildProviderEndpointPlan({
       hostMode: 'public-vps',
       endpointMode: 'multiaddr',
-      endpointValue: firstEndpoint,
+      endpointValue: firstOnchainEndpoint,
     })
-  }, [providerRecord?.endpoints])
+  }, [firstOnchainEndpoint])
+
+  useEffect(() => {
+    if (endpointPrefillInitialized) return
+    if (String(endpointValue || '').trim()) {
+      setEndpointPrefillInitialized(true)
+      return
+    }
+    if (!onchainEndpointInputPrefill) return
+    setEndpointMode(onchainEndpointInputPrefill.endpointMode)
+    setEndpointValue(onchainEndpointInputPrefill.endpointValue)
+    setPublicPort(String(onchainEndpointInputPrefill.publicPort))
+    setEndpointPrefillInitialized(true)
+  }, [endpointPrefillInitialized, endpointValue, onchainEndpointInputPrefill])
+
   const effectiveEndpointPlan = endpointPlan || onchainEndpointPlan
   const usingOnchainEndpointFallback = !endpointPlan && Boolean(onchainEndpointPlan)
   const endpointReady = Boolean(effectiveEndpointPlan)

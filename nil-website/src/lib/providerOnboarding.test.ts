@@ -8,6 +8,7 @@ import {
   buildProviderBootstrapCommand,
   buildCloudflareTunnelBootstrapCommand,
   buildProviderEndpointPlan,
+  deriveEndpointInputPrefillFromProviderEndpoint,
   buildProviderHealthCommands,
   buildProviderPairCommand,
   buildProviderLinkCommand,
@@ -65,6 +66,45 @@ test('buildProviderEndpointPlan keeps an explicit multiaddr intact', () => {
   assert.equal(plan?.providerEndpoint, '/ip4/203.0.113.10/tcp/8443/https')
   assert.equal(plan?.publicBase, 'https://203.0.113.10:8443')
   assert.equal(plan?.publicHealthUrl, 'https://203.0.113.10:8443/health')
+})
+
+test('deriveEndpointInputPrefillFromProviderEndpoint maps common endpoints to step-4 inputs', () => {
+  assert.deepEqual(
+    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/testasdf.nil-store.com/tcp/443/https'),
+    {
+      endpointMode: 'domain',
+      endpointValue: 'testasdf.nil-store.com',
+      publicPort: 443,
+    },
+  )
+
+  assert.deepEqual(
+    deriveEndpointInputPrefillFromProviderEndpoint('/ip4/203.0.113.10/tcp/8091/http'),
+    {
+      endpointMode: 'ipv4',
+      endpointValue: '203.0.113.10',
+      publicPort: 8091,
+    },
+  )
+
+  assert.deepEqual(
+    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/testasdf.nil-store.com/tcp/8443/http'),
+    {
+      endpointMode: 'multiaddr',
+      endpointValue: '/dns4/testasdf.nil-store.com/tcp/8443/http',
+      publicPort: 8443,
+    },
+  )
+
+  assert.equal(deriveEndpointInputPrefillFromProviderEndpoint(''), null)
+  assert.deepEqual(
+    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/nope/tcp/443/https'),
+    {
+      endpointMode: 'multiaddr',
+      endpointValue: '/dns4/nope/tcp/443/https',
+      publicPort: 443,
+    },
+  )
 })
 
 test('buildProviderEndpointPlan rejects invalid endpoint inputs', () => {

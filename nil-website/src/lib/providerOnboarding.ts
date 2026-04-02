@@ -19,6 +19,12 @@ export interface ProviderEndpointPlan {
   publicPort: number
 }
 
+export interface ProviderEndpointInputPrefill {
+  endpointMode: ProviderEndpointInputMode
+  endpointValue: string
+  publicPort: number
+}
+
 export interface ProviderBootstrapDraft extends ProviderEndpointDraft {
   operatorAddress?: string
   providerKey?: string
@@ -171,6 +177,52 @@ export function buildProviderEndpointPlan(draft: ProviderEndpointDraft): Provide
     publicHealthUrl: `${publicBase}/health`,
     normalizedHost,
     publicPort,
+  }
+}
+
+export function deriveEndpointInputPrefillFromProviderEndpoint(
+  providerEndpoint: string,
+): ProviderEndpointInputPrefill | null {
+  const raw = trimNonEmpty(providerEndpoint)
+  if (!raw) return null
+
+  const dnsMatch = raw.match(/^\/dns4\/([^/]+)\/tcp\/(\d+)\/https(?:\/|$)/i)
+  if (dnsMatch) {
+    const host = trimNonEmpty(dnsMatch[1]).toLowerCase()
+    const publicPort = Number(dnsMatch[2])
+    if (isValidDomainHostname(host) && Number.isInteger(publicPort) && publicPort > 0 && publicPort <= 65535) {
+      return {
+        endpointMode: 'domain',
+        endpointValue: host,
+        publicPort,
+      }
+    }
+  }
+
+  const ipMatch = raw.match(/^\/ip4\/((?:\d{1,3}\.){3}\d{1,3})\/tcp\/(\d+)\/http(?:\/|$)/i)
+  if (ipMatch) {
+    const host = trimNonEmpty(ipMatch[1])
+    const publicPort = Number(ipMatch[2])
+    if (isValidIpv4Host(host) && Number.isInteger(publicPort) && publicPort > 0 && publicPort <= 65535) {
+      return {
+        endpointMode: 'ipv4',
+        endpointValue: host,
+        publicPort,
+      }
+    }
+  }
+
+  const plan = buildProviderEndpointPlan({
+    hostMode: 'public-vps',
+    endpointMode: 'multiaddr',
+    endpointValue: raw,
+  })
+  if (!plan) return null
+
+  return {
+    endpointMode: 'multiaddr',
+    endpointValue: raw,
+    publicPort: plan.publicPort,
   }
 }
 
