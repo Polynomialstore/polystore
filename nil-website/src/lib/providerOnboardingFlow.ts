@@ -1,4 +1,4 @@
-export type ProviderOnboardingStepId = 'wallet' | 'host' | 'pairing' | 'public_access' | 'bootstrap'
+export type ProviderOnboardingStepId = 'wallet' | 'host' | 'pairing' | 'publish'
 export type ProviderOnboardingStepState = 'ready' | 'pending' | 'action' | 'idle'
 
 export interface ProviderOnboardingFlowInput {
@@ -58,16 +58,10 @@ export const PROVIDER_ONBOARDING_STEPS: ProviderOnboardingStepDefinition[] = [
     doneWhen: 'provider key name is set and the provider link is approved on-chain',
   },
   {
-    id: 'public_access',
-    label: 'Configure Public Access',
-    anchor: 'step-public-access',
-    doneWhen: 'public endpoint is defined',
-  },
-  {
-    id: 'bootstrap',
-    label: 'Bootstrap And Verify',
-    anchor: 'step-bootstrap',
-    doneWhen: 'bootstrap is run and registration plus public health both report healthy',
+    id: 'publish',
+    label: 'Publish Endpoint + Bootstrap',
+    anchor: 'step-publish-bootstrap',
+    doneWhen: 'public endpoint is defined and bootstrap plus health converge',
   },
 ]
 
@@ -132,14 +126,7 @@ function pairingNextAction(input: ProviderOnboardingFlowInput): string {
   return 'Provider identity is paired and approved on-chain.'
 }
 
-function publicAccessNextAction(input: ProviderOnboardingFlowInput): string {
-  if (!input.endpointReady) {
-    return 'Describe the public endpoint so the website can derive the provider endpoint and health URL.'
-  }
-  return 'Public endpoint is ready.'
-}
-
-function bootstrapNextAction(input: ProviderOnboardingFlowInput): string {
+function publishNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.providerRepoReady) {
     return 'Finish Step 2 so the provider host commands can run from a local nil-store checkout.'
   }
@@ -168,8 +155,7 @@ function nextActionForStep(
   if (stepId === 'wallet') return walletNextAction(input)
   if (stepId === 'host') return hostNextAction(input)
   if (stepId === 'pairing') return pairingNextAction(input)
-  if (stepId === 'public_access') return publicAccessNextAction(input)
-  return bootstrapNextAction(input)
+  return publishNextAction(input)
 }
 
 export function buildProviderOnboardingFlow(
@@ -179,8 +165,7 @@ export function buildProviderOnboardingFlow(
     wallet: input.walletReady && input.funded && input.hasOperatorAddress,
     host: input.providerRepoReady,
     pairing: input.providerKeyReady && input.pairingConfirmed,
-    public_access: input.endpointReady,
-    bootstrap: input.pairingConfirmed && input.providerRegistered && input.publicHealthReady,
+    publish: input.pairingConfirmed && input.endpointReady && input.providerRegistered && input.publicHealthReady,
   }
 
   const currentStepId: ProviderOnboardingStepId = !stepReadyById.wallet
@@ -189,9 +174,7 @@ export function buildProviderOnboardingFlow(
       ? 'host'
       : !stepReadyById.pairing
         ? 'pairing'
-        : !stepReadyById.public_access
-          ? 'public_access'
-          : 'bootstrap'
+        : 'publish'
 
   const currentStepIndex = PROVIDER_ONBOARDING_STEPS.findIndex((step) => step.id === currentStepId)
 

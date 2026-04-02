@@ -428,7 +428,7 @@ export function SpOnboarding() {
       endpointReady,
     ],
   )
-  const onboardingComplete = flow.stepReadyById.bootstrap
+  const onboardingComplete = flow.stepReadyById.publish
 
   const bootstrapCommand = useMemo(
     () =>
@@ -660,7 +660,7 @@ export function SpOnboarding() {
       const result = await approveProviderLink({ creator: address, provider: pendingLink.provider })
       setProviderAddress(pendingLink.provider)
       setLinkTxHash(result.tx_hash)
-      setNotice('Provider link approved on-chain. Continue with endpoint, bootstrap, and health checks.')
+      setNotice('Provider link approved on-chain. Continue with Step 4 to publish endpoint and run bootstrap.')
       await refreshLiveState()
     } catch (openError) {
       const message = openError instanceof Error ? openError.message : 'Could not approve provider link'
@@ -683,16 +683,26 @@ export function SpOnboarding() {
       : pairingLinked
         ? 'pending'
         : 'action'
-  const publicAccessState: 'ready' | 'pending' | 'action' | 'idle' = endpointReady ? 'ready' : 'action'
-  const providerState: 'ready' | 'pending' | 'action' | 'idle' = publicHealthReady
+  const publishBootstrapState: 'ready' | 'pending' | 'action' | 'idle' = onboardingComplete
     ? 'ready'
-    : providerRegistered
-      ? 'pending'
-      : pairingConfirmed
-        ? 'pending'
-        : flow.commandReady
-          ? 'action'
-          : 'idle'
+    : !pairingConfirmed || !endpointReady
+      ? 'action'
+      : !providerRegistered && !publicHealthReady
+        ? 'action'
+        : 'pending'
+  const publishBootstrapLabel = onboardingComplete
+    ? 'Complete'
+    : !pairingConfirmed
+      ? 'Approve link first'
+      : !endpointReady
+        ? 'Set endpoint'
+        : !providerRegistered && !publicHealthReady
+          ? 'Run bootstrap'
+          : !providerRegistered
+            ? 'Waiting registration'
+            : !publicHealthReady
+              ? 'Waiting health'
+              : 'Complete'
   const scrollToStep = useCallback((anchor: string) => {
     if (typeof document === 'undefined') return
     const target = document.getElementById(anchor)
@@ -713,8 +723,7 @@ export function SpOnboarding() {
               <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">First Healthy Provider</h1>
               <p className="max-w-2xl text-muted-foreground">
                 This is the web-first operator flow for bringing up a NilStore <span className="font-mono">provider-daemon</span>.
-                Connect the operator wallet, prepare the provider host, pair the provider identity, configure public access,
-                then run bootstrap and verify registration plus health from the same screen.
+                Connect the operator wallet, prepare the provider host, pair the provider identity, then publish endpoint plus bootstrap and verify from one final step.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -740,7 +749,7 @@ export function SpOnboarding() {
             </div>
           </div>
 
-          <div className="mt-8 grid gap-4 border-t border-border/60 pt-6 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-8 grid gap-4 border-t border-border/60 pt-6 sm:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-1">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operator wallet</div>
               <div className="flex items-center gap-2 text-sm text-foreground">
@@ -767,39 +776,9 @@ export function SpOnboarding() {
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public access</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Publish + bootstrap</div>
               <div className="flex items-center gap-2 text-sm text-foreground">
-                <StatusPill
-                  label={endpointReady ? (usingOnchainEndpointFallback ? 'Ready (on-chain)' : 'Ready') : 'Configure'}
-                  state={publicAccessState}
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Bootstrap + health</div>
-              <div className="flex items-center gap-2 text-sm text-foreground">
-                <StatusPill
-                  label={
-                    publicHealthReady
-                      ? providerDaemonStatusReady
-                        ? 'Healthy (daemon)'
-                        : 'Healthy (browser)'
-                      : providerDaemonStatusReady && providerStatusDetail && !providerStatusDetail.public_health_ok
-                        ? 'Unhealthy'
-                        : healthProbe.status === 'error'
-                          ? 'Unhealthy'
-                          : 'Waiting'
-                  }
-                  state={
-                    publicHealthReady
-                      ? 'ready'
-                      : providerDaemonStatusReady && providerStatusDetail && !providerStatusDetail.public_health_ok
-                        ? 'action'
-                        : healthProbe.status === 'error'
-                          ? 'action'
-                          : 'pending'
-                  }
-                />
+                <StatusPill label={publishBootstrapLabel} state={publishBootstrapState} />
               </div>
             </div>
           </div>
@@ -828,7 +807,7 @@ export function SpOnboarding() {
             )}
           </div>
 
-          <div className="mt-5 grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-5 grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2 xl:grid-cols-4">
             {flow.steps.map((step) => (
               <button
                 key={step.id}
@@ -1054,7 +1033,7 @@ export function SpOnboarding() {
 
                 {!providerRepoReady ? (
                   <div className="border border-border bg-background/40 px-4 py-3 text-sm text-muted-foreground">
-                    Complete this first. Steps 3 through 5 assume the provider host can run <span className="font-mono">./scripts/run_devnet_provider.sh ...</span>.
+                    Complete this first. Steps 3 through 4 assume the provider host can run <span className="font-mono">./scripts/run_devnet_provider.sh ...</span>.
                   </div>
                 ) : null}
               </div>
@@ -1140,7 +1119,7 @@ export function SpOnboarding() {
                     </div>
                   ) : pairingConfirmed ? (
                     <div className="border border-accent/40 bg-background px-4 py-3 text-sm text-accent">
-                      Provider link approved. Continue to Step 4 to define public endpoint.
+                      Provider link approved. Continue to Step 4 to publish endpoint and run bootstrap.
                     </div>
                   ) : pairingLinked ? (
                     <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
@@ -1225,22 +1204,19 @@ export function SpOnboarding() {
               </div>
             </section>
 
-            <section id="step-public-access" className="glass-panel industrial-border scroll-mt-28 p-6">
+            <section id="step-publish-bootstrap" className="glass-panel industrial-border scroll-mt-28 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Configure public access</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Set the public provider endpoint</h2>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">4. Publish endpoint and run bootstrap</div>
+                  <h2 className="text-2xl font-semibold text-foreground">Set endpoint, run bootstrap, then verify convergence</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Keep this simple: choose how browsers should reach your provider, then confirm the derived endpoint and health URL.
+                    Configure how browsers should reach your provider, then run the bootstrap command on the provider host and watch registration plus health converge in this same step.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">public endpoint is defined</span>.
+                    Done when: <span className="font-semibold text-foreground">public endpoint is defined, provider is registered on-chain, and public health is healthy</span>.
                   </p>
                 </div>
-                <StatusPill
-                  label={endpointReady ? (usingOnchainEndpointFallback ? 'Ready (on-chain)' : 'Ready') : 'Action needed'}
-                  state={publicAccessState}
-                />
+                <StatusPill label={publishBootstrapLabel} state={publishBootstrapState} />
               </div>
 
               <div className="mt-6 space-y-5">
@@ -1362,7 +1338,7 @@ export function SpOnboarding() {
 
                 {usingOnchainEndpointFallback ? (
                   <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                    Step 4 is already satisfied from the existing on-chain endpoint. Edit fields only if you want to rotate the endpoint.
+                    Endpoint fields are prefilled from the existing on-chain endpoint. Edit fields only if you want to rotate the endpoint, then run bootstrap to converge registration and health.
                   </div>
                 ) : null}
 
@@ -1411,9 +1387,157 @@ export function SpOnboarding() {
                         ? 'Finish Step 1 so the website can capture the connected operator wallet nil address.'
                         : !endpointReady
                         ? 'Describe the public endpoint so the website can derive the provider endpoint and health URL.'
-                        : 'Step 4 is complete. Continue to bootstrap and verification.'}
+                        : 'Endpoint is ready. Run bootstrap and watch registration plus health converge below.'}
                   </div>
                 ) : null}
+
+                <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                  Run the bootstrap command from a terminal on the provider host. It starts or restarts the <span className="font-mono">provider-daemon</span>, registers endpoints, and runs verification checks.
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="border border-border bg-background p-4 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing</div>
+                      <StatusPill label={confirmedPairing ? 'Approved' : pairingLinked ? 'Waiting' : 'Idle'} state={confirmedPairing ? 'ready' : pairingLinked ? 'pending' : 'idle'} />
+                    </div>
+                    <div className="mt-2 break-all text-foreground">
+                      {confirmedPairing
+                        ? `Approved for provider ${confirmedPairing.provider}`
+                        : pairingLinked
+                          ? 'Pending link exists. Approve it from Step 3.'
+                          : 'No pending link yet. Run the pair command in Step 3.'}
+                    </div>
+                  </div>
+
+                  <div data-testid="provider-status-card" className="border border-border bg-background p-4 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain registration</div>
+                      <StatusPill label={providerRecord ? 'Visible' : confirmedPairing ? 'Waiting' : 'Idle'} state={providerRecord ? 'ready' : confirmedPairing ? 'pending' : 'idle'} />
+                    </div>
+                    <div className="mt-2 break-all text-foreground">
+                      {providerRecord
+                        ? providerRecord.endpoints?.join(', ') || 'Provider exists without endpoints'
+                        : confirmedPairing
+                          ? 'Waiting for bootstrap to register or update endpoints.'
+                          : 'Registration starts after link approval.'}
+                    </div>
+                  </div>
+
+                  <div data-testid="provider-daemon-status-card" className="border border-border bg-background p-4 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider-daemon health</div>
+                      <StatusPill
+                        label={
+                          providerIdentityMismatch
+                            ? 'Wrong provider'
+                            : providerDaemonStatusReady
+                            ? providerStatusDetail?.public_health_ok
+                              ? 'Healthy'
+                              : 'Failed'
+                            : loadingPublicStatus
+                              ? 'Polling'
+                              : publicStatusError
+                                ? 'Unavailable'
+                                : 'Waiting'
+                        }
+                        state={
+                          providerIdentityMismatch
+                            ? 'action'
+                            : providerDaemonStatusReady
+                            ? providerStatusDetail?.public_health_ok
+                              ? 'ready'
+                              : 'action'
+                            : publicStatusError
+                              ? 'action'
+                              : 'pending'
+                        }
+                      />
+                    </div>
+                    <div className="mt-2 break-all text-foreground">
+                      {providerIdentityMismatch
+                        ? `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'} is currently serving ${statusProviderAddress}. Restart provider-daemon with key ${approvedProviderAddress} and rerun bootstrap.`
+                        : providerDaemonStatusReady
+                        ? providerStatusDetail?.public_health_ok
+                          ? `${providerStatusDetail.public_health_url || `${authoritativePublicBase || effectivePublicBase}/health`} is reachable from the provider host`
+                          : `${providerStatusDetail?.public_health_url || `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'}/health`} is not reachable from the provider host`
+                        : authoritativePublicBase
+                          ? loadingPublicStatus
+                            ? `Polling ${authoritativePublicBase}/status`
+                            : publicStatusError
+                              ? `/status failed at ${authoritativePublicBase}: ${publicStatusError}`
+                              : `Waiting for ${authoritativePublicBase}/status to identify provider-daemon`
+                          : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
+                    </div>
+                    {authoritativePublicBase ? (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => void refreshPublicStatus(authoritativePublicBase)}
+                          className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${loadingPublicStatus ? 'animate-spin' : ''}`} /> Refresh
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div data-testid="provider-browser-health-card" className="border border-border bg-background p-4 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Direct browser health probe (optional)</div>
+                    <div className="flex items-center gap-2">
+                      <StatusPill
+                        label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Idle'}
+                        state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'idle'}
+                      />
+                      {effectivePublicBase ? (
+                        <button
+                          type="button"
+                          onClick={() => void probePublicHealth(effectivePublicBase)}
+                          className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${healthProbe.status === 'loading' ? 'animate-spin' : ''}`} /> Probe
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="mt-2 break-all text-foreground">
+                    {healthProbe.status === 'ok'
+                      ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
+                      : healthProbe.status === 'error'
+                        ? `${healthProbe.base}/health failed: ${healthProbe.error}`
+                        : effectivePublicBase
+                          ? `Waiting to probe ${effectivePublicBase}/health`
+                          : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
+                  </div>
+                </div>
+
+                {providerStatusIssues.length ? (
+                  <div className="border border-destructive/40 bg-background p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Provider-daemon issues</div>
+                    <div className="mt-3 space-y-2 text-sm text-destructive">
+                      {providerStatusIssues.map((issue) => (
+                        <div key={issue}>{issue}</div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <details className="border-t border-border/60 pt-4 text-sm text-muted-foreground">
+                  <summary className="cursor-pointer font-semibold text-foreground">If verification is stuck</summary>
+                  <div className="mt-3 space-y-2">
+                    <div>
+                      If pairing is pending, rerun <span className="font-mono">./scripts/run_devnet_provider.sh pair</span>, then approve from Step 3.
+                    </div>
+                    <div>
+                      If the process died or never started, run <span className="font-mono">./scripts/run_devnet_provider.sh start</span> on the provider host.
+                    </div>
+                    <div>
+                      If health is failing, trust provider-side checks first: <span className="font-mono">doctor</span>, <span className="font-mono">verify</span>, and local <span className="font-mono">curl</span> from the command rail.
+                    </div>
+                  </div>
+                </details>
               </div>
             </section>
 
@@ -1503,169 +1627,6 @@ export function SpOnboarding() {
               </div>
             ) : null}
 
-            <section id="step-bootstrap" className="glass-panel industrial-border scroll-mt-28 p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">5. Bootstrap and verify</div>
-                  <h2 className="text-2xl font-semibold text-foreground">Run bootstrap on the provider host (starts daemon), then verify</h2>
-                  <p className="max-w-2xl text-sm text-muted-foreground">
-                    Run the bootstrap command in a terminal on the provider host. It starts or restarts the <span className="font-mono">provider-daemon</span>, registers endpoints, and runs checks. This page then moves from approved pairing to on-chain registration and healthy public reachability.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">bootstrap is run and registration plus health both report healthy</span>.
-                  </p>
-                </div>
-                <StatusPill label={publicHealthReady ? 'Healthy' : providerState === 'pending' ? 'In progress' : 'Waiting'} state={providerState} />
-              </div>
-
-              <div className="mt-4 border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                Run Step 5 commands on the provider host machine, not in the browser. The daemon must be running for this step to complete.
-              </div>
-
-              <div className="mt-6 grid gap-4 lg:grid-cols-3">
-                <div className="border border-border bg-background p-4 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pairing</div>
-                    <StatusPill label={confirmedPairing ? 'Approved' : pairingLinked ? 'Waiting' : 'Idle'} state={confirmedPairing ? 'ready' : pairingLinked ? 'pending' : 'idle'} />
-                  </div>
-                  <div className="mt-2 break-all text-foreground">
-                    {confirmedPairing
-                      ? `Approved for provider ${confirmedPairing.provider}`
-                      : pairingLinked
-                        ? 'Pending link exists. Approve it from Step 3.'
-                        : 'No pending link yet. Run the pair command in Step 3.'}
-                  </div>
-                </div>
-
-                <div data-testid="provider-status-card" className="border border-border bg-background p-4 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain registration</div>
-                    <StatusPill label={providerRecord ? 'Visible' : confirmedPairing ? 'Waiting' : 'Idle'} state={providerRecord ? 'ready' : confirmedPairing ? 'pending' : 'idle'} />
-                  </div>
-                  <div className="mt-2 break-all text-foreground">
-                    {providerRecord
-                      ? providerRecord.endpoints?.join(', ') || 'Provider exists without endpoints'
-                      : confirmedPairing
-                        ? 'Waiting for bootstrap to register or update endpoints.'
-                        : 'Registration starts after link approval.'}
-                  </div>
-                </div>
-
-                <div data-testid="provider-daemon-status-card" className="border border-border bg-background p-4 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider-daemon health</div>
-                    <StatusPill
-                      label={
-                        providerIdentityMismatch
-                          ? 'Wrong provider'
-                          : providerDaemonStatusReady
-                          ? providerStatusDetail?.public_health_ok
-                            ? 'Healthy'
-                            : 'Failed'
-                          : loadingPublicStatus
-                            ? 'Polling'
-                            : publicStatusError
-                              ? 'Unavailable'
-                              : 'Waiting'
-                      }
-                      state={
-                        providerIdentityMismatch
-                          ? 'action'
-                          : providerDaemonStatusReady
-                          ? providerStatusDetail?.public_health_ok
-                            ? 'ready'
-                            : 'action'
-                          : publicStatusError
-                            ? 'action'
-                            : 'pending'
-                      }
-                    />
-                  </div>
-                  <div className="mt-2 break-all text-foreground">
-                    {providerIdentityMismatch
-                      ? `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'} is currently serving ${statusProviderAddress}. Restart provider-daemon with key ${approvedProviderAddress} and rerun bootstrap.`
-                      : providerDaemonStatusReady
-                      ? providerStatusDetail?.public_health_ok
-                        ? `${providerStatusDetail.public_health_url || `${authoritativePublicBase || effectivePublicBase}/health`} is reachable from the provider host`
-                        : `${providerStatusDetail?.public_health_url || `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'}/health`} is not reachable from the provider host`
-                      : authoritativePublicBase
-                        ? loadingPublicStatus
-                          ? `Polling ${authoritativePublicBase}/status`
-                          : publicStatusError
-                            ? `/status failed at ${authoritativePublicBase}: ${publicStatusError}`
-                            : `Waiting for ${authoritativePublicBase}/status to identify provider-daemon`
-                        : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
-                  </div>
-                  {authoritativePublicBase ? (
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={() => void refreshPublicStatus(authoritativePublicBase)}
-                        className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-                      >
-                        <RefreshCw className={`h-4 w-4 ${loadingPublicStatus ? 'animate-spin' : ''}`} /> Refresh
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div data-testid="provider-browser-health-card" className="mt-4 border border-border bg-background p-4 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Direct browser health probe (optional)</div>
-                  <div className="flex items-center gap-2">
-                    <StatusPill
-                      label={healthProbe.status === 'ok' ? 'Healthy' : healthProbe.status === 'error' ? 'Failed' : 'Idle'}
-                      state={healthProbe.status === 'ok' ? 'ready' : healthProbe.status === 'error' ? 'action' : 'idle'}
-                    />
-                    {effectivePublicBase ? (
-                      <button
-                        type="button"
-                        onClick={() => void probePublicHealth(effectivePublicBase)}
-                        className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
-                      >
-                        <RefreshCw className={`h-4 w-4 ${healthProbe.status === 'loading' ? 'animate-spin' : ''}`} /> Probe
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="mt-2 break-all text-foreground">
-                  {healthProbe.status === 'ok'
-                    ? `${healthProbe.base}/health responded in ${healthProbe.ms}ms`
-                    : healthProbe.status === 'error'
-                      ? `${healthProbe.base}/health failed: ${healthProbe.error}`
-                      : effectivePublicBase
-                        ? `Waiting to probe ${effectivePublicBase}/health`
-                        : 'Waiting for a public base URL from your endpoint draft or on-chain registration'}
-                </div>
-              </div>
-
-              {providerStatusIssues.length ? (
-                <div className="mt-4 border border-destructive/40 bg-background p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Provider-daemon issues</div>
-                  <div className="mt-3 space-y-2 text-sm text-destructive">
-                    {providerStatusIssues.map((issue) => (
-                      <div key={issue}>{issue}</div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <details className="mt-5 border-t border-border/60 pt-4 text-sm text-muted-foreground">
-                <summary className="cursor-pointer font-semibold text-foreground">If verification is stuck</summary>
-                <div className="mt-3 space-y-2">
-                  <div>
-                    If pairing is pending, rerun <span className="font-mono">./scripts/run_devnet_provider.sh pair</span>, then approve from Step 3.
-                  </div>
-                  <div>
-                    If the process died or never started, run <span className="font-mono">./scripts/run_devnet_provider.sh start</span> on the provider host.
-                  </div>
-                  <div>
-                    If health is failing, trust provider-side checks first: <span className="font-mono">doctor</span>, <span className="font-mono">verify</span>, and local <span className="font-mono">curl</span> from the command rail.
-                  </div>
-                </div>
-              </details>
-            </section>
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
@@ -1673,7 +1634,7 @@ export function SpOnboarding() {
               <div className="border-b border-border/60 px-6 py-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 5 command rail</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 4 command rail</div>
                     <h2 className="mt-2 text-2xl font-semibold text-foreground">Provider host runbook</h2>
                   </div>
                 <StatusPill label={flow.commandReady ? 'Command ready' : 'Waiting'} state={flow.commandReady ? 'ready' : 'pending'} />

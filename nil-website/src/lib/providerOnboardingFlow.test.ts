@@ -22,17 +22,17 @@ function baseInput(): ProviderOnboardingFlowInput {
   }
 }
 
-test('provider onboarding flow exposes the revised 5-step model', () => {
+test('provider onboarding flow exposes the revised 4-step model', () => {
   assert.deepEqual(
     PROVIDER_ONBOARDING_STEPS.map((step) => step.id),
-    ['wallet', 'host', 'pairing', 'public_access', 'bootstrap'],
+    ['wallet', 'host', 'pairing', 'publish'],
   )
 })
 
 test('provider onboarding flow marks the happy path complete and command-ready', () => {
   const flow = buildProviderOnboardingFlow(baseInput())
 
-  assert.equal(flow.currentStepId, 'bootstrap')
+  assert.equal(flow.currentStepId, 'publish')
   assert.equal(flow.commandReady, true)
   assert.equal(flow.nextActionMessage, 'Onboarding is complete. Continue in Provider Console to manage this provider.')
   assert.deepEqual(
@@ -41,8 +41,7 @@ test('provider onboarding flow marks the happy path complete and command-ready',
       { id: 'wallet', ready: true, state: 'ready' },
       { id: 'host', ready: true, state: 'ready' },
       { id: 'pairing', ready: true, state: 'ready' },
-      { id: 'public_access', ready: true, state: 'ready' },
-      { id: 'bootstrap', ready: true, state: 'ready' },
+      { id: 'publish', ready: true, state: 'ready' },
     ],
   )
 })
@@ -125,24 +124,24 @@ test('provider onboarding flow blocks pairing on key setup and approval state in
   assert.match(needsBrowserApproval.nextActionMessage, /Approve the pending provider link/i)
 })
 
-test('provider onboarding flow gates public access on endpoint readiness', () => {
+test('provider onboarding flow gates publish step on endpoint readiness', () => {
   const missingEndpoint = buildProviderOnboardingFlow({
     ...baseInput(),
     endpointReady: false,
   })
 
-  assert.equal(missingEndpoint.currentStepId, 'public_access')
-  assert.match(missingEndpoint.nextActionMessage, /Describe the public endpoint/i)
+  assert.equal(missingEndpoint.currentStepId, 'publish')
+  assert.match(missingEndpoint.nextActionMessage, /public endpoint/i)
 })
 
-test('provider onboarding flow only marks bootstrap step ready after registration and health converge', () => {
+test('provider onboarding flow only marks publish step ready after registration and health converge', () => {
   const readyToRun = buildProviderOnboardingFlow({
     ...baseInput(),
     providerRegistered: false,
     publicHealthReady: false,
   })
 
-  assert.equal(readyToRun.currentStepId, 'bootstrap')
+  assert.equal(readyToRun.currentStepId, 'publish')
   assert.equal(readyToRun.commandReady, true)
   assert.match(readyToRun.nextActionMessage, /Run the provider host bootstrap command/i)
 
@@ -151,7 +150,7 @@ test('provider onboarding flow only marks bootstrap step ready after registratio
     providerRegistered: false,
   })
 
-  assert.equal(waitingForRegistration.currentStepId, 'bootstrap')
+  assert.equal(waitingForRegistration.currentStepId, 'publish')
   assert.match(waitingForRegistration.nextActionMessage, /register or update the provider endpoints/i)
 
   const waitingForHealth = buildProviderOnboardingFlow({
@@ -159,11 +158,11 @@ test('provider onboarding flow only marks bootstrap step ready after registratio
     publicHealthReady: false,
   })
 
-  assert.equal(waitingForHealth.currentStepId, 'bootstrap')
+  assert.equal(waitingForHealth.currentStepId, 'publish')
   assert.match(waitingForHealth.nextActionMessage, /Wait for provider health to converge/i)
 })
 
-test('provider onboarding flow keeps bootstrap command unavailable until pairing and public access are complete', () => {
+test('provider onboarding flow keeps bootstrap command unavailable until pairing and endpoint setup are complete', () => {
   const flow = buildProviderOnboardingFlow({
     ...baseInput(),
     pairingConfirmed: false,
