@@ -314,8 +314,8 @@ export function SpOnboarding() {
   )
   const activeProviderAddress = useMemo(
     () =>
-      String(providerAddress || '').trim() ||
       confirmedPairing?.provider ||
+      String(providerAddress || '').trim() ||
       pendingLink?.provider ||
       '',
     [confirmedPairing?.provider, pendingLink?.provider, providerAddress],
@@ -328,6 +328,13 @@ export function SpOnboarding() {
   const effectivePublicBase = onchainBases[0] || endpointPlan?.publicBase || null
   const providerStatusDetail = publicStatus?.provider ?? null
   const providerDaemonStatusReady = String(publicStatus?.persona || '').trim().toLowerCase() === 'provider-daemon'
+  const approvedProviderAddress = String(confirmedPairing?.provider || '').trim()
+  const statusProviderAddress = String(providerStatusDetail?.address || '').trim()
+  const providerIdentityMismatch = Boolean(
+    approvedProviderAddress
+      && statusProviderAddress
+      && approvedProviderAddress !== statusProviderAddress,
+  )
   const authoritativePublicBase = providerStatusDetail?.public_base || effectivePublicBase
   const authTokenOverride = String(authToken || '').trim()
   const hasCustomAuthToken = Boolean(authTokenOverride)
@@ -348,8 +355,17 @@ export function SpOnboarding() {
   const pairingConfirmed = Boolean(confirmedPairing)
   const providerRegistered = Boolean(providerRecord)
   const publicHealthReady = providerDaemonStatusReady
-    ? Boolean(providerStatusDetail?.public_health_ok)
+    ? !providerIdentityMismatch && Boolean(providerStatusDetail?.public_health_ok)
     : healthProbe.status === 'ok' && healthProbe.base === effectivePublicBase
+  const providerStatusIssues = useMemo(() => {
+    const issues = Array.isArray(publicStatus?.issues) ? [...publicStatus.issues] : []
+    if (providerIdentityMismatch) {
+      issues.unshift(
+        `public endpoint is serving provider ${statusProviderAddress}, but this onboarding session is approved for ${approvedProviderAddress}`,
+      )
+    }
+    return issues
+  }, [approvedProviderAddress, providerIdentityMismatch, publicStatus?.issues, statusProviderAddress])
   const flow = useMemo(
     () =>
       buildProviderOnboardingFlow({
@@ -1488,7 +1504,9 @@ export function SpOnboarding() {
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider-daemon health</div>
                     <StatusPill
                       label={
-                        providerDaemonStatusReady
+                        providerIdentityMismatch
+                          ? 'Wrong provider'
+                          : providerDaemonStatusReady
                           ? providerStatusDetail?.public_health_ok
                             ? 'Healthy'
                             : 'Failed'
@@ -1499,7 +1517,9 @@ export function SpOnboarding() {
                               : 'Waiting'
                       }
                       state={
-                        providerDaemonStatusReady
+                        providerIdentityMismatch
+                          ? 'action'
+                          : providerDaemonStatusReady
                           ? providerStatusDetail?.public_health_ok
                             ? 'ready'
                             : 'action'
@@ -1510,7 +1530,9 @@ export function SpOnboarding() {
                     />
                   </div>
                   <div className="mt-2 break-all text-foreground">
-                    {providerDaemonStatusReady
+                    {providerIdentityMismatch
+                      ? `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'} is currently serving ${statusProviderAddress}. Restart provider-daemon with key ${approvedProviderAddress} and rerun bootstrap.`
+                      : providerDaemonStatusReady
                       ? providerStatusDetail?.public_health_ok
                         ? `${providerStatusDetail.public_health_url || `${authoritativePublicBase || effectivePublicBase}/health`} is reachable from the provider host`
                         : `${providerStatusDetail?.public_health_url || `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'}/health`} is not reachable from the provider host`
@@ -1566,11 +1588,11 @@ export function SpOnboarding() {
                 </div>
               </div>
 
-              {publicStatus?.issues?.length ? (
+              {providerStatusIssues.length ? (
                 <div className="mt-4 border border-destructive/40 bg-background p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Provider-daemon issues</div>
                   <div className="mt-3 space-y-2 text-sm text-destructive">
-                    {publicStatus.issues.map((issue) => (
+                    {providerStatusIssues.map((issue) => (
                       <div key={issue}>{issue}</div>
                     ))}
                   </div>
