@@ -391,7 +391,10 @@ export function SpOnboarding() {
       }),
     [authTokenOverride, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
   )
-  const healthCommands = useMemo(() => buildProviderHealthCommands(authoritativePublicBase), [authoritativePublicBase])
+  const healthCommands = useMemo(
+    () => buildProviderHealthCommands(authoritativePublicBase, providerKey),
+    [authoritativePublicBase, providerKey],
+  )
   const providerDaemonRestartCommand = useMemo(
     () => [
       '# Start or restart provider-daemon only.',

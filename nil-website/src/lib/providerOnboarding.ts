@@ -256,14 +256,16 @@ export function buildProviderLinkCommand(providerKey: string, operatorAddress: s
   ].join('\n')
 }
 
-export function buildProviderHealthCommands(publicBase: string | null): string {
+export function buildProviderHealthCommands(publicBase: string | null, providerKey?: string): string {
   const normalizedBase = trimNonEmpty(publicBase)
+  const normalizedProviderKey = trimNonEmpty(providerKey) || DEFAULT_PROVIDER_KEY
+  const providerKeyPrefix = `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} `
   const publicHealthUrl = normalizedBase ? `${normalizedBase.replace(/\/$/, '')}/health` : '<public-health-url>'
 
   return [
-    './scripts/run_devnet_provider.sh doctor',
-    './scripts/run_devnet_provider.sh verify',
-    './scripts/run_devnet_provider.sh print-config',
+    `${providerKeyPrefix}./scripts/run_devnet_provider.sh doctor`,
+    `${providerKeyPrefix}./scripts/run_devnet_provider.sh verify`,
+    `${providerKeyPrefix}./scripts/run_devnet_provider.sh print-config`,
     'curl -sf http://127.0.0.1:8091/health',
     `curl -sf ${shellQuote(publicHealthUrl)}`,
   ].join('\n')

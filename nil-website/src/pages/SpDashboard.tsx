@@ -171,8 +171,8 @@ export function SpDashboard() {
   const providerStatusDetail = publicStatus?.provider ?? null
   const effectiveControlBase = providerStatusDetail?.public_base || selectedControlBase || activeRecord?.primaryBase || null
   const healthCommands = useMemo(
-    () => buildProviderHealthCommands(providerStatusDetail?.public_base || activeRecord?.primaryBase || null),
-    [activeRecord?.primaryBase, providerStatusDetail?.public_base],
+    () => buildProviderHealthCommands(providerStatusDetail?.public_base || activeRecord?.primaryBase || null, rotationProviderKey),
+    [activeRecord?.primaryBase, providerStatusDetail?.public_base, rotationProviderKey],
   )
   const rotationCommand = useMemo(
     () => buildProviderRegisterCommand({ providerKey: rotationProviderKey, providerEndpoint: rotationEndpoint }),

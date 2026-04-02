@@ -171,12 +171,18 @@ test('buildProviderLinkCommand emits a standalone provider-link command', () => 
 })
 
 test('buildProviderHealthCommands includes doctor, verify, config, and health probes', () => {
-  const commands = buildProviderHealthCommands('https://sp.example.com')
+  const commands = buildProviderHealthCommands('https://sp.example.com', 'provider-main')
+  assert.match(commands, /PROVIDER_KEY='provider-main' \.\/scripts\/run_devnet_provider\.sh doctor/)
+  assert.match(commands, /PROVIDER_KEY='provider-main' \.\/scripts\/run_devnet_provider\.sh verify/)
+  assert.match(commands, /PROVIDER_KEY='provider-main' \.\/scripts\/run_devnet_provider\.sh print-config/)
   assert.match(commands, /doctor/)
   assert.match(commands, /verify/)
   assert.match(commands, /print-config/)
   assert.match(commands, /127\.0\.0\.1:8091\/health/)
   assert.match(commands, /https:\/\/sp\.example\.com\/health/)
+
+  const defaultKeyCommands = buildProviderHealthCommands('https://sp.example.com')
+  assert.match(defaultKeyCommands, /PROVIDER_KEY='provider1' \.\/scripts\/run_devnet_provider\.sh doctor/)
 })
 
 test('buildProviderAgentPrompt matches the canonical repo prompt by default', () => {
