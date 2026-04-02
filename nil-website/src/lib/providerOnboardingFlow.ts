@@ -158,7 +158,7 @@ function bootstrapNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.publicHealthReady) {
     return 'Wait for provider health to converge after bootstrap, then refresh the verification cards.'
   }
-  return 'Bootstrap and verification are complete.'
+  return 'Onboarding is complete. Continue in Provider Console to manage this provider.'
 }
 
 function nextActionForStep(

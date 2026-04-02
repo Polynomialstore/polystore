@@ -34,7 +34,7 @@ test('provider onboarding flow marks the happy path complete and command-ready',
 
   assert.equal(flow.currentStepId, 'bootstrap')
   assert.equal(flow.commandReady, true)
-  assert.equal(flow.nextActionMessage, 'Bootstrap and verification are complete.')
+  assert.equal(flow.nextActionMessage, 'Onboarding is complete. Continue in Provider Console to manage this provider.')
   assert.deepEqual(
     flow.steps.map((step) => ({ id: step.id, ready: step.ready, state: step.state })),
     [

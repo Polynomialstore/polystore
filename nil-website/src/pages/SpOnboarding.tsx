@@ -405,6 +405,7 @@ export function SpOnboarding() {
       endpointReady,
     ],
   )
+  const onboardingComplete = flow.stepReadyById.bootstrap
 
   const bootstrapCommand = useMemo(
     () =>
@@ -786,13 +787,22 @@ export function SpOnboarding() {
             <div className="space-y-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Current step</div>
               <h2 className="text-2xl font-semibold text-foreground">
-                Step {flow.currentStepIndex + 1}. {flow.currentStep.label}
+                {onboardingComplete ? 'All steps complete' : `Step ${flow.currentStepIndex + 1}. ${flow.currentStep.label}`}
               </h2>
               <p className="max-w-3xl text-sm text-muted-foreground">{flow.nextActionMessage}</p>
             </div>
-            <PrimaryCtaButton size="md" onClick={() => scrollToStep(flow.currentStep.anchor)}>
-              Go To Step {flow.currentStepIndex + 1}
-            </PrimaryCtaButton>
+            {onboardingComplete ? (
+              <Link
+                to="/sp-dashboard"
+                className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              >
+                Open Provider Console
+              </Link>
+            ) : (
+              <PrimaryCtaButton size="md" onClick={() => scrollToStep(flow.currentStep.anchor)}>
+                Go To Step {flow.currentStepIndex + 1}
+              </PrimaryCtaButton>
+            )}
           </div>
 
           <div className="mt-5 grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2 xl:grid-cols-5">
