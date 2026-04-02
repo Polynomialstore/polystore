@@ -22,19 +22,19 @@ function baseInput(): ProviderOnboardingFlowInput {
   }
 }
 
-test('provider onboarding flow exposes the revised 4-step model', () => {
+test('provider onboarding flow exposes the revised 5-step model with console handoff', () => {
   assert.deepEqual(
     PROVIDER_ONBOARDING_STEPS.map((step) => step.id),
-    ['wallet', 'host', 'pairing', 'publish'],
+    ['wallet', 'host', 'pairing', 'publish', 'console'],
   )
 })
 
-test('provider onboarding flow marks the happy path complete and command-ready', () => {
+test('provider onboarding flow moves healthy providers to the console handoff step', () => {
   const flow = buildProviderOnboardingFlow(baseInput())
 
-  assert.equal(flow.currentStepId, 'publish')
+  assert.equal(flow.currentStepId, 'console')
   assert.equal(flow.commandReady, true)
-  assert.equal(flow.nextActionMessage, 'Onboarding is complete. Continue in Provider Console to manage this provider.')
+  assert.match(flow.nextActionMessage, /Open Provider Console/i)
   assert.deepEqual(
     flow.steps.map((step) => ({ id: step.id, ready: step.ready, state: step.state })),
     [
@@ -42,6 +42,7 @@ test('provider onboarding flow marks the happy path complete and command-ready',
       { id: 'host', ready: true, state: 'ready' },
       { id: 'pairing', ready: true, state: 'ready' },
       { id: 'publish', ready: true, state: 'ready' },
+      { id: 'console', ready: false, state: 'action' },
     ],
   )
 })
@@ -160,6 +161,14 @@ test('provider onboarding flow only marks publish step ready after registration 
 
   assert.equal(waitingForHealth.currentStepId, 'publish')
   assert.match(waitingForHealth.nextActionMessage, /Wait for provider health to converge/i)
+})
+
+test('provider onboarding flow reaches console handoff only after publish checks are healthy', () => {
+  const flow = buildProviderOnboardingFlow(baseInput())
+
+  assert.equal(flow.stepReadyById.publish, true)
+  assert.equal(flow.currentStepId, 'console')
+  assert.equal(flow.steps[4]?.statusLabel, 'Do now')
 })
 
 test('provider onboarding flow keeps bootstrap command unavailable until pairing and endpoint setup are complete', () => {

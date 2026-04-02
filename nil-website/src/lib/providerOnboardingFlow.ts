@@ -1,4 +1,4 @@
-export type ProviderOnboardingStepId = 'wallet' | 'host' | 'pairing' | 'publish'
+export type ProviderOnboardingStepId = 'wallet' | 'host' | 'pairing' | 'publish' | 'console'
 export type ProviderOnboardingStepState = 'ready' | 'pending' | 'action' | 'idle'
 
 export interface ProviderOnboardingFlowInput {
@@ -62,6 +62,12 @@ export const PROVIDER_ONBOARDING_STEPS: ProviderOnboardingStepDefinition[] = [
     label: 'Publish Endpoint + Bootstrap',
     anchor: 'step-publish-bootstrap',
     doneWhen: 'public endpoint is defined and bootstrap plus health converge',
+  },
+  {
+    id: 'console',
+    label: 'Open Provider Console',
+    anchor: 'step-console',
+    doneWhen: 'you are in /sp-dashboard to manage this provider',
   },
 ]
 
@@ -145,7 +151,11 @@ function publishNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.publicHealthReady) {
     return 'Wait for provider health to converge after bootstrap, then refresh the verification cards.'
   }
-  return 'Onboarding is complete. Continue in Provider Console to manage this provider.'
+  return 'Publish and bootstrap checks are healthy.'
+}
+
+function consoleNextAction(): string {
+  return 'Onboarding is healthy. Open Provider Console to monitor and operate this provider.'
 }
 
 function nextActionForStep(
@@ -155,7 +165,8 @@ function nextActionForStep(
   if (stepId === 'wallet') return walletNextAction(input)
   if (stepId === 'host') return hostNextAction(input)
   if (stepId === 'pairing') return pairingNextAction(input)
-  return publishNextAction(input)
+  if (stepId === 'publish') return publishNextAction(input)
+  return consoleNextAction()
 }
 
 export function buildProviderOnboardingFlow(
@@ -166,6 +177,7 @@ export function buildProviderOnboardingFlow(
     host: input.providerRepoReady,
     pairing: input.providerKeyReady && input.pairingConfirmed,
     publish: input.pairingConfirmed && input.endpointReady && input.providerRegistered && input.publicHealthReady,
+    console: false,
   }
 
   const currentStepId: ProviderOnboardingStepId = !stepReadyById.wallet
@@ -174,7 +186,9 @@ export function buildProviderOnboardingFlow(
       ? 'host'
       : !stepReadyById.pairing
         ? 'pairing'
-        : 'publish'
+        : !stepReadyById.publish
+          ? 'publish'
+          : 'console'
 
   const currentStepIndex = PROVIDER_ONBOARDING_STEPS.findIndex((step) => step.id === currentStepId)
 

@@ -428,7 +428,7 @@ export function SpOnboarding() {
       endpointReady,
     ],
   )
-  const onboardingComplete = flow.stepReadyById.publish
+  const providerHealthy = flow.stepReadyById.publish
 
   const bootstrapCommand = useMemo(
     () =>
@@ -683,14 +683,14 @@ export function SpOnboarding() {
       : pairingLinked
         ? 'pending'
         : 'action'
-  const publishBootstrapState: 'ready' | 'pending' | 'action' | 'idle' = onboardingComplete
+  const publishBootstrapState: 'ready' | 'pending' | 'action' | 'idle' = providerHealthy
     ? 'ready'
     : !pairingConfirmed || !endpointReady
       ? 'action'
       : !providerRegistered && !publicHealthReady
         ? 'action'
         : 'pending'
-  const publishBootstrapLabel = onboardingComplete
+  const publishBootstrapLabel = providerHealthy
     ? 'Complete'
     : !pairingConfirmed
       ? 'Approve link first'
@@ -789,11 +789,11 @@ export function SpOnboarding() {
             <div className="space-y-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Current step</div>
               <h2 className="text-2xl font-semibold text-foreground">
-                {onboardingComplete ? 'All steps complete' : `Step ${flow.currentStepIndex + 1}. ${flow.currentStep.label}`}
+                {`Step ${flow.currentStepIndex + 1}. ${flow.currentStep.label}`}
               </h2>
               <p className="max-w-3xl text-sm text-muted-foreground">{flow.nextActionMessage}</p>
             </div>
-            {onboardingComplete ? (
+            {flow.currentStepId === 'console' ? (
               <Link
                 to="/sp-dashboard"
                 className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
@@ -807,7 +807,7 @@ export function SpOnboarding() {
             )}
           </div>
 
-          <div className="mt-5 grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2 xl:grid-cols-5">
             {flow.steps.map((step) => (
               <button
                 key={step.id}
@@ -1629,7 +1629,7 @@ export function SpOnboarding() {
 
           </div>
 
-          <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+          <aside id="step-console" className="space-y-6 lg:sticky lg:top-24 lg:self-start">
             <section className="glass-panel industrial-border overflow-hidden">
               <div className="border-b border-border/60 px-6 py-5">
                 <div className="flex items-center justify-between gap-4">
