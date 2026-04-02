@@ -587,7 +587,7 @@ json_string_field() {
   local field="$1"
   local body="${2:-}"
   if have_cmd jq; then
-    printf '%s' "$body" | jq -r --arg field "$field" '(.[$field] // empty) | strings'
+    printf '%s' "$body" | jq -r --arg field "$field" '(.[$field] // .provider[$field] // .pairing[$field] // .link[$field] // empty) | strings'
     return 0
   fi
   if have_cmd python3; then
@@ -597,9 +597,17 @@ try:
     payload = json.load(sys.stdin)
 except Exception:
     sys.exit(0)
-value = payload.get(field, "")
-if isinstance(value, str):
-    sys.stdout.write(value)' <<<"$body"
+candidates = []
+if isinstance(payload, dict):
+    candidates.append(payload.get(field))
+    for parent in ("provider", "pairing", "link"):
+        scoped = payload.get(parent)
+        if isinstance(scoped, dict):
+            candidates.append(scoped.get(field))
+for value in candidates:
+    if isinstance(value, str):
+        sys.stdout.write(value)
+        break' <<<"$body"
     return 0
   fi
   printf '%s' "$body" | tr -d '\n' | sed -n "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n1
@@ -609,7 +617,7 @@ json_array_field() {
   local field="$1"
   local body="${2:-}"
   if have_cmd jq; then
-    printf '%s' "$body" | jq -c --arg field "$field" '(.[$field] // []) | arrays'
+    printf '%s' "$body" | jq -c --arg field "$field" '(.[$field] // .provider[$field] // .pairing[$field] // .link[$field] // []) | arrays'
     return 0
   fi
   if have_cmd python3; then
@@ -620,9 +628,17 @@ try:
 except Exception:
     sys.stdout.write("[]")
     sys.exit(0)
-value = payload.get(field, [])
-if isinstance(value, list):
-    sys.stdout.write(json.dumps(value))
+candidates = []
+if isinstance(payload, dict):
+    candidates.append(payload.get(field))
+    for parent in ("provider", "pairing", "link"):
+        scoped = payload.get(parent)
+        if isinstance(scoped, dict):
+            candidates.append(scoped.get(field))
+for value in candidates:
+    if isinstance(value, list):
+        sys.stdout.write(json.dumps(value))
+        break
 else:
     sys.stdout.write("[]")' <<<"$body"
     return 0
@@ -967,10 +983,7 @@ pair_provider() {
 
   request_provider_link
 
-  echo
-  echo "Next step (website operator wallet): approve this provider link request."
-  echo "  provider: $(provider_addr)"
-  echo "  operator: $(configured_operator_address || true)"
+  print_pairing_followup
 }
 
 register_provider() {
@@ -1096,6 +1109,39 @@ request_provider_link() {
   echo "  operator: $operator"
 }
 
+print_pairing_followup() {
+  local operator confirmed_operator requested_operator addr
+  operator="$(configured_operator_address || true)"
+  confirmed_operator="$(provider_pairing_operator || true)"
+  requested_operator="$(pending_link_operator || true)"
+  addr="$(provider_addr)"
+
+  echo
+  if [ -n "$operator" ] && [ "$confirmed_operator" = "$operator" ]; then
+    echo "Provider link is already approved on-chain for this operator."
+    echo "  provider: $addr"
+    echo "  operator: $operator"
+    return 0
+  fi
+
+  if [ -n "$operator" ] && [ "$requested_operator" = "$operator" ]; then
+    echo "Next step (website operator wallet): approve this provider link request."
+    echo "  provider: $addr"
+    echo "  operator: $operator"
+    return 0
+  fi
+
+  if [ -n "$confirmed_operator" ]; then
+    echo "Provider is paired on-chain to operator $confirmed_operator."
+  elif [ -n "$requested_operator" ]; then
+    echo "Provider link is pending for operator $requested_operator."
+  else
+    echo "No confirmed or pending provider link found yet. Refresh LCD and retry if needed."
+  fi
+  echo "  provider: $addr"
+  [ -n "$operator" ] && echo "  configured operator: $operator"
+}
+
 link_provider() {
   ensure_provider_key
   local addr
@@ -1111,10 +1157,7 @@ link_provider() {
 
   request_provider_link
 
-  echo
-  echo "Next step (website operator wallet): approve this provider link request."
-  echo "  provider: $(provider_addr)"
-  echo "  operator: $(configured_operator_address || true)"
+  print_pairing_followup
 }
 
 start_provider() {
