@@ -446,8 +446,9 @@ export function SpOnboarding() {
         providerKey,
         authToken: authTokenOverride,
         providerEndpoint: effectiveEndpointPlan?.providerEndpoint || '',
+        expectedProviderAddress: approvedProviderAddress || '',
       }),
-    [authTokenOverride, effectiveEndpointPlan?.providerEndpoint, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
+    [approvedProviderAddress, authTokenOverride, effectiveEndpointPlan?.providerEndpoint, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
   )
   const healthCommands = useMemo(
     () => buildProviderHealthCommands(authoritativePublicBase, providerKey),
@@ -518,7 +519,7 @@ export function SpOnboarding() {
       '  for p in $(lsof -tiTCP:9100 -sTCP:LISTEN 2>/dev/null); do kill "$p" || true; done',
       'fi',
       'sleep 1',
-      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} PROVIDER_ENDPOINT=${shellQuote(normalizedProviderEndpoint)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh bootstrap`,
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} EXPECTED_PROVIDER_ADDRESS=${shellQuote(normalizedApprovedProviderAddress)} PROVIDER_ENDPOINT=${shellQuote(normalizedProviderEndpoint)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh bootstrap`,
       `ACTUAL_PROVIDER_ADDRESS="$(curl -sS ${shellQuote(statusUrl)} | jq -r '.provider.address // empty')"`,
       `echo "Approved provider: ${normalizedApprovedProviderAddress}"`,
       'echo "Served provider:   $ACTUAL_PROVIDER_ADDRESS"',

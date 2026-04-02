@@ -30,6 +30,7 @@ export interface ProviderBootstrapDraft extends ProviderEndpointDraft {
   providerKey?: string
   authToken?: string
   providerEndpoint?: string
+  expectedProviderAddress?: string
 }
 
 export interface ProviderTunnelBootstrapDraft extends ProviderEndpointDraft {
@@ -229,6 +230,7 @@ export function deriveEndpointInputPrefillFromProviderEndpoint(
 export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): string {
   const providerKey = trimNonEmpty(draft.providerKey) || DEFAULT_PROVIDER_KEY
   const operatorAddress = trimNonEmpty(draft.operatorAddress)
+  const expectedProviderAddress = trimNonEmpty(draft.expectedProviderAddress)
   const endpointPlan = buildProviderEndpointPlan(draft)
   const explicitProviderEndpoint = trimNonEmpty(draft.providerEndpoint)
   const providerEndpoint = endpointPlan?.providerEndpoint || explicitProviderEndpoint || '<provider-endpoint>'
@@ -246,6 +248,7 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
     ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\'] : []),
     ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\`] : []),
     `PROVIDER_KEY=${shellQuote(providerKey)} \\`,
+    ...(expectedProviderAddress ? [`EXPECTED_PROVIDER_ADDRESS=${shellQuote(expectedProviderAddress)} \\`] : []),
     `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\`,
     `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken || AUTH_PLACEHOLDER)} \\`,
     './scripts/run_devnet_provider.sh bootstrap',

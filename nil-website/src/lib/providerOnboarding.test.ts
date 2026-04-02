@@ -240,9 +240,11 @@ test('buildProviderBootstrapCommand includes operator address when supplied', ()
     endpointValue: 'sp.example.com',
     operatorAddress: 'nil1operator123',
     providerKey: 'provider-main',
+    expectedProviderAddress: 'nil1providerxyz',
   })
 
   assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
+  assert.match(command, /EXPECTED_PROVIDER_ADDRESS='nil1providerxyz'/)
 })
 
 test('buildProviderPairCommand emits a single provider-host pairing command', () => {
