@@ -324,8 +324,20 @@ export function SpOnboarding() {
     () => findProviderByAddress(providers, activeProviderAddress),
     [activeProviderAddress, providers],
   )
+  const onchainEndpointPlan = useMemo(() => {
+    const firstEndpoint = String(providerRecord?.endpoints?.[0] || '').trim()
+    if (!firstEndpoint) return null
+    return buildProviderEndpointPlan({
+      hostMode: 'public-vps',
+      endpointMode: 'multiaddr',
+      endpointValue: firstEndpoint,
+    })
+  }, [providerRecord?.endpoints])
+  const effectiveEndpointPlan = endpointPlan || onchainEndpointPlan
+  const usingOnchainEndpointFallback = !endpointPlan && Boolean(onchainEndpointPlan)
+  const endpointReady = Boolean(effectiveEndpointPlan)
   const onchainBases = useMemo(() => extractProviderHttpBases(providerRecord?.endpoints), [providerRecord?.endpoints])
-  const effectivePublicBase = onchainBases[0] || endpointPlan?.publicBase || null
+  const effectivePublicBase = onchainBases[0] || effectiveEndpointPlan?.publicBase || null
   const providerStatusDetail = publicStatus?.provider ?? null
   const providerDaemonStatusReady = String(publicStatus?.persona || '').trim().toLowerCase() === 'provider-daemon'
   const approvedProviderAddress = String(confirmedPairing?.provider || '').trim()
@@ -376,7 +388,7 @@ export function SpOnboarding() {
         providerKeyReady,
         pairingLinked,
         pairingConfirmed,
-        endpointReady: Boolean(endpointPlan),
+        endpointReady,
         providerRegistered,
         publicHealthReady,
       }),
@@ -390,7 +402,7 @@ export function SpOnboarding() {
       providerRepoReady,
       publicHealthReady,
       walletReady,
-      endpointPlan,
+      endpointReady,
     ],
   )
 
@@ -404,8 +416,9 @@ export function SpOnboarding() {
         operatorAddress: nilAddress || '',
         providerKey,
         authToken: authTokenOverride,
+        providerEndpoint: effectiveEndpointPlan?.providerEndpoint || '',
       }),
-    [authTokenOverride, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
+    [authTokenOverride, effectiveEndpointPlan?.providerEndpoint, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
   )
   const healthCommands = useMemo(
     () => buildProviderHealthCommands(authoritativePublicBase, providerKey),
@@ -431,7 +444,7 @@ export function SpOnboarding() {
     [endpointMode, endpointValue, hostMode, publicPort, tunnelName],
   )
   const cloudflareTunnelManualCommands = useMemo(() => {
-    const normalizedHost = endpointPlan?.normalizedHost || '<public-hostname>'
+    const normalizedHost = effectiveEndpointPlan?.normalizedHost || '<public-hostname>'
     const normalizedTunnelName = String(tunnelName || '').trim() || 'nilstore-sp'
     return [
       `cloudflared tunnel login`,
@@ -439,7 +452,7 @@ export function SpOnboarding() {
       `cloudflared tunnel route dns ${normalizedTunnelName} ${normalizedHost}`,
       `cloudflared tunnel run ${normalizedTunnelName}`,
     ].join('\n')
-  }, [endpointPlan?.normalizedHost, tunnelName])
+  }, [effectiveEndpointPlan?.normalizedHost, tunnelName])
   const pairCommand = useMemo(
     () => buildProviderPairCommand(providerKey, nilAddress || ''),
     [nilAddress, providerKey],
@@ -452,11 +465,11 @@ export function SpOnboarding() {
     () =>
       buildProviderAgentPrompt({
         operatorAddress: nilAddress || '',
-        providerEndpoint: endpointPlan?.providerEndpoint,
+        providerEndpoint: effectiveEndpointPlan?.providerEndpoint,
         publicBase: authoritativePublicBase,
         providerKey,
       }),
-    [authoritativePublicBase, endpointPlan?.providerEndpoint, nilAddress, providerKey],
+    [authoritativePublicBase, effectiveEndpointPlan?.providerEndpoint, nilAddress, providerKey],
   )
 
   const handleCopy = useCallback(async (label: string, text: string) => {
@@ -646,7 +659,7 @@ export function SpOnboarding() {
       : pairingLinked
         ? 'pending'
         : 'action'
-  const publicAccessState: 'ready' | 'pending' | 'action' | 'idle' = endpointPlan ? 'ready' : 'action'
+  const publicAccessState: 'ready' | 'pending' | 'action' | 'idle' = endpointReady ? 'ready' : 'action'
   const providerState: 'ready' | 'pending' | 'action' | 'idle' = publicHealthReady
     ? 'ready'
     : providerRegistered
@@ -733,7 +746,7 @@ export function SpOnboarding() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public access</div>
               <div className="flex items-center gap-2 text-sm text-foreground">
                 <StatusPill
-                  label={endpointPlan ? 'Ready' : 'Configure'}
+                  label={endpointReady ? (usingOnchainEndpointFallback ? 'Ready (on-chain)' : 'Ready') : 'Configure'}
                   state={publicAccessState}
                 />
               </div>
@@ -1192,7 +1205,7 @@ export function SpOnboarding() {
                   </p>
                 </div>
                 <StatusPill
-                  label={endpointPlan ? 'Ready' : 'Action needed'}
+                  label={endpointReady ? (usingOnchainEndpointFallback ? 'Ready (on-chain)' : 'Ready') : 'Action needed'}
                   state={publicAccessState}
                 />
               </div>
@@ -1306,13 +1319,19 @@ export function SpOnboarding() {
                 <div className="grid gap-2 border border-border bg-background/40 p-4 text-sm text-muted-foreground sm:grid-cols-2">
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Derived provider endpoint</div>
-                    <div className="mt-2 break-all font-mono-data text-foreground">{endpointPlan?.providerEndpoint || '—'}</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{effectiveEndpointPlan?.providerEndpoint || '—'}</div>
                   </div>
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Public health URL</div>
-                    <div className="mt-2 break-all font-mono-data text-foreground">{endpointPlan?.publicHealthUrl || '—'}</div>
+                    <div className="mt-2 break-all font-mono-data text-foreground">{effectiveEndpointPlan?.publicHealthUrl || '—'}</div>
                   </div>
                 </div>
+
+                {usingOnchainEndpointFallback ? (
+                  <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+                    Step 4 is already satisfied from the existing on-chain endpoint. Edit fields only if you want to rotate the endpoint.
+                  </div>
+                ) : null}
 
                 <details className="border border-border bg-background p-4">
                   <summary className="cursor-pointer text-sm font-semibold text-foreground">Advanced: gateway auth override</summary>
@@ -1357,7 +1376,7 @@ export function SpOnboarding() {
                         ? 'Finish Step 3 by running the pair command and approving the provider link before bootstrap.'
                       : !hasOperatorAddress
                         ? 'Finish Step 1 so the website can capture the connected operator wallet nil address.'
-                        : !endpointPlan
+                        : !endpointReady
                         ? 'Describe the public endpoint so the website can derive the provider endpoint and health URL.'
                         : 'Step 4 is complete. Continue to bootstrap and verification.'}
                   </div>
@@ -1648,7 +1667,7 @@ export function SpOnboarding() {
                   </div>
                   <div className="min-w-0">
                     <span>Provider endpoint</span>
-                    <div className="mt-1 break-all font-mono-data text-foreground">{endpointPlan?.providerEndpoint || '—'}</div>
+                    <div className="mt-1 break-all font-mono-data text-foreground">{effectiveEndpointPlan?.providerEndpoint || '—'}</div>
                   </div>
                   <div className="min-w-0">
                     <span>Provider key</span>
@@ -1719,7 +1738,7 @@ export function SpOnboarding() {
                         ? 'Run the pair command and approve the provider link in Step 3 before generating the bootstrap command.'
                       : !hasOperatorAddress
                         ? 'Connect the operator wallet in Step 1 so this page can populate OPERATOR_ADDRESS.'
-                      : !endpointPlan
+                      : !endpointReady
                         ? 'Describe the public endpoint in Step 4 to generate the provider host runbook.'
                         : 'Runbook is ready.'}
                   </div>

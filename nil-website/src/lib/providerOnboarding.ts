@@ -23,6 +23,7 @@ export interface ProviderBootstrapDraft extends ProviderEndpointDraft {
   operatorAddress?: string
   providerKey?: string
   authToken?: string
+  providerEndpoint?: string
 }
 
 export interface ProviderTunnelBootstrapDraft extends ProviderEndpointDraft {
@@ -91,18 +92,55 @@ function stripSchemeAndPath(raw: string): string {
   }
 }
 
-function planFromMultiaddr(raw: string): ProviderEndpointPlan {
+function isValidIpv4Host(host: string): boolean {
+  const value = trimNonEmpty(host)
+  const parts = value.split('.')
+  if (parts.length !== 4) return false
+  return parts.every((part) => {
+    if (!/^\d+$/.test(part)) return false
+    const parsed = Number(part)
+    return Number.isInteger(parsed) && parsed >= 0 && parsed <= 255
+  })
+}
+
+function isValidDomainHostname(host: string): boolean {
+  const value = trimNonEmpty(host).toLowerCase()
+  if (!value || value.length > 253) return false
+  if (!value.includes('.')) return false
+  if (value.startsWith('.') || value.endsWith('.')) return false
+  const labels = value.split('.')
+  return labels.every((label) =>
+    label.length > 0
+    && label.length <= 63
+    && /^[a-z0-9-]+$/.test(label)
+    && !label.startsWith('-')
+    && !label.endsWith('-'),
+  )
+}
+
+function looksLikeHttpMultiaddr(endpoint: string): boolean {
+  const value = trimNonEmpty(endpoint)
+  if (!value.startsWith('/')) return false
+  return /\/tcp\/\d+\/(http|https)(\/|$)/i.test(value)
+}
+
+function planFromMultiaddr(raw: string): ProviderEndpointPlan | null {
   const providerEndpoint = trimNonEmpty(raw)
+  if (!providerEndpoint || !looksLikeHttpMultiaddr(providerEndpoint)) {
+    return null
+  }
   const publicBase = normalizeHttpBase(providerEndpoint)
-  const normalizedUrl = publicBase ? new URL(publicBase) : null
-  const fallbackPort = /(^|\/)http($|\/)/i.test(providerEndpoint) ? DEFAULT_IPV4_PORT : DEFAULT_DOMAIN_PORT
+  if (!publicBase) {
+    return null
+  }
+  const normalizedUrl = new URL(publicBase)
 
   return {
     providerEndpoint,
     publicBase,
     publicHealthUrl: publicBase ? `${publicBase}/health` : null,
-    normalizedHost: providerEndpoint,
-    publicPort: normalizedUrl ? Number(normalizedUrl.port || (normalizedUrl.protocol === 'http:' ? '80' : '443')) : fallbackPort,
+    normalizedHost: normalizedUrl.hostname.trim().toLowerCase(),
+    publicPort: Number(normalizedUrl.port || (normalizedUrl.protocol === 'http:' ? '80' : '443')),
   }
 }
 
@@ -117,6 +155,8 @@ export function buildProviderEndpointPlan(draft: ProviderEndpointDraft): Provide
 
   const normalizedHost = stripSchemeAndPath(rawValue)
   if (!normalizedHost) return null
+  if (endpointMode === 'ipv4' && !isValidIpv4Host(normalizedHost)) return null
+  if (endpointMode === 'domain' && !isValidDomainHostname(normalizedHost)) return null
 
   const publicPort = parsePort(draft.publicPort, endpointMode)
   const multiaddrPrefix = endpointMode === 'ipv4' ? 'ip4' : 'dns4'
@@ -138,10 +178,12 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   const providerKey = trimNonEmpty(draft.providerKey) || DEFAULT_PROVIDER_KEY
   const operatorAddress = trimNonEmpty(draft.operatorAddress)
   const endpointPlan = buildProviderEndpointPlan(draft)
-  const providerEndpoint = endpointPlan?.providerEndpoint || '<provider-endpoint>'
+  const explicitProviderEndpoint = trimNonEmpty(draft.providerEndpoint)
+  const providerEndpoint = endpointPlan?.providerEndpoint || explicitProviderEndpoint || '<provider-endpoint>'
+  const hasProviderEndpoint = Boolean(endpointPlan?.providerEndpoint || explicitProviderEndpoint)
   const authToken = trimNonEmpty(draft.authToken) || DEVNET_SHARED_GATEWAY_AUTH_TOKEN
   const usingDefaultAuth = !trimNonEmpty(draft.authToken)
-  const websiteReady = Boolean(endpointPlan && operatorAddress)
+  const websiteReady = Boolean(hasProviderEndpoint && operatorAddress)
   const envLines = [
     '# Run this from the nil-store checkout on the provider host after pairing is approved.',
     '# This command starts (or restarts) the provider-daemon, then registers endpoints and runs health checks.',
@@ -231,12 +273,13 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
 
 export function evaluateProviderRunbookReadiness(input: {
   endpointPlan: ProviderEndpointPlan | null
+  providerEndpoint?: string
   operatorAddress?: string
   authToken?: string
 }): ProviderRunbookReadiness {
   const missing: ProviderRunbookReadiness['missing'] = []
 
-  if (!input.endpointPlan) missing.push('endpoint')
+  if (!input.endpointPlan && !trimNonEmpty(input.providerEndpoint)) missing.push('endpoint')
   if (!trimNonEmpty(input.operatorAddress)) missing.push('operator')
 
   return {

@@ -67,6 +67,37 @@ test('buildProviderEndpointPlan keeps an explicit multiaddr intact', () => {
   assert.equal(plan?.publicHealthUrl, 'https://203.0.113.10:8443/health')
 })
 
+test('buildProviderEndpointPlan rejects invalid endpoint inputs', () => {
+  assert.equal(
+    buildProviderEndpointPlan({
+      hostMode: 'home-tunnel',
+      endpointMode: 'domain',
+      endpointValue: 'not-a-public-host',
+      publicPort: 443,
+    }),
+    null,
+  )
+
+  assert.equal(
+    buildProviderEndpointPlan({
+      hostMode: 'public-vps',
+      endpointMode: 'ipv4',
+      endpointValue: '999.0.113.10',
+      publicPort: 8091,
+    }),
+    null,
+  )
+
+  assert.equal(
+    buildProviderEndpointPlan({
+      hostMode: 'public-vps',
+      endpointMode: 'multiaddr',
+      endpointValue: 'abc',
+    }),
+    null,
+  )
+})
+
 test('buildProviderBootstrapCommand emits a focused bootstrap command and opts into partial mode when operator data is absent', () => {
   const command = buildProviderBootstrapCommand({
     hostMode: 'public-vps',
@@ -94,6 +125,21 @@ test('buildProviderBootstrapCommand emits a focused bootstrap command and opts i
     assert.match(line, / \\$/)
     assert.doesNotMatch(line, / \\\\$/)
   }
+})
+
+test('buildProviderBootstrapCommand uses an explicit provider endpoint fallback when draft input is invalid', () => {
+  const command = buildProviderBootstrapCommand({
+    hostMode: 'public-vps',
+    endpointMode: 'domain',
+    endpointValue: 'not-a-public-host',
+    operatorAddress: 'nil1operator123',
+    providerKey: 'provider-main',
+    providerEndpoint: '/dns4/testasdf.nil-store.com/tcp/443/https',
+  })
+
+  assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
+  assert.match(command, /PROVIDER_ENDPOINT='\/dns4\/testasdf\.nil-store\.com\/tcp\/443\/https'/)
+  assert.doesNotMatch(command, /BOOTSTRAP_ALLOW_PARTIAL=1/)
 })
 
 test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tunnel hosts', () => {
@@ -133,6 +179,18 @@ test('evaluateProviderRunbookReadiness requires endpoint and operator for websit
     ready: true,
     missing: [],
   })
+  assert.deepEqual(
+    evaluateProviderRunbookReadiness({
+      endpointPlan: null,
+      providerEndpoint: '/dns4/testasdf.nil-store.com/tcp/443/https',
+      operatorAddress: 'nil1op',
+      authToken: '',
+    }),
+    {
+      ready: true,
+      missing: [],
+    },
+  )
 })
 
 test('buildProviderBootstrapCommand includes operator address when supplied', () => {
