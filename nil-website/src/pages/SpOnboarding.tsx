@@ -453,14 +453,14 @@ export function SpOnboarding() {
     () => buildProviderHealthCommands(authoritativePublicBase, providerKey),
     [authoritativePublicBase, providerKey],
   )
-  const providerDaemonRestartCommand = useMemo(
-    () => [
+  const providerDaemonRestartCommand = useMemo(() => {
+    const normalizedProviderKey = String(providerKeyLabel || '').trim() || 'provider1'
+    return [
       '# Start or restart provider-daemon only.',
-      './scripts/run_devnet_provider.sh stop || true',
-      './scripts/run_devnet_provider.sh start',
-    ].join('\n'),
-    [],
-  )
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} ./scripts/run_devnet_provider.sh stop || true`,
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh start`,
+    ].join('\n')
+  }, [effectiveGatewayAuthToken, providerKeyLabel])
   const cloudflareTunnelCommand = useMemo(
     () =>
       buildCloudflareTunnelBootstrapCommand({
@@ -495,11 +495,13 @@ export function SpOnboarding() {
     const normalizedOperatorAddress = String(nilAddress || '').trim()
     const normalizedProviderEndpoint = String(effectiveEndpointPlan?.providerEndpoint || '').trim()
     const normalizedStatusBase = String(authoritativePublicBase || effectivePublicBase || '').trim()
+    const normalizedApprovedProviderAddress = String(approvedProviderAddress || '').trim()
     const missing: string[] = []
     if (!normalizedProviderKey) missing.push('provider key')
     if (!normalizedOperatorAddress) missing.push('operator address')
     if (!normalizedProviderEndpoint) missing.push('provider endpoint')
     if (!normalizedStatusBase) missing.push('public status base URL')
+    if (!normalizedApprovedProviderAddress) missing.push('approved provider address')
     if (missing.length > 0) {
       return {
         command: null as string | null,
@@ -509,10 +511,18 @@ export function SpOnboarding() {
     const statusUrl = `${normalizedStatusBase.replace(/\/$/, '')}/status`
     const command = [
       '# Run this on the provider host to align daemon identity with approved pairing.',
+      '# This also clears stale daemons from other nil-store checkouts on ports 8091/9100.',
       `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} ./scripts/run_devnet_provider.sh stop || true`,
-      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh start`,
+      'if command -v lsof >/dev/null 2>&1; then',
+      '  for p in $(lsof -tiTCP:8091 -sTCP:LISTEN 2>/dev/null); do kill "$p" || true; done',
+      '  for p in $(lsof -tiTCP:9100 -sTCP:LISTEN 2>/dev/null); do kill "$p" || true; done',
+      'fi',
+      'sleep 1',
       `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} PROVIDER_ENDPOINT=${shellQuote(normalizedProviderEndpoint)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh bootstrap`,
-      `curl -sS ${shellQuote(statusUrl)} | jq -r '.provider.address'`,
+      `ACTUAL_PROVIDER_ADDRESS="$(curl -sS ${shellQuote(statusUrl)} | jq -r '.provider.address // empty')"`,
+      `echo "Approved provider: ${normalizedApprovedProviderAddress}"`,
+      'echo "Served provider:   $ACTUAL_PROVIDER_ADDRESS"',
+      `[ "$ACTUAL_PROVIDER_ADDRESS" = ${shellQuote(normalizedApprovedProviderAddress)} ] && echo "OK: endpoint matches approved provider." || echo "ERROR: endpoint still serves a different provider."`,
     ].join('\n')
     return {
       command,
@@ -520,6 +530,7 @@ export function SpOnboarding() {
     }
   }, [
     authoritativePublicBase,
+    approvedProviderAddress,
     effectiveEndpointPlan?.providerEndpoint,
     effectiveGatewayAuthToken,
     effectivePublicBase,
@@ -1525,7 +1536,7 @@ export function SpOnboarding() {
                       <div className="mt-4 space-y-3 border border-destructive/40 bg-background p-3">
                         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Recommended fix</div>
                         <div className="text-sm text-foreground">
-                          Run these commands on the provider host, then verify that <span className="font-mono">/status</span> returns the approved provider address.
+                          Run these commands on the provider host, then verify that <span className="font-mono">/status</span> returns the approved provider address. This fix also clears stale daemons started from other local checkouts.
                         </div>
                         {wrongProviderFix.command ? (
                           <>
