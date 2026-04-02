@@ -236,7 +236,12 @@ provider_local_base_url() {
 }
 
 first_provider_endpoint() {
-  IFS=',' read -r -a endpoints <<<"$PROVIDER_ENDPOINTS_RAW"
+  local endpoint_csv="${PROVIDER_ENDPOINTS_RAW:-}"
+  if [ -z "$endpoint_csv" ]; then
+    return 1
+  fi
+  local endpoints=()
+  IFS=',' read -r -a endpoints <<<"$endpoint_csv" || true
   for ep in "${endpoints[@]}"; do
     ep="$(echo "$ep" | xargs)"
     if [ -n "$ep" ]; then
