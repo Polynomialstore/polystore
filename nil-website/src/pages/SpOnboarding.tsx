@@ -138,6 +138,10 @@ function loadSessionAuthToken(): string {
   }
 }
 
+function shellQuote(input: string): string {
+  return `'${String(input).replace(/'/g, `'\\''`)}'`
+}
+
 async function copyText(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
@@ -372,6 +376,7 @@ export function SpOnboarding() {
   )
   const authoritativePublicBase = providerStatusDetail?.public_base || effectivePublicBase
   const authTokenOverride = String(authToken || '').trim()
+  const effectiveGatewayAuthToken = authTokenOverride || DEVNET_SHARED_GATEWAY_AUTH_TOKEN
   const hasCustomAuthToken = Boolean(authTokenOverride)
   const hasOperatorAddress = Boolean(String(nilAddress || '').trim())
   const providerKeyLabel = String(providerKey || '').trim()
@@ -485,6 +490,42 @@ export function SpOnboarding() {
     () => buildProviderLinkCommand(providerKey, nilAddress || ''),
     [nilAddress, providerKey],
   )
+  const wrongProviderFix = useMemo(() => {
+    const normalizedProviderKey = String(providerKeyLabel || '').trim()
+    const normalizedOperatorAddress = String(nilAddress || '').trim()
+    const normalizedProviderEndpoint = String(effectiveEndpointPlan?.providerEndpoint || '').trim()
+    const normalizedStatusBase = String(authoritativePublicBase || effectivePublicBase || '').trim()
+    const missing: string[] = []
+    if (!normalizedProviderKey) missing.push('provider key')
+    if (!normalizedOperatorAddress) missing.push('operator address')
+    if (!normalizedProviderEndpoint) missing.push('provider endpoint')
+    if (!normalizedStatusBase) missing.push('public status base URL')
+    if (missing.length > 0) {
+      return {
+        command: null as string | null,
+        missing,
+      }
+    }
+    const statusUrl = `${normalizedStatusBase.replace(/\/$/, '')}/status`
+    const command = [
+      '# Run this on the provider host to align daemon identity with approved pairing.',
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} ./scripts/run_devnet_provider.sh stop || true`,
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh start`,
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} PROVIDER_ENDPOINT=${shellQuote(normalizedProviderEndpoint)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh bootstrap`,
+      `curl -sS ${shellQuote(statusUrl)} | jq -r '.provider.address'`,
+    ].join('\n')
+    return {
+      command,
+      missing,
+    }
+  }, [
+    authoritativePublicBase,
+    effectiveEndpointPlan?.providerEndpoint,
+    effectiveGatewayAuthToken,
+    effectivePublicBase,
+    nilAddress,
+    providerKeyLabel,
+  ])
   const agentPrompt = useMemo(
     () =>
       buildProviderAgentPrompt({
@@ -1456,7 +1497,7 @@ export function SpOnboarding() {
                     </div>
                     <div className="mt-2 break-all text-foreground">
                       {providerIdentityMismatch
-                        ? `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'} is currently serving ${statusProviderAddress}. Restart provider-daemon with key ${approvedProviderAddress} and rerun bootstrap.`
+                        ? `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'} is serving ${statusProviderAddress}, but this onboarding is approved for ${approvedProviderAddress}. Run the recommended fix commands below to restart with the correct provider key and re-bootstrap.`
                         : providerDaemonStatusReady
                         ? providerStatusDetail?.public_health_ok
                           ? `${providerStatusDetail.public_health_url || `${authoritativePublicBase || effectivePublicBase}/health`} is reachable from the provider host`
@@ -1478,6 +1519,27 @@ export function SpOnboarding() {
                         >
                           <RefreshCw className={`h-4 w-4 ${loadingPublicStatus ? 'animate-spin' : ''}`} /> Refresh
                         </button>
+                      </div>
+                    ) : null}
+                    {providerIdentityMismatch ? (
+                      <div className="mt-4 space-y-3 border border-destructive/40 bg-background p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Recommended fix</div>
+                        <div className="text-sm text-foreground">
+                          Run these commands on the provider host, then verify that <span className="font-mono">/status</span> returns the approved provider address.
+                        </div>
+                        {wrongProviderFix.command ? (
+                          <>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm font-semibold text-foreground">Copyable wrong-provider fix commands</div>
+                              <CopyButton label="Copy" onClick={() => void handleCopy('Wrong-provider fix commands', wrongProviderFix.command || '')} />
+                            </div>
+                            <pre className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{wrongProviderFix.command}</pre>
+                          </>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">
+                            Could not build fix commands yet. Missing: {wrongProviderFix.missing.join(', ')}.
+                          </div>
+                        )}
                       </div>
                     ) : null}
                   </div>
