@@ -110,7 +110,7 @@ test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tun
   assert.match(command, /cloudflared tunnel login/)
   assert.match(command, /cloudflared tunnel create "\$CF_TUNNEL_NAME"/)
   assert.match(command, /cloudflared tunnel route dns "\$CF_TUNNEL_NAME" "\$CF_TUNNEL_HOSTNAME"/)
-  assert.match(command, /cloudflared tunnel run "\$CF_TUNNEL_NAME"/)
+  assert.match(command, /cloudflared --config "\$HOME\/\.cloudflared\/config\.yml" tunnel run "\$CF_TUNNEL_NAME"/)
 })
 
 test('evaluateProviderRunbookReadiness requires endpoint and operator for website-managed onboarding', () => {

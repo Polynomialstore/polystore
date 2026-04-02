@@ -224,7 +224,7 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
     'EOF',
     '',
     'echo "Tunnel config written to $HOME/.cloudflared/config.yml"',
-    'cloudflared tunnel run "$CF_TUNNEL_NAME"',
+    'cloudflared --config "$HOME/.cloudflared/config.yml" tunnel run "$CF_TUNNEL_NAME"',
     'NILSTORE_CF_TUNNEL',
   ].join('\n')
 }
