@@ -4,7 +4,7 @@ import {
   BadgeCheck,
   Database,
   GitBranch,
-  Radar,
+  HeartPlus,
   Server,
   ShieldCheck,
   Sparkles,
@@ -38,19 +38,19 @@ const audienceTracks = [
 
 const proofPoints = [
   {
-    label: "Public Testnet",
-    body: "A live wallet-first environment for storage users and provider operators.",
+    label: "Preview Testnet",
+    body: "A preview test environment for storage users and provider operators.",
     icon: Sparkles,
   },
   {
     label: "Verifiable Path",
-    body: "Built around commit, retrieval, and operator health visibility instead of black-box storage.",
+    body: "Built around cryptographic proofs of storage and retrieval.",
     icon: ShieldCheck,
   },
   {
-    label: "Operational Surface",
-    body: "Provider onboarding, pairing, and recovery live in the web product instead of scattered runbooks.",
-    icon: Radar,
+    label: "High Availability",
+    body: "Data Availability is mantained by Reed-Solomon Error Correction Coding and automatic migrations.",
+    icon: HeartPlus,
   },
 ] as const
 
@@ -62,22 +62,19 @@ const quickLinks = [
 
 export const Home = () => {
   return (
-    <div className="px-4 pb-16 pt-24 md:pb-20">
+    <div className="px-4 pb-16 pt-12 md:pb-20">
       <div className="container mx-auto max-w-6xl space-y-12">
         <motion.section
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-          className="relative overflow-hidden glass-panel industrial-border px-6 py-8 md:px-10 md:py-12"
+          className="relative glass-panel industrial-border px-6 py-8 md:px-10 md:py-12"
         >
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)_/_0.14),transparent_32%),radial-gradient(circle_at_bottom_left,hsl(var(--accent)_/_0.12),transparent_28%)]" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
-
-          <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-end">
+          <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-center">
             <div className="max-w-3xl">
               <div className="inline-flex items-center gap-2 border border-border bg-card/80 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
                 <BadgeCheck className="h-4 w-4 text-primary" />
-                Public Testnet
+                Preview Testnet
               </div>
 
               <div className="mt-6 flex items-center gap-4">
@@ -103,10 +100,10 @@ export const Home = () => {
 
               <div className="mt-8 space-y-5">
                 <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl md:text-[3.7rem]">
-                  Store data. Run providers. Verify both on NilStore testnet.
+                  Store data. Run providers. Join the NilStore testnet.
                 </h1>
                 <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-                  Choose the path that matches your role, then move directly into the real browser and wallet flow for storage or provider operations.
+                  Choose the path that matches your role.
                 </p>
               </div>
 
@@ -178,9 +175,8 @@ export const Home = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.28, delay: 0.06 + index * 0.05 }}
                 whileHover={{ y: -4 }}
-                className="relative overflow-hidden glass-panel industrial-border px-6 py-7 md:px-8 md:py-8"
+                className="relative glass-panel industrial-border px-6 py-7 md:px-8 md:py-8"
               >
-                <div className={`pointer-events-none absolute inset-0 ${isAccent ? "bg-[radial-gradient(circle_at_top_right,hsl(var(--accent)_/_0.12),transparent_36%)]" : "bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)_/_0.12),transparent_36%)]"}`} />
                 <div className="relative flex items-start justify-between gap-6">
                   <div className="max-w-xl space-y-4">
                     <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{track.eyebrow}</div>
@@ -226,7 +222,7 @@ export const Home = () => {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.12 }}
-          className="grid gap-5 border border-border bg-card/70 px-6 py-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:px-8"
+          className="grid gap-5 border border-border bg-card/70 px-6 py-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:px-8 glass-panel industrial-border"
         >
           <div className="space-y-3">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Choose Your Starting Point</div>

@@ -28,9 +28,9 @@ export function AlphaStorage() {
 
         <section className="mt-12">
           <AgentPromptCard
-            className="mx-auto max-w-2xl"
+            className="mx-auto "
             badge="/alpha/storage/agent"
-            title="Optional: onboard with a coding agent"
+            title="Alternative: Onboard With A Coding Agent Prompt"
             description="Use the canonical storage prompt from the repo: autonomous local setup, burner-wallet bootstrap, MetaMask handoff, then browser continuity across /first-file and /dashboard."
             prompt={storageAgentPrompt}
           />
