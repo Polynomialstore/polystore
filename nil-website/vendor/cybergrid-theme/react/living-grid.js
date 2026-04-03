@@ -14,6 +14,9 @@ export function LivingGrid() {
   const primaryShadowColorRef = useRef("hsl(190 100% 50%)");
 
   useEffect(() => {
+
+    return; // XXX for performance reasons disable entities
+
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
 

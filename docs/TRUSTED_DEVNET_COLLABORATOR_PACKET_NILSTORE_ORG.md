@@ -68,12 +68,15 @@ Recommended website-first bootstrap:
 
 ```bash
 export PROVIDER_KEY="provider1"
-./scripts/run_devnet_provider.sh init
+export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"         # from website wallet step
+
+./scripts/run_devnet_provider.sh pair
 ```
 
-Fund the printed provider address with `aatom`, then run:
+If the key is new and gas funding is still missing, fund the printed provider address with `aatom` and rerun `pair`.
 
 ```bash
+export PROVIDER_KEY="provider1"
 export PROVIDER_ENDPOINT="/dns4/sp1.nilstore.org/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
 export NIL_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"         # from website wallet step
@@ -84,11 +87,12 @@ export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"         # from website w
 Website-first operator flow:
 - open `/sp-onboarding`
 - connect the operator wallet
-- run provider-host link request with `OPERATOR_ADDRESS`
-- approve the pending link from the operator wallet
-- finish verification from the website after bootstrap
+- prepare the provider host checkout
+- pair provider identity (run one `pair` command, fund and rerun if needed, approve from wallet)
+- configure public access (endpoint + `NIL_GATEWAY_SP_AUTH`)
+- run bootstrap and finish verification from the website
 
-Use `scripts/run_devnet_provider.sh` for `init`, `bootstrap`, `print-config`, `doctor`, and `verify`.
+Use `scripts/run_devnet_provider.sh` for `pair`, `bootstrap`, `print-config`, `doctor`, and `verify`.
 
 ## Healthcheck Commands
 

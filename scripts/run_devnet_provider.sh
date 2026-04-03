@@ -5,6 +5,7 @@ set -euo pipefail
 #
 # Usage:
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+#   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh pair
 #   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh link
 #   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh bootstrap
 #   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
@@ -25,10 +26,11 @@ ACTION="${1:-start}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/run_devnet_provider.sh [init|link|register|start|print-config|doctor|verify|bootstrap|stop|help]
+Usage: ./scripts/run_devnet_provider.sh [init|pair|link|register|start|print-config|doctor|verify|bootstrap|stop|help]
 
 Examples:
   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+  PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh pair
   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh link
   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh bootstrap
   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
@@ -40,9 +42,11 @@ Examples:
   ./scripts/run_devnet_provider.sh help
 
 Notes:
-  - link/register submit on-chain tx and require provider aatom gas balance.
-  - By default, link/register will auto-request faucet funds when NIL_PROVIDER_AUTO_FAUCET=1
+  - pair/link/register submit on-chain tx and require provider aatom gas balance.
+  - By default, pair/link/register will auto-request faucet funds when NIL_PROVIDER_AUTO_FAUCET=1
     and NIL_FAUCET_URL (or NILSTORE_TESTNET_FAUCET_URL) is configured.
+  - start/register/bootstrap will not auto-create provider keys; run init or pair first.
+  - EXPECTED_PROVIDER_ADDRESS (or NIL_EXPECTED_PROVIDER_ADDRESS) can enforce identity safety.
 USAGE
 }
 
@@ -80,6 +84,7 @@ PROVIDER_CAPABILITIES="${PROVIDER_CAPABILITIES:-General}"
 PROVIDER_TOTAL_STORAGE="${PROVIDER_TOTAL_STORAGE:-1099511627776}" # 1 TiB default
 PROVIDER_ENDPOINTS_RAW="${PROVIDER_ENDPOINTS:-${PROVIDER_ENDPOINT:-}}"
 BOOTSTRAP_ALLOW_PARTIAL="${BOOTSTRAP_ALLOW_PARTIAL:-0}"
+EXPECTED_PROVIDER_ADDRESS_RAW="${EXPECTED_PROVIDER_ADDRESS:-${NIL_EXPECTED_PROVIDER_ADDRESS:-}}"
 
 HOME_DIR="${NIL_HOME:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/nilchain_home}"
 UPLOAD_DIR="${NIL_UPLOAD_DIR:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/uploads}"
@@ -234,7 +239,12 @@ provider_local_base_url() {
 }
 
 first_provider_endpoint() {
-  IFS=',' read -r -a endpoints <<<"$PROVIDER_ENDPOINTS_RAW"
+  local endpoint_csv="${PROVIDER_ENDPOINTS_RAW:-}"
+  if [ -z "$endpoint_csv" ]; then
+    return 1
+  fi
+  local endpoints=()
+  IFS=',' read -r -a endpoints <<<"$endpoint_csv" || true
   for ep in "${endpoints[@]}"; do
     ep="$(echo "$ep" | xargs)"
     if [ -n "$ep" ]; then
@@ -352,6 +362,179 @@ ensure_nil_cli() {
 
 provider_addr() {
   "$NILCHAIND_BIN" keys show "$PROVIDER_KEY" -a --home "$HOME_DIR" --keyring-backend test 2>/dev/null || true
+}
+
+provider_key_exists() {
+  local addr
+  addr="$(provider_addr)"
+  [ -n "$addr" ]
+}
+
+require_existing_provider_key() {
+  local action_label="${1:-this action}"
+  ensure_nilchaind
+  if provider_key_exists; then
+    return 0
+  fi
+  echo "ERROR: provider key '$PROVIDER_KEY' does not exist in keyring home '$HOME_DIR'." >&2
+  echo "Refusing to create a new key during $action_label." >&2
+  echo "Run one of these first:" >&2
+  echo "  PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh init" >&2
+  echo "  OPERATOR_ADDRESS='<operator-nil1-or-0x-address>' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh pair" >&2
+  return 1
+}
+
+expected_provider_address() {
+  local raw="${EXPECTED_PROVIDER_ADDRESS_RAW:-}"
+  raw="$(echo "$raw" | xargs)"
+  if [ -z "$raw" ]; then
+    return 1
+  fi
+  printf '%s' "$raw"
+}
+
+assert_expected_provider_address() {
+  local expected actual
+  expected="$(expected_provider_address || true)"
+  if [ -z "$expected" ]; then
+    return 0
+  fi
+
+  actual="$(provider_addr)"
+  if [ -z "$actual" ]; then
+    echo "ERROR: EXPECTED_PROVIDER_ADDRESS is set to $expected but provider key '$PROVIDER_KEY' could not be resolved." >&2
+    return 1
+  fi
+  if [ "$actual" != "$expected" ]; then
+    echo "ERROR: provider key '$PROVIDER_KEY' resolves to $actual, but EXPECTED_PROVIDER_ADDRESS is $expected." >&2
+    echo "Refusing to continue to protect against wrong-provider bootstrap." >&2
+    echo "Fix by selecting the correct PROVIDER_KEY or NIL_HOME for the approved provider identity." >&2
+    return 1
+  fi
+  return 0
+}
+
+provider_listen_port() {
+  local listen="${PROVIDER_LISTEN:-}"
+  local hostport
+  if [ -z "$listen" ]; then
+    return 1
+  fi
+
+  case "$listen" in
+    http://*|https://*)
+      hostport="${listen#*://}"
+      hostport="${hostport%%/*}"
+      if [[ "$hostport" == *:* ]]; then
+        printf '%s' "${hostport##*:}"
+      elif [[ "$listen" == https://* ]]; then
+        printf '443'
+      else
+        printf '80'
+      fi
+      ;;
+    :*)
+      printf '%s' "${listen#:}"
+      ;;
+    *:*)
+      printf '%s' "${listen##*:}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+p2p_listen_ports() {
+  local raw="${NIL_P2P_LISTEN_ADDRS:-/ip4/0.0.0.0/tcp/9100/ws}"
+  local entries=()
+  local ports=()
+  local seen=" "
+  local entry port
+
+  IFS=',' read -r -a entries <<<"$raw" || true
+  if [ "${#entries[@]}" -eq 0 ]; then
+    entries=("/ip4/0.0.0.0/tcp/9100/ws")
+  fi
+
+  for entry in "${entries[@]}"; do
+    entry="$(echo "$entry" | xargs)"
+    [ -n "$entry" ] || continue
+    port=""
+    if [[ "$entry" =~ /tcp/([0-9]+) ]]; then
+      port="${BASH_REMATCH[1]}"
+    elif [[ "$entry" =~ :([0-9]+)$ ]]; then
+      port="${BASH_REMATCH[1]}"
+    fi
+    if [ -n "$port" ] && [[ "$port" =~ ^[0-9]+$ ]]; then
+      if [[ "$seen" != *" $port "* ]]; then
+        ports+=("$port")
+        seen="${seen}${port} "
+      fi
+    fi
+  done
+
+  if [ "${#ports[@]}" -eq 0 ]; then
+    ports=("9100")
+  fi
+
+  printf '%s\n' "${ports[@]}"
+}
+
+process_cwd_for_pid() {
+  local pid="$1"
+  local cwd=""
+  if have_cmd lsof; then
+    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1)"
+  fi
+  if [ -z "$cwd" ] && have_cmd pwdx; then
+    cwd="$(pwdx "$pid" 2>/dev/null | awk '{print $2}')"
+  fi
+  printf '%s' "$cwd"
+}
+
+assert_port_not_in_use_by_other_process() {
+  local port="$1"
+  local label="$2"
+  local allowed_pid="${3:-}"
+  local pid cwd
+
+  [ -n "$port" ] || return 0
+  [[ "$port" =~ ^[0-9]+$ ]] || return 0
+  have_cmd lsof || return 0
+
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    if [ -n "$allowed_pid" ] && [ "$pid" = "$allowed_pid" ]; then
+      continue
+    fi
+    cwd="$(process_cwd_for_pid "$pid")"
+    echo "ERROR: ${label} port ${port} is already in use by pid ${pid}${cwd:+ (cwd: $cwd)}." >&2
+    echo "Refusing to start provider-daemon because this usually means a stale provider from another checkout is running." >&2
+    echo "Stop the conflicting process, then retry." >&2
+    echo "  kill $pid" >&2
+    echo "  # or: lsof -tiTCP:${port} -sTCP:LISTEN | xargs -I{} kill {}" >&2
+    return 1
+  done < <(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+
+  return 0
+}
+
+assert_required_ports_available() {
+  local pid_file current_pid listen_port p2p_port
+  pid_file="$(provider_pid_file)"
+  current_pid=""
+  if [ -f "$pid_file" ]; then
+    current_pid="$(cat "$pid_file" 2>/dev/null || true)"
+  fi
+
+  listen_port="$(provider_listen_port || true)"
+  assert_port_not_in_use_by_other_process "$listen_port" "provider HTTP listen" "$current_pid"
+
+  while IFS= read -r p2p_port; do
+    [ -n "$p2p_port" ] || continue
+    assert_port_not_in_use_by_other_process "$p2p_port" "provider P2P listen" "$current_pid"
+  done < <(p2p_listen_ports)
 }
 
 provider_registered() {
@@ -580,7 +763,7 @@ json_string_field() {
   local field="$1"
   local body="${2:-}"
   if have_cmd jq; then
-    printf '%s' "$body" | jq -r --arg field "$field" '(.[$field] // empty) | strings'
+    printf '%s' "$body" | jq -r --arg field "$field" '(.[$field] // .provider[$field] // .pairing[$field] // .link[$field] // empty) | strings'
     return 0
   fi
   if have_cmd python3; then
@@ -590,9 +773,17 @@ try:
     payload = json.load(sys.stdin)
 except Exception:
     sys.exit(0)
-value = payload.get(field, "")
-if isinstance(value, str):
-    sys.stdout.write(value)' <<<"$body"
+candidates = []
+if isinstance(payload, dict):
+    candidates.append(payload.get(field))
+    for parent in ("provider", "pairing", "link"):
+        scoped = payload.get(parent)
+        if isinstance(scoped, dict):
+            candidates.append(scoped.get(field))
+for value in candidates:
+    if isinstance(value, str):
+        sys.stdout.write(value)
+        break' <<<"$body"
     return 0
   fi
   printf '%s' "$body" | tr -d '\n' | sed -n "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n1
@@ -602,7 +793,7 @@ json_array_field() {
   local field="$1"
   local body="${2:-}"
   if have_cmd jq; then
-    printf '%s' "$body" | jq -c --arg field "$field" '(.[$field] // []) | arrays'
+    printf '%s' "$body" | jq -c --arg field "$field" '(.[$field] // .provider[$field] // .pairing[$field] // .link[$field] // []) | arrays'
     return 0
   fi
   if have_cmd python3; then
@@ -613,9 +804,17 @@ try:
 except Exception:
     sys.stdout.write("[]")
     sys.exit(0)
-value = payload.get(field, [])
-if isinstance(value, list):
-    sys.stdout.write(json.dumps(value))
+candidates = []
+if isinstance(payload, dict):
+    candidates.append(payload.get(field))
+    for parent in ("provider", "pairing", "link"):
+        scoped = payload.get(parent)
+        if isinstance(scoped, dict):
+            candidates.append(scoped.get(field))
+for value in candidates:
+    if isinstance(value, list):
+        sys.stdout.write(json.dumps(value))
+        break
 else:
     sys.stdout.write("[]")' <<<"$body"
     return 0
@@ -715,6 +914,7 @@ print_config() {
   "network_profile": "$(json_escape "$NETWORK_PROFILE")",
   "provider_key": "$(json_escape "$PROVIDER_KEY")",
   "provider_address": "$(json_escape "$addr")",
+  "expected_provider_address": "$(json_escape "$(expected_provider_address || true)")",
   "configured_operator": "$(json_escape "$(configured_operator_address || true)")",
   "operator_address": "$(json_escape "$(configured_operator_address || true)")",
   "chain_id": "$(json_escape "$CHAIN_ID")",
@@ -753,7 +953,7 @@ EOF
 
 doctor_provider() {
   local failures=0
-  local addr local_url public_url pid_file
+  local addr local_url public_url pid_file expected_addr
   addr="$(provider_addr)"
   local_url="$(provider_local_base_url)"
   public_url="$(provider_public_base_url || true)"
@@ -797,6 +997,16 @@ doctor_provider() {
   else
     echo "FAIL: provider key missing; run ./scripts/run_devnet_provider.sh init"
     failures=$((failures + 1))
+  fi
+
+  expected_addr="$(expected_provider_address || true)"
+  if [ -n "$expected_addr" ]; then
+    if [ -n "$addr" ] && [ "$addr" = "$expected_addr" ]; then
+      echo "OK: expected provider address guard matches ($expected_addr)"
+    else
+      echo "FAIL: expected provider address guard mismatch (expected $expected_addr, got ${addr:-<missing>})"
+      failures=$((failures + 1))
+    fi
   fi
 
   local configured_operator current_operator requested_operator
@@ -920,33 +1130,52 @@ init_provider() {
   addr="$(provider_addr)"
   print_provider_key_summary "$addr"
   echo
-  echo "Wizard status:"
-  echo "  - Step 4 (Provider key init + fund): complete on provider host."
+  echo "Manual key preparation status:"
+  echo "  - Provider key exists on the provider host."
   if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
-    echo "  - New key created: backup the mnemonic shown above."
+    echo "  - New key created for this local keyring."
   else
-    echo "  - Existing key reused: mnemonic was not regenerated."
+    echo "  - Existing key reused."
   fi
   echo "  - Ensure this address has aatom for gas: $addr"
   if [ "$PROVIDER_AUTO_FAUCET" = "1" ] && [ -n "$FAUCET_URL" ]; then
-    echo "  - Step 5 can auto-request faucet funds from: $FAUCET_URL"
+    echo "  - pair/link can auto-request faucet funds from: $FAUCET_URL"
   fi
   if [ -n "$OPERATOR_ADDRESS_RAW" ]; then
     echo "  - Target operator wallet: $(configured_operator_address || printf '%s' "$OPERATOR_ADDRESS_RAW")"
   fi
   echo
-  echo "Next command (Wizard Step 5: request provider link from provider host):"
+  echo "Next command (manual link request after key setup):"
   if [ -n "$OPERATOR_ADDRESS_RAW" ]; then
     echo "  OPERATOR_ADDRESS='$OPERATOR_ADDRESS_RAW' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh link"
   else
     echo "  OPERATOR_ADDRESS='<operator-0x-or-nil-address>' PROVIDER_KEY='$PROVIDER_KEY' ./scripts/run_devnet_provider.sh link"
   fi
   echo
-  echo "After Step 5, return to the website for Step 6+ (approve link, endpoint, auth token, bootstrap, health)."
+  echo "For the website-first flow, prefer OPERATOR_ADDRESS=... PROVIDER_KEY=... ./scripts/run_devnet_provider.sh pair."
+}
+
+pair_provider() {
+  ensure_provider_key
+  local addr
+  addr="$(provider_addr)"
+  print_provider_key_summary "$addr"
+  echo
+  if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
+    echo "==> Provider key was created for this run."
+    echo "==> Continuing with funding check and provider link request."
+  else
+    echo "==> Reusing existing provider key."
+  fi
+
+  request_provider_link
+
+  print_pairing_followup
 }
 
 register_provider() {
-  ensure_provider_key
+  require_existing_provider_key "register"
+  assert_expected_provider_address
 
   if [ -z "$PROVIDER_ENDPOINTS_RAW" ]; then
     echo "ERROR: set PROVIDER_ENDPOINT (or PROVIDER_ENDPOINTS) to a reachable multiaddr, e.g. /ip4/1.2.3.4/tcp/8091/http" >&2
@@ -955,10 +1184,6 @@ register_provider() {
 
   local addr
   addr="$(provider_addr)"
-  if [ -z "$addr" ]; then
-    echo "ERROR: provider key not found; run: ./scripts/run_devnet_provider.sh init" >&2
-    exit 1
-  fi
 
   ensure_provider_account_funded "$addr"
 
@@ -1012,7 +1237,8 @@ register_provider() {
 }
 
 request_provider_link() {
-  ensure_provider_key
+  require_existing_provider_key "link request"
+  assert_expected_provider_address
 
   local operator
   operator="$(configured_operator_address || true)"
@@ -1068,37 +1294,59 @@ request_provider_link() {
   echo "  operator: $operator"
 }
 
+print_pairing_followup() {
+  local operator confirmed_operator requested_operator addr
+  operator="$(configured_operator_address || true)"
+  confirmed_operator="$(provider_pairing_operator || true)"
+  requested_operator="$(pending_link_operator || true)"
+  addr="$(provider_addr)"
+
+  echo
+  if [ -n "$operator" ] && [ "$confirmed_operator" = "$operator" ]; then
+    echo "Provider link is already approved on-chain for this operator."
+    echo "  provider: $addr"
+    echo "  operator: $operator"
+    return 0
+  fi
+
+  if [ -n "$operator" ] && [ "$requested_operator" = "$operator" ]; then
+    echo "Next step (website operator wallet): approve this provider link request."
+    echo "  provider: $addr"
+    echo "  operator: $operator"
+    return 0
+  fi
+
+  if [ -n "$confirmed_operator" ]; then
+    echo "Provider is paired on-chain to operator $confirmed_operator."
+  elif [ -n "$requested_operator" ]; then
+    echo "Provider link is pending for operator $requested_operator."
+  else
+    echo "No confirmed or pending provider link found yet. Refresh LCD and retry if needed."
+  fi
+  echo "  provider: $addr"
+  [ -n "$operator" ] && echo "  configured operator: $operator"
+}
+
 link_provider() {
-  ensure_provider_key
+  require_existing_provider_key "link"
+  assert_expected_provider_address
   local addr
   addr="$(provider_addr)"
   print_provider_key_summary "$addr"
 
-  if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
-    echo "==> Provider key was just created. Fund $addr with aatom, then rerun link." >&2
-    print_provider_funding_help "$addr"
-    return 1
-  fi
-
   request_provider_link
 
-  echo
-  echo "Next step (website operator wallet): approve this provider link request."
-  echo "  provider: $(provider_addr)"
-  echo "  operator: $(configured_operator_address || true)"
+  print_pairing_followup
 }
 
 start_provider() {
-  ensure_nilchaind
+  require_existing_provider_key "start"
   ensure_nil_cli
   ensure_nil_core_runtime
+  assert_expected_provider_address
 
   if [ ! -f "$TRUSTED_SETUP" ]; then
     echo "ERROR: trusted setup not found at $TRUSTED_SETUP (set NIL_TRUSTED_SETUP)" >&2
-    exit 1
-  fi
-  if [ -z "$(provider_addr)" ]; then
-    echo "ERROR: provider key not found; run: ./scripts/run_devnet_provider.sh init" >&2
     exit 1
   fi
   if [ -z "${NIL_GATEWAY_SP_AUTH:-}" ]; then
@@ -1115,6 +1363,7 @@ start_provider() {
     echo "Provider already running (pid $(cat "$pid_file"))"
     return 0
   fi
+  assert_required_ports_available
 
   echo "==> Starting provider-daemon..."
   (
@@ -1147,17 +1396,12 @@ start_provider() {
 }
 
 bootstrap_provider() {
-  ensure_provider_key
+  require_existing_provider_key "bootstrap"
+  assert_expected_provider_address
   local addr
   addr="$(provider_addr)"
   print_provider_key_summary "$addr"
   echo
-
-  if [ "$PROVIDER_KEY_CREATED" = "1" ]; then
-    echo "==> Provider key was just created. Fund $addr with aatom, then rerun bootstrap." >&2
-    print_provider_funding_help "$addr"
-    return 1
-  fi
 
   local missing=()
   if [ -z "$OPERATOR_ADDRESS_RAW" ]; then
@@ -1214,6 +1458,7 @@ stop_provider() {
 
 case "$ACTION" in
   init) init_provider ;;
+  pair) pair_provider ;;
   link) link_provider ;;
   register) register_provider ;;
   start) start_provider ;;

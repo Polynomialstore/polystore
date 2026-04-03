@@ -98,17 +98,17 @@ This packet is intentionally short; the canonical SP join docs are:
 - Go + Rust toolchains installed
 - This repo checked out
 
-### 1) Initialize your provider key
+### 1) Choose your provider key name
 
 ```bash
-PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
+export PROVIDER_KEY="provider1"
 ```
 
-Save the printed provider address (`nil1...`).
+The website pairing step will create this key if it does not already exist.
 
-### 2) Get gas funds
+### 2) Be ready to fund gas if autofunding is unavailable
 
-Ask the hub operator to fund your provider address with a small amount of `aatom` for gas.
+If `./scripts/run_devnet_provider.sh pair` prints a provider `nil1...` address that still needs gas, ask the hub operator to fund that address with a small amount of `aatom`, then rerun `pair`.
 
 ### 3) Choose your provider endpoint multiaddr
 
@@ -133,13 +133,18 @@ Cloudflare Tunnel setup reference (recommended for NAT): `docs/networking/PROVID
 
 ```bash
 export PROVIDER_KEY="provider1"
-./scripts/run_devnet_provider.sh init
+export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"      # from website wallet step
+
+./scripts/run_devnet_provider.sh pair
 ```
 
-# Fund the printed provider address with aatom, then:
+If the key is new and gas funding is still missing, fund the printed provider address with `aatom` and rerun `pair`.
+
+```bash
+export PROVIDER_KEY="provider1"
 export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"   # or /ip4/<public-ip>/tcp/8091/http
 export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
-export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"      # from website wallet step
+export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
 ./scripts/run_devnet_provider.sh bootstrap
 ```
@@ -147,9 +152,10 @@ export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"      # from website wall
 Website-first operator flow:
 - open `/sp-onboarding`
 - connect the operator wallet
-- run provider-host link request with `OPERATOR_ADDRESS`
-- approve the pending link from the operator wallet
-- finish verification from the website after bootstrap
+- prepare the provider host checkout
+- pair provider identity (run one `pair` command, fund and rerun if needed, approve from wallet)
+- configure public access (endpoint + `NIL_GATEWAY_SP_AUTH`)
+- run bootstrap and finish verification from the website
 
 The canonical provider docs for this are:
 - `docs/ALPHA_PROVIDER_QUICKSTART.md`

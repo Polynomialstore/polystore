@@ -19,10 +19,18 @@ export interface ProviderEndpointPlan {
   publicPort: number
 }
 
+export interface ProviderEndpointInputPrefill {
+  endpointMode: ProviderEndpointInputMode
+  endpointValue: string
+  publicPort: number
+}
+
 export interface ProviderBootstrapDraft extends ProviderEndpointDraft {
   operatorAddress?: string
   providerKey?: string
   authToken?: string
+  providerEndpoint?: string
+  expectedProviderAddress?: string
 }
 
 export interface ProviderTunnelBootstrapDraft extends ProviderEndpointDraft {
@@ -32,13 +40,13 @@ export interface ProviderTunnelBootstrapDraft extends ProviderEndpointDraft {
 
 export interface ProviderRunbookReadiness {
   ready: boolean
-  missing: Array<'endpoint' | 'operator' | 'auth'>
+  missing: Array<'endpoint' | 'operator'>
 }
 
-const PROVIDER_BOOTSTRAP_REPO = 'https://github.com/Nil-Store/nil-store.git'
 const DEFAULT_PROVIDER_KEY = 'provider1'
 const DEFAULT_DOMAIN_PORT = 443
 const DEFAULT_IPV4_PORT = 8091
+export const DEVNET_SHARED_GATEWAY_AUTH_TOKEN = 'nilstore-devnet-shared-gateway-auth'
 const AUTH_PLACEHOLDER = '<shared-provider-auth-token>'
 const DEFAULT_TUNNEL_NAME = 'nilstore-sp'
 const DEFAULT_TUNNEL_LOCAL_SERVICE_URL = 'http://127.0.0.1:8091'
@@ -91,18 +99,55 @@ function stripSchemeAndPath(raw: string): string {
   }
 }
 
-function planFromMultiaddr(raw: string): ProviderEndpointPlan {
+function isValidIpv4Host(host: string): boolean {
+  const value = trimNonEmpty(host)
+  const parts = value.split('.')
+  if (parts.length !== 4) return false
+  return parts.every((part) => {
+    if (!/^\d+$/.test(part)) return false
+    const parsed = Number(part)
+    return Number.isInteger(parsed) && parsed >= 0 && parsed <= 255
+  })
+}
+
+function isValidDomainHostname(host: string): boolean {
+  const value = trimNonEmpty(host).toLowerCase()
+  if (!value || value.length > 253) return false
+  if (!value.includes('.')) return false
+  if (value.startsWith('.') || value.endsWith('.')) return false
+  const labels = value.split('.')
+  return labels.every((label) =>
+    label.length > 0
+    && label.length <= 63
+    && /^[a-z0-9-]+$/.test(label)
+    && !label.startsWith('-')
+    && !label.endsWith('-'),
+  )
+}
+
+function looksLikeHttpMultiaddr(endpoint: string): boolean {
+  const value = trimNonEmpty(endpoint)
+  if (!value.startsWith('/')) return false
+  return /\/tcp\/\d+\/(http|https)(\/|$)/i.test(value)
+}
+
+function planFromMultiaddr(raw: string): ProviderEndpointPlan | null {
   const providerEndpoint = trimNonEmpty(raw)
+  if (!providerEndpoint || !looksLikeHttpMultiaddr(providerEndpoint)) {
+    return null
+  }
   const publicBase = normalizeHttpBase(providerEndpoint)
-  const normalizedUrl = publicBase ? new URL(publicBase) : null
-  const fallbackPort = /(^|\/)http($|\/)/i.test(providerEndpoint) ? DEFAULT_IPV4_PORT : DEFAULT_DOMAIN_PORT
+  if (!publicBase) {
+    return null
+  }
+  const normalizedUrl = new URL(publicBase)
 
   return {
     providerEndpoint,
     publicBase,
     publicHealthUrl: publicBase ? `${publicBase}/health` : null,
-    normalizedHost: providerEndpoint,
-    publicPort: normalizedUrl ? Number(normalizedUrl.port || (normalizedUrl.protocol === 'http:' ? '80' : '443')) : fallbackPort,
+    normalizedHost: normalizedUrl.hostname.trim().toLowerCase(),
+    publicPort: Number(normalizedUrl.port || (normalizedUrl.protocol === 'http:' ? '80' : '443')),
   }
 }
 
@@ -117,6 +162,8 @@ export function buildProviderEndpointPlan(draft: ProviderEndpointDraft): Provide
 
   const normalizedHost = stripSchemeAndPath(rawValue)
   if (!normalizedHost) return null
+  if (endpointMode === 'ipv4' && !isValidIpv4Host(normalizedHost)) return null
+  if (endpointMode === 'domain' && !isValidDomainHostname(normalizedHost)) return null
 
   const publicPort = parsePort(draft.publicPort, endpointMode)
   const multiaddrPrefix = endpointMode === 'ipv4' ? 'ip4' : 'dns4'
@@ -134,40 +181,94 @@ export function buildProviderEndpointPlan(draft: ProviderEndpointDraft): Provide
   }
 }
 
+export function deriveEndpointInputPrefillFromProviderEndpoint(
+  providerEndpoint: string,
+): ProviderEndpointInputPrefill | null {
+  const raw = trimNonEmpty(providerEndpoint)
+  if (!raw) return null
+
+  const dnsMatch = raw.match(/^\/dns4\/([^/]+)\/tcp\/(\d+)\/https(?:\/|$)/i)
+  if (dnsMatch) {
+    const host = trimNonEmpty(dnsMatch[1]).toLowerCase()
+    const publicPort = Number(dnsMatch[2])
+    if (isValidDomainHostname(host) && Number.isInteger(publicPort) && publicPort > 0 && publicPort <= 65535) {
+      return {
+        endpointMode: 'domain',
+        endpointValue: host,
+        publicPort,
+      }
+    }
+  }
+
+  const ipMatch = raw.match(/^\/ip4\/((?:\d{1,3}\.){3}\d{1,3})\/tcp\/(\d+)\/http(?:\/|$)/i)
+  if (ipMatch) {
+    const host = trimNonEmpty(ipMatch[1])
+    const publicPort = Number(ipMatch[2])
+    if (isValidIpv4Host(host) && Number.isInteger(publicPort) && publicPort > 0 && publicPort <= 65535) {
+      return {
+        endpointMode: 'ipv4',
+        endpointValue: host,
+        publicPort,
+      }
+    }
+  }
+
+  const plan = buildProviderEndpointPlan({
+    hostMode: 'public-vps',
+    endpointMode: 'multiaddr',
+    endpointValue: raw,
+  })
+  if (!plan) return null
+
+  return {
+    endpointMode: 'multiaddr',
+    endpointValue: raw,
+    publicPort: plan.publicPort,
+  }
+}
+
 export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): string {
   const providerKey = trimNonEmpty(draft.providerKey) || DEFAULT_PROVIDER_KEY
   const operatorAddress = trimNonEmpty(draft.operatorAddress)
+  const expectedProviderAddress = trimNonEmpty(draft.expectedProviderAddress)
   const endpointPlan = buildProviderEndpointPlan(draft)
-  const providerEndpoint = endpointPlan?.providerEndpoint || '<provider-endpoint>'
-  const authToken = trimNonEmpty(draft.authToken) || AUTH_PLACEHOLDER
-  const websiteReady = Boolean(endpointPlan && operatorAddress && trimNonEmpty(draft.authToken))
-
-  const bootstrapLines = [
-    '# 1. Initialize the provider key if it does not already exist:',
-    `PROVIDER_KEY=${shellQuote(providerKey)} ./scripts/run_devnet_provider.sh init`,
-    '',
-    '# 2. If init created a new key, fund the printed nil1 address with aatom before continuing.',
-    '# 3. Website-managed bootstrap now fails fast unless OPERATOR_ADDRESS, PROVIDER_ENDPOINT, and NIL_GATEWAY_SP_AUTH are present.',
-    '#    For a partial/manual bootstrap, either use staged link/register/start commands or opt in with BOOTSTRAP_ALLOW_PARTIAL=1.',
-  ]
-
+  const explicitProviderEndpoint = trimNonEmpty(draft.providerEndpoint)
+  const providerEndpoint = endpointPlan?.providerEndpoint || explicitProviderEndpoint || '<provider-endpoint>'
+  const hasProviderEndpoint = Boolean(endpointPlan?.providerEndpoint || explicitProviderEndpoint)
+  const authToken = trimNonEmpty(draft.authToken) || DEVNET_SHARED_GATEWAY_AUTH_TOKEN
+  const usingDefaultAuth = !trimNonEmpty(draft.authToken)
+  const websiteReady = Boolean(hasProviderEndpoint && operatorAddress)
   const envLines = [
-    ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\\\'] : []),
-    ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\\\`] : []),
-    `PROVIDER_KEY=${shellQuote(providerKey)} \\\\`,
-    `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\\\`,
-    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken)} \\\\`,
+    '# Run this from the nil-store checkout on the provider host after pairing is approved.',
+    '# This command starts (or restarts) the provider-daemon, then registers endpoints and runs health checks.',
+    '# This command requires OPERATOR_ADDRESS and PROVIDER_ENDPOINT.',
+    ...(usingDefaultAuth
+      ? ['# Using devnet default NIL_GATEWAY_SP_AUTH. Override it if your hub uses a custom secret.']
+      : []),
+    ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\'] : []),
+    ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\`] : []),
+    `PROVIDER_KEY=${shellQuote(providerKey)} \\`,
+    ...(expectedProviderAddress ? [`EXPECTED_PROVIDER_ADDRESS=${shellQuote(expectedProviderAddress)} \\`] : []),
+    `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\`,
+    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken || AUTH_PLACEHOLDER)} \\`,
     './scripts/run_devnet_provider.sh bootstrap',
   ]
 
   return [
-    '# If the repo is missing on the provider host:',
-    `git clone ${PROVIDER_BOOTSTRAP_REPO}`,
-    'cd nil-store',
-    '',
-    '# Canonical public testnet defaults are built in:',
-    ...bootstrapLines,
     ...envLines,
+  ].join('\n')
+}
+
+export function buildProviderPairCommand(providerKey: string, operatorAddress: string): string {
+  const normalizedProviderKey = trimNonEmpty(providerKey) || DEFAULT_PROVIDER_KEY
+  const normalizedOperatorAddress = trimNonEmpty(operatorAddress) || '<operator-nil1-or-0x-address>'
+
+  return [
+    '# Run this once on the provider host to create the key if needed and open the link request.',
+    '# If the key is unfunded and faucet autofunding is unavailable, fund the printed nil1 address and rerun this same command.',
+    `OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} \\`,
+    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\`,
+    './scripts/run_devnet_provider.sh pair',
   ].join('\n')
 }
 
@@ -186,7 +287,7 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
     `CF_TUNNEL_NAME=${shellQuote(tunnelName)} \\`,
     `CF_TUNNEL_HOSTNAME=${shellQuote(hostname)} \\`,
     `CF_TUNNEL_SERVICE_URL=${shellQuote(localServiceUrl)} \\`,
-    "bash -lc '",
+    "bash <<'NILSTORE_CF_TUNNEL'",
     'set -euo pipefail',
     '',
     'if ! command -v cloudflared >/dev/null 2>&1; then',
@@ -194,11 +295,16 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
     '  exit 1',
     'fi',
     '',
-    'cloudflared tunnel login',
+    'if [ -f "$HOME/.cloudflared/cert.pem" ]; then',
+    '  echo "Using existing Cloudflare cert at $HOME/.cloudflared/cert.pem; skipping login."',
+    'else',
+    '  cloudflared tunnel login',
+    'fi',
+    '',
     'cloudflared tunnel create "$CF_TUNNEL_NAME" >/dev/null 2>&1 || true',
     'cloudflared tunnel route dns "$CF_TUNNEL_NAME" "$CF_TUNNEL_HOSTNAME"',
     '',
-    'TUNNEL_ID="$(cloudflared tunnel list | awk -v name=\\"$CF_TUNNEL_NAME\\" \\"\\$2 == name { print \\$1; exit }\\")"',
+    `TUNNEL_ID="$(cloudflared tunnel list | awk -v name="$CF_TUNNEL_NAME" '$2 == name { print $1; exit }')"`,
     'if [ -z "$TUNNEL_ID" ]; then',
     '  echo "Could not resolve tunnel id for $CF_TUNNEL_NAME"',
     '  exit 1',
@@ -215,21 +321,21 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
     'EOF',
     '',
     'echo "Tunnel config written to $HOME/.cloudflared/config.yml"',
-    'cloudflared tunnel run "$CF_TUNNEL_NAME"',
-    "'",
+    'cloudflared --config "$HOME/.cloudflared/config.yml" tunnel run "$CF_TUNNEL_NAME"',
+    'NILSTORE_CF_TUNNEL',
   ].join('\n')
 }
 
 export function evaluateProviderRunbookReadiness(input: {
   endpointPlan: ProviderEndpointPlan | null
+  providerEndpoint?: string
   operatorAddress?: string
   authToken?: string
 }): ProviderRunbookReadiness {
   const missing: ProviderRunbookReadiness['missing'] = []
 
-  if (!input.endpointPlan) missing.push('endpoint')
+  if (!input.endpointPlan && !trimNonEmpty(input.providerEndpoint)) missing.push('endpoint')
   if (!trimNonEmpty(input.operatorAddress)) missing.push('operator')
-  if (!trimNonEmpty(input.authToken)) missing.push('auth')
 
   return {
     ready: missing.length === 0,
@@ -242,20 +348,22 @@ export function buildProviderLinkCommand(providerKey: string, operatorAddress: s
   const normalizedOperatorAddress = trimNonEmpty(operatorAddress) || '<operator-nil1-or-0x-address>'
 
   return [
-    `OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} \\\\`,
-    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\\\`,
+    `OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} \\`,
+    `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} \\`,
     './scripts/run_devnet_provider.sh link',
   ].join('\n')
 }
 
-export function buildProviderHealthCommands(publicBase: string | null): string {
+export function buildProviderHealthCommands(publicBase: string | null, providerKey?: string): string {
   const normalizedBase = trimNonEmpty(publicBase)
+  const normalizedProviderKey = trimNonEmpty(providerKey) || DEFAULT_PROVIDER_KEY
+  const providerKeyPrefix = `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} `
   const publicHealthUrl = normalizedBase ? `${normalizedBase.replace(/\/$/, '')}/health` : '<public-health-url>'
 
   return [
-    './scripts/run_devnet_provider.sh doctor',
-    './scripts/run_devnet_provider.sh verify',
-    './scripts/run_devnet_provider.sh print-config',
+    `${providerKeyPrefix}./scripts/run_devnet_provider.sh doctor`,
+    `${providerKeyPrefix}./scripts/run_devnet_provider.sh verify`,
+    `${providerKeyPrefix}./scripts/run_devnet_provider.sh print-config`,
     'curl -sf http://127.0.0.1:8091/health',
     `curl -sf ${shellQuote(publicHealthUrl)}`,
   ].join('\n')
@@ -318,6 +426,7 @@ Repo bootstrap (required unless already inside a fresh \`nil-store\` checkout):
 
 Context:
 - The website-first flow is primary. This agent run is the assistive path for the provider host.
+- The current website steps are: connect operator wallet, prepare provider host, pair provider identity, configure public access, then bootstrap and verify.
 - Supported endpoint modes:
   - direct public HTTP/HTTPS endpoint
   - home server behind NAT with Cloudflare Tunnel
@@ -341,21 +450,20 @@ Before running any on-chain step, confirm:
 - \`go\`, \`cargo\`, and \`curl\` are installed.
 - the repo checkout is current (\`git fetch origin --prune && git checkout main && git pull --ff-only origin main\`) if this is not a fresh clone.
 - if using Cloudflare Tunnel, the hostname already resolves and tunnel ingress points to the local provider listener.
-- if the provider key is new, run \`PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh init\`, print the provider \`nil1...\` address, and make sure it has \`aatom\` for gas before requesting link or registration.
+- if the provider key is new, prefer \`OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh pair\`; if autofunding is unavailable, fund the printed provider \`nil1...\` address and rerun the same command before registration.
 
 Your job:
 1. Verify toolchains and repo prerequisites.
 2. Create or import provider key.
 3. Configure local listener and public endpoint.
 4. For a new provider key, use this order:
-   - \`PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh init\`
-   - fund the printed provider address with gas
-   - then run \`OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh link\`
+   - run \`OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh pair\`
+   - if the key is new and auto-funding is unavailable, fund the printed provider address with gas and rerun the same \`pair\` command
 5. The website-managed flow requires \`OPERATOR_ADDRESS\`, a real \`PROVIDER_ENDPOINT\`, and \`NIL_GATEWAY_SP_AUTH\`.
    - \`./scripts/run_devnet_provider.sh bootstrap\` now fails fast unless all three are present
    - let \`./scripts/run_devnet_provider.sh bootstrap\` request link and continue the full happy path, or
-   - run \`./scripts/run_devnet_provider.sh link\` when you want link request as a separate manual step
-   - if you intentionally want a partial manual bootstrap, use staged \`link\`, \`register\`, and \`start\` commands, or explicitly opt in with \`BOOTSTRAP_ALLOW_PARTIAL=1\`
+   - run \`./scripts/run_devnet_provider.sh link\` when you want link request as a separate repair step after key setup
+   - if you intentionally want a partial manual bootstrap, use staged \`pair\`, \`register\`, and \`start\` commands, or explicitly opt in with \`BOOTSTRAP_ALLOW_PARTIAL=1\`
 6. Ask the operator to approve the pending provider link in the website wallet step.
 7. Register or update provider endpoints on-chain.
 8. Start the provider-daemon if it is not already running.

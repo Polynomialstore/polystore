@@ -8,7 +8,9 @@ import {
   buildProviderBootstrapCommand,
   buildCloudflareTunnelBootstrapCommand,
   buildProviderEndpointPlan,
+  deriveEndpointInputPrefillFromProviderEndpoint,
   buildProviderHealthCommands,
+  buildProviderPairCommand,
   buildProviderLinkCommand,
   evaluateProviderRunbookReadiness,
   findConfirmedProviderPairing,
@@ -66,7 +68,77 @@ test('buildProviderEndpointPlan keeps an explicit multiaddr intact', () => {
   assert.equal(plan?.publicHealthUrl, 'https://203.0.113.10:8443/health')
 })
 
-test('buildProviderBootstrapCommand stages init before bootstrap and opts into partial mode when operator address is absent', () => {
+test('deriveEndpointInputPrefillFromProviderEndpoint maps common endpoints to step-4 inputs', () => {
+  assert.deepEqual(
+    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/testasdf.nil-store.com/tcp/443/https'),
+    {
+      endpointMode: 'domain',
+      endpointValue: 'testasdf.nil-store.com',
+      publicPort: 443,
+    },
+  )
+
+  assert.deepEqual(
+    deriveEndpointInputPrefillFromProviderEndpoint('/ip4/203.0.113.10/tcp/8091/http'),
+    {
+      endpointMode: 'ipv4',
+      endpointValue: '203.0.113.10',
+      publicPort: 8091,
+    },
+  )
+
+  assert.deepEqual(
+    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/testasdf.nil-store.com/tcp/8443/http'),
+    {
+      endpointMode: 'multiaddr',
+      endpointValue: '/dns4/testasdf.nil-store.com/tcp/8443/http',
+      publicPort: 8443,
+    },
+  )
+
+  assert.equal(deriveEndpointInputPrefillFromProviderEndpoint(''), null)
+  assert.deepEqual(
+    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/nope/tcp/443/https'),
+    {
+      endpointMode: 'multiaddr',
+      endpointValue: '/dns4/nope/tcp/443/https',
+      publicPort: 443,
+    },
+  )
+})
+
+test('buildProviderEndpointPlan rejects invalid endpoint inputs', () => {
+  assert.equal(
+    buildProviderEndpointPlan({
+      hostMode: 'home-tunnel',
+      endpointMode: 'domain',
+      endpointValue: 'not-a-public-host',
+      publicPort: 443,
+    }),
+    null,
+  )
+
+  assert.equal(
+    buildProviderEndpointPlan({
+      hostMode: 'public-vps',
+      endpointMode: 'ipv4',
+      endpointValue: '999.0.113.10',
+      publicPort: 8091,
+    }),
+    null,
+  )
+
+  assert.equal(
+    buildProviderEndpointPlan({
+      hostMode: 'public-vps',
+      endpointMode: 'multiaddr',
+      endpointValue: 'abc',
+    }),
+    null,
+  )
+})
+
+test('buildProviderBootstrapCommand emits a focused bootstrap command and opts into partial mode when operator data is absent', () => {
   const command = buildProviderBootstrapCommand({
     hostMode: 'public-vps',
     endpointMode: 'ipv4',
@@ -76,14 +148,38 @@ test('buildProviderBootstrapCommand stages init before bootstrap and opts into p
     authToken: "shh it's secret",
   })
 
-  assert.match(command, /run_devnet_provider\.sh init/)
-  assert.match(command, /fund the printed nil1 address with aatom/)
+  assert.match(command, /Run this from the nil-store checkout on the provider host after pairing is approved\./)
+  assert.match(command, /starts \(or restarts\) the provider-daemon/i)
   assert.match(command, /BOOTSTRAP_ALLOW_PARTIAL=1/)
   assert.doesNotMatch(command, /OPERATOR_ADDRESS=/)
   assert.match(command, /PROVIDER_KEY='provider-main'/)
   assert.match(command, /PROVIDER_ENDPOINT='\/ip4\/203\.0\.113\.10\/tcp\/8091\/http'/)
   assert.match(command, /NIL_GATEWAY_SP_AUTH='shh it'\\''s secret'/)
   assert.match(command, /run_devnet_provider\.sh bootstrap/)
+  assert.doesNotMatch(command, /git clone/)
+  assert.doesNotMatch(command, /run_devnet_provider\.sh init/)
+  const continuationLines = command
+    .split('\n')
+    .filter((line) => /(BOOTSTRAP_ALLOW_PARTIAL|PROVIDER_KEY|PROVIDER_ENDPOINT|NIL_GATEWAY_SP_AUTH)=/.test(line))
+  for (const line of continuationLines) {
+    assert.match(line, / \\$/)
+    assert.doesNotMatch(line, / \\\\$/)
+  }
+})
+
+test('buildProviderBootstrapCommand uses an explicit provider endpoint fallback when draft input is invalid', () => {
+  const command = buildProviderBootstrapCommand({
+    hostMode: 'public-vps',
+    endpointMode: 'domain',
+    endpointValue: 'not-a-public-host',
+    operatorAddress: 'nil1operator123',
+    providerKey: 'provider-main',
+    providerEndpoint: '/dns4/testasdf.nil-store.com/tcp/443/https',
+  })
+
+  assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
+  assert.match(command, /PROVIDER_ENDPOINT='\/dns4\/testasdf\.nil-store\.com\/tcp\/443\/https'/)
+  assert.doesNotMatch(command, /BOOTSTRAP_ALLOW_PARTIAL=1/)
 })
 
 test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tunnel hosts', () => {
@@ -100,10 +196,10 @@ test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tun
   assert.match(command, /cloudflared tunnel login/)
   assert.match(command, /cloudflared tunnel create "\$CF_TUNNEL_NAME"/)
   assert.match(command, /cloudflared tunnel route dns "\$CF_TUNNEL_NAME" "\$CF_TUNNEL_HOSTNAME"/)
-  assert.match(command, /cloudflared tunnel run "\$CF_TUNNEL_NAME"/)
+  assert.match(command, /cloudflared --config "\$HOME\/\.cloudflared\/config\.yml" tunnel run "\$CF_TUNNEL_NAME"/)
 })
 
-test('evaluateProviderRunbookReadiness requires endpoint, operator, and auth for website-managed onboarding', () => {
+test('evaluateProviderRunbookReadiness requires endpoint and operator for website-managed onboarding', () => {
   const endpointPlan = buildProviderEndpointPlan({
     hostMode: 'public-vps',
     endpointMode: 'ipv4',
@@ -113,16 +209,28 @@ test('evaluateProviderRunbookReadiness requires endpoint, operator, and auth for
 
   assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan, operatorAddress: '', authToken: '' }), {
     ready: false,
-    missing: ['operator', 'auth'],
+    missing: ['operator'],
   })
   assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan: null, operatorAddress: 'nil1op', authToken: 'secret' }), {
     ready: false,
     missing: ['endpoint'],
   })
-  assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan, operatorAddress: 'nil1op', authToken: 'secret' }), {
+  assert.deepEqual(evaluateProviderRunbookReadiness({ endpointPlan, operatorAddress: 'nil1op', authToken: '' }), {
     ready: true,
     missing: [],
   })
+  assert.deepEqual(
+    evaluateProviderRunbookReadiness({
+      endpointPlan: null,
+      providerEndpoint: '/dns4/testasdf.nil-store.com/tcp/443/https',
+      operatorAddress: 'nil1op',
+      authToken: '',
+    }),
+    {
+      ready: true,
+      missing: [],
+    },
+  )
 })
 
 test('buildProviderBootstrapCommand includes operator address when supplied', () => {
@@ -132,9 +240,22 @@ test('buildProviderBootstrapCommand includes operator address when supplied', ()
     endpointValue: 'sp.example.com',
     operatorAddress: 'nil1operator123',
     providerKey: 'provider-main',
+    expectedProviderAddress: 'nil1providerxyz',
   })
 
   assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
+  assert.match(command, /EXPECTED_PROVIDER_ADDRESS='nil1providerxyz'/)
+})
+
+test('buildProviderPairCommand emits a single provider-host pairing command', () => {
+  const command = buildProviderPairCommand('provider-main', 'nil1operator123')
+
+  assert.match(command, /create the key if needed and open the link request/i)
+  assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
+  assert.match(command, /PROVIDER_KEY='provider-main'/)
+  assert.match(command, /run_devnet_provider\.sh pair/)
+  assert.doesNotMatch(command, /run_devnet_provider\.sh init/)
+  assert.doesNotMatch(command, /run_devnet_provider\.sh link/)
 })
 
 test('buildProviderLinkCommand emits a standalone provider-link command', () => {
@@ -142,16 +263,26 @@ test('buildProviderLinkCommand emits a standalone provider-link command', () => 
 
   assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
   assert.match(command, /PROVIDER_KEY='provider-main'/)
+  assert.match(command, /OPERATOR_ADDRESS='nil1operator123' \\$/m)
+  assert.match(command, /PROVIDER_KEY='provider-main' \\$/m)
+  assert.doesNotMatch(command, /OPERATOR_ADDRESS='nil1operator123' \\\\$/m)
+  assert.doesNotMatch(command, /PROVIDER_KEY='provider-main' \\\\$/m)
   assert.match(command, /run_devnet_provider\.sh link/)
 })
 
 test('buildProviderHealthCommands includes doctor, verify, config, and health probes', () => {
-  const commands = buildProviderHealthCommands('https://sp.example.com')
+  const commands = buildProviderHealthCommands('https://sp.example.com', 'provider-main')
+  assert.match(commands, /PROVIDER_KEY='provider-main' \.\/scripts\/run_devnet_provider\.sh doctor/)
+  assert.match(commands, /PROVIDER_KEY='provider-main' \.\/scripts\/run_devnet_provider\.sh verify/)
+  assert.match(commands, /PROVIDER_KEY='provider-main' \.\/scripts\/run_devnet_provider\.sh print-config/)
   assert.match(commands, /doctor/)
   assert.match(commands, /verify/)
   assert.match(commands, /print-config/)
   assert.match(commands, /127\.0\.0\.1:8091\/health/)
   assert.match(commands, /https:\/\/sp\.example\.com\/health/)
+
+  const defaultKeyCommands = buildProviderHealthCommands('https://sp.example.com')
+  assert.match(defaultKeyCommands, /PROVIDER_KEY='provider1' \.\/scripts\/run_devnet_provider\.sh doctor/)
 })
 
 test('buildProviderAgentPrompt matches the canonical repo prompt by default', () => {
@@ -173,6 +304,7 @@ test('buildProviderAgentPrompt includes runtime values and script-aligned status
   assert.match(prompt, /PROVIDER_KEY=provider-main/)
   assert.match(prompt, /PROVIDER_ENDPOINT=\/dns4\/sp\.example\.com\/tcp\/443\/https/)
   assert.match(prompt, /public health base `https:\/\/sp\.example\.com`/)
+  assert.match(prompt, /run_devnet_provider\.sh pair/)
   assert.match(prompt, /run_devnet_provider\.sh link/)
   assert.match(prompt, /bootstrap` now fails fast unless all three are present/)
   assert.match(prompt, /provider_process_running/)
@@ -192,14 +324,17 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
   assert.match(remote, /BOOTSTRAP_ALLOW_PARTIAL=1/)
   assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-onboarding/)
   assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-dashboard/)
+  assert.match(remote, /run_devnet_provider\.sh pair/)
   assert.match(remote, /run_devnet_provider\.sh link/)
   assert.match(endpoints, /update-provider-endpoints/)
   assert.doesNotMatch(endpoints, /Endpoint lists are \*\*not\*\* mutable/)
   assert.match(collaboratorPacket, /website-first bootstrap/)
+  assert.match(collaboratorPacket, /run_devnet_provider\.sh pair/)
   assert.match(collaboratorPacket, /run_devnet_provider\.sh bootstrap/)
   assert.doesNotMatch(collaboratorPacket, /run_devnet_provider\.sh register/)
   assert.doesNotMatch(collaboratorPacket, /run_devnet_provider\.sh start/)
   assert.match(nilstorePacket, /website-first bootstrap/)
+  assert.match(nilstorePacket, /run_devnet_provider\.sh pair/)
   assert.match(nilstorePacket, /run_devnet_provider\.sh bootstrap/)
 })
 
@@ -210,6 +345,7 @@ test('run_devnet_provider.sh help prints usage without requiring PROVIDER_KEY', 
   })
 
   assert.match(output, /Usage: \.\/scripts\/run_devnet_provider\.sh/)
+  assert.match(output, /pair/)
   assert.match(output, /link/)
   assert.match(output, /bootstrap/)
 })

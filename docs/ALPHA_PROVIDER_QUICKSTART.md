@@ -26,7 +26,11 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 
 1. Open the NilStore website and go to `https://nilstore.org/#/sp-onboarding`.
 2. Connect the operator wallet and copy the operator address (`nil1...`).
-3. Clone the repo on the provider machine.
+3. Follow the website flow in order:
+   - Prepare provider host: clone the repo on the provider machine.
+   - Pair provider identity: run one `pair` command on the provider host, let it create the key if needed, fund it and rerun if auto-funding is unavailable, then approve the provider link from the website wallet.
+   - Configure public access: enter the provider hostname or multiaddr and paste `NIL_GATEWAY_SP_AUTH`.
+   - Bootstrap and verify: run the generated provider-host bootstrap command, then watch registration and health converge.
 4. Optional: open your coding agent locally in the repo.
 5. Paste the provider prompt from:
    - `docs/onboarding-prompts/provider.md`
@@ -35,8 +39,8 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
    - your public hostname or multiaddr
    - `OPERATOR_ADDRESS` from the website onboarding flow
 7. Let the agent:
-   - initialize the provider key if needed
-   - fund the printed `nil1...` address before link request or registration when the key is new
+   - run `OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh pair` when the website pairing step is incomplete
+   - fund the printed `nil1...` address and rerun `pair` when the key is new and auto-funding is unavailable
    - run strict website-managed bootstrap, verify, and retry until healthy
    - use `./scripts/run_devnet_provider.sh link` for link-only repair when the host is already configured and only the on-chain link request is missing
 8. Confirm:
