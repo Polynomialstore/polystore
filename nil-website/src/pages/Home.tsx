@@ -72,7 +72,7 @@ export const Home = () => {
         >
           <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-center">
             <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 border border-border bg-card/80 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground">
+              <div className="nil-badge">
                 <BadgeCheck className="h-4 w-4 text-primary" />
                 Preview Testnet
               </div>
@@ -99,10 +99,10 @@ export const Home = () => {
               </div>
 
               <div className="mt-8 space-y-5">
-                <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl md:text-[3.7rem]">
+                <h1 className="nil-hero-title">
                   Store data. Run providers. Join the NilStore testnet.
                 </h1>
-                <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+                <p className="nil-hero-description">
                   Choose the path that matches your role.
                 </p>
               </div>
@@ -144,17 +144,17 @@ export const Home = () => {
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.24, delay: 0.05 + index * 0.04 }}
-                    className="relative border border-border bg-background/55 p-5 backdrop-blur-sm"
+                    className="nil-hero-point"
                   >
                     <div className="flex items-start gap-4">
-                      <div className="mt-0.5 flex h-10 w-10 items-center justify-center border border-border bg-background/80">
-                        <Icon className="h-5 w-5 text-primary" />
+                      <div className="nil-hero-point-icon shrink-0">
+                        <Icon className="h-5 w-5" />
                       </div>
                       <div>
-                        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-foreground">
+                        <div className="nil-hero-point-label">
                           {point.label}
                         </div>
-                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{point.body}</p>
+                        <p className="nil-hero-point-body">{point.body}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -175,13 +175,13 @@ export const Home = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.28, delay: 0.06 + index * 0.05 }}
                 whileHover={{ y: -4 }}
-                className="relative glass-panel industrial-border px-6 py-7 md:px-8 md:py-8"
+                className="nil-card"
               >
                 <div className="relative flex items-start justify-between gap-6">
                   <div className="max-w-xl space-y-4">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{track.eyebrow}</div>
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">{track.title}</h2>
-                    <p className="max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">{track.description}</p>
+                    <div className="nil-card-eyebrow">{track.eyebrow}</div>
+                    <h2 className="nil-card-title">{track.title}</h2>
+                    <p className="nil-card-description">{track.description}</p>
                   </div>
                   <div className={`mt-1 flex h-14 w-14 shrink-0 items-center justify-center glass-panel industrial-border ${isAccent ? "industrial-border-accent" : ""}`}>
                     <Icon className={`h-6 w-6 ${isAccent ? "text-accent" : "text-primary"}`} />
@@ -222,14 +222,14 @@ export const Home = () => {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.12 }}
-          className="grid gap-5 border border-border bg-card/70 px-6 py-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:px-8 glass-panel industrial-border"
+          className="nil-card grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-center"
         >
-          <div className="space-y-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Choose Your Starting Point</div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+          <div className="space-y-4">
+            <div className="nil-card-eyebrow">Choose Your Starting Point</div>
+            <h2 className="nil-card-title">
               One network. Two roles. A direct way in.
             </h2>
-            <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground md:text-base">
+            <p className="max-w-3xl nil-card-description">
               Data users should get to storage fast. Provider operators should get to onboarding fast. The homepage should do exactly that, without making either audience decode internal product structure first.
             </p>
           </div>

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, CheckCircle2, Database, Globe, Server, TriangleAlert, XCircle } from "lucide-react";
+import { Activity, BadgeCheck, CheckCircle2, Database, Globe, Server, TriangleAlert, XCircle } from "lucide-react";
 import { AlphaHero } from "../components/marketing/AlphaHero";
-import { TrackCard } from "../components/marketing/TrackCard";
 import { StatusBar } from "../components/StatusBar";
 import { PrimaryCtaLink } from "../components/PrimaryCta";
 import { fetchStatus, type ServiceStatus } from "../lib/status";
@@ -36,6 +35,24 @@ function StatusIcon({ status }: { status: ServiceStatus }) {
   if (status === "error") return <XCircle className={`h-4 w-4 ${statusTone(status)}`} />;
   return <TriangleAlert className={`h-4 w-4 ${statusTone(status)}`} />;
 }
+
+const statusPoints = [
+  {
+    label: "Network Vitality",
+    body: "Real-time probes of LCD, EVM, and Faucet health across the testnet.",
+    icon: Activity,
+  },
+  {
+    label: "Provider Visibility",
+    body: "Live tracking of registered providers and their public reachability.",
+    icon: Server,
+  },
+  {
+    label: "Operational Transparency",
+    body: "Explicit endpoint mapping for all core network services.",
+    icon: Globe,
+  },
+] as const;
 
 export function AlphaStatus() {
   const [state, setState] = useState<StatusState>({
@@ -118,23 +135,31 @@ export function AlphaStatus() {
   }, [summary]);
 
   return (
-    <div className="px-4 pb-12 pt-24">
-      <div className="container mx-auto max-w-6xl">
+    <div className="px-4 pb-16 pt-12 md:pb-20">
+      <div className="container mx-auto max-w-6xl space-y-12">
         <AlphaHero
-          badge="/alpha/status"
+          badge={
+            <>
+              <BadgeCheck className="h-4 w-4 text-primary" />
+              Preview Testnet / Status
+            </>
+          }
           logo={
             <div className="flex h-full w-full items-center justify-center">
-              <Activity className="h-14 w-14 text-primary" />
+              <Activity className="h-10 w-10 text-primary md:h-12 md:w-12" />
             </div>
           }
-          title={<h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">Testnet Status</h1>}
-          description="This is the shared operational view for storage users and provider operators. It consolidates chain reachability, provider visibility, and the public endpoints the testnet depends on."
+          title="Testnet Status"
+          description="This is the shared operational view for storage users and provider operators. It consolidates chain reachability, provider visibility, and the public endpoints."
+          points={statusPoints}
           actions={
             <>
-              <PrimaryCtaLink to="/alpha/storage">Start Storing</PrimaryCtaLink>
+              <PrimaryCtaLink to="/alpha/storage" leftIcon={<Database className="h-4 w-4" />}>
+                Start Storing
+              </PrimaryCtaLink>
               <Link
                 to="/alpha/provider"
-                className="inline-flex items-center justify-center rounded-none border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
+                className="inline-flex items-center justify-center border border-border bg-card px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-foreground transition-colors hover:bg-secondary"
               >
                 Become A Provider
               </Link>
@@ -146,34 +171,16 @@ export function AlphaStatus() {
           <StatusBar />
         </div>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          <TrackCard
-            icon={<Database className="h-6 w-6 text-accent" />}
-            title="Storage Signal"
-            description="Storage users can check wallet-facing chain health, faucet availability, and provider count before debugging browser or deal flow issues."
-          />
-          <TrackCard
-            icon={<Server className="h-6 w-6 text-primary" />}
-            title="Provider Signal"
-            description="Provider operators can quickly tell whether the network sees active providers and which public endpoints are expected to answer."
-          />
-          <TrackCard
-            icon={<Globe className="h-6 w-6 text-primary" />}
-            title="Public Surface"
-            description="The page keeps the testnet surface area explicit: RPC, LCD, EVM, faucet, website, and the currently visible provider endpoints."
-          />
-        </div>
-
         <section className="mt-12 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="glass-panel industrial-border p-6">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+          <div className="nil-card">
+            <div className="nil-card-eyebrow">
               /alpha/status/overview
             </div>
             <div className="mt-3 flex items-center gap-3">
               <StatusIcon status={headlineStatus} />
-              <h2 className="text-2xl font-bold text-foreground">Network overview</h2>
+              <h2 className="nil-card-title">Network overview</h2>
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            <p className="nil-card-description mt-2">
               {state.loading
                 ? "Refreshing live network probes."
                 : summary
@@ -196,7 +203,7 @@ export function AlphaStatus() {
               />
             </div>
 
-            <div className="mt-6 rounded-none border border-border bg-background/60 p-4">
+            <div className="mt-6 border border-border bg-background/60 p-4">
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Known issues</div>
               <div className="mt-3 space-y-3">
                 {knownIssues.map((item) => (
@@ -209,11 +216,11 @@ export function AlphaStatus() {
             </div>
           </div>
 
-          <div className="glass-panel industrial-border p-6">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+          <div className="nil-card">
+            <div className="nil-card-eyebrow">
               /alpha/status/endpoints
             </div>
-            <h2 className="mt-3 text-2xl font-bold text-foreground">Public endpoints</h2>
+            <h2 className="nil-card-title mt-3">Public endpoints</h2>
             <div className="mt-5 space-y-3">
               <EndpointRow label="Website" value={appConfig.explorerBase} />
               <EndpointRow label="EVM RPC" value={appConfig.evmRpc} />
@@ -223,27 +230,27 @@ export function AlphaStatus() {
             </div>
 
             {state.error ? (
-              <div className="mt-6 rounded-none border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+              <div className="mt-6 border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
                 Failed to refresh full status: {state.error}
               </div>
             ) : null}
           </div>
         </section>
 
-        <section className="mt-12 glass-panel industrial-border p-6">
+        <section className="mt-12 nil-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">
+              <div className="nil-card-eyebrow">
                 /alpha/status/providers
               </div>
-              <h2 className="mt-3 text-2xl font-bold text-foreground">Visible providers</h2>
+              <h2 className="nil-card-title mt-3">Visible providers</h2>
             </div>
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {state.loading ? "Refreshing" : `${providerRows.length} visible`}
             </div>
           </div>
 
-          <div className="mt-6 overflow-x-auto rounded-none border border-border">
+          <div className="mt-6 overflow-x-auto border border-border">
             <table className="min-w-full divide-y divide-border text-sm">
               <thead className="bg-background/80">
                 <tr>

@@ -60,27 +60,30 @@ export function AgentPromptCard({
   const promptLabel = "Agent prompt";
 
   return (
-    <div className={`glass-panel industrial-border p-6 ${className}`.trim()}>
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-muted-foreground">{badge}</div>
+    <article className={`nil-card ${className}`.trim()}>
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-center">
+        <div className="space-y-4">
+          <div className="nil-card-eyebrow">{badge}</div>
+          <div className="min-w-0">
+            <h3 className="nil-card-title">{title}</h3>
+            <p className="mt-4 max-w-3xl nil-card-description">{description}</p>
+          </div>
+        </div>
 
-      <div className="mt-6 min-w-0">
-        <h3 className="text-2xl font-bold text-foreground">{title}</h3>
-        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
-
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <button
-            type="button"
+        <div className="flex flex-col gap-3 sm:flex-row md:flex-col">
+          <PrimaryCtaButton
             onClick={() => setPreviewOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-none border border-accent bg-accent px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data text-accent-foreground cta-shadow transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
+            size="md"
+            leftIcon={<ExternalLink className="h-4 w-4" />}
+            className="!border-accent !bg-accent !text-accent-foreground"
           >
-            <ExternalLink className="h-4 w-4" />
             Preview Prompt
-          </button>
+          </PrimaryCtaButton>
         </div>
       </div>
 
       {links.length > 0 || copyStatus ? (
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-border/60 pt-6">
           {links.map((link) => (
             <a
               key={link.href}
@@ -150,6 +153,6 @@ export function AgentPromptCard({
             )
           : null
       ) : null}
-    </div>
+    </article>
   );
 }
