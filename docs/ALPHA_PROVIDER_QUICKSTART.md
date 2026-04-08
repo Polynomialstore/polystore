@@ -1,6 +1,6 @@
 # Testnet Provider-Daemon Quickstart
 
-This is the shortest supported path for a NilStore testnet provider-daemon operator.
+This is the shortest supported path for a PolyStore testnet provider-daemon operator.
 
 Note: this file keeps a legacy `ALPHA_` prefix for compatibility.
 
@@ -12,7 +12,7 @@ Fallback target:
 
 ## What you need from the hub operator
 
-- Repo URL: `https://github.com/Nil-Store/nil-store`
+- Repo URL: `https://github.com/Polynomialstore/polystore`
 - Shared `user-gateway` to `provider-daemon` auth token: `NIL_GATEWAY_SP_AUTH=...`
 - Recommended hostname: `sp.<domain>` or `spN.<domain>`
 - Operator wallet address from website onboarding: `OPERATOR_ADDRESS=nil1...` (or `0x...`)
@@ -24,7 +24,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 
 ## Fast path
 
-1. Open the NilStore website and go to `https://nilstore.org/#/sp-onboarding`.
+1. Open the PolyStore website and go to `https://polynomialstore.com/#/sp-onboarding`.
 2. Connect the operator wallet and copy the operator address (`nil1...`).
 3. Follow the website flow in order:
    - Prepare provider host: clone the repo on the provider machine.
@@ -47,7 +47,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
    - local `http://127.0.0.1:8091/health`
    - public `https://sp.<domain>/health` for tunnel / hostname mode, or `http://<ip>:8091/health` for direct IPv4 mode
    - provider appears on `https://lcd.<domain>/nilchain/nilchain/v1/providers`
-   - provider appears in the website `My Providers` dashboard at `https://nilstore.org/#/sp-dashboard`
+   - provider appears in the website `My Providers` dashboard at `https://polynomialstore.com/#/sp-dashboard`
 
 If you deliberately want partial bootstrap without provider link, use the manual path in `docs/REMOTE_SP_JOIN_QUICKSTART.md` or opt in with `BOOTSTRAP_ALLOW_PARTIAL=1`. Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unlinked provider.
 
