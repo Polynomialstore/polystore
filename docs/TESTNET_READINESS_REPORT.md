@@ -78,8 +78,8 @@ All items below are expected to be verifiable via the unit tests and/or the e2e 
   - Audit budget + task derivation tests: `polystorechain/x/polystorechain/keeper/epoch_audit_test.go`
   - Protocol session open/consume tests: `polystorechain/x/polystorechain/keeper/msg_server_protocol_sessions_test.go`
 - Compression round-trip:
-  - NilCE v1 is **opt-in** (`NIL_NILCE=0` by default). The encode/decode helpers are unit-tested in `polystore_gateway/nilce_test.go`.
-  - CI does not currently require NilCE-enabled end-to-end coverage.
+  - PolyCE v1 is **opt-in** (`NIL_POLYCE=0` by default). The encode/decode helpers are unit-tested in `polystore_gateway/polyce_test.go`.
+  - CI does not currently require PolyCE-enabled end-to-end coverage.
 - Wallet-first chain writes (MetaMask/EVM signed intents; no relayer required):
   - Covered by Playwright E2E flows (in-page E2E wallet when `VITE_E2E=1`), not by `scripts/e2e_lifecycle.sh`.
 

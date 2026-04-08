@@ -15,7 +15,7 @@ import {
   encodeOpenRetrievalSessionsSponsoredData,
 } from '../lib/polystorePrecompile'
 import { planPolyfsFileRangeChunks } from '../lib/rangeChunker'
-import { decodeNilceV1 } from '../lib/nilce'
+import { decodePolyceV1 } from '../lib/polyce'
 import { classifyWalletError } from '../lib/walletErrors'
 import {
   resolveProviderEndpoint,
@@ -50,7 +50,7 @@ export interface FetchInput {
   fileSizeBytes?: number
   mduSizeBytes?: number
   blobSizeBytes?: number
-  decodeNilce?: boolean
+  decodePolyce?: boolean
   sponsoredAuth?: SponsoredRetrievalAuth
   routePreference?: RoutePreference
 }
@@ -237,8 +237,8 @@ export function useFetch() {
         if (wantRangeStart >= wantFileSize) throw new Error('rangeStart beyond EOF')
         effectiveRangeLen = wantFileSize - wantRangeStart
       }
-      const shouldDecodeNilce =
-        input.decodeNilce !== false &&
+      const shouldDecodePolyce =
+        input.decodePolyce !== false &&
         wantRangeStart === 0 && wantFileSize > 0 && effectiveRangeLen === wantFileSize
 
       const hasMeta =
@@ -921,14 +921,14 @@ export function useFetch() {
       }
 
       let payload = concatUint8Arrays(parts)
-      if (shouldDecodeNilce) {
+      if (shouldDecodePolyce) {
         try {
-          const decoded = await decodeNilceV1(payload)
+          const decoded = await decodePolyceV1(payload)
           if (decoded.wrapped) {
             payload = decoded.payload
           }
         } catch (err) {
-          console.warn('NilCE decode failed, returning raw bytes', err)
+          console.warn('PolyCE decode failed, returning raw bytes', err)
         }
       }
       const blob = new Blob([payload] as BlobPart[], { type: 'application/octet-stream' })

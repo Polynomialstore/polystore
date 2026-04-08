@@ -10,7 +10,7 @@ import { DealDetail } from './DealDetail'
 import { StatusBar } from './StatusBar'
 import { FileSharder } from './FileSharder'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
-import { maybeWrapNilceZstd } from '../lib/nilce'
+import { maybeWrapPolyceZstd } from '../lib/polyce'
 import { classifyWalletError } from '../lib/walletErrors'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
@@ -882,9 +882,9 @@ export function Dashboard() {
       let uploadFile = file
       if (compressUploads) {
         setStatusTone('neutral')
-        setStatusMsg('Compressing file (NilCE)...')
+        setStatusMsg('Compressing file (PolyCE)...')
         const buf = new Uint8Array(await file.arrayBuffer())
-        const wrapped = await maybeWrapNilceZstd(buf)
+        const wrapped = await maybeWrapPolyceZstd(buf)
         if (wrapped.wrapped && wrapped.encoding === 'zstd') {
           const view = wrapped.bytes
           const buffer = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer
@@ -1371,7 +1371,7 @@ export function Dashboard() {
                   onChange={(e) => setCompressUploads(e.target.checked)}
                   className="h-3 w-3 rounded-none border-border text-primary focus:ring-primary/40"
                 />
-                Compress before upload (NilCE, recommended)
+                Compress before upload (PolyCE, recommended)
               </label>
               {stagedUpload && (
                 <div className="nil-inset glass-panel industrial-border space-y-1 px-3 py-2 text-[11px] font-mono-data text-muted-foreground">

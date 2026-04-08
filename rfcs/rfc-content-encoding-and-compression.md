@@ -68,8 +68,8 @@ To avoid PolyFS schema churn, we store encoding metadata **inside the file bytes
 All fields are little-endian.
 
 ```
-struct NilCEv1 {
-  magic[4]            = 0x4E 0x49 0x4C 0x43   // "NILC"
+struct PolyCEv1 {
+  magic[4]            = 0x4E 0x49 0x4C 0x43   // "POLC"
   version_u8          = 1
   encoding_u8         // ContentEncoding enum (see below)
   flags_u16           // reserved, must be 0

@@ -56,7 +56,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | DONE | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | `polystorechain/x/polystorechain/types/types.go` (`MAX_DEAL_BYTES`); `polystorechain/x/polystorechain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | `cd polystorechain && go test ./...` (unit tests) | — | — |
 | Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | DONE | `rfcs/rfc-blob-alignment-and-striping.md` | Playwright asserts sha256(downloaded) == sha256(uploaded) in `polystore-website/tests/mode2-stripe.spec.ts` | `scripts/e2e_mode2_stripe_multi_sp.sh` | — | — |
 | Allowlist retrieval policy verification has test vectors | DONE | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification in `polystorechain/x/polystorechain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) + test vectors in `polystorechain/x/polystorechain/keeper/msg_server_sponsored_sessions_test.go` | `cd polystorechain && go test ./...` | — | — |
-| NilCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `polystore_gateway/` (opt-in `NIL_NILCE=1`) | `go test ./polystore_gateway/...` (NilCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
+| PolyCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `polystore_gateway/` (opt-in `NIL_POLYCE=1`) | `go test ./polystore_gateway/...` (PolyCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
 
 ## Phase 1 — Deal expiry + renewal (ExtendDeal)
 
@@ -96,11 +96,11 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Deterministic protocol auth (repair sessions only for pending provider of repairing slot) | DONE | `OpenProtocolRetrievalSession` REPAIR auth + Mode2 slot checks in keeper | `polystorechain/x/polystorechain/keeper/msg_server_protocol_sessions_test.go` | Multi-host repair flows are not yet validated (CI is single-machine) |
 | Audit budget mint/caps + spending for protocol sessions | DONE | `polystorechain/x/polystorechain/keeper/epoch_audit.go` + protocol budget module accounting | `polystorechain/x/polystorechain/keeper/epoch_audit_test.go` | — |
 
-## Phase 5 — Compression-aware content pipeline (NilCEv1)
+## Phase 5 — Compression-aware content pipeline (PolyCEv1)
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Optional compression-aware uploads (NilCE v1 header + zstd) | PARTIAL | `polystore_gateway/nilce.go` + `polystore_gateway/main.go` (`NIL_NILCE=1`) | `polystore_gateway/nilce_test.go` | No CI E2E coverage; retrieval semantics are “return stored bytes” (no auto-decode) |
+| Optional compression-aware uploads (PolyCE v1 header + zstd) | PARTIAL | `polystore_gateway/polyce.go` + `polystore_gateway/main.go` (`NIL_POLYCE=1`) | `polystore_gateway/polyce_test.go` | No CI E2E coverage; retrieval semantics are “return stored bytes” (no auto-decode) |
 
 ## Phase 6 — Wallet-first UX (no relay/faucet dependency outside dev)
 

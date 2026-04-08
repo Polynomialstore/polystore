@@ -140,7 +140,7 @@ The agent should execute (adapt as needed):
   - Protocol-funded sessions integrated with audit budget module.
   - Repair path uses protocol sessions (restricted deals still repairable).
 
-**Phase 5 – Compression/content encoding (NilCEv1)**
+**Phase 5 – Compression/content encoding (PolyCEv1)**
 - Outputs:
   - Upload pipeline compresses pre-encryption (gateway/wasm).
   - Stored bytes are compressed ciphertext; pricing applies to stored size.
@@ -360,21 +360,21 @@ Tests:
 
 ---
 
-## 9) Phase 5: Compression/content encoding (NilCEv1)
+## 9) Phase 5: Compression/content encoding (PolyCEv1)
 
 ### 9.1 Goal
 - Charge storage and bandwidth on **stored ciphertext bytes**, which are compressed when possible.
 - Prevent SPs from “getting lucky” storing compressible plaintext at uncompressed prices.
 
-### 9.2 NilCEv1 format
+### 9.2 PolyCEv1 format
 - A small header in plaintext before encryption:
-  - magic `NILC`
+  - magic `POLC`
   - version
   - encoding enum (NONE, ZSTD)
   - uncompressed length
   - optional checksum
 - Pipeline:
-  - compress → wrap (NilCEv1) → encrypt → chunk/commit
+  - compress → wrap (PolyCEv1) → encrypt → chunk/commit
   - retrieve → verify → decrypt → parse header → decompress → handoff
 
 ### 9.3 Implementation points

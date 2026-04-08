@@ -144,7 +144,7 @@ Test gates:
 
 ### B6) Compression / content-encoding (CORE-403 + GW-205)
 
-- Implement NilCEv1 header and codecs (NONE + ZSTD) in:
+- Implement PolyCEv1 header and codecs (NONE + ZSTD) in:
   - `polystore_core` (WASM client)
   - `polystore_gateway` ingest path
 - Ensure download returns original bytes (decompress after decrypt).

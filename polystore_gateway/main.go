@@ -222,12 +222,12 @@ var (
 	// Optional: auto-fund creators via faucet when relaying EVM-signed intents.
 	autoFaucetEnabled = envDefault("NIL_AUTO_FAUCET_EVM", envDefault("NIL_AUTO_FAUCET", "0")) == "1"
 
-	// Optional NilCE v1 compression layer for uploads (pre-alpha).
-	// When enabled, the gateway may store some files as a NILC header + ZSTD payload
+	// Optional PolyCE v1 compression layer for uploads (pre-alpha).
+	// When enabled, the gateway may store some files as a POLC header + ZSTD payload
 	// (encoding happens before sharding/commitment generation).
-	nilceEnabled       = envDefault("NIL_NILCE", "0") == "1"
-	nilceMinSavingsBps = envInt("NIL_NILCE_MIN_SAVINGS_BPS", 500)
-	nilceSampleBytes   = envInt("NIL_NILCE_SAMPLE_BYTES", 256<<10)
+	polyceEnabled       = envDefault("POLYSTORE_POLYCE", "0") == "1"
+	polyceMinSavingsBps = envInt("POLYSTORE_POLYCE_MIN_SAVINGS_BPS", 500)
+	polyceSampleBytes   = envInt("POLYSTORE_POLYCE_SAMPLE_BYTES", 256<<10)
 
 	execCommandContext = exec.CommandContext
 	mockCombinedOutput func(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -1365,13 +1365,13 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	contentEncoding := "none"
 	fileFlags := uint8(0)
 	prepareStarted := time.Now()
-	if nilceEnabled {
-		wrapped, err := maybeWrapNilceZstd(receiveCtx, rawPath, nilceMinSavingsBps, nilceSampleBytes)
+	if polyceEnabled {
+		wrapped, err := maybeWrapPolyceZstd(receiveCtx, rawPath, polyceMinSavingsBps, polyceSampleBytes)
 		if err != nil {
-			writeUploadError(fmt.Errorf("nilce wrap failed: %w", err))
+			writeUploadError(fmt.Errorf("polyce wrap failed: %w", err))
 			return
 		}
-		if wrapped.Encoding == nilceEncodingZstd && strings.TrimSpace(wrapped.Path) != "" && wrapped.Path != rawPath {
+		if wrapped.Encoding == polyceEncodingZstd && strings.TrimSpace(wrapped.Path) != "" && wrapped.Path != rawPath {
 			ingestPath = wrapped.Path
 			contentEncoding = "zstd"
 			fileFlags |= crypto_ffi.FlagCompressionZstd
@@ -1379,8 +1379,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if contentEncoding == "none" {
-		if hdr, ok, err := detectNilceHeaderFromFile(ingestPath); err == nil && ok {
-			if hdr.Encoding == nilceEncodingZstd {
+		if hdr, ok, err := detectPolyceHeaderFromFile(ingestPath); err == nil && ok {
+			if hdr.Encoding == polyceEncodingZstd {
 				contentEncoding = "zstd"
 				fileFlags |= crypto_ffi.FlagCompressionZstd
 			}
@@ -4209,21 +4209,21 @@ type slabLayoutResponse struct {
 	Segments       []slabSegment `json:"segments"`
 }
 
-func readNilceHeaderForPolyfsFile(dealDir string, slabStartIdx uint64, fileStartOffset uint64, fileLen uint64) (nilceHeader, bool, error) {
-	if fileLen < nilceHeaderSize {
-		return nilceHeader{}, false, nil
+func readPolyceHeaderForPolyfsFile(dealDir string, slabStartIdx uint64, fileStartOffset uint64, fileLen uint64) (polyceHeader, bool, error) {
+	if fileLen < polyceHeaderSize {
+		return polyceHeader{}, false, nil
 	}
-	reader, err := newPolyfsDecodedReader(dealDir, slabStartIdx, fileStartOffset, fileLen, fileStartOffset, nilceHeaderSize)
+	reader, err := newPolyfsDecodedReader(dealDir, slabStartIdx, fileStartOffset, fileLen, fileStartOffset, polyceHeaderSize)
 	if err != nil {
-		return nilceHeader{}, false, err
+		return polyceHeader{}, false, err
 	}
 	defer reader.Close()
 
-	buf := make([]byte, nilceHeaderSize)
+	buf := make([]byte, polyceHeaderSize)
 	if _, err := io.ReadFull(reader, buf); err != nil {
-		return nilceHeader{}, false, err
+		return polyceHeader{}, false, err
 	}
-	return readNilceV1Header(bytes.NewReader(buf))
+	return readPolyceV1Header(bytes.NewReader(buf))
 }
 
 // GatewayListFiles returns the PolyFS V1 file table for a manifest root.
@@ -4358,11 +4358,11 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 			Flags:        flags,
 			CachePresent: true,
 		}
-		if hdr, ok, err := readNilceHeaderForPolyfsFile(dealDir, slabStartIdx, rec.StartOffset, length); err == nil && ok {
+		if hdr, ok, err := readPolyceHeaderForPolyfsFile(dealDir, slabStartIdx, rec.StartOffset, length); err == nil && ok {
 			if hdr.UncompressedLen > 0 {
 				entry.LogicalSizeBytes = hdr.UncompressedLen
 			}
-			if hdr.Encoding == nilceEncodingZstd {
+			if hdr.Encoding == polyceEncodingZstd {
 				entry.ContentEncoding = "zstd"
 			}
 		}

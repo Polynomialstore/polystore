@@ -32,7 +32,7 @@ import { providerFetchMduWindowWithSession } from '../api/providerClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
-import { maybeWrapNilceZstd, peekNilceHeader, NILCE_FLAG_COMPRESSION_ZSTD } from '../lib/nilce';
+import { maybeWrapPolyceZstd, peekPolyceHeader, POLYCE_FLAG_COMPRESSION_ZSTD } from '../lib/polyce';
 import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode';
 import { postSparseArtifact } from '../lib/upload/sparseTransport';
 import { expandSparseBytes, makeSparseArtifact } from '../lib/upload/sparseArtifacts';
@@ -2763,11 +2763,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       let fileFlags = 0
       let contentEncoding: 'none' | 'zstd' = 'none'
 
-      const header = peekNilceHeader(bytes)
-      const hasNilceHeader = header.ok && !header.error
+      const header = peekPolyceHeader(bytes)
+      const hasPolyceHeader = header.ok && !header.error
       if (header.ok) {
         if (header.error) {
-          addLog(`> NilCE header error: ${header.error.message}`)
+          addLog(`> PolyCE header error: ${header.error.message}`)
         } else {
           if (header.uncompressedLen) {
             logicalSizeBytes = header.uncompressedLen
@@ -2775,22 +2775,22 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           if (header.encoding && header.encoding !== 'none') {
             contentEncoding = header.encoding
             if (header.encoding === 'zstd') {
-              fileFlags |= NILCE_FLAG_COMPRESSION_ZSTD
+              fileFlags |= POLYCE_FLAG_COMPRESSION_ZSTD
             }
-            addLog(`> NilCE: detected existing ${header.encoding} header (${formatBytes(logicalSizeBytes)} logical)`)
+            addLog(`> PolyCE: detected existing ${header.encoding} header (${formatBytes(logicalSizeBytes)} logical)`)
           } else if (header.encoding === 'none') {
-            addLog(`> NilCE: detected existing header (${formatBytes(logicalSizeBytes)} logical)`)
+            addLog(`> PolyCE: detected existing header (${formatBytes(logicalSizeBytes)} logical)`)
           }
         }
       }
 
-      if (compressUploads && contentEncoding === 'none' && !hasNilceHeader) {
+      if (compressUploads && contentEncoding === 'none' && !hasPolyceHeader) {
         try {
-          browserPerfStartPhase('nilce_wrap', {
+          browserPerfStartPhase('polyce_wrap', {
             inputBytes: bytes.length,
           })
-          const wrapped = await maybeWrapNilceZstd(bytes)
-          browserPerfEndPhase('nilce_wrap', {
+          const wrapped = await maybeWrapPolyceZstd(bytes)
+          browserPerfEndPhase('polyce_wrap', {
             ok: true,
             wrapped: wrapped.wrapped,
             encoding: wrapped.encoding,
@@ -2800,19 +2800,19 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           if (wrapped.wrapped && wrapped.encoding === 'zstd') {
             bytes = wrapped.bytes as Uint8Array
             contentEncoding = 'zstd'
-            fileFlags |= NILCE_FLAG_COMPRESSION_ZSTD
+            fileFlags |= POLYCE_FLAG_COMPRESSION_ZSTD
             logicalSizeBytes = wrapped.uncompressedLen
             addLog(
-              `> NilCE: compressed ${formatBytes(wrapped.uncompressedLen)} -> ${formatBytes(wrapped.bytes.length)}`,
+              `> PolyCE: compressed ${formatBytes(wrapped.uncompressedLen)} -> ${formatBytes(wrapped.bytes.length)}`,
             )
           }
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e)
-          browserPerfEndPhase('nilce_wrap', {
+          browserPerfEndPhase('polyce_wrap', {
             ok: false,
             error: msg,
           })
-          addLog(`> NilCE compression failed; proceeding without compression (${msg})`)
+          addLog(`> PolyCE compression failed; proceeding without compression (${msg})`)
         }
       }
 

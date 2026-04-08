@@ -95,7 +95,7 @@ Show:
   - retrieve ciphertext,
   - verify proofs,
   - decrypt,
-  - parse NilCE header,
+  - parse PolyCE header,
   - decompress if needed.
 
 Advanced option (optional):

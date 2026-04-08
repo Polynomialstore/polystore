@@ -172,7 +172,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
 
-#### GW-205 — Content encoding / compression in gateway (NilCEv1)
+#### GW-205 — Content encoding / compression in gateway (PolyCEv1)
 - **Status:** NOT STARTED
 - **RFC:** `rfcs/rfc-content-encoding-and-compression.md`
 - **Work:** implement compress-before-encrypt wrapper for uploads; ensure download path can decompress after decrypt when gateway holds keys (local mode); maintain header blobs for partial reads.
@@ -227,12 +227,12 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** PARTIAL (DEVNET)
 - **DoD:** stable outputs for commitments across Mac/Linux and browser/gateway; fuzzers for edge-cases.
 
-#### CORE-403 — NilCE content-encoding + compression (compress before encrypt)
+#### CORE-403 — PolyCE content-encoding + compression (compress before encrypt)
 - **Status:** NOT STARTED
 - **RFC:** `rfcs/rfc-content-encoding-and-compression.md`
 - **Why:** reduces user cost, standardizes encoding metadata, and ensures charging is based on stored ciphertext bytes.
 - **Work:**
-  - implement NilCEv1 header (`NILC`) parsing + generation
+  - implement PolyCEv1 header (`POLC`) parsing + generation
   - add zstd level-3 (and NONE) codec support in WASM + gateway
   - add decompression after decrypt on download path
   - add zip-bomb defenses and fuzz tests

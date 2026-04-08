@@ -50,7 +50,7 @@ Companion docs:
 - [ ] E2E gates: owner-only deal rejects non-owner; public deal allows non-owner sponsored open; voucher replay fails; allowlist proof required (`tests/`, `scripts/`).
 
 ## Stage 2c — Content encoding / compression (A2c)
-- [ ] Implement NilCEv1 header (`NILC`) + `ContentEncoding` enum and zstd (level 3) compress-before-encrypt pipeline in both gateway and WASM (`polystore_gateway/`, `polystore_core/`).
+- [ ] Implement PolyCEv1 header (`POLC`) + `ContentEncoding` enum and zstd (level 3) compress-before-encrypt pipeline in both gateway and WASM (`polystore_gateway/`, `polystore_core/`).
 - [ ] Retrieval path parses header and decompresses after decrypt; partial reads fetch header blobs first (`polystore_gateway/`, `polystore_core/`).
 - [ ] UI shows original vs stored size and cost delta; compression default ON with opt-out (`polystore-website/`).
 - [ ] Tests: round-trip equality; corrupt header fails safely; zip-bomb defense; gateway vs WASM parity (`tests/`).

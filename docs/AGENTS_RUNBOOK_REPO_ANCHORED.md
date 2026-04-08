@@ -171,13 +171,13 @@ CI signals:
 CI signals:
 - Unit tests: protocol sessions + audit budget under `polystorechain/x/polystorechain/keeper/*protocol*` and `*audit*`
 
-### Phase 5 — Compression-aware content pipeline (NilCE v1) (PARTIAL)
+### Phase 5 — Compression-aware content pipeline (PolyCE v1) (PARTIAL)
 
 CI signals:
-- Unit tests only: `go test ./polystore_gateway/...` (NilCE helpers)
+- Unit tests only: `go test ./polystore_gateway/...` (PolyCE helpers)
 
 Not proven:
-- NilCE-enabled end-to-end upload/fetch semantics are not required by CI E2E (and are opt-in via `NIL_NILCE=1`).
+- PolyCE-enabled end-to-end upload/fetch semantics are not required by CI E2E (and are opt-in via `NIL_POLYCE=1`).
 
 ### Phase 6 — Wallet-first UX (DONE)
 
