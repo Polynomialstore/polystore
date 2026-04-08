@@ -56,7 +56,7 @@ func main() {
 
     // 3. Bind Contract
     address := common.HexToAddress(BRIDGE_CONTRACT_ADDR)
-    bridge, err := NewNilBridge(address, client)
+    bridge, err := NewPolyStoreBridge(address, client)
     if err != nil {
         log.Fatalf("Failed to bind contract: %v", err)
     }
@@ -111,7 +111,7 @@ func fetchL1State() (int64, string, error) {
 
 // ... (fetchL1State)
 
-func updateL2(client *ethclient.Client, bridge *NilBridge, key *ecdsa.PrivateKey, height int64, appHash string) error {
+func updateL2(client *ethclient.Client, bridge *PolyStoreBridge, key *ecdsa.PrivateKey, height int64, appHash string) error {
     // Convert AppHash (hex) to [32]byte
     appHashBytes, err := hex.DecodeString(appHash)
     if err != nil {

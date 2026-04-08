@@ -96,7 +96,7 @@ export const TestnetDocs = () => {
               <p className="text-sm text-muted-foreground mb-2">To enable future bridge features, deploy the smart contracts to the local EVM.</p>
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Requires Foundry (forge)</p>
-                <p>$ cd polystore/nil_bridge</p>
+                <p>$ cd polystore/polystore_bridge</p>
                 <p>$ forge script script/Deploy.s.sol --rpc-url {appConfig.evmRpc} --broadcast --private-key &lt;YOUR_PRIVATE_KEY&gt;</p>
               </div>
             </div>

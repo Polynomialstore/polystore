@@ -51,7 +51,7 @@ scripts/e2e_browser_libp2p_relay.sh
 - Go `1.25.x` (see `nilchain/go.mod`, `polystore_gateway/go.mod`, etc.)
 - Rust (stable) + `wasm-pack` + `wasm32-unknown-unknown` target
 - Node.js `20.x` + npm
-- (Optional) Foundry (`forge`) for `nil_bridge` contract tests
+- (Optional) Foundry (`forge`) for `polystore_bridge` contract tests
 
 To build the full release bundle locally:
 

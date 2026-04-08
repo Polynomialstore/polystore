@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Minimal helper to deploy NilBridge to the local EVM and capture the address.
+# Minimal helper to deploy PolyStoreBridge to the local EVM and capture the address.
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RPC_URL="${RPC_URL:-http://127.0.0.1:8545}"
 MNEMONIC="${MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
@@ -34,9 +34,9 @@ if [[ ! "$PRIVATE_KEY" =~ ^0x ]]; then
   PRIVATE_KEY="0x$PRIVATE_KEY"
 fi
 
-echo ">>> Deploying NilBridge to $RPC_URL ..."
+echo ">>> Deploying PolyStoreBridge to $RPC_URL ..."
 export PRIVATE_KEY
-pushd "$REPO_ROOT/nil_bridge" >/dev/null
+pushd "$REPO_ROOT/polystore_bridge" >/dev/null
 
 # Clean previous broadcast logs to avoid confusion
 rm -rf broadcast/ cache/
@@ -75,7 +75,7 @@ fi
 
 BRIDGE_ADDR=$(
   echo "$DEPLOY_LOG" \
-    | grep -E "NilBridge deployed at:" \
+    | grep -E "PolyStoreBridge deployed at:" \
     | grep -Eo "0x[a-fA-F0-9]{40}" \
     | tail -n 1
 )
@@ -84,13 +84,13 @@ if [ -z "$BRIDGE_ADDR" ]; then
   BRIDGE_ADDR=$(echo "$DEPLOY_LOG" | grep -Eo "0x[a-fA-F0-9]{40}" | tail -n 1)
 fi
 if [ -z "$BRIDGE_ADDR" ]; then
-  echo "✖ Could not parse NilBridge address from deploy output." >&2
+  echo "✖ Could not parse PolyStoreBridge address from deploy output." >&2
   echo "---- forge output (tail) ----" >&2
   echo "$DEPLOY_LOG" | tail -n 120 >&2
   exit 1
 fi
 
-echo ">>> Verifying NilBridge code at $BRIDGE_ADDR ..."
+echo ">>> Verifying PolyStoreBridge code at $BRIDGE_ADDR ..."
 VERIFY_TIMEOUT_SECS="${VERIFY_TIMEOUT_SECS:-120}"
 VERIFY_DEADLINE=$(( $(date +%s) + VERIFY_TIMEOUT_SECS ))
 while true; do
@@ -99,7 +99,7 @@ while true; do
     break
   fi
   if [ "$(date +%s)" -ge "$VERIFY_DEADLINE" ]; then
-    echo "✖ NilBridge not deployed (eth_getCode returned 0x after ${VERIFY_TIMEOUT_SECS}s)." >&2
+    echo "✖ PolyStoreBridge not deployed (eth_getCode returned 0x after ${VERIFY_TIMEOUT_SECS}s)." >&2
     echo "  Parsed address: $BRIDGE_ADDR" >&2
     if [ -n "$DEPLOYER_ADDR" ]; then
       echo "  Deployer: $DEPLOYER_ADDR" >&2
@@ -113,6 +113,6 @@ done
 
 mkdir -p "$REPO_ROOT/_artifacts"
 echo "$BRIDGE_ADDR" > "$REPO_ROOT/_artifacts/bridge_address.txt"
-echo ">>> NilBridge deployed at $BRIDGE_ADDR"
+echo ">>> PolyStoreBridge deployed at $BRIDGE_ADDR"
 echo ">>> Address written to _artifacts/bridge_address.txt"
 echo ">>> Set VITE_BRIDGE_ADDRESS=$BRIDGE_ADDR for the dashboard bridge widgets."

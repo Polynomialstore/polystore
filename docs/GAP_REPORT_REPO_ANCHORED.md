@@ -27,7 +27,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
   - Rust: `cargo test` in `polystore_core`, `polystore_cli`, `polystore_p2p`, `polystore_mock_l1`
   - Web: `npm -C polystore-website run build` + `npm -C polystore-website run test:unit` + `npm -C polystore-website run lint`
   - Tauri GUI: `npm -C polystore_gateway_gui test` + `cd polystore_gateway_gui/src-tauri && cargo test` (plus fmt/clippy checks)
-  - Solidity contracts: `cd nil_bridge && forge test -vv`
+  - Solidity contracts: `cd polystore_bridge && forge test -vv`
 - Cross-target parity
   - Native/WASM parity: CI builds `polystore_core` with `wasm-pack` and runs `tools/parity/compare_parity.ts`.
 - E2E scripts (run in CI; single-machine)

@@ -2,13 +2,13 @@
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
-import {NilBridge} from "../src/NilBridge.sol";
+import {PolyStoreBridge} from "../src/PolyStoreBridge.sol";
 
-contract NilBridgeTest is Test {
-    NilBridge public bridge;
+contract PolyStoreBridgeTest is Test {
+    PolyStoreBridge public bridge;
 
     function setUp() public {
-        bridge = new NilBridge();
+        bridge = new PolyStoreBridge();
     }
 
     function test_UpdateStateRoot() public {

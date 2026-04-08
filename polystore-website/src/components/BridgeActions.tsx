@@ -132,7 +132,7 @@ export function BridgeActions() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <PlugZap className="w-4 h-4 text-primary" />
-          <div className="font-semibold text-foreground">NilBridge Demo</div>
+          <div className="font-semibold text-foreground">PolyStoreBridge Demo</div>
           <span className="font-mono text-[11px] text-primary" title={bridgeAddress}>
             {shortBridge}
           </span>

@@ -32,7 +32,7 @@ Implement the plan end-to-end, in small verified increments:
 ## Commit Protocol
 - Commit frequently in small chunks with descriptive messages.
 - Avoid destructive git commands.
-- Stage only what you intend to ship (avoid committing local deploy artifacts like `nil_bridge/broadcast/**` run logs).
+- Stage only what you intend to ship (avoid committing local deploy artifacts like `polystore_bridge/broadcast/**` run logs).
 - If you push, push to **both** remotes: `origin` and `nil-store`.
 
 ## Iteration Logic

@@ -347,7 +347,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          submodules: recursive # For nil_bridge, etc.
+          submodules: recursive # For polystore_bridge, etc.
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -661,5 +661,5 @@ jobs:
           version: nightly
 
       - name: Run Tests
-        working-directory: nil_bridge
+        working-directory: polystore_bridge
         run: forge test -vv

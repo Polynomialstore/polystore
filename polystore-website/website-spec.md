@@ -79,7 +79,7 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_FAUCET_AUTH_TOKEN` | *(empty)* | Optional build-time faucet auth token. When set, the website sends this token automatically on faucet requests. |
 | `VITE_DEFAULT_RS_K` | `2` | Default RS K used by web deal creation when not explicitly overridden. |
 | `VITE_DEFAULT_RS_M` | `1` | Default RS M used by web deal creation when not explicitly overridden. |
-| `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional NilBridge contract address for bridge status UI. |
+| `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional PolyStoreBridge contract address for bridge status UI. |
 | `VITE_NILSTORE_PRECOMPILE` | `0x0000...0900` | NilStore precompile address (create/update/retrieval sessions). |
 | `VITE_E2E` | `0` | Enable injected E2E wallet shim when `1`. |
 | `VITE_E2E_PK` | *(dev key)* | Private key for E2E wallet shim (local/CI only). |

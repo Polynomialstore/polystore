@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-contract NilBridge {
+contract PolyStoreBridge {
     // The latest state root of the NilStore Network (L1)
     bytes32 public latestStateRoot;
     

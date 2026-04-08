@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import { Script, console } from "forge-std/Script.sol";
-import "../src/NilBridge.sol";
+import "../src/PolyStoreBridge.sol";
 
 contract Deploy is Script {
     function setUp() public {}
@@ -11,8 +11,8 @@ contract Deploy is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        NilBridge bridge = new NilBridge();
-        console.log("NilBridge deployed at:", address(bridge));
+        PolyStoreBridge bridge = new PolyStoreBridge();
+        console.log("PolyStoreBridge deployed at:", address(bridge));
 
         vm.stopBroadcast();
     }

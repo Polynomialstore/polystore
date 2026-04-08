@@ -133,7 +133,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 *   [x] **Genesis:** Update `genesis.json` generation to include EVM parameters (ChainID, Gas Limits). (Auto-generated usually).
 
 ### Step 2: Smart Contract Deployment
-*   [x] **Deploy `NilBridge.sol`:** Deploy the bridge contract directly to the internal EVM.
+*   [x] **Deploy `PolyStoreBridge.sol`:** Deploy the bridge contract directly to the internal EVM.
 *   [x] **Test Interaction:** Verify that calling the contract from MetaMask works.
 
 ### Step 3: Frontend Integration
@@ -1181,10 +1181,10 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Test gate:** `cd polystore-website && npm run lint && npm run test:e2e`
 
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
-- [x] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
+- [x] Implement and stabilize `PolyStoreBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
 - [x] Ensure `NIL_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
 - [x] Verify and, if needed, finish the Wagmi/Viem Web3 provider wiring in `polystore-website` (Connect MetaMask, chain config, RPC URL).
-- [x] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path NilBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
+- [x] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path PolyStoreBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
 
 ### 11.2 Protocol Cleanup (Dynamic Sizing)
 - [x] **11.2.0 Remove capacity-tier proto fields (`DealSize` / `deal_size`).**

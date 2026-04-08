@@ -19,7 +19,7 @@ You are working in `nilcoin2`. Prompt 1 created/updated an “Immediate Goals”
 ## Constraints / Repo Protocol
 - Keep commits small and scoped to docs/spec alignment.
 - Avoid destructive git commands.
-- Stage only the files you intend to commit (avoid accidentally committing local deploy artifacts like `nil_bridge/broadcast/**` run logs).
+- Stage only the files you intend to commit (avoid accidentally committing local deploy artifacts like `polystore_bridge/broadcast/**` run logs).
 - If you push, push to **both** remotes: `origin` and `nil-store`.
 
 ## Iteration Logic

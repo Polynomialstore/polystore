@@ -118,7 +118,7 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
   - `npm -C polystore_gateway_gui run build`
   - `cd polystore_gateway_gui/src-tauri && cargo test`
 - Foundry contracts:
-  - `cd nil_bridge && forge test -vv`
+  - `cd polystore_bridge && forge test -vv`
 
 ## CI truth (GitHub Actions)
 
@@ -133,7 +133,7 @@ At a high level, CI exercises:
 - Local-stack E2E: lifecycle (with and without a local gateway), retrieval fees, and retrieval sessions (Mode1 + Mode2)
 - Browser E2E (Playwright): gateway-absent, libp2p-relay, Mode2 stripe (12 SPs)
 - Multi-SP regression: `scripts/ci_e2e_gateway_retrieval_multi_sp.sh`
-- Solidity: `forge test` under `nil_bridge`
+- Solidity: `forge test` under `polystore_bridge`
 
 ## Phase mapping (repo-specific)
 

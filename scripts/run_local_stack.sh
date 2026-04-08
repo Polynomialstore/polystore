@@ -657,7 +657,7 @@ init_chain() {
   # Fund faucet + create validator
   "$NILCHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   # Pre-fund the EVM dev account (derived from the local Foundry mnemonic) so
-  # that MsgCreateDealFromEvm / NilBridge deployments have gas without relying
+  # that MsgCreateDealFromEvm / PolyStoreBridge deployments have gas without relying
   # on the faucet timing. This address is the bech32 mapping of the default
   # Foundry EVM deployer (0x4dd2C8c449581466Df3F62b007A24398DD858f5d).
   "$NILCHAIND_BIN" genesis add-genesis-account nil1fhfv33zftq2xdhelv2cq0gjrnrwctr6ag75ey4 "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
@@ -1056,7 +1056,7 @@ start_bridge() {
     return
   fi
   if ! command -v forge >/dev/null 2>&1 || ! command -v cast >/dev/null 2>&1; then
-    echo "Foundry tools not found; skipping NilBridge deployment. Install forge/cast or set NIL_DEPLOY_BRIDGE=0."
+    echo "Foundry tools not found; skipping PolyStoreBridge deployment. Install forge/cast or set NIL_DEPLOY_BRIDGE=0."
     BRIDGE_STATUS="skipped (forge/cast not found)"
     return
   fi
@@ -1078,16 +1078,16 @@ start_bridge() {
     sleep 1
   done
   if [ "$ready" != "1" ]; then
-    echo "EVM RPC never became ready; skipping NilBridge deployment."
+    echo "EVM RPC never became ready; skipping PolyStoreBridge deployment."
     BRIDGE_STATUS="failed (EVM RPC not ready)"
     return
   fi
 
-  banner "Deploying NilBridge to local EVM"
+  banner "Deploying PolyStoreBridge to local EVM"
   if env -u PRIVATE_KEY EVM_PRIVKEY= NIL_EVM_DEV_PRIVKEY="$NIL_EVM_DEV_PRIVKEY" "$ROOT_DIR/scripts/deploy_bridge_local.sh" >/tmp/bridge_deploy.log 2>&1; then
     if [ -f "$BRIDGE_ADDR_FILE" ]; then
       BRIDGE_ADDRESS="$(cat "$BRIDGE_ADDR_FILE" | tr -d '\n' | tr -d '\r')"
-      echo "NilBridge deployed at $BRIDGE_ADDRESS (exported to VITE_BRIDGE_ADDRESS for the web UI)"
+      echo "PolyStoreBridge deployed at $BRIDGE_ADDRESS (exported to VITE_BRIDGE_ADDRESS for the web UI)"
       BRIDGE_STATUS="$BRIDGE_ADDRESS"
     else
       echo "Bridge deploy script completed but address file missing; check /tmp/bridge_deploy.log"

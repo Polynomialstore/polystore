@@ -21,7 +21,7 @@ You are working in `nilcoin2`.
 ## Constraints / Repo Protocol
 - Keep commits small and scoped.
 - Avoid destructive git commands (`git clean`, `git reset --hard`, etc.).
-- Stage only the files you intend to commit (avoid accidentally committing local deploy artifacts like `nil_bridge/broadcast/**` run logs).
+- Stage only the files you intend to commit (avoid accidentally committing local deploy artifacts like `polystore_bridge/broadcast/**` run logs).
 - If you push, push to **both** remotes: `origin` and `nil-store`.
 
 ## Iteration Logic
