@@ -5,7 +5,7 @@
 
 ## 1. Executive Summary
 
-Moving the Gateway logic into the browser transforms NilStore from a "Tethered" application (requiring a local CLI/Server) to a true "Web3" DApp. This removes the biggest friction point for new users (installing software) but shifts the burden of cryptography, file management, and networking onto the browser runtime.
+Moving the Gateway logic into the browser transforms PolyStore from a "Tethered" application (requiring a local CLI/Server) to a true "Web3" DApp. This removes the biggest friction point for new users (installing software) but shifts the burden of cryptography, file management, and networking onto the browser runtime.
 
 **Recommendation:** Proceed with this architecture for **"Consumer" use cases** (files < 1GB). Retain the Go Gateway/CLI for "Enterprise" bulk data (TB-scale) where browser memory limits and WASM performance are prohibitive.
 
@@ -140,7 +140,7 @@ We should not "rewrite" the Go Gateway in JS. We should **move logic to Rust**, 
 
 1.  **Stop writing Go logic for core formats.** Move `polystore_gateway/pkg/builder` (File Table construction) to `polystore_core` (Rust).
 2.  **Compile Rust to WASM.**
-3.  **Build the TS `NilStoreClient`.**
+3.  **Build the TS `PolyStoreClient`.**
 
 ## 7. Immediate Next Steps (Pure Browser Pilot)
 

@@ -1,12 +1,12 @@
 [Unit]
-Description=NilStore devnet chain daemon (polystorechaind)
+Description=PolyStore devnet chain daemon (polystorechaind)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/nilstore/polystorechaind.env
-WorkingDirectory=/opt/nilstore
+EnvironmentFile=/etc/polystore/polystorechaind.env
+WorkingDirectory=/opt/polystore
 ExecStart=/bin/bash -lc 'exec "$NILCHAIND_BIN" start --home "$NIL_HOME" --rpc.laddr "$NIL_RPC_LADDR" --minimum-gas-prices "$NIL_GAS_PRICES" --api.enable'
 Restart=on-failure
 RestartSec=2

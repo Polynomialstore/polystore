@@ -179,7 +179,7 @@ fn bridge_html() -> &'static str {
   <body>
     <div class="card">
       <h1>NilGateway Authorization</h1>
-      <p>Use MetaMask to sign the NilStore intent.</p>
+      <p>Use MetaMask to sign the PolyStore intent.</p>
       <button id="sign">Sign with MetaMask</button>
       <div class="status" id="status">Waiting for wallet...</div>
     </div>

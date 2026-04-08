@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end lifecycle test for NilStore:
+# End-to-end lifecycle test for PolyStore:
 # 1. Upload a file via Gateway -> get Manifest Root & Size.
 # 2. Create a Deal via Gateway (EVM signed) -> get Deal ID.
 # 3. Commit Content via Gateway (EVM signed) -> update Deal with Manifest Root.

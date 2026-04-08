@@ -43,7 +43,7 @@ Tx relay is **off by default** and should remain off for mainnet parity.
    Notes:
    - `scripts/run_local_stack.sh start` **always re-initializes** the chain home.
    - Default home is `_artifacts/polystorechain_data`. If you set `NIL_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `NIL_REINIT_HOME=1`.
-     - Example: `NIL_HOME=/var/lib/nilstore/local NIL_REINIT_HOME=1 scripts/run_local_stack.sh start`
+     - Example: `NIL_HOME=/var/lib/polystore/local NIL_REINIT_HOME=1 scripts/run_local_stack.sh start`
    - Tx relay is **off by default**; enable it only if you’re following **Profile A**:
      - `NIL_ENABLE_TX_RELAY=1 scripts/run_local_stack.sh start`
 

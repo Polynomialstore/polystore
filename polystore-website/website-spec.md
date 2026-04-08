@@ -80,7 +80,7 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_DEFAULT_RS_K` | `2` | Default RS K used by web deal creation when not explicitly overridden. |
 | `VITE_DEFAULT_RS_M` | `1` | Default RS M used by web deal creation when not explicitly overridden. |
 | `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional PolyStoreBridge contract address for bridge status UI. |
-| `VITE_POLYSTORE_PRECOMPILE` | `0x0000...0900` | NilStore precompile address (create/update/retrieval sessions). |
+| `VITE_POLYSTORE_PRECOMPILE` | `0x0000...0900` | PolyStore precompile address (create/update/retrieval sessions). |
 | `VITE_E2E` | `0` | Enable injected E2E wallet shim when `1`. |
 | `VITE_E2E_PK` | *(dev key)* | Private key for E2E wallet shim (local/CI only). |
 
@@ -207,13 +207,13 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 ### 4.1 `useCreateDeal` (`src/hooks/useCreateDeal.ts`)
 *   **Purpose:** Orchestrates Deal creation (thin-provisioned container; no capacity tiers).
 *   **Input:** `CreateDealInput` (duration, escrow, maxSpend, replication).
-*   **Flow:** MetaMask `eth_sendTransaction` to the NilStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`); `service_hint` encodes replica count and (for Mode 2) `rs=K+M`.
+*   **Flow:** MetaMask `eth_sendTransaction` to the PolyStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`); `service_hint` encodes replica count and (for Mode 2) `rs=K+M`.
 *   **Output:** `deal_id` parsed from the `DealCreated` event.
 
 ### 4.2 `useUpdateDealContent` (`src/hooks/useUpdateDealContent.ts`)
 *   **Purpose:** Commits a file Manifest to an existing Deal.
 *   **Input:** `UpdateDealContentInput` (dealId, manifestRoot, sizeBytes).
-*   **Flow:** MetaMask `eth_sendTransaction` to the NilStore precompile (`updateDealContent(dealId, manifestRoot, sizeBytes)`).
+*   **Flow:** MetaMask `eth_sendTransaction` to the PolyStore precompile (`updateDealContent(dealId, manifestRoot, sizeBytes)`).
     *   **Compatibility:** Some codepaths may still label this field as `cid`, but it is always the *deal-level* `manifest_root` (not a file identifier).
 
 ### 4.3 `useUpload` (`src/hooks/useUpload.ts`)

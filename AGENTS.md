@@ -1,4 +1,4 @@
-# NilStore Network Development Roadmap
+# PolyStore Network Development Roadmap
 
 ## Protocol for Agents
 **CRITICAL:** When pushing changes to the repository, use the canonical `origin` remote.
@@ -22,7 +22,7 @@
 *   Push to `origin` only:
     *   `git push origin <branch>`
 
-This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
+This document outlines a strategic "Go-to-Market" Engineering Roadmap for the PolyStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
 ## Runtime Persona Source of Truth
 - Canonical runtime role naming and ownership is defined in `docs/runtime-personas.md`.
@@ -507,7 +507,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Test gate:** Browser uploads file directly to SP; SP acknowledges receipt.
 
 - [x] **Goal 3: Direct-to-Chain Commit (Metadata Path).**
-    - **Concept:** Use MetaMask (`eth_sendTransaction`) to call the NilStore Precompile (`0x...0900`) directly.
+    - **Concept:** Use MetaMask (`eth_sendTransaction`) to call the PolyStore Precompile (`0x...0900`) directly.
     - **Frontend:** Implement ABI encoding for `updateDealContent(dealId, cid, size)`.
     - **Test gate:** Browser commits content; `polystorechaind q polystorechain deal` shows updated `manifest_root`.
 
@@ -1006,7 +1006,7 @@ This sprint closes the biggest remaining UX/product gaps for multi-provider devn
 - [x] Replace `/gateway/create-deal-evm` and `/gateway/update-deal-content-evm` with a **wallet-sent transaction** path.
 - [x] Replace retrieval “receipt submission” with a wallet-sent transaction path or a single wallet-sent “session open” tx (no `eth_signTypedData_v4` prompts).
 - **Implementation options (choose one):**
-    - **A (Preferred):** Add an EVM precompile (or EVM contract + precompile) that exposes Nilchain actions as ABI methods, so the user uses `eth_sendTransaction` and pays gas normally. (**Implemented:** NilStore precompile at `0x0000000000000000000000000000000000000900`.)
+    - **A (Preferred):** Add an EVM precompile (or EVM contract + precompile) that exposes Nilchain actions as ABI methods, so the user uses `eth_sendTransaction` and pays gas normally. (**Implemented:** PolyStore precompile at `0x0000000000000000000000000000000000000900`.)
     - **B:** Support EVM-signed Cosmos txs (EIP-712 sign mode) and broadcast directly from the browser to LCD (still “sign typed data”, not an EVM tx).
 - **Pass gate:** A user can create deal → commit content → download → finalize receipt with **zero gateway-held funded keys**.
 
@@ -1084,7 +1084,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 
 - [x] **Goal 1: Remove provider/faucet as tx signer.**
     - **Change:** Eliminate `NIL_PROVIDER_KEY=faucet` / `polystorechaind tx ... --from faucet` from the critical path for deal lifecycle and user-side retrieval actions.
-    - **Implemented model (devnet):** Web uses MetaMask **transaction prompts** (`eth_sendTransaction`) against the NilStore EVM precompile at `0x0000000000000000000000000000000000000900` for `createDeal`, `updateDealContent`, and batched retrieval proofs; the gateway holds no user keys.
+    - **Implemented model (devnet):** Web uses MetaMask **transaction prompts** (`eth_sendTransaction`) against the PolyStore EVM precompile at `0x0000000000000000000000000000000000000900` for `createDeal`, `updateDealContent`, and batched retrieval proofs; the gateway holds no user keys.
     - **Pass gate:** A user can create deal → upload/commit → fetch → submit retrieval proof with no gateway-held funded keys, and on-chain heat increments.
         - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
         - Duplicate paths: if upload/append allows multiple File Table entries with the same `file_path`, a naive resolver might return the *wrong* record (stale bytes). Enforce uniqueness or implement last-write-wins semantics explicitly (and test it).

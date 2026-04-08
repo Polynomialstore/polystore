@@ -7,7 +7,7 @@ Primary tool: [`scripts/redeploy_polystorechaind.sh`](/scripts/redeploy_polystor
 ## What the script does
 
 Default execution (`no flags`):
-1. Loads `/etc/nilstore/polystorechaind.env` (if present) to discover the live binary path.
+1. Loads `/etc/polystore/polystorechaind.env` (if present) to discover the live binary path.
 2. Builds `polystorechain/polystorechaind` from your source checkout.
 3. Backs up the live binary as `polystorechaind.bak.<timestamp>`.
 4. Installs the new binary in place.
@@ -71,13 +71,13 @@ If the new binary fails after restart, restore the backup and restart again.
 1. Find latest backup:
 
 ```bash
-ls -1t /opt/nilstore/polystorechain/polystorechaind.bak.* | head -n 1
+ls -1t /opt/polystore/polystorechain/polystorechaind.bak.* | head -n 1
 ```
 
 2. Restore and restart:
 
 ```bash
-sudo cp -p /opt/nilstore/polystorechain/polystorechaind.bak.<timestamp> /opt/nilstore/polystorechain/polystorechaind
+sudo cp -p /opt/polystore/polystorechain/polystorechaind.bak.<timestamp> /opt/polystore/polystorechain/polystorechaind
 sudo systemctl restart polystorechaind
 ./scripts/redeploy_polystorechaind.sh --verify-only
 ```
@@ -86,4 +86,4 @@ sudo systemctl restart polystorechaind
 
 - The script defaults to building with `-mod=mod` so local rebuilds do not get stuck on stale vendor state.
 - If `libpolystore_core` is missing, the script attempts to build `polystore_core` in the selected source checkout.
-- Default runtime paths are tuned to this environment (`/opt/nilstore`, `/etc/nilstore/polystorechaind.env`) and can be overridden with flags.
+- Default runtime paths are tuned to this environment (`/opt/polystore`, `/etc/polystore/polystorechaind.env`) and can be overridden with flags.

@@ -9,7 +9,7 @@ This document is written to be **unambiguous enough that a Codex agent can imple
 ## 0. Goals, Non‑Goals, and Definition of Done
 
 ### 0.1 Goals
-- Provide a **desktop GUI** for NilStore’s devnet workflows using **Tauri**.
+- Provide a **desktop GUI** for PolyStore’s devnet workflows using **Tauri**.
 - Ship a **self-contained app** that runs a local gateway sidecar and supports:
   - Deal creation (EVM intent + wallet signature)
   - File ingest/upload into PolyFS / Mode 2 slab
@@ -105,7 +105,7 @@ The implementation must choose **WalletConnect** as the default and treat the br
 
 ### 4.1 EIP-712 Domain
 The domain is defined in `polystorechain/x/polystorechain/types/eip712.go`:
-- `name`: `"NilStore"`
+- `name`: `"PolyStore"`
 - `version`: `"1"`
 - `chainId`: **numeric** `Params.eip712_chain_id` (default devnet: `31337`)
 - `verifyingContract`: `"0x0000000000000000000000000000000000000000"`

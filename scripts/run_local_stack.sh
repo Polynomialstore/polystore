@@ -826,7 +826,7 @@ bank["denom_metadata"] = md
 bank["supply"] = supply
 data["app_state"]["bank"] = bank
 
-# Enable NilStore EVM precompile for MetaMask tx UX.
+# Enable PolyStore EVM precompile for MetaMask tx UX.
 evm = data.get("app_state", {}).get("evm", {})
 params = evm.get("params", {})
 pre = params.get("active_static_precompiles", []) or []

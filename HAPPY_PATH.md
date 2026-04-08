@@ -65,7 +65,7 @@ scripts/run_local_stack.sh stop
 
 - Default behavior (safe): if you do **not** set `NIL_HOME`, the script uses `_artifacts/polystorechain_data` and will wipe/re-init that directory on each `start`.
 - Persistent home safety: if you set `NIL_HOME` to a path **outside** `_artifacts/`, the script will **refuse** to wipe it unless you explicitly opt in with `NIL_REINIT_HOME=1`.
-  - Example: `NIL_HOME=/var/lib/nilstore/local NIL_REINIT_HOME=1 scripts/run_local_stack.sh start`
+  - Example: `NIL_HOME=/var/lib/polystore/local NIL_REINIT_HOME=1 scripts/run_local_stack.sh start`
 
 ## Common “why did fetch fail?”
 

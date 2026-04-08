@@ -1,5 +1,5 @@
 ```AGENTS.md (excerpt: git protocol)
-# NilStore Network Development Roadmap
+# PolyStore Network Development Roadmap
 
 ## Protocol for Agents
 **CRITICAL:** When pushing changes to the repository, you **MUST** push to both remotes to ensure synchronization.
@@ -13,7 +13,7 @@
 *   **Commit & Push Cadence:** Treat this file as the canonical TODO list. As you complete tasks, update the checklist, commit your work with a descriptive message, and push to both remotes (`origin` and `nil-store`) in small, verified increments.
 *   **Default Autonomy:** Unless the user explicitly says “don’t commit/push yet,” agents should **automatically** commit completed work (after relevant tests pass) and push to both remotes. Keep commits small and descriptive, and avoid batching unrelated changes.
 
-This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
+This document outlines a strategic "Go-to-Market" Engineering Roadmap for the PolyStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
 ## Phase 1: The "Localhost" Prototype (Months 1-3)
 **Goal:** Prove the math works on a single machine. Don't worry about the network yet.
@@ -91,7 +91,7 @@ See `notes/mainnet_policy_resolution_jan2026.md` for full details.
 ```
 
 ```MAINNET_GAP_TRACKER.md
-# Mainnet Gap Tracker (NilStore)
+# Mainnet Gap Tracker (PolyStore)
 
 This document tracks **what is missing** between the current implementation in this repo and the **long‑term Mainnet plan** described by `spec.md` (canonical), `rfcs/`, and `notes/`.
 
@@ -227,7 +227,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### GW-204 — S3 adapter polish + bidirectional sync scripts (nilstore ↔ S3)
+#### GW-204 — S3 adapter polish + bidirectional sync scripts (polystore ↔ S3)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
 
@@ -261,7 +261,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### CLI-502 — Fast download / mirror scripts (provider → local, nilstore → S3)
+#### CLI-502 — Fast download / mirror scripts (provider → local, polystore → S3)
 - **Status:** PARTIAL (DEVNET)
 - **Notes:** `notes/launch_todos.md`
 
@@ -383,7 +383,7 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Delivers:**
   - S3 adapter correctness + compatibility testing (aws-cli/rclone).
   - Third-party uploader pattern: scoped key funding + teardown + audit workflow.
-  - Fast download / mirroring scripts (nilstore ↔ S3) with documented performance expectations.
+  - Fast download / mirroring scripts (polystore ↔ S3) with documented performance expectations.
 - **Test gate:** integration tests + scripted “upload from S3 → verify on-chain → retrieve to S3” pipeline.
 
 ### Sprint 10 — Mainnet hardening + audits + launch readiness
@@ -597,7 +597,7 @@ Fallback (simpler, weaker): flat bond only (no assignment collateral).
 
 **Deterministic candidate selection:**
 - seed:
-  - `seed = SHA256("nilstore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
+  - `seed = SHA256("polystore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
 - rank provider registry by `SHA256(seed || provider_addr)` and choose first eligible.
 
 **Eligibility filter:**
@@ -966,7 +966,7 @@ elasticity_cost = base_stripe_cost * delta_replication
 
 ## 0. Executive Summary
 
-NilStore’s “Unified Liveness” requires the chain to deterministically answer:
+PolyStore’s “Unified Liveness” requires the chain to deterministically answer:
 1. **What** positions a provider must prove for a given epoch (synthetic challenges)
 2. **How many** proofs are required (quota)
 3. **How organic retrieval** reduces synthetic demand (credits)
@@ -983,7 +983,7 @@ This RFC freezes:
 ## 1. Definitions
 
 ### 1.1 Epoch
-NilStore defines a **liveness epoch** with fixed length:
+PolyStore defines a **liveness epoch** with fixed length:
 - `EPOCH_LEN_BLOCKS` (param; e.g. 100 blocks)
 - `epoch_id = floor(block_height / EPOCH_LEN_BLOCKS)`
 
@@ -1030,7 +1030,7 @@ Define the epoch seed as:
 
 ```
 epoch_start_height = epoch_id * EPOCH_LEN_BLOCKS
-R_e = SHA256("nilstore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
+R_e = SHA256("polystore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
 ```
 
 Rationale:
@@ -1063,7 +1063,7 @@ Let:
 For slot `s ∈ [0..N-1]` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 row        = U64BE(seed[8..16]) % rows
 
@@ -1086,7 +1086,7 @@ Let:
 For provider `P` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 blob_index  = U64BE(seed[8..16]) % 64
 mdu_index   = meta_mdus + mdu_ordinal
@@ -1149,7 +1149,7 @@ credits_blobs = min(credit_cap, unique_proved_blobs_in_epoch)
 ```
 
 Uniqueness is enforced by storing a per-epoch set keyed by:
-`credit_id = SHA256("nilstore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
+`credit_id = SHA256("polystore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
 
 ---
 
@@ -1563,7 +1563,7 @@ ensure_polystore_core() {
 ```scripts/run_devnet_alpha_multi_sp.sh (param override excerpt)
 data["app_state"]["bank"] = bank
 
-# Enable NilStore EVM precompile for MetaMask tx UX.
+# Enable PolyStore EVM precompile for MetaMask tx UX.
 evm = data.get("app_state", {}).get("evm", {})
 params = evm.get("params", {})
 pre = params.get("active_static_precompiles", []) or []
@@ -1846,7 +1846,7 @@ ensure_polystore_core() {
 
 ```scripts/e2e_lifecycle.sh (header excerpt)
 #!/usr/bin/env bash
-# End-to-end lifecycle test for NilStore:
+# End-to-end lifecycle test for PolyStore:
 # 1. Upload a file via Gateway -> get Manifest Root & Size.
 # 2. Create a Deal via Gateway (EVM signed) -> get Deal ID.
 # 3. Commit Content via Gateway (EVM signed) -> update Deal with Manifest Root.

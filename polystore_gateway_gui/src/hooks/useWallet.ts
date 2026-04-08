@@ -10,7 +10,7 @@ const PROJECT_ID =
 
 const metadata = {
   name: "NilGateway GUI",
-  description: "NilStore desktop gateway",
+  description: "PolyStore desktop gateway",
   url: "https://nil.store",
   icons: [],
 };

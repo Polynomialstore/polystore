@@ -927,7 +927,7 @@ export default function App() {
             <div className="flex items-center gap-4">
               <img
                 src={theme === "dark" ? logoDark : logoLight}
-                alt="NilStore"
+                alt="PolyStore"
                 className="h-8 w-8 rounded-none border border-border bg-card p-1.5"
               />
               <div className="flex items-center gap-3">

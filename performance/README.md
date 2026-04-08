@@ -1,4 +1,4 @@
-# NilStore Network Performance Simulation Plan
+# PolyStore Network Performance Simulation Plan
 
 ## Objective
 To benchmark the `polystorechain` implementation under varying loads to assess stability, transaction throughput (TPS), and resource consumption. This ensures the Phase 3 implementation is robust enough for Phase 4 (Testnet).

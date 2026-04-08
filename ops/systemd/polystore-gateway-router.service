@@ -1,12 +1,12 @@
 [Unit]
-Description=NilStore router gateway (polystore_gateway)
+Description=PolyStore router gateway (polystore_gateway)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/nilstore/polystore-gateway-router.env
-WorkingDirectory=/opt/nilstore
+EnvironmentFile=/etc/polystore/polystore-gateway-router.env
+WorkingDirectory=/opt/polystore
 ExecStart=/bin/bash -lc 'exec "$NIL_GATEWAY_BIN"'
 Restart=on-failure
 RestartSec=2

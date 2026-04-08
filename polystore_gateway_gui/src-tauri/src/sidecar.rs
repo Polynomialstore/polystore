@@ -324,7 +324,7 @@ fn parse_listening_addr(line: &str) -> Option<String> {
         }
     }
 
-    let marker = "Starting NilStore Gateway/S3 Adapter on ";
+    let marker = "Starting PolyStore Gateway/S3 Adapter on ";
     if let Some(pos) = line.find(marker) {
         let addr = line[pos + marker.len()..].trim();
         if !addr.is_empty() {
@@ -522,7 +522,7 @@ fn resolve_gateway_storage_paths(app: &AppHandle) -> Option<GatewayStoragePaths>
         .path()
         .app_data_dir()
         .ok()
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".nilstore")))?;
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".polystore")))?;
 
     let gateway_dir = base_dir.join("gateway");
     let uploads_dir = gateway_dir.join("uploads");

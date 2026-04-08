@@ -26,9 +26,9 @@ import (
 )
 
 var (
-	epochSeedTagBytes     = []byte("nilstore/epoch/v1")
-	challengeSeedTagBytes = []byte("nilstore/chal/v1")
-	kzgZSeedTagBytes      = []byte("nilstore/kzgz/v1")
+	epochSeedTagBytes     = []byte("polystore/epoch/v1")
+	challengeSeedTagBytes = []byte("polystore/chal/v1")
+	kzgZSeedTagBytes      = []byte("polystore/kzgz/v1")
 )
 
 type systemLivenessParams struct {

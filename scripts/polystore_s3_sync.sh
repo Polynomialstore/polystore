@@ -21,7 +21,7 @@ if [[ -z "${MODE}" || -z "${DEAL_ID}" || -z "${PATH_ARG}" ]]; then
   exit 1
 fi
 
-ENDPOINT_URL="${NILSTORE_S3_ENDPOINT:-http://localhost:8080}"
+ENDPOINT_URL="${POLYSTORE_S3_ENDPOINT:-http://localhost:8080}"
 BUCKET="deal-${DEAL_ID}"
 
 if ! command -v aws >/dev/null 2>&1; then

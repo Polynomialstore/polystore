@@ -2,7 +2,7 @@
 
 Last updated: 2026-02-24
 
-This file is a **repo-tracked, PR-by-PR TODO list** for getting NilStore to a
+This file is a **repo-tracked, PR-by-PR TODO list** for getting PolyStore to a
 **trusted-collaborator devnet soft launch** (hub VPS + remote SPs).
 
 Conventions:

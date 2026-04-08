@@ -4,7 +4,7 @@ These are **templates** for running a long-lived hub + remote SP devnet using sy
 
 Files:
 - `ops/systemd/*.service`: unit templates
-- `ops/systemd/env/*.env`: EnvironmentFile templates (copy to `/etc/nilstore/*.env`)
+- `ops/systemd/env/*.env`: EnvironmentFile templates (copy to `/etc/polystore/*.env`)
 
 For the full “blank box → running devnet” hub runbook, see `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 
@@ -20,9 +20,9 @@ sudo systemctl daemon-reload
 2) Copy env templates and edit paths/secrets:
 
 ```bash
-sudo mkdir -p /etc/nilstore
-sudo cp ops/systemd/env/*.env /etc/nilstore/
-sudoedit /etc/nilstore/polystore-gateway-router.env
+sudo mkdir -p /etc/polystore
+sudo cp ops/systemd/env/*.env /etc/polystore/
+sudoedit /etc/polystore/polystore-gateway-router.env
 ```
 
 3) Enable + start (hub):
@@ -62,9 +62,9 @@ Providers can run `polystore_gateway` in **provider** mode as a long-running ser
 sudo cp ops/systemd/polystore-gateway-provider.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
-sudo mkdir -p /etc/nilstore
-sudo cp ops/systemd/env/polystore-gateway-provider.env /etc/nilstore/
-sudoedit /etc/nilstore/polystore-gateway-provider.env
+sudo mkdir -p /etc/polystore
+sudo cp ops/systemd/env/polystore-gateway-provider.env /etc/polystore/
+sudoedit /etc/polystore/polystore-gateway-provider.env
 
 sudo systemctl enable --now polystore-gateway-provider
 ```
@@ -76,10 +76,10 @@ Minimum required edits in `polystore-gateway-provider.env`:
 
 ## Notes
 
-- These templates assume you checked the repo out at `/opt/nilstore`. Adjust as needed.
+- These templates assume you checked the repo out at `/opt/polystore`. Adjust as needed.
 - Unit `ExecStart` commands intentionally use a shell wrapper so EnvironmentFile
   variables (for example `NILCHAIND_BIN`) are expanded correctly by systemd.
-- The env templates include `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release`
+- The env templates include `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release`
   so binaries linked against `libpolystore_core.so` start cleanly under systemd.
 - The router↔provider auth token **must match** across the hub router and all providers:
   - `NIL_GATEWAY_SP_AUTH=...`

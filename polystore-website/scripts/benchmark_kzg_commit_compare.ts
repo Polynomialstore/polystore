@@ -178,7 +178,7 @@ const result = {
     micro_eth_signer_fast_setup_ms: microEthSigner.initMs,
   },
   notes: {
-    nil_wasm: 'NilStore BLS12-381 wasm path over a canonical 128 KiB blob.',
+    nil_wasm: 'PolyStore BLS12-381 wasm path over a canonical 128 KiB blob.',
     kzg_wasm: 'c-kzg-4844 compiled to wasm; same canonical 128 KiB blob workload.',
     micro_eth_signer: 'Pure JS KZG from micro-eth-signer using fast-kzg setup, matching the upstream benchmark style.',
     libkzg:

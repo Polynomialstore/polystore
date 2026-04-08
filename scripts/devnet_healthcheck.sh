@@ -262,7 +262,7 @@ PROVIDER="$(trim_trailing_slash "$PROVIDER")"
 HUB_LCD="$(trim_trailing_slash "$HUB_LCD")"
 PROVIDER_PUBLIC="$(trim_trailing_slash "$PROVIDER_PUBLIC")"
 
-echo "==> NilStore devnet healthcheck (mode=$MODE, timeout=${HC_TIMEOUT}s)"
+echo "==> PolyStore devnet healthcheck (mode=$MODE, timeout=${HC_TIMEOUT}s)"
 if ! have_cmd jq; then
   echo "    (note) jq not found; some JSON parsing will be skipped"
 fi

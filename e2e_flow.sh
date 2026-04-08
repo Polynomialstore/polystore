@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# End-to-End Flow Script for NilStore Network (Phase 3)
+# End-to-End Flow Script for PolyStore Network (Phase 3)
 # This script simulates a full lifecycle: Setup -> Register -> Deal -> Prove -> Reward
 
 BINARY="./polystorechaind"

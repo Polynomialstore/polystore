@@ -11,10 +11,10 @@ const (
 	// the human-readable message that EVM wallets sign for MsgCreateDealFromEvm.
 	// This is intentionally simple and non-EIP-712 for the first iteration so
 	// that both the Go keeper and the web client can implement it easily.
-	EvmCreateDealDomainSeparator = "NILSTORE_EVM_CREATE_DEAL"
+	EvmCreateDealDomainSeparator = "POLYSTORE_EVM_CREATE_DEAL"
 
 	// EvmUpdateContentDomainSeparator is the prefix for updating deal content.
-	EvmUpdateContentDomainSeparator = "NILSTORE_EVM_UPDATE_CONTENT"
+	EvmUpdateContentDomainSeparator = "POLYSTORE_EVM_UPDATE_CONTENT"
 )
 
 // BuildEvmCreateDealMessage constructs the canonical string payload that is
@@ -23,7 +23,7 @@ const (
 //
 // The format is:
 //
-//	"NILSTORE_EVM_CREATE_DEAL|<creator_evm>|<duration_seconds>|<service_hint>|<initial_escrow>|<max_monthly_spend>|<nonce>|<chain_id>"
+//	"POLYSTORE_EVM_CREATE_DEAL|<creator_evm>|<duration_seconds>|<service_hint>|<initial_escrow>|<max_monthly_spend>|<nonce>|<chain_id>"
 //
 // All numeric values are encoded in base-10. creator_evm is lowercased and
 // normalised to a 0x-prefixed hexadecimal address.
@@ -60,7 +60,7 @@ func BuildEvmCreateDealMessage(intent *EvmCreateDealIntent) (string, error) {
 //
 // The format is:
 //
-//	"NILSTORE_EVM_UPDATE_CONTENT|<creator_evm>|<deal_id>|<previous_manifest_root>|<cid>|<size_bytes>|<nonce>|<chain_id>"
+//	"POLYSTORE_EVM_UPDATE_CONTENT|<creator_evm>|<deal_id>|<previous_manifest_root>|<cid>|<size_bytes>|<nonce>|<chain_id>"
 func BuildEvmUpdateContentMessage(intent *EvmUpdateContentIntent) (string, error) {
 	if intent == nil {
 		return "", fmt.Errorf("intent is nil")

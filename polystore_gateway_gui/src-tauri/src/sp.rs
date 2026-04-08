@@ -702,7 +702,7 @@ pub fn generate_remote_bundle(req: SpRemoteBundleRequest) -> SpRemoteBundleRespo
     let healthcheck_command = "scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1${PROVIDER_LISTEN} --hub-lcd $HUB_LCD".to_string();
 
     let systemd_unit = r#"[Unit]
-Description=NilStore Provider Gateway
+Description=PolyStore Provider Gateway
 After=network-online.target
 
 [Service]

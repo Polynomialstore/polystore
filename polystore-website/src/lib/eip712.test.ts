@@ -33,7 +33,7 @@ test('CreateDeal typed data hashes to chain digest', async () => {
   const digest = hashTypedData(viemTypedData)
   assert.equal(
     digest.toLowerCase(),
-    '0x451aed60aebda47645d60d0c2e397c0366ff4735024422f39f4199849e9e3c45',
+    '0xc46ef9356a5d95b6981397f903a405d491df36a967183566f2903c500cc7bb60',
   )
 
   const signature = await TEST_ACCOUNT.signTypedData(viemTypedData)
@@ -58,7 +58,7 @@ test('UpdateContent typed data hashes to chain digest', async () => {
   const digest = hashTypedData(viemTypedData)
   assert.equal(
     digest.toLowerCase(),
-    '0x692375805edac16abec11484ef34ed7d8fa6cde537bd7ae5c9d22331e3f6c35b',
+    '0x6b9a79182267803871963121df6e6e6c2f921a144b20fc05fe9f0637d9aed60e',
   )
 
   const signature = await TEST_ACCOUNT.signTypedData(viemTypedData)

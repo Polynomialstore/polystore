@@ -1,6 +1,6 @@
-# NilStore Website & Explorer
+# PolyStore Website & Explorer
 
-The official frontend for the NilStore Network. This application serves as the marketing landing page, documentation hub, and interactive block explorer for the Incentivized Testnet ("Store Wars").
+The official frontend for the PolyStore Network. This application serves as the marketing landing page, documentation hub, and interactive block explorer for the Incentivized Testnet ("Store Wars").
 
 ## Features
 
@@ -21,7 +21,7 @@ The official frontend for the NilStore Network. This application serves as the m
 
 ## SDK: Batch Retrieval Precompile
 
-NilStore exposes an EVM precompile at `0x0000000000000000000000000000000000000900`. For downloads that span multiple providers, use the batch methods (avoid log parsing and reduce MetaMask prompts):
+PolyStore exposes an EVM precompile at `0x0000000000000000000000000000000000000900`. For downloads that span multiple providers, use the batch methods (avoid log parsing and reduce MetaMask prompts):
 
 - `computeRetrievalSessionIds(sessions[])` (`eth_call`) → `(providers[], sessionIds[])`
 - `openRetrievalSessions(sessions[])` (`eth_sendTransaction`)

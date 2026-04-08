@@ -9,7 +9,7 @@ This repository now uses **PolyStore** as the canonical product and public-facin
 - Public testnet environment prefix: `POLYSTORE_TESTNET_*`
 - GitHub repo path: `https://github.com/Polynomialstore/polystore`
 
-`NILSTORE_TESTNET_*` is no longer supported in the public testnet scripts or website bootstrap flow. `POLYSTORE_TESTNET_*` is the only canonical public prefix.
+`POLYSTORE_TESTNET_*` is no longer supported in the public testnet scripts or website bootstrap flow. `POLYSTORE_TESTNET_*` is the only canonical public prefix.
 
 ## Frozen technical surfaces
 

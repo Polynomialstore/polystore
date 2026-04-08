@@ -1,12 +1,12 @@
 [Unit]
-Description=NilStore devnet faucet (polystore_faucet)
+Description=PolyStore devnet faucet (polystore_faucet)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/nilstore/polystore-faucet.env
-WorkingDirectory=/opt/nilstore
+EnvironmentFile=/etc/polystore/polystore-faucet.env
+WorkingDirectory=/opt/polystore
 ExecStart=/bin/bash -lc 'exec "$NIL_FAUCET_BIN"'
 Restart=on-failure
 RestartSec=2

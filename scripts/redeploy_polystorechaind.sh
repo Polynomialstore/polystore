@@ -6,9 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 SOURCE_ROOT="$REPO_ROOT_DEFAULT"
-TARGET_ROOT="/opt/nilstore"
+TARGET_ROOT="/opt/polystore"
 SERVICE_NAME="polystorechaind"
-ENV_FILE="/etc/nilstore/polystorechaind.env"
+ENV_FILE="/etc/polystore/polystorechaind.env"
 LCD_BASE="http://127.0.0.1:1317"
 OPERATOR_ADDRESS=""
 
@@ -36,9 +36,9 @@ By default this script:
 
 Options:
   --source-root <path>      Source checkout root (default: $REPO_ROOT_DEFAULT)
-  --target-root <path>      Target runtime root (default: /opt/nilstore)
+  --target-root <path>      Target runtime root (default: /opt/polystore)
   --service <name>          systemd service name (default: polystorechaind)
-  --env-file <path>         EnvironmentFile path (default: /etc/nilstore/polystorechaind.env)
+  --env-file <path>         EnvironmentFile path (default: /etc/polystore/polystorechaind.env)
   --lcd-base <url>          LCD base for verification (default: http://127.0.0.1:1317)
   --operator-address <addr> Optional operator address to verify pending-by-operator endpoint
   --with-restart            Attempt restart automatically (uses sudo unless root)
@@ -181,7 +181,7 @@ load_env_file() {
   fi
 
   NILCHAIND_BIN="${NILCHAIND_BIN:-$TARGET_ROOT/polystorechain/polystorechaind}"
-  NIL_HOME="${NIL_HOME:-/var/lib/nilstore/polystorechaind}"
+  NIL_HOME="${NIL_HOME:-/var/lib/polystore/polystorechaind}"
 }
 
 require_cmd() {

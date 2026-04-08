@@ -14,7 +14,7 @@ OWNER_ADDR=$(timeout 10s $NILCHAIND_BIN keys show faucet -a --home _artifacts/po
 echo "Owner: $OWNER_ADDR"
 
 # Create test file
-echo "Hello NilStore Spring" > test_spring.txt
+echo "Hello PolyStore Spring" > test_spring.txt
 
 # 1. Upload
 echo "=== 1. Uploading File ==="

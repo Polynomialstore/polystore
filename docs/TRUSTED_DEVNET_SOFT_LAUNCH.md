@@ -116,21 +116,21 @@ This produces a persistent chain home directory and prints the router↔provider
 
 ```bash
 sudo mkdir -p /opt && sudo chown "$USER":"$USER" /opt
-git clone https://github.com/Polynomialstore/polystore.git /opt/nilstore
-cd /opt/nilstore
+git clone https://github.com/Polynomialstore/polystore.git /opt/polystore
+cd /opt/polystore
 
 # Use a persistent chain home outside the repo (matches `ops/systemd/env/polystorechaind.env` defaults).
-sudo mkdir -p /var/lib/nilstore
-sudo chown -R "$USER":"$USER" /var/lib/nilstore
+sudo mkdir -p /var/lib/polystore
+sudo chown -R "$USER":"$USER" /var/lib/polystore
 
 # One-time init (hub only; no local providers; no web).
-NIL_HOME=/var/lib/nilstore/polystorechaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+NIL_HOME=/var/lib/polystore/polystorechaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
 If you need to re-run bootstrap later, the script will refuse to delete an existing non-`_artifacts/` home unless you explicitly opt in:
 
 ```bash
-NIL_HOME=/var/lib/nilstore/polystorechaind NIL_REINIT_HOME=1 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+NIL_HOME=/var/lib/polystore/polystorechaind NIL_REINIT_HOME=1 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
 Note: the bootstrap script binds LCD + EVM JSON-RPC to localhost by default (safe for the hub-behind-Caddy profile).
@@ -162,12 +162,12 @@ sudo systemctl daemon-reload
 2) Install env files and fill in the `<set-me>` values:
 
 ```bash
-sudo mkdir -p /etc/nilstore
-sudo cp ops/systemd/env/*.env /etc/nilstore/
+sudo mkdir -p /etc/polystore
+sudo cp ops/systemd/env/*.env /etc/polystore/
 
-sudoedit /etc/nilstore/polystorechaind.env
-sudoedit /etc/nilstore/polystore-gateway-router.env
-sudoedit /etc/nilstore/polystore-faucet.env
+sudoedit /etc/polystore/polystorechaind.env
+sudoedit /etc/polystore/polystore-gateway-router.env
+sudoedit /etc/polystore/polystore-faucet.env
 ```
 
 Minimum required edits:
@@ -175,7 +175,7 @@ Minimum required edits:
 - set `NIL_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
 - set `NIL_GATEWAY_SP_AUTH` on the router and providers (shared secret)
 - set `NIL_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
-- set `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` in all nilstore env files
+- set `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release` in all polystore env files
 - recommended (hub behind Caddy or Cloudflare Tunnel): bind services to localhost and expose only via the public edge:
   - `polystorechaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
   - `polystore-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080` (or another free local port if `8080` is occupied)
@@ -196,7 +196,7 @@ If you are using Profile B (Cloudflare Tunnel), skip this section and use sectio
 1) Copy the hub example and replace `example.com`:
 
 ```bash
-sudo cp /opt/nilstore/ops/caddy/Caddyfile.hub.example /etc/caddy/Caddyfile
+sudo cp /opt/polystore/ops/caddy/Caddyfile.hub.example /etc/caddy/Caddyfile
 sudoedit /etc/caddy/Caddyfile
 ```
 
@@ -253,7 +253,7 @@ sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
 
 :8088 {
   bind 127.0.0.1
-  root * /opt/nilstore/polystore-website/dist
+  root * /opt/polystore/polystore-website/dist
   encode zstd gzip
   file_server
 }
@@ -262,11 +262,11 @@ sudo systemctl restart caddy
 ```
 
 Operational note:
-- `web.<domain>` serves whatever files exist under `/opt/nilstore/polystore-website/dist` (or whatever path you configure in Caddy).
+- `web.<domain>` serves whatever files exist under `/opt/polystore/polystore-website/dist` (or whatever path you configure in Caddy).
 - If you build the website from a different checkout than the one Caddy serves, you **must** publish that build output into the served `dist/` directory or `web.<domain>` will keep showing the older site.
 - Recommended pattern for this host profile:
   - build from the checkout you actually want to publish
-  - sync the resulting `polystore-website/dist/` into `/opt/nilstore/polystore-website/dist`
+  - sync the resulting `polystore-website/dist/` into `/opt/polystore/polystore-website/dist`
   - then verify `http://127.0.0.1:8088/` before checking `https://web.<domain>/`
 
 4) Install the tunnel credentials/config under `/etc/cloudflared/`, then run the tunnel as a service.
@@ -397,7 +397,7 @@ Build requirements:
 Build example:
 
 ```bash
-cd /opt/nilstore/polystore-website
+cd /opt/polystore/polystore-website
 npm ci
 
 VITE_API_BASE=https://faucet.<domain> \
@@ -412,13 +412,13 @@ VITE_FAUCET_AUTH_TOKEN=<token> \
 npm run build
 ```
 
-If `/opt/nilstore` is your long-running hub checkout and you built from that same checkout, the build is already in the served location.
+If `/opt/polystore` is your long-running hub checkout and you built from that same checkout, the build is already in the served location.
 
 If you built from a different checkout (for example a newer workspace under `~/dev/...`), publish the output into the hub-served path:
 
 ```bash
-rm -rf /opt/nilstore/polystore-website/dist
-cp -a /path/to/your/current/checkout/polystore-website/dist /opt/nilstore/polystore-website/dist
+rm -rf /opt/polystore/polystore-website/dist
+cp -a /path/to/your/current/checkout/polystore-website/dist /opt/polystore/polystore-website/dist
 ```
 
 Then verify the local static server is serving the new build:
@@ -697,9 +697,9 @@ Important:
 - systemd service exits with `203/EXEC`:
   - ensure unit templates use the shell wrapper in `ops/systemd/*.service` and run `systemctl daemon-reload`
 - nil services fail with `libpolystore_core.so: cannot open shared object file`:
-  - ensure `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` is set in each `/etc/nilstore/*.env`
+  - ensure `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release` is set in each `/etc/polystore/*.env`
 - `polystorechaind` fails binding gRPC `localhost:9090`:
-  - set a free port in `/var/lib/nilstore/polystorechaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
+  - set a free port in `/var/lib/polystore/polystorechaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
 - Multiple providers on one host fail to start (port bind errors):
   - either disable provider libp2p for the soft launch (`NIL_P2P_ENABLED=0`) or assign unique `NIL_P2P_LISTEN_ADDRS` per provider
 - Provider logs are noisy with repeated `system liveness` proof failures (for example `no such file or directory` on old shard paths):
@@ -712,8 +712,8 @@ Important:
       - `mode2_reconstruct_fallback_provider_successes` rising means repair-aware fallback is actively serving chunks.
       - `mode2_reconstruct_not_enough_shards_failures` rising means RS quorum is not available for reconstruction.
   - if counters keep climbing for stale/old deals, run cleanup in dry-run first:
-    - `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317`
-    - apply mode (removes only expired/orphan dirs): `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317 --apply`
+    - `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/polystore/providers --lcd http://127.0.0.1:1317`
+    - apply mode (removes only expired/orphan dirs): `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/polystore/providers --lcd http://127.0.0.1:1317 --apply`
 
 ## Go/No-Go checklist (before inviting collaborators)
 

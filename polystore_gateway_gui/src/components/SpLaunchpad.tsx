@@ -564,7 +564,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
           <p className="soft-label">Advanced Local Ops</p>
           <h2 className="text-2xl font-semibold text-foreground">Provider Tools</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Advanced local onboarding and diagnostics for NilStore provider-daemons. The primary operator path lives on the website.
+            Advanced local onboarding and diagnostics for PolyStore provider-daemons. The primary operator path lives on the website.
           </p>
         </div>
         <div className="sp-topbar-actions">

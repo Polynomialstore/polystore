@@ -166,7 +166,7 @@ function parseTrustedSetupText(text: string): TrustedSetup {
 }
 
 async function tryLoadCompatibleKzg(): Promise<
-  | { supported: true; initMs: number; source: 'default' | 'nilstore_setup'; kzg: Awaited<ReturnType<typeof loadKZG>> }
+  | { supported: true; initMs: number; source: 'default' | 'polystore_setup'; kzg: Awaited<ReturnType<typeof loadKZG>> }
   | { supported: false; initMs: number; reason: string }
 > {
   const blob = new Uint8Array(BLOB_SIZE)
@@ -191,7 +191,7 @@ async function tryLoadCompatibleKzg(): Promise<
     const exactKzg = await loadKZG(0, exactSetup)
     const exactInitMs = performance.now() - exactInitStart
     if (exactKzg.blobToKZGCommitment(blobHex) === nilHex) {
-      return { supported: true, initMs: exactInitMs, source: 'nilstore_setup', kzg: exactKzg }
+      return { supported: true, initMs: exactInitMs, source: 'polystore_setup', kzg: exactKzg }
     }
     return {
       supported: false,
@@ -202,7 +202,7 @@ async function tryLoadCompatibleKzg(): Promise<
     return {
       supported: false,
       initMs: defaultInitMs,
-      reason: `kzg-wasm could not load the NilStore trusted setup: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `kzg-wasm could not load the PolyStore trusted setup: ${error instanceof Error ? error.message : String(error)}`,
     }
   }
 }
