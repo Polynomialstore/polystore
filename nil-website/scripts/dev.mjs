@@ -30,23 +30,6 @@ function readPublicTestnetEnv() {
   }
 }
 
-function readFaucetAuthTokenFromEtc() {
-  const envPath = "/etc/nilstore/nil-faucet.env";
-  try {
-    const raw = fs.readFileSync(envPath, "utf8");
-    for (const line of raw.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      if (!trimmed.startsWith("NIL_FAUCET_AUTH_TOKEN=")) continue;
-      const value = trimmed.slice("NIL_FAUCET_AUTH_TOKEN=".length).trim();
-      return value || "";
-    }
-  } catch {
-    // Best-effort fallback only. Local dev should still work without /etc present.
-  }
-  return "";
-}
-
 function resolveViteBin() {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const websiteRoot = path.resolve(scriptDir, "..");
@@ -79,17 +62,6 @@ if (!isE2E && !process.env.VITE_CHAIN_ID && publicTestnetEnv.POLYSTORE_TESTNET_C
 
 if (process.env.VITE_ENABLE_FAUCET == null || String(process.env.VITE_ENABLE_FAUCET).trim() === "") {
   process.env.VITE_ENABLE_FAUCET = "1";
-}
-
-if (!process.env.VITE_FAUCET_AUTH_TOKEN) {
-  const token =
-    publicTestnetEnv.POLYSTORE_TESTNET_FAUCET_AUTH_TOKEN ||
-    readFaucetAuthTokenFromEtc();
-  if (token) {
-    process.env.VITE_FAUCET_AUTH_TOKEN = token;
-    // Also export the non-Vite name for convenience in local scripts.
-    if (!process.env.NIL_FAUCET_AUTH_TOKEN) process.env.NIL_FAUCET_AUTH_TOKEN = token;
-  }
 }
 
 const viteBin = resolveViteBin();
