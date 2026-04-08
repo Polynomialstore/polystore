@@ -16,19 +16,19 @@ export const LogoShowcase = () => {
             <img
               src="/brand/logo-light-256.png"
               className="absolute inset-0 h-full w-full object-contain opacity-100 dark:opacity-0 transition-opacity"
-              alt="NilStore Logo (Light)"
+              alt="PolyStore Logo (Light)"
             />
             <img
               src="/brand/logo-dark-256.png"
               className="absolute inset-0 h-full w-full object-contain opacity-0 dark:opacity-100 transition-opacity"
-              alt="NilStore Logo (Dark)"
+              alt="PolyStore Logo (Dark)"
             />
           </div>
 
           {/* Wordmark */}
           <div className="space-y-3">
             <div className="text-4xl sm:text-5xl font-extrabold tracking-tight">
-              <span className="text-foreground">NIL</span>
+              <span className="text-foreground">POLY</span>
               <span className="text-primary">STORE</span>
             </div>
             <p className="text-[10px] font-bold uppercase tracking-[0.5em] font-mono-data text-muted-foreground">

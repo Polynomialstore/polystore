@@ -15,7 +15,7 @@ export const Hero = () => {
               The Future of Decentralized Storage
             </h1>
             <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-              NilStore leverages <strong>KZG Commitments</strong> and a <strong>Performance Market</strong> (no sealing) to deliver verifiable, secure, and low-latency decentralized storage.
+              PolyStore leverages <strong>KZG Commitments</strong> and a <strong>Performance Market</strong> (no sealing) to deliver verifiable, secure, and low-latency decentralized storage.
             </p>
           </motion.div>
 

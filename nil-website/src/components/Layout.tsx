@@ -123,18 +123,18 @@ export const Layout = () => {
                   src="/brand/logo-light-36.png"
                   srcSet="/brand/logo-light-36.png 1x, /brand/logo-light-72.png 2x"
                   className="absolute inset-0 w-full h-full object-contain transition-opacity duration-200 opacity-100 dark:opacity-0"
-                  alt="NilStore Logo"
+                  alt="PolyStore Logo"
                 />
                 <img
                   src="/brand/logo-dark-36.png"
                   srcSet="/brand/logo-dark-36.png 1x, /brand/logo-dark-72.png 2x"
                   className="absolute inset-0 w-full h-full object-contain transition-opacity duration-200 opacity-0 dark:opacity-100"
-                  alt="NilStore Logo"
+                  alt="PolyStore Logo"
                 />
               </div>
               <div className="hidden sm:flex items-center leading-none">
                 <div className="text-[1.9rem] font-extrabold tracking-tight">
-                  <span className="text-foreground">Nil</span>
+                  <span className="text-foreground">Poly</span>
                   <span className="text-primary">Store</span>
                 </div>
               </div>
@@ -297,7 +297,7 @@ export const Layout = () => {
               </ul>
             </div>
           </div>
-          <p className="opacity-60">© 2025 NilStore Network. Open Source.</p>
+          <p className="opacity-60">© 2025 PolyStore Network. Open Source.</p>
           {shortCommit ? (
             <p className="mt-2 font-mono-data text-[10px] uppercase tracking-[0.2em] opacity-60">Build {shortCommit}</p>
           ) : null}

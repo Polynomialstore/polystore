@@ -8,7 +8,7 @@ export const BenchmarkSection = () => {
         <div className="mb-16 text-center">
           <h2 className="text-3xl font-bold mb-4">Performance Benchmarks</h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            We benchmarked our core verification primitives. NilStore is designed to be unsealed: verification is cheap, and incentives come from serving speed (the Performance Market).
+            We benchmarked our core verification primitives. PolyStore is designed to be unsealed: verification is cheap, and incentives come from serving speed (the Performance Market).
           </p>
         </div>
 

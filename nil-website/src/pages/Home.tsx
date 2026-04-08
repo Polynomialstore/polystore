@@ -18,7 +18,7 @@ const audienceTracks = [
     eyebrow: "For Data Users",
     title: "Store a file. Retrieve it back. Verify the full path.",
     description:
-      "Upload data to NilStore testnet, commit it on-chain, and pull it back through the same network. This is the shortest path for users validating storage end to end.",
+      "Upload data to PolyStore testnet, commit it on-chain, and pull it back through the same network. This is the shortest path for users validating storage end to end.",
     bullets: ["Browser-first upload flow", "Wallet-funded testnet path", "Retrieval loop included"],
     cta: { to: "/alpha/storage", label: "Store a File" },
     icon: Database,
@@ -82,25 +82,25 @@ export const Home = () => {
                   <img
                     src="/brand/logo-light-256.png"
                     srcSet="/brand/logo-light-256.png 1x, /brand/logo-light-512.png 2x"
-                    alt="NilStore Logo (Light)"
+                    alt="PolyStore Logo (Light)"
                     className="absolute inset-0 h-full w-full object-contain opacity-100 transition-opacity dark:opacity-0"
                   />
                   <img
                     src="/brand/logo-dark-256.png"
                     srcSet="/brand/logo-dark-256.png 1x, /brand/logo-dark-512.png 2x"
-                    alt="NilStore Logo (Dark)"
+                    alt="PolyStore Logo (Dark)"
                     className="absolute inset-0 h-full w-full object-contain opacity-0 transition-opacity dark:opacity-100"
                   />
                 </div>
                 <div className="text-[2.25rem] font-extrabold tracking-tight sm:text-6xl md:text-7xl leading-none">
-                  <span className="text-foreground">Nil</span>
+                  <span className="text-foreground">Poly</span>
                   <span className="text-primary">Store</span>
                 </div>
               </div>
 
               <div className="mt-8 space-y-5">
                 <h1 className="nil-hero-title">
-                  Store data. Run providers. Join the NilStore testnet.
+                  Store data. Run providers. Join the PolyStore testnet.
                 </h1>
                 <p className="nil-hero-description">
                   Choose the path that matches your role.
