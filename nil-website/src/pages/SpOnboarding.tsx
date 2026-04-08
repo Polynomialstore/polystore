@@ -978,7 +978,7 @@ export function SpOnboarding() {
                       className="inline-flex items-center justify-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40"
                     >
                       <RefreshCw className="h-4 w-4" />
-                      {genesisMismatch ? 'Repair Network Entry' : 'Switch To PolyStore'}
+                      {genesisMismatch ? 'Repair Network Entry' : 'Switch To PolyStore Devnet'}
                     </button>
                   ) : null}
                   {walletReady && !funded && faucetEnabled ? (
