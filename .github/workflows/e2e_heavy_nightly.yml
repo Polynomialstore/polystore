@@ -1,4 +1,4 @@
-name: NilStore E2E Heavy
+name: PolyStore E2E Heavy
 
 on:
   schedule:

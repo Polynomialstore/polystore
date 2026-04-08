@@ -413,7 +413,7 @@ export function buildProviderAgentPrompt(input: {
 
   return `# Provider-Daemon Prompt
 
-You are setting up this machine as a NilStore testnet provider-daemon for an operator who already initiated onboarding from the website.
+You are setting up this machine as a PolyStore testnet provider-daemon for an operator who already initiated onboarding from the website.
 
 Repo bootstrap (required unless already inside a fresh \`polystore\` checkout):
 1. If repo is missing:

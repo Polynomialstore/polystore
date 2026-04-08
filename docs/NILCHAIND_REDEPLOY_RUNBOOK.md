@@ -49,7 +49,7 @@ Then verify:
 ./scripts/redeploy_nilchaind.sh --dry-run
 
 # Use a different source checkout
-./scripts/redeploy_nilchaind.sh --source-root /path/to/nil-store
+./scripts/redeploy_nilchaind.sh --source-root /path/to/polystore
 
 # Attempt restart inline (uses sudo unless root)
 ./scripts/redeploy_nilchaind.sh --with-restart

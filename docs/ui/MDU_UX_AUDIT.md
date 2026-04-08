@@ -1,7 +1,7 @@
 # MDU UX Audit (User-Facing Representation)
 
 Date: 2026-02-24  
-Repo: `nil-store-ux`  
+Repo: `polystore-ux`
 Scope: user-visible MDU concepts across the website (`nil-website`) and desktop GUI (`nil_gateway_gui`).
 
 ## Why this matters
@@ -60,7 +60,7 @@ If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and
 
 ### Website: education / marketing pages
 
-4) **How NilStore Works (Technology deep dives)**
+4) **How PolyStore Works (Technology deep dives)**
 - `nil-website/src/pages/Technology.tsx`
 - `nil-website/src/pages/ShardingDeepDive.tsx`
 - `nil-website/src/pages/KZGDeepDive.tsx`
@@ -177,4 +177,3 @@ Track this work as a short PR series (copy + UI improvements + GUI parity). Sugg
   - `nil-website/src/components/DealDetail.tsx`
 - Add a basic retrieval trace summary to the download flow.
 - Add a minimal slab breakdown card to `nil_gateway_gui/src/App.tsx`.
-

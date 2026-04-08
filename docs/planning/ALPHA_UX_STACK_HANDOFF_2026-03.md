@@ -93,7 +93,7 @@ Storage-user docs:
 
 Collaborator packets:
 - `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`
-- `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md`
+- `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_POLYNOMIALSTORE_COM.md`
 
 Provider automation:
 - `scripts/run_devnet_provider.sh`

@@ -1,7 +1,7 @@
 export function buildStorageAgentPrompt(): string {
   return `# Storage Prompt
 
-You are helping a NilStore testnet storage user complete a full local onboarding run.
+You are helping a PolyStore testnet storage user complete a full local onboarding run.
 
 Primary goal:
 - finish \`scripts/testnet_burner_upload.sh\` successfully as fast as possible, then preserve that same identity through MetaMask and browser continuity checks

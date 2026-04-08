@@ -1,4 +1,4 @@
-# AGENTS Autonomous Runbook: NilStore Econ + Deal Lifecycle + Retrieval Control (pre‑alpha)
+# AGENTS Autonomous Runbook: PolyStore Econ + Deal Lifecycle + Retrieval Control (pre‑alpha)
 
 **Version:** v2.0 (autonomous)  
 **Last updated:** 2026-01-23  

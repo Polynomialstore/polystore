@@ -99,7 +99,7 @@ Keep the underlying service ports **local-only** (recommended) or **firewalled**
 
 2) Keep only SSH inbound to the server (typically `22/tcp` on LAN/VPN as you prefer).
 
-3) Keep all NilStore services bound to localhost (`127.0.0.1`), then publish them through `cloudflared` (section 4B).
+3) Keep all PolyStore services bound to localhost (`127.0.0.1`), then publish them through `cloudflared` (section 4B).
 
 ### 1) Install prerequisites (one-time)
 
@@ -116,7 +116,7 @@ This produces a persistent chain home directory and prints the router↔provider
 
 ```bash
 sudo mkdir -p /opt && sudo chown "$USER":"$USER" /opt
-git clone https://github.com/Nil-Store/nil-store.git /opt/nilstore
+git clone https://github.com/Polynomialstore/polystore.git /opt/nilstore
 cd /opt/nilstore
 
 # Use a persistent chain home outside the repo (matches `ops/systemd/env/nilchaind.env` defaults).
@@ -340,7 +340,7 @@ loginctl enable-linger <user>
 mkdir -p ~/.config/systemd/user
 cat > ~/.config/systemd/user/cloudflared-providers.service <<'EOF'
 [Unit]
-Description=cloudflared tunnel for NilStore provider hostnames
+Description=cloudflared tunnel for PolyStore provider hostnames
 After=network-online.target
 Wants=network-online.target
 
@@ -383,12 +383,12 @@ Skip this section if your website is already hosted elsewhere (for example a Git
 The website is built with Vite.
 
 - You can set explicit endpoint URLs at build time (`VITE_*` vars below).
-- If deployed on `nilstore.org` (or `*.nilstore.org`) and `VITE_*` are omitted, the app auto-infers:
-  - `https://faucet.nilstore.org`
-  - `https://lcd.nilstore.org`
-  - `https://evm.nilstore.org`
+- If deployed on `polynomialstore.com` (or `*.polynomialstore.com`) and `VITE_*` are omitted, the app auto-infers:
+  - `https://faucet.polynomialstore.com`
+  - `https://lcd.polynomialstore.com`
+  - `https://evm.polynomialstore.com`
 - Gateway remains localhost-only (`http://localhost:8080`) and is treated as a user-local app.
-- Recommended local Gateway distribution for collaborators: `nil_gateway_gui` release artifacts from `https://github.com/Nil-Store/nil-store/releases/latest`.
+- Recommended local Gateway distribution for collaborators: `nil_gateway_gui` release artifacts from `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Build requirements:
 - Rust + `wasm-pack` (the build compiles `nil_core` → WASM)
@@ -432,7 +432,7 @@ Helper script (from repo root):
 ```bash
 scripts/build_website_public.sh <domain>
 # example:
-scripts/build_website_public.sh nilstore.org
+scripts/build_website_public.sh polynomialstore.com
 ```
 
 Note: the canonical list of env vars lives in `nil-website/website-spec.md`.
@@ -440,7 +440,7 @@ Note: the canonical list of env vars lives in `nil-website/website-spec.md`.
 ### 6) MetaMask “add network” snippet (share with collaborators)
 
 In MetaMask → **Add network manually**:
-- Network name: `NilStore Devnet`
+- Network name: `PolyStore Devnet`
 - New RPC URL: `https://evm.<domain>`
 - Chain ID: `20260211` (`0x1352573`)
 - Currency symbol: `ATOM` (EVM gas denom is `aatom` in the current devnet profile)

@@ -1,4 +1,4 @@
-# Gap Report (Repo-Anchored): NilStore (Spec ↔ Code ↔ CI)
+# Gap Report (Repo-Anchored): PolyStore (Spec ↔ Code ↔ CI)
 
 Last updated: 2026-02-05
 

@@ -69,7 +69,7 @@ Explorer shows deals list from chain, but fetches metadata only when a user requ
 Pros: no operator subsidy.  
 Cons: metadata appears on demand.
 
-NilStore’s sponsored session open semantics ensure the explorer or users can pay without draining deal owner escrow.
+PolyStore’s sponsored session open semantics ensure the explorer or users can pay without draining deal owner escrow.
 
 ---
 

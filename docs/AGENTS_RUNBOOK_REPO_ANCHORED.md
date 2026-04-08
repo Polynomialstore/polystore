@@ -1,4 +1,4 @@
-# AGENTS Runbook (Repo-Anchored): nilcoin2 / NilStore
+# AGENTS Runbook (Repo-Anchored): nilcoin2 / PolyStore
 
 Last updated: 2026-02-05
 

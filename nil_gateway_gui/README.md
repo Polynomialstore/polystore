@@ -1,10 +1,10 @@
 # Nil Gateway GUI (Local Gateway)
 
-`nil_gateway_gui` is the desktop local Gateway app for browser users on trusted devnet. It runs a local NilStore **user-gateway** on `http://localhost:8080` so the website can use local routing/cache flows without relying on a hosted relay gateway.
+`nil_gateway_gui` is the desktop local Gateway app for browser users on trusted devnet. It runs a local PolyStore **user-gateway** on `http://localhost:8080` so the website can use local routing/cache flows without relying on a hosted relay gateway.
 
 ## Download
 
-- Releases: `https://github.com/Nil-Store/nil-store/releases/latest`
+- Releases: `https://github.com/Polynomialstore/polystore/releases/latest`
 - CI release workflow: `.github/workflows/tauri_release.yml`
 - Release tags use semver and trigger desktop builds automatically:
   - `nil-gateway-gui-vMAJOR.MINOR.PATCH` (example: `nil-gateway-gui-v0.2.0`)
@@ -18,7 +18,7 @@
    - If macOS Gatekeeper blocks first launch, use right-click `Open` or approve it in System Settings, then relaunch.
 3. Verify local health:
    - `curl -sf http://localhost:8080/health`
-4. Open `https://nilstore.org/#/dashboard`.
+4. Open `https://polynomialstore.com/#/dashboard`.
    - The dashboard gateway indicator should show local Gateway connected.
 
 ## Local Gateway UX Notes
@@ -72,7 +72,7 @@ From `nil_gateway_gui/`:
 - `npm run user:ensure` / `npm run user:stop`
   - Start/stop only externally managed user-gateway process on `:8080`.
 
-From repo root (`nil-store/`):
+From repo root (`polystore/`):
 
 - `./scripts/ensure_stack.sh`
   - Brings up the local dev stack (chain + faucet + providers + user-gateway + optional web) with health checks.

@@ -1,6 +1,6 @@
-# NilStore Network
+# PolyStore Network
 
-NilStore is a verifiable decentralized storage network (Cosmos-SDK chain + user-gateway + provider-daemon + web UI).
+PolyStore is a verifiable decentralized storage network (Cosmos-SDK chain + user-gateway + provider-daemon + web UI).
 
 This repo is currently geared toward a **trusted devnet soft launch (Feb 2026)**:
 - A hub operator runs the chain + user-gateway + faucet + website on a VPS.

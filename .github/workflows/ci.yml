@@ -1,4 +1,4 @@
-name: NilStore CI
+name: PolyStore CI
 
 on:
   push

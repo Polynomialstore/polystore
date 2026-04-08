@@ -1,4 +1,4 @@
-# NilStore Testnet Readiness Report
+# PolyStore Testnet Readiness Report
 
 Date: 2026-02-05
 

@@ -1,6 +1,6 @@
 # Runtime Personas and Ownership (Source of Truth)
 
-This document defines the runtime persona contract for NilStore processes.
+This document defines the runtime persona contract for PolyStore processes.
 
 If any other doc uses ambiguous terms like "router" or generic "gateway", this file is authoritative for naming and behavior.
 

@@ -1,6 +1,6 @@
 # Provider Endpoint Types (Testnet)
 
-NilStore providers (SPs) must register at least one reachable **endpoint multiaddr** on-chain via `register-provider`.
+PolyStore providers (SPs) must register at least one reachable **endpoint multiaddr** on-chain via `register-provider`.
 
 This doc defines the two supported endpoint "types" for testnet onboarding:
 

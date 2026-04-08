@@ -1,10 +1,10 @@
-# NilStore Litepaper: The Sealing-Free Storage Network
+# PolyStore Litepaper: The Sealing-Free Storage Network
 **Technical Overview v2.7**
 
 ## 1. Introduction & Value Proposition
-NilStore is a high-throughput, verifiable decentralized storage network designed to democratize access to the storage economy while delivering cloud-grade performance.
+PolyStore is a high-throughput, verifiable decentralized storage network designed to democratize access to the storage economy while delivering cloud-grade performance.
 
-By utilizing a **Performance Market** (Tiered Rewards) and **System-Defined Placement**, NilStore enables a diverse marketplace of Storage Providers (SPs) to provide instant, verifiable data retrieval. This architecture ensures data is always available for high-performance workloads without the latency or hardware overhead of legacy "Sealing" protocols.
+By utilizing a **Performance Market** (Tiered Rewards) and **System-Defined Placement**, PolyStore enables a diverse marketplace of Storage Providers (SPs) to provide instant, verifiable data retrieval. This architecture ensures data is always available for high-performance workloads without the latency or hardware overhead of legacy "Sealing" protocols.
 
 ### Value for Storage Providers
 *   **Commodity Hardware Access:** No GPU sealing. Providers are judged on **Response Time**, incentivizing standard NVMe/SSD storage.
@@ -20,7 +20,7 @@ By utilizing a **Performance Market** (Tiered Rewards) and **System-Defined Plac
 ---
 
 ## 2. The Core Innovation: Unified Liveness
-Instead of separate "Storage Audits" and "Retrieval Requests," NilStore unifies them.
+Instead of separate "Storage Audits" and "Retrieval Requests," PolyStore unifies them.
 
 ### A. The "User is the Auditor"
 *   **Hot Data:** When a user downloads a file, they open a **Retrieval Session** on-chain (MetaMask), fetch the data, and confirm completion. The provider submits a session-bound proof; the session completion **counts as the Storage Proof** for that epoch.
@@ -35,7 +35,7 @@ We don't ban S3. We just pay for speed.
 
 ### C. Retrievability & Self-Healing (High-Level)
 
-NilStore’s retrieval layer is designed so that:
+PolyStore’s retrieval layer is designed so that:
 
 *   For every `(Deal, Provider)` pair, either the data is retrievable under protocol rules, or there is verifiable evidence the Provider failed (wrong data or non-response) and can be punished.
 *   Providers who repeatedly fail retrievals are automatically pushed out of Deals and replaced by healthier nodes over time.
@@ -57,7 +57,7 @@ Concretely, the mainnet Mode 1 design adds:
 
 ### Layer 2: EVM Compatibility (MetaMask)
 *   **Role:** Wallet-facing execution inside NilChain (no separate settlement chain in devnet).
-*   **Function:** Hosts EVM-compatible signatures and the NilStore precompile used for retrieval sessions and future contracts.
+*   **Function:** Hosts EVM-compatible signatures and the PolyStore precompile used for retrieval sessions and future contracts.
 
 ### Client Layer: Browser + Gateway (Optional)
 *   **Browser/WASM:** Generates shards and proofs locally and stores slabs in OPFS.

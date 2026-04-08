@@ -1,6 +1,6 @@
 # Testnet Storage User Quickstart
 
-This is the primary testnet path for users who want to store data on NilStore.
+This is the primary testnet path for users who want to store data on PolyStore.
 
 Note: this file keeps a legacy `ALPHA_` prefix for compatibility.
 
@@ -8,7 +8,7 @@ Recommended target:
 - fast local onboarding with one identity across CLI, MetaMask, browser, and local Gateway GUI
 
 Fallback target:
-- browser-only flow through `https://nilstore.org/#/first-file` when local gateway or CLI are unavailable
+- browser-only flow through `https://polynomialstore.com/#/first-file` when local gateway or CLI are unavailable
 
 ## Recommended Onboarding Order
 
@@ -29,14 +29,14 @@ Fallback target:
 2. Import the Same Wallet into MetaMask
 - Import the exported keystore JSON into MetaMask.
 - Confirm the MetaMask address exactly matches the CLI-generated EVM address.
-- Confirm the wallet is on the NilStore testnet network and funded.
+- Confirm the wallet is on the PolyStore testnet network and funded.
 
 3. Verify Browser Continuity
 - Confirm the website and EVM RPC are reachable.
-- Open `https://nilstore.org/#/first-file`.
+- Open `https://polynomialstore.com/#/first-file`.
 - Connect the imported MetaMask wallet.
 - Verify the site sees the same address and the local gateway on `http://localhost:8080`.
-- After deal allocation on `/#/first-file`, continue to `https://nilstore.org/#/dashboard` for upload, retrieval, and file listing.
+- After deal allocation on `/#/first-file`, continue to `https://polynomialstore.com/#/dashboard` for upload, retrieval, and file listing.
 - Perform retrieval and/or a small browser upload/retrieve using that same wallet on `/#/dashboard`.
 
 4. Verify Gateway Large-File Flow
@@ -53,9 +53,9 @@ Fallback target:
 
 ## Browser-only fallback
 
-1. Open `https://nilstore.org/#/first-file`.
+1. Open `https://polynomialstore.com/#/first-file`.
 2. Connect MetaMask.
-3. Switch to the NilStore testnet network.
+3. Switch to the PolyStore testnet network.
 4. Fund your wallet through the faucet if available.
 5. Create a deal on `/#/first-file`.
 6. Continue to `/#/dashboard`.

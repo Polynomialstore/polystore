@@ -1,4 +1,4 @@
-# NilStore testnet launch next steps (engineering + policy) — updated for deal expiry + renewal + wallet-first
+# PolyStore testnet launch next steps (engineering + policy) — updated for deal expiry + renewal + wallet-first
 
 Last updated: 2026-01-23
 

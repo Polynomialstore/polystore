@@ -1,4 +1,4 @@
-# Trusted Devnet Collaborator Packet (nilstore.org)
+# Trusted Devnet Collaborator Packet (polynomialstore.com)
 
 This is the concrete collaborator packet for the current trusted devnet hub deployment.
 
@@ -8,17 +8,17 @@ Recommended public entry points:
 
 ## Live Endpoints
 
-- Website: `https://nilstore.org/#/first-file` (primary onboarding route) / `https://web.nilstore.org/#/first-file` (if enabled)
-- EVM RPC: `https://evm.nilstore.org`
-- Hub RPC: `https://rpc.nilstore.org`
-- Hub LCD: `https://lcd.nilstore.org`
-- Faucet: `https://faucet.nilstore.org/faucet`
+- Website: `https://polynomialstore.com/#/first-file` (primary onboarding route) / `https://web.polynomialstore.com/#/first-file` (if enabled)
+- EVM RPC: `https://evm.polynomialstore.com`
+- Hub RPC: `https://rpc.polynomialstore.com`
+- Hub LCD: `https://lcd.polynomialstore.com`
+- Faucet: `https://faucet.polynomialstore.com/faucet`
 - Chain ID: `20260211` (`0x1352573`)
 
 Provider public endpoints (Mode 2 `2+1` baseline):
-- `https://sp1.nilstore.org` → provider `nil1jtqzjx7y9kh3un3a86u774mucsq4q3vshh8sr0`
-- `https://sp2.nilstore.org` → provider `nil1w98n98a8gnrwnyz62wfvya9wzvdr92uwz7dssk`
-- `https://sp3.nilstore.org` → provider `nil182f6qy5taazj5fa722p2ut4d0v5j2gkap0dprj`
+- `https://sp1.polynomialstore.com` → provider `nil1jtqzjx7y9kh3un3a86u774mucsq4q3vshh8sr0`
+- `https://sp2.polynomialstore.com` → provider `nil1w98n98a8gnrwnyz62wfvya9wzvdr92uwz7dssk`
+- `https://sp3.polynomialstore.com` → provider `nil182f6qy5taazj5fa722p2ut4d0v5j2gkap0dprj`
 
 ## What Collaborators Need From Hub Operator
 
@@ -27,14 +27,14 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 
 ## Website Tester Quickstart
 
-1) Open `https://nilstore.org/#/first-file` (use `https://web.nilstore.org/#/first-file` only if you are explicitly testing that host).
+1) Open `https://polynomialstore.com/#/first-file` (use `https://web.polynomialstore.com/#/first-file` only if you are explicitly testing that host).
 2) Connect MetaMask and switch to:
-- RPC URL: `https://evm.nilstore.org`
+- RPC URL: `https://evm.polynomialstore.com`
 - Chain ID: `20260211`
 - Currency: `ATOM`
 3) Fund test address:
 - Use website faucet flow (this deployment may include a preconfigured faucet token), or
-- POST to `https://faucet.nilstore.org/faucet` with header `X-Nil-Faucet-Auth: <token>`.
+- POST to `https://faucet.polynomialstore.com/faucet` with header `X-Nil-Faucet-Auth: <token>`.
 4) Run the flow:
 - create the deal on `/#/first-file`
 - continue to `/#/dashboard`
@@ -46,11 +46,11 @@ Fast full-local repo onboarding:
 - Use the repo-tracked public bootstrap defaults in `.env.testnet.public` unless you need explicit overrides.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file.
 - Import the exported keystore into MetaMask.
-- Continue browser verification on `https://nilstore.org/#/dashboard` with that same wallet and local gateway after the first-file allocation step.
+- Continue browser verification on `https://polynomialstore.com/#/dashboard` with that same wallet and local gateway after the first-file allocation step.
 
 Local gateway app (recommended for localhost gateway-assisted flows):
 - Start Nil Gateway GUI (or local `nil_gateway`) on `http://localhost:8080`.
-- Download builds: `https://github.com/Nil-Store/nil-store/releases/latest`.
+- Download builds: `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Notes:
 - The website flow remains wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
@@ -77,7 +77,7 @@ If the key is new and gas funding is still missing, fund the printed provider ad
 
 ```bash
 export PROVIDER_KEY="provider1"
-export PROVIDER_ENDPOINT="/dns4/sp1.nilstore.org/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
+export PROVIDER_ENDPOINT="/dns4/sp1.polynomialstore.com/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
 export NIL_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"         # from website wallet step
 
@@ -100,19 +100,19 @@ Hub public surface:
 
 ```bash
 scripts/devnet_healthcheck.sh hub \
-  --rpc https://rpc.nilstore.org \
-  --lcd https://lcd.nilstore.org \
-  --evm https://evm.nilstore.org \
+  --rpc https://rpc.polynomialstore.com \
+  --lcd https://lcd.polynomialstore.com \
+  --evm https://evm.polynomialstore.com \
   --gateway http://127.0.0.1:18080 \
-  --faucet https://faucet.nilstore.org
+  --faucet https://faucet.polynomialstore.com
 ```
 
 Provider operator baseline:
 
 ```bash
 scripts/devnet_healthcheck.sh provider \
-  --provider https://sp1.nilstore.org \
-  --hub-lcd https://lcd.nilstore.org \
+  --provider https://sp1.polynomialstore.com \
+  --hub-lcd https://lcd.polynomialstore.com \
   --provider-addr nil1jtqzjx7y9kh3un3a86u774mucsq4q3vshh8sr0
 ```
 

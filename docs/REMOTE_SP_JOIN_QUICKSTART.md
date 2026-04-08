@@ -1,6 +1,6 @@
 # Remote Provider-Daemon Join — Quickstart
 
-This is the **fast path** for a trusted collaborator to join a shared devnet as a NilStore provider-daemon operator.
+This is the **fast path** for a trusted collaborator to join a shared devnet as a PolyStore provider-daemon operator.
 
 If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 
@@ -11,16 +11,16 @@ If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 
 Treat `NIL_GATEWAY_SP_AUTH` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
 
-The default provider flow now targets the canonical public NilStore testnet from `.env.testnet.public`.
+The default provider flow now targets the canonical public PolyStore testnet from `.env.testnet.public`.
 Only set `HUB_NODE`, `HUB_LCD`, or `CHAIN_ID` when you are intentionally joining a non-public hub.
 
 The web-first operator flow is:
-1. Open `https://nilstore.org/#/sp-onboarding` on the website.
+1. Open `https://polynomialstore.com/#/sp-onboarding` on the website.
 2. Connect the operator wallet and copy the operator address (`nil1...`).
 3. Prepare the provider host checkout on the machine that will run the provider-daemon.
 4. Pair provider identity: run one `pair` command on the provider host, let it create the key if needed, fund it and rerun if auto-funding is unavailable, then approve it from the website wallet step.
 5. Configure public access: set the provider endpoint and paste `NIL_GATEWAY_SP_AUTH` from the hub operator.
-6. Run bootstrap from the website command rail, then finish verification from `https://nilstore.org/#/sp-dashboard`.
+6. Run bootstrap from the website command rail, then finish verification from `https://polynomialstore.com/#/sp-dashboard`.
 
 ## Provider machine prerequisites
 
@@ -83,7 +83,7 @@ export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
 If the key is new and the command prints a provider `nil1...` address that still needs gas, fund that address with `aatom` and rerun the same `pair` command.
 
-Approve the pending provider link in `https://nilstore.org/#/sp-onboarding`, then continue with:
+Approve the pending provider link in `https://polynomialstore.com/#/sp-onboarding`, then continue with:
 
 ```bash
 export PROVIDER_KEY="provider1"
@@ -172,7 +172,7 @@ curl -sf https://sp.<domain>/health
 Or run the healthcheck script (recommended):
 
 ```bash
-scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd "${HUB_LCD:-https://lcd.nilstore.org}" --provider-addr <nil1...>
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd "${HUB_LCD:-https://lcd.polynomialstore.com}" --provider-addr <nil1...>
 ```
 
 Agent-oriented diagnostics:
@@ -188,7 +188,7 @@ Agent-oriented diagnostics:
 From the hub (or anywhere with LCD access):
 
 ```bash
-curl -sf "${HUB_LCD:-https://lcd.nilstore.org}/nilchain/nilchain/v1/providers" | jq '.providers | length'
+curl -sf "${HUB_LCD:-https://lcd.polynomialstore.com}/nilchain/nilchain/v1/providers" | jq '.providers | length'
 ```
 
 ## Common failures
