@@ -8,7 +8,7 @@ set -euo pipefail
 # - Commits manifest_root on-chain via /gateway/update-deal-content-evm or direct nilchaind tx
 #
 # Requires:
-# - node/tsx deps installed in `nil-website/` (for signing intents)
+# - node/tsx deps installed in `polystore-website/` (for signing intents)
 # - EVM_PRIVKEY set (delegated uploader key)
 # - local gateway available at GATEWAY_BASE for /gateway/upload
 #
@@ -253,7 +253,7 @@ direct_update_deal_content() {
 
   for attempt in $(seq 1 "$EVM_NONCE_RETRY_ATTEMPTS"); do
     update_json="$(
-      cd "$ROOT_DIR/nil-website"
+      cd "$ROOT_DIR/polystore-website"
       EVM_PRIVKEY="$EVM_PRIVKEY" \
       EVM_CHAIN_ID="$EVM_CHAIN_ID" \
       CHAIN_ID="$CHAIN_ID" \
@@ -263,7 +263,7 @@ direct_update_deal_content() {
       SIZE_BYTES="$SIZE_BYTES" \
       TOTAL_MDUS="$TOTAL_MDUS" \
       WITNESS_MDUS="$WITNESS_MDUS" \
-      "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
+      "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" update-content
     )"
 
     update_file="$(mktemp "${TMPDIR:-/tmp}/nilstore-update-content-XXXXXX")"
@@ -355,7 +355,7 @@ sign_intent() {
   local mode="$1"
   local nonce="${2:-}"
   (
-    cd "$ROOT_DIR/nil-website"
+    cd "$ROOT_DIR/polystore-website"
     # Ensure dependencies are present (CI/dev stacks do this already).
     if [[ ! -d node_modules ]]; then
       npm install >/dev/null
@@ -365,7 +365,7 @@ sign_intent() {
     CHAIN_ID="$CHAIN_ID" \
     NONCE="$nonce" \
     SERVICE_HINT="$SERVICE_HINT" \
-    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" "$mode"
+    "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" "$mode"
   )
 }
 
@@ -507,7 +507,7 @@ if [[ "$TX_SUBMIT_MODE" == "direct" ]]; then
   direct_update_deal_content
 else
   UPDATE_JSON="$(
-    cd "$ROOT_DIR/nil-website"
+    cd "$ROOT_DIR/polystore-website"
     EVM_PRIVKEY="$EVM_PRIVKEY" \
     EVM_CHAIN_ID="$EVM_CHAIN_ID" \
     CHAIN_ID="$CHAIN_ID" \
@@ -517,7 +517,7 @@ else
     SIZE_BYTES="$SIZE_BYTES" \
     TOTAL_MDUS="$TOTAL_MDUS" \
     WITNESS_MDUS="$WITNESS_MDUS" \
-    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
+    "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" update-content
   )"
 
   UPDATE_RESP="$(curl -sS -X POST "${GATEWAY_BASE}/gateway/update-deal-content-evm" \

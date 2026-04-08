@@ -58,4 +58,4 @@ wait_for_http "gateway" "http://localhost:8080/status"
 wait_for_http "gateway health" "http://localhost:8080/health"
 
 echo "==> Running Playwright (libp2p)..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/libp2p-fetch.spec.ts)
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/libp2p-fetch.spec.ts)

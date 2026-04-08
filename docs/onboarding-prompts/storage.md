@@ -44,10 +44,10 @@ Browser route map:
 
 Local prerequisites:
 - Required commands: `bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind`; `gh` is optional.
-- First run may execute `npm install` inside `nil-website/` if `nil-website/node_modules` is missing.
+- First run may execute `npm install` inside `polystore-website/` if `polystore-website/node_modules` is missing.
 - Before running the burner helper, set a keystore password in `NIL_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
 - Do not let `scripts/testnet_burner_upload.sh` fall back to its interactive password prompt during an autonomous run. If `NIL_BURNER_KEYSTORE_PASSWORD` is unset, stop and ask the user for the import password first.
-- Expect local artifacts to be created under the repo, including `nil-website/node_modules/`, a keystore JSON, and a `nilchaind` sender home in `_artifacts/`.
+- Expect local artifacts to be created under the repo, including `polystore-website/node_modules/`, a keystore JSON, and a `nilchaind` sender home in `_artifacts/`.
 
 Operating mode:
 - This is a guided onboarding run, not a test automation run.
@@ -108,12 +108,12 @@ Your job:
    - otherwise install or open Nil Gateway GUI yourself; prefer the latest GitHub release artifact and only fall back to source-build/manual debugging if the release path is blocked
    - macOS setup path:
      - choose the latest release `.dmg` that matches the machine architecture: Apple Silicon for `arm64`, Intel for `x86_64`
-     - mount the `.dmg`, copy `nil_gateway_gui.app` into `/Applications` if needed, then launch it with `open /Applications/nil_gateway_gui.app` or equivalent
+     - mount the `.dmg`, copy `polystore_gateway_gui.app` into `/Applications` if needed, then launch it with `open /Applications/polystore_gateway_gui.app` or equivalent
      - if Gatekeeper blocks first launch, pause only long enough to tell the user to approve the app via right-click `Open` or System Settings, then resume automatically
    - Linux setup path:
      - on Ubuntu or Debian, prefer the latest `.deb`; on RPM-based systems, prefer the latest `.rpm`
-     - install the package, then launch `nil_gateway_gui` from the desktop launcher or by running `nil_gateway_gui` or `/usr/bin/nil_gateway_gui`
-     - only fall back to `cd nil_gateway_gui && npm ci && npm run tauri build` when no matching package works for the host OS
+     - install the package, then launch `polystore_gateway_gui` from the desktop launcher or by running `polystore_gateway_gui` or `/usr/bin/polystore_gateway_gui`
+     - only fall back to `cd polystore_gateway_gui && npm ci && npm run tauri build` when no matching package works for the host OS
    - verify local gateway `/health`; use `/status` only if it exists or if debugging is needed
    - if `NIL_BURNER_KEYSTORE_PASSWORD` is unset, ask the user for the keystore import password before invoking `scripts/testnet_burner_upload.sh`
    - create a temporary tiny file locally and complete `scripts/testnet_burner_upload.sh <file_path>`

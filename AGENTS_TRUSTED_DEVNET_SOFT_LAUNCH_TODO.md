@@ -79,7 +79,7 @@ Checklist:
   - `scripts/e2e_mode2_stripe_multi_sp.sh`
 
 Checklist:
-- [x] Update `nil-website/tests/mode2-stripe.spec.ts` to assert downloaded bytes (or hash) == uploaded.
+- [x] Update `polystore-website/tests/mode2-stripe.spec.ts` to assert downloaded bytes (or hash) == uploaded.
 - [x] Ensure the test continues to work with chunked/ranged gateway fetches.
 - [x] Fix Mode2 provider→provider shard fetches: `/sp/shard` requires `X‑Nil‑Gateway‑Auth` and no longer enforces the user session range across the full shard leaf interval (router still enforces user sessions on `/gateway/fetch`).
 
@@ -121,8 +121,8 @@ Checklist:
 - Goal: A collaborator can store and retrieve a file with minimal context.
 - PR: https://github.com/Nil-Store/nil-store/pull/63
 - Test gate:
-  - `npm -C nil-website run test:unit`
-  - `npm -C nil-website run build`
+  - `npm -C polystore-website run test:unit`
+  - `npm -C polystore-website run build`
 
 Checklist:
 - [x] Guided “First File” flow (connect → fund → alloc → upload → commit → retrieve).
@@ -188,8 +188,8 @@ Checklist:
 - Goal: Allow token-protected faucet funding from the website UI (without baking secrets into the build).
 - PR: https://github.com/Nil-Store/nil-store/pull/67
 - Test gate:
-  - `npm -C nil-website run test:unit`
-  - `npm -C nil-website run build`
+  - `npm -C polystore-website run test:unit`
+  - `npm -C polystore-website run build`
 
 Checklist:
 - [x] Add localStorage-backed faucet auth token helper.
@@ -254,7 +254,7 @@ Checklist:
 
 Checklist:
 - [x] Add a hub operator runbook section: required ports, DNS records, Caddy install + reload, and systemd enable/start order.
-- [x] Document `nil-website` build env for HTTPS subdomains (`VITE_LCD_BASE`, `VITE_EVM_RPC`, `VITE_GATEWAY_BASE`, `VITE_API_BASE`, `VITE_COSMOS_CHAIN_ID`, `VITE_CHAIN_ID`).
+- [x] Document `polystore-website` build env for HTTPS subdomains (`VITE_LCD_BASE`, `VITE_EVM_RPC`, `VITE_GATEWAY_BASE`, `VITE_API_BASE`, `VITE_COSMOS_CHAIN_ID`, `VITE_CHAIN_ID`).
 - [x] Add a “MetaMask add network” snippet (RPC URL, chain id, currency, explorer placeholder).
 
 ---
@@ -279,13 +279,13 @@ Checklist:
 - Goal: Reduce CI flakes in `scripts/e2e_mode2_stripe_multi_sp.sh` by waiting for the local gateway “Connected” state and adding a single retry for the Mode2 Stripe suite in CI.
 - PR: https://github.com/Nil-Store/nil-store/pull/73
 - Test gate:
-  - `npm -C nil-website run test:unit`
-  - `npm -C nil-website run lint`
+  - `npm -C polystore-website run test:unit`
+  - `npm -C polystore-website run lint`
   - `bash -n scripts/e2e_mode2_stripe_multi_sp.sh`
 
 Checklist:
 - [x] Add a stable selector/attribute for gateway connection status (so Playwright can wait for it).
-- [x] Update `nil-website/tests/mode2-stripe.spec.ts` to wait for gateway “Connected” before selecting files.
+- [x] Update `polystore-website/tests/mode2-stripe.spec.ts` to wait for gateway “Connected” before selecting files.
 - [x] Add a single CI retry for the Mode2 Stripe suite (targeted; not global).
 
 ---
@@ -528,14 +528,14 @@ Checklist:
 ### PR34 — CI: deflake Playwright “Gateway Absent” upload flow (MERGED)
 
 - Branch: `codex/deflake-gateway-absent-ui`
-- Goal: Reduce flakes in `nil-website/tests/gateway-absent-ui.spec.ts` by ensuring the test reliably navigates back to the Mode 2 upload panel (and enables Advanced only if needed) before waiting on `mdu-file-input`.
+- Goal: Reduce flakes in `polystore-website/tests/gateway-absent-ui.spec.ts` by ensuring the test reliably navigates back to the Mode 2 upload panel (and enables Advanced only if needed) before waiting on `mdu-file-input`.
 - PR: https://github.com/Nil-Store/nil-store/pull/96
 - Test gate:
-  - `npm -C nil-website run test:unit`
+  - `npm -C polystore-website run test:unit`
   - `scripts/e2e_browser_smoke_no_gateway.sh`
 
 Checklist:
-- [x] Update `nil-website/tests/gateway-absent-ui.spec.ts` to robustly reach the upload UI before selecting a file.
+- [x] Update `polystore-website/tests/gateway-absent-ui.spec.ts` to robustly reach the upload UI before selecting a file.
 
 ---
 
@@ -622,10 +622,10 @@ Checklist:
 - Goal: Make MDUs (MDU #0 / Witness / User) a first-class UX object for debugging + marketing.
 - Spec/audit doc: `docs/ui/MDU_UX_AUDIT.md`
 - Test gate (if code changes):
-  - `npm -C nil-website run test:unit`
+  - `npm -C polystore-website run test:unit`
 
 Checklist:
 - [ ] Standardize copy on “MDU” (alias “DU” only as legacy).
 - [ ] Improve FileSharder MDU labeling (meta/witness/user) + add an “MDU primer”.
 - [ ] Add retrieval trace details (blob/MDU ranges, receipt counts) after downloads.
-- [ ] Add basic slab/MDU visibility to `nil_gateway_gui`.
+- [ ] Add basic slab/MDU visibility to `polystore_gateway_gui`.

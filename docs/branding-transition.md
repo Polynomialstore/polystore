@@ -18,7 +18,7 @@ The following technical identifiers remain intentionally unchanged for now:
 - `nilchain`
 - `NilFS`
 - `X-Nil-*` protocol headers
-- `nil_*`/`nil-*` module, package, service, and implementation-surface names such as `nil_gateway`, `nil_core`, `nil_cli`, and `nil-website`
+- `nil_*`/`nil-*` module, package, service, and implementation-surface names such as `nil_gateway`, `nil_core`, and `nil_cli`
 - existing generated or protocol-bound identifiers that still encode `nil`
 
 These names are part of the current protocol and implementation surface area. They should only change in a deliberate follow-up migration with explicit compatibility and versioning decisions.

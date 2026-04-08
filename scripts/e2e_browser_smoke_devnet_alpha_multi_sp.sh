@@ -53,4 +53,4 @@ wait_for_http "gateway" "http://localhost:8080/health" "200" 60 1
 wait_for_http "web" "http://localhost:5173/" "200" 90 1
 
 echo "==> Running Playwright..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e)
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e)

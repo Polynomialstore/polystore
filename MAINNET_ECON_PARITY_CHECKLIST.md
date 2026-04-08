@@ -30,7 +30,7 @@ Companion docs:
 - [ ] Add e2e: expire → renew → read; expire → GC delete (`scripts/`, `tests/`).
 ## Stage 2 — Retrieval session economics (A2)
 - [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`nilchain/`).
-- [ ] Enforce **mandatory sessions for all served bytes**: provider + gateway reject out-of-session reads (`X-Nil-Session-Id` required); blob alignment + session range subset enforced; segmented/batched downloads within one session supported (`nil-provider/`, `nil_gateway/`, `nil-website/`).
+- [ ] Enforce **mandatory sessions for all served bytes**: provider + gateway reject out-of-session reads (`X-Nil-Session-Id` required); blob alignment + session range subset enforced; segmented/batched downloads within one session supported (`nil-provider/`, `nil_gateway/`, `polystore-website/`).
 - [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`nilchain/`).
 - [ ] Extend econ e2e: open → complete; open → cancel/expire; verify burns/payouts/refunds (`scripts/`, `tests/`).
 
@@ -43,16 +43,16 @@ Companion docs:
       - `DEAL_ESCROW` → refund to deal escrow
       - `REQUESTER`  → refund to payer
       - `PROTOCOL`   → refund to protocol audit budget module account
-- [ ] Allowlist mode: merkle root + proof verification (`nilchain/`, `nil-website/`).
-- [ ] Voucher mode: EIP-712 (recommended) signature verification + one-time nonce tracking (`nilchain/`, `nil-website/`).
+- [ ] Allowlist mode: merkle root + proof verification (`nilchain/`, `polystore-website/`).
+- [ ] Voucher mode: EIP-712 (recommended) signature verification + one-time nonce tracking (`nilchain/`, `polystore-website/`).
 - [ ] Add query/index support for public deals (at minimum expose retrieval_policy in Deal query; ideally add `QueryPublicDeals`) (`nilchain/`).
-- [ ] UI/UX: deal creation includes retrieval policy selection; allowlist manager; voucher generator; retrieval flow uses sponsored open when requester != owner (`nil-website/`).
+- [ ] UI/UX: deal creation includes retrieval policy selection; allowlist manager; voucher generator; retrieval flow uses sponsored open when requester != owner (`polystore-website/`).
 - [ ] E2E gates: owner-only deal rejects non-owner; public deal allows non-owner sponsored open; voucher replay fails; allowlist proof required (`tests/`, `scripts/`).
 
 ## Stage 2c — Content encoding / compression (A2c)
 - [ ] Implement NilCEv1 header (`NILC`) + `ContentEncoding` enum and zstd (level 3) compress-before-encrypt pipeline in both gateway and WASM (`nil_gateway/`, `nil_core/`).
 - [ ] Retrieval path parses header and decompresses after decrypt; partial reads fetch header blobs first (`nil_gateway/`, `nil_core/`).
-- [ ] UI shows original vs stored size and cost delta; compression default ON with opt-out (`nil-website/`).
+- [ ] UI shows original vs stored size and cost delta; compression default ON with opt-out (`polystore-website/`).
 - [ ] Tests: round-trip equality; corrupt header fails safely; zip-bomb defense; gateway vs WASM parity (`tests/`).
 
 ## Stage 3 — Deterministic challenge derivation + quotas + synthetic fill (A3)

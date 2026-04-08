@@ -89,22 +89,22 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci
 
       - name: Type Check & Build
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm run build
 
       - name: Run Unit Tests
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm run test:unit
 
       - name: Lint
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm run lint
 
   e2e-sparse-browser:
@@ -127,13 +127,13 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci --prefer-offline --no-audit
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
@@ -142,12 +142,12 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('nil-website/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('polystore-website/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright Browsers
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
       - name: Run browser-only sparse upload proof
@@ -159,8 +159,8 @@ jobs:
         with:
           name: e2e-sparse-browser-artifacts
           path: |
-            nil-website/test-results/**
-            nil-website/playwright-report/**
+            polystore-website/test-results/**
+            polystore-website/playwright-report/**
           if-no-files-found: ignore
 
   website-node-integration:
@@ -200,7 +200,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -208,7 +208,7 @@ jobs:
           python-version: '3.x'
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci --prefer-offline --no-audit
 
       - name: Build nil_core (native)
@@ -243,22 +243,22 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil_gateway_gui/package-lock.json
+          cache-dependency-path: polystore_gateway_gui/package-lock.json
 
       - name: Install Dependencies
-        working-directory: nil_gateway_gui
+        working-directory: polystore_gateway_gui
         run: npm ci
 
       - name: Type Check
-        working-directory: nil_gateway_gui
+        working-directory: polystore_gateway_gui
         run: npm run lint
 
       - name: Run Unit Tests
-        working-directory: nil_gateway_gui
+        working-directory: polystore_gateway_gui
         run: npm test
 
       - name: Build UI
-        working-directory: nil_gateway_gui
+        working-directory: polystore_gateway_gui
         run: npm run build
 
       - name: Install Linux system deps
@@ -277,15 +277,15 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cargo Format
-        working-directory: nil_gateway_gui/src-tauri
+        working-directory: polystore_gateway_gui/src-tauri
         run: cargo fmt --check
 
       - name: Cargo Test
-        working-directory: nil_gateway_gui/src-tauri
+        working-directory: polystore_gateway_gui/src-tauri
         run: cargo test --verbose
 
       - name: Cargo Clippy
-        working-directory: nil_gateway_gui/src-tauri
+        working-directory: polystore_gateway_gui/src-tauri
         run: cargo clippy --all-targets -- -D warnings
 
   native-wasm-parity:
@@ -305,24 +305,24 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci
 
       - name: Install Playwright Browsers
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npx playwright install --with-deps
 
       - name: Build WASM for website
-        run: cd nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core
+        run: cd nil_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name nil_core
 
       - name: Run Native/WASM Parity
-        run: nil-website/node_modules/.bin/tsx tools/parity/compare_parity.ts
+        run: polystore-website/node_modules/.bin/tsx tools/parity/compare_parity.ts
 
   e2e-smoke-test:
     name: E2E Smoke (${{ matrix.smoke_name }})
@@ -389,7 +389,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build WASM for website
-        run: cd nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core
+        run: cd nil_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name nil_core
 
       - name: Build nil_core (native)
         run: cd nil_core && cargo build --release
@@ -438,7 +438,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install Python
         uses: actions/setup-python@v6
@@ -449,7 +449,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci --prefer-offline --no-audit
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
@@ -458,12 +458,12 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('nil-website/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('polystore-website/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright Browsers
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
       - name: Build nil_core (native)
@@ -481,8 +481,8 @@ jobs:
           name: e2e-gateway-absent-artifacts
           path: |
             _artifacts/devnet_alpha_multi_sp/**
-            nil-website/test-results/**
-            nil-website/playwright-report/**
+            polystore-website/test-results/**
+            polystore-website/playwright-report/**
           if-no-files-found: ignore
 
   e2e-mode2-fast:
@@ -525,7 +525,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install Python
         uses: actions/setup-python@v6
@@ -536,7 +536,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci --prefer-offline --no-audit
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
@@ -545,12 +545,12 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('nil-website/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('polystore-website/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright Browsers
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
       - name: Run Mode2 Stripe E2E (fast)
@@ -570,8 +570,8 @@ jobs:
           name: e2e-mode2-fast-artifacts
           path: |
             _artifacts/devnet_alpha_multi_sp/**
-            nil-website/test-results/**
-            nil-website/playwright-report/**
+            polystore-website/test-results/**
+            polystore-website/playwright-report/**
           if-no-files-found: ignore
 
   e2e-gateway-retrieval-multi-sp:
@@ -611,7 +611,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install Python
         uses: actions/setup-python@v6
@@ -622,7 +622,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci --prefer-offline --no-audit
 
       - name: Build nil_core (native)
@@ -640,8 +640,8 @@ jobs:
           name: e2e-retrieval-multi-sp-artifacts
           path: |
             _artifacts/devnet_alpha_multi_sp/**
-            nil-website/test-results/**
-            nil-website/playwright-report/**
+            polystore-website/test-results/**
+            polystore-website/playwright-report/**
           if-no-files-found: ignore
 
   # ------------------------------------------------------------------

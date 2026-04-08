@@ -34,7 +34,7 @@ Notes:
   - Private keys are never transmitted over the network by this script.
   - Requires a local Nil Gateway at GATEWAY_BASE (default: http://localhost:8080).
   - Set NIL_BURNER_KEYSTORE_PASSWORD (or pass --keystore-password-env) to avoid an interactive keystore-password prompt.
-  - On first run, the script may install nil-website dependencies if nil-website/node_modules is missing.
+  - On first run, the script may install polystore-website dependencies if polystore-website/node_modules is missing.
   - Uses direct nilchaind submission for create/update by default so local gateway
     GUI setup does not also need local tx-relay configuration.
 USAGE
@@ -172,14 +172,14 @@ if ! curl -fsS "${GATEWAY_BASE}/health" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -d "$ROOT_DIR/nil-website/node_modules" ]]; then
-  echo "Installing nil-website dependencies..."
-  npm -C "$ROOT_DIR/nil-website" install >/dev/null
+if [[ ! -d "$ROOT_DIR/polystore-website/node_modules" ]]; then
+  echo "Installing polystore-website dependencies..."
+  npm -C "$ROOT_DIR/polystore-website" install >/dev/null
 fi
 
 umask 077
 
-wallet_json="$(cd "$ROOT_DIR/nil-website" && node_modules/.bin/tsx "$ROOT_DIR/nil-website/scripts/testnet_burner_wallet.ts" generate)"
+wallet_json="$(cd "$ROOT_DIR/polystore-website" && node_modules/.bin/tsx "$ROOT_DIR/polystore-website/scripts/testnet_burner_wallet.ts" generate)"
 PRIVATE_KEY="$(printf '%s' "$wallet_json" | jq -r '.private_key')"
 EVM_ADDRESS="$(printf '%s' "$wallet_json" | jq -r '.address')"
 NIL_ADDRESS="$(printf '%s' "$wallet_json" | jq -r '.nil_address')"
@@ -272,11 +272,11 @@ if [[ -z "$KEYSTORE_PASSWORD" ]]; then
 fi
 
 keystore_json="$(
-  cd "$ROOT_DIR/nil-website"
+  cd "$ROOT_DIR/polystore-website"
   KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD" \
   KEYSTORE_OUT="$EXPORT_KEYSTORE" \
   EVM_PRIVKEY="$PRIVATE_KEY" \
-  node_modules/.bin/tsx "$ROOT_DIR/nil-website/scripts/testnet_burner_wallet.ts" export-keystore
+  node_modules/.bin/tsx "$ROOT_DIR/polystore-website/scripts/testnet_burner_wallet.ts" export-keystore
 )"
 KEYSTORE_PATH="$(printf '%s' "$keystore_json" | jq -r '.keystore_path')"
 

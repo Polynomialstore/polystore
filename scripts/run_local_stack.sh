@@ -1108,7 +1108,7 @@ start_web() {
   fi
   banner "Starting web (Vite dev server)"
   (
-    cd "$ROOT_DIR/nil-website"
+    cd "$ROOT_DIR/polystore-website"
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
     VITE_BRIDGE_ADDRESS="${BRIDGE_ADDRESS:-${VITE_BRIDGE_ADDRESS:-}}" \
     VITE_API_BASE="${VITE_API_BASE:-http://localhost:${FAUCET_PORT}}" \

@@ -94,7 +94,7 @@ PAYLOAD=$(
   SERVICE_HINT="General" \
   INITIAL_ESCROW="1000000" \
   MAX_MONTHLY_SPEND="500000" \
-  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" create-deal
+  "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" create-deal
 )
 
 RESP=$(timeout 10s curl -sS -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \

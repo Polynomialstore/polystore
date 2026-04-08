@@ -2,7 +2,7 @@
 
 This repo now supports two standard E2E profiles for browser + gateway flows.
 Deterministic upload, commit, and sparse transport assertions should prefer the
-Node integration lane (`cd nil-website && npm run test:integration`).
+Node integration lane (`cd polystore-website && npm run test:integration`).
 Playwright is retained for browser-only smoke paths.
 The browser-only sparse upload proof is also a push-gated fast check because it
 verifies the exact browser transport contract for sparse and parallel uploads
@@ -26,7 +26,7 @@ set -a
 source .env.e2e.fast
 set +a
 scripts/e2e_stack_up.sh
-cd nil-website && npm run test:e2e -- tests/mode2-stripe.spec.ts --grep "mode2 deal"
+cd polystore-website && npm run test:e2e -- tests/mode2-stripe.spec.ts --grep "mode2 deal"
 scripts/e2e_stack_down.sh
 ```
 

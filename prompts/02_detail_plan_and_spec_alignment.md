@@ -9,7 +9,7 @@ You are working in `nilcoin2`. Prompt 1 created/updated an “Immediate Goals”
 2. Update specs/docs so they match the intended end state of the TODO plan:
    - Protocol/architecture: `spec.md`, `notes/triple-proof.md` (and any other referenced notes).
    - Gateway/API: `nil_gateway/nil-gateway-spec.md` (or other gateway docs).
-   - Web: `nil-website/website-spec.md` and relevant pages/docs if the flow changes.
+   - Web: `polystore-website/website-spec.md` and relevant pages/docs if the flow changes.
 3. Ensure the specs are consistent about:
    - “No tiers / thin provisioning” semantics.
    - NilFS as the source of truth (no CID/index dependence).

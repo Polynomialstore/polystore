@@ -54,4 +54,4 @@ wait_for_http "web" "http://localhost:${WEB_PORT}/"
 wait_for_http "gateway" "${GATEWAY_BASE}/health"
 
 echo "==> Running Playwright..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- "${E2E_BROWSER_SMOKE_SPECS[@]}")
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- "${E2E_BROWSER_SMOKE_SPECS[@]}")

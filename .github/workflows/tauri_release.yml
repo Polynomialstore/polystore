@@ -47,10 +47,10 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil_gateway_gui/package-lock.json
+          cache-dependency-path: polystore_gateway_gui/package-lock.json
 
       - name: Install Dependencies
-        working-directory: nil_gateway_gui
+        working-directory: polystore_gateway_gui
         run: npm ci
 
       - name: Set up Go
@@ -80,7 +80,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: nil_gateway_gui
+          projectPath: polystore_gateway_gui
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
           releaseName: NilGateway GUI ${{ github.event.inputs.tag || github.ref_name }}
           releaseBody: "Automated release build."

@@ -28,7 +28,7 @@ Usage:
 
 Env overrides:
   PROVIDER_COUNT=12           number of providers
-  START_WEB=1                 start nil-website
+  START_WEB=1                 start polystore-website
   START_GUI=1                 start Tauri GUI (default on)
   GUI_CMD="npm run tauri dev" command to launch GUI
   NIL_LOCAL_IMPORT_ENABLED=1  allow local import in gateway
@@ -63,7 +63,7 @@ start_gui() {
   fi
 
   echo "Starting NilGateway GUI..."
-  pushd "$ROOT_DIR/nil_gateway_gui" >/dev/null
+  pushd "$ROOT_DIR/polystore_gateway_gui" >/dev/null
   if [ ! -d node_modules ]; then
     npm install
   fi

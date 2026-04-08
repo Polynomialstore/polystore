@@ -2,7 +2,7 @@
 
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23  
-**Scope:** Chain (`nilchain/`), Gateway/router (`nil_gateway/`), Providers, UI (`nil-website/`), and side projects (public explorers)  
+**Scope:** Chain (`nilchain/`), Gateway/router (`nil_gateway/`), Providers, UI (`polystore-website/`), and side projects (public explorers)
 **Hard constraints respected:** does **not** change storage lock‑in pricing or the settlement semantics of **owner‑paid** retrieval sessions in `rfcs/rfc-pricing-and-escrow-accounting.md`; no off-chain oracles; deterministic on-chain behavior.
 
 ---

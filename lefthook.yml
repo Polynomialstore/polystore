@@ -1,11 +1,11 @@
 pre-commit:
-  files: git ls-files nil-website
+  files: git ls-files polystore-website
   commands:
     lint:
-      run: cd nil-website && npm run lint
+      run: cd polystore-website && npm run lint
 
 pre-push:
-  files: git ls-files nil-website
+  files: git ls-files polystore-website
   commands:
     build:
-      run: cd nil-website && npm run build
+      run: cd polystore-website && npm run build

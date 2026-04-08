@@ -8,7 +8,7 @@
 
 `nil_gateway` is a dual-purpose service that acts as:
 1.  **S3-Compatible Adapter:** Allows legacy applications to `PUT` and `GET` objects using standard S3 semantics, transparently handling NilStore sharding and on-chain storage.
-2.  **Optional Web Gateway:** Provides REST endpoints for the `nil-website` frontend to offload heavy cryptographic operations (MDU packing, KZG commitments) and to relay provider proofs.
+2.  **Optional Web Gateway:** Provides REST endpoints for the `polystore-website` frontend to offload heavy cryptographic operations (MDU packing, KZG commitments) and to relay provider proofs.
 
 In the current **Devnet** architecture, the browser can operate without a local gateway (direct SP + MetaMask). The gateway is an **optional sidecar** that improves performance and UX, but it is not a signing authority.
 
@@ -60,7 +60,7 @@ The gateway also exposes a **minimal, path-style S3 surface** at the HTTP root f
 | `DELETE` | `/{bucket}/{key...}` | Not implemented yet (NilFS tombstoning still needs wiring). |
 
 ### 3.2 Gateway (Web Frontend Support)
-These endpoints support the `nil-website` "Thin Client" flow.
+These endpoints support the `polystore-website` "Thin Client" flow.
 
 **Naming note:** Some handlers and routes still name the path parameter `{cid}`. In all gateway APIs, `cid` is a **legacy alias** for the deal-level `manifest_root` (48-byte KZG commitment) — it is never a file identifier and must not be used as a lookup key into `uploads/index.json`.
 

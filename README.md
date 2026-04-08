@@ -66,7 +66,7 @@ To build the full release bundle locally:
 - `nil_cli`: client tooling (sharding / commitment generation)
 - `nil_gateway`: user-gateway and provider-daemon HTTP APIs (retrieval/session enforcement)
 - `nil_faucet`: devnet faucet service (token-auth capable)
-- `nil-website`: web UI (React/Vite) for onboarding + deal flows
+- `polystore-website`: web UI (React/Vite) for onboarding + deal flows
 
 ## What CI does (and does not) prove
 

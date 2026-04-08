@@ -19,7 +19,7 @@ This document tracks **what is missing** between the current implementation in t
   - Core crypto/WASM: `nil_core/`
   - CLI automation: `nil_cli/`
   - P2P: `nil_p2p/`
-  - Web UX: `nil-website/`
+  - Web UX: `polystore-website/`
 
 ## Status Legend
 
@@ -138,7 +138,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
 
-### Web / UX (`nil-website/`)
+### Web / UX (`polystore-website/`)
 
 #### WEB-301 — Provider onboarding wizard (“Become a Provider”)
 - **Status:** MISSING
@@ -150,7 +150,7 @@ This document tracks **what is missing** between the current implementation in t
 
 #### WEB-303 — Educational content remediation (Mode 2, Triple Proof, Deputy)
 - **Status:** MISSING
-- **Source:** `nil-website/AGENTS.md` §8
+- **Source:** `polystore-website/AGENTS.md` §8
 
 ### Core crypto / WASM (`nil_core/`)
 
@@ -218,7 +218,7 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `nil_core`.
 - **Delivers:**
   - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `nil_core` (Rust) with a stable API surface.
-  - WASM bindings used by `nil-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
+  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
 

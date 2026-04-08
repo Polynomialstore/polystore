@@ -116,8 +116,8 @@ wait_for_http "LCD" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info"
 wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm"
 FAUCET_PID="$(start_custom_faucet)"
 wait_for_http "Faucet" "$FAUCET_BASE/faucet"
-echo "==> Running nil-website Node integration suite..."
+echo "==> Running polystore-website Node integration suite..."
 (
-  cd "$ROOT_DIR/nil-website"
+  cd "$ROOT_DIR/polystore-website"
   npm run test:integration
 )

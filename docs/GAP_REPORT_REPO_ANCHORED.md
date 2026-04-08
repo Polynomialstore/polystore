@@ -25,8 +25,8 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
     - Faucet: `cd nil_faucet && go test ./...`
     - Relayer: `cd nil_relayer && go test ./...`
   - Rust: `cargo test` in `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
-  - Web: `npm -C nil-website run build` + `npm -C nil-website run test:unit` + `npm -C nil-website run lint`
-  - Tauri GUI: `npm -C nil_gateway_gui test` + `cd nil_gateway_gui/src-tauri && cargo test` (plus fmt/clippy checks)
+  - Web: `npm -C polystore-website run build` + `npm -C polystore-website run test:unit` + `npm -C polystore-website run lint`
+  - Tauri GUI: `npm -C polystore_gateway_gui test` + `cd polystore_gateway_gui/src-tauri && cargo test` (plus fmt/clippy checks)
   - Solidity contracts: `cd nil_bridge && forge test -vv`
 - Cross-target parity
   - Native/WASM parity: CI builds `nil_core` with `wasm-pack` and runs `tools/parity/compare_parity.ts`.
@@ -54,7 +54,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Requirement | Status | Spec/RFC anchor | Current implementation (refs) | CI proof | Not proven / gap | Planned fix |
 |---|---:|---|---|---|---|---|
 | Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | DONE | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | `nilchain/x/nilchain/types/types.go` (`MAX_DEAL_BYTES`); `nilchain/x/nilchain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | `cd nilchain && go test ./...` (unit tests) | — | — |
-| Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | DONE | `rfcs/rfc-blob-alignment-and-striping.md` | Playwright asserts sha256(downloaded) == sha256(uploaded) in `nil-website/tests/mode2-stripe.spec.ts` | `scripts/e2e_mode2_stripe_multi_sp.sh` | — | — |
+| Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | DONE | `rfcs/rfc-blob-alignment-and-striping.md` | Playwright asserts sha256(downloaded) == sha256(uploaded) in `polystore-website/tests/mode2-stripe.spec.ts` | `scripts/e2e_mode2_stripe_multi_sp.sh` | — | — |
 | Allowlist retrieval policy verification has test vectors | DONE | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification in `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) + test vectors in `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | `cd nilchain && go test ./...` | — | — |
 | NilCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `nil_gateway/` (opt-in `NIL_NILCE=1`) | `go test ./nil_gateway/...` (NilCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
 
@@ -107,7 +107,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
 | Disable tx relay by default (dev-only opt-in) | DONE | `nil_gateway/main.go`: `NIL_ENABLE_TX_RELAY=0` default; `scripts/run_local_stack.sh` defaults relay off | CI jobs still enable relay for `scripts/e2e_lifecycle.sh` | Add a dedicated “no relay” CLI E2E if desired (wallet-first is already covered in browser E2E) |
-| Wallet-first chain writes (browser) | DONE | `nil-website/src/lib/e2eWallet.ts` injects E2E wallet for Playwright when `VITE_E2E=1` | Playwright suites listed above | Human UX polish for real MetaMask + remote RPC endpoints is still needed for soft launch |
+| Wallet-first chain writes (browser) | DONE | `polystore-website/src/lib/e2eWallet.ts` injects E2E wallet for Playwright when `VITE_E2E=1` | Playwright suites listed above | Human UX polish for real MetaMask + remote RPC endpoints is still needed for soft launch |
 
 ## Phase 7 — Economics (rewards, draining, retrieval fees)
 

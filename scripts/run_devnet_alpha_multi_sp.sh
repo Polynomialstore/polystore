@@ -5,7 +5,7 @@
 # - nil_faucet
 # - N provider daemons (nil_gateway, provider mode) on ports 8091+
 # - 1 gateway router (nil_gateway, router mode) on :8080
-# - nil-website (optional, default on)
+# - polystore-website (optional, default on)
 #
 # Usage:
 #   ./scripts/run_devnet_alpha_multi_sp.sh start
@@ -726,7 +726,7 @@ start_router() {
 start_web() {
   banner "Starting web (Vite dev server)"
   (
-    cd "$ROOT_DIR/nil-website"
+    cd "$ROOT_DIR/polystore-website"
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
     VITE_ENABLE_FAUCET="${VITE_ENABLE_FAUCET:-1}" \
     VITE_API_BASE="${VITE_API_BASE:-http://localhost:${FAUCET_PORT}}" \

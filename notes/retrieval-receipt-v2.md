@@ -104,7 +104,7 @@ Frontend rule:
 **Test gates (gateway):**
 - Integration test: fetch response contains required headers; provider is non-empty.
 
-### 7.3 Frontend (`nil-website`)
+### 7.3 Frontend (`polystore-website`)
 1. Update `RetrievalReceipt` typed-data to v2 fields (`expires_at`, `proof_hash`).
 2. Replace local nonce counter with chain-derived nonce via `GET /owners/{owner}/receipt-nonce`.
 3. Surface receipt submission success/failure in UI; retry queue (minimum: display error, do not silently ignore).

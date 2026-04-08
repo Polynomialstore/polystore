@@ -29,7 +29,7 @@ faucet.example.com {
 }
 
 web.example.com {
-  root * /opt/nilstore/nil-website/dist
+  root * /opt/nilstore/polystore-website/dist
   encode zstd gzip
   file_server
 }

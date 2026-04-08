@@ -106,7 +106,7 @@ go test ./...
 ## What remains / known gaps
 
 - Mode1 does not yet have explicit make-before-break churn state (drain/rotation schedulers are Mode2-only).
-- Mode2 Stripe Playwright E2E asserts **byte-for-byte equality** between uploaded and downloaded payloads (`nil-website/tests/mode2-stripe.spec.ts`).
+- Mode2 Stripe Playwright E2E asserts **byte-for-byte equality** between uploaded and downloaded payloads (`polystore-website/tests/mode2-stripe.spec.ts`).
 
 ## CI does NOT prove (read before inviting collaborators)
 

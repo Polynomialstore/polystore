@@ -20,7 +20,7 @@ Enable the browser to act as a full "Thick Client" capable of client-side encryp
     *   Output -> `N = K+M` Slot Buffers + Witness commitments buffer.
 *   **Trusted Setup:** Refactor loading to accept raw bytes (passed from JS) instead of file paths.
 
-### 2.2 Frontend (`nil-website` - React/TS)
+### 2.2 Frontend (`polystore-website` - React/TS)
 *   **WasmWorker:** Create a Web Worker to run the heavy `expand_mdu` WASM function off the main thread.
 *   **Integration:** Replace the mock `FileSharder.tsx` with the real WASM pipeline.
 *   **Asset Management:** Serve the `trusted_setup.txt` (or binary) as a static asset to be fetched and passed to WASM.

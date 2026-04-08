@@ -8,7 +8,7 @@ If you are onboarding trusted collaborators for a long-lived soft launch, start 
 
 ## Mental Model
 
-- **Hub** runs: `nilchaind` (RPC/LCD/EVM), `nil_faucet`, **gateway-router** (`nil_gateway` in router mode), and optionally `nil-website`.
+- **Hub** runs: `nilchaind` (RPC/LCD/EVM), `nil_faucet`, **gateway-router** (`nil_gateway` in router mode), and optionally `polystore-website`.
 - **Provider** runs: `nil_gateway` in provider mode with its own `nilchaind` keyring key (pays gas for provider txs).
 - **Users** use: the web UI (MetaMask) or curl. The web flow uses EIP-712 signatures for authorization; the hub still broadcasts some txs with its faucet key (devnet shortcut).
 

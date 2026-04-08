@@ -15,12 +15,12 @@ Related:
   - `nilchaind` (CometBFT RPC + LCD + EVM JSON-RPC)
   - `user-gateway` (legacy runtime alias: `nil_gateway` in router mode)
   - `nil_faucet` (enabled, rate-limited; collaborator-only)
-  - `nil-website` (static build behind HTTPS)
+  - `polystore-website` (static build behind HTTPS)
 - **Providers (remote SPs)** run (direct endpoint or Cloudflare Tunnel endpoint):
   - `provider-daemon` (legacy runtime alias: `nil_gateway` in provider mode, one per SP)
 - **Users** interact via:
   - Website + MetaMask (wallet-first), or curl for debugging
-  - Optional local `user-gateway` app (`nil_gateway_gui`, legacy runtime alias `nil_gateway`) on `http://localhost:8080`
+  - Optional local `user-gateway` app (`polystore_gateway_gui`, legacy runtime alias `nil_gateway`) on `http://localhost:8080`
 
 Security posture:
 - This is **trusted** and **invite-only** (not Sybil resistant).
@@ -253,7 +253,7 @@ sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
 
 :8088 {
   bind 127.0.0.1
-  root * /opt/nilstore/nil-website/dist
+  root * /opt/nilstore/polystore-website/dist
   encode zstd gzip
   file_server
 }
@@ -262,11 +262,11 @@ sudo systemctl restart caddy
 ```
 
 Operational note:
-- `web.<domain>` serves whatever files exist under `/opt/nilstore/nil-website/dist` (or whatever path you configure in Caddy).
+- `web.<domain>` serves whatever files exist under `/opt/nilstore/polystore-website/dist` (or whatever path you configure in Caddy).
 - If you build the website from a different checkout than the one Caddy serves, you **must** publish that build output into the served `dist/` directory or `web.<domain>` will keep showing the older site.
 - Recommended pattern for this host profile:
   - build from the checkout you actually want to publish
-  - sync the resulting `nil-website/dist/` into `/opt/nilstore/nil-website/dist`
+  - sync the resulting `polystore-website/dist/` into `/opt/nilstore/polystore-website/dist`
   - then verify `http://127.0.0.1:8088/` before checking `https://web.<domain>/`
 
 4) Install the tunnel credentials/config under `/etc/cloudflared/`, then run the tunnel as a service.
@@ -388,7 +388,7 @@ The website is built with Vite.
   - `https://lcd.polynomialstore.com`
   - `https://evm.polynomialstore.com`
 - Gateway remains localhost-only (`http://localhost:8080`) and is treated as a user-local app.
-- Recommended local Gateway distribution for collaborators: `nil_gateway_gui` release artifacts from `https://github.com/Polynomialstore/polystore/releases/latest`.
+- Recommended local Gateway distribution for collaborators: `polystore_gateway_gui` release artifacts from `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Build requirements:
 - Rust + `wasm-pack` (the build compiles `nil_core` → WASM)
@@ -397,7 +397,7 @@ Build requirements:
 Build example:
 
 ```bash
-cd /opt/nilstore/nil-website
+cd /opt/nilstore/polystore-website
 npm ci
 
 VITE_API_BASE=https://faucet.<domain> \
@@ -417,8 +417,8 @@ If `/opt/nilstore` is your long-running hub checkout and you built from that sam
 If you built from a different checkout (for example a newer workspace under `~/dev/...`), publish the output into the hub-served path:
 
 ```bash
-rm -rf /opt/nilstore/nil-website/dist
-cp -a /path/to/your/current/checkout/nil-website/dist /opt/nilstore/nil-website/dist
+rm -rf /opt/nilstore/polystore-website/dist
+cp -a /path/to/your/current/checkout/polystore-website/dist /opt/nilstore/polystore-website/dist
 ```
 
 Then verify the local static server is serving the new build:
@@ -435,7 +435,7 @@ scripts/build_website_public.sh <domain>
 scripts/build_website_public.sh polynomialstore.com
 ```
 
-Note: the canonical list of env vars lives in `nil-website/website-spec.md`.
+Note: the canonical list of env vars lives in `polystore-website/website-spec.md`.
 
 ### 6) MetaMask “add network” snippet (share with collaborators)
 
@@ -641,15 +641,15 @@ curl -sf "http://127.0.0.1:8093/gateway/list-files/<manifest_root_hex>?deal_id=<
 If `POST /gateway/create-deal-evm` returns `403`, that is expected in wallet-first mode (`NIL_ENABLE_TX_RELAY=0`).
 Use this flow instead:
 
-1) Generate EVM intents with `nil-website/scripts/sign_intent.ts` (`create-deal`, then `update-content`).
+1) Generate EVM intents with `polystore-website/scripts/sign_intent.ts` (`create-deal`, then `update-content`).
 2) Submit intents directly on-chain:
    - `nilchaind tx nilchain create-deal-from-evm <create_payload.json> ...`
    - `nilchaind tx nilchain update-deal-content-from-evm <update_payload.json> ...`
 3) Use local gateway data path:
    - upload: `POST http://127.0.0.1:8080/gateway/upload?deal_id=<id>`
    - plan session: `GET http://127.0.0.1:8080/gateway/plan-retrieval-session/<manifest_root>?...`
-4) Open retrieval session with `nil-website/scripts/open_retrieval_session.ts`.
-5) Sign fetch request with `nil-website/scripts/sign_intent.ts sign-fetch-request`.
+4) Open retrieval session with `polystore-website/scripts/open_retrieval_session.ts`.
+5) Sign fetch request with `polystore-website/scripts/sign_intent.ts sign-fetch-request`.
 6) Fetch bytes from `http://127.0.0.1:8080/gateway/fetch/<manifest_root>?...` with session + signed request headers.
 7) Verify byte equality (`cmp` / sha256).
 

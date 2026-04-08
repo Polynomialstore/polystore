@@ -18,7 +18,7 @@ Implement the plan end-to-end, in small verified increments:
 - Update any migrations and tests needed for the new semantics.
 
 ### C) Browser Smoke E2E (Playwright or Cypress)
-- Add a lightweight browser e2e suite under `nil-website`.
+- Add a lightweight browser e2e suite under `polystore-website`.
 - Add a smoke test that drives: connect wallet (test account) → create deal → upload file → commit content → assert manifest root and non-zero size → fetch file from explorer.
 - Make it runnable against `./scripts/run_local_stack.sh start` and stable in CI/local.
 
@@ -26,7 +26,7 @@ Implement the plan end-to-end, in small verified increments:
 - Run the most relevant tests per change:
   - `nil_gateway`: Go unit tests, plus `./scripts/e2e_lifecycle.sh` as a backend gate.
   - `nilchain`: `go test ./...` and any proto generation/build steps required by your changes.
-  - `nil-website`: unit tests + new browser e2e suite.
+  - `polystore-website`: unit tests + new browser e2e suite.
 - If you must deviate from the plan, update `AGENTS.md` and the relevant specs/docs to reflect the new reality (in the same PR/commit series).
 
 ## Commit Protocol

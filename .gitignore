@@ -22,8 +22,8 @@ nil_s3/uploads/
 uploads/sessions.db
 uploads/
 .gemini
-nil-website/test-results/
-nil-website/playwright-report/
+polystore-website/test-results/
+polystore-website/playwright-report/
 nil_bridge/broadcast/**/run-*.json
 nil_bridge/cache/**/run-*.json
 nil_bridge/cache/solidity-files-cache.json

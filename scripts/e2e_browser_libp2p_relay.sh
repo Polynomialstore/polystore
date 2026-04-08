@@ -170,4 +170,4 @@ if [ "$tx_relay_code" != "403" ]; then
 fi
 
 banner "Running Playwright (libp2p relay)..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/libp2p-relay-fetch.spec.ts)
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/libp2p-relay-fetch.spec.ts)

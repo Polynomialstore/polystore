@@ -299,7 +299,7 @@ find_nil_core_lib_dir() {
     "$NIL_CORE_LIB_DIR"
     "$ROOT_DIR/nilchain/lib"
     "$ROOT_DIR/nil_core/target/release"
-    "$ROOT_DIR/nil_gateway_gui/src-tauri/bin"
+    "$ROOT_DIR/polystore_gateway_gui/src-tauri/bin"
   )
 
   for candidate in "${candidates[@]}"; do

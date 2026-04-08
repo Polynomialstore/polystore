@@ -137,7 +137,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 *   [x] **Test Interaction:** Verify that calling the contract from MetaMask works.
 
 ### Step 3: Frontend Integration
-*   [x] **Wallet Connection:** Add `wagmi` / `viem` to `nil-website`.
+*   [x] **Wallet Connection:** Add `wagmi` / `viem` to `polystore-website`.
 *   [x] **"Connect MetaMask" Button:** Allow users to see their balance and interact with the bridge contract.
 
 ---
@@ -229,7 +229,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
     *   [x] **Task:** Create `useUpdateDealContent.ts` to call `GatewayUpdateDealContentFromEvm`.
 
 ### 4. Work Stream: Visualizations & Marketing
-*   [x] **Task:** Implement interactive Performance Market visualization in `nil-website` (The Latency Racer).
+*   [x] **Task:** Implement interactive Performance Market visualization in `polystore-website` (The Latency Racer).
 *   [x] **Task:** Visualize `DealHeatState` in Deal Explorer (Added `GetDealHeat` query and UI integration).
 
 ### 5. Work Stream: Protocol Cleanup (Dynamic Sizing)
@@ -276,7 +276,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 
 ## 8. Gap Analysis: Frontend vs. Protocol Spec
 
-Future agents utilizing this documentation must be aware of the following architectural divergence detected during the review of `@spec.md` and `@nil-website/**`:
+Future agents utilizing this documentation must be aware of the following architectural divergence detected during the review of `@spec.md` and `@polystore-website/**`:
 
 - **Triple Proof Model:** The frontend **does not** currently implement the Triple Proof verification logic described in `@notes/triple-proof.md`. It relies on the Gateway (`nil_gateway` / `nil_gateway`) to perform these checks.
 - **MDU Packing:** The frontend **does not** pack files into MDUs (as defined in `@spec.md`). It streams raw bytes to the Gateway via `useUpload`.
@@ -471,7 +471,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 **Objective:** Implement the browser-side storage adapter (OPFS), the Web Worker harness for WASM offloading, and the "Green Dot" local gateway detection to enable the "Hybrid Client" architecture.
 
-- [x] **Goal 1: Implement OPFS Storage Adapter (`nil-website`).**
+- [x] **Goal 1: Implement OPFS Storage Adapter (`polystore-website`).**
     - **Step 1:** Create `src/lib/storage/OpfsAdapter.ts`. Implement `writeMdu`, `readMdu`, `listFiles`.
     - **Step 2:** Add unit tests using a mock FileSystem API.
     - **Test gate:** `npm run test:unit`
@@ -586,7 +586,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
 **Goal:** Make the web client resilient when the local gateway is missing/flaky, while keeping MetaMask signing in the browser.
 
 - [x] **Task 1: Transport Router primitives (client-side; no React; GUI-ready traces).**
-  - **New module (pure TS):** `nil-website/src/lib/transport/`
+  - **New module (pure TS):** `polystore-website/src/lib/transport/`
     - `types.ts`: shared types for routing/trace/errors (no DOM).
     - `errors.ts`: error normalization + classification.
     - `router.ts`: policy engine (`Auto`/`PreferGateway`/`PreferDirectSP`) and bounded retries.
@@ -606,7 +606,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
       - `http_429` uses exponential backoff (bounded; e.g., 250ms → 1s → 2s).
     - Not retryable: `http_4xx` (except 429), `provider_mismatch`, `invalid_response`, `cors` (unless gateway-down detection false-positive)
     - Defaults: `maxAttemptsPerBackend=1`, `maxTotalAttempts=2`, `timeoutMs=10_000` (tunable per op).
-  - **Pass gate:** new unit tests in `nil-website/src/lib/transport/router.test.ts` (runs under `npm run test:unit`) cover:
+  - **Pass gate:** new unit tests in `polystore-website/src/lib/transport/router.test.ts` (runs under `npm run test:unit`) cover:
     - gateway-down → direct SP chosen
     - SP-down → gateway chosen (if preference says so / if gateway available)
     - timeout classification
@@ -614,15 +614,15 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - provider mismatch is terminal
 
 - [x] **Task 2: Integrate router across all user-visible network paths (Web UI never half-breaks).**
-  - **New hook:** `nil-website/src/hooks/useTransportRouter.ts`
+  - **New hook:** `polystore-website/src/hooks/useTransportRouter.ts`
     - Owns current `RoutePreference` (localStorage) + exposes `lastDecisionTrace` for UI.
     - Wraps calls like `transport.fetch(...)`, `transport.upload(...)`, `transport.listFiles(...)`, `transport.slab(...)`.
   - **Upload (data plane):**
-    - Update `nil-website/src/hooks/useUpload.ts` (or the calling path in `Dashboard.tsx`) to call router:
+    - Update `polystore-website/src/hooks/useUpload.ts` (or the calling path in `Dashboard.tsx`) to call router:
       - Try `LocalGatewayAdapter.upload` first when gateway healthy, otherwise `DirectSPAdapter.upload`.
       - Preserve existing semantics: same returned fields (`manifest_root`, `cid`, `size_bytes`, etc.).
   - **Fetch/Retrieval (data plane):**
-    - Update `nil-website/src/hooks/useFetch.ts` to route the byte stream fetch:
+    - Update `polystore-website/src/hooks/useFetch.ts` to route the byte stream fetch:
       - MetaMask signing remains in-browser for `openRetrievalSession` and `confirmRetrievalSession` (no gateway signing).
       - Replace the direct `fetchUrl` assembly with a router call:
         - Gateway route: `/gateway/fetch/...` (current behavior).
@@ -631,7 +631,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
       - If gateway provides a plan endpoint: use it opportunistically.
       - Otherwise: derive provider endpoint by querying the deal + provider endpoints via LCD, and compute blob-range from NilFS file record (gateway or OPFS).
   - **Deal content observables (data plane):**
-    - Update `nil-website/src/components/DealDetail.tsx` to unify list/slab selection via router:
+    - Update `polystore-website/src/components/DealDetail.tsx` to unify list/slab selection via router:
       - `listFiles`: try gateway, then direct SP (if available), then OPFS fallback.
       - `slab/layout`: try gateway, then OPFS fallback (already partially implemented; route choice should be centralized).
   - **Provider discovery (control plane):**
@@ -658,10 +658,10 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - **Pass gate:** browser shows “Gateway present + capabilities” (or “Gateway absent”) without throwing.
 
 - [x] **Task 5: Tests + CI coverage.**
-  - **Unit tests:** router tests live under `nil-website/src/lib/transport/*.test.ts` so `npm run test:unit` covers them.
+  - **Unit tests:** router tests live under `polystore-website/src/lib/transport/*.test.ts` so `npm run test:unit` covers them.
   - **E2E (browser) smoke:** add a Playwright spec that runs the “direct path” with the gateway disabled.
     - Add stack control: update `scripts/run_local_stack.sh` to honor `NIL_DISABLE_GATEWAY=1` (do not start gateway; keep chain + SP + web).
-    - New test: `nil-website/tests/fallback-no-gateway.spec.ts` runs `upload → commit → fetch` with `NIL_DISABLE_GATEWAY=1`.
+    - New test: `polystore-website/tests/fallback-no-gateway.spec.ts` runs `upload → commit → fetch` with `NIL_DISABLE_GATEWAY=1`.
   - **CI integration:** extend `.github/workflows/ci.yml` e2e job to run the new Playwright test (or run an additional e2e script) with the gateway disabled.
   - **Pass gate:** GitHub CI runs:
     - unit tests (`npm run test:unit`)
@@ -669,7 +669,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - existing e2e flows remain green
 
 - [x] **Task 6: Spec synchronization (Delta).**
-  - **Docs:** Align `spec.md`, `whitepaper.md`, `litepaper.md`, `nil-website/public/*`, `nil-website/website-spec.md`, and `nil_gateway/nil-gateway-spec.md` with current gateway‑optional, retrieval‑session, and thin‑provisioned flows.
+  - **Docs:** Align `spec.md`, `whitepaper.md`, `litepaper.md`, `polystore-website/public/*`, `polystore-website/website-spec.md`, and `nil_gateway/nil-gateway-spec.md` with current gateway‑optional, retrieval‑session, and thin‑provisioned flows.
   - **Pass gate:** No remaining references to receipt‑nonce UX or mandatory gateway signing in spec/docs.
 
 #### 11.3.B Delta Sprint Checklist: Native↔WASM Parity Tests
@@ -705,14 +705,14 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 - [x] **Task 3: Implement WASM parity runner (Node).**
   - Build wasm using the repo’s existing pattern:
-    - `cd nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core`
-  - Add Node runner script: `nil-website/scripts/parity_wasm.ts`
+    - `cd nil_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name nil_core`
+  - Add Node runner script: `polystore-website/scripts/parity_wasm.ts`
     - Imports the wasm bundle and computes the same JSON output for the same fixtures.
     - Uses Node fs to read fixture bytes; does not require a browser.
-  - **Pass gate:** `cd nil-website && tsx scripts/parity_wasm.ts` prints JSON matching the native schema.
+  - **Pass gate:** `cd polystore-website && tsx scripts/parity_wasm.ts` prints JSON matching the native schema.
 
 - [x] **Task 4: Compare native vs WASM outputs (single parity assertion).**
-  - Add comparator script: `tools/parity/compare_parity.ts` (or keep in `nil-website/scripts/`).
+  - Add comparator script: `tools/parity/compare_parity.ts` (or keep in `polystore-website/scripts/`).
     - Runs native runner, runs wasm runner, compares JSON fields, prints a readable diff, exits non-zero on mismatch.
   - Make mismatch output actionable (show which field mismatched + expected/actual digests).
   - **Pass gate:** running the comparator locally fails fast on any mismatch and is easy to debug.
@@ -1098,11 +1098,11 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
         - Unit: missing/invalid `deal_id` returns `400`; unknown deal returns `404`; owner mismatch returns `403`; stale root returns `409`.
         - E2E: restart in the middle (no in-memory/index state), then list-files + fetch-by-path + prove-retrieval all succeed.
     - **Pass gate:** Upload → commit → fetch works after a restart using only on-disk slab state; missing `file_path` returns a clear non-200 (no hidden legacy behavior).
-    - **Test gate:** `cd nil_gateway && go test ./...` and `cd nil-website && npm run lint` and `./scripts/e2e_lifecycle.sh` and `./scripts/e2e_browser_smoke.sh` and `./e2e_gateway_retrieval.sh`
+    - **Test gate:** `cd nil_gateway && go test ./...` and `cd polystore-website && npm run lint` and `./scripts/e2e_lifecycle.sh` and `./scripts/e2e_browser_smoke.sh` and `./e2e_gateway_retrieval.sh`
 
 - [x] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
     - **Steps:** `11.2.1` thin-provision deals; `11.2.2` remove `size_tier` from EIP-712 intents; `11.2.3` sweep scripts/docs/debug; `11.2.4` (optional) remove deprecated `size_tier` from proto.
-    - **Key files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/types/eip712.go`, `nil-website/src/lib/eip712.ts`, `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`
+    - **Key files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/types/eip712.go`, `polystore-website/src/lib/eip712.ts`, `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`
     - **Semantics (target end state):**
         - Deals are **thin-provisioned**: `CreateDeal*` writes `manifest_root = empty`, `size = 0` (and leaves any “capacity” fields unset/ignored) until `UpdateDealContent*`.
         - Tier fields (`DealSize` / `deal_size` / `size_tier`) are **non-normative**: ignored by chain logic and removed from all client payloads.
@@ -1117,11 +1117,11 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
         - Unit: shared EIP-712 golden vectors (CreateDealV2 + UpdateContent) match between the chain verifier and the web signer.
         - Integration: `create-deal-from-evm` succeeds with an intent that omits `size_tier` (and legacy intent support is explicit if kept during transition).
     - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
-    - **Test gate:** `cd nilchain && go test ./...` and `cd nil-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
+    - **Test gate:** `cd nilchain && go test ./...` and `cd polystore-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
 
 - [x] **Goal 3: Add a real browser smoke E2E suite (runs against `./scripts/run_local_stack.sh start`).**
     - **Steps:** `11.4.1` deterministic E2E wallet; `11.4.2` stable selectors; `11.4.3` dashboard lifecycle smoke; `11.4.4` deal explorer smoke; `11.4.5` one-command runner.
-    - **Key files:** `nil-website/tests/*.spec.ts`, `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, `scripts/e2e_browser_smoke.sh`
+    - **Key files:** `polystore-website/tests/*.spec.ts`, `polystore-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, `scripts/e2e_browser_smoke.sh`
     - **Wallet strategy (recommended):**
         - Prefer an **injected EIP-1193 shim / deterministic test connector** (env-gated, e.g. `NIL_E2E=1`) over automating a real MetaMask extension in CI.
         - The E2E wallet MUST support `eth_signTypedData_v4` for CreateDeal + UpdateContent and send txs against the local EVM (chain id `31337`).
@@ -1165,7 +1165,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 - [x] **Goal 3: EVM precompile: tx-only UX for session open + confirm.**
     - **ABI (minimum):** `openRetrievalSession(...) returns (bytes32 sessionId)` and `confirmRetrievalSession(bytes32 sessionId)`.
     - **Pass gate:** browser sees only “Confirm transaction” prompts (no `eth_signTypedData_v4`) for session open/confirm.
-    - **Test gate:** `cd nil-website && npm run test:e2e`
+    - **Test gate:** `cd polystore-website && npm run test:e2e`
 
 - [x] **Goal 4: Gateway/SP: enforce session-bound fetch and durable session proof assembly.**
     - **Fetch contract:** remote fetches require `X-Nil-Session-Id`; the gateway verifies on-chain session is `OPEN` and provider matches before serving.
@@ -1178,12 +1178,12 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **UI:** Add a straightforward table (no pagination) showing `session_id`, `deal_id`, `provider`, `start_mdu/blob`, `blob_count`, `total_bytes`, `status`, `expires_at`.
     - **Flow:** “Download” triggers `openRetrievalSession` tx → fetches blobs → triggers `confirmRetrievalSession` tx; provider submission can be async.
     - **Pass gate:** user can see sessions + statuses update; retries are idempotent via nonce.
-    - **Test gate:** `cd nil-website && npm run lint && npm run test:e2e`
+    - **Test gate:** `cd polystore-website && npm run lint && npm run test:e2e`
 
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
 - [x] Implement and stabilize `NilBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
 - [x] Ensure `NIL_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
-- [x] Verify and, if needed, finish the Wagmi/Viem Web3 provider wiring in `nil-website` (Connect MetaMask, chain config, RPC URL).
+- [x] Verify and, if needed, finish the Wagmi/Viem Web3 provider wiring in `polystore-website` (Connect MetaMask, chain config, RPC URL).
 - [x] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path NilBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
 
 ### 11.2 Protocol Cleanup (Dynamic Sizing)
@@ -1200,19 +1200,19 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 
 - [x] **11.2.2 Remove `size_tier` from EIP-712 CreateDeal intent end-to-end.**
     - **Files (chain):** `nilchain/x/nilchain/types/eip712.go`, `nilchain/x/nilchain/keeper/msg_server.go`
-    - **Files (web/tools):** `nil-website/src/lib/eip712.ts`, `nil-website/src/lib/eip712.test.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/scripts/sign_intent.ts`
+    - **Files (web/tools):** `polystore-website/src/lib/eip712.ts`, `polystore-website/src/lib/eip712.test.ts`, `polystore-website/src/hooks/useCreateDeal.ts`, `polystore-website/scripts/sign_intent.ts`
     - **Pass gate:** A CreateDeal signature produced by the web (MetaMask or viem) verifies on-chain and `create-deal-from-evm` succeeds with an intent JSON that does **not** include `size_tier`.
-    - **Test gate:** `cd nil-website && npm run test:unit` and `cd nilchain && go test ./...` and `./e2e_create_deal_from_evm.sh`
+    - **Test gate:** `cd polystore-website && npm run test:unit` and `cd nilchain && go test ./...` and `./e2e_create_deal_from_evm.sh`
     - **Commit gate:** After pass, commit `refactor(eip712): remove size_tier from CreateDeal intent` and push to `origin`.
 
 - [x] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
-    - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `nil-website/website-spec.md`, `nil-website/debug/*`
+    - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `polystore-website/website-spec.md`, `polystore-website/debug/*`
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
-    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S nil-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
+    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
     - **Commit gate:** After pass, commit `chore: remove tier remnants` and push to `origin`.
 
 - [x] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
-    - **Files:** `nilchain/proto/nilchain/nilchain/v1/tx.proto` (reserve field 10), generated `nilchain/x/nilchain/types/tx.pb.go`, `nil-website/src/lib/eip712.ts`, `nilchain/x/nilchain/types/eip712.go`
+    - **Files:** `nilchain/proto/nilchain/nilchain/v1/tx.proto` (reserve field 10), generated `nilchain/x/nilchain/types/tx.pb.go`, `polystore-website/src/lib/eip712.ts`, `nilchain/x/nilchain/types/eip712.go`
     - **Pass gate:** `create-deal-from-evm` still works (intent JSON omits `size_tier`; default semantics unchanged); no code references `SizeTier`.
     - **Test gate:** `cd nilchain && make proto-gen && go test ./...` and `./scripts/e2e_lifecycle.sh`
     - **Commit gate:** After pass, commit `refactor(proto): remove EvmCreateDealIntent.size_tier` and push to `origin`.
@@ -1225,38 +1225,38 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - *Note:* Fixed syntax errors in `msg_server.go` and verified the full lifecycle (Create -> Upload -> Update -> Fetch) works with EIP-712 signatures using ChainID 31337.
 - [x] Fix `/gateway/upload` “hangs” (very slow canonical ingest):
     - **Fixed:** Speed up KZG commitments in `nil_core` and ensure gateway ingest propagates cancellation/timeouts into `nil_cli` subprocesses.
-    - **Tests:** Go unit tests for `nil_gateway` (timeout/cancel + MDU #0 `--raw`) and JS unit tests in `nil-website` (AbortController timeout).
+    - **Tests:** Go unit tests for `nil_gateway` (timeout/cancel + MDU #0 `--raw`) and JS unit tests in `polystore-website` (AbortController timeout).
     - **E2E:** `scripts/e2e_lifecycle.sh` upload timeout reduced to `<=60s`.
 
 ### 11.4 Frontend Browser E2E (Cypress/Playwright)
 - [x] **11.4.0 Playwright harness exists (baseline smoke).**
-    - **Files:** `nil-website/playwright.config.ts`, `nil-website/tests/smoke.spec.ts`, `nil-website/package.json`
+    - **Files:** `polystore-website/playwright.config.ts`, `polystore-website/tests/smoke.spec.ts`, `polystore-website/package.json`
     - **Pass gate:** With the stack running, Playwright can load `/#/dashboard` and render the wallet prompt.
-    - **Test gate:** `./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
+    - **Test gate:** `./scripts/run_local_stack.sh start` then `cd polystore-website && npm run test:e2e`
 
 - [x] **11.4.1 Add a deterministic E2E wallet (test account) for headless runs.**
-    - **Files:** `nil-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, (new) `nil-website/src/lib/e2eWallet.ts`
+    - **Files:** `polystore-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, (new) `polystore-website/src/lib/e2eWallet.ts`
     - **Pass gate:** In E2E mode, “Connect Wallet” works without the MetaMask extension and supports `eth_signTypedData_v4` for create-deal + update-content.
-    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
-    - **Commit gate:** After pass, commit `test(nil-website): deterministic E2E wallet` and push to `origin`.
+    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd polystore-website && npm run test:e2e`
+    - **Commit gate:** After pass, commit `test(polystore-website): deterministic E2E wallet` and push to `origin`.
 
 - [x] **11.4.2 Add stable selectors for the demo flow (no UI polish).**
-    - **Files:** `nil-website/src/components/Dashboard.tsx`, `nil-website/src/components/DealDetail.tsx`, `nil-website/src/components/ConnectWallet.tsx`
+    - **Files:** `polystore-website/src/components/Dashboard.tsx`, `polystore-website/src/components/DealDetail.tsx`, `polystore-website/src/components/ConnectWallet.tsx`
     - **Pass gate:** Playwright tests use `data-testid` selectors (not brittle text matching); UX polish remains backlog.
-    - **Test gate:** `cd nil-website && npm run test:e2e`
-    - **Commit gate:** After pass, commit `test(nil-website): add stable e2e selectors` and push to `origin`.
+    - **Test gate:** `cd polystore-website && npm run test:e2e`
+    - **Commit gate:** After pass, commit `test(polystore-website): add stable e2e selectors` and push to `origin`.
 
 - [x] **11.4.3 Browser smoke: dashboard lifecycle (connect → create → upload → commit).**
-    - **Files:** `nil-website/tests/deal-smoke.spec.ts`, `nil-website/src/hooks/useCreateDeal.ts`, `nil-website/src/hooks/useUpload.ts`, `nil-website/src/hooks/useUpdateDealContent.ts`
+    - **Files:** `polystore-website/tests/deal-smoke.spec.ts`, `polystore-website/src/hooks/useCreateDeal.ts`, `polystore-website/src/hooks/useUpload.ts`, `polystore-website/src/hooks/useUpdateDealContent.ts`
     - **Pass gate:** Test creates a deal, uploads a small file, commits content, and asserts the deal row shows a non-zero size + a manifest root.
-    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
-    - **Commit gate:** After pass, commit `test(nil-website): dashboard lifecycle smoke e2e` and push to `origin`.
+    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd polystore-website && npm run test:e2e`
+    - **Commit gate:** After pass, commit `test(polystore-website): dashboard lifecycle smoke e2e` and push to `origin`.
 
 - [x] **11.4.4 Browser smoke: deal explorer shows file + fetch works.**
-    - **Files:** `nil-website/tests/deal-smoke.spec.ts`, `nil-website/src/components/DealDetail.tsx`
+    - **Files:** `polystore-website/tests/deal-smoke.spec.ts`, `polystore-website/src/components/DealDetail.tsx`
     - **Pass gate:** Uploaded file appears in the NilFS file list and can be downloaded via `/gateway/fetch/...&file_path=...` (HTTP 200).
-    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd nil-website && npm run test:e2e`
-    - **Commit gate:** After pass, commit `test(nil-website): deal explorer smoke e2e` and push to `origin`.
+    - **Test gate:** `CHAIN_ID=test-1 VITE_E2E=1 ./scripts/run_local_stack.sh start` then `cd polystore-website && npm run test:e2e`
+    - **Commit gate:** After pass, commit `test(polystore-website): deal explorer smoke e2e` and push to `origin`.
 
 - [x] **11.4.5 One-command runner script (start stack → run tests → stop).**
     - **Files:** (new) `scripts/e2e_browser_smoke.sh`
@@ -1267,7 +1267,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 ### 11.4.6 Frontend Observables & Node-Testable Logic (Dashboard/Explorer)
 **Goal:** Make the web UI’s deal lifecycle observable and testable end-to-end (create → upload → commit → slab/files), using the same TypeScript model/controller code the UI consumes.
 
-- [x] Extract LCD/Gateway normalization into pure TS “domain” modules (`nil-website/src/domain/*`) with Node unit tests.
+- [x] Extract LCD/Gateway normalization into pure TS “domain” modules (`polystore-website/src/domain/*`) with Node unit tests.
 - [x] Introduce a centralized “deal content observables” controller/hook used by both `Dashboard.tsx` and `DealDetail.tsx` to fetch:
   - `GET /gateway/slab/{manifest_root}` (MDU #0 + Witness + User segment ranges)
   - `GET /gateway/list-files/{manifest_root}` (NilFS file table)
@@ -1332,7 +1332,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
         3. Commit content → deal becomes Active with correct size,
         4. Fetch from Deal Explorer succeeds.
     - **Backlog:** UX/UI polish (non-blocking) can iterate after the protocol + e2e work is finished.
-    - **Commit gate:** After pass, commit `feat(nil-website): NilFS commit-content UX` and push.
+    - **Commit gate:** After pass, commit `feat(polystore-website): NilFS commit-content UX` and push.
 
 #### 11.6.B Thick‑Client WASM Stabilization (Parallel Track)
 - [x] **B1. Fix WASM “Invalid scalar” in `expand_mdu/expand_file`.**
@@ -1350,4 +1350,4 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 - [ ] **B3. (Deferred) Integrate client‑side pre‑sharding into gateway.**
     - **Change:** Add an optional gateway endpoint to accept pre‑expanded MDUs + Witness data from browser (Mode 2), but keep Gateway‑first flow as default until stable.
     - **Pass gate:** Feature flag works end‑to‑end on localhost without breaking Mode 1.
-    - **Commit gate:** After pass, commit `feat(nil_gateway,nil-website): pre-sharded upload path` and push.
+    - **Commit gate:** After pass, commit `feat(nil_gateway,polystore-website): pre-sharded upload path` and push.

@@ -634,9 +634,9 @@ func looksLikeDesktopSidecarLayout() bool {
 	rootDir := filepath.Dir(binDir)
 
 	// Typical desktop app layout:
-	//   .../nil_gateway_gui/bin/nil_gateway
-	//   .../nil_gateway_gui/bin/nil_cli
-	//   .../nil_gateway_gui/trusted_setup.txt
+	//   .../polystore_gateway_gui/bin/nil_gateway
+	//   .../polystore_gateway_gui/bin/nil_cli
+	//   .../polystore_gateway_gui/trusted_setup.txt
 	if !fileExists(filepath.Join(binDir, nilCliBinaryName())) {
 		return false
 	}
@@ -646,7 +646,7 @@ func looksLikeDesktopSidecarLayout() bool {
 
 	rootBase := strings.ToLower(filepath.Base(rootDir))
 	exeLower := strings.ToLower(exePath)
-	return rootBase == "nil_gateway_gui" || rootBase == "src-tauri" || strings.Contains(exeLower, "nil_gateway_gui")
+	return rootBase == "polystore_gateway_gui" || rootBase == "src-tauri" || strings.Contains(exeLower, "polystore_gateway_gui")
 }
 
 func applyDesktopSidecarDefaults() {

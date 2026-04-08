@@ -64,12 +64,12 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
 ### Web UI
 
 - Main UX:
-  - `nil-website/src/components/Dashboard.tsx` (create deal, faucet UX, upload/commit, retrieval flows)
-  - `nil-website/src/hooks/useFaucet.ts` (browser-triggered faucet calls; should be dev-only in wallet-first mode)
-  - `nil-website/src/hooks/useTransportRouter.ts` (adds `X-Nil-Session-Id` when downloading)
-  - `nil-website/src/lib/e2eWallet.ts` (Playwright: injects an in-page “wallet” when `VITE_E2E=1`)
+  - `polystore-website/src/components/Dashboard.tsx` (create deal, faucet UX, upload/commit, retrieval flows)
+  - `polystore-website/src/hooks/useFaucet.ts` (browser-triggered faucet calls; should be dev-only in wallet-first mode)
+  - `polystore-website/src/hooks/useTransportRouter.ts` (adds `X-Nil-Session-Id` when downloading)
+  - `polystore-website/src/lib/e2eWallet.ts` (Playwright: injects an in-page “wallet” when `VITE_E2E=1`)
 - Web contract doc:
-  - `nil-website/website-spec.md`
+  - `polystore-website/website-spec.md`
 
 ## Existing test/run gates (use these as the phase “test gates”)
 
@@ -110,13 +110,13 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
   - `cd nil_p2p && cargo test`
   - `cd nil_mock_l1 && cargo test`
 - Website:
-  - `npm -C nil-website run test:unit`
-  - `npm -C nil-website run build`
-  - `npm -C nil-website run lint`
+  - `npm -C polystore-website run test:unit`
+  - `npm -C polystore-website run build`
+  - `npm -C polystore-website run lint`
 - Tauri GUI:
-  - `npm -C nil_gateway_gui test`
-  - `npm -C nil_gateway_gui run build`
-  - `cd nil_gateway_gui/src-tauri && cargo test`
+  - `npm -C polystore_gateway_gui test`
+  - `npm -C polystore_gateway_gui run build`
+  - `cd polystore_gateway_gui/src-tauri && cargo test`
 - Foundry contracts:
   - `cd nil_bridge && forge test -vv`
 
@@ -127,8 +127,8 @@ The authoritative source of “what CI runs” is `.github/workflows/ci.yml`.
 At a high level, CI exercises:
 - Go unit tests: `nilchain`, `nil_faucet`, `nil_gateway`, `nil_relayer`
 - Rust unit tests: `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
-- Frontend: build + unit tests + lint (`nil-website`)
-- Tauri GUI: build + unit tests + clippy (`nil_gateway_gui`)
+- Frontend: build + unit tests + lint (`polystore-website`)
+- Tauri GUI: build + unit tests + clippy (`polystore_gateway_gui`)
 - Native/WASM parity: `nil_core` wasm-pack build + `tools/parity/compare_parity.ts`
 - Local-stack E2E: lifecycle (with and without a local gateway), retrieval fees, and retrieval sessions (Mode1 + Mode2)
 - Browser E2E (Playwright): gateway-absent, libp2p-relay, Mode2 stripe (12 SPs)

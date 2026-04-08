@@ -19,12 +19,12 @@ This document is written to be **unambiguous enough that a Codex agent can imple
  
 ### 0.2 Non‑Goals (explicit)
 - Building a general-purpose “NilChain desktop wallet”.
-- Full replacement of the existing web app (`nil-website`).
+- Full replacement of the existing web app (`polystore-website`).
 - Production-grade key custody / HSM integration (devnet-grade custody is acceptable; mainnet hardening is a separate spec).
  
 ### 0.3 Definition of Done (DoD)
 The project is “done” when all items below are true:
-1. A new Tauri app exists at `nil_gateway_gui/` and runs on macOS/Linux/Windows.
+1. A new Tauri app exists at `polystore_gateway_gui/` and runs on macOS/Linux/Windows.
 2. The app bundles (or deterministically provisions) a **local `nil_gateway` sidecar** and can:
    - show gateway status
    - create a deal via `/gateway/create-deal-evm`
@@ -73,7 +73,7 @@ Mode 2 ingest paths already use `nilchain/x/crypto_ffi` (Go ↔ Rust FFI). The G
 ### 2.4 Sidecar Bundling & Dependency Strategy (Release Requirements)
 The GUI must run without requiring the user to install build tools or CLI binaries.
 
-**Supported implementation strategy (choose one and document it in `nil_gateway_gui/README.md`):**
+**Supported implementation strategy (choose one and document it in `polystore_gateway_gui/README.md`):**
 1. **Bundle required binaries (recommended MVP):**
    - Bundle a `nil_gateway` sidecar binary per platform.
    - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `nilchaind` client binary if `nil_gateway` still shells out).
@@ -177,7 +177,7 @@ Where `intent` uses the on-chain JSON field names (see `nilchain/proto/nilchain/
 ### 6.1 Repo Layout (Normative)
 Create a new project at:
 ```text
-nil_gateway_gui/
+polystore_gateway_gui/
   package.json
   src/
     app/
@@ -280,8 +280,8 @@ Optional/nightly:
 ### 8.1 CI (on every push)
 Update `.github/workflows/ci.yml` to add a job that:
 - installs Node 20 and Rust stable
-- runs `npm ci`, `npm run lint`, `npm run test`, `npm run build` in `nil_gateway_gui/`
-- runs `cargo fmt --check` and `cargo clippy -- -D warnings` in `nil_gateway_gui/src-tauri/`
+- runs `npm ci`, `npm run lint`, `npm run test`, `npm run build` in `polystore_gateway_gui/`
+- runs `cargo fmt --check` and `cargo clippy -- -D warnings` in `polystore_gateway_gui/src-tauri/`
 - (optional) builds `nil_gateway` for smoke tests used by host integration tests
  
 ### 8.2 Release Builds (tagged)
@@ -294,10 +294,10 @@ Add `.github/workflows/tauri_release.yml` that:
 Each phase is small-commit friendly and includes a test gate.
  
 ### Phase 0 — Scaffold + CI Skeleton
-- [ ] Create `nil_gateway_gui/` via a Tauri + React + TS + Vite scaffold.
+- [ ] Create `polystore_gateway_gui/` via a Tauri + React + TS + Vite scaffold.
 - [ ] Add Tailwind and a basic layout shell (sidebar + main view).
 - [ ] Add a CI job that runs UI + Rust checks.
-- **Test gate:** `cd nil_gateway_gui && npm test && npm run build` and `cd src-tauri && cargo test`.
+- **Test gate:** `cd polystore_gateway_gui && npm test && npm run build` and `cd src-tauri && cargo test`.
  
 ### Phase 1 — Sidecar Lifecycle + Status UI
 - [ ] Implement Rust sidecar manager and `gateway_start/gateway_stop/gateway_status`.
@@ -342,7 +342,7 @@ Each phase is small-commit friendly and includes a test gate.
 
 These are not blockers; defaults are stated. Please confirm/correct.
  
-1. **App name + bundle id**: Default `NilGateway GUI` / `com.nilstore.nilgateway`.
+1. **App name + bundle id**: Default `PolyStore Gateway GUI` / `com.polynomialstore.gatewaygui`.
 2. **Wallet choice**: Default WalletConnect v2 only; is browser-bridge required?
 3. **Relayer key custody**: Default store in OS keychain when possible; fall back to a local file in app data.
 4. **Chain params source**: Default read `eip712_chain_id` from LCD params; fall back to `31337`.

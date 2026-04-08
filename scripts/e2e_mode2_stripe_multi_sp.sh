@@ -91,10 +91,10 @@ fi
 
 echo "==> Running Playwright (Mode 2 StripeReplica)..."
 if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then
-  (cd "$ROOT_DIR/nil-website" && npx playwright install --with-deps chromium)
+  (cd "$ROOT_DIR/polystore-website" && npx playwright install --with-deps chromium)
 fi
 playwright_args=("$E2E_MODE2_SPEC")
 if [ -n "$E2E_MODE2_GREP" ]; then
   playwright_args+=(--grep "$E2E_MODE2_GREP")
 fi
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- "${playwright_args[@]}")
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- "${playwright_args[@]}")

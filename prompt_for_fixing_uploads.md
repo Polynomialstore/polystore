@@ -93,11 +93,11 @@ Add tests:
 - `TestIngestNewDeal_Mdu0UsesRaw`:
   - Have helper process record args; assert `--raw` is present for mdu0 sharding.
 
-#### JS (`nil-website`) unit tests
+#### JS (`polystore-website`) unit tests
 Files:
-- `nil-website/src/hooks/useUpload.ts` (refactor)
-- Add `nil-website/src/lib/http.ts` with `fetchWithTimeout()`
-- Add `nil-website/src/lib/http.test.ts`
+- `polystore-website/src/hooks/useUpload.ts` (refactor)
+- Add `polystore-website/src/lib/http.ts` with `fetchWithTimeout()`
+- Add `polystore-website/src/lib/http.test.ts`
 
 Plan:
 - Implement `fetchWithTimeout(url, init, timeoutMs)` using `AbortController`.

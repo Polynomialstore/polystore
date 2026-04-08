@@ -7,7 +7,7 @@ set -euo pipefail
 # - nilchaind (RPC/LCD/EVM)
 # - nil_faucet
 # - nil_gateway in router mode (:8080)
-# - nil-website (optional, on by default)
+# - polystore-website (optional, on by default)
 #
 # Does NOT start any local providers. Remote providers can register and join.
 #

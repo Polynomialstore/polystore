@@ -220,7 +220,7 @@ for i in $(seq 1 5); do
     SERVICE_HINT="General" \
     INITIAL_ESCROW="1000000" \
     MAX_MONTHLY_SPEND="500000" \
-    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" create-deal
+    "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" create-deal
   )
   CREATE_RESP=$(timeout "$GATEWAY_TX_TIMEOUT" curl -v -X POST "$GATEWAY_BASE/gateway/create-deal-evm" \
     -H "Content-Type: application/json" \
@@ -313,7 +313,7 @@ for i in $(seq 1 5); do
     SIZE_BYTES="$SIZE_BYTES" \
     TOTAL_MDUS="$TOTAL_MDUS" \
     WITNESS_MDUS="$WITNESS_MDUS" \
-    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
+    "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" update-content
   )
   UPDATE_RESP=$(timeout "$GATEWAY_TX_TIMEOUT" curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
     -H "Content-Type: application/json" \
@@ -413,7 +413,7 @@ REQ_SIG_JSON=$(
   RANGE_START="0" \
   RANGE_LEN="$FILE_LEN" \
   EXPIRES_AT="$REQ_EXPIRES_AT" \
-  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
+  "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" sign-fetch-request
 )
 REQ_SIG=$(echo "$REQ_SIG_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
 if [ -z "$REQ_SIG" ]; then
@@ -533,7 +533,7 @@ SESSION_OPEN_JSON=$(
   NONCE="$SESSION_NONCE" \
   EXPIRES_AT="$SESSION_EXPIRES_AT" \
   EVM_RPC="$EVM_RPC" \
-  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
+  "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/open_retrieval_session.ts"
 )
 SESSION_ID=$(echo "$SESSION_OPEN_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
 if [ -z "$SESSION_ID" ]; then
@@ -612,7 +612,7 @@ for i in $(seq 1 5); do
     SIZE_BYTES="$SIZE_BYTES_2" \
     TOTAL_MDUS="$TOTAL_MDUS_2" \
     WITNESS_MDUS="$WITNESS_MDUS_2" \
-    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
+    "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" update-content
   )
   UPDATE2_RESP=$(timeout "$GATEWAY_TX_TIMEOUT" curl -v -X POST "$GATEWAY_BASE/gateway/update-deal-content-evm" \
     -H "Content-Type: application/json" \
@@ -746,7 +746,7 @@ SESSION_OPEN_JSON_1=$(
   NONCE="$SESSION_NONCE_1" \
   EXPIRES_AT="$SESSION_EXPIRES_AT_1" \
   EVM_RPC="$EVM_RPC" \
-  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
+  "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/open_retrieval_session.ts"
 )
 SESSION_ID_1=$(echo "$SESSION_OPEN_JSON_1" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
 if [ -z "$SESSION_ID_1" ]; then
@@ -818,7 +818,7 @@ SESSION_OPEN_JSON_2=$(
   NONCE="$SESSION_NONCE_2" \
   EXPIRES_AT="$SESSION_EXPIRES_AT_2" \
   EVM_RPC="$EVM_RPC" \
-  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/open_retrieval_session.ts"
+  "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/open_retrieval_session.ts"
 )
 SESSION_ID_2=$(echo "$SESSION_OPEN_JSON_2" | python3 -c "import sys, json; print(json.load(sys.stdin).get('session_id',''))")
 if [ -z "$SESSION_ID_2" ]; then
@@ -836,7 +836,7 @@ REQ_SIG_JSON_1=$(
   RANGE_START="0" \
   RANGE_LEN="$FILE_LEN_1" \
   EXPIRES_AT="$REQ_EXPIRES_AT_1" \
-  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
+  "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" sign-fetch-request
 )
 REQ_SIG_1=$(echo "$REQ_SIG_JSON_1" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
 
@@ -849,7 +849,7 @@ REQ_SIG_JSON_2=$(
   RANGE_START="0" \
   RANGE_LEN="$FILE_LEN_2" \
   EXPIRES_AT="$REQ_EXPIRES_AT_2" \
-  "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" sign-fetch-request
+  "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" sign-fetch-request
 )
 REQ_SIG_2=$(echo "$REQ_SIG_JSON_2" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
 

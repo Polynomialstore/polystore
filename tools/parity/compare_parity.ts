@@ -21,12 +21,12 @@ function getPath(obj: Record<string, unknown>, pathExpr: string): unknown {
 const nativeRaw = run('cargo', ['run', '--release', '--bin', 'parity_native'], path.join(repoRoot, 'nil_core'))
 const tsxBin = path.join(
   repoRoot,
-  'nil-website',
+  'polystore-website',
   'node_modules',
   '.bin',
   process.platform === 'win32' ? 'tsx.cmd' : 'tsx',
 )
-const wasmRaw = run(tsxBin, ['scripts/parity_wasm.ts'], path.join(repoRoot, 'nil-website'))
+const wasmRaw = run(tsxBin, ['scripts/parity_wasm.ts'], path.join(repoRoot, 'polystore-website'))
 
 const native = JSON.parse(nativeRaw) as Record<string, unknown>
 const wasm = JSON.parse(wasmRaw) as Record<string, unknown>

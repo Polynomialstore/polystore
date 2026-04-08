@@ -26,12 +26,12 @@ Tx relay is **off by default** and should remain off for mainnet parity.
 
 1. Ensure local tooling is available:
    - Go + Rust toolchains
-   - Node.js + npm (for `tsx` helper scripts under `nil-website/scripts/`)
+   - Node.js + npm (for `tsx` helper scripts under `polystore-website/scripts/`)
    - `curl` + `python3` (used for JSON parsing / tiny helpers)
 2. Install website deps (needed for `tsx` scripts used below):
 
    ```bash
-   npm -C nil-website ci
+   npm -C polystore-website ci
    ```
 
 3. Start the canonical local stack:
@@ -68,7 +68,7 @@ export EVM_RPC="${EVM_RPC:-http://localhost:8545}"
 export CHAIN_ID="${CHAIN_ID:-test-1}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 
-# Deterministic dev key (Foundry default #0); used by `nil-website/scripts/*`.
+# Deterministic dev key (Foundry default #0); used by `polystore-website/scripts/*`.
 export EVM_PRIVKEY="${EVM_PRIVKEY:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 ```
 
@@ -85,7 +85,7 @@ CREATE_PAYLOAD=$(
   SERVICE_HINT="General" \
   INITIAL_ESCROW="1000000" \
   MAX_MONTHLY_SPEND="500000" \
-  nil-website/node_modules/.bin/tsx nil-website/scripts/sign_intent.ts create-deal
+  polystore-website/node_modules/.bin/tsx polystore-website/scripts/sign_intent.ts create-deal
 )
 ```
 
@@ -236,7 +236,7 @@ UPDATE_PAYLOAD=$(
   SIZE_BYTES="$SIZE_BYTES" \
   TOTAL_MDUS="$TOTAL_MDUS" \
   WITNESS_MDUS="$WITNESS_MDUS" \
-  nil-website/node_modules/.bin/tsx nil-website/scripts/sign_intent.ts update-content
+  polystore-website/node_modules/.bin/tsx polystore-website/scripts/sign_intent.ts update-content
 )
 curl -sS -X POST -H "Content-Type: application/json" -d "$UPDATE_PAYLOAD" \
   "$GATEWAY_BASE/gateway/update-deal-content-evm"
@@ -305,7 +305,7 @@ SESSION_OPEN_JSON=$(
   EVM_PRIVKEY="$EVM_PRIVKEY" \
   EVM_RPC="$EVM_RPC" \
   EVM_CHAIN_ID="$EVM_CHAIN_ID" \
-  nil-website/node_modules/.bin/tsx nil-website/scripts/open_retrieval_session.ts
+  polystore-website/node_modules/.bin/tsx polystore-website/scripts/open_retrieval_session.ts
 )
 SESSION_ID="$(python3 - <<PY
 import json
@@ -329,7 +329,7 @@ REQ_SIG_JSON=$(
   RANGE_START=0 \
   RANGE_LEN="$FILE_SIZE_BYTES" \
   EXPIRES_AT="$REQ_EXPIRES_AT" \
-  nil-website/node_modules/.bin/tsx nil-website/scripts/sign_intent.ts sign-fetch-request
+  polystore-website/node_modules/.bin/tsx polystore-website/scripts/sign_intent.ts sign-fetch-request
 )
 REQ_SIG="$(python3 - <<PY
 import json

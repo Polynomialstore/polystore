@@ -1,5 +1,5 @@
 // Computes SHA-256 digests of NilWasm.expand_file outputs for a fixed 8MiB fixture.
-// Uses the *web-target* wasm-pack bundle that nil-website serves from `public/wasm`.
+// Uses the *web-target* wasm-pack bundle that polystore-website serves from `public/wasm`.
 //
 // Intended to be invoked from Rust tests (see expand_parity_test.rs).
 
@@ -47,10 +47,10 @@ async function main() {
   const trustedSetupPath = path.resolve(repoRoot, "demos/kzg/trusted_setup.txt");
   const trustedSetup = fs.readFileSync(trustedSetupPath);
 
-  const wasmJsPath = path.resolve(repoRoot, "nil-website/public/wasm/nil_core.js");
+  const wasmJsPath = path.resolve(repoRoot, "polystore-website/public/wasm/nil_core.js");
   const wasmWasmPath = path.resolve(
     repoRoot,
-    "nil-website/public/wasm/nil_core_bg.wasm",
+    "polystore-website/public/wasm/nil_core_bg.wasm",
   );
   const wasmBytes = fs.readFileSync(wasmWasmPath);
 

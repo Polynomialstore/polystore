@@ -56,7 +56,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install Python
         uses: actions/setup-python@v6
@@ -67,7 +67,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci --prefer-offline --no-audit
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
@@ -76,12 +76,12 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('nil-website/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('polystore-website/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright Browsers
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
       - name: Run Mode2 Stripe E2E (heavy)
@@ -99,8 +99,8 @@ jobs:
           name: e2e-mode2-heavy-artifacts
           path: |
             _artifacts/devnet_alpha_multi_sp/**
-            nil-website/test-results/**
-            nil-website/playwright-report/**
+            polystore-website/test-results/**
+            polystore-website/playwright-report/**
           if-no-files-found: ignore
 
   e2e-libp2p-relay:
@@ -142,7 +142,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install Python
         uses: actions/setup-python@v6
@@ -153,7 +153,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci --prefer-offline --no-audit
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
@@ -162,12 +162,12 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('nil-website/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('polystore-website/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright Browsers
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
       - name: Build nil_core (native)
@@ -185,6 +185,6 @@ jobs:
           name: e2e-libp2p-relay-artifacts
           path: |
             _artifacts/devnet_alpha_multi_sp/**
-            nil-website/test-results/**
-            nil-website/playwright-report/**
+            polystore-website/test-results/**
+            polystore-website/playwright-report/**
           if-no-files-found: ignore

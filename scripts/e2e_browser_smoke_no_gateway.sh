@@ -52,4 +52,4 @@ wait_for_http "web" "http://localhost:5173/"
 wait_for_http "sp gateway" "http://localhost:8082/health"
 
 echo "==> Running Playwright (gateway absent)..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/gateway-absent-ui.spec.ts)
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/gateway-absent-ui.spec.ts)

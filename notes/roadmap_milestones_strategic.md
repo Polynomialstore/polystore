@@ -96,4 +96,4 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 
 **Do not start Mode 2 yet.** The immediate friction point is the **Developer Experience (DX)** regarding keys and funding. Prioritize **Milestone 1 (Devnet Gamma)**.
 
-**Action Item:** Create the `Become a Provider` web wizard and ensure the `nil-website` can drive the entire lifecycle (Deal -> Upload -> Session -> Retrieve) using *only* the user's MetaMask, with zero reliance on the Gateway holding a funded key. This validates the "Trustless" aspect of the product before adding the complexity of Erasure Coding.
+**Action Item:** Create the `Become a Provider` web wizard and ensure the `polystore-website` can drive the entire lifecycle (Deal -> Upload -> Session -> Retrieve) using *only* the user's MetaMask, with zero reliance on the Gateway holding a funded key. This validates the "Trustless" aspect of the product before adding the complexity of Erasure Coding.
