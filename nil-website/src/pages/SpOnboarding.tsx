@@ -46,13 +46,13 @@ import {
 import { buildProviderOnboardingFlow } from '../lib/providerOnboardingFlow'
 import { extractProviderHttpBases } from '../lib/spDashboard'
 
-const PROVIDER_DOCS_URL = 'https://github.com/Nil-Store/nil-store/blob/main/docs/ALPHA_PROVIDER_QUICKSTART.md'
-const PROVIDER_PLAYBOOK_URL = 'https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md'
-const REPO_URL = 'https://github.com/Nil-Store/nil-store'
-const REPO_CLONE_HTTPS = 'git clone https://github.com/Nil-Store/nil-store.git'
-const REPO_CLONE_SSH = 'git clone git@github.com:Nil-Store/nil-store.git'
-const REPO_CLONE_GH = 'gh repo clone Nil-Store/nil-store'
-const REPO_ENTER_DIR = 'cd nil-store'
+const PROVIDER_DOCS_URL = 'https://github.com/Polynomialstore/polystore/blob/main/docs/ALPHA_PROVIDER_QUICKSTART.md'
+const PROVIDER_PLAYBOOK_URL = 'https://github.com/Polynomialstore/polystore/blob/main/DEVNET_MULTI_PROVIDER.md'
+const REPO_URL = 'https://github.com/Polynomialstore/polystore'
+const REPO_CLONE_HTTPS = 'git clone https://github.com/Polynomialstore/polystore.git'
+const REPO_CLONE_SSH = 'git clone git@github.com:Polynomialstore/polystore.git'
+const REPO_CLONE_GH = 'gh repo clone Polynomialstore/polystore'
+const REPO_ENTER_DIR = 'cd polystore'
 const LOCAL_HEALTH_URL = 'http://127.0.0.1:8091/health'
 const PROVIDER_DRAFT_KEY = 'nilstore.provider-onboarding.v2'
 const PROVIDER_AUTH_SESSION_KEY = 'nilstore.provider-onboarding.auth.v1'
@@ -512,7 +512,7 @@ export function SpOnboarding() {
     const statusUrl = `${normalizedStatusBase.replace(/\/$/, '')}/status`
     const command = [
       '# Run this on the provider host to align daemon identity with approved pairing.',
-      '# This also clears stale daemons from other nil-store checkouts on ports 8091/9100.',
+      '# This also clears stale daemons from other polystore checkouts on ports 8091/9100.',
       `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} ./scripts/run_devnet_provider.sh stop || true`,
       'if command -v lsof >/dev/null 2>&1; then',
       '  for p in $(lsof -tiTCP:8091 -sTCP:LISTEN 2>/dev/null); do kill "$p" || true; done',
@@ -1004,10 +1004,10 @@ export function SpOnboarding() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Prepare provider host</div>
                   <h2 className="text-2xl font-semibold text-foreground">Prepare the provider host workspace</h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Pick one clone method and run it on the provider host. Every provider command in the rest of this flow assumes a local <span className="font-mono">nil-store</span> checkout.
+                    Pick one clone method and run it on the provider host. Every provider command in the rest of this flow assumes a local <span className="font-mono">polystore</span> checkout.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">provider host has a local nil-store checkout and you are running commands inside it</span>.
+                    Done when: <span className="font-semibold text-foreground">provider host has a local polystore checkout and you are running commands inside it</span>.
                   </p>
                 </div>
                 <StatusPill label={providerRepoReady ? 'Host ready' : 'Clone required'} state={hostSetupState} />
@@ -1081,7 +1081,7 @@ export function SpOnboarding() {
                     onChange={(event) => setProviderRepoReady(event.target.checked)}
                     className="mt-1 h-4 w-4 border border-border bg-background"
                   />
-                  <span>I cloned the repo on the provider host and I am running commands inside the `nil-store` directory.</span>
+                  <span>I cloned the repo on the provider host and I am running commands inside the `polystore` directory.</span>
                 </label>
 
                 {!providerRepoReady ? (
@@ -1431,7 +1431,7 @@ export function SpOnboarding() {
                 {!flow.commandReady ? (
                   <div className="border border-border bg-background p-4 text-sm text-muted-foreground">
                     {!providerRepoReady
-                      ? 'Finish Step 2 by cloning nil-store on the provider host.'
+                      ? 'Finish Step 2 by cloning polystore on the provider host.'
                       : !providerKeyReady
                         ? 'Finish Step 3 by setting the local provider key name used by provider host commands.'
                       : !pairingConfirmed
@@ -1799,7 +1799,7 @@ export function SpOnboarding() {
                 ) : (
                   <div className="border border-border bg-background p-4 text-sm text-muted-foreground">
                     {!providerRepoReady
-                      ? 'Complete Step 2 by cloning nil-store on the provider host before generating bootstrap commands.'
+                      ? 'Complete Step 2 by cloning polystore on the provider host before generating bootstrap commands.'
                       : !providerKeyReady
                         ? 'Set the provider key name in Step 3 before generating bootstrap commands.'
                       : !pairingConfirmed

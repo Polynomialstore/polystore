@@ -2,10 +2,10 @@
 
 You are setting up this machine as a NilStore testnet provider-daemon for an operator who already initiated onboarding from the website.
 
-Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
+Repo bootstrap (required unless already inside a fresh `polystore` checkout):
 1. If repo is missing:
-   - `git clone https://github.com/Nil-Store/nil-store.git`
-   - `cd nil-store`
+   - `git clone https://github.com/Polynomialstore/polystore.git`
+   - `cd polystore`
 2. Refresh checkout:
    - `git fetch origin --prune`
    - `git checkout main`

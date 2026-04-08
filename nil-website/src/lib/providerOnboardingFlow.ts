@@ -49,7 +49,7 @@ export const PROVIDER_ONBOARDING_STEPS: ProviderOnboardingStepDefinition[] = [
     id: 'host',
     label: 'Prepare Provider Host',
     anchor: 'step-host-setup',
-    doneWhen: 'provider host has a local nil-store checkout ready for commands',
+    doneWhen: 'provider host has a local polystore checkout ready for commands',
   },
   {
     id: 'pairing',
@@ -108,7 +108,7 @@ function walletNextAction(input: ProviderOnboardingFlowInput): string {
 
 function hostNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.providerRepoReady) {
-    return 'Clone nil-store on the provider host and run the onboarding commands from that checkout.'
+    return 'Clone polystore on the provider host and run the onboarding commands from that checkout.'
   }
   return 'Provider host checkout is ready.'
 }
@@ -134,7 +134,7 @@ function pairingNextAction(input: ProviderOnboardingFlowInput): string {
 
 function publishNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.providerRepoReady) {
-    return 'Finish Step 2 so the provider host commands can run from a local nil-store checkout.'
+    return 'Finish Step 2 so the provider host commands can run from a local polystore checkout.'
   }
   if (!input.providerKeyReady || !input.pairingConfirmed) {
     return 'Finish Step 3 by setting the provider key name, running the pair command, and approving the provider link before bootstrap.'

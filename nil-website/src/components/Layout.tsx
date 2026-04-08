@@ -84,7 +84,7 @@ export const Layout = () => {
         { name: "Testnet Status", path: "/alpha/status", description: "Shared testnet status surface.", icon: <Activity className="w-5 h-5" /> },
         { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
           //{ name: "Governance", path: "/governance", description: "DAO proposals and voting.", icon: <Vote className="w-5 h-5" /> },
-          //{ name: "GitHub", path: "https://github.com/Nil-Store/nil-store", external: true, description: "Source code and contributions.", icon: <Github className="w-5 h-5" /> },
+          //{ name: "GitHub", path: "https://github.com/Polynomialstore/polystore", external: true, description: "Source code and contributions.", icon: <Github className="w-5 h-5" /> },
         ] 
       },
   ];
@@ -156,7 +156,7 @@ export const Layout = () => {
 
               {/* Desktop GitHub */}
               <a 
-                href="https://github.com/Nil-Store/nil-store" 
+                href="https://github.com/Polynomialstore/polystore" 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="hidden 2xl:flex items-center justify-center w-9 h-9 glass-panel industrial-border text-muted-foreground hover:text-foreground transition-[transform,color] duration-200 ease-out hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px]"
@@ -293,7 +293,7 @@ export const Layout = () => {
               <ul className="space-y-3">
                 <li><Link to="/testnet" className="font-mono-data text-[11px] hover:text-primary transition-colors">Testnet Guide</Link></li>
                 <li><Link to="/sp-onboarding" className="font-mono-data text-[11px] hover:text-primary transition-colors">SP Onboarding</Link></li>
-                <li><a href="https://github.com/Nil-Store/nil-store" target="_blank" rel="noopener noreferrer" className="font-mono-data text-[11px] hover:text-primary transition-colors">GitHub</a></li>
+                <li><a href="https://github.com/Polynomialstore/polystore" target="_blank" rel="noopener noreferrer" className="font-mono-data text-[11px] hover:text-primary transition-colors">GitHub</a></li>
               </ul>
             </div>
           </div>

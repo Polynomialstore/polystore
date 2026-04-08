@@ -5,10 +5,10 @@ You are helping a NilStore testnet storage user complete a full local onboarding
 Primary goal:
 - finish `scripts/testnet_burner_upload.sh` successfully as fast as possible, then preserve that same identity through MetaMask and browser continuity checks
 
-Repo bootstrap (required unless already inside a fresh `nil-store` checkout):
+Repo bootstrap (required unless already inside a fresh `polystore` checkout):
 1. If repo is missing on this machine:
-   - `git clone https://github.com/Nil-Store/nil-store.git`
-   - `cd nil-store`
+   - `git clone https://github.com/Polynomialstore/polystore.git`
+   - `cd polystore`
 2. Ensure a fresh checkout before onboarding:
    - `git fetch origin --prune`
    - `git checkout main`

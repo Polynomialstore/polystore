@@ -148,7 +148,7 @@ test('buildProviderBootstrapCommand emits a focused bootstrap command and opts i
     authToken: "shh it's secret",
   })
 
-  assert.match(command, /Run this from the nil-store checkout on the provider host after pairing is approved\./)
+  assert.match(command, /Run this from the polystore checkout on the provider host after pairing is approved\./)
   assert.match(command, /starts \(or restarts\) the provider-daemon/i)
   assert.match(command, /BOOTSTRAP_ALLOW_PARTIAL=1/)
   assert.doesNotMatch(command, /OPERATOR_ADDRESS=/)

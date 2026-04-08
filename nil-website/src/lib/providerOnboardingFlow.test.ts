@@ -82,7 +82,7 @@ test('provider onboarding flow advances to host setup when the wallet is ready b
   assert.equal(flow.currentStepId, 'host')
   assert.equal(flow.steps[1]?.state, 'action')
   assert.equal(flow.steps[2]?.state, 'pending')
-  assert.match(flow.nextActionMessage, /Clone nil-store on the provider host/i)
+  assert.match(flow.nextActionMessage, /Clone polystore on the provider host/i)
 })
 
 test('provider onboarding flow blocks pairing on key setup and approval state in the right order', () => {

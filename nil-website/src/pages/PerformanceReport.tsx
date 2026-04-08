@@ -173,7 +173,7 @@ export const PerformanceReport = () => {
                 For a deep dive into our testing strategy, including detailed environment setup, specific simulation flows, and success criteria, please refer to the official documentation on GitHub.
             </p>
             <a 
-                href="https://github.com/Nil-Store/nil-store/tree/main/performance" 
+                href="https://github.com/Polynomialstore/polystore/tree/main/performance" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-none font-medium hover:opacity-90 transition-opacity"

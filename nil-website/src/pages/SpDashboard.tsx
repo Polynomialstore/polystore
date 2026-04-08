@@ -28,7 +28,7 @@ import {
 } from '../lib/providerConsole'
 import { buildProviderHealthCommands } from '../lib/providerOnboarding'
 
-const PROVIDER_PLAYBOOK_URL = 'https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md'
+const PROVIDER_PLAYBOOK_URL = 'https://github.com/Polynomialstore/polystore/blob/main/DEVNET_MULTI_PROVIDER.md'
 const LOCAL_DEMO_STACK_CMD = './scripts/ensure_stack_local.sh'
 const LOCAL_DEMO_STOP_CMD = './scripts/run_local_stack.sh stop'
 

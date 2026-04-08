@@ -239,7 +239,7 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
   const usingDefaultAuth = !trimNonEmpty(draft.authToken)
   const websiteReady = Boolean(hasProviderEndpoint && operatorAddress)
   const envLines = [
-    '# Run this from the nil-store checkout on the provider host after pairing is approved.',
+    '# Run this from the polystore checkout on the provider host after pairing is approved.',
     '# This command starts (or restarts) the provider-daemon, then registers endpoints and runs health checks.',
     '# This command requires OPERATOR_ADDRESS and PROVIDER_ENDPOINT.',
     ...(usingDefaultAuth
@@ -415,10 +415,10 @@ export function buildProviderAgentPrompt(input: {
 
 You are setting up this machine as a NilStore testnet provider-daemon for an operator who already initiated onboarding from the website.
 
-Repo bootstrap (required unless already inside a fresh \`nil-store\` checkout):
+Repo bootstrap (required unless already inside a fresh \`polystore\` checkout):
 1. If repo is missing:
-   - \`git clone https://github.com/Nil-Store/nil-store.git\`
-   - \`cd nil-store\`
+   - \`git clone https://github.com/Polynomialstore/polystore.git\`
+   - \`cd polystore\`
 2. Refresh checkout:
    - \`git fetch origin --prune\`
    - \`git checkout main\`

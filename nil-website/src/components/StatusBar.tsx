@@ -18,7 +18,7 @@ import {
 const STATUS_POLL_MS = 60_000
 const STATUS_HIDDEN_POLL_MS = 300_000
 const OPTIONAL_HEALTH_PROBE_EVERY_TICKS = 20
-const GATEWAY_DESKTOP_RELEASE_URL = 'https://github.com/Nil-Store/nil-store/releases/latest'
+const GATEWAY_DESKTOP_RELEASE_URL = 'https://github.com/Polynomialstore/polystore/releases/latest'
 
 async function copyText(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {

@@ -13,7 +13,7 @@ export const TestnetDocs = () => {
   const { address } = useAccount();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [targetDealId, setTargetDealId] = useState("");
-  const gatewayGuiReleaseUrl = "https://github.com/Nil-Store/nil-store/releases/latest";
+  const gatewayGuiReleaseUrl = "https://github.com/Polynomialstore/polystore/releases/latest";
 
   useEffect(() => {
     if (address) {
@@ -60,8 +60,8 @@ export const TestnetDocs = () => {
               <h3 className="font-bold text-lg text-foreground">1. Build & Run Chain (EVM enabled)</h3>
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Clone Repository</p>
-                <p>$ git clone https://github.com/Nil-Store/nil-store.git</p>
-                <p>$ cd nil-store/nilchain</p>
+                <p>$ git clone https://github.com/Polynomialstore/polystore.git</p>
+                <p>$ cd polystore/nilchain</p>
                 <br/>
                 <p className="text-accent"># Build & Install</p>
                 <p>$ make install</p>
@@ -96,7 +96,7 @@ export const TestnetDocs = () => {
               <p className="text-sm text-muted-foreground mb-2">To enable future bridge features, deploy the smart contracts to the local EVM.</p>
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Requires Foundry (forge)</p>
-                <p>$ cd nil-store/nil_bridge</p>
+                <p>$ cd polystore/nil_bridge</p>
                 <p>$ forge script script/Deploy.s.sol --rpc-url {appConfig.evmRpc} --broadcast --private-key &lt;YOUR_PRIVATE_KEY&gt;</p>
               </div>
             </div>
