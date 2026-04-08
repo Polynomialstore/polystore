@@ -1,7 +1,7 @@
 # RFC: Mode 2 On-Chain State (Slots, Generations, Repairs)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain protocol state (`nilchain/`)
+**Scope:** Chain protocol state (`polystorechain/`)
 **Depends on:** `spec.md` §6.2, §8.3–§8.4; `rfcs/rfc-blob-alignment-and-striping.md`
 **Motivation:** Appendix B #2 (Mode 2 encoding), #6 (write semantics beyond append-only; near-term constraints)
 
@@ -207,8 +207,8 @@ Add a one-time migration that:
 ## 7. Implementation Checklist (Sprint 3/4)
 
 1. Protobuf + codegen:
-   - `nilchain/proto/nilchain/nilchain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
-   - `nilchain/proto/nilchain/nilchain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
+   - `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
+   - `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
 2. Keeper logic:
    - Populate typed fields at `CreateDeal`.
    - Persist `total_mdus/witness_mdus/current_gen` at `UpdateDealContent*`.

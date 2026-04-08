@@ -287,7 +287,7 @@ func TestGatewayUpdateDealContentFromEvm_ForwardsPreviousManifestRootInPayload(t
 
 	var payloadPreviousRoot any
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if len(args) >= 4 && args[0] == "tx" && args[1] == "nilchain" && args[2] == "update-deal-content-from-evm" {
+		if len(args) >= 4 && args[0] == "tx" && args[1] == "polystorechain" && args[2] == "update-deal-content-from-evm" {
 			payloadBytes, err := os.ReadFile(args[3])
 			if err != nil {
 				t.Fatalf("read payload: %v", err)

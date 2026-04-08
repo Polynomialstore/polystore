@@ -17,7 +17,7 @@ In the current **Devnet** architecture, the browser can operate without a local 
 The service wraps a mix of native libraries and CLI tools:
 *   **`polystore_core` (FFI):** NilFS layout helpers (MDU #0 builder, record parsing) and cryptographic helpers shared with Rust.
 *   **`polystore_cli`:** Used for **Sharding** (erasure coding) and **KZG Commitment** generation in devnet flows.
-*   **`nilchaind`:** Used for **Querying** and for relaying on-chain transactions that already carry user signatures (e.g., EVM precompile intents). The gateway does **not** replace MetaMask for user authorization.
+*   **`polystorechaind`:** Used for **Querying** and for relaying on-chain transactions that already carry user signatures (e.g., EVM precompile intents). The gateway does **not** replace MetaMask for user authorization.
 
 ### 2.1 Storage Model
 *   **Local Buffer:** Files are uploaded to a local `uploads/` directory.
@@ -111,13 +111,13 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 #### Deal Management (EVM Bridge, Optional Relay)
 *   **`POST /gateway/create-deal-evm`**
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
-*   **Logic:** Forwards the intent to `nilchaind tx nilchain create-deal-from-evm`.
+*   **Logic:** Forwards the intent to `polystorechaind tx polystorechain create-deal-from-evm`.
 *   **Role:** Relays user‑signed intents to the chain for clients that cannot call the precompile directly (MetaMask is the preferred path).
     *   **Semantics (target):** Creates a **thin-provisioned** deal (`manifest_root = empty`, `size = 0`, `total_mdus = 0`) until the first `update-deal-content-evm` commit.
         *   **No tiers:** Capacity-tier fields are deprecated and must not be required by the gateway; if accepted during transition they must be ignored.
 *   **`POST /gateway/update-deal-content-evm`**
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
-*   **Logic:** Forwards to `nilchaind tx nilchain update-deal-content-evm`.
+*   **Logic:** Forwards to `polystorechaind tx polystorechain update-deal-content-evm`.
 *   **Role:** Commits the Deal `manifest_root` (returned from upload) to the on-chain deal when clients opt into the relay.
     *   **CAS rule:** the signed intent MUST include `previous_manifest_root`, and relay/chain execution MUST reject the update if it does not match the current on-chain deal root.
 

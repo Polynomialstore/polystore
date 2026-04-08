@@ -43,7 +43,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
   let spProofCalls = 0
 
   // LCD deals + balances
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -63,7 +63,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -81,7 +81,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

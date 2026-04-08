@@ -2,7 +2,7 @@
 
 ## 0) Header
 
-This file is the **Codex-executable** execution punch list for completing remaining **Mainnet econ/security parity** work (plus the devnet/testnet launch-critical pieces) across `nilchain/`, `polystore_gateway/`, and `polystore_p2p/`. It is derived from the staged checklist and the frozen/approved economic and repair policies; tasks are written to be **low ambiguity**, **test-gated**, and small enough to land in **1–3 commits** each.
+This file is the **Codex-executable** execution punch list for completing remaining **Mainnet econ/security parity** work (plus the devnet/testnet launch-critical pieces) across `polystorechain/`, `polystore_gateway/`, and `polystore_p2p/`. It is derived from the staged checklist and the frozen/approved economic and repair policies; tasks are written to be **low ambiguity**, **test-gated**, and small enough to land in **1–3 commits** each.
 
 ### How to run locally
 
@@ -17,7 +17,7 @@ This file is the **Codex-executable** execution punch list for completing remain
 ./scripts/e2e_lifecycle.sh
 
 # (4) Run chain unit tests (params/keeper logic)
-go test ./nilchain/...
+go test ./polystorechain/...
 ```
 
 ---
@@ -58,7 +58,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/proto/nilchain/nilchain/v1/params.proto`, `nilchain/x/nilchain/types/`, `nilchain/x/nilchain/keeper/`, `scripts/run_devnet_alpha_multi_sp.sh`
+* **Area:** `polystorechain/proto/polystorechain/polystorechain/v1/params.proto`, `polystorechain/x/polystorechain/types/`, `polystorechain/x/polystorechain/keeper/`, `scripts/run_devnet_alpha_multi_sp.sh`
 * **Depends on:** (none)
 * **Context:**
 
@@ -68,12 +68,12 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
     * Audit budget Option A: `audit_budget_bps`, `audit_budget_cap_bps`, carryover ≤2 epochs, and `epoch_slot_rent` formula
     * Credits phase-in: devnet caps = 0; testnet hot/cold caps 25%/10%; mainnet caps = 0 at launch → later enable
     * Trusted override posture: dev/test enabled **if implemented**; mainnet disabled by default (governance-emergency only)
-  * `nilchain/proto/nilchain/nilchain/v1/params.proto` currently ends at field `evict_after_missed_epochs = 17;` (see existing file).
+  * `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` currently ends at field `evict_after_missed_epochs = 17;` (see existing file).
   * `scripts/run_devnet_alpha_multi_sp.sh` has a python `overrides = {...}` block that currently overrides: `month_len_blocks`, `epoch_len_blocks`, `quota_*`, `credit_cap_bps`, `evict_after_missed_epochs`.
   * `rfcs/rfc-challenge-derivation-and-quotas.md` §4–§5 (quota + credits), §7 (state additions).
 * **Work plan:**
 
-  1. Extend `Params` in `nilchain/proto/nilchain/nilchain/v1/params.proto` by adding new fields **after** the existing ones (use new field numbers ≥ 18). Do not renumber existing fields.
+  1. Extend `Params` in `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` by adding new fields **after** the existing ones (use new field numbers ≥ 18). Do not renumber existing fields.
   2. Add params required to encode the approved policy surfaces:
 
      * **B1 Slashing/jailing ladder + non-response windowing**
@@ -103,7 +103,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
      * Keep `credit_cap_bps` and `evict_after_missed_epochs` as legacy defaults, but update keeper code to **prefer hot/cold split** if present.
   4. Regenerate protobuf bindings using the repo’s existing proto generation workflow (do not invent new tooling).
-  5. Update `Params` defaults and validation (`nilchain/x/nilchain/types/`):
+  5. Update `Params` defaults and validation (`polystorechain/x/polystorechain/types/`):
 
      * Enforce all `*_bps <= 10_000`
      * Enforce epoch/month lengths > 0
@@ -122,12 +122,12 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
      * confirm the presence of new fields and that validation rejects obvious invalid values (bps > 10_000, negative coins, etc.).
 * **Artifacts:**
 
-  * `nilchain/proto/nilchain/nilchain/v1/params.proto`
-  * generated proto outputs under `nilchain/` (wherever this repo keeps `*.pb.go`)
-  * `nilchain/x/nilchain/types/` (params defaults + validation)
-  * `nilchain/x/nilchain/keeper/` (param accessors, if required)
+  * `polystorechain/proto/polystorechain/polystorechain/v1/params.proto`
+  * generated proto outputs under `polystorechain/` (wherever this repo keeps `*.pb.go`)
+  * `polystorechain/x/polystorechain/types/` (params defaults + validation)
+  * `polystorechain/x/polystorechain/keeper/` (param accessors, if required)
   * `scripts/run_devnet_alpha_multi_sp.sh`
-  * `nilchain/` unit tests for params validation
+  * `polystorechain/` unit tests for params validation
 * **DoD:**
 
   * New params are present in proto and in generated Go bindings.
@@ -137,7 +137,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests cover (at minimum) `base_retrieval_fee`, audit budget bps/cap/carryover, hot/cold eviction thresholds, and nonresponse threshold/window validation.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
   * (Optional smoke) `./scripts/run_devnet_alpha_multi_sp.sh start` and ensure chain boots with updated genesis overrides.
 * **Notes / gotchas:**
 
@@ -153,7 +153,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, (Deal update message handlers), `rfcs/rfc-pricing-and-escrow-accounting.md`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, (Deal update message handlers), `rfcs/rfc-pricing-and-escrow-accounting.md`
 * **Depends on:** `P0-PARAMS-001`
 * **Context:**
 
@@ -170,7 +170,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
      * `duration_blocks = deal.end_block - deal.start_block`
      * `storage_cost = ceil(storage_price * delta_bytes * duration_blocks)`
-  4. Transfer `storage_cost` from deal owner → `nilchain` module account.
+  4. Transfer `storage_cost` from deal owner → `polystorechain` module account.
   5. Update bookkeeping:
 
      * `deal.escrow_balance += storage_cost`
@@ -183,8 +183,8 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
      * ceil rounding behavior on boundary cases
 * **Artifacts:**
 
-  * `nilchain/x/nilchain/keeper/` (deal update handlers + shared accounting)
-  * `nilchain/x/nilchain/types/` (if deal fields/helpers need updates)
+  * `polystorechain/x/polystorechain/keeper/` (deal update handlers + shared accounting)
+  * `polystorechain/x/polystorechain/types/` (if deal fields/helpers need updates)
   * new/updated keeper unit tests
 * **DoD:**
 
@@ -193,7 +193,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests validate correct arithmetic and idempotency.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Use deterministic rounding (`ceil`) for `Dec * uint64 * uint64`; avoid float conversions.
@@ -203,7 +203,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-pricing-and-escrow-accounting.md`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, `rfcs/rfc-pricing-and-escrow-accounting.md`
 * **Depends on:** `P0-PARAMS-001`, `P0-ECON-LOCKIN-001`
 * **Context:**
 
@@ -237,8 +237,8 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
      * escrow debit correctness
 * **Artifacts:**
 
-  * `nilchain/x/nilchain/keeper/` (elasticity handler)
-  * `nilchain/x/nilchain/types/` (deal state)
+  * `polystorechain/x/polystorechain/keeper/` (elasticity handler)
+  * `polystorechain/x/polystorechain/types/` (deal state)
   * new/updated unit tests
 * **DoD:**
 
@@ -247,7 +247,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests cover debit, reset, and cap failure cases.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Ensure the debit is replay-safe (same tx cannot be applied twice).
@@ -261,7 +261,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-pricing-and-escrow-accounting.md`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, `rfcs/rfc-pricing-and-escrow-accounting.md`
 * **Depends on:** `P0-PARAMS-001`, `P0-ECON-LOCKIN-001`
 * **Context:**
 
@@ -292,8 +292,8 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
      * locked_fee equals computed variable_fee and is stored once
 * **Artifacts:**
 
-  * `nilchain/x/nilchain/keeper/` (session open handler)
-  * `nilchain/x/nilchain/types/` (session state)
+  * `polystorechain/x/polystorechain/keeper/` (session open handler)
+  * `polystorechain/x/polystorechain/types/` (session state)
   * unit tests for retrieval open
 * **DoD:**
 
@@ -302,7 +302,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests confirm burn/lock behavior and determinism.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Burning must reduce actual supply / module balance (not just bookkeeping).
@@ -312,7 +312,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-pricing-and-escrow-accounting.md`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, `rfcs/rfc-pricing-and-escrow-accounting.md`
 * **Depends on:** `P0-RETRIEVAL-FEES-001`
 * **Context:**
 
@@ -344,8 +344,8 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
      * expiry path is deterministic and idempotent
 * **Artifacts:**
 
-  * `nilchain/x/nilchain/keeper/` (settlement handlers)
-  * `nilchain/x/nilchain/types/` (session state)
+  * `polystorechain/x/polystorechain/keeper/` (settlement handlers)
+  * `polystorechain/x/polystorechain/types/` (session state)
   * unit tests for settlement/cancel/expiry
 * **DoD:**
 
@@ -354,7 +354,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests validate accounting and idempotency.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Avoid double-settlement; enforce a strict session state machine.
@@ -415,7 +415,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
 * **Depends on:** `P0-PARAMS-001`
 * **Context:**
 
@@ -439,8 +439,8 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   5. Add unit tests for determinism and exclusions.
 * **Artifacts:**
 
-  * `nilchain/x/nilchain/keeper/` derivation helpers
-  * `nilchain/x/nilchain/types/` helper funcs/constants
+  * `polystorechain/x/polystorechain/keeper/` derivation helpers
+  * `polystorechain/x/polystorechain/types/` helper funcs/constants
   * unit tests for determinism/exclusion
 * **DoD:**
 
@@ -448,7 +448,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests prove metadata is never targeted and REPAIRING slots are excluded.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Avoid iterating over maps to build challenge sets; use sorted lists for any provider/slot enumeration.
@@ -458,7 +458,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
 * **Depends on:** `P0-QUOTAS-001`
 * **Context:**
 
@@ -491,7 +491,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Uniqueness set prevents double counting.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Ensure `SyntheticSeen` state is pruned/TTL’d to prevent unbounded growth.
@@ -501,7 +501,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
 * **Depends on:** `P0-QUOTAS-002`, `P0-RETRIEVAL-SETTLE-002`, `P0-PARAMS-001`
 * **Context:**
 
@@ -531,7 +531,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Devnet defaults yield no quota reduction (caps = 0), but accounting code exists.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Credit state growth must be bounded; TTL pruning is mandatory.
@@ -541,7 +541,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `scripts/`, `performance/` (if present), or `nilchain/` property tests
+* **Area:** `scripts/`, `performance/` (if present), or `polystorechain/` property tests
 * **Depends on:** `P0-QUOTAS-001`
 * **Context:**
 
@@ -558,14 +558,14 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   3. Keep runtime short and deterministic (fixed RNG seed).
 * **Artifacts:**
 
-  * sim test code (under `nilchain/` or a script wrapper)
+  * sim test code (under `polystorechain/` or a script wrapper)
   * documentation comment in the sim explaining invariants
 * **DoD:**
 
   * Sim gate exists, runs deterministically, and fails on invariant violation.
 * **Test gate:**
 
-  * The command you add (e.g., `go test ./nilchain/... -run TestChallengeDerivationSim` or `./scripts/...`)
+  * The command you add (e.g., `go test ./polystorechain/... -run TestChallengeDerivationSim` or `./scripts/...`)
 * **Notes / gotchas:**
 
   * Do not assert probabilistic distribution properties with tight thresholds; focus on correctness invariants.
@@ -578,7 +578,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-QUOTAS-002`, `P0-PARAMS-001`
 * **Context:**
 
@@ -617,7 +617,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Eviction triggers follow hot/cold thresholds and do not spam-trigger.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Ensure HealthState updates are idempotent; the same epoch’s miss should not be counted twice.
@@ -627,7 +627,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, query layer
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, query layer
 * **Depends on:** `P0-HEALTH-001`
 * **Context:**
 
@@ -655,7 +655,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Query pagination prevents unbounded responses.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Do not embed large binary blobs in events; keep events indexable and lightweight.
@@ -668,7 +668,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-mode2-onchain-state.md`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, `rfcs/rfc-mode2-onchain-state.md`
 * **Depends on:** `P0-PARAMS-001`, `P0-HEALTH-001`
 * **Context:**
 
@@ -698,7 +698,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests cover start/promotion and failure cases.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Promotion must be replay-safe; no double swaps.
@@ -708,7 +708,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, provider registry/activation path
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, provider registry/activation path
 * **Depends on:** `P0-PARAMS-001`
 * **Context:**
 
@@ -737,7 +737,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Provider bond state is queryable.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * If the repo already uses staking for provider collateral, do not duplicate; map “bond” to the existing stake source and document it.
@@ -746,7 +746,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-BOND-001`, `P0-ECON-LOCKIN-001`, `P0-MODE2-MBB-001`
 * **Context:**
 
@@ -773,7 +773,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Providers cannot escape required collateral via unbonding while assigned.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Use ceil rounding for required bond to avoid under-collateralization.
@@ -782,7 +782,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-BOND-001`, `P0-BOND-002`, `P0-HEALTH-001`
 * **Context:**
 
@@ -818,7 +818,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Eligibility checks include bond and jail status.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Never iterate over an unsorted provider set when ranking; sort before hashing.
@@ -862,7 +862,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-QUOTAS-001`, `P0-QUOTAS-002`, `P0-MODE2-MBB-001`
 * **Context:**
 
@@ -886,7 +886,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests validate exclusion end-to-end at the keeper level.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Separate “repair readiness proofs” from “liveness proofs” so you don’t accidentally pay for repair traffic.
@@ -932,7 +932,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-REPAIR-001`
 * **Context:**
 
@@ -956,7 +956,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Mainnet default is disabled; dev/test default is enabled (if feature exists).
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Keep this as an emergency tool only; do not allow silent bypass of bonding/slashing unless explicitly authorized.
@@ -969,7 +969,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, evidence/proof proto handlers
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`, evidence/proof proto handlers
 * **Depends on:** `P0-PARAMS-001`, `P0-HEALTH-001`, `P0-MODE2-MBB-001`, `P0-REPAIR-001`
 * **Context:**
 
@@ -1012,7 +1012,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests cover correctness and idempotency.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Do not allow multiple evidence submissions to cause repeated slashes; store a “penalized” marker keyed by `evidence_id` or `(deal, slot, epoch)`.
@@ -1058,7 +1058,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-PARAMS-001`, `P0-RETRIEVAL-SETTLE-002`
 * **Context:**
 
@@ -1090,7 +1090,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Premium is not paid without a successful proof-based completion.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Ensure deputy cannot be the same entity as the failing provider for the same session (or document/guard if allowed).
@@ -1099,7 +1099,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-DEPUTY-001`, `P0-PARAMS-001`, `P0-EVIDENCE-001`
 * **Context:**
 
@@ -1138,7 +1138,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Unit tests cover all state transitions deterministically.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Defend against Sybil reporters via the bond and by ensuring deputies are selected by the gateway/p2p layer (not arbitrary self-assigned).
@@ -1147,7 +1147,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-PARAMS-001`, `P0-MODE2-MBB-001`, `P0-MODE2-REWARD-003`
 * **Context:**
 
@@ -1181,7 +1181,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * REPAIRING slots are excluded from rent computation.
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Avoid full chain scans each epoch if it’s too costly; prefer maintaining an incrementally updated aggregate, but correctness comes first.
@@ -1190,7 +1190,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
+* **Area:** `polystorechain/x/polystorechain/keeper/`, `polystorechain/x/polystorechain/types/`
 * **Depends on:** `P0-AUDIT-001`, `P0-DEPUTY-002`
 * **Context:**
 
@@ -1217,7 +1217,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   * Audit budget can be debited deterministically for bounties (and later audits).
 * **Test gate:**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Notes / gotchas:**
 
   * Keep MVP tight: trackability first; full audit task scheduling can iterate later.
@@ -1305,15 +1305,15 @@ These are the canonical “stop-the-line” gates used to claim parity. Tasks sh
 
 * **Stage 0 (params/interfaces):**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
   * (Optional) `./scripts/run_devnet_alpha_multi_sp.sh start` (boot smoke)
 * **Stage 1–2 (econ + retrieval session lifecycle):**
 
   * `./scripts/e2e_lifecycle.sh`
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
 * **Stage 3 (challenges/quotas):**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
   * Challenge sim gate from `TASK P0-QUOTAS-SIM-003`
 * **Stage 5 (repair + no outage):**
 
@@ -1321,7 +1321,7 @@ These are the canonical “stop-the-line” gates used to claim parity. Tasks sh
   * Repair E2E from `TASK P0-REPAIR-E2E-002`
 * **Stage 6 (evidence):**
 
-  * `go test ./nilchain/...`
+  * `go test ./polystorechain/...`
   * Evidence E2E from `TASK P0-EVIDENCE-E2E-002`
 * **Stage 7 (deputy + audit debt):**
 

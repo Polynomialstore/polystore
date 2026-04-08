@@ -44,7 +44,7 @@ NilStore’s upload flow is two-phase:
   - `storage_price` (Dec per byte per block, on-chain),
   - `delta_size_bytes` (new_bytes - old_bytes),
   - `duration` (per the pricing RFC; see note below),
-  - and then transfers that amount from the deal owner to the `nilchain` module account, increasing `Deal.escrow_balance`.
+  - and then transfers that amount from the deal owner to the `polystorechain` module account, increasing `Deal.escrow_balance`.
 
 This means:
 - Users experience a deterministic “commit costs X NIL” event (similar to a “write transaction” in other chains).
@@ -190,7 +190,7 @@ To prevent this, NilStore adds an **additive** requester-funded open path:
 - `MsgOpenRetrievalSessionSponsored` is the public/third-party path and works as:
 
   1) Chain computes `total = base_fee + retrieval_price_per_blob * blob_count` (same fee schedule and rounding).
-  2) Chain transfers `total` from the requester to the `nilchain` module account.
+  2) Chain transfers `total` from the requester to the `polystorechain` module account.
   3) Chain creates a retrieval session with `funding=REQUESTER` and `payer=requester`.
   4) On completion: burn `retrieval_burn_bps` of `variable_fee` and pay the provider the remainder.
   5) On expiry/cancel (non-completion): refund any refundable `variable_fee` to the **payer** (requester), not to deal escrow. Base fee remains burned.

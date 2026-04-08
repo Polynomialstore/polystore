@@ -375,7 +375,7 @@ func fetchProviderStatusFromLCD(ctx context.Context, providerAddr string) (*lcdP
 	}
 
 	var payload lcdProviderStatusResponse
-	statusCode, err := fetchStatusJSON(ctx, base+"/nilchain/nilchain/v1/providers/"+providerAddr, &payload)
+	statusCode, err := fetchStatusJSON(ctx, base+"/polystorechain/polystorechain/v1/providers/"+providerAddr, &payload)
 	switch statusCode {
 	case http.StatusOK:
 		return &payload, "registered", nil
@@ -393,7 +393,7 @@ func fetchProviderPairingFromLCD(ctx context.Context, providerAddr string) (*lcd
 	}
 
 	var payload lcdProviderPairingResponse
-	statusCode, err := fetchStatusJSON(ctx, base+"/nilchain/nilchain/v1/provider-pairings/"+providerAddr, &payload)
+	statusCode, err := fetchStatusJSON(ctx, base+"/polystorechain/polystorechain/v1/provider-pairings/"+providerAddr, &payload)
 	switch statusCode {
 	case http.StatusOK:
 		return &payload, "paired", nil
@@ -411,7 +411,7 @@ func fetchPendingProviderLinkFromLCD(ctx context.Context, providerAddr string) (
 	}
 
 	var payload lcdPendingProviderLinkResponse
-	statusCode, err := fetchStatusJSON(ctx, base+"/nilchain/nilchain/v1/provider-pairings/pending/"+providerAddr, &payload)
+	statusCode, err := fetchStatusJSON(ctx, base+"/polystorechain/polystorechain/v1/provider-pairings/pending/"+providerAddr, &payload)
 	switch statusCode {
 	case http.StatusOK:
 		return &payload, "pending", nil

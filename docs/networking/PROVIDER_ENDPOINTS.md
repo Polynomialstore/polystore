@@ -80,7 +80,7 @@ NIL_PUBLIC_HTTP_HOST=sp.example.com NIL_PUBLIC_HTTP_SCHEME=https NIL_PUBLIC_HTTP
 Register it on-chain:
 
 ```bash
-nilchaind tx nilchain register-provider General 1099511627776 \
+polystorechaind tx polystorechain register-provider General 1099511627776 \
   --from <your-key> \
   --chain-id <chain-id> \
   --yes \
@@ -90,7 +90,7 @@ nilchaind tx nilchain register-provider General 1099511627776 \
 Rotate or correct endpoints later:
 
 ```bash
-nilchaind tx nilchain update-provider-endpoints \
+polystorechaind tx polystorechain update-provider-endpoints \
   --from <your-key> \
   --chain-id <chain-id> \
   --yes \
@@ -147,7 +147,7 @@ NIL_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints
 6) Register the endpoint on-chain:
 
 ```bash
-nilchaind tx nilchain register-provider General 1099511627776 \
+polystorechaind tx polystorechain register-provider General 1099511627776 \
   --from <your-key> \
   --chain-id <chain-id> \
   --yes \
@@ -157,7 +157,7 @@ nilchaind tx nilchain register-provider General 1099511627776 \
 Rotate or correct endpoints later with:
 
 ```bash
-nilchaind tx nilchain update-provider-endpoints \
+polystorechaind tx polystorechain update-provider-endpoints \
   --from <your-key> \
   --chain-id <chain-id> \
   --yes \

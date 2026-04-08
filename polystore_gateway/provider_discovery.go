@@ -365,7 +365,7 @@ func resolveProviderForRetrievalPlan(ctx context.Context, dealID uint64, stripe 
 }
 
 func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", lcdBase, dealID)
 	var lastBody string
 	for attempt := 1; attempt <= 10; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -474,7 +474,7 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 }
 
 func fetchDealMode2SlotsFromLCD(ctx context.Context, dealID uint64) ([]mode2SlotAssignment, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", lcdBase, dealID)
 	var lastBody string
 	for attempt := 1; attempt <= 10; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -607,7 +607,7 @@ func fetchDealServiceHintFromLCD(ctx context.Context, dealID uint64) (string, er
 		}
 	}
 
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", lcdBase, dealID)
 	var lastBody string
 	for attempt := 1; attempt <= 10; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -652,7 +652,7 @@ func fetchDealServiceHintFromLCD(ctx context.Context, dealID uint64) (string, er
 }
 
 func fetchProviderEndpointsFromLCD(ctx context.Context, providerAddr string) ([]string, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/providers/%s", lcdBase, providerAddr)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/providers/%s", lcdBase, providerAddr)
 	var lastBody string
 	for attempt := 1; attempt <= 10; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

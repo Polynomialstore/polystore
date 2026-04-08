@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 const RawMduCapacity = 8126464

@@ -20,7 +20,7 @@ We are currently in **Phase 3: Code Implementation** of the NilStore Network dev
     *   **MDU Architecture:** Standardized on **8 MiB Mega-Data Units** composed of 64 x 128 KiB KZG blobs.
 2.  **Codebase Updates:**
     *   **`polystore_core` (Rust):** Removed deprecated `argon2` logic. Added `rs-merkle` and `blake2` for MDU Merkle root computation. Updated FFI bindings to support MDU-centric verification.
-    *   **`nilchain` (Go):** 
+    *   **`polystorechain` (Go):**
         *   Defined new Protobuf types (`Deal`, `Provider`, `KzgProof`, `RetrievalReceipt`) in `types.proto`.
         *   Updated `tx.proto` with `MsgRegisterProvider`, `MsgCreateDeal`, `MsgProveLiveness`, `MsgSignalSaturation`.
         *   Implemented `AssignProviders` logic in `Keeper` (Deterministic Placement).
@@ -59,11 +59,10 @@ The next agent should focus on **verifying and refining the implementation**.
 *   **`whitepaper.md`**: High-level unified economy logic.
 
 ## Prompt for Next Agent
-"You are resuming the implementation of the NilStore Network in Phase 3. The previous agent has implemented the core Message Handlers for `CreateDeal`, `ProveLiveness`, and `SignalSaturation` in `nilchain/x/nilchain/keeper/msg_server.go`, and updated the Rust `polystore_core` cryptography library to support MDU Merkle proofs.
+"You are resuming the implementation of the NilStore Network in Phase 3. The previous agent has implemented the core Message Handlers for `CreateDeal`, `ProveLiveness`, and `SignalSaturation` in `polystorechain/x/polystorechain/keeper/msg_server.go`, and updated the Rust `polystore_core` cryptography library to support MDU Merkle proofs.
 
 Your goal is to **stabilize and verify** this code.
-1.  Run the build (`go build ./...` in `nilchain`). Fix any syntax errors or missing imports in the new `msg_server.go` code.
+1.  Run the build (`go build ./...` in `polystorechain`). Fix any syntax errors or missing imports in the new `msg_server.go` code.
 2.  Create a unit test suite for the Keeper methods to verify the logic (Placement, Tiers, Rewards) works as intended.
 3.  Ensure the Rust FFI binding is correctly linked and callable from Go tests.
 4.  Once stable, document the 'Happy Path' execution trace."
-

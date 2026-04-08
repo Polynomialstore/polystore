@@ -181,7 +181,7 @@ interface StatusSummary {
 *   **Purpose:** Streams a global feed of ZK proofs (both real chain data and simulated visuals).
 *   **State:** `proofs: Proof[]`, `loading: boolean`.
 *   **Logic:**
-    *   **Initialization:** Fetches initial proofs from `${LCD_BASE}/nilchain/nilchain/v1/proofs`.
+    *   **Initialization:** Fetches initial proofs from `${LCD_BASE}/polystorechain/polystorechain/v1/proofs`.
     *   **Deduplication:** Merges new proofs preventing duplicates by `id`.
     *   **Simulation:** `addSimulatedProof(proof)` prepends locally generated proofs with `source: 'simulated'`.
 *   **Exports:** `useProofs()` hook.
@@ -394,8 +394,8 @@ The website depends on the following services (configured in `config.ts`):
 *   `GET /gateway/status`: Local gateway status/capabilities (optional).
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
 *   `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`: Returns blob commitments + MDU root (debug/inspection).
-*   `GET /nilchain/nilchain/v1/deals`: Returns list of all deals (client-side filtering by owner).
-*   `GET /nilchain/nilchain/v1/providers`: Returns list of active SPs.
+*   `GET /polystorechain/polystorechain/v1/deals`: Returns list of all deals (client-side filtering by owner).
+*   `GET /polystorechain/polystorechain/v1/providers`: Returns list of active SPs.
 
 ---
 
@@ -484,8 +484,8 @@ This sprint prioritizes a clean separation between:
 - **Visualization (React):** rendering panels using the centralized observables.
 
 ### 9.1 Primary Observables (Authoritative Sources)
-*   **Deal (LCD):** `GET /nilchain/nilchain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
-*   **Heat (LCD):** `GET /nilchain/nilchain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
+*   **Deal (LCD):** `GET /polystorechain/polystorechain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
+*   **Heat (LCD):** `GET /polystorechain/polystorechain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
 *   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
 *   **NilFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
 *   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,witness_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.

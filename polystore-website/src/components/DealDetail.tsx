@@ -1404,7 +1404,7 @@ export function DealDetail({
     let cancelled = false
     async function loadProviders() {
       try {
-        const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
+        const res = await fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`)
         if (!res.ok) return
         const json = await res.json().catch(() => null)
         const list = Array.isArray((json as { providers?: unknown[] } | null)?.providers) ? (json as { providers: unknown[] }).providers : []
@@ -2390,7 +2390,7 @@ export function DealDetail({
 
   const fetchHeat = useCallback(async (dealId: string) => {
       try {
-          const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${dealId}/heat`)
+          const res = await fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/deals/${dealId}/heat`)
           if (res.ok) {
               const json = await res.json()
               if (json.heat) {

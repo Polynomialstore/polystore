@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/blake2s"
-	"nilchain/x/crypto_ffi"
-	niltypes "nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	niltypes "polystorechain/x/polystorechain/types"
 )
 
 func TestGatewayFetch_ByPath(t *testing.T) {
@@ -185,7 +185,7 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 		metadataProvider = "nil1metadataproviderfetch"
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/2" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/2" {
 			http.NotFound(w, r)
 			return
 		}

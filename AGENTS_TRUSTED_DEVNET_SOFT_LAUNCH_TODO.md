@@ -35,7 +35,7 @@ Checklist:
 - [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` to match repo reality + CI coverage.
 - [x] Fix doc index and onboarding docs (`DOCS.md`, `HAPPY_PATH.md`, `docs/TESTNET_READINESS_REPORT.md`).
 - [x] Update repo-anchored agent runbook (`docs/AGENTS_RUNBOOK_REPO_ANCHORED.md`).
-- [x] Replace Ignite boilerplate chain readme (`nilchain/readme.md`).
+- [x] Replace Ignite boilerplate chain readme (`polystorechain/readme.md`).
 - [x] Fix `install.sh` CLI binary name (`polystore_cli` vs `nil-cli`).
 
 ---
@@ -46,7 +46,7 @@ Checklist:
 - Goal: Close the most dangerous “spec says enforced, code doesn’t” gaps.
 - PR: https://github.com/Nil-Store/nil-store/pull/58
 - Test gate:
-  - `cd nilchain && go test ./...`
+  - `cd polystorechain && go test ./...`
 
 Checklist:
 - [x] Enforce `MAX_DEAL_BYTES` cap in `MsgUpdateDealContent*` (spec + RFC requirement).
@@ -91,7 +91,7 @@ Checklist:
 - Goal: Turn allowlist logic from “implemented” into “proven”.
 - PR: https://github.com/Nil-Store/nil-store/pull/61
 - Test gate:
-  - `cd nilchain && go test ./...`
+  - `cd polystorechain && go test ./...`
 
 Checklist:
 - [x] Add unit tests for `OpenRetrievalSessionSponsored` allowlist proof verification (valid + invalid paths).
@@ -137,7 +137,7 @@ Checklist:
 - Goal: Add a testable first version of dynamic pricing without destabilizing the devnet.
 - PR: https://github.com/Nil-Store/nil-store/pull/64
 - Test gate:
-  - `cd nilchain && go test ./...`
+  - `cd polystorechain && go test ./...`
   - `./e2e_retrieval_fees.sh`
 
 Checklist:
@@ -316,7 +316,7 @@ Checklist:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
 Checklist:
-- [x] Update `ops/systemd/env/nilchaind.env` to default CometBFT RPC to localhost.
+- [x] Update `ops/systemd/env/polystorechaind.env` to default CometBFT RPC to localhost.
 - [x] Update `ops/systemd/env/polystore-gateway-router.env` to default router listen addr to localhost.
 - [x] Add a brief note in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` that these are safe defaults for the HTTPS subdomain profile.
 
@@ -542,7 +542,7 @@ Checklist:
 ### PR35 — CI: align Go toolchain with `go.mod` (1.25.x) (MERGED)
 
 - Branch: `codex/ci-go-1-25x`
-- Goal: Reduce CI/toolchain drift by using Go `1.25.x` (matches `nilchain/go.mod`, `polystore_gateway/go.mod`, etc.) instead of relying on toolchain auto-download from an older Go.
+- Goal: Reduce CI/toolchain drift by using Go `1.25.x` (matches `polystorechain/go.mod`, `polystore_gateway/go.mod`, etc.) instead of relying on toolchain auto-download from an older Go.
 - PR: https://github.com/Nil-Store/nil-store/pull/97
 - Test gate:
   - `ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/ci.yml\"); YAML.load_file(\".github/workflows/tauri_release.yml\")'`

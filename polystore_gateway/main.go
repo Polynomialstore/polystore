@@ -33,8 +33,8 @@ import (
 	"github.com/gorilla/mux"
 	"golang.org/x/sync/singleflight"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 var uploadCopyBufferPool = sync.Pool{
@@ -187,11 +187,11 @@ var (
 	sessionDBPath   = envDefault("NIL_SESSION_DB_PATH", filepath.Join(uploadDir, "sessions.db"))
 	providerBase    = envDefault("NIL_PROVIDER_BASE", "http://localhost:8080")
 	nilCliPath      = envDefault("NIL_CLI_BIN", "../polystore_cli/target/release/polystore_cli")
-	trustedSetup    = envDefault("NIL_TRUSTED_SETUP", "../nilchain/trusted_setup.txt")
-	nilchaindBin    = envDefault("NILCHAIND_BIN", "nilchaind")
+	trustedSetup    = envDefault("NIL_TRUSTED_SETUP", "../polystorechain/trusted_setup.txt")
+	polystorechaindBin    = envDefault("NILCHAIND_BIN", "polystorechaind")
 	chainID         = envDefault("NIL_CHAIN_ID", "test-1")
 	nodeAddr        = envDefault("NIL_NODE", "tcp://127.0.0.1:26657")
-	homeDir         = envDefault("NIL_HOME", "../_artifacts/nilchain_data")
+	homeDir         = envDefault("NIL_HOME", "../_artifacts/polystorechain_data")
 	gasPrices       = envDefault("NIL_GAS_PRICES", "0.001aatom")
 	defaultDuration = envDefault("NIL_DEFAULT_DEAL_DURATION_SECONDS", envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000"))
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
@@ -409,7 +409,7 @@ type txBroadcastResponse struct {
 func extractDealID(logs []txLog, events []txEvent) string {
 	find := func(evts []txEvent) string {
 		for _, evt := range evts {
-			if evt.Type != "nilchain.nilchain.EventCreateDeal" && evt.Type != "create_deal" {
+			if evt.Type != "polystorechain.polystorechain.EventCreateDeal" && evt.Type != "create_deal" {
 				continue
 			}
 			for _, attr := range evt.Attributes {
@@ -462,9 +462,9 @@ func fundAddressOnce(addr string) {
 	}
 }
 
-// deriveNilchaindDir attempts to find a working directory where nilchaind
+// deriveNilchaindDir attempts to find a working directory where polystorechaind
 // can locate its trusted setup file via the default relative path
-// "nilchain/trusted_setup.txt". This keeps gateway CLI calls reliable even when
+// "polystorechain/trusted_setup.txt". This keeps gateway CLI calls reliable even when
 // the gateway runs from a subdirectory.
 func deriveNilchaindDir() string {
 	if root := os.Getenv("NIL_ROOT_DIR"); root != "" {
@@ -477,7 +477,7 @@ func deriveNilchaindDir() string {
 			dir = abs
 		}
 		for i := 0; i < 6; i++ {
-			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "polystorechain", "trusted_setup.txt")); err == nil {
 				return dir
 			}
 			parent := filepath.Dir(dir)
@@ -491,7 +491,7 @@ func deriveNilchaindDir() string {
 	if wd, err := os.Getwd(); err == nil {
 		dir := wd
 		for i := 0; i < 6; i++ {
-			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "polystorechain", "trusted_setup.txt")); err == nil {
 				return dir
 			}
 			parent := filepath.Dir(dir)
@@ -548,7 +548,7 @@ func resolveTrustedSetupPath(configured string) string {
 
 		dir := binDir
 		for i := 0; i < 8; i++ {
-			add(filepath.Join(dir, "nilchain", "trusted_setup.txt"))
+			add(filepath.Join(dir, "polystorechain", "trusted_setup.txt"))
 			parent := filepath.Dir(dir)
 			if parent == dir {
 				break
@@ -558,7 +558,7 @@ func resolveTrustedSetupPath(configured string) string {
 	}
 
 	if root := deriveNilchaindDir(); root != "" {
-		add(filepath.Join(root, "nilchain", "trusted_setup.txt"))
+		add(filepath.Join(root, "polystorechain", "trusted_setup.txt"))
 	}
 
 	for _, candidate := range candidates {
@@ -668,10 +668,10 @@ func applyDesktopSidecarDefaults() {
 	applyIfUnset("NIL_LOCAL_IMPORT_ALLOW_ABS", "1")
 }
 
-// execNilchaind runs a nilchaind command and returns its combined output.
+// execNilchaind runs a polystorechaind command and returns its combined output.
 func execNilchaind(ctx context.Context, args ...string) ([]byte, error) {
 	args = maybeWithNodeArg(args)
-	return runCommand(ctx, nilchaindBin, args, deriveNilchaindDir())
+	return runCommand(ctx, polystorechaindBin, args, deriveNilchaindDir())
 }
 
 func maybeWithNodeArg(args []string) []string {
@@ -717,7 +717,7 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 		outStr := string(out)
 
 		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
-			return out, fmt.Errorf("nilchaind command timed out after %s", cmdTimeout)
+			return out, fmt.Errorf("polystorechaind command timed out after %s", cmdTimeout)
 		}
 
 		if err != nil {
@@ -1843,7 +1843,7 @@ func GatewayCreateDeal(w http.ResponseWriter, r *http.Request) {
 	// provided in req.Creator and can be wired into on-chain state later.
 	out, err := runTxWithRetry(
 		r.Context(),
-		"tx", "nilchain", "create-deal",
+		"tx", "polystorechain", "create-deal",
 		durationStr,
 		req.InitialEscrow,
 		req.MaxMonthlySpend,
@@ -1931,8 +1931,8 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 	witnessMdusStr := strconv.FormatUint(req.WitnessMdus, 10)
 
 	log.Printf(
-		"Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --previous-manifest-root %s --cid %s --size %s --total-mdus %s --witness-mdus %s",
-		nilchaindBin,
+		"Executing polystorechaind command: %s tx polystorechain update-deal-content --deal-id %s --previous-manifest-root %s --cid %s --size %s --total-mdus %s --witness-mdus %s",
+		polystorechaindBin,
 		dealIDStr,
 		req.PreviousManifestRoot,
 		req.Cid,
@@ -1943,7 +1943,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 
 	out, err := runTxWithRetry(
 		r.Context(),
-		"tx", "nilchain", "update-deal-content",
+		"tx", "polystorechain", "update-deal-content",
 		"--deal-id", dealIDStr,
 		"--previous-manifest-root", req.PreviousManifestRoot,
 		"--cid", req.Cid,
@@ -1977,7 +1977,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 }
 
 // GatewayCreateDealFromEvm accepts an EVM-signed deal intent and forwards it
-// to nilchaind via the MsgCreateDealFromEvm CLI path. This is the primary
+// to polystorechaind via the MsgCreateDealFromEvm CLI path. This is the primary
 // devnet/testnet entrypoint for user-signed deals.
 func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
@@ -2071,7 +2071,7 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 
 	out, err := runTxWithRetry(
 		r.Context(),
-		"tx", "nilchain", "create-deal-from-evm",
+		"tx", "polystorechain", "create-deal-from-evm",
 		tmpPath,
 		"--chain-id", chainID,
 		"--from", "faucet",
@@ -2168,7 +2168,7 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		listOut, _ := execNilchaind(
 			fallbackCtx,
-			"query", "nilchain", "list-deals",
+			"query", "polystorechain", "list-deals",
 			"--home", homeDir,
 			"--output", "json",
 		)
@@ -2353,7 +2353,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 
 	out, err := runTxWithRetry(
 		r.Context(),
-		"tx", "nilchain", "update-deal-content-from-evm",
+		"tx", "polystorechain", "update-deal-content-from-evm",
 		tmpPath,
 		"--chain-id", chainID,
 		"--from", "faucet",
@@ -2638,7 +2638,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
 		// Surface the underlying chain/CLI error in the HTTP response so CI/E2E
-		// failures are diagnosable without digging through nilchaind logs.
+		// failures are diagnosable without digging through polystorechaind logs.
 		hint := err.Error()
 		if len(hint) > 1024 {
 			hint = hint[:1024] + "..."
@@ -5143,7 +5143,7 @@ func submitRetrievalProofWithParams(ctx context.Context, dealID, epoch uint64, p
 	defer cancel()
 	signOut, err := execNilchaind(
 		signCtx,
-		"tx", "nilchain", "sign-retrieval-receipt",
+		"tx", "polystorechain", "sign-retrieval-receipt",
 		dealIDStr,
 		providerAddr,
 		epochStr,
@@ -5182,7 +5182,7 @@ func submitRetrievalProofWithParams(ctx context.Context, dealID, epoch uint64, p
 	// 2) Submit the receipt as a retrieval proof.
 	submitOut, err := runTxWithRetry(
 		ctx,
-		"tx", "nilchain", "submit-retrieval-proof",
+		"tx", "polystorechain", "submit-retrieval-proof",
 		tmpPath,
 		"--from", providerKeyName,
 		"--chain-id", chainID,
@@ -5203,7 +5203,7 @@ func submitRetrievalProofWithParams(ctx context.Context, dealID, epoch uint64, p
 
 // fetchDealOwnerAndCID calls the LCD to retrieve the deal owner and CID for a given deal ID.
 func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", lcdBase, dealID)
 	resp, err := lcdHTTPClient.Get(url)
 	if err != nil {
 		return "", "", fmt.Errorf("LCD request failed: %w", err)
@@ -5295,7 +5295,7 @@ func setCacheFreshnessHeaders(w http.ResponseWriter, status, reason string) {
 
 // fetchDealMetaUncached calls the LCD to retrieve the deal owner, manifest_root, and end_block.
 func fetchDealMetaUncached(dealID uint64) (dealMeta, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", lcdBase, dealID)
 	resp, err := lcdHTTPClient.Get(url)
 	if err != nil {
 		return dealMeta{}, fmt.Errorf("LCD request failed: %w", err)
@@ -5698,7 +5698,7 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 
 	txHash, err := submitTxAndWait(
 		r.Context(),
-		"tx", "nilchain", "submit-retrieval-proof",
+		"tx", "polystorechain", "submit-retrieval-proof",
 		tmpFile.Name(),
 		"--from", providerKeyName,
 		"--chain-id", chainID,
@@ -5896,7 +5896,7 @@ func SpSubmitReceipts(w http.ResponseWriter, r *http.Request) {
 
 	txHash, err := submitTxAndWait(
 		r.Context(),
-		"tx", "nilchain", "submit-retrieval-proof",
+		"tx", "polystorechain", "submit-retrieval-proof",
 		tmpFile.Name(),
 		"--from", providerKeyName,
 		"--chain-id", chainID,
@@ -6106,7 +6106,7 @@ func SpSubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
 
 	txHash, err := submitTxAndWait(
 		r.Context(),
-		"tx", "nilchain", "submit-retrieval-proof",
+		"tx", "polystorechain", "submit-retrieval-proof",
 		tmpFile.Name(),
 		"--from", providerKeyName,
 		"--chain-id", chainID,
@@ -6271,7 +6271,7 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 
 	txHash, err := submitTxAndWait(
 		r.Context(),
-		"tx", "nilchain", "submit-retrieval-proof",
+		"tx", "polystorechain", "submit-retrieval-proof",
 		tmpFile.Name(),
 		"--from", providerKeyName,
 		"--chain-id", chainID,

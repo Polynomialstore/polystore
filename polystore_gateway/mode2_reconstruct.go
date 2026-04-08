@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 var mode2ShardHTTPClient = &http.Client{

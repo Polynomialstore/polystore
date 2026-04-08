@@ -21,7 +21,7 @@ function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T
 
 async function resolveEip712ChainId(lcdBase: string): Promise<number> {
   try {
-    const res = await fetch(`${lcdBase}/nilchain/nilchain/v1/params`)
+    const res = await fetch(`${lcdBase}/polystorechain/polystorechain/v1/params`)
     if (!res.ok) return DEFAULT_EIP712_CHAIN_ID
     const json = (await res.json().catch(() => null)) as { params?: { eip712_chain_id?: string | number } } | null
     const raw = json?.params?.eip712_chain_id

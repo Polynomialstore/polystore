@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 func writeTestDealGeneration(t *testing.T, dealID uint64, root ManifestRoot, totalMdus uint64, omitLastMdu bool) string {

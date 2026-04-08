@@ -43,11 +43,11 @@ Browser route map:
 - Do not expect file upload on `/#/first-file`; that page ends by sending the user to `/#/dashboard`.
 
 Local prerequisites:
-- Required commands: `bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind`; `gh` is optional.
+- Required commands: `bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `polystorechaind`; `gh` is optional.
 - First run may execute `npm install` inside `polystore-website/` if `polystore-website/node_modules` is missing.
 - Before running the burner helper, set a keystore password in `NIL_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
 - Do not let `scripts/testnet_burner_upload.sh` fall back to its interactive password prompt during an autonomous run. If `NIL_BURNER_KEYSTORE_PASSWORD` is unset, stop and ask the user for the import password first.
-- Expect local artifacts to be created under the repo, including `polystore-website/node_modules/`, a keystore JSON, and a `nilchaind` sender home in `_artifacts/`.
+- Expect local artifacts to be created under the repo, including `polystore-website/node_modules/`, a keystore JSON, and a `polystorechaind` sender home in `_artifacts/`.
 
 Operating mode:
 - This is a guided onboarding run, not a test automation run.
@@ -69,7 +69,7 @@ Avoid these detours unless debugging is required:
 Canonical onboarding milestones (run in order unless the user asks to skip):
 1. Fast Bootstrap
    - repo is synced
-   - required tools are present (`bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind`; `gh` is optional)
+   - required tools are present (`bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `polystorechaind`; `gh` is optional)
    - hosted LCD + faucet reachable
    - Nil Gateway GUI is installed or opened by the agent and the local gateway is healthy at `http://localhost:8080`
    - create a temporary local file (`10-100 KiB`) yourself
@@ -103,7 +103,7 @@ Your job:
    - `browser-only`: fallback only if local gateway or CLI cannot be brought up after bounded retries, or if the user explicitly asks for it
 3. Milestone 1, Fast Bootstrap:
    - verify hosted LCD + faucet reachable
-   - verify required local tools are installed: `bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind` (`gh` optional)
+   - verify required local tools are installed: `bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `polystorechaind` (`gh` optional)
    - check `http://localhost:8080/health` first; if it is already healthy, reuse the existing local gateway
    - otherwise install or open Nil Gateway GUI yourself; prefer the latest GitHub release artifact and only fall back to source-build/manual debugging if the release path is blocked
    - macOS setup path:

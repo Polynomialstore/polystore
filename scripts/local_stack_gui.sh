@@ -112,7 +112,7 @@ status() {
   local stack_pid_dir="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp/pids"
   echo "Stack:"
   if [ -d "$stack_pid_dir" ]; then
-    for svc in nilchaind faucet router website; do
+    for svc in polystorechaind faucet router website; do
       local pid_file="$stack_pid_dir/$svc.pid"
       if [ -f "$pid_file" ]; then
         local pid

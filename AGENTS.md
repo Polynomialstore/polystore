@@ -81,7 +81,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
     *   *New:* `MsgCreateDeal` creates a `Deal` object. Proofs must match Deal ID.
 
 **Immediate Tasks:**
-1.  [x] Implement `MsgCreateDeal` in `nilchain`.
+1.  [x] Implement `MsgCreateDeal` in `polystorechain`.
 2.  [x] Implement `ActiveProviderList` Keeper.
 3.  [x] Implement Deterministic Slotting Logic.
 
@@ -121,7 +121,7 @@ We have moved away from "Physics-Policed" constraints (strict 1.1s deadlines) to
 ---
 
 ## Phase 5: EVM Integration (Ethermint) - "The Bi-Lingual Chain"
-**Goal:** Make `nilchain` compatible with MetaMask and Solidity to serve as a robust Testnet and simplify onboarding.
+**Goal:** Make `polystorechain` compatible with MetaMask and Solidity to serve as a robust Testnet and simplify onboarding.
 
 ### Step 1: Dependencies & Configuration
 *   [x] **Update `go.mod`:** Add `github.com/cosmos/evm` (v0.5.1) and `github.com/cosmos/go-ethereum`.
@@ -192,7 +192,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 **Goal:** Implement the 3-Hop Verification to allow dealing with large datasets using a single 48-byte Manifest Root.
 
 *   **Step A: Protobuf Definitions (Executed)**
-    *   [x] **File:** `nilchain/proto/nilchain/nilchain/v1/types.proto`
+    *   [x] **File:** `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`
     *   [x] **Task:** Update `Deal` struct: replace `string cid` with `bytes manifest_root` (48-byte) and add `uint64 total_mdus`.
     *   [x] **Task:** Define `message ChainedProof`: `mdu_index`, `mdu_root_fr`, `manifest_opening` (Hop 1), `blob_commitment`, `merkle_path` (Hop 2), `z`, `y`, `kzg_opening` (Hop 3).
 *   **Step B: Core Cryptography (`polystore_core`) (Executed)**
@@ -203,7 +203,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 *   **Step C: Chain Verification Logic**
     *   [x] **Task (Core):** Implement `verify_manifest_inclusion` in `polystore_core` (Need to handle Roots of Unity coordinate mapping).
     *   [x] **Task (FFI):** Expose `nil_verify_chained_proof` (Hop 1 + 3) and `nil_compute_manifest_commitment`.
-    *   [x] **File:** `nilchain/x/nilchain/keeper/msg_server.go` (or dedicated verifier).
+    *   [x] **File:** `polystorechain/x/polystorechain/keeper/msg_server.go` (or dedicated verifier).
     *   [x] **Task:** Implement `VerifyChainedProof` algorithm using FFI:
         *   Hop 1 (KZG): Verify MDU Root is in Manifest.
         *   Hop 2 (Merkle): Verify Blob is in MDU.
@@ -444,7 +444,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 **TDD Plan:** Create an integration test script (`test_lifecycle.sh`) that orchestrates chain operations.
 
 1.  **`TestFullDealLifecycle_E2E`**:
-    *   **Phase 1: Setup:** Start local `nilchaind` and `polystore_gateway`.
+    *   **Phase 1: Setup:** Start local `polystorechaind` and `polystore_gateway`.
     *   **Phase 2: Create Deal:** Use `GatewayCreateDealFromEvm` to establish a **thin‑provisioned** container Deal (`manifest_root` empty, `size = 0`).
         *   **Assertion:** Verify on-chain `manifest_root` is empty and `total_mdus`/`allocated_length` is `0` until the first `GatewayUpdateDealContent*` commit (no implicit “metadata preallocation” during `CreateDeal*`).
         *   **Note:** `max_user_mdus` is a devnet sizing hint used by the gateway for local slab/Witness layout; it MUST NOT change `Deal.total_mdus` before a content commit.
@@ -452,12 +452,12 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
         *   Call `GatewayUpload` for "first.txt" (e.g., 100KB).
         *   Capture the returned `manifest_root` and `new_allocated_length`.
         *   Call `GatewayUpdateDealContentFromEvm` with this data.
-        *   **Assertion:** Query `nilchaind` to verify that the Deal on-chain now has the correct `manifest_root` and `allocated_length`.
+        *   **Assertion:** Query `polystorechaind` to verify that the Deal on-chain now has the correct `manifest_root` and `allocated_length`.
     *   **Phase 4: Upload File 2 (Append):**
         *   Call `GatewayUpload` for "second.txt".
         *   Capture new `manifest_root` and `new_allocated_length`.
         *   Call `GatewayUpdateDealContentFromEvm`.
-        *   **Assertion:** Query `nilchaind` to verify that the Deal on-chain has updated again.
+        *   **Assertion:** Query `polystorechaind` to verify that the Deal on-chain has updated again.
     *   **Phase 5: Fetch & Verify:** Call `GatewayFetch` for "first.txt" and "second.txt". Assert content is correct.
     *   **Phase 6: Deletion & Reupload:** Simulate deletion, then re-upload a file to reuse space. Assert `manifest_root` updates correctly and `allocated_length` remains stable (if no new User Data MDUs were needed).
 
@@ -509,7 +509,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] **Goal 3: Direct-to-Chain Commit (Metadata Path).**
     - **Concept:** Use MetaMask (`eth_sendTransaction`) to call the NilStore Precompile (`0x...0900`) directly.
     - **Frontend:** Implement ABI encoding for `updateDealContent(dealId, cid, size)`.
-    - **Test gate:** Browser commits content; `nilchaind q nilchain deal` shows updated `manifest_root`.
+    - **Test gate:** Browser commits content; `polystorechaind q polystorechain deal` shows updated `manifest_root`.
 
 - [x] **Goal 4: UI/UX Minimal Polish.**
     - **Visuals:** Separate "Sharding" (Local) vs "Uploading" (Network) progress.
@@ -522,11 +522,11 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - **Resolved defaults (already implemented on-chain):**
     - **Denom:** all fees/deposits are in `sdk.DefaultBondDenom` (`stake`).
     - **Creation fee:** `Params.deal_creation_fee` is transferred to `authtypes.FeeCollectorName` (fee collector module account).
-    - **Initial escrow:** `initial_escrow_amount` is transferred to the `nilchain` module account (`types.ModuleName`) and recorded in `Deal.escrow_balance`.
+    - **Initial escrow:** `initial_escrow_amount` is transferred to the `polystorechain` module account (`types.ModuleName`) and recorded in `Deal.escrow_balance`.
     - **Term deposit trigger:** only on **size increase** (`delta_size = new_size_bytes - old_size_bytes`, else no charge).
     - **Term deposit formula:** `cost = ceil(storage_price * delta_size * duration_blocks)` where `duration_blocks = deal.end_block - deal.start_block`.
-    - **Term deposit destination:** `cost` is transferred to the `nilchain` module account and added to `Deal.escrow_balance` (TVL/accounting).
-    - **References:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/keeper/economics_gamma4_test.go`.
+    - **Term deposit destination:** `cost` is transferred to the `polystorechain` module account and added to `Deal.escrow_balance` (TVL/accounting).
+    - **References:** `polystorechain/x/polystorechain/keeper/msg_server.go`, `polystorechain/x/polystorechain/keeper/economics_gamma4_test.go`.
 
 - [x] **Goal 1: Update `spec.md` for Gamma-4 economics (lock-in pricing + retrieval credits).**
     - **Align spec with current implementation:** denom, fee destinations, and `ceil(...)` rounding MUST be explicitly stated.
@@ -546,7 +546,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Decision:** Retrieval credits are **out of scope** for Gamma-4 (too much state/UX ambiguity). Revisit after economics stabilize.
     - **Pricing unit:** price per **Blob** (128KiB) to avoid per-byte decimals and match `RetrievalSession.blob_count`.
     - **Preflight/lock:** `OpenRetrievalSession` MUST charge `base_retrieval_fee` (non-refundable) and reserve `variable = retrieval_price_per_blob * blob_count` against `Deal.escrow_balance` so providers never serve unpaid sessions.
-    - **Completion payout:** on session `COMPLETED`, burn `burn_cut = ceil(variable * retrieval_burn_bps / 10000)` and transfer `provider_cut = variable - burn_cut` from `nilchain` module account to provider.
+    - **Completion payout:** on session `COMPLETED`, burn `burn_cut = ceil(variable * retrieval_burn_bps / 10000)` and transfer `provider_cut = variable - burn_cut` from `polystorechain` module account to provider.
     - **Refund:** if a session expires/cancels without completion, refund only the locked `variable` amount back to `Deal.escrow_balance` (base fee remains burned/spent).
     - **Refund mechanism:** implement `MsgCancelRetrievalSession` (owner-only) to unlock `variable` after expiry; do not rely on an expensive “scan all sessions” EndBlocker sweep for devnet.
 
@@ -947,8 +947,8 @@ This sprint turns the current “single-machine” gateway/provider implementati
 - [x] **Chain:** Validate endpoints (parseable Multiaddr; basic length/limit protections).
 - [x] **Chain:** Ensure `Query/GetProvider` and `Query/ListProviders` expose endpoints.
 - [x] **CLI:** Update `register-provider` to accept `--endpoint` (repeatable).
-- **Pass gate:** `nilchaind q nilchain providers` returns endpoints for each registered provider.
-- **Test gate:** `cd nilchain && go test ./...`
+- **Pass gate:** `polystorechaind q polystorechain providers` returns endpoints for each registered provider.
+- **Test gate:** `cd polystorechain && go test ./...`
 
 #### Goal 2: Gateway becomes a router/proxy (no local proving)
 - [x] **Gateway:** Add “router mode” (env-gated) where `GatewayFetch`, `GatewayListFiles`, `GatewaySlab`, `GatewayUpload`, and session/receipt endpoints route to the assigned provider.
@@ -1083,7 +1083,7 @@ This is the **canonical execution checklist** for the next development sprint. E
 This sprint removes the devnet shortcut where the “provider” (currently `faucet`) pays gas and signs on-chain transactions for user actions. The gateway should behave like a user desktop daemon: it can compute/prepare proofs, but must not be a funded key holder.
 
 - [x] **Goal 1: Remove provider/faucet as tx signer.**
-    - **Change:** Eliminate `NIL_PROVIDER_KEY=faucet` / `nilchaind tx ... --from faucet` from the critical path for deal lifecycle and user-side retrieval actions.
+    - **Change:** Eliminate `NIL_PROVIDER_KEY=faucet` / `polystorechaind tx ... --from faucet` from the critical path for deal lifecycle and user-side retrieval actions.
     - **Implemented model (devnet):** Web uses MetaMask **transaction prompts** (`eth_sendTransaction`) against the NilStore EVM precompile at `0x0000000000000000000000000000000000000900` for `createDeal`, `updateDealContent`, and batched retrieval proofs; the gateway holds no user keys.
     - **Pass gate:** A user can create deal → upload/commit → fetch → submit retrieval proof with no gateway-held funded keys, and on-chain heat increments.
         - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
@@ -1102,7 +1102,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 
 - [x] **Goal 2: Finish “dynamic sizing / no capacity tiers” cleanup (end-to-end).**
     - **Steps:** `11.2.1` thin-provision deals; `11.2.2` remove `size_tier` from EIP-712 intents; `11.2.3` sweep scripts/docs/debug; `11.2.4` (optional) remove deprecated `size_tier` from proto.
-    - **Key files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/types/eip712.go`, `polystore-website/src/lib/eip712.ts`, `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`
+    - **Key files:** `polystorechain/x/polystorechain/keeper/msg_server.go`, `polystorechain/x/polystorechain/types/eip712.go`, `polystore-website/src/lib/eip712.ts`, `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`
     - **Semantics (target end state):**
         - Deals are **thin-provisioned**: `CreateDeal*` writes `manifest_root = empty`, `size = 0` (and leaves any “capacity” fields unset/ignored) until `UpdateDealContent*`.
         - Tier fields (`DealSize` / `deal_size` / `size_tier`) are **non-normative**: ignored by chain logic and removed from all client payloads.
@@ -1117,7 +1117,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
         - Unit: shared EIP-712 golden vectors (CreateDealV2 + UpdateContent) match between the chain verifier and the web signer.
         - Integration: `create-deal-from-evm` succeeds with an intent that omits `size_tier` (and legacy intent support is explicit if kept during transition).
     - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
-    - **Test gate:** `cd nilchain && go test ./...` and `cd polystore-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website nilchain polystore_gateway polystore_cli scripts tests e2e_*.sh`
+    - **Test gate:** `cd polystorechain && go test ./...` and `cd polystore-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website polystorechain polystore_gateway polystore_cli scripts tests e2e_*.sh`
 
 - [x] **Goal 3: Add a real browser smoke E2E suite (runs against `./scripts/run_local_stack.sh start`).**
     - **Steps:** `11.4.1` deterministic E2E wallet; `11.4.2` stable selectors; `11.4.3` dashboard lifecycle smoke; `11.4.4` deal explorer smoke; `11.4.5` one-command runner.
@@ -1150,8 +1150,8 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Session identity:** `session_id = keccak256(encode({deal_id, owner, provider, manifest_root, start_mdu_index, start_blob_index, blob_count, nonce, expires_at}))` (canonical encoding, documented + test-vectored).
     - **State machine:** `OPEN` → (`PROOF_SUBMITTED` and/or `USER_CONFIRMED`) → `COMPLETED`; `EXPIRED` terminal if past `expires_at` and not completed; optional `CANCELED`.
     - **Validation:** provider must be one of `Deal.providers`; `start_blob_index < BLOBS_PER_MDU`; `blob_count > 0`; `manifest_root` matches current deal content at open time (pin to prevent “proof against old root” ambiguity).
-    - **Files:** `nilchain/proto/nilchain/nilchain/v1/types.proto`, `nilchain/proto/nilchain/nilchain/v1/tx.proto`, `nilchain/proto/nilchain/nilchain/v1/query.proto`, keeper collections + indexes, generated pb.go.
-    - **Test gate:** `cd nilchain && make proto-gen && go test ./x/nilchain/keeper -run RetrievalSession`
+    - **Files:** `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`, `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`, `polystorechain/proto/polystorechain/polystorechain/v1/query.proto`, keeper collections + indexes, generated pb.go.
+    - **Test gate:** `cd polystorechain && make proto-gen && go test ./x/polystorechain/keeper -run RetrievalSession`
 
 - [x] **Goal 2: Chain: add txs + queries for sessions (owner/provider/deal views).**
     - **Msgs (minimum):**
@@ -1160,7 +1160,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
         - `MsgSubmitRetrievalSessionProof` (signer: provider): submits proof-of-retrieval (triple proof(s)) and sets `PROOF_SUBMITTED`.
     - **Queries (minimum):** `GetRetrievalSession`, `ListRetrievalSessionsByOwner`, `ListRetrievalSessionsByProvider` (and optionally by `deal_id`).
     - **Pass gate:** session tables are queryable from LCD and status transitions are enforced.
-    - **Test gate:** `cd nilchain && go test ./...`
+    - **Test gate:** `cd polystorechain && go test ./...`
 
 - [x] **Goal 3: EVM precompile: tx-only UX for session open + confirm.**
     - **ABI (minimum):** `openRetrievalSession(...) returns (bytes32 sessionId)` and `confirmRetrievalSession(bytes32 sessionId)`.
@@ -1188,33 +1188,33 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 
 ### 11.2 Protocol Cleanup (Dynamic Sizing)
 - [x] **11.2.0 Remove capacity-tier proto fields (`DealSize` / `deal_size`).**
-    - **Files:** `nilchain/proto/nilchain/nilchain/v1/types.proto`, `nilchain/proto/nilchain/nilchain/v1/tx.proto`, generated `nilchain/x/nilchain/types/*.pb.go`
-    - **Pass gate:** `nilchaind` builds; LCD JSON has no `deal_size`/`DealSize` fields.
-    - **Test gate:** `cd nilchain && make proto-gen && go test ./...`
+    - **Files:** `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`, `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`, generated `polystorechain/x/polystorechain/types/*.pb.go`
+    - **Pass gate:** `polystorechaind` builds; LCD JSON has no `deal_size`/`DealSize` fields.
+    - **Test gate:** `cd polystorechain && make proto-gen && go test ./...`
 
 - [x] **11.2.1 Chain: ensure deals are thin-provisioned (no implicit tier sizing).**
-    - **Files:** `nilchain/x/nilchain/keeper/msg_server.go`, `nilchain/x/nilchain/keeper/msg_server_test.go`, `nilchain/x/nilchain/keeper/genesis_test.go`
+    - **Files:** `polystorechain/x/polystorechain/keeper/msg_server.go`, `polystorechain/x/polystorechain/keeper/msg_server_test.go`, `polystorechain/x/polystorechain/keeper/genesis_test.go`
     - **Pass gate:** `CreateDeal` + `CreateDealFromEvm` create deals with `Deal.size == 0` + empty `Deal.manifest_root` until `UpdateDealContent*` is executed; any legacy tier fields are ignored for state.
-    - **Test gate:** `cd nilchain && go test ./x/nilchain/keeper -run CreateDeal`
-    - **Commit gate:** After pass, commit `fix(nilchain): thin-provision CreateDeal` and push to `origin`.
+    - **Test gate:** `cd polystorechain && go test ./x/polystorechain/keeper -run CreateDeal`
+    - **Commit gate:** After pass, commit `fix(polystorechain): thin-provision CreateDeal` and push to `origin`.
 
 - [x] **11.2.2 Remove `size_tier` from EIP-712 CreateDeal intent end-to-end.**
-    - **Files (chain):** `nilchain/x/nilchain/types/eip712.go`, `nilchain/x/nilchain/keeper/msg_server.go`
+    - **Files (chain):** `polystorechain/x/polystorechain/types/eip712.go`, `polystorechain/x/polystorechain/keeper/msg_server.go`
     - **Files (web/tools):** `polystore-website/src/lib/eip712.ts`, `polystore-website/src/lib/eip712.test.ts`, `polystore-website/src/hooks/useCreateDeal.ts`, `polystore-website/scripts/sign_intent.ts`
     - **Pass gate:** A CreateDeal signature produced by the web (MetaMask or viem) verifies on-chain and `create-deal-from-evm` succeeds with an intent JSON that does **not** include `size_tier`.
-    - **Test gate:** `cd polystore-website && npm run test:unit` and `cd nilchain && go test ./...` and `./e2e_create_deal_from_evm.sh`
+    - **Test gate:** `cd polystore-website && npm run test:unit` and `cd polystorechain && go test ./...` and `./e2e_create_deal_from_evm.sh`
     - **Commit gate:** After pass, commit `refactor(eip712): remove size_tier from CreateDeal intent` and push to `origin`.
 
 - [x] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
     - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `polystore-website/website-spec.md`, `polystore-website/debug/*`
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
-    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website nilchain polystore_gateway polystore_cli scripts tests e2e_*.sh`
+    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website polystorechain polystore_gateway polystore_cli scripts tests e2e_*.sh`
     - **Commit gate:** After pass, commit `chore: remove tier remnants` and push to `origin`.
 
 - [x] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
-    - **Files:** `nilchain/proto/nilchain/nilchain/v1/tx.proto` (reserve field 10), generated `nilchain/x/nilchain/types/tx.pb.go`, `polystore-website/src/lib/eip712.ts`, `nilchain/x/nilchain/types/eip712.go`
+    - **Files:** `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto` (reserve field 10), generated `polystorechain/x/polystorechain/types/tx.pb.go`, `polystore-website/src/lib/eip712.ts`, `polystorechain/x/polystorechain/types/eip712.go`
     - **Pass gate:** `create-deal-from-evm` still works (intent JSON omits `size_tier`; default semantics unchanged); no code references `SizeTier`.
-    - **Test gate:** `cd nilchain && make proto-gen && go test ./...` and `./scripts/e2e_lifecycle.sh`
+    - **Test gate:** `cd polystorechain && make proto-gen && go test ./...` and `./scripts/e2e_lifecycle.sh`
     - **Commit gate:** After pass, commit `refactor(proto): remove EvmCreateDealIntent.size_tier` and push to `origin`.
 
 ### 11.3 Gateway & File Lifecycle E2E

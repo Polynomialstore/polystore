@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 // GatewayDebugRawFetch serves file bytes directly from an on-disk NilFS slab without

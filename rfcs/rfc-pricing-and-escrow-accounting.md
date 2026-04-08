@@ -1,7 +1,7 @@
 # RFC: Pricing & Escrow Accounting (Lock-in + Retrieval Fees + Elasticity Caps)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain economics (`nilchain/`) + gateway/UI intent fields
+**Scope:** Chain economics (`polystorechain/`) + gateway/UI intent fields
 **Motivation:** `spec.md` §6.1–§6.2, §7.2.1; Appendix B #5
 **Depends on:** `rfcs/rfc-data-granularity-and-economics.md`
 
@@ -25,13 +25,13 @@ This RFC intentionally does **not** introduce retrieval “credits” for Gamma�
 
 ### 1.2 Module accounts
 - `authtypes.FeeCollectorName`: receives `deal_creation_fee`.
-- `types.ModuleName` (`nilchain` module account): holds escrow and performs burns/transfers for retrieval settlement.
+- `types.ModuleName` (`polystorechain` module account): holds escrow and performs burns/transfers for retrieval settlement.
 
 ---
 
 ## 2. Parameters (Frozen)
 
-From `nilchain/nilchain/v1/params.proto`:
+From `polystorechain/polystorechain/v1/params.proto`:
 - `deal_creation_fee: Coin`
 - `min_duration_blocks: uint64`
 - `storage_price: Dec` (per byte per block)

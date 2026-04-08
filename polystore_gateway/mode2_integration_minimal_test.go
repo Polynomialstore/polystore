@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 type mode2DealState struct {
@@ -50,7 +50,7 @@ func newMode2LCDServer(t *testing.T, dealID uint64, state *mode2DealState) *http
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			owner, cid, hint, providers := state.getDeal()
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
@@ -61,8 +61,8 @@ func newMode2LCDServer(t *testing.T, dealID uint64, state *mode2DealState) *http
 					"providers":    providers,
 				},
 			})
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
-			providerAddr := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/")
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"):
+			providerAddr := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/")
 			baseURL := state.baseURLFor(providerAddr)
 			if strings.TrimSpace(baseURL) == "" {
 				http.NotFound(w, r)

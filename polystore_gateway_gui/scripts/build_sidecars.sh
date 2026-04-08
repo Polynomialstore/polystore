@@ -71,6 +71,6 @@ echo "==> Building polystore_cli sidecar"
 )
 
 echo "==> Copying trusted setup"
-cp "$ROOT_DIR/nilchain/trusted_setup.txt" "$RESOURCE_DIR/trusted_setup.txt"
+cp "$ROOT_DIR/polystorechain/trusted_setup.txt" "$RESOURCE_DIR/trusted_setup.txt"
 
 echo "Sidecars staged in $BIN_DIR"

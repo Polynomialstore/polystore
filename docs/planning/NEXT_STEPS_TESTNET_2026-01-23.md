@@ -59,7 +59,7 @@ This is a practical checklist that turns the current drafts into code + test gat
    - Confirm codec set for v1 (recommend: NONE + ZSTD).
    - Confirm header stability and zip-bomb safety limits.
 
-## B. Code implementation items (nilchain module)
+## B. Code implementation items (polystorechain module)
 
 ### B1) Deal expiry + renewal (CHAIN-104)
 

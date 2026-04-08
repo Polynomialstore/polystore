@@ -62,9 +62,9 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 ## 5. Key Files
 
 - **Roadmap:** `AGENTS.md` (Canonical).
-- **Chain Params:** `nilchain/x/nilchain/types/params.go`.
-- **Msg Server:** `nilchain/x/nilchain/keeper/msg_server.go`.
-- **Retrieval Session types:** `nilchain/proto/nilchain/nilchain/v1/types.proto`.
+- **Chain Params:** `polystorechain/x/polystorechain/types/params.go`.
+- **Msg Server:** `polystorechain/x/polystorechain/keeper/msg_server.go`.
+- **Retrieval Session types:** `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`.
 - **E2E scripts:** `e2e_retrieval_fees.sh`, `e2e_open_retrieval_session_cli.sh`.
 
 ## 6. How to Run

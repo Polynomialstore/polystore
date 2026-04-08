@@ -76,7 +76,7 @@ fi
 "$STACK_UP_SCRIPT"
 
 wait_for_http "lcd" "http://localhost:${LCD_PORT}/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
-wait_for_http "nilchain lcd" "http://localhost:${LCD_PORT}/nilchain/nilchain/v1/params" "200" 60 1
+wait_for_http "polystorechain lcd" "http://localhost:${LCD_PORT}/polystorechain/polystorechain/v1/params" "200" 60 1
 wait_for_http "faucet" "http://localhost:${FAUCET_PORT}/faucet" "200,405" 60 1
 wait_for_http "gateway router" "http://localhost:8080/health" "200" 60 1
 wait_for_http "provider #1" "http://localhost:${PROVIDER_PORT_BASE}/health" "200" 60 1

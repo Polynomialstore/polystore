@@ -333,7 +333,7 @@ export function Dashboard() {
       if (cancelled) return
       setRetrievalSessionsLoading(true)
       try {
-        const url = `${appConfig.lcdBase}/nilchain/nilchain/v1/retrieval-sessions/by-owner/${encodeURIComponent(
+        const url = `${appConfig.lcdBase}/polystorechain/polystorechain/v1/retrieval-sessions/by-owner/${encodeURIComponent(
           nilAddress,
         )}?pagination.limit=1000`
         const res = await fetch(url)
@@ -674,7 +674,7 @@ export function Dashboard() {
 
   async function fetchProviders() {
     try {
-      const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
+      const res = await fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`)
       const json = await res.json()
       if (json.providers) {
         setProviders(json.providers as Provider[])

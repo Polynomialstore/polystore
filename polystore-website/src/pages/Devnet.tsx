@@ -27,7 +27,7 @@ export function Devnet() {
       setLoading(true)
       setErr(null)
       try {
-        const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
+        const res = await fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`)
         if (!res.ok) throw new Error(`LCD returned ${res.status}`)
         const json = await res.json()
         if (cancelled) return

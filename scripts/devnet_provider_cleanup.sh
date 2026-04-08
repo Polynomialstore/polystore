@@ -106,7 +106,7 @@ resolve_deal() {
   local tmp
   tmp="$(mktemp)"
   local code
-  code="$(curl -sS -o "$tmp" -w '%{http_code}' "$LCD_BASE/nilchain/nilchain/v1/deals/$deal_id" || true)"
+  code="$(curl -sS -o "$tmp" -w '%{http_code}' "$LCD_BASE/polystorechain/polystorechain/v1/deals/$deal_id" || true)"
   if [[ "$code" == "404" ]]; then
     DEAL_STATUS[$deal_id]="missing"
     DEAL_END[$deal_id]="0"

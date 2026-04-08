@@ -34,20 +34,20 @@ It maps the runbook phases to real directories, files, and existing test gates i
 ### Chain (Cosmos SDK app)
 
 - Protos:
-  - `nilchain/proto/nilchain/nilchain/v1/types.proto` (Deal + types)
-  - `nilchain/proto/nilchain/nilchain/v1/tx.proto` (Msgs)
-  - `nilchain/proto/nilchain/nilchain/v1/params.proto` (Params)
+  - `polystorechain/proto/polystorechain/polystorechain/v1/types.proto` (Deal + types)
+  - `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto` (Msgs)
+  - `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` (Params)
 - Msg handlers:
-  - `nilchain/x/nilchain/keeper/msg_server.go`
+  - `polystorechain/x/polystorechain/keeper/msg_server.go`
     - `CreateDeal` / `CreateDealFromEvm`
     - `UpdateDealContent` / `UpdateDealContentFromEvm`
     - `OpenRetrievalSession` / `ConfirmRetrievalSession` / `CancelRetrievalSession`
     - `ProveLiveness` (unified liveness, includes Mode 2 repairing slot rules)
 - Quotas / unified liveness:
-  - `nilchain/x/nilchain/keeper/unified_liveness.go`
-  - `nilchain/x/nilchain/keeper/slashing.go` (quota miss -> repair triggers, evidence summaries)
+  - `polystorechain/x/polystorechain/keeper/unified_liveness.go`
+  - `polystorechain/x/polystorechain/keeper/slashing.go` (quota miss -> repair triggers, evidence summaries)
 - EVM bridge helpers:
-  - `nilchain/x/nilchain/types/evm_bridge.go`
+  - `polystorechain/x/polystorechain/types/evm_bridge.go`
 
 ### Gateway + Provider data-plane
 
@@ -80,7 +80,7 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
   - `./scripts/run_devnet_alpha_multi_sp.sh stop`
 - Single-node stack:
   - `./scripts/run_local_stack.sh`
-  - Safety note: `run_local_stack.sh start` always re-initializes the chain home. Default home is `_artifacts/nilchain_data`. If you set `NIL_HOME` outside `_artifacts/`, wiping requires `NIL_REINIT_HOME=1`.
+  - Safety note: `run_local_stack.sh start` always re-initializes the chain home. Default home is `_artifacts/polystorechain_data`. If you set `NIL_HOME` outside `_artifacts/`, wiping requires `NIL_REINIT_HOME=1`.
 
 ### E2E scripts
 
@@ -101,7 +101,7 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
 ### Unit tests
 
 - Chain:
-  - `go test ./nilchain/...`
+  - `go test ./polystorechain/...`
 - Gateway:
   - `go test ./polystore_gateway/...`
 - Rust crates:
@@ -125,7 +125,7 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
 The authoritative source of “what CI runs” is `.github/workflows/ci.yml`.
 
 At a high level, CI exercises:
-- Go unit tests: `nilchain`, `polystore_faucet`, `polystore_gateway`, `polystore_relayer`
+- Go unit tests: `polystorechain`, `polystore_faucet`, `polystore_gateway`, `polystore_relayer`
 - Rust unit tests: `polystore_core`, `polystore_cli`, `polystore_p2p`, `polystore_mock_l1`
 - Frontend: build + unit tests + lint (`polystore-website`)
 - Tauri GUI: build + unit tests + clippy (`polystore_gateway_gui`)
@@ -151,7 +151,7 @@ Primary artifacts:
 ### Phase 1 — Deal expiry + renewal (ExtendDeal) (DONE)
 
 CI signals:
-- Unit tests: `cd nilchain && go test ./...` (see extend tests under `nilchain/x/nilchain/keeper/*extend*`)
+- Unit tests: `cd polystorechain && go test ./...` (see extend tests under `polystorechain/x/polystorechain/keeper/*extend*`)
 - E2E: `scripts/e2e_lifecycle.sh`
 
 ### Phase 2 — Mandatory retrieval sessions for all served bytes (DONE)
@@ -163,13 +163,13 @@ CI signals:
 ### Phase 3 — Retrieval policies + sponsored/public sessions (DONE)
 
 CI signals:
-- Unit tests: allowlist + vouchers under `nilchain/x/nilchain/keeper/*sponsored*`
+- Unit tests: allowlist + vouchers under `polystorechain/x/polystorechain/keeper/*sponsored*`
 - E2E: covered by lifecycle + retrieval-session scripts
 
 ### Phase 4 — Protocol retrieval hooks (audit/repair) + audit budget (DONE)
 
 CI signals:
-- Unit tests: protocol sessions + audit budget under `nilchain/x/nilchain/keeper/*protocol*` and `*audit*`
+- Unit tests: protocol sessions + audit budget under `polystorechain/x/polystorechain/keeper/*protocol*` and `*audit*`
 
 ### Phase 5 — Compression-aware content pipeline (NilCE v1) (PARTIAL)
 

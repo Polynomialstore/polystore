@@ -351,7 +351,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     const url = route.request().url()
     if (url.includes('/heat')) {
       await route.fulfill({
@@ -378,7 +378,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     } catch {
       // ignore
     }
-    if (/\/nilchain\/nilchain\/v1\/deals\/[0-9]+$/.test(pathname)) {
+    if (/\/polystorechain\/polystorechain\/v1\/deals\/[0-9]+$/.test(pathname)) {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -393,7 +393,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

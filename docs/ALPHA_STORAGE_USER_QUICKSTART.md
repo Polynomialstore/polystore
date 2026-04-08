@@ -17,7 +17,7 @@ Fallback target:
 - Reuse an already healthy local gateway on `http://localhost:8080` if one is running; otherwise install and open Nil Gateway GUI so it owns that address.
 - macOS: use the latest release `.dmg` for Apple Silicon or Intel, install `polystore_gateway_gui.app`, and approve the first launch in Gatekeeper if prompted.
 - Linux: use the latest release `.deb` on Ubuntu or Debian, or `.rpm` on RPM-based systems, then launch `polystore_gateway_gui` from the app menu or shell.
-- Confirm required tools are present (`bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `nilchaind`; `gh` optional).
+- Confirm required tools are present (`bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `polystorechaind`; `gh` optional).
 - Confirm the hosted LCD and faucet are reachable.
 - Use the repo-tracked public testnet bootstrap defaults from `.env.testnet.public` unless you intentionally need overrides.
 - Before running the burner helper, set a keystore password in `NIL_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.

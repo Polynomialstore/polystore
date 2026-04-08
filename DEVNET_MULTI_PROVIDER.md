@@ -8,8 +8,8 @@ If you are onboarding trusted collaborators for a long-lived soft launch, start 
 
 ## Mental Model
 
-- **Hub** runs: `nilchaind` (RPC/LCD/EVM), `polystore_faucet`, **gateway-router** (`polystore_gateway` in router mode), and optionally `polystore-website`.
-- **Provider** runs: `polystore_gateway` in provider mode with its own `nilchaind` keyring key (pays gas for provider txs).
+- **Hub** runs: `polystorechaind` (RPC/LCD/EVM), `polystore_faucet`, **gateway-router** (`polystore_gateway` in router mode), and optionally `polystore-website`.
+- **Provider** runs: `polystore_gateway` in provider mode with its own `polystorechaind` keyring key (pays gas for provider txs).
 - **Users** use: the web UI (MetaMask) or curl. The web flow uses EIP-712 signatures for authorization; the hub still broadcasts some txs with its faucet key (devnet shortcut).
 
 ## One-Command Local Multi-SP (Single Machine)
@@ -87,11 +87,11 @@ Create a deal, upload a file, and downloads will route through the hub gateway t
 
 ## Troubleshooting
 
-- Provider not showing up on `/nilchain/nilchain/v1/providers`:
+- Provider not showing up on `/polystorechain/polystorechain/v1/providers`:
   - ensure the registration tx succeeded and the provider address is funded for fees
   - ensure you passed a reachable `--endpoint` multiaddr
 - Router can’t reach provider:
   - check firewall/NAT, and confirm `PROVIDER_ENDPOINT` is reachable *from the hub*
   - ensure both router + provider share the same `NIL_GATEWAY_SP_AUTH`
 - Remote provider submitting txs to the wrong node:
-  - set `NIL_NODE=tcp://<hub-host>:26657` (provider gateway uses this for `nilchaind tx/query`)
+  - set `NIL_NODE=tcp://<hub-host>:26657` (provider gateway uses this for `polystorechaind tx/query`)

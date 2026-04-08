@@ -2,7 +2,7 @@
 
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23  
-**Scope:** Chain (`nilchain/`), Gateway/router (`polystore_gateway/`), Providers, UI (`polystore-website/`), and side projects (public explorers)
+**Scope:** Chain (`polystorechain/`), Gateway/router (`polystore_gateway/`), Providers, UI (`polystore-website/`), and side projects (public explorers)
 **Hard constraints respected:** does **not** change storage lock‑in pricing or the settlement semantics of **owner‑paid** retrieval sessions in `rfcs/rfc-pricing-and-escrow-accounting.md`; no off-chain oracles; deterministic on-chain behavior.
 
 ---
@@ -138,7 +138,7 @@ Handler semantics (normative):
 2) Enforce deal policy based on `Deal.retrieval_policy` (see §6.2).
 3) Compute `base_fee` and `variable_fee` using the same fee schedule and rounding rules as the frozen RFC.
 4) `total = base_fee + variable_fee`. If `max_total_fee` is set, reject unless `total <= max_total_fee`.
-5) Transfer `total` from `creator` to the `nilchain` module account.
+5) Transfer `total` from `creator` to the `polystorechain` module account.
 6) Create a session with:
    - `purpose = USER`
    - `funding = REQUESTER`
@@ -169,7 +169,7 @@ Fields (conceptual):
 
 Funding semantics (normative):
 1) Fees are funded from a **protocol retrieval budget** module account (see §5.4).
-2) The chain transfers `total` from the protocol budget module account into the `nilchain` module account and opens the session with:
+2) The chain transfers `total` from the protocol budget module account into the `polystorechain` module account and opens the session with:
    - `purpose = PROTOCOL_AUDIT` or `PROTOCOL_REPAIR`
    - `funding = PROTOCOL`
    - `payer = protocol_budget_module_account_address`

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 type stripeParams struct {

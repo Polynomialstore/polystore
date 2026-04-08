@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 func TestReconstructMduRs_MissingShards(t *testing.T) {

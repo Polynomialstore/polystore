@@ -143,7 +143,7 @@ export const PerformanceReport = () => {
             <h3 className="text-2xl font-bold text-foreground mb-6">Test Methodology</h3>
             <div className="space-y-6 text-muted-foreground">
                 <p>
-                    These benchmarks were conducted using a local `nilchain` devnet. We utilized a custom load generator script (`load_gen.sh`) to simulate varying network conditions.
+                    These benchmarks were conducted using a local `polystorechain` devnet. We utilized a custom load generator script (`load_gen.sh`) to simulate varying network conditions.
                 </p>
                 <ul className="space-y-4">
                     <li className="flex gap-3">

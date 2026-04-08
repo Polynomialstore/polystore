@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 type mode2Fixture struct {

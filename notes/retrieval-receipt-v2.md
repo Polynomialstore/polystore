@@ -53,7 +53,7 @@ In `MsgProveLiveness` (user receipt path), enforce:
 
 To prevent client nonce drift across devices and resets, expose the last accepted nonce:
 
-- `GET /nilchain/nilchain/v1/owners/{owner}/receipt-nonce` → `{ last_nonce: uint64 }`
+- `GET /polystorechain/polystorechain/v1/owners/{owner}/receipt-nonce` → `{ last_nonce: uint64 }`
 
 Frontend rule:
 - Always fetch `last_nonce` before signing; sign with `nonce = last_nonce + 1`.
@@ -75,11 +75,11 @@ Frontend rule:
 - Add on-chain envelope/receipt consistency checks.
 - Implement v2 EIP-712 hashing for retrieval receipts (with v1 fallback during migration).
 - Add nonce query endpoint and wire frontend to it.
-- Add unit tests in `nilchain` for v2 digest + invariants; add frontend unit test vectors (where available).
+- Add unit tests in `polystorechain` for v2 digest + invariants; add frontend unit test vectors (where available).
 
 ## 7. Phase 3 TODO (Concrete Checklist)
 
-### 7.1 Chain (`nilchain`)
+### 7.1 Chain (`polystorechain`)
 1. Delete `SKIP_KZG_VERIFY` bypass; verification must always run.
 2. Enforce receipt/msg consistency:
    - `receipt.deal_id == msg.deal_id`

@@ -104,7 +104,7 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 		switch r.URL.Path {
 		case "/cosmos/base/tendermint/v1beta1/node_info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_node_info": map[string]any{}})
-		case "/nilchain/nilchain/v1/providers/nil1providerstatus":
+		case "/polystorechain/polystorechain/v1/providers/nil1providerstatus":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"address":      "nil1providerstatus",
@@ -114,7 +114,7 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 					"draining":     false,
 				},
 			})
-		case "/nilchain/nilchain/v1/provider-pairings/nil1providerstatus":
+		case "/polystorechain/polystorechain/v1/provider-pairings/nil1providerstatus":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
 					"provider":      "nil1providerstatus",
@@ -218,7 +218,7 @@ func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 					"header": map[string]any{"height": "40"},
 				},
 			})
-		case "/nilchain/nilchain/v1/providers/nil1providerpending":
+		case "/polystorechain/polystorechain/v1/providers/nil1providerpending":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"address":   "nil1providerpending",
@@ -227,9 +227,9 @@ func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 					"draining":  false,
 				},
 			})
-		case "/nilchain/nilchain/v1/provider-pairings/nil1providerpending":
+		case "/polystorechain/polystorechain/v1/provider-pairings/nil1providerpending":
 			http.NotFound(w, r)
-		case "/nilchain/nilchain/v1/provider-pairings/pending/nil1providerpending":
+		case "/polystorechain/polystorechain/v1/provider-pairings/pending/nil1providerpending":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"link": map[string]any{
 					"provider":         "nil1providerpending",
@@ -283,11 +283,11 @@ func TestGatewayStatusReportsProviderDaemonIssues(t *testing.T) {
 		switch r.URL.Path {
 		case "/cosmos/base/tendermint/v1beta1/node_info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_node_info": map[string]any{}})
-		case "/nilchain/nilchain/v1/providers/nil1providerissues":
+		case "/polystorechain/polystorechain/v1/providers/nil1providerissues":
 			http.NotFound(w, r)
-		case "/nilchain/nilchain/v1/provider-pairings/nil1providerissues":
+		case "/polystorechain/polystorechain/v1/provider-pairings/nil1providerissues":
 			http.NotFound(w, r)
-		case "/nilchain/nilchain/v1/provider-pairings/pending/nil1providerissues":
+		case "/polystorechain/polystorechain/v1/provider-pairings/pending/nil1providerissues":
 			http.NotFound(w, r)
 		default:
 			http.NotFound(w, r)

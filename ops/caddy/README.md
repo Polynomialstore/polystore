@@ -11,7 +11,7 @@ Why:
 1) Install Caddy (package or official installer).
 2) Copy `ops/caddy/Caddyfile.hub.example` to `/etc/caddy/Caddyfile` and edit the domain names.
 3) Ensure the hub services are running on localhost:
-   - `nilchaind` RPC: `127.0.0.1:26657`
+   - `polystorechaind` RPC: `127.0.0.1:26657`
    - LCD/API: `127.0.0.1:1317`
    - EVM JSON-RPC: `127.0.0.1:8545`
    - Router gateway: `127.0.0.1:8080`

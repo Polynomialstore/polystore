@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 func TestGatewayDebugRawFetch_ByPath_NoManifestBin(t *testing.T) {

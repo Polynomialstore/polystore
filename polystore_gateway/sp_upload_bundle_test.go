@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"testing"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 func TestSpUploadBundle_AcceptsSparseArtifacts(t *testing.T) {

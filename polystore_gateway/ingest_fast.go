@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 // IngestNewDealFast creates a simplified Deal Slab for testing.

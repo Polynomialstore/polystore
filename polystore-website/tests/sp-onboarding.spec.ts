@@ -195,7 +195,7 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/provider-pairings/pending-by-operator/${nilAddress}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/provider-pairings/pending-by-operator/${nilAddress}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -203,7 +203,7 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/provider-pairings/by-operator/${nilAddress}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/provider-pairings/by-operator/${nilAddress}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -211,7 +211,7 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

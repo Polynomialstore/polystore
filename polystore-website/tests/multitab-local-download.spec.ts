@@ -170,7 +170,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   })
 
   // Mock LCD deals (page 1: empty container).
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -191,7 +191,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -210,7 +210,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -341,7 +341,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   })
 
   // LCD deals: now shows CID on-chain.
-  await page2.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page2.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -362,7 +362,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
-  await page2.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page2.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -381,7 +381,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
-  await page2.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page2.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

@@ -14,7 +14,7 @@ This document tracks **what is missing** between the current implementation in t
 - Keep items **small enough to ship** (1–5 PRs each).
 - Every epic should have a **test gate** (unit/e2e/script) before it can be marked “Done”.
 - Prefer tracking **code ownership** by directory:
-  - Chain: `nilchain/`
+  - Chain: `polystorechain/`
   - Gateway/SP: `polystore_gateway/`
   - Core crypto/WASM: `polystore_core/`
   - CLI automation: `polystore_cli/`
@@ -89,7 +89,7 @@ This document tracks **what is missing** between the current implementation in t
 
 ## Domain Backlog (P1/P2) — Organized By Subsystem
 
-### Chain / Protocol (`nilchain/`)
+### Chain / Protocol (`polystorechain/`)
 
 #### CHAIN-101 — Explicit Mode 2 encoding on-chain (K/M, slot mapping, overlays)
 - **Status:** PARTIAL (DEVNET)
@@ -150,7 +150,7 @@ This document tracks **what is missing** between the current implementation in t
 
 #### CHAIN-106 — EVM module production posture (simulation vs runtime)
 - **Status:** PARTIAL (DEVNET)
-- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `nilchain/app/app.go` simulation exclusions
+- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `polystorechain/app/app.go` simulation exclusions
 - **Notes:** EVM/FeeMarket are excluded from simulation to avoid signer panics; ensure production builds are safe and tested.
 
 ### Gateway / Provider (`polystore_gateway/`)

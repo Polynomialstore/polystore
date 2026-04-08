@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 type slabFileInfo struct {

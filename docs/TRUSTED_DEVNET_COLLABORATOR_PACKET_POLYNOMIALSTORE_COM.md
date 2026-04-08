@@ -54,7 +54,7 @@ Local gateway app (recommended for localhost gateway-assisted flows):
 
 Notes:
 - The website flow remains wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
-- The repo helper `scripts/testnet_burner_upload.sh` uses the local gateway for upload and direct `nilchaind` submission for create/update, so it does not require a separately managed local faucet or gateway tx-relay setup.
+- The repo helper `scripts/testnet_burner_upload.sh` uses the local gateway for upload and direct `polystorechaind` submission for create/update, so it does not require a separately managed local faucet or gateway tx-relay setup.
 - The website flow uses direct EVM transactions (MetaMask / precompile), then uses direct provider transport and optional localhost local-gateway mode.
 
 ## SP Operator Quickstart

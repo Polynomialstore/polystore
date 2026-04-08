@@ -12,7 +12,7 @@ Related:
 ## Architecture (locked for soft launch)
 
 - **Hub** runs (either public VPS or home server behind NAT):
-  - `nilchaind` (CometBFT RPC + LCD + EVM JSON-RPC)
+  - `polystorechaind` (CometBFT RPC + LCD + EVM JSON-RPC)
   - `user-gateway` (legacy runtime alias: `polystore_gateway` in router mode)
   - `polystore_faucet` (enabled, rate-limited; collaborator-only)
   - `polystore-website` (static build behind HTTPS)
@@ -119,18 +119,18 @@ sudo mkdir -p /opt && sudo chown "$USER":"$USER" /opt
 git clone https://github.com/Polynomialstore/polystore.git /opt/nilstore
 cd /opt/nilstore
 
-# Use a persistent chain home outside the repo (matches `ops/systemd/env/nilchaind.env` defaults).
+# Use a persistent chain home outside the repo (matches `ops/systemd/env/polystorechaind.env` defaults).
 sudo mkdir -p /var/lib/nilstore
 sudo chown -R "$USER":"$USER" /var/lib/nilstore
 
 # One-time init (hub only; no local providers; no web).
-NIL_HOME=/var/lib/nilstore/nilchaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+NIL_HOME=/var/lib/nilstore/polystorechaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
 If you need to re-run bootstrap later, the script will refuse to delete an existing non-`_artifacts/` home unless you explicitly opt in:
 
 ```bash
-NIL_HOME=/var/lib/nilstore/nilchaind NIL_REINIT_HOME=1 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+NIL_HOME=/var/lib/nilstore/polystorechaind NIL_REINIT_HOME=1 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
 Note: the bootstrap script binds LCD + EVM JSON-RPC to localhost by default (safe for the hub-behind-Caddy profile).
@@ -165,7 +165,7 @@ sudo systemctl daemon-reload
 sudo mkdir -p /etc/nilstore
 sudo cp ops/systemd/env/*.env /etc/nilstore/
 
-sudoedit /etc/nilstore/nilchaind.env
+sudoedit /etc/nilstore/polystorechaind.env
 sudoedit /etc/nilstore/polystore-gateway-router.env
 sudoedit /etc/nilstore/polystore-faucet.env
 ```
@@ -177,14 +177,14 @@ Minimum required edits:
 - set `NIL_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
 - set `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` in all nilstore env files
 - recommended (hub behind Caddy or Cloudflare Tunnel): bind services to localhost and expose only via the public edge:
-  - `nilchaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
+  - `polystorechaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
   - `polystore-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080` (or another free local port if `8080` is occupied)
   - `polystore-faucet.env`: `NIL_LISTEN_ADDR=127.0.0.1:8081`
 
 3) Enable + start (recommended order):
 
 ```bash
-sudo systemctl enable --now nilchaind
+sudo systemctl enable --now polystorechaind
 sudo systemctl enable --now polystore-gateway-router
 sudo systemctl enable --now polystore-faucet
 ```
@@ -452,7 +452,7 @@ Sanity checks (replace `<domain>`):
 
 ```bash
 curl -fsS https://lcd.<domain>/cosmos/base/tendermint/v1beta1/node_info >/dev/null
-curl -fsS https://lcd.<domain>/nilchain/nilchain/v1/params >/dev/null
+curl -fsS https://lcd.<domain>/polystorechain/polystorechain/v1/params >/dev/null
 curl -fsS https://evm.<domain> -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' >/dev/null
 curl -fsS -o /dev/null -w '%{http_code}\n' https://faucet.<domain>/faucet
@@ -465,7 +465,7 @@ curl -fsS http://127.0.0.1:8088/ >/dev/null
 
 ## Economics knobs (soft launch)
 
-Nilchain module params are stored in genesis under `app_state.nilchain.params` and can be patched at init-time
+Nilchain module params are stored in genesis under `app_state.polystorechain.params` and can be patched at init-time
 by `scripts/run_devnet_alpha_multi_sp.sh` via env vars.
 
 Recommended soft-launch defaults:
@@ -531,7 +531,7 @@ Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its cha
 Systemd templates live in `ops/systemd/`.
 
 Minimum units to run on the hub:
-- `ops/systemd/nilchaind.service`
+- `ops/systemd/polystorechaind.service`
 - `ops/systemd/polystore-gateway-router.service`
 - `ops/systemd/polystore-faucet.service` (optional but recommended for collaborators)
 
@@ -539,8 +539,8 @@ Use the env templates under `ops/systemd/env/` and make sure:
 - All hub services share the same `NIL_HOME` (chain home directory).
 - `polystore-gateway-router` and all providers share the same `NIL_GATEWAY_SP_AUTH`.
 
-For repeatable `nilchaind` binary rollouts on systemd hosts, use:
-- `scripts/redeploy_nilchaind.sh`
+For repeatable `polystorechaind` binary rollouts on systemd hosts, use:
+- `scripts/redeploy_polystorechaind.sh`
 - `docs/NILCHAIND_REDEPLOY_RUNBOOK.md`
 
 ## Provider onboarding
@@ -571,7 +571,7 @@ For trusted-devnet bring-up, you can run multiple logical providers on the hub h
   - `NIL_HOME` (separate keyring + state)
   - `NIL_UPLOAD_DIR`
   - `NIL_SESSION_DB_PATH`
-- If faucet throttling slows provider funding, fund provider keys directly from the local `faucet` key via `nilchaind tx bank send`.
+- If faucet throttling slows provider funding, fund provider keys directly from the local `faucet` key via `polystorechaind tx bank send`.
 
 Provider health checks:
 
@@ -587,7 +587,7 @@ scripts/devnet_healthcheck.sh provider --provider https://sp3.<domain> --hub-lcd
 ## Faucet / funding (collaborators)
 
 Collaborators must have funds for gas (and any protocol fees). For the current devnet profile:
-- EVM gas denom is `aatom` (see `nilchain` params / genesis).
+- EVM gas denom is `aatom` (see `polystorechain` params / genesis).
 - The faucet can send both `aatom` and `stake` (default `NIL_AMOUNT`).
 
 Faucet access control (recommended for invite-only):
@@ -619,7 +619,7 @@ For a collaborator validating their SP is actually participating:
 4) Verify on-chain deal state is updated:
 
 ```bash
-curl -sf https://lcd.<domain>/nilchain/nilchain/v1/deals/<id> | jq '.deal | {id,size,manifest_root,total_mdus,witness_mdus}'
+curl -sf https://lcd.<domain>/polystorechain/polystorechain/v1/deals/<id> | jq '.deal | {id,size,manifest_root,total_mdus,witness_mdus}'
 ```
 
 5) Verify provider-side file presence (local Phase A example):
@@ -643,8 +643,8 @@ Use this flow instead:
 
 1) Generate EVM intents with `polystore-website/scripts/sign_intent.ts` (`create-deal`, then `update-content`).
 2) Submit intents directly on-chain:
-   - `nilchaind tx nilchain create-deal-from-evm <create_payload.json> ...`
-   - `nilchaind tx nilchain update-deal-content-from-evm <update_payload.json> ...`
+   - `polystorechaind tx polystorechain create-deal-from-evm <create_payload.json> ...`
+   - `polystorechaind tx polystorechain update-deal-content-from-evm <update_payload.json> ...`
 3) Use local gateway data path:
    - upload: `POST http://127.0.0.1:8080/gateway/upload?deal_id=<id>`
    - plan session: `GET http://127.0.0.1:8080/gateway/plan-retrieval-session/<manifest_root>?...`
@@ -675,11 +675,11 @@ Recommended onboarding order:
 
 Important:
 - this is **testnet-only** convenience flow, not production custody
-- the flow still requires a local gateway for `/gateway/upload`, but create/update are submitted directly with `nilchaind` by default so you do not also need a local faucet or gateway tx-relay setup
+- the flow still requires a local gateway for `/gateway/upload`, but create/update are submitted directly with `polystorechaind` by default so you do not also need a local faucet or gateway tx-relay setup
 
 ## Troubleshooting (hub)
 
-- Provider doesn’t show up on `/nilchain/nilchain/v1/providers`:
+- Provider doesn’t show up on `/polystorechain/polystorechain/v1/providers`:
   - the registration tx likely failed (fund provider key for gas)
 - You registered `/ip4/127.0.0.1/...` and need public endpoint hostnames now:
   - endpoint updates are immutable for an already registered provider address
@@ -698,8 +698,8 @@ Important:
   - ensure unit templates use the shell wrapper in `ops/systemd/*.service` and run `systemctl daemon-reload`
 - nil services fail with `libpolystore_core.so: cannot open shared object file`:
   - ensure `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` is set in each `/etc/nilstore/*.env`
-- `nilchaind` fails binding gRPC `localhost:9090`:
-  - set a free port in `/var/lib/nilstore/nilchaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
+- `polystorechaind` fails binding gRPC `localhost:9090`:
+  - set a free port in `/var/lib/nilstore/polystorechaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
 - Multiple providers on one host fail to start (port bind errors):
   - either disable provider libp2p for the soft launch (`NIL_P2P_ENABLED=0`) or assign unique `NIL_P2P_LISTEN_ADDRS` per provider
 - Provider logs are noisy with repeated `system liveness` proof failures (for example `no such file or directory` on old shard paths):
@@ -731,16 +731,16 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 - Faucet is configured for invite-only (recommended):
   - `NIL_FAUCET_AUTH_TOKEN` set and tested via curl.
 - Pricing params are sane (and dynamic pricing status is intentional):
-  - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/params | jq '.params.dynamic_pricing_enabled,.params.storage_price,.params.retrieval_price_per_blob'`
+  - `curl -sf https://lcd.<domain>/polystorechain/polystorechain/v1/params | jq '.params.dynamic_pricing_enabled,.params.storage_price,.params.retrieval_price_per_blob'`
 
 ### Providers (remote SP baseline)
 
 - Provider healthcheck passes:
   - `scripts/devnet_healthcheck.sh provider --provider https://sp1.<domain> --hub-lcd https://lcd.<domain> --provider-addr nil1...`
 - Provider is visible on-chain and has reachable endpoints:
-  - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers/<nil1...> | jq '.provider.endpoints'`
+  - `curl -sf https://lcd.<domain>/polystorechain/polystorechain/v1/providers/<nil1...> | jq '.provider.endpoints'`
 - Active providers are registered with public `/dns4/.../tcp/443/https` endpoints (not localhost):
-  - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers | jq -r '.providers[] | select((.draining // false) == false) | [.address, (.endpoints[0] // \"\")] | @tsv'`
+  - `curl -sf https://lcd.<domain>/polystorechain/polystorechain/v1/providers | jq -r '.providers[] | select((.draining // false) == false) | [.address, (.endpoints[0] // \"\")] | @tsv'`
 - Router↔provider auth secret matches (`NIL_GATEWAY_SP_AUTH`) and is stored out-of-band (treat like a password).
 
 ### Website (collaborator UX)

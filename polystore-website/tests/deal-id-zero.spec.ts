@@ -235,7 +235,7 @@ test('repro bug: download from commit content widget', async ({
   })
 
   // Intercept deals response to force ID="0"
-  await page.route('**/nilchain/nilchain/v1/deals*', async route => {
+  await page.route('**/polystorechain/polystorechain/v1/deals*', async route => {
     await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -260,7 +260,7 @@ test('repro bug: download from commit content widget', async ({
     });
   });
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -302,7 +302,7 @@ test('repro bug: download from commit content widget', async ({
   });
 
   // Mock receipt nonce (unsigned proof tx path uses chain nonce state).
-  await page.route('**/nilchain/nilchain/v1/deals/*/receipt-nonce*', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals/*/receipt-nonce*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

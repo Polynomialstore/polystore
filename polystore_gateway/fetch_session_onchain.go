@@ -13,7 +13,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 var ErrSessionNotFound = errors.New("retrieval session not found")
@@ -100,7 +100,7 @@ func fetchRetrievalSession(sessionIDHex string) (*types.RetrievalSession, error)
 	}
 	sidB64 := base64.URLEncoding.EncodeToString(sidBytes)
 
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/retrieval-sessions/%s", lcdBase, sidB64)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/retrieval-sessions/%s", lcdBase, sidB64)
 	resp, err := lcdHTTPClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("LCD request failed: %w", err)

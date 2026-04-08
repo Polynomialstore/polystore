@@ -18,7 +18,7 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 - Faucet is healthy (if enabled):
   - `curl -sf http://127.0.0.1:8081/health >/dev/null`
 - Pricing params are sane (and dynamic pricing status is intentional):
-  - `curl -sf http://127.0.0.1:1317/nilchain/nilchain/v1/params | jq '.params.dynamic_pricing_enabled,.params.storage_price,.params.retrieval_price_per_blob'`
+  - `curl -sf http://127.0.0.1:1317/polystorechain/polystorechain/v1/params | jq '.params.dynamic_pricing_enabled,.params.storage_price,.params.retrieval_price_per_blob'`
 
 ## Hub — resource / network checks
 
@@ -29,7 +29,7 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 
 ## Hub — logs
 
-- `journalctl -u nilchaind -S today --no-pager | tail -n 200`
+- `journalctl -u polystorechaind -S today --no-pager | tail -n 200`
 - `journalctl -u polystore-gateway-router -S today --no-pager | tail -n 200`
 - `journalctl -u polystore-faucet -S today --no-pager | tail -n 200`
 
@@ -41,11 +41,11 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 - Provider gateway is healthy:
   - `curl -sf http://127.0.0.1:<PORT>/health >/dev/null`
 - Provider is visible on-chain (from hub):
-  - `curl -sf http://127.0.0.1:1317/nilchain/nilchain/v1/providers/<nil1...> | jq '.provider.endpoints'`
+  - `curl -sf http://127.0.0.1:1317/polystorechain/polystorechain/v1/providers/<nil1...> | jq '.provider.endpoints'`
 - Router can reach provider endpoint (from hub):
   - `curl -sf <provider-public-url>/health >/dev/null`
 - Active providers are using public endpoints (no accidental localhost endpoint leakage):
-  - `curl -sf https://lcd.<domain>/nilchain/nilchain/v1/providers | jq -r '.providers[] | select((.draining // false) == false) | [.address, (.endpoints[0] // \"\"), (.draining // false)] | @tsv'`
+  - `curl -sf https://lcd.<domain>/polystorechain/polystorechain/v1/providers | jq -r '.providers[] | select((.draining // false) == false) | [.address, (.endpoints[0] // \"\"), (.draining // false)] | @tsv'`
   - Ensure active entries resolve to `/dns4/<public-host>/tcp/443/https`.
 - System liveness is progressing (and not thrashing on stale local shards):
   - `curl -sf http://127.0.0.1:<PORT>/status | jq '.extra | with_entries(select(.key|startswith("system_liveness_")))'`
@@ -59,7 +59,7 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 
 ## When something breaks (quick triage)
 
-- **Chain stuck**: check disk full first, then `nilchaind` logs for consensus errors; restart only after disk/IO is healthy.
+- **Chain stuck**: check disk full first, then `polystorechaind` logs for consensus errors; restart only after disk/IO is healthy.
 - **Provider missing**: re-check funding for provider key (gas), endpoint multiaddr reachability, and `NIL_GATEWAY_SP_AUTH` match.
 - **Fetch failing**: confirm sessions are opening on-chain and clients are sending `X-Nil-Session-Id` (sessions are required by default).
 - **Mode2 fetch intermittently failing**: inspect `mode2_reconstruct_*` counters and verify at least `K` shards remain available across assigned + fallback providers.

@@ -8,7 +8,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STACK_SCRIPT="$ROOT_DIR/scripts/run_local_stack.sh"
-NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
+NILCHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
 
 LCD_BASE="${LCD_BASE:-http://localhost:1317}"
 GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
@@ -165,7 +165,7 @@ echo "==> Polling LCD for created deal..."
 TMP_JSON="$(mktemp)"
 found=0
 for attempt in $(seq 1 20); do
-  timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals" > "$TMP_JSON" || true
+  timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals" > "$TMP_JSON" || true
   if python3 - "$TMP_JSON" "$NIL_ADDRESS" << 'PY'
 import json, sys
 path, owner = sys.argv[1], sys.argv[2]

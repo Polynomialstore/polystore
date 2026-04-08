@@ -58,7 +58,7 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 *   **Consulting Analysis:** Mode 1 (Full Replica) is expensive and brittle. Mode 2 allows the network to survive node failures mathematically rather than just via redundancy. This is the most complex engineering phase.
 *   **Key Deliverables:**
     *   **Slot-Major Indexing:** Implement the "Slot-Major" leaf ordering defined in `mode2-framing.md`. This ensures providers can serve data efficiently (contiguous reads) while still supporting distributed repairs.
-    *   **Virtual Stripes on Chain:** Update `nilchain` to track `VirtualStripe` assignments (slot -> provider mapping).
+    *   **Virtual Stripes on Chain:** Update `polystorechain` to track `VirtualStripe` assignments (slot -> provider mapping).
     *   **Client-Side Reconstruction:** Update the Fetch logic to query `K` providers in parallel and perform Reed-Solomon reconstruction on the fly if some fail.
     *   **Parity Accountability:** Implement "Design A" from the framing notes: Parity shards must be committed and provable just like data shards (using Triple Proofs).
 

@@ -28,8 +28,8 @@ import (
 
 	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 func useTempUploadDir(t *testing.T) string {
@@ -1388,7 +1388,7 @@ func TestGatewayPlanRetrievalSession_UsesMetadataProviderWithoutLocalProvider(t 
 
 	metadataProvider := "nil1metadataprovider"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/11" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/11" {
 			http.NotFound(w, r)
 			return
 		}
@@ -1451,7 +1451,7 @@ func TestGatewayPlanRetrievalSession_PrefersMetadataProviderOverLocalEnv(t *test
 
 	metadataProvider := "nil1metadataproviderx"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/12" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/12" {
 			http.NotFound(w, r)
 			return
 		}
@@ -1523,7 +1523,7 @@ func TestGatewayPlanRetrievalSession_ProviderResolutionStatusMapping(t *testing.
 	preparePlanRetrievalTestSlab(t, dealID, manifestRoot, "plan.txt", 1024)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/13" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/13" {
 			http.NotFound(w, r)
 			return
 		}

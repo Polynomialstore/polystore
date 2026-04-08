@@ -42,7 +42,7 @@ Tx relay is **off by default** and should remain off for mainnet parity.
 
    Notes:
    - `scripts/run_local_stack.sh start` **always re-initializes** the chain home.
-   - Default home is `_artifacts/nilchain_data`. If you set `NIL_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `NIL_REINIT_HOME=1`.
+   - Default home is `_artifacts/polystorechain_data`. If you set `NIL_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `NIL_REINIT_HOME=1`.
      - Example: `NIL_HOME=/var/lib/nilstore/local NIL_REINIT_HOME=1 scripts/run_local_stack.sh start`
    - Tx relay is **off by default**; enable it only if you’re following **Profile A**:
      - `NIL_ENABLE_TX_RELAY=1 scripts/run_local_stack.sh start`
@@ -231,7 +231,7 @@ Commit the content (Profile A relay path; mirrors `scripts/e2e_lifecycle.sh`):
 UPDATE_PAYLOAD=$(
   NONCE=2 \
   DEAL_ID="$DEAL_ID" \
-  PREVIOUS_MANIFEST_ROOT="$(curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID" | jq -r '.deal.manifest_root // ""')" \
+  PREVIOUS_MANIFEST_ROOT="$(curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID" | jq -r '.deal.manifest_root // ""')" \
   CID="$MANIFEST_ROOT" \
   SIZE_BYTES="$SIZE_BYTES" \
   TOTAL_MDUS="$TOTAL_MDUS" \
@@ -247,7 +247,7 @@ The signed update intent now carries both `previous_manifest_root` and `manifest
 Verify on chain (LCD):
 
 ```bash
-curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID" | python3 -m json.tool
+curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID" | python3 -m json.tool
 ```
 
 ### 2.3 Plan + open a retrieval session (mandatory)
@@ -359,9 +359,9 @@ cmp -s "$UPLOAD_FILE" fetched.bin && echo "OK: fetched bytes match"
 
 Mirrors `scripts/e2e_gateway_retrieval_multi_sp.sh`:
 
-1. Create a Mode2 deal using `General:rs=2+1` so the gateway splits shards across many SPs (`nilchain tx nilchain create-deal ... --service-hint "General:rs=2+1"`).
+1. Create a Mode2 deal using `General:rs=2+1` so the gateway splits shards across many SPs (`polystorechain tx polystorechain create-deal ... --service-hint "General:rs=2+1"`).
 2. Upload and commit a 1 MiB payload via the router exactly as above.
-3. Use `nilchain query nilchain get-deal --id <deal_id>` to read `providers[]` and choose the assigned provider that differs from the owner. Note its `endpoints[0]`.
+3. Use `polystorechain query polystorechain get-deal --id <deal_id>` to read `providers[]` and choose the assigned provider that differs from the owner. Note its `endpoints[0]`.
 4. Hit the router’s `/gateway/prove-retrieval` endpoint with JSON:
    ```json
    {
@@ -374,7 +374,7 @@ Mirrors `scripts/e2e_gateway_retrieval_multi_sp.sh`:
    }
    ```
    (The epoch can be computed via `curl http://127.0.0.1:26657/status`, matching the script’s `current_epoch` helper.)
-5. Watch the gateway reply with a `tx_hash`. Use `nilchain query tx <hash>` to confirm the `MsgSubmitRetrievalProof` succeeded under the assigned provider key. This proves the router can reconstruct Mode2 MDUs and authorize cross-account receipts.
+5. Watch the gateway reply with a `tx_hash`. Use `polystorechain query tx <hash>` to confirm the `MsgSubmitRetrievalProof` succeeded under the assigned provider key. This proves the router can reconstruct Mode2 MDUs and authorize cross-account receipts.
 
 ## 4. Deputy-led healing / repair validation
 
@@ -383,17 +383,17 @@ Following the latter half of `scripts/e2e_deputy_ghost_repair_multi_sp.sh`:
 1. Create another deal (Mode2), upload/commit, and request a retrieval plan with `curl http://localhost:8080/gateway/plan-retrieval-session/<manifest>?deal_id=<id>&owner=<owner>&file_path=<file>&range_start=0&range_len=<bytes>`. Capture the returned provider; this is the planned slot owner.
 2. Fetch bytes via `/gateway/fetch/...` using the owner signature. Inspect `X-Nil-Provider` in the response headers—if the planner routes around the busy slot, the header should show a deputy provider.
 3. Submit a deputy session proof: POST to `/gateway/session-proof` with the same `session_id` and the deputy provider address. The gateway should reply `{"status":"success"}`.
-4. Wait for the next epoch boundary (see the script’s `wait_for_height` logic) and inspect `nilchain query nilchain get-deal --id <id>` to confirm the targeted `mode2_slots` entry shows `status=REPAIRING` with a `pending_provider`.
+4. Wait for the next epoch boundary (see the script’s `wait_for_height` logic) and inspect `polystorechain query polystorechain get-deal --id <id>` to confirm the targeted `mode2_slots` entry shows `status=REPAIRING` with a `pending_provider`.
 5. Use the planner again to ensure it now returns the pending provider, proving the healing path defers traffic away from repairing slots.
 
 ## 5. Economics, slashing, and quotas
 
 Manual checks derived from keeper tests:
 
-- Query `nilchain query nilchain params` and `nilchain query nilchain list-deals` to examine `Params.max_drain_bytes_per_epoch`, `Params.max_repairing_bytes_ratio_bps`, and deal heat statistics.
-- Execute `nilchain tx nilchain set-provider-draining <provider>` to test that new placement requests avoid that provider, as tested in `nilchain/x/nilchain/keeper/draining_test.go`.
-- Open sponsored retrieval sessions and vouchers via `/gateway/plan-retrieval-session` + `/gateway/session-receipt`; inspect `nilchain query nilchain retrieval-sessions` to ensure quotas decrement just like `msg_server_sponsored_sessions_test.go`.
-- Watch reward distribution by querying `nilchain query nilchain rewards` or running dedicated `go test ./nilchain/x/nilchain/keeper/base_rewards_test.go` for a reference baseline.
+- Query `polystorechain query polystorechain params` and `polystorechain query polystorechain list-deals` to examine `Params.max_drain_bytes_per_epoch`, `Params.max_repairing_bytes_ratio_bps`, and deal heat statistics.
+- Execute `polystorechain tx polystorechain set-provider-draining <provider>` to test that new placement requests avoid that provider, as tested in `polystorechain/x/polystorechain/keeper/draining_test.go`.
+- Open sponsored retrieval sessions and vouchers via `/gateway/plan-retrieval-session` + `/gateway/session-receipt`; inspect `polystorechain query polystorechain retrieval-sessions` to ensure quotas decrement just like `msg_server_sponsored_sessions_test.go`.
+- Watch reward distribution by querying `polystorechain query polystorechain rewards` or running dedicated `go test ./polystorechain/x/polystorechain/keeper/base_rewards_test.go` for a reference baseline.
 
 ## 6. Keeping the runbook up to date
 

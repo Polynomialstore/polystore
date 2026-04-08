@@ -52,7 +52,7 @@ The GUI must treat `{cid}` as a **legacy alias** for the deal-level **`manifest_
 Canonical behavior for these endpoints is documented in `polystore_gateway/polystore-gateway-spec.md`.
  
 ### 1.2 Existing Cryptography / Mode 2
-Mode 2 ingest paths already use `nilchain/x/crypto_ffi` (Go ↔ Rust FFI). The GUI plan assumes **Mode 2 is the primary supported path**.
+Mode 2 ingest paths already use `polystorechain/x/crypto_ffi` (Go ↔ Rust FFI). The GUI plan assumes **Mode 2 is the primary supported path**.
  
 ## 2. Target Architecture (Monolithic Sidecar + GUI)
 
@@ -76,7 +76,7 @@ The GUI must run without requiring the user to install build tools or CLI binari
 **Supported implementation strategy (choose one and document it in `polystore_gateway_gui/README.md`):**
 1. **Bundle required binaries (recommended MVP):**
    - Bundle a `polystore_gateway` sidecar binary per platform.
-   - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `nilchaind` client binary if `polystore_gateway` still shells out).
+   - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `polystorechaind` client binary if `polystore_gateway` still shells out).
    - The host sets `NIL_TRUSTED_SETUP`, `NILCHAIND_BIN`, and other paths to bundle-resident locations.
 2. **Eliminate external exec dependencies (target hardening):**
    - Remove `execNilchaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
@@ -104,7 +104,7 @@ The implementation must choose **WalletConnect** as the default and treat the br
 ## 4. Signing Spec (Normative, No Guessing)
 
 ### 4.1 EIP-712 Domain
-The domain is defined in `nilchain/x/nilchain/types/eip712.go`:
+The domain is defined in `polystorechain/x/polystorechain/types/eip712.go`:
 - `name`: `"NilStore"`
 - `version`: `"1"`
 - `chainId`: **numeric** `Params.eip712_chain_id` (default devnet: `31337`)
@@ -139,9 +139,9 @@ Field order (must match `UpdateContentTypeHash` in `eip712.go`):
   "evm_signature": "0x..."
 }
 ```
-Where `intent` uses the on-chain JSON field names (see `nilchain/proto/nilchain/nilchain/v1/tx.proto` and validation in `polystore_gateway/main.go`).
+Where `intent` uses the on-chain JSON field names (see `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto` and validation in `polystore_gateway/main.go`).
  
-**Implementation rule:** Add golden tests that ensure typed-data encoding produces signatures accepted by chain tests (see `nilchain/x/nilchain/keeper/msg_server_evmbdg_test.go`).
+**Implementation rule:** Add golden tests that ensure typed-data encoding produces signatures accepted by chain tests (see `polystorechain/x/polystorechain/keeper/msg_server_evmbdg_test.go`).
  
 ## 5. UX Flows (What the App Must Do)
 
@@ -246,7 +246,7 @@ The host must map config to sidecar env vars consistently:
 - `NIL_NODE` ← `chain.node_rpc`
 - `NIL_PROVIDER_BASE` ← `gateway.provider_base`
 - `NIL_TRUSTED_SETUP` ← bundle-resident `trusted_setup.txt` path (Strategy 1)
-- `NILCHAIND_BIN` ← bundle-resident `nilchaind` path (Strategy 1, only if still used)
+- `NILCHAIND_BIN` ← bundle-resident `polystorechaind` path (Strategy 1, only if still used)
  
 ## 7. Testing Plan (Thorough, CI-Friendly)
 
@@ -273,7 +273,7 @@ Minimum:
 - Headless UI E2E (Playwright) running against the **web UI** with a mocked host bridge (recommended for CI).
  
 Optional/nightly:
-- Full-stack E2E that starts `nilchaind` + `polystore_gateway` + the GUI and runs a real create-deal/upload/commit/list/fetch lifecycle (can reuse/adapt `polystore_gateway/test_lifecycle.sh`).
+- Full-stack E2E that starts `polystorechaind` + `polystore_gateway` + the GUI and runs a real create-deal/upload/commit/list/fetch lifecycle (can reuse/adapt `polystore_gateway/test_lifecycle.sh`).
  
 ## 8. CI / Build / Release
 
@@ -349,4 +349,4 @@ These are not blockers; defaults are stated. Please confirm/correct.
 5. **Sidecar port strategy**: Default ephemeral port with host discovery; OK to require an engineering change in `polystore_gateway`?
 6. **Target OS support**: Default macOS + Linux first; Windows supported in CI but may lag for local dev.
 7. **Proof/receipt UX**: Should downloads auto-submit receipts/proofs (devnet convenience) or only display “ready to sign” payloads?
-8. **Bundling approach**: Should we bundle a `nilchaind` client binary for MVP, or should Phase 7 (dependency-free) be required before shipping a GUI?
+8. **Bundling approach**: Should we bundle a `polystorechaind` client binary for MVP, or should Phase 7 (dependency-free) be required before shipping a GUI?

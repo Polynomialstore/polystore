@@ -113,7 +113,7 @@ func s3DealIDToBucket(id uint64) string {
 }
 
 func fetchDealIDsFromLCD(ctx context.Context) ([]uint64, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals?pagination.limit=1000", lcdBase)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals?pagination.limit=1000", lcdBase)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := lcdHTTPClient.Do(req)
 	if err != nil {
@@ -514,7 +514,7 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 	sizeStr := strconv.FormatUint(res.sizeBytes, 10)
 	_, txErr := runTxWithRetry(
 		ingestCtx,
-		"tx", "nilchain", "update-deal-content",
+		"tx", "polystorechain", "update-deal-content",
 		"--deal-id", dealIDStr,
 		"--cid", res.manifestRoot.Canonical,
 		"--size", sizeStr,

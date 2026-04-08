@@ -8,7 +8,7 @@ LCD_PORT="${LCD_PORT:-3317}"
 LCD_BASE="${LCD_BASE:-http://127.0.0.1:${LCD_PORT}}"
 GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
 FAUCET_BASE="${FAUCET_BASE:-http://127.0.0.1:18081}"
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data}"
+CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/polystorechain_data}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 FAUCET_PID=""
 

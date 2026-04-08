@@ -14,7 +14,7 @@
     "lint": "tsc --noEmit",
     "preview": "vite preview",
     "desktop": "npm run desktop:user",
-    "desktop:user": "bash -lc 'cd .. && CHAIN_ID=${CHAIN_ID:-20260211} EVM_CHAIN_ID=${EVM_CHAIN_ID:-20260211} NIL_CHAIN_ID=${NIL_CHAIN_ID:-${CHAIN_ID:-20260211}} NIL_HOME=${NIL_HOME:-$PWD/_artifacts/nilchain_data_devnet_alpha} NIL_NODE=${NIL_NODE:-tcp://127.0.0.1:26657} NIL_LCD_BASE=${NIL_LCD_BASE:-http://127.0.0.1:1317} NIL_GAS_PRICES=${NIL_GAS_PRICES:-0.001aatom} cd polystore_gateway_gui && npm run stack:stop-user && npm run build-sidecars && npm run tauri dev'",
+    "desktop:user": "bash -lc 'cd .. && CHAIN_ID=${CHAIN_ID:-20260211} EVM_CHAIN_ID=${EVM_CHAIN_ID:-20260211} NIL_CHAIN_ID=${NIL_CHAIN_ID:-${CHAIN_ID:-20260211}} NIL_HOME=${NIL_HOME:-$PWD/_artifacts/polystorechain_data_devnet_alpha} NIL_NODE=${NIL_NODE:-tcp://127.0.0.1:26657} NIL_LCD_BASE=${NIL_LCD_BASE:-http://127.0.0.1:1317} NIL_GAS_PRICES=${NIL_GAS_PRICES:-0.001aatom} cd polystore_gateway_gui && npm run stack:stop-user && npm run build-sidecars && npm run tauri dev'",
     "desktop:with-sp": "npm run stack:ensure-sp && npm run desktop:user",
     "sp:ensure": "npm run stack:ensure-sp",
     "user:ensure": "npm run stack:ensure-user",

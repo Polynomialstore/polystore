@@ -22,7 +22,7 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
   const filePath = 'opfs.txt'
   const fileSize = 1024
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

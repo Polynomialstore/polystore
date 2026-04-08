@@ -15,7 +15,7 @@ func TestFetchDealProvidersFromLCD_Mode2SlotsPrefersActive(t *testing.T) {
 	t.Cleanup(func() { lcdBase = origLCD })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/123" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/123" {
 			http.NotFound(w, r)
 			return
 		}
@@ -58,7 +58,7 @@ func TestFetchDealProvidersFromLCD_FallsBackToProvidersWhenNoMode2Slots(t *testi
 	t.Cleanup(func() { lcdBase = origLCD })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/7" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/7" {
 			http.NotFound(w, r)
 			return
 		}
@@ -94,7 +94,7 @@ func TestResolveDealMode2Slots_PreservesSlotOrder(t *testing.T) {
 	const dealID = 999
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/999" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/999" {
 			http.NotFound(w, r)
 			return
 		}
@@ -191,7 +191,7 @@ func TestResolveProviderHTTPBaseURL_HostOverrideFromEndpoint(t *testing.T) {
 
 	providerBaseCache = sync.Map{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/providers/nil1providerz" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/providers/nil1providerz" {
 			http.NotFound(w, r)
 			return
 		}
@@ -222,7 +222,7 @@ func TestResolveProviderForRetrievalPlan_Mode2UsesPendingProvider(t *testing.T) 
 
 	const dealID uint64 = 55
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/55" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/55" {
 			http.NotFound(w, r)
 			return
 		}
@@ -310,7 +310,7 @@ func TestResolveProviderForRetrievalPlan_Mode2SlotOutOfRange(t *testing.T) {
 
 	const dealID uint64 = 56
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/56" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/56" {
 			http.NotFound(w, r)
 			return
 		}
@@ -343,7 +343,7 @@ func TestResolveProviderForRetrievalPlan_Mode2MetadataInvalidEmptyProvider(t *te
 
 	const dealID uint64 = 57
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/nilchain/nilchain/v1/deals/57" {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/57" {
 			http.NotFound(w, r)
 			return
 		}

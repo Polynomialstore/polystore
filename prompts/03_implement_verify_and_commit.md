@@ -25,7 +25,7 @@ Implement the plan end-to-end, in small verified increments:
 ## Verification Requirements
 - Run the most relevant tests per change:
   - `polystore_gateway`: Go unit tests, plus `./scripts/e2e_lifecycle.sh` as a backend gate.
-  - `nilchain`: `go test ./...` and any proto generation/build steps required by your changes.
+  - `polystorechain`: `go test ./...` and any proto generation/build steps required by your changes.
   - `polystore-website`: unit tests + new browser e2e suite.
 - If you must deviate from the plan, update `AGENTS.md` and the relevant specs/docs to reflect the new reality (in the same PR/commit series).
 

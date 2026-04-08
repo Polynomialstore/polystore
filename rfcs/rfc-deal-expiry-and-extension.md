@@ -3,7 +3,7 @@
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23
 
-**Scope:** Chain (`nilchain/`), Gateway (`polystore_gateway/`), Providers, UI (`polystore-website/`)
+**Scope:** Chain (`polystorechain/`), Gateway (`polystore_gateway/`), Providers, UI (`polystore-website/`)
 
 **Hard constraints respected**
 - Does **not** modify the frozen escrow/retrieval settlement contract in `rfcs/rfc-pricing-and-escrow-accounting.md`.
@@ -86,7 +86,7 @@ Compute:
 - `extension_cost = ceil(P * size * additional_duration_blocks)`
 
 Accounting:
-- transfer `extension_cost` from `deal.owner` to the `nilchain` module account
+- transfer `extension_cost` from `deal.owner` to the `polystorechain` module account
 - increase `deal.escrow_balance += extension_cost`
 
 Rounding:

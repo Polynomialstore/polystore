@@ -506,7 +506,7 @@ pub async fn health_snapshot(req: SpHealthSnapshotRequest) -> Result<SpHealthSna
     }
 
     let lcd_base = req.hub_lcd.trim_end_matches('/');
-    let params_url = format!("{lcd_base}/nilchain/nilchain/v1/params");
+    let params_url = format!("{lcd_base}/polystorechain/polystorechain/v1/params");
     match client.get(&params_url).send().await {
         Ok(resp) if resp.status().is_success() => {
             checks.push(SpCheckResult {
@@ -597,7 +597,7 @@ pub async fn health_snapshot(req: SpHealthSnapshotRequest) -> Result<SpHealthSna
     }
 
     if let Some(provider_addr) = req.provider_addr.clone() {
-        let provider_url = format!("{lcd_base}/nilchain/nilchain/v1/providers/{provider_addr}");
+        let provider_url = format!("{lcd_base}/polystorechain/polystorechain/v1/providers/{provider_addr}");
         match client.get(&provider_url).send().await {
             Ok(resp) if resp.status().is_success() => checks.push(SpCheckResult {
                 name: "provider_registered".to_string(),

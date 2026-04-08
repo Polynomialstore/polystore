@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 // IngestAppendToDeal appends a new file into an existing deal slab.

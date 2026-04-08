@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Devnet Alpha multi-provider stack runner.
 # Starts:
-# - nilchaind (CometBFT + LCD + JSON-RPC)
+# - polystorechaind (CometBFT + LCD + JSON-RPC)
 # - polystore_faucet
 # - N provider daemons (polystore_gateway, provider mode) on ports 8091+
 # - 1 gateway router (polystore_gateway, router mode) on :8080
@@ -22,7 +22,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp"
 PID_DIR="$LOG_DIR/pids"
 
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data_devnet_alpha}"
+CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/polystorechain_data_devnet_alpha}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
@@ -37,10 +37,10 @@ DENOM="${NIL_DENOM:-stake}"
 NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
 NIL_REINIT_HOME="${NIL_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
 
-NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
+NILCHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
 NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
 NIL_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
-TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
+TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
 
 PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
@@ -257,7 +257,7 @@ wait_for_provider_count() {
   for i in $(seq 1 "$attempts"); do
     local tmp code body
     tmp="$(mktemp)"
-    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:${LCD_PORT}/nilchain/nilchain/v1/providers" 2>/dev/null || true)
+    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:${LCD_PORT}/polystorechain/polystorechain/v1/providers" 2>/dev/null || true)
     body="$(cat "$tmp" 2>/dev/null || true)"
     rm -f "$tmp"
     if [ "$code" = "200" ] && python3 - "$body" "$want" >/dev/null 2>&1 <<'PY'
@@ -285,7 +285,7 @@ wait_for_provider_visible() {
   for i in $(seq 1 "$attempts"); do
     local tmp code body
     tmp="$(mktemp)"
-    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:${LCD_PORT}/nilchain/nilchain/v1/providers/$addr" 2>/dev/null || true)
+    code=$(timeout 10s curl -sS -o "$tmp" -w '%{http_code}' "http://localhost:${LCD_PORT}/polystorechain/polystorechain/v1/providers/$addr" 2>/dev/null || true)
     body="$(cat "$tmp" 2>/dev/null || true)"
     rm -f "$tmp"
     if [ "$code" = "200" ] && python3 - "$body" "$endpoint" >/dev/null 2>&1 <<'PY'
@@ -306,10 +306,10 @@ PY
   return 1
 }
 
-ensure_nilchaind() {
-  banner "Building nilchaind (via $GO_BIN)"
-  (cd "$ROOT_DIR/nilchain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
-  (cd "$ROOT_DIR/nilchain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" install ./cmd/nilchaind)
+ensure_polystorechaind() {
+  banner "Building polystorechaind (via $GO_BIN)"
+  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/polystorechaind)
+  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" install ./cmd/polystorechaind)
 }
 
 ensure_polystore_cli() {
@@ -373,9 +373,9 @@ params["active_static_precompiles"] = pre
 evm["params"] = params
 data["app_state"]["evm"] = evm
 
-# Optional devnet overrides for nilchain params (useful for fast CI/E2E loops).
-nilchain = data.get("app_state", {}).get("nilchain", {})
-params = nilchain.get("params", {}) if isinstance(nilchain, dict) else {}
+# Optional devnet overrides for polystorechain params (useful for fast CI/E2E loops).
+polystorechain = data.get("app_state", {}).get("polystorechain", {})
+params = polystorechain.get("params", {}) if isinstance(polystorechain, dict) else {}
 default_denom = (os.getenv("NIL_DENOM") or "stake").strip() or "stake"
 
 def set_uint_param(key, env_key):
@@ -485,9 +485,9 @@ if dynamic_enabled is True:
         params["storage_price"] = params.get("storage_price_min")
     if retrieval_price_min_set and not retrieval_price_set:
         params["retrieval_price_per_blob"] = params.get("retrieval_price_per_blob_min")
-if isinstance(nilchain, dict):
-    nilchain["params"] = params
-    data["app_state"]["nilchain"] = nilchain
+if isinstance(polystorechain, dict):
+    polystorechain["params"] = params
+    data["app_state"]["polystorechain"] = polystorechain
 
 json.dump(data, open(path, "w"), indent=1)
 PY
@@ -569,7 +569,7 @@ PY
 }
 
 start_chain() {
-  banner "Starting nilchaind"
+  banner "Starting polystorechaind"
   local grpc_flags=()
   if [ "${NIL_GRPC_ENABLE:-0}" = "1" ]; then
     grpc_flags+=(--grpc.enable=true)
@@ -600,15 +600,15 @@ start_chain() {
     --json-rpc.address "$json_rpc_addr" \
     --json-rpc.ws-address "$json_rpc_ws_addr" \
     --json-rpc.api eth,net,web3 \
-    >"$LOG_DIR/nilchaind.log" 2>&1 &
-  echo $! >"$PID_DIR/nilchaind.pid"
+    >"$LOG_DIR/polystorechaind.log" 2>&1 &
+  echo $! >"$PID_DIR/polystorechaind.pid"
   sleep 1
-  if ! kill -0 "$(cat "$PID_DIR/nilchaind.pid")" 2>/dev/null; then
-    echo "nilchaind failed to start; check $LOG_DIR/nilchaind.log"
-    tail -n 40 "$LOG_DIR/nilchaind.log" || true
+  if ! kill -0 "$(cat "$PID_DIR/polystorechaind.pid")" 2>/dev/null; then
+    echo "polystorechaind failed to start; check $LOG_DIR/polystorechaind.log"
+    tail -n 40 "$LOG_DIR/polystorechaind.log" || true
     exit 1
   fi
-  echo "nilchaind pid $(cat "$PID_DIR/nilchaind.pid"), logs: $LOG_DIR/nilchaind.log"
+  echo "polystorechaind pid $(cat "$PID_DIR/polystorechaind.pid"), logs: $LOG_DIR/polystorechaind.log"
 }
 
 start_faucet() {
@@ -632,7 +632,7 @@ start_faucet() {
 register_provider() {
   local key="$1"
   local endpoint="$2"
-  "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+  "$NILCHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
     --endpoint "$endpoint" \
     --from "$key" \
     --chain-id "$CHAIN_ID" \
@@ -745,7 +745,7 @@ start_web() {
 
 stop_all() {
   banner "Stopping processes"
-  for svc in nilchaind faucet router website; do
+  for svc in polystorechaind faucet router website; do
     pid_file="$PID_DIR/$svc.pid"
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file")
@@ -791,7 +791,7 @@ start_all() {
   fi
 
   ensure_polystore_core
-  ensure_nilchaind
+  ensure_polystorechaind
   ensure_polystore_cli
   ensure_polystore_gateway
   init_chain
@@ -799,7 +799,7 @@ start_all() {
   start_faucet
 
   wait_for_http "lcd" "http://localhost:${LCD_PORT}/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
-  wait_for_http "nilchain lcd" "http://localhost:${LCD_PORT}/nilchain/nilchain/v1/params" "200" 60 1
+  wait_for_http "polystorechain lcd" "http://localhost:${LCD_PORT}/polystorechain/polystorechain/v1/params" "200" 60 1
   wait_for_http "faucet" "http://localhost:${FAUCET_PORT}/faucet" "200,405" 60 1
 
   if [ "$PROVIDER_COUNT" -gt 0 ]; then

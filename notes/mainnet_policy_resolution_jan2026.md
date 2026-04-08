@@ -43,7 +43,7 @@ These are the baseline parameter defaults to implement and calibrate.
 
 ## Implementation Note: Params That Exist Today vs Proposed Additions
 
-The current on-chain params are defined in `nilchain/proto/nilchain/nilchain/v1/params.proto` and already include (non-exhaustive):
+The current on-chain params are defined in `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` and already include (non-exhaustive):
 - `storage_price`, `base_retrieval_fee`, `retrieval_price_per_blob`, `retrieval_burn_bps`
 - `month_len_blocks`, `epoch_len_blocks`
 - `quota_bps_per_epoch_hot/cold`, `quota_min_blobs`, `quota_max_blobs`

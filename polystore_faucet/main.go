@@ -22,14 +22,14 @@ import (
 // Config (overridable via env)
 var (
 	chainID     = envDefault("NIL_CHAIN_ID", "test-1")
-	homeDir     = envDefault("NIL_HOME", "../.nilchain")
+	homeDir     = envDefault("NIL_HOME", "../.polystorechain")
 	nodeAddr    = envDefault("NIL_NODE", "tcp://127.0.0.1:26657")
 	listenAddr  = envDefault("NIL_LISTEN_ADDR", "127.0.0.1:8081")
 	amount      = envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
 	denom       = envDefault("NIL_DENOM", "stake")
 	gasPrices   = envDefault("NIL_GAS_PRICES", "0.001aatom")
 	cooldown    = time.Duration(envInt("NIL_COOLDOWN_SECONDS", 30)) * time.Second
-	nilchaindBin = envDefault("NILCHAIND_BIN", "nilchaind")
+	polystorechaindBin = envDefault("NILCHAIND_BIN", "polystorechaind")
 	cmdTimeout   = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 20)) * time.Second
 
 	// Optional: when set, POST endpoints require X-Nil-Faucet-Auth header.
@@ -57,20 +57,20 @@ func main() {
 	log.Fatal(http.ListenAndServe(listenAddr, r))
 }
 
-// deriveNilchaindDir attempts to find a working directory where nilchaind
+// deriveNilchaindDir attempts to find a working directory where polystorechaind
 // can locate its trusted setup file via the default relative path
-// "nilchain/trusted_setup.txt". This keeps faucet CLI calls reliable even when
+// "polystorechain/trusted_setup.txt". This keeps faucet CLI calls reliable even when
 // the faucet process runs from a subdirectory.
 func deriveNilchaindDir() string {
 	if root := os.Getenv("NIL_ROOT_DIR"); root != "" {
 		return root
 	}
 
-	// Walk upwards from homeDir (if absolute) to find nilchain/trusted_setup.txt.
+	// Walk upwards from homeDir (if absolute) to find polystorechain/trusted_setup.txt.
 	if homeDir != "" {
 		dir := homeDir
 		for i := 0; i < 6; i++ {
-			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "polystorechain", "trusted_setup.txt")); err == nil {
 				return dir
 			}
 			parent := filepath.Dir(dir)
@@ -85,7 +85,7 @@ func deriveNilchaindDir() string {
 	if wd, err := os.Getwd(); err == nil {
 		dir := wd
 		for i := 0; i < 6; i++ {
-			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "polystorechain", "trusted_setup.txt")); err == nil {
 				return dir
 			}
 			parent := filepath.Dir(dir)
@@ -100,7 +100,7 @@ func deriveNilchaindDir() string {
 }
 
 func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, nilchaindBin, args...)
+	cmd := exec.CommandContext(ctx, polystorechaindBin, args...)
 	if dir := deriveNilchaindDir(); dir != "" {
 		cmd.Dir = dir
 	}

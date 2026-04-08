@@ -37,7 +37,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
         return;
     }
 
-    const trustedSetupPath = path.resolve('..', 'nilchain/trusted_setup.txt');
+    const trustedSetupPath = path.resolve('..', 'polystorechain/trusted_setup.txt');
     console.log('Trusted Setup Path:', trustedSetupPath);
     console.log('File Path:', path.resolve(testFilePath));
     
@@ -69,7 +69,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
   const nilAddress = ethToNil(account.address);
 
   // Mock LCD Deals to allow selection
-  await page.route('**/nilchain/nilchain/v1/deals**', async route => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async route => {
       await route.fulfill({
           status: 200,
           body: JSON.stringify({

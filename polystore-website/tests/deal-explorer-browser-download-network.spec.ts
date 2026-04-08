@@ -42,7 +42,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
   let fetchCalls = 0
   let listFilesCalls = 0
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -62,7 +62,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -88,7 +88,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -104,7 +104,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/proofs', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/proofs', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

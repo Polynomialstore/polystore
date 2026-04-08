@@ -46,7 +46,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 8. Confirm:
    - local `http://127.0.0.1:8091/health`
    - public `https://sp.<domain>/health` for tunnel / hostname mode, or `http://<ip>:8091/health` for direct IPv4 mode
-   - provider appears on `https://lcd.<domain>/nilchain/nilchain/v1/providers`
+   - provider appears on `https://lcd.<domain>/polystorechain/polystorechain/v1/providers`
    - provider appears in the website `My Providers` dashboard at `https://polynomialstore.com/#/sp-dashboard`
 
 If you deliberately want partial bootstrap without provider link, use the manual path in `docs/REMOTE_SP_JOIN_QUICKSTART.md` or opt in with `BOOTSTRAP_ALLOW_PARTIAL=1`. Do not expect `/#/sp-onboarding` or `/#/sp-dashboard` to track an unlinked provider.

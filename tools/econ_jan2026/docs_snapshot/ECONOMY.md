@@ -55,7 +55,7 @@ Providers earn tokens via:
 
 ### 3.3 Sinks (Burning)
 *   **Slashing:** Example policy: missed proofs / non-response violations trigger a slash and potential jailing. Exact windows and amounts are protocol parameters.
-*   **Burner:** The `nilchain` module has burn permissions to remove slashed assets from circulation.
+*   **Burner:** The `polystorechain` module has burn permissions to remove slashed assets from circulation.
 
 ## 5. Protocol Parameters (Proposal Defaults)
 

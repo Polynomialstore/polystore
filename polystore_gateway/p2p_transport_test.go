@@ -17,8 +17,8 @@ import (
 	"github.com/multiformats/go-multiaddr"
 
 	"golang.org/x/crypto/blake2s"
-	"nilchain/x/crypto_ffi"
-	niltypes "nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	niltypes "polystorechain/x/polystorechain/types"
 )
 
 func buildTestSlab(t *testing.T, filePath string, fileContent []byte) ManifestRoot {

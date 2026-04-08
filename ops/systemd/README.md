@@ -28,7 +28,7 @@ sudoedit /etc/nilstore/polystore-gateway-router.env
 3) Enable + start (hub):
 
 ```bash
-sudo systemctl enable --now nilchaind
+sudo systemctl enable --now polystorechaind
 sudo systemctl enable --now polystore-gateway-router
 sudo systemctl enable --now polystore-faucet
 ```
@@ -38,20 +38,20 @@ sudo systemctl enable --now polystore-faucet
 For recurring chain binary updates (build -> backup/install -> restart -> verify), use:
 
 - runbook: `docs/NILCHAIND_REDEPLOY_RUNBOOK.md`
-- script: `scripts/redeploy_nilchaind.sh`
+- script: `scripts/redeploy_polystorechaind.sh`
 
 Typical flow:
 
 ```bash
-./scripts/redeploy_nilchaind.sh
-sudo systemctl restart nilchaind && sudo systemctl status --no-pager nilchaind
-./scripts/redeploy_nilchaind.sh --verify-only
+./scripts/redeploy_polystorechaind.sh
+sudo systemctl restart polystorechaind && sudo systemctl status --no-pager polystorechaind
+./scripts/redeploy_polystorechaind.sh --verify-only
 ```
 
 4) Tail logs:
 
 ```bash
-journalctl -u nilchaind -f
+journalctl -u polystorechaind -f
 ```
 
 ## Provider quick usage

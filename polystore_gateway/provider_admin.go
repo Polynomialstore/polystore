@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 const (
@@ -375,7 +375,7 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 		return "", fmt.Errorf("provider registration state unavailable")
 	}
 
-	args := []string{"tx", "nilchain"}
+	args := []string{"tx", "polystorechain"}
 	switch registrationStatus {
 	case "registered":
 		args = append(args, "update-provider-endpoints", "--endpoint", endpoint)
@@ -405,7 +405,7 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 		"--yes",
 	)
 
-	out, err := runCommand(ctx, nilchaindBin, args, "")
+	out, err := runCommand(ctx, polystorechaindBin, args, "")
 	output := strings.TrimSpace(string(out))
 	if err != nil {
 		if output == "" {

@@ -85,7 +85,7 @@ atomicCopy(
 
 console.log("==> Copying trusted setup");
 copyFileSync(
-  join(rootDir, "nilchain", "trusted_setup.txt"),
+  join(rootDir, "polystorechain", "trusted_setup.txt"),
   join(binDir, "trusted_setup.txt"),
 );
 

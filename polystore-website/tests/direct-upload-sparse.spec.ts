@@ -162,7 +162,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     const url = route.request().url()
 
     if (url.includes('/heat')) {
@@ -190,7 +190,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
       // ignore
     }
 
-    if (/\/nilchain\/nilchain\/v1\/deals\/[0-9]+$/.test(pathname)) {
+    if (/\/polystorechain\/polystorechain\/v1\/deals\/[0-9]+$/.test(pathname)) {
       return route.fulfill({
         status: 200,
         body: JSON.stringify({ deal }),
@@ -203,7 +203,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers**', async (route) => {
     return route.fulfill({
       status: 200,
       body: JSON.stringify({

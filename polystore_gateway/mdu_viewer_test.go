@@ -15,8 +15,8 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 func TestGatewayManifestInfo_Basic(t *testing.T) {
@@ -279,7 +279,7 @@ func TestProviderGatewayMdu_RequiresOnchainSession(t *testing.T) {
 	const dealID = uint64(1)
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"id":        "1",
@@ -347,7 +347,7 @@ func TestProviderGatewayMdu_AllowsOnchainSession(t *testing.T) {
 	sessionB64 := base64.URLEncoding.EncodeToString(sessionBytes)
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"id":        "1",
@@ -357,8 +357,8 @@ func TestProviderGatewayMdu_AllowsOnchainSession(t *testing.T) {
 				},
 			})
 			return
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/"):
-			sid := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/")
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/retrieval-sessions/"):
+			sid := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/retrieval-sessions/")
 			if sid != sessionB64 {
 				http.NotFound(w, r)
 				return

@@ -15,7 +15,7 @@ import (
 
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 const providerAdminTestPrivKey = "4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1"
@@ -111,7 +111,7 @@ func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
 		switch r.URL.Path {
 		case "/cosmos/base/tendermint/v1beta1/node_info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_node_info": map[string]any{}})
-		case "/nilchain/nilchain/v1/providers/" + provider:
+		case "/polystorechain/polystorechain/v1/providers/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"address":   provider,
@@ -120,7 +120,7 @@ func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
 					"draining":  false,
 				},
 			})
-		case "/nilchain/nilchain/v1/provider-pairings/" + provider:
+		case "/polystorechain/polystorechain/v1/provider-pairings/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
 					"provider":      provider,
@@ -183,7 +183,7 @@ func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
 		switch r.URL.Path {
 		case "/cosmos/base/tendermint/v1beta1/node_info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_node_info": map[string]any{}})
-		case "/nilchain/nilchain/v1/providers/" + provider:
+		case "/polystorechain/polystorechain/v1/providers/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"address":   provider,
@@ -191,7 +191,7 @@ func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
 					"endpoints": []string{publicEndpoint},
 				},
 			})
-		case "/nilchain/nilchain/v1/provider-pairings/" + provider:
+		case "/polystorechain/polystorechain/v1/provider-pairings/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
 					"provider":      provider,
@@ -246,7 +246,7 @@ func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
 		switch r.URL.Path {
 		case "/cosmos/base/tendermint/v1beta1/node_info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_node_info": map[string]any{}})
-		case "/nilchain/nilchain/v1/providers/" + provider:
+		case "/polystorechain/polystorechain/v1/providers/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"address":   provider,
@@ -254,7 +254,7 @@ func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
 					"endpoints": []string{endpoint},
 				},
 			})
-		case "/nilchain/nilchain/v1/provider-pairings/" + provider:
+		case "/polystorechain/polystorechain/v1/provider-pairings/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
 					"provider":      provider,
@@ -287,8 +287,8 @@ func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: got=%d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.HasSuffix(gotName, "nilchaind") && gotName != "nilchaind" {
-		t.Fatalf("expected nilchaind command, got=%q", gotName)
+	if !strings.HasSuffix(gotName, "polystorechaind") && gotName != "polystorechaind" {
+		t.Fatalf("expected polystorechaind command, got=%q", gotName)
 	}
 	if !strings.Contains(strings.Join(gotArgs, " "), "update-provider-endpoints") {
 		t.Fatalf("expected update-provider-endpoints args, got=%v", gotArgs)

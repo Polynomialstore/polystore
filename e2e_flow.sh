@@ -4,19 +4,19 @@ set -e
 # End-to-End Flow Script for NilStore Network (Phase 3)
 # This script simulates a full lifecycle: Setup -> Register -> Deal -> Prove -> Reward
 
-BINARY="./nilchaind"
-CHAIN_ID="nilchain"
-HOME_DIR="./.nilchain"
+BINARY="./polystorechaind"
+CHAIN_ID="polystorechain"
+HOME_DIR="./.polystorechain"
 MDU_FILE="./test_mdu.dat"
-TRUSTED_SETUP="$(pwd)/nilchain/trusted_setup.txt"
+TRUSTED_SETUP="$(pwd)/polystorechain/trusted_setup.txt"
 
 # Ensure binaries are built
 echo ">>> Building binaries..."
-cd nilchain && go build -o ../nilchaind ./cmd/nilchaind && cd ..
+cd polystorechain && go build -o ../polystorechaind ./cmd/polystorechaind && cd ..
 
 # Clean start
 echo ">>> Resetting chain..."
-pkill -f nilchaind || true
+pkill -f polystorechaind || true
 rm -rf $HOME_DIR
 $BINARY init mynode --chain-id $CHAIN_ID --home $HOME_DIR > /dev/null 2>&1
 $BINARY config chain-id $CHAIN_ID --home $HOME_DIR
@@ -101,7 +101,7 @@ done
 echo ">>> Registering 12 Providers..."
 for i in {1..12}
 do
-   yes | $BINARY tx nilchain register-provider General 1000000000 --from "provider$i" --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+   yes | $BINARY tx polystorechain register-provider General 1000000000 --from "provider$i" --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 done
 
 # Create 8MB Test File
@@ -110,12 +110,12 @@ dd if=/dev/zero of=$MDU_FILE bs=1M count=8
 
 # Create Deal (Alice) - Step 1: Capacity
 echo ">>> Creating Deal (Capacity)..."
-yes | $BINARY tx nilchain create-deal 1000 1000000000 1000000000 --from alice --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+yes | $BINARY tx polystorechain create-deal 1000 1000000000 1000000000 --from alice --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 sleep 5
 
 # Update Deal Content - Step 2: Content
 echo ">>> Updating Deal Content..."
-yes | $BINARY tx nilchain update-deal-content --deal-id 1 --cid "QmTestCid" --size 8388608 --total-mdus 3 --witness-mdus 1 --from alice --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+yes | $BINARY tx polystorechain update-deal-content --deal-id 1 --cid "QmTestCid" --size 8388608 --total-mdus 3 --witness-mdus 1 --from alice --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 sleep 5
 
 # Verify Deal Created
@@ -126,7 +126,7 @@ sleep 5
 # We try provider1. If they aren't assigned, it will fail.
 # With 12 providers and redundancy 12, ALL 12 should be assigned!
 echo ">>> Submitting Proof (Provider 1)..."
-yes | $BINARY tx nilchain prove-liveness-local 1 $MDU_FILE $TRUSTED_SETUP --from provider1 --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+yes | $BINARY tx polystorechain prove-liveness-local 1 $MDU_FILE $TRUSTED_SETUP --from provider1 --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 
 echo ">>> Waiting for block..."
 sleep 5

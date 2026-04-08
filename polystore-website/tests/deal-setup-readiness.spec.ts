@@ -68,7 +68,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     const url = route.request().url()
 
     if (url.includes('/heat')) {
@@ -97,7 +97,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
       // ignore
     }
 
-    if (/\/nilchain\/nilchain\/v1\/deals\/32$/.test(pathname)) {
+    if (/\/polystorechain\/polystorechain\/v1\/deals\/32$/.test(pathname)) {
       detailAttempts += 1
       if (detailAttempts < 4) {
         return route.fulfill({
@@ -120,7 +120,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers**', async (route) => {
     return route.fulfill({
       status: 200,
       contentType: 'application/json',

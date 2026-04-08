@@ -3,9 +3,9 @@ set -euo pipefail
 
 #
 # Enterprise upload job runner (devnet):
-# - Creates (optional) deal via /gateway/create-deal-evm or direct nilchaind tx
+# - Creates (optional) deal via /gateway/create-deal-evm or direct polystorechaind tx
 # - Uploads a file into a deal via /gateway/upload (Mode 2 fast path when gateway available)
-# - Commits manifest_root on-chain via /gateway/update-deal-content-evm or direct nilchaind tx
+# - Commits manifest_root on-chain via /gateway/update-deal-content-evm or direct polystorechaind tx
 #
 # Requires:
 # - node/tsx deps installed in `polystore-website/` (for signing intents)
@@ -44,7 +44,7 @@ SERVICE_HINT="${SERVICE_HINT:-General}"
 UPLOAD_STATUS_TIMEOUT_SECS="${UPLOAD_STATUS_TIMEOUT_SECS:-300}"
 UPLOAD_STATUS_POLL_INTERVAL_SECS="${UPLOAD_STATUS_POLL_INTERVAL_SECS:-2}"
 TX_SUBMIT_MODE="${NIL_TX_SUBMIT_MODE:-gateway}"
-NILCHAIND_BIN="${NILCHAIND_BIN:-nilchaind}"
+NILCHAIND_BIN="${NILCHAIND_BIN:-polystorechaind}"
 NIL_GAS_PRICES="${NIL_GAS_PRICES:-${POLYSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
 NIL_TX_SENDER_KEY="${NIL_TX_SENDER_KEY:-${POLYSTORE_TESTNET_TX_SENDER_KEY:-faucet}}"
 NIL_TX_SENDER_HOME="${NIL_TX_SENDER_HOME:-$ROOT_DIR/_artifacts/testnet_tx_sender_home}"
@@ -143,7 +143,7 @@ direct_create_deal() {
     printf '%s\n' "$payload_json" >"$payload_file"
 
     cmd_status=0
-    create_out="$("$NILCHAIND_BIN" tx nilchain create-deal-from-evm "$payload_file" \
+    create_out="$("$NILCHAIND_BIN" tx polystorechain create-deal-from-evm "$payload_file" \
       --node "$NIL_NODE" \
       --chain-id "$CHAIN_ID" \
       --from "$NIL_TX_SENDER_KEY" \
@@ -212,7 +212,7 @@ direct_create_deal() {
         .tx_response.logs[]?.events[]?,
         .tx_response.events[]?
       ]
-      | map(select(.type == "nilchain.nilchain.EventCreateDeal" or .type == "create_deal"))
+      | map(select(.type == "polystorechain.polystorechain.EventCreateDeal" or .type == "create_deal"))
       | map(.attributes[]?)
       | flatten
       | map(select(.key == "id" or .key == "deal_id"))
@@ -220,7 +220,7 @@ direct_create_deal() {
     ' 2>/dev/null || true)"
 
     if [[ -z "$deal_id" ]]; then
-      list_out="$("$NILCHAIND_BIN" query nilchain list-deals \
+      list_out="$("$NILCHAIND_BIN" query polystorechain list-deals \
         --node "$NIL_NODE" \
         --output json 2>/dev/null || true)"
       max_id="$(printf '%s' "$list_out" | jq -r '[.deals[]?.id | tonumber] | max // empty' 2>/dev/null || true)"
@@ -270,7 +270,7 @@ direct_update_deal_content() {
     printf '%s\n' "$update_json" >"$update_file"
 
     cmd_status=0
-    update_out="$("$NILCHAIND_BIN" tx nilchain update-deal-content-from-evm "$update_file" \
+    update_out="$("$NILCHAIND_BIN" tx polystorechain update-deal-content-from-evm "$update_file" \
       --node "$NIL_NODE" \
       --chain-id "$CHAIN_ID" \
       --from "$NIL_TX_SENDER_KEY" \

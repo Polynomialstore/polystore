@@ -188,7 +188,7 @@ Agent-oriented diagnostics:
 From the hub (or anywhere with LCD access):
 
 ```bash
-curl -sf "${HUB_LCD:-https://lcd.polynomialstore.com}/nilchain/nilchain/v1/providers" | jq '.providers | length'
+curl -sf "${HUB_LCD:-https://lcd.polynomialstore.com}/polystorechain/polystorechain/v1/providers" | jq '.providers | length'
 ```
 
 ## Common failures

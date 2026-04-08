@@ -61,7 +61,7 @@ const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.
 const wasmBuffer = await fs.readFile(wasmPath)
 await init({ module_or_path: wasmBuffer })
 
-const trustedSetupPath = path.resolve(repoRoot, 'nilchain', 'trusted_setup.txt')
+const trustedSetupPath = path.resolve(repoRoot, 'polystorechain', 'trusted_setup.txt')
 const trustedSetup = await fs.readFile(trustedSetupPath)
 const wasm = new NilWasm(trustedSetup)
 

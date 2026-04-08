@@ -13,7 +13,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/localnet"
 PID_DIR="$LOG_DIR/pids"
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data}"
+CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/polystorechain_data}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
@@ -28,7 +28,7 @@ NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
 NIL_REINIT_HOME="${NIL_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
 export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
-NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
+NILCHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
 GATEWAY_BIN="$LOG_DIR/polystore_gateway"
 NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-$ROOT_DIR/polystore_core/target/release}"
@@ -404,14 +404,14 @@ wait_for_local_gateway_health() {
   exit 1
 }
 
-ensure_nilchaind() {
+ensure_polystorechaind() {
   ensure_polystore_core_shared
-  banner "Building and installing nilchaind (via $GO_BIN)"
+  banner "Building and installing polystorechaind (via $GO_BIN)"
   
   # Reconstruct vendor directory to handle partial vendoring strategy
   (
-    cd "$ROOT_DIR/nilchain"
-    echo "Reconstructing vendor for nilchain..."
+    cd "$ROOT_DIR/polystorechain"
+    echo "Reconstructing vendor for polystorechain..."
     "$GO_BIN" mod vendor
     # Restore tracked vendor files (if any) to preserve patches/partial vendoring
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -419,9 +419,9 @@ ensure_nilchaind() {
     fi
   )
 
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build -o "$ROOT_DIR/nilchain/nilchaind" ./cmd/nilchaind)
+  (cd "$ROOT_DIR/polystorechain" && "$GO_BIN" build -o "$ROOT_DIR/polystorechain/polystorechaind" ./cmd/polystorechaind)
   # Also install to GOPATH/bin to ensure it's in PATH for arbitrary shell calls
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" install ./cmd/nilchaind)
+  (cd "$ROOT_DIR/polystorechain" && "$GO_BIN" install ./cmd/polystorechaind)
 }
 
 ensure_polystore_cli() {
@@ -476,7 +476,7 @@ register_demo_provider() {
     IFS=',' read -r -a extra_endpoints <<<"$extra_endpoints_raw"
   fi
 
-  # Avoid racing nilchaind startup: wait for RPC to come up before attempting txs.
+  # Avoid racing polystorechaind startup: wait for RPC to come up before attempting txs.
   if command -v curl >/dev/null 2>&1; then
     local rpc_ready=0
     local rpc_tries=30
@@ -536,7 +536,7 @@ register_demo_provider() {
       done
     fi
 
-    "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+    "$NILCHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
       --from faucet \
       "${endpoint_args[@]}" \
       --chain-id "$CHAIN_ID" \
@@ -599,7 +599,7 @@ register_demo_provider() {
             done
           fi
 
-          "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+          "$NILCHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
             --from "$key_name" \
             "${endpoint_args_child[@]}" \
             --chain-id "$CHAIN_ID" \
@@ -614,7 +614,7 @@ register_demo_provider() {
 
     # Check if we have enough providers for Mode 2 placement.
     local count
-    count=$("$NILCHAIND_BIN" query nilchain list-providers --node "$RPC_ADDR" --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
+    count=$("$NILCHAIND_BIN" query polystorechain list-providers --node "$RPC_ADDR" --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
     if [ "$count" -ge "$provider_count" ]; then
       echo "Demo providers registered successfully ($count provider(s))."
       return 0
@@ -624,7 +624,7 @@ register_demo_provider() {
     sleep 4
   done
 
-  echo "Warning: demo provider registration failed after $attempts attempts (see nilchaind logs)"
+  echo "Warning: demo provider registration failed after $attempts attempts (see polystorechaind logs)"
 }
 
 init_chain() {
@@ -665,7 +665,7 @@ init_chain() {
   "$NILCHAIND_BIN" genesis add-genesis-account nil177f3lalu2hgeaa9gzw060e9n7phq8uhzpfks5m "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
 
   # Also pre-fund EVM signer accounts used by gateway/e2e/bridge deployment.
-  # This avoids relying on the faucet, which uses nilchaind CLI txs that can hang on some setups.
+  # This avoids relying on the faucet, which uses polystorechaind CLI txs that can hang on some setups.
   if command -v python3 >/dev/null 2>&1; then
     local signer_nil_addrs
     signer_nil_addrs=$(python3 - <<'PY' 2>/dev/null || true
@@ -838,22 +838,22 @@ params["active_static_precompiles"] = pre
 evm["params"] = params
 data["app_state"]["evm"] = evm
 
-# Keep nilchain EIP-712 domain chain id aligned with the local EVM chain id.
-nilchain = data.get("app_state", {}).get("nilchain", {})
-if isinstance(nilchain, dict):
-    nparams = nilchain.get("params", {})
+# Keep polystorechain EIP-712 domain chain id aligned with the local EVM chain id.
+polystorechain = data.get("app_state", {}).get("polystorechain", {})
+if isinstance(polystorechain, dict):
+    nparams = polystorechain.get("params", {})
     raw = (os.getenv("EVM_CHAIN_ID") or "").strip()
     if raw.isdigit():
         nparams["eip712_chain_id"] = raw
-    nilchain["params"] = nparams
-    data["app_state"]["nilchain"] = nilchain
+    polystorechain["params"] = nparams
+    data["app_state"]["polystorechain"] = polystorechain
 
 json.dump(data, open(path, "w"), indent=1)
 PY
 }
 
 start_chain() {
-  banner "Starting nilchaind"
+  banner "Starting polystorechaind"
   local grpc_flags=()
   if [ "${NIL_GRPC_ENABLE:-0}" = "1" ]; then
     grpc_flags+=(--grpc.enable=true)
@@ -885,15 +885,15 @@ start_chain() {
     --json-rpc.address "$json_rpc_addr" \
     --json-rpc.ws-address "$json_rpc_ws_addr" \
     --json-rpc.api eth,net,web3 \
-    >"$LOG_DIR/nilchaind.log" 2>&1 &
-  echo $! > "$PID_DIR/nilchaind.pid"
+    >"$LOG_DIR/polystorechaind.log" 2>&1 &
+  echo $! > "$PID_DIR/polystorechaind.pid"
   sleep 1
-  if ! kill -0 "$(cat "$PID_DIR/nilchaind.pid")" 2>/dev/null; then
-    echo "nilchaind failed to start; check $LOG_DIR/nilchaind.log"
-    tail -n 40 "$LOG_DIR/nilchaind.log" || true
+  if ! kill -0 "$(cat "$PID_DIR/polystorechaind.pid")" 2>/dev/null; then
+    echo "polystorechaind failed to start; check $LOG_DIR/polystorechaind.log"
+    tail -n 40 "$LOG_DIR/polystorechaind.log" || true
     exit 1
   fi
-  echo "nilchaind pid $(cat "$PID_DIR/nilchaind.pid"), logs: $LOG_DIR/nilchaind.log"
+  echo "polystorechaind pid $(cat "$PID_DIR/polystorechaind.pid"), logs: $LOG_DIR/polystorechaind.log"
 }
 
 start_faucet() {
@@ -968,7 +968,7 @@ start_sp_gateway() {
       NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS_SP:-}" \
       NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS_SP:-}" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-        NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
+        NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt" \
         NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
         "$GATEWAY_BIN" \
         >"$LOG_DIR/$log_name" 2>&1 &
@@ -1028,7 +1028,7 @@ start_user_gateway() {
     NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS:-}" \
     NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS:-}" \
     NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
+      NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
       "$GATEWAY_BIN" \
       >"$LOG_DIR/gateway_user.log" 2>&1 &
@@ -1235,7 +1235,7 @@ start_all() {
   stop_all
   rm -rf "$LOG_DIR/uploads_sp" "$LOG_DIR/uploads_user"
   ensure_polystore_core
-  ensure_nilchaind
+  ensure_polystorechaind
   init_chain
   start_chain
   register_demo_provider
@@ -1253,7 +1253,7 @@ start_all() {
   cat <<EOF
 RPC:         http://localhost:${RPC_ADDR##*:}
 REST/LCD:    http://localhost:$LCD_PORT
-EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
+EVM RPC:     http://localhost:$EVM_RPC_PORT  (polystorechaind, Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
 Faucet:      http://localhost:${FAUCET_PORT}/faucet
 SP Gateways: http://localhost:8082.. (Uploads to $LOG_DIR/uploads_sp)
 User Gateway: http://localhost:8080 (Uploads to $LOG_DIR/uploads_user)
@@ -1267,7 +1267,7 @@ EOF
 
 stop_all() {
   banner "Stopping processes"
-  for svc in nilchaind faucet gateway_sp gateway_user website; do
+  for svc in polystorechaind faucet gateway_sp gateway_user website; do
     pid_file="$PID_DIR/$svc.pid"
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file")

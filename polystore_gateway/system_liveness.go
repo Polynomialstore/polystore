@@ -21,8 +21,8 @@ import (
 
 	"golang.org/x/crypto/blake2s"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 var (
@@ -459,7 +459,7 @@ dealLoop:
 				txCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 				_, err = submitTxAndWait(
 					txCtx,
-					"tx", "nilchain", "prove-liveness-system",
+					"tx", "polystorechain", "prove-liveness-system",
 					strconv.FormatUint(deal.dealID, 10),
 					strconv.FormatUint(epochID, 10),
 					tmpPath,
@@ -527,7 +527,7 @@ func cachedSystemLivenessParams(ctx context.Context) (*systemLivenessParams, err
 }
 
 func fetchSystemLivenessParams(ctx context.Context, base string) (systemLivenessParams, error) {
-	url := base + "/nilchain/nilchain/v1/params"
+	url := base + "/polystorechain/polystorechain/v1/params"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return systemLivenessParams{}, err
@@ -650,7 +650,7 @@ type dealStateForSystemLiveness struct {
 }
 
 func fetchDealStateForSystemLiveness(ctx context.Context, dealID uint64) (*dealStateForSystemLiveness, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", strings.TrimRight(lcdBase, "/"), dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", strings.TrimRight(lcdBase, "/"), dealID)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := lcdHTTPClient.Do(req)
 	if err != nil {

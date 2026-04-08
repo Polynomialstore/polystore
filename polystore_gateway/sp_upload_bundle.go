@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 const (

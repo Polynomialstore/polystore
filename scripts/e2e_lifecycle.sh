@@ -121,7 +121,7 @@ wait_for_manifest_root() {
   local delay_secs="${5:-0.5}"
   local observed_root
   for attempt in $(seq 1 "$max_attempts"); do
-    observed_root=$(timeout 10s curl -sS "$lcd_base/nilchain/nilchain/v1/deals/$deal_id" \
+    observed_root=$(timeout 10s curl -sS "$lcd_base/polystorechain/polystorechain/v1/deals/$deal_id" \
       | python3 -c "import sys, json, base64; deal=(json.load(sys.stdin).get('deal') or {}); raw=str(deal.get('cid') or deal.get('manifest_root_hex') or deal.get('manifest_root') or '').strip(); print(raw if raw.startswith('0x') else ('0x'+base64.b64decode(raw).hex() if raw else ''))" \
       || echo "")
     if [ "$observed_root" == "$expected_root" ]; then
@@ -345,7 +345,7 @@ EVM_NONCE=$((EVM_NONCE + 1))
 # 5. Verify on LCD
 echo "==> Verifying Deal on LCD..."
 wait_for_manifest_root "$DEAL_ID" "$MANIFEST_ROOT" "$LCD_BASE" 40 0.5
-DEAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
+DEAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID")
 
 TMP_DEAL_JSON_FILE=$(mktemp)
 echo "$DEAL_JSON" > "$TMP_DEAL_JSON_FILE"
@@ -486,7 +486,7 @@ FETCH_GATEWAY_BASE="$GATEWAY_BASE"
 FETCH_PATH_PREFIX="/gateway/fetch"
 FETCH_EXTRA_QUERY="&deputy=1"
 if [ "$DIRECT_PROVIDER_FETCH" = "1" ]; then
-  PROVIDER_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/providers/$PROVIDER_ADDR" || echo "{}")"
+  PROVIDER_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/providers/$PROVIDER_ADDR" || echo "{}")"
   FETCH_GATEWAY_BASE="$(echo "$PROVIDER_JSON" | python3 -c '
 import json, re, sys
 obj = json.load(sys.stdin)
@@ -644,7 +644,7 @@ EVM_NONCE=$((EVM_NONCE + 1))
 # 9. Verify on LCD (new manifest root)
 echo "==> Verifying Deal on LCD after append..."
 wait_for_manifest_root "$DEAL_ID" "$MANIFEST_ROOT_2" "$LCD_BASE" 40 0.5
-DEAL_JSON_2=$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
+DEAL_JSON_2=$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID")
 
 TMP_DEAL_JSON_FILE_2=$(mktemp)
 echo "$DEAL_JSON_2" > "$TMP_DEAL_JSON_FILE_2"

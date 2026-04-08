@@ -523,7 +523,7 @@ For Gamma-4, retrieval pricing is **fee-based** (no credits). Fees are charged a
 * **Variable fee (per blob):** On `MsgOpenRetrievalSession`, the chain MUST lock `variable = retrieval_price_per_blob * blob_count` against `Deal.escrow_balance`.
 * **Completion payout:** When a session reaches `COMPLETED`, the chain MUST:
   * burn `ceil(variable * retrieval_burn_bps / 10000)`, and
-  * transfer the remaining `variable - burn_cut` from the `nilchain` module account to the Provider.
+  * transfer the remaining `variable - burn_cut` from the `polystorechain` module account to the Provider.
 * **Expiry/refund:** If a session expires without completion, the locked `variable` amount MAY be unlocked by an owner-initiated cancel transaction (base fee remains burned).
 
 Retrieval credits and byte-based allowances are out of scope for Gamma-4 and may be introduced later.

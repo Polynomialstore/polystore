@@ -75,9 +75,9 @@ PROVIDER_AUTO_FAUCET="${NIL_PROVIDER_AUTO_FAUCET:-1}"
 PROVIDER_FUNDING_WAIT_SECS="${NIL_PROVIDER_FUNDING_WAIT_SECS:-45}"
 PROVIDER_FUNDING_POLL_SECS="${NIL_PROVIDER_FUNDING_POLL_SECS:-2}"
 
-NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/nilchain/nilchaind}"
+NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/polystorechain/polystorechaind}"
 NIL_CLI_BIN="${NIL_CLI_BIN:-$ROOT_DIR/polystore_cli/target/release/polystore_cli}"
-TRUSTED_SETUP="${NIL_TRUSTED_SETUP:-$ROOT_DIR/nilchain/trusted_setup.txt}"
+TRUSTED_SETUP="${NIL_TRUSTED_SETUP:-$ROOT_DIR/polystorechain/trusted_setup.txt}"
 
 PROVIDER_LISTEN="${PROVIDER_LISTEN:-${NIL_LISTEN_ADDR:-:8091}}"
 PROVIDER_CAPABILITIES="${PROVIDER_CAPABILITIES:-General}"
@@ -86,7 +86,7 @@ PROVIDER_ENDPOINTS_RAW="${PROVIDER_ENDPOINTS:-${PROVIDER_ENDPOINT:-}}"
 BOOTSTRAP_ALLOW_PARTIAL="${BOOTSTRAP_ALLOW_PARTIAL:-0}"
 EXPECTED_PROVIDER_ADDRESS_RAW="${EXPECTED_PROVIDER_ADDRESS:-${NIL_EXPECTED_PROVIDER_ADDRESS:-}}"
 
-HOME_DIR="${NIL_HOME:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/nilchain_home}"
+HOME_DIR="${NIL_HOME:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/polystorechain_home}"
 UPLOAD_DIR="${NIL_UPLOAD_DIR:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/uploads}"
 LOG_DIR="$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY"
 PID_DIR="$LOG_DIR/pids"
@@ -297,7 +297,7 @@ find_polystore_core_lib_dir() {
   local candidate
   local candidates=(
     "$NIL_CORE_LIB_DIR"
-    "$ROOT_DIR/nilchain/lib"
+    "$ROOT_DIR/polystorechain/lib"
     "$ROOT_DIR/polystore_core/target/release"
     "$ROOT_DIR/polystore_gateway_gui/src-tauri/bin"
   )
@@ -341,15 +341,15 @@ ensure_polystore_core_runtime() {
   fi
 }
 
-ensure_nilchaind() {
+ensure_polystorechaind() {
   if [ -x "$NILCHAIND_BIN" ]; then
     return 0
   fi
   ensure_polystore_core_runtime
   local build_goflags="${GOFLAGS:-}"
   build_goflags="${build_goflags} -mod=mod"
-  echo "==> Building nilchaind..."
-  (cd "$ROOT_DIR/nilchain" && GOFLAGS="$build_goflags" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
+  echo "==> Building polystorechaind..."
+  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="$build_goflags" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/polystorechaind)
 }
 
 ensure_polystore_cli() {
@@ -372,7 +372,7 @@ provider_key_exists() {
 
 require_existing_provider_key() {
   local action_label="${1:-this action}"
-  ensure_nilchaind
+  ensure_polystorechaind
   if provider_key_exists; then
     return 0
   fi
@@ -544,7 +544,7 @@ provider_registered() {
     return 1
   fi
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/providers/$addr" 2>/dev/null || true)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/providers/$addr" 2>/dev/null || true)"
   [ "$code" = "200" ]
 }
 
@@ -554,7 +554,7 @@ provider_json() {
   if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
   fi
-  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/providers/$addr" 2>/dev/null
+  curl -fsS --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/providers/$addr" 2>/dev/null
 }
 
 provider_aatom_amount() {
@@ -726,7 +726,7 @@ provider_paired() {
     return 1
   fi
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/$addr" 2>/dev/null || true)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/provider-pairings/$addr" 2>/dev/null || true)"
   [ "$code" = "200" ]
 }
 
@@ -736,7 +736,7 @@ provider_pairing_json() {
   if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
   fi
-  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/$addr" 2>/dev/null
+  curl -fsS --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/provider-pairings/$addr" 2>/dev/null
 }
 
 pending_link_exists() {
@@ -746,7 +746,7 @@ pending_link_exists() {
     return 1
   fi
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$addr" 2>/dev/null || true)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/provider-pairings/pending/$addr" 2>/dev/null || true)"
   [ "$code" = "200" ]
 }
 
@@ -756,7 +756,7 @@ pending_link_json() {
   if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
   fi
-  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$addr" 2>/dev/null
+  curl -fsS --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/provider-pairings/pending/$addr" 2>/dev/null
 }
 
 json_string_field() {
@@ -930,7 +930,7 @@ print_config() {
   "nil_home": "$(json_escape "$HOME_DIR")",
   "nil_upload_dir": "$(json_escape "$UPLOAD_DIR")",
   "trusted_setup": "$(json_escape "$TRUSTED_SETUP")",
-  "nilchaind_bin": "$(json_escape "$NILCHAIND_BIN")",
+  "polystorechaind_bin": "$(json_escape "$NILCHAIND_BIN")",
   "polystore_cli_bin": "$(json_escape "$NIL_CLI_BIN")",
   "go_bin": "$(json_escape "$GO_BIN")",
   "pid_file": "$(json_escape "$pid_file")",
@@ -974,9 +974,9 @@ doctor_provider() {
   fi
 
   if [ -x "$NILCHAIND_BIN" ] || [ -f "$NILCHAIND_BIN" ]; then
-    echo "OK: nilchaind binary present at $NILCHAIND_BIN"
+    echo "OK: polystorechaind binary present at $NILCHAIND_BIN"
   else
-    echo "WARN: nilchaind binary missing at $NILCHAIND_BIN"
+    echo "WARN: polystorechaind binary missing at $NILCHAIND_BIN"
   fi
 
   if [ -x "$NIL_CLI_BIN" ] || [ -f "$NIL_CLI_BIN" ]; then
@@ -1106,7 +1106,7 @@ verify_provider() {
 }
 
 ensure_provider_key() {
-  ensure_nilchaind
+  ensure_polystorechaind
   mkdir -p "$HOME_DIR"
   if [ -z "$(provider_addr)" ]; then
     echo "==> Creating provider key: $PROVIDER_KEY"
@@ -1202,7 +1202,7 @@ register_provider() {
 
   if provider_registered; then
     echo "==> Updating provider endpoints on-chain..."
-    "$NILCHAIND_BIN" tx nilchain update-provider-endpoints \
+    "$NILCHAIND_BIN" tx polystorechain update-provider-endpoints \
       "${endpoint_args[@]}" \
       --from "$PROVIDER_KEY" \
       --chain-id "$CHAIN_ID" \
@@ -1216,7 +1216,7 @@ register_provider() {
     echo "Updated:"
   else
     echo "==> Registering provider on-chain..."
-    "$NILCHAIND_BIN" tx nilchain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
+    "$NILCHAIND_BIN" tx polystorechain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
       "${endpoint_args[@]}" \
       --from "$PROVIDER_KEY" \
       --chain-id "$CHAIN_ID" \
@@ -1278,7 +1278,7 @@ request_provider_link() {
   ensure_provider_account_funded "$addr"
 
   echo "==> Requesting provider link on-chain..."
-  "$NILCHAIND_BIN" tx nilchain request-provider-link "$operator" \
+  "$NILCHAIND_BIN" tx polystorechain request-provider-link "$operator" \
     --from "$PROVIDER_KEY" \
     --chain-id "$CHAIN_ID" \
     --node "$NODE_ADDR" \
