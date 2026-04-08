@@ -9,6 +9,7 @@ This repo is currently geared toward a **trusted devnet soft launch (Feb 2026)**
 ## Start here (canonical docs)
 
 - Documentation index: `DOCS.md`
+- Branding transition note: `docs/branding-transition.md`
 - Runtime persona contract (authoritative naming/ownership): `docs/runtime-personas.md`
 - Local runbook (fast): `HAPPY_PATH.md`
 - Spec ↔ code ↔ CI gap matrix (what CI proves / doesn’t): `docs/GAP_REPORT_REPO_ANCHORED.md`
