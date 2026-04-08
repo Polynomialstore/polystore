@@ -697,7 +697,7 @@ export function SpOnboarding() {
       return
     }
     if (!walletReady) {
-      setError('Switch the wallet onto NilStore testnet before approving provider link.')
+      setError('Switch the wallet onto PolyStore testnet before approving provider link.')
       return
     }
     if (!funded) {
@@ -918,7 +918,7 @@ export function SpOnboarding() {
                     This step gives the provider host its <span className="font-mono">OPERATOR_ADDRESS</span>. The same wallet also approves the pending provider link later in Step 3.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">wallet is connected, on NilStore testnet, and funded for the approval transaction</span>.
+                    Done when: <span className="font-semibold text-foreground">wallet is connected, on PolyStore testnet, and funded for the approval transaction</span>.
                   </p>
                 </div>
                 <StatusPill label={walletReady && funded ? 'Ready' : 'Action needed'} state={walletState} />
@@ -978,7 +978,7 @@ export function SpOnboarding() {
                       className="inline-flex items-center justify-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40"
                     >
                       <RefreshCw className="h-4 w-4" />
-                      {genesisMismatch ? 'Repair Network Entry' : 'Switch To NilStore'}
+                      {genesisMismatch ? 'Repair Network Entry' : 'Switch To PolyStore'}
                     </button>
                   ) : null}
                   {walletReady && !funded && faucetEnabled ? (

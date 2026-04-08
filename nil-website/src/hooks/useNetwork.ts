@@ -102,7 +102,7 @@ export function useNetwork() {
       method: 'wallet_addEthereumChain',
       params: [{
         chainId: toChainHex(appConfig.chainId),
-        chainName: 'NilStore Devnet',
+        chainName: 'PolyStore Devnet',
         nativeCurrency: {
           name: 'NIL',
           symbol: 'NIL',

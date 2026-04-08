@@ -502,7 +502,7 @@ export function SpDashboard() {
               <p className="max-w-2xl text-sm text-muted-foreground">
                 {needsReconnect
                   ? 'MetaMask account permissions are stale. Reconnect the wallet used for provider pairing.'
-                  : 'Switch MetaMask onto the NilStore testnet before relying on the operator view.'}
+                  : 'Switch MetaMask onto the PolyStore testnet before relying on the operator view.'}
               </p>
             </div>
             <button
@@ -511,7 +511,7 @@ export function SpDashboard() {
               className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-3 text-sm font-semibold text-foreground hover:bg-secondary/40"
             >
               <RefreshCw className="h-4 w-4" />
-              {genesisMismatch ? 'Repair Network Entry' : 'Switch To NilStore'}
+              {genesisMismatch ? 'Repair Network Entry' : 'Switch To PolyStore'}
             </button>
           </div>
         </section>

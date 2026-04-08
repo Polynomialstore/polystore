@@ -214,7 +214,7 @@ export function Dashboard() {
       if (e instanceof Error && e.message === 'GENESIS_MISMATCH_AFTER_SWITCH') {
         setStatusTone('error')
         setStatusMsg(
-          `MetaMask is still using a different RPC for chain ${appConfig.chainId}. Open MetaMask > Networks > NilStore Devnet and set RPC URL to ${appConfig.evmRpc}, or remove/re-add the network.`,
+          `MetaMask is still using a different RPC for chain ${appConfig.chainId}. Open MetaMask > Networks > PolyStore Devnet and set RPC URL to ${appConfig.evmRpc}, or remove/re-add the network.`,
         )
         return
       }
@@ -1039,7 +1039,7 @@ export function Dashboard() {
           await switchNetwork({ forceAdd: genesisMismatch })
         } catch (error) {
           const fallback = genesisMismatch
-            ? `Network identity mismatch for chain ${appConfig.chainId}. Re-add NilStore Devnet in MetaMask using RPC ${appConfig.evmRpc}.`
+            ? `Network identity mismatch for chain ${appConfig.chainId}. Re-add PolyStore Devnet in MetaMask using RPC ${appConfig.evmRpc}.`
             : `Wrong network. Switch wallet to chain ${appConfig.chainId} and retry.`
           handleWalletError(error, fallback)
         }
