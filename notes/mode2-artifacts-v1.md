@@ -6,7 +6,7 @@ The goal is that the **gateway** and the **browser/WASM** implementation can pro
 
 ## Directory Roots
 
-- **Gateway (disk):** `nil_gateway/uploads/deals/<deal_id>/<manifest_root_key>/`
+- **Gateway (disk):** `polystore_gateway/uploads/deals/<deal_id>/<manifest_root_key>/`
 - **Browser (OPFS):** `OPFS:/deal-<deal_id>/`
 
 `manifest_root_key` is a filesystem-safe key derived from the 48-byte manifest root:
@@ -52,7 +52,7 @@ Raw payload bytes are encoded into an 8 MiB user MDU using the NilFS scalar pack
 - scalars are written sequentially until the payload is exhausted
 
 This must match:
-- `nil_gateway/ingest_mode2.go:encodePayloadToMdu`
+- `polystore_gateway/ingest_mode2.go:encodePayloadToMdu`
 - `polystore_core` scalar packing implementation used by WASM/FFI
 
 ### RS shard ordering (slot-major)

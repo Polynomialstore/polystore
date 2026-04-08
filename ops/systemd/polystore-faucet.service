@@ -1,13 +1,13 @@
 [Unit]
-Description=NilStore provider gateway (nil_gateway)
+Description=NilStore devnet faucet (polystore_faucet)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/nilstore/nil-gateway-provider.env
+EnvironmentFile=/etc/nilstore/polystore-faucet.env
 WorkingDirectory=/opt/nilstore
-ExecStart=/bin/bash -lc 'exec "$NIL_GATEWAY_BIN"'
+ExecStart=/bin/bash -lc 'exec "$NIL_FAUCET_BIN"'
 Restart=on-failure
 RestartSec=2
 

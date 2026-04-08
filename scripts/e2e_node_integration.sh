@@ -85,7 +85,7 @@ trap cleanup EXIT
 start_custom_faucet() {
   echo "==> Starting dedicated faucet at $FAUCET_BASE ..."
   (
-    cd "$ROOT_DIR/nil_faucet"
+    cd "$ROOT_DIR/polystore_faucet"
     nohup env \
       NIL_CHAIN_ID="$CHAIN_ID" \
       NIL_NODE="$RPC_ADDR" \

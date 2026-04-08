@@ -35,7 +35,7 @@ NilStore has two funding sources for storage providers (SPs):
 NilStore’s upload flow is two-phase:
 
 ### 2.1 Data-plane upload (no chain charge by itself)
-- The client uploads bytes to providers (often via `nil_gateway`).
+- The client uploads bytes to providers (often via `polystore_gateway`).
 - This is an off-chain operation; it *prepares* commitment material but does not finalize economics.
 
 ### 2.2 On-chain commit (where storage is charged)

@@ -2,8 +2,8 @@
 # S3 Adapter E2E Test
 
 # 1. Start S3 Server
-cd nil_gateway
-./nil_gateway &
+cd polystore_gateway
+./polystore_gateway &
 S3_PID=$!
 echo "S3 Server started at PID $S3_PID"
 sleep 2

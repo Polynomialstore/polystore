@@ -11,7 +11,7 @@ For a concrete example with real hostnames, see:
 
 Audience:
 - **Website testers** (no server required)
-- **Storage Provider (SP) operators** (optional; run `nil_gateway` in provider mode)
+- **Storage Provider (SP) operators** (optional; run `polystore_gateway` in provider mode)
 
 If you are the hub operator, also read: `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 

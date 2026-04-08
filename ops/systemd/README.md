@@ -22,15 +22,15 @@ sudo systemctl daemon-reload
 ```bash
 sudo mkdir -p /etc/nilstore
 sudo cp ops/systemd/env/*.env /etc/nilstore/
-sudoedit /etc/nilstore/nil-gateway-router.env
+sudoedit /etc/nilstore/polystore-gateway-router.env
 ```
 
 3) Enable + start (hub):
 
 ```bash
 sudo systemctl enable --now nilchaind
-sudo systemctl enable --now nil-gateway-router
-sudo systemctl enable --now nil-faucet
+sudo systemctl enable --now polystore-gateway-router
+sudo systemctl enable --now polystore-faucet
 ```
 
 ### Nilchaind redeploy workflow
@@ -56,20 +56,20 @@ journalctl -u nilchaind -f
 
 ## Provider quick usage
 
-Providers can run `nil_gateway` in **provider** mode as a long-running service too:
+Providers can run `polystore_gateway` in **provider** mode as a long-running service too:
 
 ```bash
-sudo cp ops/systemd/nil-gateway-provider.service /etc/systemd/system/
+sudo cp ops/systemd/polystore-gateway-provider.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
 sudo mkdir -p /etc/nilstore
-sudo cp ops/systemd/env/nil-gateway-provider.env /etc/nilstore/
-sudoedit /etc/nilstore/nil-gateway-provider.env
+sudo cp ops/systemd/env/polystore-gateway-provider.env /etc/nilstore/
+sudoedit /etc/nilstore/polystore-gateway-provider.env
 
-sudo systemctl enable --now nil-gateway-provider
+sudo systemctl enable --now polystore-gateway-provider
 ```
 
-Minimum required edits in `nil-gateway-provider.env`:
+Minimum required edits in `polystore-gateway-provider.env`:
 - `NIL_GATEWAY_SP_AUTH` must match the hub router
 - `NIL_CHAIN_ID`, `NIL_NODE`, `NIL_LCD_BASE` must point at the hub
 - `NIL_HOME` + `NIL_PROVIDER_KEY` must reference a key that exists locally

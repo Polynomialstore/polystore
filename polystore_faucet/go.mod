@@ -1,4 +1,4 @@
-module nil_faucet
+module polystore_faucet
 
 go 1.25.5
 

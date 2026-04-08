@@ -21,9 +21,9 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 - Unit tests
   - Go:
     - Chain: `cd nilchain && go test ./...`
-    - Gateway: `cd nil_gateway && go test ./...`
-    - Faucet: `cd nil_faucet && go test ./...`
-    - Relayer: `cd nil_relayer && go test ./...`
+    - Gateway: `cd polystore_gateway && go test ./...`
+    - Faucet: `cd polystore_faucet && go test ./...`
+    - Relayer: `cd polystore_relayer && go test ./...`
   - Rust: `cargo test` in `polystore_core`, `polystore_cli`, `polystore_p2p`, `polystore_mock_l1`
   - Web: `npm -C polystore-website run build` + `npm -C polystore-website run test:unit` + `npm -C polystore-website run lint`
   - Tauri GUI: `npm -C polystore_gateway_gui test` + `cd polystore_gateway_gui/src-tauri && cargo test` (plus fmt/clippy checks)
@@ -44,7 +44,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 
 - WAN / multi-host devnet behavior (real latency, NAT, TLS, firewalling)
 - Long-running durability (restarts, reorgs, disk corruption, GC/compaction)
-- Mode2 Stripe behavior under background `nil_gateway` system liveness prover load (CI disables it for determinism via `NIL_DISABLE_SYSTEM_LIVENESS=1`)
+- Mode2 Stripe behavior under background `polystore_gateway` system liveness prover load (CI disables it for determinism via `NIL_DISABLE_SYSTEM_LIVENESS=1`)
 - Dynamic pricing stability/tuning beyond bounded, unit-tested epoch adjustments (no long-running devnet evidence)
 - Adversarial cryptoeconomic behavior (griefing, strategic downtime, bribery)
 - Comprehensive security review / external audit
@@ -56,7 +56,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | DONE | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | `nilchain/x/nilchain/types/types.go` (`MAX_DEAL_BYTES`); `nilchain/x/nilchain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | `cd nilchain && go test ./...` (unit tests) | — | — |
 | Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | DONE | `rfcs/rfc-blob-alignment-and-striping.md` | Playwright asserts sha256(downloaded) == sha256(uploaded) in `polystore-website/tests/mode2-stripe.spec.ts` | `scripts/e2e_mode2_stripe_multi_sp.sh` | — | — |
 | Allowlist retrieval policy verification has test vectors | DONE | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification in `nilchain/x/nilchain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) + test vectors in `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go` | `cd nilchain && go test ./...` | — | — |
-| NilCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `nil_gateway/` (opt-in `NIL_NILCE=1`) | `go test ./nil_gateway/...` (NilCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
+| NilCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `polystore_gateway/` (opt-in `NIL_NILCE=1`) | `go test ./polystore_gateway/...` (NilCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
 
 ## Phase 1 — Deal expiry + renewal (ExtendDeal)
 
@@ -68,14 +68,14 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Reject liveness/retrieval proofs once `height >= end_block` | DONE | `nilchain/x/nilchain/keeper/msg_server.go` (`ProveLiveness`, retrieval proof paths) | `cd nilchain && go test ./...` | — |
 | Implement `MsgExtendDeal` with spot pricing at extension time | DONE | `nilchain/proto/nilchain/nilchain/v1/tx.proto` + `nilchain/x/nilchain/keeper/msg_server.go` (`ExtendDeal`) | `nilchain/x/nilchain/keeper/msg_server_extend_deal_test.go` | — |
 | Prevent renewal overcharge via `pricing_anchor_block` | DONE | `nilchain/proto/.../types.proto` (Deal.pricing_anchor_block); duration uses anchor in `msg_server.go` | `nilchain/x/nilchain/keeper/msg_server_extend_deal_test.go` | — |
-| Refuse serving expired deals on data plane | DONE | `nil_gateway/main.go` (`GatewayFetch`, `SpFetchShard`) fetch deal meta and reject expired deals | `go test ./nil_gateway/...` + CI E2E scripts | Disk GC after grace is not implemented (ops/process gap) |
+| Refuse serving expired deals on data plane | DONE | `polystore_gateway/main.go` (`GatewayFetch`, `SpFetchShard`) fetch deal meta and reject expired deals | `go test ./polystore_gateway/...` + CI E2E scripts | Disk GC after grace is not implemented (ops/process gap) |
 
 ## Phase 2 — Mandatory retrieval sessions for all served bytes
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Data-plane requests MUST include `X-Nil-Session-Id` | DONE | `nil_gateway/main.go`: `NIL_REQUIRE_ONCHAIN_SESSION=1` default; enforced in `GatewayFetch` and `SpFetchShard` | `nil_gateway/session_enforcement_test.go`; `e2e_open_retrieval_session_cli.sh` | — |
-| Validate session is `OPEN`, unexpired, and bound to (deal, provider/slot, manifest_root) | DONE | `nil_gateway/main.go` (`SpFetchShard` validates deal+root+status+expiry); chain validates on open | `nil_gateway/session_enforcement_test.go`; `nilchain/x/nilchain/keeper/msg_server_retrieval_sessions_test.go` | Gateway-wide “all endpoints” auditing is not automated (human review needed when adding new byte-serving endpoints) |
+| Data-plane requests MUST include `X-Nil-Session-Id` | DONE | `polystore_gateway/main.go`: `NIL_REQUIRE_ONCHAIN_SESSION=1` default; enforced in `GatewayFetch` and `SpFetchShard` | `polystore_gateway/session_enforcement_test.go`; `e2e_open_retrieval_session_cli.sh` | — |
+| Validate session is `OPEN`, unexpired, and bound to (deal, provider/slot, manifest_root) | DONE | `polystore_gateway/main.go` (`SpFetchShard` validates deal+root+status+expiry); chain validates on open | `polystore_gateway/session_enforcement_test.go`; `nilchain/x/nilchain/keeper/msg_server_retrieval_sessions_test.go` | Gateway-wide “all endpoints” auditing is not automated (human review needed when adding new byte-serving endpoints) |
 | Enforce Mode2 slot confinement + subset-of-session-range (batching preserved) | DONE | Chain range invariants in `nilchain/x/nilchain/keeper/msg_server.go`; gateway enforces slot mapping in `SpFetchShard` | `e2e_open_retrieval_session_mode2_cli.sh`; keeper tests | — |
 
 ## Phase 3 — Retrieval policies + sponsored/public sessions
@@ -100,13 +100,13 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Optional compression-aware uploads (NilCE v1 header + zstd) | PARTIAL | `nil_gateway/nilce.go` + `nil_gateway/main.go` (`NIL_NILCE=1`) | `nil_gateway/nilce_test.go` | No CI E2E coverage; retrieval semantics are “return stored bytes” (no auto-decode) |
+| Optional compression-aware uploads (NilCE v1 header + zstd) | PARTIAL | `polystore_gateway/nilce.go` + `polystore_gateway/main.go` (`NIL_NILCE=1`) | `polystore_gateway/nilce_test.go` | No CI E2E coverage; retrieval semantics are “return stored bytes” (no auto-decode) |
 
 ## Phase 6 — Wallet-first UX (no relay/faucet dependency outside dev)
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Disable tx relay by default (dev-only opt-in) | DONE | `nil_gateway/main.go`: `NIL_ENABLE_TX_RELAY=0` default; `scripts/run_local_stack.sh` defaults relay off | CI jobs still enable relay for `scripts/e2e_lifecycle.sh` | Add a dedicated “no relay” CLI E2E if desired (wallet-first is already covered in browser E2E) |
+| Disable tx relay by default (dev-only opt-in) | DONE | `polystore_gateway/main.go`: `NIL_ENABLE_TX_RELAY=0` default; `scripts/run_local_stack.sh` defaults relay off | CI jobs still enable relay for `scripts/e2e_lifecycle.sh` | Add a dedicated “no relay” CLI E2E if desired (wallet-first is already covered in browser E2E) |
 | Wallet-first chain writes (browser) | DONE | `polystore-website/src/lib/e2eWallet.ts` injects E2E wallet for Playwright when `VITE_E2E=1` | Playwright suites listed above | Human UX polish for real MetaMask + remote RPC endpoints is still needed for soft launch |
 
 ## Phase 7 — Economics (rewards, draining, retrieval fees)

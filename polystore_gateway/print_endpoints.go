@@ -52,7 +52,7 @@ func maybePrintProviderEndpoints(args []string) bool {
 		return true
 	}
 
-	fmt.Println("# nil_gateway provider endpoints (copy/paste into register-provider)")
+	fmt.Println("# polystore_gateway provider endpoints (copy/paste into register-provider)")
 	for _, ep := range out.Endpoints {
 		if ep.Notes != "" {
 			fmt.Printf("# %s (%s)\n", ep.Notes, ep.Type)

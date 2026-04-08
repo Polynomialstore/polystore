@@ -44,18 +44,18 @@ echo ">>> Building polystore_cli..."
     cp target/release/polystore_cli ../dist/bin/
 )
 
-# 5. Build nil_gateway (Go)
-echo ">>> Building nil_gateway..."
+# 5. Build polystore_gateway (Go)
+echo ">>> Building polystore_gateway..."
 (
-    cd nil_gateway
-    go build -o ../dist/bin/nil_gateway .
+    cd polystore_gateway
+    go build -o ../dist/bin/polystore_gateway .
 )
 
 # 6. Build Faucet
-echo ">>> Building nil_faucet..."
+echo ">>> Building polystore_faucet..."
 (
-    cd nil_faucet
-    go build -o ../dist/bin/nil_faucet .
+    cd polystore_faucet
+    go build -o ../dist/bin/polystore_faucet .
 )
 
 # 7. Package Configuration

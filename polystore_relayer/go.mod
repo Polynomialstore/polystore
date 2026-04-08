@@ -1,4 +1,4 @@
-module nil_relayer
+module polystore_relayer
 
 go 1.25.5
 

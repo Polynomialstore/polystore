@@ -28,7 +28,7 @@ The web-first operator flow is:
 - Go + Rust toolchains installed
 - A reachable provider endpoint (either direct public IP/port-forward, or Cloudflare Tunnel HTTPS)
 - (Optional, recommended) systemd + a reverse proxy:
-  - systemd templates: `ops/systemd/nil-gateway-provider.service` + `ops/systemd/env/nil-gateway-provider.env`
+  - systemd templates: `ops/systemd/polystore-gateway-provider.service` + `ops/systemd/env/polystore-gateway-provider.env`
   - HTTPS reverse proxy example: `ops/caddy/Caddyfile.provider.example`
 
 ## Step-by-step
@@ -147,7 +147,7 @@ export PROVIDER_LISTEN=":8091"
 ./scripts/run_devnet_provider.sh start
 ```
 
-Long-running (recommended): use the systemd templates in `ops/systemd/` and copy/edit `ops/systemd/env/nil-gateway-provider.env`.
+Long-running (recommended): use the systemd templates in `ops/systemd/` and copy/edit `ops/systemd/env/polystore-gateway-provider.env`.
 
 ### 5) Verify
 

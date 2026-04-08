@@ -49,7 +49,7 @@ Fast full-local repo onboarding:
 - Continue browser verification on `https://polynomialstore.com/#/dashboard` with that same wallet and local gateway after the first-file allocation step.
 
 Local gateway app (recommended for localhost gateway-assisted flows):
-- Start Nil Gateway GUI (or local `nil_gateway`) on `http://localhost:8080`.
+- Start Nil Gateway GUI (or local `polystore_gateway`) on `http://localhost:8080`.
 - Download builds: `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Notes:

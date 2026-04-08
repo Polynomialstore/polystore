@@ -21,7 +21,7 @@ You must use the repo context and the existing tasks/code structure. Do **not** 
 If you need to reference code locations, prefer these likely areas (verify in repo):
 - Chain params/proto: `nilchain/proto/nilchain/nilchain/v1/params.proto`
 - Chain keeper logic: `nilchain/x/nilchain/keeper/`
-- Gateway/router: `nil_gateway/`
+- Gateway/router: `polystore_gateway/`
 - P2P deputy stubs: `polystore_p2p/`
 
 ## Output (single file)

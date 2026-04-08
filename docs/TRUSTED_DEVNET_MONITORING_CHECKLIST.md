@@ -30,8 +30,8 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 ## Hub — logs
 
 - `journalctl -u nilchaind -S today --no-pager | tail -n 200`
-- `journalctl -u nil-gateway-router -S today --no-pager | tail -n 200`
-- `journalctl -u nil-faucet -S today --no-pager | tail -n 200`
+- `journalctl -u polystore-gateway-router -S today --no-pager | tail -n 200`
+- `journalctl -u polystore-faucet -S today --no-pager | tail -n 200`
 
 ## Providers (remote SPs) — daily checks
 

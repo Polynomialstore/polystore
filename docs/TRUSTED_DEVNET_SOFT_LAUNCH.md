@@ -13,14 +13,14 @@ Related:
 
 - **Hub** runs (either public VPS or home server behind NAT):
   - `nilchaind` (CometBFT RPC + LCD + EVM JSON-RPC)
-  - `user-gateway` (legacy runtime alias: `nil_gateway` in router mode)
-  - `nil_faucet` (enabled, rate-limited; collaborator-only)
+  - `user-gateway` (legacy runtime alias: `polystore_gateway` in router mode)
+  - `polystore_faucet` (enabled, rate-limited; collaborator-only)
   - `polystore-website` (static build behind HTTPS)
 - **Providers (remote SPs)** run (direct endpoint or Cloudflare Tunnel endpoint):
-  - `provider-daemon` (legacy runtime alias: `nil_gateway` in provider mode, one per SP)
+  - `provider-daemon` (legacy runtime alias: `polystore_gateway` in provider mode, one per SP)
 - **Users** interact via:
   - Website + MetaMask (wallet-first), or curl for debugging
-  - Optional local `user-gateway` app (`polystore_gateway_gui`, legacy runtime alias `nil_gateway`) on `http://localhost:8080`
+  - Optional local `user-gateway` app (`polystore_gateway_gui`, legacy runtime alias `polystore_gateway`) on `http://localhost:8080`
 
 Security posture:
 - This is **trusted** and **invite-only** (not Sybil resistant).
@@ -166,8 +166,8 @@ sudo mkdir -p /etc/nilstore
 sudo cp ops/systemd/env/*.env /etc/nilstore/
 
 sudoedit /etc/nilstore/nilchaind.env
-sudoedit /etc/nilstore/nil-gateway-router.env
-sudoedit /etc/nilstore/nil-faucet.env
+sudoedit /etc/nilstore/polystore-gateway-router.env
+sudoedit /etc/nilstore/polystore-faucet.env
 ```
 
 Minimum required edits:
@@ -178,15 +178,15 @@ Minimum required edits:
 - set `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` in all nilstore env files
 - recommended (hub behind Caddy or Cloudflare Tunnel): bind services to localhost and expose only via the public edge:
   - `nilchaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
-  - `nil-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080` (or another free local port if `8080` is occupied)
-  - `nil-faucet.env`: `NIL_LISTEN_ADDR=127.0.0.1:8081`
+  - `polystore-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080` (or another free local port if `8080` is occupied)
+  - `polystore-faucet.env`: `NIL_LISTEN_ADDR=127.0.0.1:8081`
 
 3) Enable + start (recommended order):
 
 ```bash
 sudo systemctl enable --now nilchaind
-sudo systemctl enable --now nil-gateway-router
-sudo systemctl enable --now nil-faucet
+sudo systemctl enable --now polystore-gateway-router
+sudo systemctl enable --now polystore-faucet
 ```
 
 ### 4) Caddy (HTTPS reverse proxy, Profile A)
@@ -532,12 +532,12 @@ Systemd templates live in `ops/systemd/`.
 
 Minimum units to run on the hub:
 - `ops/systemd/nilchaind.service`
-- `ops/systemd/nil-gateway-router.service`
-- `ops/systemd/nil-faucet.service` (optional but recommended for collaborators)
+- `ops/systemd/polystore-gateway-router.service`
+- `ops/systemd/polystore-faucet.service` (optional but recommended for collaborators)
 
 Use the env templates under `ops/systemd/env/` and make sure:
 - All hub services share the same `NIL_HOME` (chain home directory).
-- `nil-gateway-router` and all providers share the same `NIL_GATEWAY_SP_AUTH`.
+- `polystore-gateway-router` and all providers share the same `NIL_GATEWAY_SP_AUTH`.
 
 For repeatable `nilchaind` binary rollouts on systemd hosts, use:
 - `scripts/redeploy_nilchaind.sh`

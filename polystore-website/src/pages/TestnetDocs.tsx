@@ -136,7 +136,7 @@ export const TestnetDocs = () => {
             </a>
           </div>
           <div className="bg-secondary/10 rounded-none p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
-            <p>$ # (optional) in nil_faucet/</p>
+            <p>$ # (optional) in polystore_faucet/</p>
             <p>$ NIL_CHAIN_ID=test-1 NIL_HOME=$HOME/.nilchain NIL_DENOM=stake NIL_AMOUNT=1000000stake go run main.go</p>
             <p># Open http://localhost:5173/#/dashboard and click "Submit Deal"</p>
           </div>
@@ -259,7 +259,7 @@ export const TestnetDocs = () => {
             <Terminal className="w-6 h-6 text-primary" /> Run a Provider Node
           </h2>
           <p className="text-muted-foreground">
-            To participate as a Storage Provider (SP), run <code className="px-1 py-0.5 rounded-none bg-secondary/60">nil_gateway</code> in provider mode and register at least one public endpoint on-chain.
+            To participate as a Storage Provider (SP), run <code className="px-1 py-0.5 rounded-none bg-secondary/60">polystore_gateway</code> in provider mode and register at least one public endpoint on-chain.
           </p>
 
           <div className="bg-card p-6 rounded-none border border-border space-y-6 text-sm">
@@ -274,7 +274,7 @@ export const TestnetDocs = () => {
                 <li><strong>webrtc</strong> (future): NAT traversal optimization; not testnet-blocking.</li>
               </ul>
               <p className="text-muted-foreground">
-                The chain stores endpoints as multiaddrs. Use <code className="px-1 py-0.5 rounded-none bg-secondary/60">nil_gateway --print-endpoints</code> to generate the exact <code className="px-1 py-0.5 rounded-none bg-secondary/60">--endpoint</code> value to register.
+                The chain stores endpoints as multiaddrs. Use <code className="px-1 py-0.5 rounded-none bg-secondary/60">polystore_gateway --print-endpoints</code> to generate the exact <code className="px-1 py-0.5 rounded-none bg-secondary/60">--endpoint</code> value to register.
               </p>
             </div>
 
@@ -282,7 +282,7 @@ export const TestnetDocs = () => {
               <h3 className="font-bold text-foreground">1) Run the SP Gateway</h3>
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Run provider-mode gateway on the SP machine</p>
-                <p>$ cd nil_gateway</p>
+                <p>$ cd polystore_gateway</p>
                 <p>$ NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .</p>
               </div>
             </div>

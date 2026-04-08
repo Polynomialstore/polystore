@@ -43,7 +43,7 @@ For chain policy and bounds checks we freeze:
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)
 
 Notes:
-- This RFC intentionally avoids `allocated_length` in protocol state. Gateway/UI MAY keep `allocated_length` as a legacy alias for `total_mdus` (count), per `nil_gateway/nil-gateway-spec.md`.
+- This RFC intentionally avoids `allocated_length` in protocol state. Gateway/UI MAY keep `allocated_length` as a legacy alias for `total_mdus` (count), per `polystore_gateway/polystore-gateway-spec.md`.
 
 ---
 

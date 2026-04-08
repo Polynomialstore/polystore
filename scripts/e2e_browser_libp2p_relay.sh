@@ -97,7 +97,7 @@ PROVIDER_KEYS=("faucet" "provider1" "provider2")
 EXTRA_MAP=""
 for key in "${PROVIDER_KEYS[@]}"; do
   identity_path="$SP_IDENTITY_DIR/${key}.key"
-  peer_id=$(cd "$ROOT_DIR/nil_gateway" && go run ./cmd/p2p-relay --gen-identity "$identity_path" --print-peer-id)
+  peer_id=$(cd "$ROOT_DIR/polystore_gateway" && go run ./cmd/p2p-relay --gen-identity "$identity_path" --print-peer-id)
   if [ -z "$peer_id" ]; then
     echo "ERROR: failed to generate peer id for $key" >&2
     exit 1
@@ -111,7 +111,7 @@ done
 
 banner "Starting local relay"
 : >"$RELAY_LOG"
-(cd "$ROOT_DIR/nil_gateway" && nohup go run ./cmd/p2p-relay --listen "/ip4/127.0.0.1/tcp/9101/ws" --gen-identity "$RELAY_IDENTITY" >"$RELAY_LOG" 2>&1 & echo $! >"$RELAY_PID_FILE")
+(cd "$ROOT_DIR/polystore_gateway" && nohup go run ./cmd/p2p-relay --listen "/ip4/127.0.0.1/tcp/9101/ws" --gen-identity "$RELAY_IDENTITY" >"$RELAY_LOG" 2>&1 & echo $! >"$RELAY_PID_FILE")
 
 RELAY_PEER_ID="$(wait_for_relay_peer_id "$RELAY_LOG")"
 if [ -z "$RELAY_PEER_ID" ]; then

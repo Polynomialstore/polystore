@@ -2,7 +2,7 @@
 
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23  
-**Scope:** Client/WASM (`polystore_core`), Gateway ingest (`nil_gateway`), download UX, and provider storage format (bytes only)
+**Scope:** Client/WASM (`polystore_core`), Gateway ingest (`polystore_gateway`), download UX, and provider storage format (bytes only)
 **Hard constraints respected:** does not modify escrow settlement; no oracles; deterministic on-chain.
 
 ---

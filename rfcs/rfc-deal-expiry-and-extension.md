@@ -3,7 +3,7 @@
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23
 
-**Scope:** Chain (`nilchain/`), Gateway (`nil_gateway/`), Providers, UI (`polystore-website/`)
+**Scope:** Chain (`nilchain/`), Gateway (`polystore_gateway/`), Providers, UI (`polystore-website/`)
 
 **Hard constraints respected**
 - Does **not** modify the frozen escrow/retrieval settlement contract in `rfcs/rfc-pricing-and-escrow-accounting.md`.

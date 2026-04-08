@@ -87,8 +87,8 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			}
 			if len(manifestBlob) != 131072 {
 				// Try to decode if it's hex string?
-				// Assuming CLI/nil_gateway passes binary temp file.
-				// But nil-cli outputs hex. So nil_gateway must decode or write binary.
+				// Assuming CLI/polystore_gateway passes binary temp file.
+				// But nil-cli outputs hex. So polystore_gateway must decode or write binary.
 				// Let's assume it is binary 128KB.
 				// If not, try hex decode.
 			}

@@ -28,7 +28,7 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
   - provider-side session/receipt/proof handling
 
 ### Other independent daemons
-- `nilchain` (chain/LCD/EVM), `nil_faucet`, and website are separate daemons.
+- `nilchain` (chain/LCD/EVM), `polystore_faucet`, and website are separate daemons.
 - In local/dev environments they can run on one host, but ownership and lifecycle remain separate.
 
 ## Allowed call graph

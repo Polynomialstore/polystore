@@ -172,12 +172,12 @@ Checklist:
 - Goal: Make the devnet faucet truly “collaborator-only” and reduce exposed surface area.
 - PR: https://github.com/Nil-Store/nil-store/pull/66
 - Test gate:
-  - `cd nil_faucet && go test ./...`
+  - `cd polystore_faucet && go test ./...`
 
 Checklist:
 - [x] Add optional auth token (`NIL_FAUCET_AUTH_TOKEN`) required via `X-Nil-Faucet-Auth`.
 - [x] Improve rate limiting IP parsing (use forwarded headers / host-only).
-- [x] Remove stale `/create-deal` endpoint from `nil_faucet`.
+- [x] Remove stale `/create-deal` endpoint from `polystore_faucet`.
 - [x] Update trusted devnet docs + systemd env template with the auth knob.
 
 ---
@@ -300,7 +300,7 @@ Checklist:
 
 Checklist:
 - [x] Update `docs/REMOTE_SP_JOIN_QUICKSTART.md` to reference:
-  - `ops/systemd/nil-gateway-provider.service` + `ops/systemd/env/nil-gateway-provider.env`
+  - `ops/systemd/polystore-gateway-provider.service` + `ops/systemd/env/polystore-gateway-provider.env`
   - `ops/caddy/Caddyfile.provider.example` for HTTPS
   - `scripts/devnet_healthcheck.sh provider ...` for verification
 - [x] Add a short “provider systemd” snippet to `ops/systemd/README.md`.
@@ -317,7 +317,7 @@ Checklist:
 
 Checklist:
 - [x] Update `ops/systemd/env/nilchaind.env` to default CometBFT RPC to localhost.
-- [x] Update `ops/systemd/env/nil-gateway-router.env` to default router listen addr to localhost.
+- [x] Update `ops/systemd/env/polystore-gateway-router.env` to default router listen addr to localhost.
 - [x] Add a brief note in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` that these are safe defaults for the HTTPS subdomain profile.
 
 ---
@@ -328,11 +328,11 @@ Checklist:
 - Goal: Make the hub faucet bind to localhost by default (Caddy remains the public entrypoint).
 - PR: https://github.com/Nil-Store/nil-store/pull/78
 - Test gate:
-  - `cd nil_faucet && go test ./...`
+  - `cd polystore_faucet && go test ./...`
 
 Checklist:
-- [x] Add `NIL_LISTEN_ADDR` support to `nil_faucet` (default `127.0.0.1:8081`).
-- [x] Update `ops/systemd/env/nil-faucet.env` to set `NIL_LISTEN_ADDR=127.0.0.1:8081`.
+- [x] Add `NIL_LISTEN_ADDR` support to `polystore_faucet` (default `127.0.0.1:8081`).
+- [x] Update `ops/systemd/env/polystore-faucet.env` to set `NIL_LISTEN_ADDR=127.0.0.1:8081`.
 - [x] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` to remove the “firewall-only” faucet bind note.
 
 ---
@@ -542,7 +542,7 @@ Checklist:
 ### PR35 — CI: align Go toolchain with `go.mod` (1.25.x) (MERGED)
 
 - Branch: `codex/ci-go-1-25x`
-- Goal: Reduce CI/toolchain drift by using Go `1.25.x` (matches `nilchain/go.mod`, `nil_gateway/go.mod`, etc.) instead of relying on toolchain auto-download from an older Go.
+- Goal: Reduce CI/toolchain drift by using Go `1.25.x` (matches `nilchain/go.mod`, `polystore_gateway/go.mod`, etc.) instead of relying on toolchain auto-download from an older Go.
 - PR: https://github.com/Nil-Store/nil-store/pull/97
 - Test gate:
   - `ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/ci.yml\"); YAML.load_file(\".github/workflows/tauri_release.yml\")'`

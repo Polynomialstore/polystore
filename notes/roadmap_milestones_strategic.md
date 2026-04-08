@@ -48,7 +48,7 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 
 *   **Consulting Analysis:** The `kzg_upload_bottleneck_report.md` is a critical red flag. CPU-based KZG generation (~8MB/s) is insufficient for the protocol's target use case. We cannot launch Mainnet with "dial-up" upload speeds for "broadband" data.
 *   **Key Deliverables:**
-    *   **GPU Acceleration (Icicle):** Integrate CUDA-accelerated KZG (e.g., Ingonyama's Icicle) into `polystore_cli` and `nil_gateway`. Target >500 MB/s throughput.
+    *   **GPU Acceleration (Icicle):** Integrate CUDA-accelerated KZG (e.g., Ingonyama's Icicle) into `polystore_cli` and `polystore_gateway`. Target >500 MB/s throughput.
     *   **Thick Client (WASM) Finalization:** Complete the Rust-to-WASM compilation pipeline (`polystore_core`) so that small files (<100MB) can be sharded and committed directly in the browser, bypassing the Gateway for small deals.
     *   **Parallel Ingest:** Refactor the Gateway ingest pipeline to handle parallel blob commitment generation across multiple GPU streams.
 
@@ -77,7 +77,7 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 
 *   **Consulting Analysis:** To capture non-crypto native demand (the "Enterprise User" archetype), the system needs to look like S3 but behave like crypto.
 *   **Key Deliverables:**
-    *   **S3 Adapter V1:** Polish the `nil_gateway` S3-compatible API to support standard tools like `aws-cli` or `rclone` for uploads/downloads.
+    *   **S3 Adapter V1:** Polish the `polystore_gateway` S3-compatible API to support standard tools like `aws-cli` or `rclone` for uploads/downloads.
     *   **Upload Delegations:** Implement the "Third-Party Uploader" pattern (from `launch_todos.md`) allowing an enterprise to fund a temporary key for a specific upload job without exposing their main wallet.
     *   **Audits:**
         *   **Cryptographic Audit:** Verify the KZG Trusted Setup and Triple Proof circuit logic.

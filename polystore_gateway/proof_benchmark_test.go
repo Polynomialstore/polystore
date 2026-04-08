@@ -13,7 +13,7 @@ import (
 func buildProofBenchmarkFixture(t testing.TB) (manifestPath string, mduPath string) {
 	t.Helper()
 
-	// Locate trusted setup relative to nil_gateway directory.
+	// Locate trusted setup relative to polystore_gateway directory.
 	setupPath := "../nilchain/trusted_setup.txt"
 	if _, err := os.Stat(setupPath); os.IsNotExist(err) {
 		t.Skipf("trusted setup not found at %s", setupPath)

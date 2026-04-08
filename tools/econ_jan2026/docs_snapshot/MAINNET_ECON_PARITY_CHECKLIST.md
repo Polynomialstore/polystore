@@ -33,7 +33,7 @@ Companion docs:
 ## Stage 5 — Mode 2 repair + make-before-break replacement (A5)
 - [ ] Implement make-before-break replacement per `rfcs/rfc-mode2-onchain-state.md` (`nilchain/`).
 - [ ] Implement deterministic candidate selection + churn controls (B4) (`nilchain/`).
-- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `nil_gateway/`).
+- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `polystore_gateway/`).
 - [ ] Add multi-SP repair e2e: slot failure → candidate catch-up → promotion; reads succeed throughout (`scripts/`, `tests/`).
 
 ## Stage 6 — Evidence / fraud proofs pipeline (A4)
@@ -42,7 +42,7 @@ Companion docs:
 - [ ] Add unit tests per evidence type + e2e demonstrating slash on proven bad data (`scripts/`, `tests/`).
 
 ## Stage 7 — Deputy market + proxy retrieval + audit debt (P0-P2P-001)
-- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `nil_gateway/`).
+- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `polystore_gateway/`).
 - [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`nilchain/`).
 - [ ] Add ghosting-provider e2e: still retrieve via deputy and record evidence (`scripts/`).
 

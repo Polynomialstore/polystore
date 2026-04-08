@@ -51,15 +51,15 @@ It maps the runbook phases to real directories, files, and existing test gates i
 
 ### Gateway + Provider data-plane
 
-In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` (no separate `nil-provider/` dir).
+In this repo, provider byte-serving endpoints are implemented in `polystore_gateway/` (no separate `nil-provider/` dir).
 
 - HTTP router + handlers:
-  - `nil_gateway/main.go`
+  - `polystore_gateway/main.go`
     - `GatewayFetch` (user-facing download path; **requires** `X-Nil-Session-Id` by default via `NIL_REQUIRE_ONCHAIN_SESSION=1`)
     - `SpFetchShard` (provider shard fetch; validates on-chain session + Mode2 slot/range constraints when sessions are required)
     - dev-only tx relay flows (`NIL_ENABLE_TX_RELAY=0` by default; CI lifecycle scripts enable it explicitly)
-  - `nil_gateway/router_proxy.go` (gateway proxy/router for provider requests)
-  - `nil_gateway/p2p_server.go` (P2P requests; forwards `X-Nil-Session-Id` when present)
+  - `polystore_gateway/router_proxy.go` (gateway proxy/router for provider requests)
+  - `polystore_gateway/p2p_server.go` (P2P requests; forwards `X-Nil-Session-Id` when present)
 
 ### Web UI
 
@@ -103,7 +103,7 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
 - Chain:
   - `go test ./nilchain/...`
 - Gateway:
-  - `go test ./nil_gateway/...`
+  - `go test ./polystore_gateway/...`
 - Rust crates:
   - `cd polystore_core && cargo test`
   - `cd polystore_cli && cargo test`
@@ -125,7 +125,7 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
 The authoritative source of “what CI runs” is `.github/workflows/ci.yml`.
 
 At a high level, CI exercises:
-- Go unit tests: `nilchain`, `nil_faucet`, `nil_gateway`, `nil_relayer`
+- Go unit tests: `nilchain`, `polystore_faucet`, `polystore_gateway`, `polystore_relayer`
 - Rust unit tests: `polystore_core`, `polystore_cli`, `polystore_p2p`, `polystore_mock_l1`
 - Frontend: build + unit tests + lint (`polystore-website`)
 - Tauri GUI: build + unit tests + clippy (`polystore_gateway_gui`)
@@ -174,7 +174,7 @@ CI signals:
 ### Phase 5 — Compression-aware content pipeline (NilCE v1) (PARTIAL)
 
 CI signals:
-- Unit tests only: `go test ./nil_gateway/...` (NilCE helpers)
+- Unit tests only: `go test ./polystore_gateway/...` (NilCE helpers)
 
 Not proven:
 - NilCE-enabled end-to-end upload/fetch semantics are not required by CI E2E (and are opt-in via `NIL_NILCE=1`).

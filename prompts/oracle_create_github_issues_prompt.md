@@ -15,7 +15,7 @@ You are an “oracle” planning agent. Convert the agents punch list in `AGENTS
      - Links (spec/docs paths)
    - **Labels**:
      - `priority:P0` or `priority:P1`
-     - `area:nilchain` / `area:nil_gateway` / `area:polystore_p2p` / `area:scripts` / `area:docs`
+     - `area:nilchain` / `area:polystore_gateway` / `area:polystore_p2p` / `area:scripts` / `area:docs`
      - `type:feature` or `type:chore` or `type:test`
    - **Milestone**: `Mainnet Parity` (create if missing)
 

@@ -31,7 +31,7 @@ Important (current protocol behavior):
 
 ## Helper: Print Endpoint Multiaddrs
 
-From `nil_gateway/`, you can generate the exact `--endpoint` values:
+From `polystore_gateway/`, you can generate the exact `--endpoint` values:
 
 ```bash
 go run . --print-endpoints
@@ -58,7 +58,7 @@ One straightforward approach is to run the provider gateway locally on `:8082` a
 
 ```bash
 # Provider machine
-cd nil_gateway
+cd polystore_gateway
 NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .
 ```
 
@@ -72,7 +72,7 @@ caddy reverse-proxy --from sp.example.com --to localhost:8082
 Now print the endpoint to register:
 
 ```bash
-cd nil_gateway
+cd polystore_gateway
 NIL_PUBLIC_HTTP_HOST=sp.example.com NIL_PUBLIC_HTTP_SCHEME=https NIL_PUBLIC_HTTP_PORT=443 \
   go run . --print-endpoints
 ```
@@ -108,7 +108,7 @@ This routes traffic through Cloudflare, but is simple and works behind NAT.
 1) Run the provider gateway locally (same as direct):
 
 ```bash
-cd nil_gateway
+cd polystore_gateway
 NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .
 ```
 
@@ -140,7 +140,7 @@ cloudflared tunnel run nilstore-sp
 5) Print the multiaddr to register:
 
 ```bash
-cd nil_gateway
+cd polystore_gateway
 NIL_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints
 ```
 

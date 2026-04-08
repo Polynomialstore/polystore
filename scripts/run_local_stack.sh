@@ -30,7 +30,7 @@ export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
-GATEWAY_BIN="$LOG_DIR/nil_gateway"
+GATEWAY_BIN="$LOG_DIR/polystore_gateway"
 NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-$ROOT_DIR/polystore_core/target/release}"
 NIL_CORE_LIB_SO="$NIL_CORE_LIB_DIR/libpolystore_core.so"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
@@ -429,17 +429,17 @@ ensure_polystore_cli() {
   (cd "$ROOT_DIR/polystore_cli" && cargo build --release)
 }
 
-ensure_nil_gateway() {
+ensure_polystore_gateway() {
   ensure_polystore_core_shared
   # Rebuild when sources changed; the stack script reuses a single binary path
   # under _artifacts/, so a simple "exists" check can lead to stale behavior.
   if [ -x "$GATEWAY_BIN" ]; then
-    if ! find "$ROOT_DIR/nil_gateway" -name '*.go' -newer "$GATEWAY_BIN" -print -quit | grep -q .; then
+    if ! find "$ROOT_DIR/polystore_gateway" -name '*.go' -newer "$GATEWAY_BIN" -print -quit | grep -q .; then
       return 0
     fi
   fi
-  banner "Building nil_gateway (via $GO_BIN)"
-  (cd "$ROOT_DIR/nil_gateway" && "$GO_BIN" build -o "$GATEWAY_BIN" .)
+  banner "Building polystore_gateway (via $GO_BIN)"
+  (cd "$ROOT_DIR/polystore_gateway" && "$GO_BIN" build -o "$GATEWAY_BIN" .)
 }
 
 ensure_polystore_core_shared() {
@@ -899,7 +899,7 @@ start_chain() {
 start_faucet() {
   banner "Starting faucet service"
   (
-    cd "$ROOT_DIR/nil_faucet"
+    cd "$ROOT_DIR/polystore_faucet"
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_DENOM="$DENOM" NIL_AMOUNT="$NIL_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" NIL_LISTEN_ADDR="127.0.0.1:${FAUCET_PORT}" \
       "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
@@ -917,7 +917,7 @@ start_faucet() {
 start_sp_gateway() {
   banner "Starting SP gateway service(s) (ports starting at 8082)"
   ensure_polystore_cli
-  ensure_nil_gateway
+  ensure_polystore_gateway
   local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-6}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
@@ -952,7 +952,7 @@ start_sp_gateway() {
     fi
 
     (
-      cd "$ROOT_DIR/nil_gateway"
+      cd "$ROOT_DIR/polystore_gateway"
       # SP Mode (default). Each instance listens on its own port but can share the upload dir.
       nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_LCD_BASE="http://127.0.0.1:$LCD_PORT" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
         NIL_RUNTIME_PERSONA="provider-daemon" \
@@ -997,7 +997,7 @@ start_user_gateway() {
 
   banner "Starting User gateway service (Port 8080)"
   ensure_polystore_cli
-  ensure_nil_gateway
+  ensure_polystore_gateway
   local user_gateway_proxy_mode="$NIL_USER_GATEWAY_PROXY_MODE"
   if [ "$user_gateway_proxy_mode" != "1" ]; then
     user_gateway_proxy_mode="0"
@@ -1011,7 +1011,7 @@ start_user_gateway() {
     fi
   fi
   (
-    cd "$ROOT_DIR/nil_gateway"
+    cd "$ROOT_DIR/polystore_gateway"
     # user-gateway persona on :8080.
     # Default is standalone mode (local slab/cache + orchestration).
     # Set NIL_USER_GATEWAY_PROXY_MODE=1 for legacy proxy/router compatibility.

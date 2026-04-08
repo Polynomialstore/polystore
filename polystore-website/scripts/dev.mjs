@@ -31,7 +31,7 @@ function readPublicTestnetEnv() {
 }
 
 function readFaucetAuthTokenFromEtc() {
-  const envPath = "/etc/nilstore/nil-faucet.env";
+  const envPath = "/etc/nilstore/polystore-faucet.env";
   try {
     const raw = fs.readFileSync(envPath, "utf8");
     for (const line of raw.split(/\r?\n/)) {

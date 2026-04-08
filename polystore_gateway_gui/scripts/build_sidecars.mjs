@@ -53,8 +53,8 @@ if (!nilCorePath) {
 console.log(`==> Staging ${basename(nilCorePath)}`);
 atomicCopy(nilCorePath, join(binDir, basename(nilCorePath)));
 
-console.log("==> Building nil_gateway sidecar");
-const nilGatewayOutput = join(binDir, `nil_gateway${ext}`);
+console.log("==> Building polystore_gateway sidecar");
+const nilGatewayOutput = join(binDir, `polystore_gateway${ext}`);
 const nilGatewayTempOutput = `${nilGatewayOutput}.tmp-${process.pid}-${Date.now()}`;
 const goBuildArgs = ["build"];
 if (process.platform === "linux") {
@@ -67,7 +67,7 @@ execFileSync(
   "go",
   goBuildArgs,
   {
-    cwd: join(rootDir, "nil_gateway"),
+    cwd: join(rootDir, "polystore_gateway"),
     stdio: "inherit",
   },
 );

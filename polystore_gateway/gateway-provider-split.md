@@ -7,7 +7,7 @@
 
 This specification defines the architectural split of the legacy combined gateway/provider service into two distinct logical roles:
 1.  **`nil_provider` (Storage Provider):** A passive, "dumb" storage server that holds raw data (MDUs) and submits proofs to the chain upon receiving valid receipts. It holds the **Provider Key**.
-2.  **`nil_gateway` (User Daemon):** An intelligent user agent (Thick Client helper) that performs cryptographic verification, packing, and serves the frontend. It does **not** hold user keys (for the main flow); it delegates signing to the Client (Browser/CLI).
+2.  **`polystore_gateway` (User Daemon):** An intelligent user agent (Thick Client helper) that performs cryptographic verification, packing, and serves the frontend. It does **not** hold user keys (for the main flow); it delegates signing to the Client (Browser/CLI).
 
 ## 2. Architecture & Roles
 
@@ -22,7 +22,7 @@ This specification defines the architectural split of the legacy combined gatewa
     *   `uploads/<manifest_root_key>/` (The Slab).
     *   `receipts.db` (Buffer of unsubmitted receipts).
 
-### 2.2 `nil_gateway` (The User Daemon)
+### 2.2 `polystore_gateway` (The User Daemon)
 *   **Role:** Active Client Helper / "Thick Client" Daemon.
 *   **Key:** None (Delegates to Frontend/CLI). *Exception: E2E testing mode.*
 *   **Responsibility:**
@@ -114,7 +114,7 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
 *   **`GET /sp/mdu/{manifest_root_key}/{mdu_index}`**
     *   **Logic:** Serves raw MDU bytes from disk.
 
-### 4.2 Gateway API (`nil_gateway`)
+### 4.2 Gateway API (`polystore_gateway`)
 
 *   **`GET /gateway/fetch/{manifest_root}`** (Updated)
     *   **Behavior:** Streams file.
@@ -167,7 +167,7 @@ This preserves “fair exchange” while reducing signatures from `O(chunks)` �
 
 ## 6. Migration Steps (Phase 2)
 
-1.  **Refactor `nil_gateway`:**
+1.  **Refactor `polystore_gateway`:**
     *   Add `--mode provider` and `--mode gateway` flags (default to "combined" for backward compat if needed, but prefer split).
     *   Implement `POST /sp/receipt` handler.
     *   Update `GatewayFetch` to stop auto-submitting and start setting headers.

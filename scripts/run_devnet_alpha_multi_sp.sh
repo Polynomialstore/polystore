@@ -2,9 +2,9 @@
 # Devnet Alpha multi-provider stack runner.
 # Starts:
 # - nilchaind (CometBFT + LCD + JSON-RPC)
-# - nil_faucet
-# - N provider daemons (nil_gateway, provider mode) on ports 8091+
-# - 1 gateway router (nil_gateway, router mode) on :8080
+# - polystore_faucet
+# - N provider daemons (polystore_gateway, provider mode) on ports 8091+
+# - 1 gateway router (polystore_gateway, router mode) on :8080
 # - polystore-website (optional, default on)
 #
 # Usage:
@@ -39,13 +39,13 @@ NIL_REINIT_HOME="${NIL_REINIT_HOME:-0}" # set to 1 to allow wiping an existing C
 
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
-NIL_GATEWAY_BIN="$ROOT_DIR/nil_gateway/nil_gateway"
+NIL_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
 TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
 
 PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
 PROVIDER_PORT_BASE="${PROVIDER_PORT_BASE:-8091}"
-# Each nil_gateway instance runs an optional libp2p server. When enabled by
+# Each polystore_gateway instance runs an optional libp2p server. When enabled by
 # default, we must ensure unique listen ports for multi-provider stacks.
 P2P_PORT_BASE="${P2P_PORT_BASE:-9200}"
 
@@ -317,9 +317,9 @@ ensure_polystore_cli() {
   (cd "$ROOT_DIR/polystore_cli" && cargo build --release)
 }
 
-ensure_nil_gateway() {
-  banner "Building nil_gateway (via $GO_BIN)"
-  (cd "$ROOT_DIR/nil_gateway" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NIL_GATEWAY_BIN" .)
+ensure_polystore_gateway() {
+  banner "Building polystore_gateway (via $GO_BIN)"
+  (cd "$ROOT_DIR/polystore_gateway" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NIL_GATEWAY_BIN" .)
 }
 
 ensure_metadata() {
@@ -614,7 +614,7 @@ start_chain() {
 start_faucet() {
   banner "Starting faucet service"
   (
-    cd "$ROOT_DIR/nil_faucet"
+    cd "$ROOT_DIR/polystore_faucet"
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_DENOM="$DENOM" NIL_AMOUNT="1000000000000000000aatom,100000000stake" NIL_GAS_PRICES="$GAS_PRICE" NIL_LISTEN_ADDR="127.0.0.1:${FAUCET_PORT}" \
       "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
@@ -676,7 +676,7 @@ start_provider() {
   local dir="$LOG_DIR/providers/$key"
   mkdir -p "$dir"
   (
-    cd "$ROOT_DIR/nil_gateway"
+    cd "$ROOT_DIR/polystore_gateway"
     nohup env \
       NIL_RUNTIME_PERSONA="provider-daemon" \
       NIL_LISTEN_ADDR=":$port" \
@@ -700,10 +700,10 @@ start_provider() {
 }
 
 start_router() {
-  banner "Starting gateway router (nil_gateway)"
+  banner "Starting gateway router (polystore_gateway)"
   local p2p_port="$P2P_PORT_BASE"
   (
-    cd "$ROOT_DIR/nil_gateway"
+    cd "$ROOT_DIR/polystore_gateway"
     nohup env \
       NIL_RUNTIME_PERSONA="user-gateway" \
       NIL_GATEWAY_ROUTER="1" \
@@ -793,7 +793,7 @@ start_all() {
   ensure_polystore_core
   ensure_nilchaind
   ensure_polystore_cli
-  ensure_nil_gateway
+  ensure_polystore_gateway
   init_chain
   start_chain
   start_faucet

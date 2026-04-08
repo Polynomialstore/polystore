@@ -1,12 +1,12 @@
-# NilGateway — S3 Adapter & Web2 Gateway Specification (`nil_gateway`)
+# NilGateway — S3 Adapter & Web2 Gateway Specification (`polystore_gateway`)
 
-**Component:** `nil_gateway`
+**Component:** `polystore_gateway`
 **Role:** Web2 Gateway, S3 Compatibility Layer, and Devnet Relayer.
 **Language:** Go.
 
 ## 1. Overview
 
-`nil_gateway` is a dual-purpose service that acts as:
+`polystore_gateway` is a dual-purpose service that acts as:
 1.  **S3-Compatible Adapter:** Allows legacy applications to `PUT` and `GET` objects using standard S3 semantics, transparently handling NilStore sharding and on-chain storage.
 2.  **Optional Web Gateway:** Provides REST endpoints for the `polystore-website` frontend to offload heavy cryptographic operations (MDU packing, KZG commitments) and to relay provider proofs.
 
@@ -207,7 +207,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 
 ## 4. Devnet Shortcuts & "The Gap"
 
-To facilitate the "Store Wars" Devnet without a full WASM client, `nil_gateway` takes several shortcuts:
+To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gateway` takes several shortcuts:
 
 1.  **The "Faucet Relayer":**
     *   The gateway can relay user‑signed intents (e.g., `create-deal-from-evm`, `update-deal-content-evm`) and submit provider proofs using a local key.

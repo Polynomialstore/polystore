@@ -1,4 +1,4 @@
-module nil_gateway
+module polystore_gateway
 
 go 1.25.5
 

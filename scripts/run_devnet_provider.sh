@@ -1367,7 +1367,7 @@ start_provider() {
 
   echo "==> Starting provider-daemon..."
   (
-    cd "$ROOT_DIR/nil_gateway"
+    cd "$ROOT_DIR/polystore_gateway"
     nohup env \
       NIL_RUNTIME_PERSONA="provider-daemon" \
       NIL_LISTEN_ADDR="$PROVIDER_LISTEN" \

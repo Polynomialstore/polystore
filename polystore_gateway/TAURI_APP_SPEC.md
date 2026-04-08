@@ -25,7 +25,7 @@ This document is written to be **unambiguous enough that a Codex agent can imple
 ### 0.3 Definition of Done (DoD)
 The project is “done” when all items below are true:
 1. A new Tauri app exists at `polystore_gateway_gui/` and runs on macOS/Linux/Windows.
-2. The app bundles (or deterministically provisions) a **local `nil_gateway` sidecar** and can:
+2. The app bundles (or deterministically provisions) a **local `polystore_gateway` sidecar** and can:
    - show gateway status
    - create a deal via `/gateway/create-deal-evm`
    - upload a file via `/gateway/upload`
@@ -42,14 +42,14 @@ The project is “done” when all items below are true:
 ## 1. Context and Current Reality (Repo Truth)
 
 ### 1.1 Existing Gateway Surface
-`nil_gateway` (Go) already exposes:
+`polystore_gateway` (Go) already exposes:
 - `/health`, `/status`
 - `/gateway/create-deal-evm`, `/gateway/update-deal-content-evm`
 - `/gateway/upload`, `/gateway/list-files/{cid}`, `/gateway/fetch/{cid}`
  
 The GUI must treat `{cid}` as a **legacy alias** for the deal-level **`manifest_root`** (48-byte commitment); it is not a per-file CID.
  
-Canonical behavior for these endpoints is documented in `nil_gateway/nil-gateway-spec.md`.
+Canonical behavior for these endpoints is documented in `polystore_gateway/polystore-gateway-spec.md`.
  
 ### 1.2 Existing Cryptography / Mode 2
 Mode 2 ingest paths already use `nilchain/x/crypto_ffi` (Go ↔ Rust FFI). The GUI plan assumes **Mode 2 is the primary supported path**.
@@ -59,7 +59,7 @@ Mode 2 ingest paths already use `nilchain/x/crypto_ffi` (Go ↔ Rust FFI). The G
 ### 2.1 Components
 1. **Frontend (UI)** — React + TypeScript + Vite + Tailwind.
 2. **Host (Tauri Rust)** — owns process lifecycle, filesystem permissions, and IPC.
-3. **Sidecar (`nil_gateway`)** — Go HTTP server running on loopback; configured by the host via env/args.
+3. **Sidecar (`polystore_gateway`)** — Go HTTP server running on loopback; configured by the host via env/args.
  
 ### 2.2 Security Boundary (Important)
 - The frontend must not talk directly to `http://127.0.0.1:<port>` (origin/CORS confusion).  
@@ -75,11 +75,11 @@ The GUI must run without requiring the user to install build tools or CLI binari
 
 **Supported implementation strategy (choose one and document it in `polystore_gateway_gui/README.md`):**
 1. **Bundle required binaries (recommended MVP):**
-   - Bundle a `nil_gateway` sidecar binary per platform.
-   - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `nilchaind` client binary if `nil_gateway` still shells out).
+   - Bundle a `polystore_gateway` sidecar binary per platform.
+   - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `nilchaind` client binary if `polystore_gateway` still shells out).
    - The host sets `NIL_TRUSTED_SETUP`, `NILCHAIND_BIN`, and other paths to bundle-resident locations.
 2. **Eliminate external exec dependencies (target hardening):**
-   - Remove `execNilchaind` usage from `nil_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
+   - Remove `execNilchaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
    - Ensure Mode 2 ingest does not require `polystore_cli` subprocesses (prefer `crypto_ffi`, which already exists for RS + KZG primitives).
 
 The plan below assumes Strategy (1) first, then Strategy (2) as a follow-up hardening phase.
@@ -131,15 +131,15 @@ Field order (must match `UpdateContentTypeHash` in `eip712.go`):
 6. `witness_mdus` (uint64)
 7. `nonce` (uint64)
  
-### 4.4 Payload Shape Sent to `nil_gateway`
-`nil_gateway` expects JSON:
+### 4.4 Payload Shape Sent to `polystore_gateway`
+`polystore_gateway` expects JSON:
 ```json
 {
   "intent": { "...": "..." },
   "evm_signature": "0x..."
 }
 ```
-Where `intent` uses the on-chain JSON field names (see `nilchain/proto/nilchain/nilchain/v1/tx.proto` and validation in `nil_gateway/main.go`).
+Where `intent` uses the on-chain JSON field names (see `nilchain/proto/nilchain/nilchain/v1/tx.proto` and validation in `polystore_gateway/main.go`).
  
 **Implementation rule:** Add golden tests that ensure typed-data encoding produces signatures accepted by chain tests (see `nilchain/x/nilchain/keeper/msg_server_evmbdg_test.go`).
  
@@ -266,14 +266,14 @@ The host must map config to sidecar env vars consistently:
 ### 7.3 Sidecar Integration Tests
 Two tiers:
 1) **Mock sidecar**: a tiny HTTP server in Rust tests that mimics `/status`, `/gateway/*` for deterministic CI.
-2) **Real sidecar smoke**: build `nil_gateway` and start it in a “test mode” (no chain required), verifying `/health` and `/status`.
+2) **Real sidecar smoke**: build `polystore_gateway` and start it in a “test mode” (no chain required), verifying `/health` and `/status`.
  
 ### 7.4 E2E Tests
 Minimum:
 - Headless UI E2E (Playwright) running against the **web UI** with a mocked host bridge (recommended for CI).
  
 Optional/nightly:
-- Full-stack E2E that starts `nilchaind` + `nil_gateway` + the GUI and runs a real create-deal/upload/commit/list/fetch lifecycle (can reuse/adapt `nil_gateway/test_lifecycle.sh`).
+- Full-stack E2E that starts `nilchaind` + `polystore_gateway` + the GUI and runs a real create-deal/upload/commit/list/fetch lifecycle (can reuse/adapt `polystore_gateway/test_lifecycle.sh`).
  
 ## 8. CI / Build / Release
 
@@ -282,7 +282,7 @@ Update `.github/workflows/ci.yml` to add a job that:
 - installs Node 20 and Rust stable
 - runs `npm ci`, `npm run lint`, `npm run test`, `npm run build` in `polystore_gateway_gui/`
 - runs `cargo fmt --check` and `cargo clippy -- -D warnings` in `polystore_gateway_gui/src-tauri/`
-- (optional) builds `nil_gateway` for smoke tests used by host integration tests
+- (optional) builds `polystore_gateway` for smoke tests used by host integration tests
  
 ### 8.2 Release Builds (tagged)
 Add `.github/workflows/tauri_release.yml` that:
@@ -329,13 +329,13 @@ Each phase is small-commit friendly and includes a test gate.
 - **Test gate:** E2E test downloads a mocked file and verifies checksum.
  
 ### Phase 6 — Real Sidecar Smoke (Optional but recommended)
-- [ ] Add a “dev smoke” script that builds `nil_gateway` and runs GUI against it.
+- [ ] Add a “dev smoke” script that builds `polystore_gateway` and runs GUI against it.
 - [ ] Add nightly CI job for full stack if feasible.
 
 ### Phase 7 — Dependency-Free Sidecar (Hardening)
-- [ ] Remove `execNilchaind` usage from `nil_gateway` (broadcast/query via libraries).
+- [ ] Remove `execNilchaind` usage from `polystore_gateway` (broadcast/query via libraries).
 - [ ] Ensure all ingest/commit paths used by the GUI do not shell out to `polystore_cli`.
-- [ ] Update GUI bundling to only include the `nil_gateway` sidecar and required static assets.
+- [ ] Update GUI bundling to only include the `polystore_gateway` sidecar and required static assets.
 - **Test gate:** all previous tests still pass; add a “no external exec” unit test that fails if `NILCHAIND_BIN`/`NIL_CLI_BIN` is required.
  
 ## 10. Open Questions (Need Your Clarifications)
@@ -346,7 +346,7 @@ These are not blockers; defaults are stated. Please confirm/correct.
 2. **Wallet choice**: Default WalletConnect v2 only; is browser-bridge required?
 3. **Relayer key custody**: Default store in OS keychain when possible; fall back to a local file in app data.
 4. **Chain params source**: Default read `eip712_chain_id` from LCD params; fall back to `31337`.
-5. **Sidecar port strategy**: Default ephemeral port with host discovery; OK to require an engineering change in `nil_gateway`?
+5. **Sidecar port strategy**: Default ephemeral port with host discovery; OK to require an engineering change in `polystore_gateway`?
 6. **Target OS support**: Default macOS + Linux first; Windows supported in CI but may lag for local dev.
 7. **Proof/receipt UX**: Should downloads auto-submit receipts/proofs (devnet convenience) or only display “ready to sign” payloads?
 8. **Bundling approach**: Should we bundle a `nilchaind` client binary for MVP, or should Phase 7 (dependency-free) be required before shipping a GUI?

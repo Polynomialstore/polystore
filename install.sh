@@ -49,10 +49,10 @@ cargo build --release
 cp target/release/polystore_p2p ../bin/
 cd ..
 
-# 5. Build nil_faucet
-echo "🛠️  Building nil_faucet..."
-cd nil_faucet
-go build -o ../bin/nil_faucet main.go
+# 5. Build polystore_faucet
+echo "🛠️  Building polystore_faucet..."
+cd polystore_faucet
+go build -o ../bin/polystore_faucet main.go
 cd ..
 
 # 6. Build polystore_cli

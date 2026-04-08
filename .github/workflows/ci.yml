@@ -12,22 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [nilchain, nil_faucet, nil_gateway, nil_relayer]
+        service: [nilchain, polystore_faucet, polystore_gateway, polystore_relayer]
     steps:
       - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25.x' # Match `go.mod` (nilchain/nil_gateway/etc.)
+          go-version: '1.25.x' # Match `go.mod` (nilchain/polystore_gateway/etc.)
           cache-dependency-path: ${{ matrix.service }}/go.sum
 
       - name: Set up Rust
-        if: matrix.service == 'nil_gateway' || matrix.service == 'nilchain'
+        if: matrix.service == 'polystore_gateway' || matrix.service == 'nilchain'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build polystore_core
-        if: matrix.service == 'nil_gateway' || matrix.service == 'nilchain'
+        if: matrix.service == 'polystore_gateway' || matrix.service == 'nilchain'
         run: |
           cd polystore_core
           cargo build --release
@@ -41,7 +41,7 @@ jobs:
             git checkout vendor
           fi
           
-          # Add polystore_core release dir to LD_LIBRARY_PATH for nil_gateway/nilchain
+          # Add polystore_core release dir to LD_LIBRARY_PATH for polystore_gateway/nilchain
           # We use GITHUB_WORKSPACE because working-directory is set to the service dir
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
           

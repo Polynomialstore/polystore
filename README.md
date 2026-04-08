@@ -48,7 +48,7 @@ scripts/e2e_browser_libp2p_relay.sh
 
 ## Build prerequisites (current CI profile)
 
-- Go `1.25.x` (see `nilchain/go.mod`, `nil_gateway/go.mod`, etc.)
+- Go `1.25.x` (see `nilchain/go.mod`, `polystore_gateway/go.mod`, etc.)
 - Rust (stable) + `wasm-pack` + `wasm32-unknown-unknown` target
 - Node.js `20.x` + npm
 - (Optional) Foundry (`forge`) for `nil_bridge` contract tests
@@ -64,8 +64,8 @@ To build the full release bundle locally:
 - `nilchain` (L1): Cosmos-SDK chain (deals, proofs, economics, retrieval sessions)
 - `polystore_core` (Rust): cryptographic primitives (KZG, Merkle, Reed-Solomon), exposed via C-FFI and WASM
 - `polystore_cli`: client tooling (sharding / commitment generation)
-- `nil_gateway`: user-gateway and provider-daemon HTTP APIs (retrieval/session enforcement)
-- `nil_faucet`: devnet faucet service (token-auth capable)
+- `polystore_gateway`: user-gateway and provider-daemon HTTP APIs (retrieval/session enforcement)
+- `polystore_faucet`: devnet faucet service (token-auth capable)
 - `polystore-website`: web UI (React/Vite) for onboarding + deal flows
 
 ## What CI does (and does not) prove

@@ -2,7 +2,7 @@
 
 Last updated: 2026-01-23
 
-This document is intentionally **implementation-oriented** for `polystore-website/` and `nil_gateway/` and aligns with:
+This document is intentionally **implementation-oriented** for `polystore-website/` and `polystore_gateway/` and aligns with:
 
 - `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers_PROTOCOL_HOOKS.md`
 - `rfcs/rfc-mandatory-retrieval-sessions-and-batching_ACCESS_CONTROL_PROTOCOL_HOOKS.md`

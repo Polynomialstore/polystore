@@ -634,7 +634,7 @@ func looksLikeDesktopSidecarLayout() bool {
 	rootDir := filepath.Dir(binDir)
 
 	// Typical desktop app layout:
-	//   .../polystore_gateway_gui/bin/nil_gateway
+	//   .../polystore_gateway_gui/bin/polystore_gateway
 	//   .../polystore_gateway_gui/bin/polystore_cli
 	//   .../polystore_gateway_gui/trusted_setup.txt
 	if !fileExists(filepath.Join(binDir, nilCliBinaryName())) {

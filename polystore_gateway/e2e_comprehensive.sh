@@ -102,7 +102,7 @@ echo "✅ Chain State Verified (Manifest & Size)"
 
 # 6. Verify Local Storage (Gateway)
 echo ">>> [6] Verifying Gateway Storage (Filesystem on Slab)..."
-STORAGE_DIR="nil_gateway/uploads/$CID"
+STORAGE_DIR="polystore_gateway/uploads/$CID"
 if [ ! -d "$STORAGE_DIR" ]; then
     echo "❌ Storage directory not found: $STORAGE_DIR"
     exit 1

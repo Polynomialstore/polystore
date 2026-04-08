@@ -5,8 +5,8 @@ set -euo pipefail
 #
 # Starts:
 # - nilchaind (RPC/LCD/EVM)
-# - nil_faucet
-# - nil_gateway in router mode (:8080)
+# - polystore_faucet
+# - polystore_gateway in router mode (:8080)
 # - polystore-website (optional, on by default)
 #
 # Does NOT start any local providers. Remote providers can register and join.

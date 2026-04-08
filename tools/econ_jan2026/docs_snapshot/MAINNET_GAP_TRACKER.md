@@ -15,7 +15,7 @@ This document tracks **what is missing** between the current implementation in t
 - Every epic should have a **test gate** (unit/e2e/script) before it can be marked “Done”.
 - Prefer tracking **code ownership** by directory:
   - Chain: `nilchain/`
-  - Gateway/SP: `nil_gateway/`
+  - Gateway/SP: `polystore_gateway/`
   - Core crypto/WASM: `polystore_core/`
   - CLI automation: `polystore_cli/`
   - P2P: `polystore_p2p/`
@@ -69,7 +69,7 @@ This document tracks **what is missing** between the current implementation in t
 ### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
-- **Current state:** `nil_gateway` contains NilFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
+- **Current state:** `polystore_gateway` contains NilFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
 - **DoD:** NilFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
 - **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
 
@@ -119,7 +119,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Spec/Notes:** `AGENTS.md` Phase 5 notes; `nilchain/app/app.go` simulation exclusions
 - **Notes:** EVM/FeeMarket are excluded from simulation to avoid signer panics; ensure production builds are safe and tested.
 
-### Gateway / Provider (`nil_gateway/`)
+### Gateway / Provider (`polystore_gateway/`)
 
 #### GW-201 — Strict session enforcement on data-plane fetches
 - **Status:** PARTIAL (DEVNET)
@@ -217,8 +217,8 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
 - **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `polystore_core`.
 - **Delivers:**
-  - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
-  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
+  - Port NilFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
+  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `polystore_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
 

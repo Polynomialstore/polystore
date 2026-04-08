@@ -14,7 +14,7 @@ timeout 600s curl --verbose -X POST \
 Observed: the request can exceed minutes; the e2e script times out; users perceive an infinite hang.
 
 ## What’s Actually Happening (Likely Root Cause)
-Canonical ingest (`nil_gateway/IngestNewDeal`) calls `polystore_cli shard` multiple times per upload:
+Canonical ingest (`polystore_gateway/IngestNewDeal`) calls `polystore_cli shard` multiple times per upload:
 - User file sharding
 - Witness MDU sharding (W depends on `max_user_mdus`)
 - MDU #0 sharding
@@ -24,7 +24,7 @@ Each `polystore_cli shard` run computes KZG commitments for 64 blobs of an 8 MiB
 - This is ~60s per MDU on a dev laptop, so even a 1 KB file becomes multiple minutes because canonical ingest touches multiple MDUs.
 
 Additional issues that worsen “hang” perception:
-- `nil_gateway` does not propagate `r.Context()` into ingest/sharding, so if the client disconnects (Ctrl+C, browser nav), the gateway continues doing expensive work anyway.
+- `polystore_gateway` does not propagate `r.Context()` into ingest/sharding, so if the client disconnects (Ctrl+C, browser nav), the gateway continues doing expensive work anyway.
 - `IngestNewDeal` shards MDU #0 using `raw=false`, causing `polystore_cli` to treat an 8 MiB file as raw bytes and split into 2 MDUs (adds ~+1 MDU of work and yields a root mismatch risk).
 
 ## Goals / Acceptance Criteria
@@ -32,16 +32,16 @@ Additional issues that worsen “hang” perception:
 2. Aborted HTTP upload cancels `polystore_cli` work (no “zombie” CPU burn after client disconnect).
 3. Tests catch regressions:
    - JS unit tests: no indefinite hangs (upload uses fetch timeout/AbortController).
-   - Go unit tests for `nil_gateway`: shard subprocess cancellation/timeout is enforced.
+   - Go unit tests for `polystore_gateway`: shard subprocess cancellation/timeout is enforced.
 - `./scripts/e2e_lifecycle.sh` fails fast if upload exceeds the target (after perf fix).
 
 ## Implementation Plan (Suggested Order)
 
 ### 1) Make gateway cancellation + deadlines real (behavioral fix)
 Files:
-- `nil_gateway/main.go`
-- `nil_gateway/ingest.go`
-- `nil_gateway/aggregate.go`
+- `polystore_gateway/main.go`
+- `polystore_gateway/ingest.go`
+- `polystore_gateway/aggregate.go`
 
 Actions:
 - Thread a `context.Context` through `GatewayUpload` → `IngestNewDeal`/`IngestAppendToDeal` → `shardFile`/`aggregateRoots`.
@@ -51,7 +51,7 @@ Actions:
 
 ### 2) Fix the “extra MDU” bug in MDU #0 sharding (correctness + performance)
 File:
-- `nil_gateway/ingest.go`
+- `polystore_gateway/ingest.go`
 
 Action:
 - When sharding MDU #0 (already an 8 MiB MDU buffer), call `shardFile(..., raw=true, ...)` so `polystore_cli` does not re-encode/split it into 2 MDUs.
@@ -74,9 +74,9 @@ Target: seconds, not minutes.
 
 ### 4) Add tests that replicate “hang” and enforce timeouts
 
-#### Go (`nil_gateway`) unit tests
+#### Go (`polystore_gateway`) unit tests
 File:
-- `nil_gateway/main_test.go` (or new focused test files)
+- `polystore_gateway/main_test.go` (or new focused test files)
 
 Fix existing test scaffolding:
 - `TestHelperProcess` exists but `execNilCli` uses `exec.CommandContext` directly, so tests can’t mock `polystore_cli`.

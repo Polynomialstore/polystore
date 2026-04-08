@@ -61,7 +61,7 @@ Faucet note:
 
 Avoid these detours unless debugging is required:
 - do not set up or run a local faucet
-- do not prefer raw `nil_gateway` daemon management over Nil Gateway GUI
+- do not prefer raw `polystore_gateway` daemon management over Nil Gateway GUI
 - do not ask the user to pick a flow mode up front; default to `full-local`
 - do not ask the user to supply the tiny bootstrap file; create a temporary local file yourself
 - do not reinstall or relaunch Nil Gateway GUI if `http://localhost:8080/health` is already healthy

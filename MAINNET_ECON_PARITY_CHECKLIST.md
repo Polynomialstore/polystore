@@ -26,11 +26,11 @@ Companion docs:
 - [ ] Enforce expiry: reject `UpdateDealContent*`, `OpenRetrievalSession`, `ProveLiveness` after `end_block` (`nilchain/`).
 - [ ] Enforce `expires_at <= end_block` on retrieval sessions (`nilchain/`).
 - [ ] Exclude expired deals from quotas/challenge derivation and rewards (`nilchain/`).
-- [ ] Provider + gateway: stop serving expired deals; GC after `end_block + grace` (`nil_provider/`, `nil_gateway/`).
+- [ ] Provider + gateway: stop serving expired deals; GC after `end_block + grace` (`nil_provider/`, `polystore_gateway/`).
 - [ ] Add e2e: expire → renew → read; expire → GC delete (`scripts/`, `tests/`).
 ## Stage 2 — Retrieval session economics (A2)
 - [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`nilchain/`).
-- [ ] Enforce **mandatory sessions for all served bytes**: provider + gateway reject out-of-session reads (`X-Nil-Session-Id` required); blob alignment + session range subset enforced; segmented/batched downloads within one session supported (`nil-provider/`, `nil_gateway/`, `polystore-website/`).
+- [ ] Enforce **mandatory sessions for all served bytes**: provider + gateway reject out-of-session reads (`X-Nil-Session-Id` required); blob alignment + session range subset enforced; segmented/batched downloads within one session supported (`nil-provider/`, `polystore_gateway/`, `polystore-website/`).
 - [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`nilchain/`).
 - [ ] Extend econ e2e: open → complete; open → cancel/expire; verify burns/payouts/refunds (`scripts/`, `tests/`).
 
@@ -50,8 +50,8 @@ Companion docs:
 - [ ] E2E gates: owner-only deal rejects non-owner; public deal allows non-owner sponsored open; voucher replay fails; allowlist proof required (`tests/`, `scripts/`).
 
 ## Stage 2c — Content encoding / compression (A2c)
-- [ ] Implement NilCEv1 header (`NILC`) + `ContentEncoding` enum and zstd (level 3) compress-before-encrypt pipeline in both gateway and WASM (`nil_gateway/`, `polystore_core/`).
-- [ ] Retrieval path parses header and decompresses after decrypt; partial reads fetch header blobs first (`nil_gateway/`, `polystore_core/`).
+- [ ] Implement NilCEv1 header (`NILC`) + `ContentEncoding` enum and zstd (level 3) compress-before-encrypt pipeline in both gateway and WASM (`polystore_gateway/`, `polystore_core/`).
+- [ ] Retrieval path parses header and decompresses after decrypt; partial reads fetch header blobs first (`polystore_gateway/`, `polystore_core/`).
 - [ ] UI shows original vs stored size and cost delta; compression default ON with opt-out (`polystore-website/`).
 - [ ] Tests: round-trip equality; corrupt header fails safely; zip-bomb defense; gateway vs WASM parity (`tests/`).
 
@@ -69,8 +69,8 @@ Companion docs:
 ## Stage 5 — Mode 2 repair + make-before-break replacement (A5)
 - [ ] Implement make-before-break replacement per `rfcs/rfc-mode2-onchain-state.md` (`nilchain/`).
 - [ ] Implement deterministic candidate selection + churn controls (B4) (`nilchain/`).
-- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `nil_gateway/`).
-- [ ] Ensure repair catch-up transfers are **session-accounted** via protocol repair sessions (`MsgOpenProtocolRetrievalSession`, `purpose=PROTOCOL_REPAIR`) (`nilchain/`, `nil_gateway/`, `nil-provider/`).
+- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `polystore_gateway/`).
+- [ ] Ensure repair catch-up transfers are **session-accounted** via protocol repair sessions (`MsgOpenProtocolRetrievalSession`, `purpose=PROTOCOL_REPAIR`) (`nilchain/`, `polystore_gateway/`, `nil-provider/`).
 - [ ] Add multi-SP repair e2e: slot failure → candidate catch-up → promotion; reads succeed throughout (`scripts/`, `tests/`).
 
 ## Stage 6 — Evidence / fraud proofs pipeline (A4)
@@ -79,7 +79,7 @@ Companion docs:
 - [ ] Add unit tests per evidence type + e2e demonstrating slash on proven bad data (`scripts/`, `tests/`).
 
 ## Stage 7 — Deputy market + proxy retrieval + audit debt (P0-P2P-001)
-- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `nil_gateway/`).
+- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `polystore_gateway/`).
 - [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`nilchain/`).
 - [ ] Add ghosting-provider e2e: still retrieve via deputy and record evidence (`scripts/`).
 

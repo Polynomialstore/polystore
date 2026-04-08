@@ -131,6 +131,6 @@ See `notes/mainnet_policy_resolution_jan2026.md`.
 
 ## 4. S3 Adapter (Web2 Gateway)
 
-The `nil_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
+The `polystore_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
 *   **PUT:** Shards file -> Computes KZG -> Creates Deal on Chain.
 *   **GET:** Retrieves shards -> Verifies KZG -> Reconstructs File.

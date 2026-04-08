@@ -15,7 +15,7 @@ This document tracks **what is missing** between the current implementation in t
 - Every epic should have a **test gate** (unit/e2e/script) before it can be marked “Done”.
 - Prefer tracking **code ownership** by directory:
   - Chain: `nilchain/`
-  - Gateway/SP: `nil_gateway/`
+  - Gateway/SP: `polystore_gateway/`
   - Core crypto/WASM: `polystore_core/`
   - CLI automation: `polystore_cli/`
   - P2P: `polystore_p2p/`
@@ -69,7 +69,7 @@ This document tracks **what is missing** between the current implementation in t
 ### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
-- **Current state:** `nil_gateway` contains NilFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
+- **Current state:** `polystore_gateway` contains NilFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
 - **DoD:** NilFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
 - **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
 
@@ -119,7 +119,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Spec/Notes:** `AGENTS.md` Phase 5 notes; `nilchain/app/app.go` simulation exclusions
 - **Notes:** EVM/FeeMarket are excluded from simulation to avoid signer panics; ensure production builds are safe and tested.
 
-### Gateway / Provider (`nil_gateway/`)
+### Gateway / Provider (`polystore_gateway/`)
 
 #### GW-201 — Strict session enforcement on data-plane fetches
 - **Status:** PARTIAL (DEVNET)
@@ -217,8 +217,8 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
 - **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `polystore_core`.
 - **Delivers:**
-  - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
-  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
+  - Port NilFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
+  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `polystore_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
 
@@ -385,7 +385,7 @@ Companion docs:
 ## Stage 5 — Mode 2 repair + make-before-break replacement (A5)
 - [ ] Implement make-before-break replacement per `rfcs/rfc-mode2-onchain-state.md` (`nilchain/`).
 - [ ] Implement deterministic candidate selection + churn controls (B4) (`nilchain/`).
-- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `nil_gateway/`).
+- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `polystore_gateway/`).
 - [ ] Add multi-SP repair e2e: slot failure → candidate catch-up → promotion; reads succeed throughout (`scripts/`, `tests/`).
 
 ## Stage 6 — Evidence / fraud proofs pipeline (A4)
@@ -394,7 +394,7 @@ Companion docs:
 - [ ] Add unit tests per evidence type + e2e demonstrating slash on proven bad data (`scripts/`, `tests/`).
 
 ## Stage 7 — Deputy market + proxy retrieval + audit debt (P0-P2P-001)
-- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `nil_gateway/`).
+- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `polystore_gateway/`).
 - [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`nilchain/`).
 - [ ] Add ghosting-provider e2e: still retrieve via deputy and record evidence (`scripts/`).
 
@@ -866,7 +866,7 @@ See `notes/mainnet_policy_resolution_jan2026.md`.
 
 ## 4. S3 Adapter (Web2 Gateway)
 
-The `nil_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
+The `polystore_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
 *   **PUT:** Shards file -> Computes KZG -> Creates Deal on Chain.
 *   **GET:** Retrieves shards -> Verifies KZG -> Reconstructs File.
 
@@ -1576,7 +1576,7 @@ For chain policy and bounds checks we freeze:
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)
 
 Notes:
-- This RFC intentionally avoids `allocated_length` in protocol state. Gateway/UI MAY keep `allocated_length` as a legacy alias for `total_mdus` (count), per `nil_gateway/nil-gateway-spec.md`.
+- This RFC intentionally avoids `allocated_length` in protocol state. Gateway/UI MAY keep `allocated_length` as a legacy alias for `total_mdus` (count), per `polystore_gateway/polystore-gateway-spec.md`.
 
 ---
 

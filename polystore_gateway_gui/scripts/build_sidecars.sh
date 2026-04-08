@@ -48,18 +48,18 @@ if [[ ! -f "$NIL_CORE_RELEASE_DIR/$polystore_core_lib" ]]; then
 fi
 cp "$NIL_CORE_RELEASE_DIR/$polystore_core_lib" "$BIN_DIR/$polystore_core_lib"
 
-echo "==> Building nil_gateway sidecar"
-if [[ -f "$BIN_DIR/nil_gateway$ext" ]]; then
-  rm -f "$BIN_DIR/nil_gateway$ext"
+echo "==> Building polystore_gateway sidecar"
+if [[ -f "$BIN_DIR/polystore_gateway$ext" ]]; then
+  rm -f "$BIN_DIR/polystore_gateway$ext"
 fi
 (
-  cd "$ROOT_DIR/nil_gateway"
+  cd "$ROOT_DIR/polystore_gateway"
   if [[ "$(uname -s)" == "Linux" ]]; then
-    go build -ldflags '-extldflags=-Wl,-rpath,$ORIGIN' -o "$BIN_DIR/nil_gateway$ext" .
+    go build -ldflags '-extldflags=-Wl,-rpath,$ORIGIN' -o "$BIN_DIR/polystore_gateway$ext" .
   elif [[ "$(uname -s)" == "Darwin" ]]; then
-    go build -ldflags '-extldflags=-Wl,-rpath,@loader_path' -o "$BIN_DIR/nil_gateway$ext" .
+    go build -ldflags '-extldflags=-Wl,-rpath,@loader_path' -o "$BIN_DIR/polystore_gateway$ext" .
   else
-    go build -o "$BIN_DIR/nil_gateway$ext" .
+    go build -o "$BIN_DIR/polystore_gateway$ext" .
   fi
 )
 

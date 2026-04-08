@@ -2,7 +2,7 @@
 
 ## 0) Header
 
-This file is the **Codex-executable** execution punch list for completing remaining **Mainnet econ/security parity** work (plus the devnet/testnet launch-critical pieces) across `nilchain/`, `nil_gateway/`, and `polystore_p2p/`. It is derived from the staged checklist and the frozen/approved economic and repair policies; tasks are written to be **low ambiguity**, **test-gated**, and small enough to land in **1–3 commits** each.
+This file is the **Codex-executable** execution punch list for completing remaining **Mainnet econ/security parity** work (plus the devnet/testnet launch-critical pieces) across `nilchain/`, `polystore_gateway/`, and `polystore_p2p/`. It is derived from the staged checklist and the frozen/approved economic and repair policies; tasks are written to be **low ambiguity**, **test-gated**, and small enough to land in **1–3 commits** each.
 
 ### How to run locally
 
@@ -828,14 +828,14 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nil_gateway/`
+* **Area:** `polystore_gateway/`
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-REPAIR-001`
 * **Context:**
 
   * Stage 5 requirement: reads succeed throughout repair (router must avoid `REPAIRING`)
 * **Work plan:**
 
-  1. Locate the Mode2 provider selection logic in `nil_gateway/`.
+  1. Locate the Mode2 provider selection logic in `polystore_gateway/`.
   2. Ensure gateway fetches slot **status** (not just provider addresses). If the existing chain query does not include status, extend it or add a new query.
   3. Update routing:
 
@@ -895,7 +895,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `scripts/`, `nil_gateway/`, (devnet stack)
+* **Area:** `scripts/`, `polystore_gateway/`, (devnet stack)
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-REPAIR-001`, `P0-MODE2-ROUTING-002`
 * **Context:**
 
@@ -1226,7 +1226,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `polystore_p2p/`, `nil_gateway/`
+* **Area:** `polystore_p2p/`, `polystore_gateway/`
 * **Depends on:** `P0-DEPUTY-001`, `P0-DEPUTY-002`, `P0-AUDIT-001`
 * **Context:**
 
@@ -1247,7 +1247,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 * **Artifacts:**
 
   * `polystore_p2p/` AskForProxy implementation
-  * `nil_gateway/` fallback routing integration
+  * `polystore_gateway/` fallback routing integration
 * **DoD:**
 
   * Gateway can retrieve via deputy when primary fails and settle premium correctly on chain.

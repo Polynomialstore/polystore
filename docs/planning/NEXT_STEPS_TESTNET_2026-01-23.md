@@ -146,7 +146,7 @@ Test gates:
 
 - Implement NilCEv1 header and codecs (NONE + ZSTD) in:
   - `polystore_core` (WASM client)
-  - `nil_gateway` ingest path
+  - `polystore_gateway` ingest path
 - Ensure download returns original bytes (decompress after decrypt).
 - Add UI quoting:
   - show estimated stored bytes and cost delta

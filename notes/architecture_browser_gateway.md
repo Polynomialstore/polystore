@@ -1,7 +1,7 @@
 # Architectural Review: The Browser-Based Gateway ("Thick Client")
 
 **Date:** 2025-12-15
-**Context:** Pivoting from a local Go daemon (`nil_gateway`) to a pure browser experience.
+**Context:** Pivoting from a local Go daemon (`polystore_gateway`) to a pure browser experience.
 
 ## 1. Executive Summary
 
@@ -13,7 +13,7 @@ Moving the Gateway logic into the browser transforms NilStore from a "Tethered" 
 
 ## 2. Architecture: "The Gateway is a Library"
 
-We are effectively moving the `nil_gateway` logic into a TypeScript/WASM library running inside a Web Worker.
+We are effectively moving the `polystore_gateway` logic into a TypeScript/WASM library running inside a Web Worker.
 
 ### Current Flow (Thin Client)
 `Browser UI` -> `Local HTTP` -> `Go Gateway` -> `Disk/Network`
@@ -63,7 +63,7 @@ We are effectively moving the `nil_gateway` logic into a TypeScript/WASM library
 ### Phase 1: WASM Parity (The Core)
 *   **Goal:** `polystore_core` WASM can do everything the Go Gateway needs to do for a single file.
 *   **Tasks:**
-    1.  Expose `Mdu0Builder` logic (building the NilFS file table) via WASM. currently this logic is in Go (`nil_gateway/pkg/builder`). **Decision:** Port `Mdu0Builder` to Rust in `polystore_core` to share logic between CLI and Browser.
+    1.  Expose `Mdu0Builder` logic (building the NilFS file table) via WASM. currently this logic is in Go (`polystore_gateway/pkg/builder`). **Decision:** Port `Mdu0Builder` to Rust in `polystore_core` to share logic between CLI and Browser.
     2.  Implement `StreamingSharder` in WASM (input: stream of bytes, output: stream of blobs/commitments).
 
 ### Phase 2: The Virtual Gateway (State & Storage)
@@ -138,7 +138,7 @@ You mentioned **libp2p**.
 
 We should not "rewrite" the Go Gateway in JS. We should **move logic to Rust**, then call it from both Go (via FFI or cgo) and JS (via WASM).
 
-1.  **Stop writing Go logic for core formats.** Move `nil_gateway/pkg/builder` (File Table construction) to `polystore_core` (Rust).
+1.  **Stop writing Go logic for core formats.** Move `polystore_gateway/pkg/builder` (File Table construction) to `polystore_core` (Rust).
 2.  **Compile Rust to WASM.**
 3.  **Build the TS `NilStoreClient`.**
 

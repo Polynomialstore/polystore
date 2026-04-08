@@ -144,7 +144,7 @@ impl SidecarManager {
             ));
         }
 
-        let binary = resolve_binary_path(&app, config.binary_path.clone(), "nil_gateway")?;
+        let binary = resolve_binary_path(&app, config.binary_path.clone(), "polystore_gateway")?;
         let args = config.args.unwrap_or_default();
 
         let mut cmd = Command::new(&binary);
@@ -408,7 +408,7 @@ fn resolve_binary_path(
     if let Ok(current_exe) = env::current_exe() {
         if let Some(exe_dir) = current_exe.parent() {
             // Debian/Ubuntu install layout:
-            //   /usr/bin/polystore_gateway_gui -> /usr/lib/polystore_gateway_gui/bin/nil_gateway
+            //   /usr/bin/polystore_gateway_gui -> /usr/lib/polystore_gateway_gui/bin/polystore_gateway
             resource_roots.push(exe_dir.join("..").join("lib").join("polystore_gateway_gui"));
         }
     }
