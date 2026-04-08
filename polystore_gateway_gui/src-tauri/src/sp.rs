@@ -708,7 +708,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/dev/nil-store/nil-store
-EnvironmentFile=%h/.config/nilstore-provider.env
+EnvironmentFile=%h/.config/polystore-provider.env
 ExecStart=/usr/bin/env bash -lc 'PROVIDER_KEY=${PROVIDER_KEY} CHAIN_ID=${CHAIN_ID} HUB_LCD=${HUB_LCD} HUB_NODE=${HUB_NODE} PROVIDER_LISTEN=${PROVIDER_LISTEN} NIL_GATEWAY_SP_AUTH=${NIL_GATEWAY_SP_AUTH} ./scripts/run_devnet_provider.sh start'
 ExecStop=/usr/bin/env bash -lc 'PROVIDER_KEY=${PROVIDER_KEY} ./scripts/run_devnet_provider.sh stop'
 Restart=always
