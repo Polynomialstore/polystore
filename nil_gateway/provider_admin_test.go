@@ -81,7 +81,7 @@ func setupProviderAdminStatusEnv(t *testing.T, providerAddress string, localURL 
 	t.Setenv("NIL_PROVIDER_ADDRESS", providerAddress)
 	t.Setenv("NIL_LISTEN_ADDR", localURL)
 	t.Setenv("NIL_GATEWAY_SP_AUTH", "shared-secret")
-	withProviderStatusGlobals(t, lcdURL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.nilstore.org")
+	withProviderStatusGlobals(t, lcdURL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.polynomialstore.com")
 }
 
 func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {

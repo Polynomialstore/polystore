@@ -66,7 +66,7 @@ The application uses Vite for building and handling environment variables. Confi
 #### Environment Variables (`.env`)
 | Variable | Default | Description |
 |:---|:---|:---|
-| `VITE_PUBLIC_DOMAIN` | *(empty)* | Optional domain override for auto endpoint inference (for example `nilstore.org` → `faucet/lcd/evm` subdomains). |
+| `VITE_PUBLIC_DOMAIN` | *(empty)* | Optional domain override for auto endpoint inference (for example `polynomialstore.com` → `faucet/lcd/evm` subdomains). |
 | `VITE_API_BASE` | `http://localhost:8081` | Backend API base URL (auto-falls back to `https://faucet.<domain>` when hosted on matching public domain). |
 | `VITE_LCD_BASE` | `http://localhost:1317` | Cosmos LCD URL (auto-falls back to `https://lcd.<domain>` when hosted on matching public domain). |
 | `VITE_GATEWAY_BASE` | `http://127.0.0.1:8080` | Local gateway base URL. Non-loopback values are ignored; loopback values are normalized to `127.0.0.1` for consistent browser connectivity. |
@@ -75,7 +75,7 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_COSMOS_CHAIN_ID` | `20260211` | Chain ID for the Cosmos layer (trusted devnet soft launch default). |
 | `VITE_EVM_RPC` | `http://localhost:8545` | EVM JSON-RPC endpoint (auto-falls back to `https://evm.<domain>` when hosted on matching public domain). |
 | `VITE_CHAIN_ID` | `20260211` | Chain ID for the EVM layer (trusted devnet soft launch default). For local-only stacks, override explicitly if you keep using `31337`. |
-| `VITE_ENABLE_FAUCET` | auto (`1` on `*.nilstore.org`, else `0`) | Faucet UI/actions override (`1` force on, `0` force off). |
+| `VITE_ENABLE_FAUCET` | auto (`1` on `*.polynomialstore.com`, else `0`) | Faucet UI/actions override (`1` force on, `0` force off). |
 | `VITE_FAUCET_AUTH_TOKEN` | *(empty)* | Optional build-time faucet auth token. When set, the website sends this token automatically on faucet requests. |
 | `VITE_DEFAULT_RS_K` | `2` | Default RS K used by web deal creation when not explicitly overridden. |
 | `VITE_DEFAULT_RS_M` | `1` | Default RS M used by web deal creation when not explicitly overridden. |

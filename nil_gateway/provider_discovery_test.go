@@ -198,14 +198,14 @@ func TestResolveProviderHTTPBaseURL_HostOverrideFromEndpoint(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"provider": {
-				"endpoints": ["/dns4/sp2.nilstore.org/tcp/443/https"]
+				"endpoints": ["/dns4/sp2.polynomialstore.com/tcp/443/https"]
 			}
 		}`))
 	}))
 	t.Cleanup(srv.Close)
 	lcdBase = srv.URL
 
-	_ = os.Setenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES", "sp2.nilstore.org=http://127.0.0.1:8092")
+	_ = os.Setenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES", "sp2.polynomialstore.com=http://127.0.0.1:8092")
 	base, err := resolveProviderHTTPBaseURL(context.Background(), "nil1providerz")
 	if err != nil {
 		t.Fatalf("resolveProviderHTTPBaseURL returned error: %v", err)

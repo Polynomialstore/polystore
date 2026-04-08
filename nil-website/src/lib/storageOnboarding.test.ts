@@ -19,8 +19,8 @@ test('buildStorageAgentPrompt captures the current storage onboarding contract',
   const prompt = buildStorageAgentPrompt()
 
   assert.match(prompt, /Proceed autonomously through repo sync, local checks, Gateway GUI setup/)
-  assert.match(prompt, /https:\/\/nilstore\.org\/#\/first-file/)
-  assert.match(prompt, /https:\/\/nilstore\.org\/#\/dashboard/)
+  assert.match(prompt, /https:\/\/polynomialstore\.com\/#\/first-file/)
+  assert.match(prompt, /https:\/\/polynomialstore\.com\/#\/dashboard/)
   assert.match(prompt, /NIL_BURNER_KEYSTORE_PASSWORD/)
   assert.match(prompt, /interactive password prompt/)
   assert.match(prompt, /create_tx_hash/)

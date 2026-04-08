@@ -20,7 +20,7 @@ test('extractProviderHttpBases dedupes and preserves order', () => {
 test('isLikelyLocalHttpBase detects localhost and 127.0.0.1', () => {
   assert.equal(isLikelyLocalHttpBase('http://localhost:8091'), true)
   assert.equal(isLikelyLocalHttpBase('http://127.0.0.1:8091'), true)
-  assert.equal(isLikelyLocalHttpBase('https://sp.nilstore.org'), false)
+  assert.equal(isLikelyLocalHttpBase('https://sp.polynomialstore.com'), false)
 })
 
 test('isLocalDemoProvider returns true when provider endpoint is local', () => {
@@ -29,8 +29,7 @@ test('isLocalDemoProvider returns true when provider endpoint is local', () => {
     true,
   )
   assert.equal(
-    isLocalDemoProvider({ address: 'nil1x', endpoints: ['https://sp.nilstore.org'] }),
+    isLocalDemoProvider({ address: 'nil1x', endpoints: ['https://sp.polynomialstore.com'] }),
     false,
   )
 })
-

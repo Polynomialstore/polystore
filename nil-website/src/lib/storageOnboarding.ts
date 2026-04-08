@@ -27,7 +27,7 @@ Execution order:
 - Downgrade to browser-only onboarding only if local gateway or CLI cannot be brought up.
 
 Context:
-- Primary homepage for this deployment: \`https://nilstore.org/#/first-file\`.
+- Primary homepage for this deployment: \`https://polynomialstore.com/#/first-file\`.
 - Primary local gateway for this onboarding path: \`http://localhost:8080\`.
 - Use \`docs/ALPHA_STORAGE_USER_QUICKSTART.md\` and \`docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md\`.
 - The best UX for users who want local gateway + CLI is: repo sync, install/open Nil Gateway GUI, complete \`scripts/testnet_burner_upload.sh\`, then MetaMask handoff, then browser continuity verification.
@@ -39,8 +39,8 @@ Context:
 - Never print secrets or private keys in full; redact sensitive values.
 
 Browser route map:
-- Open \`https://nilstore.org/#/first-file\` for wallet connect, network switch, faucet funding, and first deal allocation.
-- After deal allocation, continue to \`https://nilstore.org/#/dashboard\` for upload, commit, file listing, and retrieval.
+- Open \`https://polynomialstore.com/#/first-file\` for wallet connect, network switch, faucet funding, and first deal allocation.
+- After deal allocation, continue to \`https://polynomialstore.com/#/dashboard\` for upload, commit, file listing, and retrieval.
 - Do not expect file upload on \`/#/first-file\`; that page ends by sending the user to \`/#/dashboard\`.
 
 Local prerequisites:
@@ -84,10 +84,10 @@ Canonical onboarding milestones (run in order unless the user asks to skip):
 3. Browser Continuity Check
    - website URL reachable
    - EVM RPC reachable
-   - open \`https://nilstore.org/#/first-file\`
+   - open \`https://polynomialstore.com/#/first-file\`
    - connect the imported MetaMask wallet
    - verify the site sees the same identity and local gateway
-   - continue to \`https://nilstore.org/#/dashboard\` for retrieval and/or a small browser upload/retrieve with the same wallet
+   - continue to \`https://polynomialstore.com/#/dashboard\` for retrieval and/or a small browser upload/retrieve with the same wallet
 4. Gateway Large-File Check
    - re-run upload/commit/retrieve with a larger file (\`64 MiB+\`)
    - capture gateway health, cache or route behavior, and provider endpoint details if shown

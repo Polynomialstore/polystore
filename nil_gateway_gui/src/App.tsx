@@ -562,7 +562,7 @@ export default function App() {
   };
 
   const handleOpenDashboard = async () => {
-    await openUrl("https://nilstore.org/#/dashboard");
+    await openUrl("https://polynomialstore.com/#/dashboard");
   };
 
   const handleOpenEndpoint = async (suffix: string) => {

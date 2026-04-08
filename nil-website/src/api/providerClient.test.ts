@@ -22,7 +22,7 @@ test('providerFetchMduWindowWithSession sends retrieval window in query and head
   }) as typeof fetch
 
   const out = await providerFetchMduWindowWithSession(
-    'https://sp1.nilstore.org',
+    'https://sp1.polynomialstore.com',
     '0xabc123',
     7,
     {
@@ -69,7 +69,7 @@ test('providerAdminRefreshStatus posts the signed envelope to the provider-daemo
   }) as typeof fetch
 
   const response = await providerAdminRefreshStatus(
-    'https://sp.nilstore.org',
+    'https://sp.polynomialstore.com',
     {
       provider: 'nil1provider',
       action: 'status_refresh',
@@ -81,7 +81,7 @@ test('providerAdminRefreshStatus posts the signed envelope to the provider-daemo
     fetchMock,
   )
 
-  assert.equal(seen.url, 'https://sp.nilstore.org/sp/admin/status')
+  assert.equal(seen.url, 'https://sp.polynomialstore.com/sp/admin/status')
   assert.equal(seen.method, 'POST')
   assert.equal(seen.headers?.['content-type'], 'application/json')
   assert.match(seen.body || '', /"provider":"nil1provider"/)
@@ -97,7 +97,7 @@ test('providerAdminRotateEndpoint surfaces provider-daemon admin errors', async 
 
   await assert.rejects(
     providerAdminRotateEndpoint(
-      'https://sp.nilstore.org',
+      'https://sp.polynomialstore.com',
       {
         provider: 'nil1provider',
         action: 'rotate_endpoint',
@@ -123,7 +123,7 @@ test('providerFetchPublicStatus reads public provider-daemon status without sign
         allowed_route_families: ['sp', 'sp/retrieval'],
         provider: {
           address: 'nil1provider',
-          public_base: 'https://sp.nilstore.org',
+          public_base: 'https://sp.polynomialstore.com',
           public_health_ok: true,
         },
         issues: [],
@@ -135,11 +135,11 @@ test('providerFetchPublicStatus reads public provider-daemon status without sign
     )
   }) as typeof fetch
 
-  const response = await providerFetchPublicStatus('https://sp.nilstore.org/', fetchMock)
+  const response = await providerFetchPublicStatus('https://sp.polynomialstore.com/', fetchMock)
 
-  assert.equal(seen.url, 'https://sp.nilstore.org/status')
+  assert.equal(seen.url, 'https://sp.polynomialstore.com/status')
   assert.equal(seen.method, 'GET')
   assert.equal(response.persona, 'provider-daemon')
-  assert.equal(response.provider?.public_base, 'https://sp.nilstore.org')
+  assert.equal(response.provider?.public_base, 'https://sp.polynomialstore.com')
   assert.equal(response.provider?.public_health_ok, true)
 })

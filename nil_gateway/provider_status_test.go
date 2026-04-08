@@ -128,7 +128,7 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 	}))
 	defer lcdSrv.Close()
 
-	withProviderStatusGlobals(t, lcdSrv.URL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.nilstore.org")
+	withProviderStatusGlobals(t, lcdSrv.URL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.polynomialstore.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
 	w := httptest.NewRecorder()
@@ -243,7 +243,7 @@ func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 	}))
 	defer lcdSrv.Close()
 
-	withProviderStatusGlobals(t, lcdSrv.URL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.nilstore.org")
+	withProviderStatusGlobals(t, lcdSrv.URL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.polynomialstore.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
 	w := httptest.NewRecorder()
@@ -295,7 +295,7 @@ func TestGatewayStatusReportsProviderDaemonIssues(t *testing.T) {
 	}))
 	defer lcdSrv.Close()
 
-	withProviderStatusGlobals(t, lcdSrv.URL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.nilstore.org")
+	withProviderStatusGlobals(t, lcdSrv.URL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.polynomialstore.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
 	w := httptest.NewRecorder()

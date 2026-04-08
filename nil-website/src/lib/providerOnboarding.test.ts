@@ -70,10 +70,10 @@ test('buildProviderEndpointPlan keeps an explicit multiaddr intact', () => {
 
 test('deriveEndpointInputPrefillFromProviderEndpoint maps common endpoints to step-4 inputs', () => {
   assert.deepEqual(
-    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/testasdf.nil-store.com/tcp/443/https'),
+    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/testasdf.polynomialstore.com/tcp/443/https'),
     {
       endpointMode: 'domain',
-      endpointValue: 'testasdf.nil-store.com',
+      endpointValue: 'testasdf.polynomialstore.com',
       publicPort: 443,
     },
   )
@@ -88,10 +88,10 @@ test('deriveEndpointInputPrefillFromProviderEndpoint maps common endpoints to st
   )
 
   assert.deepEqual(
-    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/testasdf.nil-store.com/tcp/8443/http'),
+    deriveEndpointInputPrefillFromProviderEndpoint('/dns4/testasdf.polynomialstore.com/tcp/8443/http'),
     {
       endpointMode: 'multiaddr',
-      endpointValue: '/dns4/testasdf.nil-store.com/tcp/8443/http',
+      endpointValue: '/dns4/testasdf.polynomialstore.com/tcp/8443/http',
       publicPort: 8443,
     },
   )
@@ -174,11 +174,11 @@ test('buildProviderBootstrapCommand uses an explicit provider endpoint fallback 
     endpointValue: 'not-a-public-host',
     operatorAddress: 'nil1operator123',
     providerKey: 'provider-main',
-    providerEndpoint: '/dns4/testasdf.nil-store.com/tcp/443/https',
+    providerEndpoint: '/dns4/testasdf.polynomialstore.com/tcp/443/https',
   })
 
   assert.match(command, /OPERATOR_ADDRESS='nil1operator123'/)
-  assert.match(command, /PROVIDER_ENDPOINT='\/dns4\/testasdf\.nil-store\.com\/tcp\/443\/https'/)
+  assert.match(command, /PROVIDER_ENDPOINT='\/dns4\/testasdf\.polynomialstore\.com\/tcp\/443\/https'/)
   assert.doesNotMatch(command, /BOOTSTRAP_ALLOW_PARTIAL=1/)
 })
 
@@ -222,7 +222,7 @@ test('evaluateProviderRunbookReadiness requires endpoint and operator for websit
   assert.deepEqual(
     evaluateProviderRunbookReadiness({
       endpointPlan: null,
-      providerEndpoint: '/dns4/testasdf.nil-store.com/tcp/443/https',
+      providerEndpoint: '/dns4/testasdf.polynomialstore.com/tcp/443/https',
       operatorAddress: 'nil1op',
       authToken: '',
     }),

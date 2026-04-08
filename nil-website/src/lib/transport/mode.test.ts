@@ -92,7 +92,7 @@ test('isTrustedLocalGatewayBase only allows loopback :8080', () => {
 
   assert.equal(isTrustedLocalGatewayBase('http://localhost:8081'), false)
   assert.equal(isTrustedLocalGatewayBase('http://127.0.0.1:8091'), false)
-  assert.equal(isTrustedLocalGatewayBase('http://nilstore.org:8080'), false)
+  assert.equal(isTrustedLocalGatewayBase('http://polynomialstore.com:8080'), false)
   assert.equal(isTrustedLocalGatewayBase('not-a-url'), false)
 })
 

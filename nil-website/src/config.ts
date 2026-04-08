@@ -22,9 +22,9 @@ function inferPublicDomain(runtimeHost: string): string {
   if (explicit) return explicit
 
   if (!runtimeHost) return ''
-  if (runtimeHost === 'nilstore.org' || runtimeHost.endsWith('.nilstore.org')) return 'nilstore.org'
+  if (runtimeHost === 'polynomialstore.com' || runtimeHost.endsWith('.polynomialstore.com')) return 'polynomialstore.com'
   // Cloudflare preview hosts should resolve to production public service subdomains.
-  if (runtimeHost.endsWith('.workers.dev') || runtimeHost.endsWith('.pages.dev')) return 'nilstore.org'
+  if (runtimeHost.endsWith('.workers.dev') || runtimeHost.endsWith('.pages.dev')) return 'polynomialstore.com'
   if (runtimeHost.startsWith('web.') && runtimeHost.split('.').length >= 3) {
     return runtimeHost.slice(4)
   }
@@ -114,7 +114,7 @@ const FAUCET_ENABLED = (() => {
   if (typeof raw === 'string') {
     return raw === '1'
   }
-  // Public trusted-devnet deployments (e.g. *.nilstore.org) default to faucet-on.
+  // Public trusted-devnet deployments (e.g. *.polynomialstore.com) default to faucet-on.
   // Keep local/dev default off unless explicitly enabled.
   return PUBLIC_DOMAIN !== ''
 })()

@@ -80,7 +80,7 @@ export const TestnetDocs = () => {
               <h3 className="font-bold text-lg text-foreground">2. Run Faucet (Optional)</h3>
               <p className="text-sm text-muted-foreground mb-2">
                 The faucet is a dev-only helper. On trusted-devnet public domains (for example
-                <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">*.nilstore.org</code>) the UI enables faucet by default.
+                <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">*.polynomialstore.com</code>) the UI enables faucet by default.
                 You can always override with
                 <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">VITE_ENABLE_FAUCET=1|0</code>.
               </p>

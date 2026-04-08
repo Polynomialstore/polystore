@@ -52,7 +52,7 @@ export function Devnet() {
   const joinSnippet = useMemo(() => {
     return [
       '# Website-first provider flow:',
-      '# 1. Open https://nilstore.org/#/sp-onboarding, connect the operator wallet, and copy the nil1 operator address.',
+      '# 1. Open https://polynomialstore.com/#/sp-onboarding, connect the operator wallet, and copy the nil1 operator address.',
       '# 2. On the provider host (repo checked out):',
       'PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init',
       '',

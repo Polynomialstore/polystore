@@ -186,7 +186,7 @@ func TestGlobalCORSPreflight_AllowsUnknownPathAndRequestedHeaders(t *testing.T) 
 	h := withGlobalCORS(testRouter())
 
 	req := httptest.NewRequest(http.MethodOptions, "/sp/not-registered", nil)
-	req.Header.Set("Origin", "https://nilstore.org")
+	req.Header.Set("Origin", "https://polynomialstore.com")
 	req.Header.Set("Access-Control-Request-Method", "POST")
 	req.Header.Set("Access-Control-Request-Headers", "x-nil-deal-id,x-nil-slot,x-nil-custom-header,content-type")
 	w := httptest.NewRecorder()
@@ -196,7 +196,7 @@ func TestGlobalCORSPreflight_AllowsUnknownPathAndRequestedHeaders(t *testing.T) 
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 preflight, got %d", w.Code)
 	}
-	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://nilstore.org" {
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://polynomialstore.com" {
 		t.Fatalf("expected Access-Control-Allow-Origin to echo request origin, got %q", got)
 	}
 	allowHeaders := w.Header().Get("Access-Control-Allow-Headers")
@@ -214,7 +214,7 @@ func TestGlobalCORS_MethodNotAllowedStillReturnsCORSHeaders(t *testing.T) {
 	h := withGlobalCORS(testRouter())
 
 	req := httptest.NewRequest(http.MethodPost, "/sp/shard?deal_id=1&mdu_index=0&slot=0&manifest_root=0x00", nil)
-	req.Header.Set("Origin", "https://nilstore.org")
+	req.Header.Set("Origin", "https://polynomialstore.com")
 	w := httptest.NewRecorder()
 
 	h.ServeHTTP(w, req)
@@ -222,7 +222,7 @@ func TestGlobalCORS_MethodNotAllowedStillReturnsCORSHeaders(t *testing.T) {
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for POST /sp/shard, got %d", w.Code)
 	}
-	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://nilstore.org" {
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://polynomialstore.com" {
 		t.Fatalf("expected Access-Control-Allow-Origin to be present on 405, got %q", got)
 	}
 	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Methods")); got == "" {
@@ -234,7 +234,7 @@ func TestSpUploadMdu_PreflightReturnsCORSHeaders(t *testing.T) {
 	h := withGlobalCORS(testRouter())
 
 	req := httptest.NewRequest(http.MethodOptions, "/sp/upload_mdu", nil)
-	req.Header.Set("Origin", "https://web.nilstore.org")
+	req.Header.Set("Origin", "https://web.polynomialstore.com")
 	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
 	req.Header.Set("Access-Control-Request-Headers", "x-nil-deal-id,x-nil-mdu-index,x-nil-manifest-root,x-nil-full-size,content-type")
 	w := httptest.NewRecorder()
@@ -244,7 +244,7 @@ func TestSpUploadMdu_PreflightReturnsCORSHeaders(t *testing.T) {
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 preflight for /sp/upload_mdu, got %d", w.Code)
 	}
-	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://web.nilstore.org" {
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://web.polynomialstore.com" {
 		t.Fatalf("expected Access-Control-Allow-Origin to echo request origin, got %q", got)
 	}
 	if !csvHeaderContains(w.Header().Get("Access-Control-Allow-Methods"), http.MethodPost) {
@@ -268,7 +268,7 @@ func TestPanicRecovery_ReturnsJSONAndCORSHeaders(t *testing.T) {
 		panic("upload worker crashed")
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
-	req.Header.Set("Origin", "https://nilstore.org")
+	req.Header.Set("Origin", "https://polynomialstore.com")
 	w := httptest.NewRecorder()
 
 	h.ServeHTTP(w, req)
@@ -277,7 +277,7 @@ func TestPanicRecovery_ReturnsJSONAndCORSHeaders(t *testing.T) {
 		t.Fatalf("expected 500 on panic, got %d", w.Code)
 	}
 
-	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://nilstore.org" {
+	if got := strings.TrimSpace(w.Header().Get("Access-Control-Allow-Origin")); got != "https://polynomialstore.com" {
 		t.Fatalf("expected Access-Control-Allow-Origin to mirror request origin, got %q", got)
 	}
 
