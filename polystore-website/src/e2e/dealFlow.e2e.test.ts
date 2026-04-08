@@ -14,8 +14,8 @@ import { lcdFetchDeals } from '../api/lcdClient'
 import { hexToBytes } from '../lib/merkle'
 import { resolveProviderEndpoint } from '../lib/providerDiscovery'
 
-const DEFAULT_EIP712_CHAIN_ID = Number(process.env.NIL_EIP712_CHAIN_ID ?? 20260211)
-const COSMOS_CHAIN_ID = process.env.NIL_COSMOS_CHAIN_ID ?? '31337'
+const DEFAULT_EIP712_CHAIN_ID = Number(process.env.POLYSTORE_EIP712_CHAIN_ID ?? 20260211)
+const COSMOS_CHAIN_ID = process.env.POLYSTORE_COSMOS_CHAIN_ID ?? '31337'
 
 // viem's typed-data helpers require domain.chainId as bigint.
 function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T) {
@@ -40,15 +40,15 @@ async function resolveEip712ChainId(lcdBase: string): Promise<number> {
 
 test(
   'e2e: create deal → upload → commit → slab/files (requires local stack)',
-  { skip: process.env.NIL_E2E !== '1' },
+  { skip: process.env.POLYSTORE_E2E !== '1' },
   async () => {
-    const gatewayBase = process.env.NIL_GATEWAY_BASE ?? 'http://localhost:8080'
-    const providerBase = process.env.NIL_PROVIDER_BASE ?? 'http://127.0.0.1:8082'
-    const lcdBase = process.env.NIL_LCD_BASE ?? 'http://localhost:1317'
+    const gatewayBase = process.env.POLYSTORE_GATEWAY_BASE ?? 'http://localhost:8080'
+    const providerBase = process.env.POLYSTORE_PROVIDER_BASE ?? 'http://127.0.0.1:8082'
+    const lcdBase = process.env.POLYSTORE_LCD_BASE ?? 'http://localhost:1317'
     const eip712ChainId = await resolveEip712ChainId(lcdBase)
 
     const account = privateKeyToAccount(
-      (process.env.NIL_E2E_PRIVKEY ??
+      (process.env.POLYSTORE_E2E_PRIVKEY ??
         '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1') as `0x${string}`,
     )
     const ownerNil = ethToNil(account.address)

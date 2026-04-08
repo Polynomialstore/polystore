@@ -53,17 +53,17 @@ export E2E_BASE_URL="${E2E_BASE_URL:-http://localhost:${WEB_PORT}}"
 export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
-export NIL_ENABLE_TX_RELAY=0
+export POLYSTORE_ENABLE_TX_RELAY=0
 export E2E_MODE2_SPEC="${E2E_MODE2_SPEC:-tests/mode2-stripe.spec.ts}"
 export E2E_MODE2_GREP="${E2E_MODE2_GREP:-}"
 
 # Keep CI deterministic: the system liveness prover can contend with Mode 2
 # upload/append and trigger timeouts on shared runners.
-export NIL_DISABLE_SYSTEM_LIVENESS="${NIL_DISABLE_SYSTEM_LIVENESS:-1}"
+export POLYSTORE_DISABLE_SYSTEM_LIVENESS="${POLYSTORE_DISABLE_SYSTEM_LIVENESS:-1}"
 
 # Gateway Mode 2 uploads replicate ~16 MiB of metadata per provider; cap parallelism
 # so providers don't starve under heavy concurrent disk/network IO.
-export NIL_MODE2_UPLOAD_PARALLELISM="${NIL_MODE2_UPLOAD_PARALLELISM:-16}"
+export POLYSTORE_MODE2_UPLOAD_PARALLELISM="${POLYSTORE_MODE2_UPLOAD_PARALLELISM:-16}"
 
 echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
 if [ -z "${E2E_STACK_PROFILE:-}" ]; then
@@ -85,7 +85,7 @@ wait_for_http "web" "http://localhost:${WEB_PORT}/" "200" 90 1
 echo "==> Asserting tx relay is disabled..."
 tx_relay_code="$(timeout 10s curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/gateway/create-deal-evm 2>/dev/null || true)"
 if [ "$tx_relay_code" != "403" ]; then
-  echo "ERROR: expected /gateway/create-deal-evm to be forbidden (403) with NIL_ENABLE_TX_RELAY=0; got HTTP $tx_relay_code" >&2
+  echo "ERROR: expected /gateway/create-deal-evm to be forbidden (403) with POLYSTORE_ENABLE_TX_RELAY=0; got HTTP $tx_relay_code" >&2
   exit 1
 fi
 

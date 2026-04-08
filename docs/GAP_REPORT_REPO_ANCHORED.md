@@ -44,7 +44,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 
 - WAN / multi-host devnet behavior (real latency, NAT, TLS, firewalling)
 - Long-running durability (restarts, reorgs, disk corruption, GC/compaction)
-- Mode2 Stripe behavior under background `polystore_gateway` system liveness prover load (CI disables it for determinism via `NIL_DISABLE_SYSTEM_LIVENESS=1`)
+- Mode2 Stripe behavior under background `polystore_gateway` system liveness prover load (CI disables it for determinism via `POLYSTORE_DISABLE_SYSTEM_LIVENESS=1`)
 - Dynamic pricing stability/tuning beyond bounded, unit-tested epoch adjustments (no long-running devnet evidence)
 - Adversarial cryptoeconomic behavior (griefing, strategic downtime, bribery)
 - Comprehensive security review / external audit
@@ -56,7 +56,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | DONE | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | `polystorechain/x/polystorechain/types/types.go` (`MAX_DEAL_BYTES`); `polystorechain/x/polystorechain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | `cd polystorechain && go test ./...` (unit tests) | — | — |
 | Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | DONE | `rfcs/rfc-blob-alignment-and-striping.md` | Playwright asserts sha256(downloaded) == sha256(uploaded) in `polystore-website/tests/mode2-stripe.spec.ts` | `scripts/e2e_mode2_stripe_multi_sp.sh` | — | — |
 | Allowlist retrieval policy verification has test vectors | DONE | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification in `polystorechain/x/polystorechain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) + test vectors in `polystorechain/x/polystorechain/keeper/msg_server_sponsored_sessions_test.go` | `cd polystorechain && go test ./...` | — | — |
-| PolyCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `polystore_gateway/` (opt-in `NIL_POLYCE=1`) | `go test ./polystore_gateway/...` (PolyCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
+| PolyCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `polystore_gateway/` (opt-in `POLYSTORE_POLYCE=1`) | `go test ./polystore_gateway/...` (PolyCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
 
 ## Phase 1 — Deal expiry + renewal (ExtendDeal)
 
@@ -74,7 +74,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Data-plane requests MUST include `X-PolyStore-Session-Id` | DONE | `polystore_gateway/main.go`: `NIL_REQUIRE_ONCHAIN_SESSION=1` default; enforced in `GatewayFetch` and `SpFetchShard` | `polystore_gateway/session_enforcement_test.go`; `e2e_open_retrieval_session_cli.sh` | — |
+| Data-plane requests MUST include `X-PolyStore-Session-Id` | DONE | `polystore_gateway/main.go`: `POLYSTORE_REQUIRE_ONCHAIN_SESSION=1` default; enforced in `GatewayFetch` and `SpFetchShard` | `polystore_gateway/session_enforcement_test.go`; `e2e_open_retrieval_session_cli.sh` | — |
 | Validate session is `OPEN`, unexpired, and bound to (deal, provider/slot, manifest_root) | DONE | `polystore_gateway/main.go` (`SpFetchShard` validates deal+root+status+expiry); chain validates on open | `polystore_gateway/session_enforcement_test.go`; `polystorechain/x/polystorechain/keeper/msg_server_retrieval_sessions_test.go` | Gateway-wide “all endpoints” auditing is not automated (human review needed when adding new byte-serving endpoints) |
 | Enforce Mode2 slot confinement + subset-of-session-range (batching preserved) | DONE | Chain range invariants in `polystorechain/x/polystorechain/keeper/msg_server.go`; gateway enforces slot mapping in `SpFetchShard` | `e2e_open_retrieval_session_mode2_cli.sh`; keeper tests | — |
 
@@ -100,13 +100,13 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Optional compression-aware uploads (PolyCE v1 header + zstd) | PARTIAL | `polystore_gateway/polyce.go` + `polystore_gateway/main.go` (`NIL_POLYCE=1`) | `polystore_gateway/polyce_test.go` | No CI E2E coverage; retrieval semantics are “return stored bytes” (no auto-decode) |
+| Optional compression-aware uploads (PolyCE v1 header + zstd) | PARTIAL | `polystore_gateway/polyce.go` + `polystore_gateway/main.go` (`POLYSTORE_POLYCE=1`) | `polystore_gateway/polyce_test.go` | No CI E2E coverage; retrieval semantics are “return stored bytes” (no auto-decode) |
 
 ## Phase 6 — Wallet-first UX (no relay/faucet dependency outside dev)
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Disable tx relay by default (dev-only opt-in) | DONE | `polystore_gateway/main.go`: `NIL_ENABLE_TX_RELAY=0` default; `scripts/run_local_stack.sh` defaults relay off | CI jobs still enable relay for `scripts/e2e_lifecycle.sh` | Add a dedicated “no relay” CLI E2E if desired (wallet-first is already covered in browser E2E) |
+| Disable tx relay by default (dev-only opt-in) | DONE | `polystore_gateway/main.go`: `POLYSTORE_ENABLE_TX_RELAY=0` default; `scripts/run_local_stack.sh` defaults relay off | CI jobs still enable relay for `scripts/e2e_lifecycle.sh` | Add a dedicated “no relay” CLI E2E if desired (wallet-first is already covered in browser E2E) |
 | Wallet-first chain writes (browser) | DONE | `polystore-website/src/lib/e2eWallet.ts` injects E2E wallet for Playwright when `VITE_E2E=1` | Playwright suites listed above | Human UX polish for real MetaMask + remote RPC endpoints is still needed for soft launch |
 
 ## Phase 7 — Economics (rewards, draining, retrieval fees)
@@ -116,5 +116,5 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Base reward pool mint/distribution | DONE | `polystorechain/x/polystorechain/keeper/base_rewards.go` | `polystorechain/x/polystorechain/keeper/base_rewards_test.go` | — |
 | Provider draining / exit | DONE | `polystorechain/x/polystorechain/keeper/draining.go`, `polystorechain/x/polystorechain/keeper/msg_provider_draining.go` | `polystorechain/x/polystorechain/keeper/draining_test.go` | — |
 | Elasticity (saturation signal → pre-emptive scaling) | PARTIAL | `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto` (`MsgSignalSaturation`); `polystorechain/x/polystorechain/keeper/msg_server.go` (`SignalSaturation`) | `polystorechain/x/polystorechain/keeper/msg_server_test.go` (`TestSignalSaturation`) | Mode2 overlay stripes are not fully modeled yet: the handler appends to `deal.providers` / updates `current_replication` but does not update `mode2_slots` or any router selection; no E2E coverage; treat as experimental / dev-only. |
-| Retrieval fees (base + per-blob) settlement | DONE | `polystorechain/x/polystorechain/keeper/msg_server_retrieval_fees_test.go` | `e2e_retrieval_fees.sh` | Dynamic pricing is optional and not exercised by CI E2E (unit-tested only). Manual smoke: `NIL_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh` (retrieval only). |
-| Dynamic pricing (storage + retrieval params; epoch-based controller) | DONE | `polystorechain/proto/polystorechain/polystorechain/v1/params.proto`; `polystorechain/x/polystorechain/keeper/dynamic_pricing.go` | `polystorechain/x/polystorechain/keeper/dynamic_pricing_test.go` | Disabled by default; economics not tuned; no long-running devnet evidence. Manual smoke: `NIL_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh` (asserts both `retrieval_price_per_blob` and `storage_price` update at the next epoch). |
+| Retrieval fees (base + per-blob) settlement | DONE | `polystorechain/x/polystorechain/keeper/msg_server_retrieval_fees_test.go` | `e2e_retrieval_fees.sh` | Dynamic pricing is optional and not exercised by CI E2E (unit-tested only). Manual smoke: `POLYSTORE_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh` (retrieval only). |
+| Dynamic pricing (storage + retrieval params; epoch-based controller) | DONE | `polystorechain/proto/polystorechain/polystorechain/v1/params.proto`; `polystorechain/x/polystorechain/keeper/dynamic_pricing.go` | `polystorechain/x/polystorechain/keeper/dynamic_pricing_test.go` | Disabled by default; economics not tuned; no long-running devnet evidence. Manual smoke: `POLYSTORE_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh` (asserts both `retrieval_price_per_blob` and `storage_price` update at the next epoch). |

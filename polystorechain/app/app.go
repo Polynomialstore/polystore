@@ -90,7 +90,7 @@ func resolveEVMChainID(appOpts servertypes.AppOptions) uint64 {
 	}
 
 	// Fall back to environment if service wiring provides chain ID there.
-	if id := cast.ToUint64(strings.TrimSpace(os.Getenv("NIL_CHAIN_ID"))); id != 0 {
+	if id := cast.ToUint64(strings.TrimSpace(os.Getenv("POLYSTORE_CHAIN_ID"))); id != 0 {
 		return id
 	}
 	if id := cast.ToUint64(strings.TrimSpace(os.Getenv("EVM_CHAIN_ID"))); id != 0 {

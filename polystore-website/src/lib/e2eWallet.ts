@@ -24,7 +24,7 @@ export function installE2eWallet() {
   const chainIdHex = numberToHex(appConfig.chainId)
   const chain: Chain = {
     id: appConfig.chainId,
-    name: 'NilChain E2E',
+    name: 'PolyStore Chain E2E',
     nativeCurrency: { name: 'atom', symbol: 'atom', decimals: 18 },
     rpcUrls: { default: { http: [appConfig.evmRpc] } },
   }

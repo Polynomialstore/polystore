@@ -1518,17 +1518,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp"
 PID_DIR="$LOG_DIR/pids"
 
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/polystorechain_data_devnet_alpha}"
+CHAIN_HOME="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/polystorechain_data_devnet_alpha}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
-GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
-DENOM="${NIL_DENOM:-stake}"
+GAS_PRICE="${POLYSTORE_GAS_PRICES:-0.001aatom}"
+DENOM="${POLYSTORE_DENOM:-stake}"
 
-NILCHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
-NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
-NIL_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
+POLYSTORECHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
+POLYSTORE_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
+POLYSTORE_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
 TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
 
@@ -1538,7 +1538,7 @@ PROVIDER_PORT_BASE="${PROVIDER_PORT_BASE:-8091}"
 START_WEB="${START_WEB:-1}"
 
 # Shared secret between the gateway router and all providers.
-NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
+POLYSTORE_GATEWAY_SP_AUTH="${POLYSTORE_GATEWAY_SP_AUTH:-}"
 
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 
@@ -1579,14 +1579,14 @@ data["app_state"]["evm"] = evm
 polystorechain = data.get("app_state", {}).get("polystorechain", {})
 params = polystorechain.get("params", {}) if isinstance(polystorechain, dict) else {}
 overrides = {
-    "month_len_blocks": os.getenv("NIL_MONTH_LEN_BLOCKS"),
-    "epoch_len_blocks": os.getenv("NIL_EPOCH_LEN_BLOCKS"),
-    "quota_bps_per_epoch_hot": os.getenv("NIL_QUOTA_BPS_PER_EPOCH_HOT"),
-    "quota_bps_per_epoch_cold": os.getenv("NIL_QUOTA_BPS_PER_EPOCH_COLD"),
-    "quota_min_blobs": os.getenv("NIL_QUOTA_MIN_BLOBS"),
-    "quota_max_blobs": os.getenv("NIL_QUOTA_MAX_BLOBS"),
-    "credit_cap_bps": os.getenv("NIL_CREDIT_CAP_BPS"),
-    "evict_after_missed_epochs": os.getenv("NIL_EVICT_AFTER_MISSED_EPOCHS"),
+    "month_len_blocks": os.getenv("POLYSTORE_MONTH_LEN_BLOCKS"),
+    "epoch_len_blocks": os.getenv("POLYSTORE_EPOCH_LEN_BLOCKS"),
+    "quota_bps_per_epoch_hot": os.getenv("POLYSTORE_QUOTA_BPS_PER_EPOCH_HOT"),
+    "quota_bps_per_epoch_cold": os.getenv("POLYSTORE_QUOTA_BPS_PER_EPOCH_COLD"),
+    "quota_min_blobs": os.getenv("POLYSTORE_QUOTA_MIN_BLOBS"),
+    "quota_max_blobs": os.getenv("POLYSTORE_QUOTA_MAX_BLOBS"),
+    "credit_cap_bps": os.getenv("POLYSTORE_CREDIT_CAP_BPS"),
+    "evict_after_missed_epochs": os.getenv("POLYSTORE_EVICT_AFTER_MISSED_EPOCHS"),
 }
 for key, raw in overrides.items():
     if raw is None:
@@ -1611,16 +1611,16 @@ PY
 
 gen_provider_key() {
   local name="$1"
-  "$NILCHAIND_BIN" keys add "$name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
-  "$NILCHAIND_BIN" keys show "$name" -a --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" keys add "$name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
+  "$POLYSTORECHAIND_BIN" keys show "$name" -a --home "$CHAIN_HOME" --keyring-backend test
 }
 
 init_chain() {
   rm -rf "$CHAIN_HOME"
   banner "Initializing chain at $CHAIN_HOME"
-  "$NILCHAIND_BIN" init devnet-alpha --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
+  "$POLYSTORECHAIND_BIN" init devnet-alpha --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
 
-  printf '%s\n' "$FAUCET_MNEMONIC" | "$NILCHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
+  printf '%s\n' "$FAUCET_MNEMONIC" | "$POLYSTORECHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
 
 
 ```
@@ -1665,7 +1665,7 @@ set -euo pipefail
 # Requires: run_devnet_alpha_multi_sp.sh stack to be running.
 
 GATEWAY_ROUTER="http://localhost:8080"
-NILCHAIND="polystorechain/polystorechaind"
+POLYSTORECHAIND="polystorechain/polystorechaind"
 CHAIN_HOME="_artifacts/polystorechain_data_devnet_alpha"
 TMP_DIR="_artifacts/e2e_multi_sp_tmp"
 mkdir -p "$TMP_DIR"
@@ -1680,18 +1680,18 @@ dd if=/dev/urandom of="$TMP_DIR/payload.bin" bs=1024 count=1024 2>/dev/null # 1M
 
 # 2. Identify Test Accounts (Provider1 = Owner)
 banner "Resolving Accounts"
-OWNER_ADDR=$($NILCHAIND keys show provider1 -a --home "$CHAIN_HOME" --keyring-backend test)
+OWNER_ADDR=$($POLYSTORECHAIND keys show provider1 -a --home "$CHAIN_HOME" --keyring-backend test)
 echo "Owner (Provider1): $OWNER_ADDR"
 
 # 3. Create Deal
 banner "Creating Deal"
-CREATE_OUT=$($NILCHAIND tx polystorechain create-deal 1000 1000000 1000000 --service-hint General --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+CREATE_OUT=$($POLYSTORECHAIND tx polystorechain create-deal 1000 1000000 1000000 --service-hint General --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
 TX_HASH=$(echo "$CREATE_OUT" | jq -r '.txhash')
 echo "Create Deal Tx: $TX_HASH"
 
 banner "Waiting for Deal on Chain..."
 sleep 6
-TX_QUERY=$($NILCHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
+TX_QUERY=$($POLYSTORECHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
 DEAL_ID=$(echo "$TX_QUERY" | jq -r '
   .events? // []
   | map(select(.type == "polystorechain.polystorechain.v1.EventCreateDeal" or .type == "create_deal"))
@@ -1701,7 +1701,7 @@ DEAL_ID=$(echo "$TX_QUERY" | jq -r '
   | .[0].value // empty
 ')
 if [ -z "$DEAL_ID" ]; then
-  DEAL_LIST=$($NILCHAIND query polystorechain list-deals --output json)
+  DEAL_LIST=$($POLYSTORECHAIND query polystorechain list-deals --output json)
   DEAL_ID=$(echo "$DEAL_LIST" | jq -r '.deals[-1].id')
 fi
 echo "Deal ID: $DEAL_ID"
@@ -1726,13 +1726,13 @@ echo "CID: $CID"
 
 # 5. Commit Content
 banner "Committing Content"
-COMMIT_OUT=$($NILCHAIND tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+COMMIT_OUT=$($POLYSTORECHAIND tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
 echo "Commit Tx: $(echo "$COMMIT_OUT" | jq -r '.txhash')"
 sleep 6
 
 # 6. Resolve Assigned Provider
 banner "Resolving Assigned Provider"
-DEAL_INFO=$($NILCHAIND query polystorechain get-deal --id "$DEAL_ID" --output json)
+DEAL_INFO=$($POLYSTORECHAIND query polystorechain get-deal --id "$DEAL_ID" --output json)
 ASSIGNED_ADDR=$(echo "$DEAL_INFO" | jq -r '.deal.providers[0]')
 echo "Assigned Provider: $ASSIGNED_ADDR"
 
@@ -1743,7 +1743,7 @@ else
     echo "Confirmed: Assigned provider != Owner. Testing cross-account signing."
 fi
 
-PROVIDER_INFO=$($NILCHAIND query polystorechain get-provider --address "$ASSIGNED_ADDR" --output json)
+PROVIDER_INFO=$($POLYSTORECHAIND query polystorechain get-provider --address "$ASSIGNED_ADDR" --output json)
 ENDPOINT=$(echo "$PROVIDER_INFO" | jq -r '.provider.endpoints[0]')
 # Extract port from /ip4/127.0.0.1/tcp/PORT/http
 PORT=$(echo "$ENDPOINT" | awk -F/ '{print $5}')
@@ -1782,7 +1782,7 @@ echo "✅ TEST PASSED: Retrieval proof submitted successfully."
 
 ```scripts/run_local_stack.sh (usage excerpt)
 #!/usr/bin/env bash
-# Spin up a local NilChain stack: chain (CometBFT+EVM), faucet, and web UI.
+# Spin up a local PolyStore Chain stack: chain (CometBFT+EVM), faucet, and web UI.
 # Usage:
 #   ./scripts/run_local_stack.sh start   # default
 #   ./scripts/run_local_stack.sh stop    # kill background processes started by this script
@@ -1791,48 +1791,48 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/localnet"
 PID_DIR="$LOG_DIR/pids"
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/polystorechain_data}"
+CHAIN_HOME="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/polystorechain_data}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
-GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
-DENOM="${NIL_DENOM:-stake}"
-export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
+GAS_PRICE="${POLYSTORE_GAS_PRICES:-0.001aatom}"
+DENOM="${POLYSTORE_DENOM:-stake}"
+export POLYSTORE_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
-NILCHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
+POLYSTORECHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
 GATEWAY_BIN="$LOG_DIR/polystore_gateway"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
 BRIDGE_STATUS="not deployed"
 # Default: attempt to deploy the bridge when the stack starts (set to 0 to skip).
-NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
-NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
-export NIL_EVM_DEV_PRIVKEY
+POLYSTORE_DEPLOY_BRIDGE="${POLYSTORE_DEPLOY_BRIDGE:-1}"
+POLYSTORE_EVM_DEV_PRIVKEY="${POLYSTORE_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
+export POLYSTORE_EVM_DEV_PRIVKEY
 # Shared auth between router and provider for /sp/session-proof forwarding.
-NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
+POLYSTORE_GATEWAY_SP_AUTH="${POLYSTORE_GATEWAY_SP_AUTH:-}"
 # Enable the EVM mempool by default so JSON-RPC / MetaMask works out of the box.
-NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
-export NIL_DISABLE_EVM_MEMPOOL
+POLYSTORE_DISABLE_EVM_MEMPOOL="${POLYSTORE_DISABLE_EVM_MEMPOOL:-0}"
+export POLYSTORE_DISABLE_EVM_MEMPOOL
 # Auto-fund the default demo EVM account by calling the faucet once on startup.
-NIL_AUTO_FAUCET_EVM="${NIL_AUTO_FAUCET_EVM:-1}"
-NIL_AUTO_FAUCET_EVM_ADDR="${NIL_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
+POLYSTORE_AUTO_FAUCET_EVM="${POLYSTORE_AUTO_FAUCET_EVM:-1}"
+POLYSTORE_AUTO_FAUCET_EVM_ADDR="${POLYSTORE_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
-if [ -z "$NIL_GATEWAY_SP_AUTH" ]; then
+if [ -z "$POLYSTORE_GATEWAY_SP_AUTH" ]; then
   if command -v openssl >/dev/null 2>&1; then
-    NIL_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
+    POLYSTORE_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
   else
-    NIL_GATEWAY_SP_AUTH="$(date +%s%N)"
+    POLYSTORE_GATEWAY_SP_AUTH="$(date +%s%N)"
   fi
 fi
-export NIL_GATEWAY_SP_AUTH
-echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
+export POLYSTORE_GATEWAY_SP_AUTH
+echo "$POLYSTORE_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
 
@@ -1961,14 +1961,14 @@ print(nil_addr)
 PY
 )
 EVM_ADDRESS=$(echo "$ADDR_JSON" | sed -n '1p')
-NIL_ADDRESS=$(echo "$ADDR_JSON" | sed -n '2p')
+POLYSTORE_ADDRESS=$(echo "$ADDR_JSON" | sed -n '2p')
 echo "    EVM: $EVM_ADDRESS"
-echo "    NIL: $NIL_ADDRESS"
+echo "    NIL: $POLYSTORE_ADDRESS"
 
-fund_account "$NIL_ADDRESS" "$FAUCET_BASE"
+fund_account "$POLYSTORE_ADDRESS" "$FAUCET_BASE"
 sleep 5 # Give chain time to process funding transaction
-echo "==> Verifying balance for $NIL_ADDRESS..."
-BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$NIL_ADDRESS" || echo "{}")
+echo "==> Verifying balance for $POLYSTORE_ADDRESS..."
+BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$POLYSTORE_ADDRESS" || echo "{}")
 echo "$BAL_JSON" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
 
 # 2. Create Deal (EVM)

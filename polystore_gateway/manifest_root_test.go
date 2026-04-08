@@ -218,7 +218,7 @@ func TestCleanupInterruptedDealGenerations_RemovesExpiredProvisionalGeneration(t
 
 func TestCleanupInterruptedDealGenerations_DisabledRetentionKeepsExpiredProvisionalGeneration(t *testing.T) {
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVISIONAL_GENERATION_RETENTION_TTL", "0")
+	t.Setenv("POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL", "0")
 
 	dealID := uint64(80)
 	root := mustTestManifestRoot(t, "expired-provisional-retention-disabled")

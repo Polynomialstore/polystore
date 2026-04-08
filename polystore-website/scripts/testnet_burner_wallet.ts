@@ -48,7 +48,7 @@ function generateWallet() {
 
 function exportKeystore() {
   const privateKey = normalizePrivateKey(
-    argValue('--private-key') || process.env.EVM_PRIVKEY || process.env.NIL_EVM_DEV_PRIVKEY || '',
+    argValue('--private-key') || process.env.EVM_PRIVKEY || process.env.POLYSTORE_EVM_DEV_PRIVKEY || '',
   )
   const password = argValue('--password') || process.env.KEYSTORE_PASSWORD || ''
   const out = argValue('--out') || process.env.KEYSTORE_OUT || ''

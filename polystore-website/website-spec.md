@@ -88,7 +88,7 @@ The application uses Vite for building and handling environment variables. Confi
 *   **Vite (`vite.config.ts`):** Standard React plugin setup.
 *   **TypeScript (`tsconfig.json`):** Strict mode enabled, Target ES2020.
 *   **Tailwind (`tailwind.config.js`):** Configured for CSS variable-based theming (HSL values) with `darkMode: 'class'`.
-*   **WASM (`polystore_core`):** `npm run dev` first runs `wasm:ensure`, which reuses `public/wasm/` when `polystore_core.js` and `polystore_core_bg.wasm` are already present and only falls back to `wasm-pack build` when the bundle is missing or `NIL_FORCE_WASM_BUILD=1` is set. `npm run build:full` still performs a fresh `wasm-pack build`. Fresh WASM builds require `wasm-pack` + a Rust toolchain on the machine/CI runner.
+*   **WASM (`polystore_core`):** `npm run dev` first runs `wasm:ensure`, which reuses `public/wasm/` when `polystore_core.js` and `polystore_core_bg.wasm` are already present and only falls back to `wasm-pack build` when the bundle is missing or `POLYSTORE_FORCE_WASM_BUILD=1` is set. `npm run build:full` still performs a fresh `wasm-pack build`. Fresh WASM builds require `wasm-pack` + a Rust toolchain on the machine/CI runner.
 
 ### 1.3 Key Dependencies
 *   **Web3:** `wagmi`, `viem`
@@ -170,7 +170,7 @@ interface StatusSummary {
 
 ### 3.1 Web3Provider (`src/context/Web3Provider.tsx`)
 *   **Purpose:** Configures `wagmi` for wallet connection and blockchain interaction.
-*   **Chains:** `NilChain Local` (Custom, ID defined in `VITE_CHAIN_ID`), `Mainnet`, `Sepolia`.
+*   **Chains:** `PolyStore Chain Local` (Custom, ID defined in `VITE_CHAIN_ID`), `Mainnet`, `Sepolia`.
 *   **Transport:** HTTP (configured via `appConfig.evmRpc`).
 *   **Client:** Integrates `@tanstack/react-query`'s `QueryClient` for caching blockchain reads.
 *   **Exports:** Wraps app in `WagmiProvider` and `QueryClientProvider`.

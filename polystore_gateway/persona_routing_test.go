@@ -10,38 +10,38 @@ import (
 
 func TestValidateRuntimePersona(t *testing.T) {
 	t.Run("provider requires provider identity", func(t *testing.T) {
-		t.Setenv("NIL_PROVIDER_KEY", "")
-		t.Setenv("NIL_PROVIDER_ADDRESS", "")
-		t.Setenv("NIL_LEGACY_MIXED_ROUTES", "0")
+		t.Setenv("POLYSTORE_PROVIDER_KEY", "")
+		t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+		t.Setenv("POLYSTORE_LEGACY_MIXED_ROUTES", "0")
 		if err := validateRuntimePersona(runtimePersonaProviderDaemon, false, ":8082"); err == nil {
 			t.Fatalf("expected validation failure when provider identity is missing")
 		}
 	})
 
 	t.Run("user rejects provider identity in strict mode", func(t *testing.T) {
-		t.Setenv("NIL_PROVIDER_KEY", "provider1")
-		t.Setenv("NIL_PROVIDER_ADDRESS", "")
-		t.Setenv("NIL_LEGACY_MIXED_ROUTES", "0")
+		t.Setenv("POLYSTORE_PROVIDER_KEY", "provider1")
+		t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+		t.Setenv("POLYSTORE_LEGACY_MIXED_ROUTES", "0")
 		if err := validateRuntimePersona(runtimePersonaUserGateway, true, ":8080"); err == nil {
 			t.Fatalf("expected validation failure when user-gateway has provider identity env")
 		}
 	})
 
 	t.Run("provider rejects user-gateway port by default", func(t *testing.T) {
-		t.Setenv("NIL_PROVIDER_KEY", "provider1")
-		t.Setenv("NIL_PROVIDER_ADDRESS", "")
-		t.Setenv("NIL_LEGACY_MIXED_ROUTES", "0")
-		t.Setenv("NIL_ALLOW_PROVIDER_ON_USER_PORT", "0")
+		t.Setenv("POLYSTORE_PROVIDER_KEY", "provider1")
+		t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+		t.Setenv("POLYSTORE_LEGACY_MIXED_ROUTES", "0")
+		t.Setenv("POLYSTORE_ALLOW_PROVIDER_ON_USER_PORT", "0")
 		if err := validateRuntimePersona(runtimePersonaProviderDaemon, false, ":8080"); err == nil {
 			t.Fatalf("expected validation failure when provider-daemon binds :8080")
 		}
 	})
 
 	t.Run("provider can override user-gateway port guard for legacy compatibility", func(t *testing.T) {
-		t.Setenv("NIL_PROVIDER_KEY", "provider1")
-		t.Setenv("NIL_PROVIDER_ADDRESS", "")
-		t.Setenv("NIL_LEGACY_MIXED_ROUTES", "0")
-		t.Setenv("NIL_ALLOW_PROVIDER_ON_USER_PORT", "1")
+		t.Setenv("POLYSTORE_PROVIDER_KEY", "provider1")
+		t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+		t.Setenv("POLYSTORE_LEGACY_MIXED_ROUTES", "0")
+		t.Setenv("POLYSTORE_ALLOW_PROVIDER_ON_USER_PORT", "1")
 		if err := validateRuntimePersona(runtimePersonaProviderDaemon, false, ":8080"); err != nil {
 			t.Fatalf("expected provider-daemon :8080 override to pass, got: %v", err)
 		}

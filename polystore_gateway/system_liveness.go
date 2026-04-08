@@ -103,10 +103,10 @@ const (
 var systemProverState systemLivenessState
 
 func shouldRunSystemLiveness() bool {
-	if envDefault("NIL_DISABLE_SYSTEM_LIVENESS", "0") == "1" {
+	if envDefault("POLYSTORE_DISABLE_SYSTEM_LIVENESS", "0") == "1" {
 		return false
 	}
-	return envDefault("NIL_SYSTEM_LIVENESS", "1") == "1"
+	return envDefault("POLYSTORE_SYSTEM_LIVENESS", "1") == "1"
 }
 
 func (s *systemLivenessState) ensureEpoch(epochID uint64, now time.Time) {
@@ -279,7 +279,7 @@ func startSystemLivenessProver() {
 		return
 	}
 
-	interval := time.Duration(envInt("NIL_SYSTEM_LIVENESS_INTERVAL_SECONDS", 10)) * time.Second
+	interval := time.Duration(envInt("POLYSTORE_SYSTEM_LIVENESS_INTERVAL_SECONDS", 10)) * time.Second
 	if interval < 3*time.Second {
 		interval = 3 * time.Second
 	}
@@ -463,7 +463,7 @@ dealLoop:
 					strconv.FormatUint(deal.dealID, 10),
 					strconv.FormatUint(epochID, 10),
 					tmpPath,
-					"--from", envDefault("NIL_PROVIDER_KEY", "faucet"),
+					"--from", envDefault("POLYSTORE_PROVIDER_KEY", "faucet"),
 					"--chain-id", chainID,
 					"--home", homeDir,
 					"--keyring-backend", "test",

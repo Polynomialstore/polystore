@@ -45,8 +45,8 @@ Browser route map:
 Local prerequisites:
 - Required commands: `bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `polystorechaind`; `gh` is optional.
 - First run may execute `npm install` inside `polystore-website/` if `polystore-website/node_modules` is missing.
-- Before running the burner helper, set a keystore password in `NIL_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
-- Do not let `scripts/testnet_burner_upload.sh` fall back to its interactive password prompt during an autonomous run. If `NIL_BURNER_KEYSTORE_PASSWORD` is unset, stop and ask the user for the import password first.
+- Before running the burner helper, set a keystore password in `POLYSTORE_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
+- Do not let `scripts/testnet_burner_upload.sh` fall back to its interactive password prompt during an autonomous run. If `POLYSTORE_BURNER_KEYSTORE_PASSWORD` is unset, stop and ask the user for the import password first.
 - Expect local artifacts to be created under the repo, including `polystore-website/node_modules/`, a keystore JSON, and a `polystorechaind` sender home in `_artifacts/`.
 
 Operating mode:
@@ -115,7 +115,7 @@ Your job:
      - install the package, then launch `polystore_gateway_gui` from the desktop launcher or by running `polystore_gateway_gui` or `/usr/bin/polystore_gateway_gui`
      - only fall back to `cd polystore_gateway_gui && npm ci && npm run tauri build` when no matching package works for the host OS
    - verify local gateway `/health`; use `/status` only if it exists or if debugging is needed
-   - if `NIL_BURNER_KEYSTORE_PASSWORD` is unset, ask the user for the keystore import password before invoking `scripts/testnet_burner_upload.sh`
+   - if `POLYSTORE_BURNER_KEYSTORE_PASSWORD` is unset, ask the user for the keystore import password before invoking `scripts/testnet_burner_upload.sh`
    - create a temporary tiny file locally and complete `scripts/testnet_burner_upload.sh <file_path>`
    - capture wallet address, nil address, keystore path, deal ID, manifest root, file name, file size, create tx hash, and commit tx hash
 4. Milestone 2, MetaMask Handoff:

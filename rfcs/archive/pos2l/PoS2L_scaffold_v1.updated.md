@@ -260,12 +260,12 @@ Merkleize all `OriginEntry` objects (Poseidon) into `origin_root`. Any PoS² pro
 | "P2Δ"                | Delta‑head binding for PoS²‑L                 |
 | "POSS2-MIX"         | PoS² challenge mixing                          |
 | "NILHASH-RANGE"     | nilhash range‑proof transcript tag             |
-| "NIL_SEAL_PRP"      | PRP round‑function key                         |
-| "NIL_SEAL_ZETA"     | ζ offset derivation                            |
-| "NIL_SEAL_ITER_INIT"| IteratedHash init for ζ                        |
-| "NIL_SEAL_ITER_STEP"| IteratedHash step for ζ                        |
-| "NIL_SEAL_NOISE"    | Noise RNG domain                               |
-| "NIL_SEAL_SALT_EXP" | Salt expansion XOF for k‑limbs (also used by PoDE Derive)
+| "POLYSTORE_SEAL_PRP"      | PRP round‑function key                         |
+| "POLYSTORE_SEAL_ZETA"     | ζ offset derivation                            |
+| "POLYSTORE_SEAL_ITER_INIT"| IteratedHash init for ζ                        |
+| "POLYSTORE_SEAL_ITER_STEP"| IteratedHash step for ζ                        |
+| "POLYSTORE_SEAL_NOISE"    | Noise RNG domain                               |
+| "POLYSTORE_SEAL_SALT_EXP" | Salt expansion XOF for k‑limbs (also used by PoDE Derive)
 
 For research runs, reuse the machine‑readable KATs defined in Core Annexes with the following files:
 

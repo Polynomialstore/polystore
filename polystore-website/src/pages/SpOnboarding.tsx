@@ -459,7 +459,7 @@ export function SpOnboarding() {
     return [
       '# Start or restart provider-daemon only.',
       `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} ./scripts/run_devnet_provider.sh stop || true`,
-      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh start`,
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} POLYSTORE_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh start`,
     ].join('\n')
   }, [effectiveGatewayAuthToken, providerKeyLabel])
   const cloudflareTunnelCommand = useMemo(
@@ -519,7 +519,7 @@ export function SpOnboarding() {
       '  for p in $(lsof -tiTCP:9100 -sTCP:LISTEN 2>/dev/null); do kill "$p" || true; done',
       'fi',
       'sleep 1',
-      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} EXPECTED_PROVIDER_ADDRESS=${shellQuote(normalizedApprovedProviderAddress)} PROVIDER_ENDPOINT=${shellQuote(normalizedProviderEndpoint)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh bootstrap`,
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} EXPECTED_PROVIDER_ADDRESS=${shellQuote(normalizedApprovedProviderAddress)} PROVIDER_ENDPOINT=${shellQuote(normalizedProviderEndpoint)} POLYSTORE_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh bootstrap`,
       `ACTUAL_PROVIDER_ADDRESS="$(curl -sS ${shellQuote(statusUrl)} | jq -r '.provider.address // empty')"`,
       `echo "Approved provider: ${normalizedApprovedProviderAddress}"`,
       'echo "Served provider:   $ACTUAL_PROVIDER_ADDRESS"',
@@ -1399,7 +1399,7 @@ export function SpOnboarding() {
                   <summary className="cursor-pointer text-sm font-semibold text-foreground">Advanced: gateway auth override</summary>
                   <div className="mt-3 space-y-4 text-sm text-muted-foreground">
                     <p>
-                      Bootstrap commands include <span className="font-mono">NIL_GATEWAY_SP_AUTH</span> automatically using the devnet default value.
+                      Bootstrap commands include <span className="font-mono">POLYSTORE_GATEWAY_SP_AUTH</span> automatically using the devnet default value.
                       Only override it if your hub operator gave you a custom secret.
                     </p>
                     <label className="block max-w-xl space-y-2 text-sm">

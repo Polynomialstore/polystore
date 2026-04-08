@@ -30,7 +30,7 @@ You should receive:
 If you are running an SP, you also need:
 - Hub RPC: `https://rpc.<domain>`
 - Hub LCD: `https://lcd.<domain>`
-- Router↔provider shared secret: `NIL_GATEWAY_SP_AUTH=...` (treat like a password)
+- Router↔provider shared secret: `POLYSTORE_GATEWAY_SP_AUTH=...` (treat like a password)
 
 ---
 
@@ -143,7 +143,7 @@ If the key is new and gas funding is still missing, fund the printed provider ad
 ```bash
 export PROVIDER_KEY="provider1"
 export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"   # or /ip4/<public-ip>/tcp/8091/http
-export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
+export POLYSTORE_GATEWAY_SP_AUTH="<shared-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
 ./scripts/run_devnet_provider.sh bootstrap
@@ -154,7 +154,7 @@ Website-first operator flow:
 - connect the operator wallet
 - prepare the provider host checkout
 - pair provider identity (run one `pair` command, fund and rerun if needed, approve from wallet)
-- configure public access (endpoint + `NIL_GATEWAY_SP_AUTH`)
+- configure public access (endpoint + `POLYSTORE_GATEWAY_SP_AUTH`)
 - run bootstrap and finish verification from the website
 
 The canonical provider docs for this are:

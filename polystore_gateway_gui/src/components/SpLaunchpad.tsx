@@ -857,7 +857,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                     className="sp-input rounded-none border-border bg-background"
                     value={sharedAuth}
                     onChange={(event) => setSharedAuth(event.target.value)}
-                    placeholder="NIL_GATEWAY_SP_AUTH"
+                    placeholder="POLYSTORE_GATEWAY_SP_AUTH"
                   />
                 </label>
               </div>

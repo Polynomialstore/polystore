@@ -379,8 +379,8 @@ Abandoned provisional generations are a storage-churn / griefing surface and MUS
 Devnet gateway policy:
 * user-gateway/provider-daemon implementations MAY retain provisional generations for a bounded TTL before GC.
 * The current devnet reference behavior is: complete provisional generations older than 24 hours MAY be removed during startup/recovery cleanup if they were never promoted on-chain.
-* The reference gateway exposes this as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports the effective TTL via `/status` as `polyfs_generation_provisional_retention_ttl_seconds`.
-* Setting `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC; it does not delete provisional generations immediately.
+* The reference gateway exposes this as `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL` and reports the effective TTL via `/status` as `polyfs_generation_provisional_retention_ttl_seconds`.
+* Setting `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC; it does not delete provisional generations immediately.
 * The reference gateway also reports stale compare-and-swap preflight rejections via `/status` as `polyfs_cas_preflight_conflicts_total`, `polyfs_cas_preflight_conflicts_legacy`, `polyfs_cas_preflight_conflicts_evm`, and `polyfs_cas_preflight_conflicts_upload` so operators can observe concurrent-writer / churn pressure across relay and artifact-ingest paths.
 * The reference gateway exposes per-deal local generation inspection at `GET /gateway/deal-generations/{deal_id}`, including active/provisional/incomplete/invalid generation classification, `previous_manifest_root`, and local byte counts so abandoned staged generations can be inspected before cleanup.
 

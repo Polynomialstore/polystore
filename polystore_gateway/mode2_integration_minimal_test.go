@@ -290,7 +290,7 @@ func TestGateway_Mode2_UploadThenFetch_WithMissingLocalShard(t *testing.T) {
 	t.Cleanup(func() { lcdBase = oldLCD })
 
 	// Gateway acts as the slot 0 provider for proof headers.
-	t.Setenv("NIL_PROVIDER_ADDRESS", providers[0])
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", providers[0])
 
 	// Upload via gateway (Mode 2 ingest), then "commit" by updating mock LCD cid.
 	body := &bytes.Buffer{}

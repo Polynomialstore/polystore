@@ -297,7 +297,7 @@ func TestProviderGatewayMdu_RequiresOnchainSession(t *testing.T) {
 	oldLCD := lcdBase
 	lcdBase = lcdSrv.URL
 	t.Cleanup(func() { lcdBase = oldLCD })
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1provider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1provider")
 
 	r := mux.NewRouter()
 	registerProviderDaemonRoutes(r)
@@ -312,7 +312,7 @@ func TestProviderGatewayMdu_RequiresOnchainSession(t *testing.T) {
 func TestProviderGatewayMdu_AllowsOnchainSession(t *testing.T) {
 	useTempUploadDir(t)
 	dealMetaCache = sync.Map{}
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1provider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1provider")
 
 	cid := mustTestManifestRoot(t, "provider-mdu-session-ok")
 	dealDir := filepath.Join(uploadDir, cid.Key)

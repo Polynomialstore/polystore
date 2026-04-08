@@ -42,7 +42,7 @@ We don't ban S3. We just pay for speed.
 *   **Function:** Manages the **Active Provider List**, executes **System-Defined Placement**, and verifies **KZG Proofs**. It calculates reward tiers based on proof inclusion height.
 
 ### Layer 2: EVM Compatibility (MetaMask)
-*   **Role:** Wallet-facing execution inside NilChain (no separate settlement chain in devnet).
+*   **Role:** Wallet-facing execution inside PolyStore Chain (no separate settlement chain in devnet).
 *   **Function:** Hosts EVM-compatible signatures and the PolyStore precompile used for retrieval sessions and future contracts.
 
 ---

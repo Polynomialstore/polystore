@@ -17,8 +17,8 @@ VERIFY_ONLY=0
 DRY_RUN=0
 SKIP_BACKUP=0
 
-NILCHAIND_BIN=""
-NIL_HOME=""
+POLYSTORECHAIND_BIN=""
+POLYSTORE_HOME=""
 LAST_BACKUP=""
 SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
 
@@ -30,7 +30,7 @@ Build and redeploy polystorechaind for a systemd-managed hub node.
 
 By default this script:
 1) builds polystorechaind from SOURCE_ROOT/polystorechain,
-2) backs up and installs the binary into NILCHAIND_BIN,
+2) backs up and installs the binary into POLYSTORECHAIND_BIN,
 3) prints the sudo restart command for systemd,
 4) prints a verify-only command for post-restart checks.
 
@@ -48,8 +48,8 @@ Options:
   -h, --help                Show this help
 
 Environment knobs:
-  NILCHAIN_BUILD_GOFLAGS    GOFLAGS override for build (default appends -mod=mod)
-  NIL_CORE_LIB_DIR          Override path containing libpolystore_core.so / libpolystore_core.dylib
+  POLYSTORECHAIN_BUILD_GOFLAGS    GOFLAGS override for build (default appends -mod=mod)
+  POLYSTORE_CORE_LIB_DIR          Override path containing libpolystore_core.so / libpolystore_core.dylib
 USAGE
 }
 
@@ -180,8 +180,8 @@ load_env_file() {
     warn "env file not found at $ENV_FILE (continuing with defaults)"
   fi
 
-  NILCHAIND_BIN="${NILCHAIND_BIN:-$TARGET_ROOT/polystorechain/polystorechaind}"
-  NIL_HOME="${NIL_HOME:-/var/lib/polystore/polystorechaind}"
+  POLYSTORECHAIND_BIN="${POLYSTORECHAIND_BIN:-$TARGET_ROOT/polystorechain/polystorechaind}"
+  POLYSTORE_HOME="${POLYSTORE_HOME:-/var/lib/polystore/polystorechaind}"
 }
 
 require_cmd() {
@@ -200,7 +200,7 @@ preflight_build() {
   [ -f "$SOURCE_ROOT/polystorechain/go.mod" ] || die "polystorechain/go.mod missing under source root: $SOURCE_ROOT"
 
   local target_dir
-  target_dir="$(dirname "$NILCHAIND_BIN")"
+  target_dir="$(dirname "$POLYSTORECHAIND_BIN")"
   [ -d "$target_dir" ] || die "target bin directory missing: $target_dir"
 
   if ! systemctl list-unit-files --no-legend "${SERVICE_NAME}.service" >/dev/null 2>&1; then
@@ -211,7 +211,7 @@ preflight_build() {
 find_polystore_core_lib_dir() {
   local candidate
   for candidate in \
-    "${NIL_CORE_LIB_DIR:-}" \
+    "${POLYSTORE_CORE_LIB_DIR:-}" \
     "$TARGET_ROOT/polystore_core/target/release" \
     "$SOURCE_ROOT/polystore_core/target/release"
   do
@@ -257,7 +257,7 @@ ensure_polystore_core_runtime() {
 
 build_polystorechaind() {
   local build_goflags
-  build_goflags="${NILCHAIN_BUILD_GOFLAGS:-${GOFLAGS:-}}"
+  build_goflags="${POLYSTORECHAIN_BUILD_GOFLAGS:-${GOFLAGS:-}}"
   case " $build_goflags " in
     *" -mod="*) ;;
     *) build_goflags="${build_goflags} -mod=mod" ;;
@@ -280,7 +280,7 @@ build_polystorechaind() {
 install_polystorechaind() {
   local source_bin target_bin target_dir timestamp
   source_bin="$SOURCE_ROOT/polystorechain/polystorechaind"
-  target_bin="$NILCHAIND_BIN"
+  target_bin="$POLYSTORECHAIND_BIN"
   target_dir="$(dirname "$target_bin")"
 
   [ -f "$source_bin" ] || die "built source binary not found: $source_bin"

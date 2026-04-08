@@ -22,7 +22,7 @@ const providerAdminTestPrivKey = "4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b
 
 func configureProviderAdminNonceStoreForTest(t *testing.T) {
 	t.Helper()
-	t.Setenv("NIL_PROVIDER_ADMIN_NONCES_PATH", filepath.Join(t.TempDir(), "provider_admin_nonces.json"))
+	t.Setenv("POLYSTORE_PROVIDER_ADMIN_NONCES_PATH", filepath.Join(t.TempDir(), "provider_admin_nonces.json"))
 }
 
 func providerAdminTestKey(t *testing.T) *ecdsa.PrivateKey {
@@ -76,11 +76,11 @@ func setupProviderAdminStatusEnv(t *testing.T, providerAddress string, localURL 
 	t.Helper()
 	resetProviderAddressCacheForTest(t)
 	configureProviderAdminNonceStoreForTest(t)
-	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
-	t.Setenv("NIL_PROVIDER_KEY", "provider-admin")
-	t.Setenv("NIL_PROVIDER_ADDRESS", providerAddress)
-	t.Setenv("NIL_LISTEN_ADDR", localURL)
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "shared-secret")
+	t.Setenv("POLYSTORE_RUNTIME_PERSONA", "provider-daemon")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "provider-admin")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", providerAddress)
+	t.Setenv("POLYSTORE_LISTEN_ADDR", localURL)
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "shared-secret")
 	withProviderStatusGlobals(t, lcdURL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.polynomialstore.com")
 }
 

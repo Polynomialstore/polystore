@@ -5,7 +5,7 @@ on:
 
 jobs:
   # ------------------------------------------------------------------
-  # GO SERVICES (NilChain, Faucet, S3, Relayer)
+  # GO SERVICES (PolyStore Chain, Faucet, S3, Relayer)
   # ------------------------------------------------------------------
   go-test:
     name: Go Test (${{ matrix.service }})

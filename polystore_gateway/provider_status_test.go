@@ -72,11 +72,11 @@ func requireIssueContains(t *testing.T, issues []string, want string) {
 
 func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
-	t.Setenv("NIL_PROVIDER_KEY", "provider-status")
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1providerstatus")
-	t.Setenv("NIL_OPERATOR_ADDRESS", "nil1operatorstatus")
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "shared-secret")
+	t.Setenv("POLYSTORE_RUNTIME_PERSONA", "provider-daemon")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "provider-status")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1providerstatus")
+	t.Setenv("POLYSTORE_OPERATOR_ADDRESS", "nil1operatorstatus")
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "shared-secret")
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/health" {
@@ -97,8 +97,8 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 	defer publicSrv.Close()
 
 	publicEndpoint := mustStatusHTTPMultiaddr(t, publicSrv.URL)
-	t.Setenv("NIL_LISTEN_ADDR", localSrv.URL)
-	t.Setenv("NIL_PROVIDER_ENDPOINTS", publicEndpoint)
+	t.Setenv("POLYSTORE_LISTEN_ADDR", localSrv.URL)
+	t.Setenv("POLYSTORE_PROVIDER_ENDPOINTS", publicEndpoint)
 
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -189,11 +189,11 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 
 func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
-	t.Setenv("NIL_PROVIDER_KEY", "provider-pending")
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1providerpending")
-	t.Setenv("NIL_OPERATOR_ADDRESS", "nil1pendingoperator")
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "shared-secret")
+	t.Setenv("POLYSTORE_RUNTIME_PERSONA", "provider-daemon")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "provider-pending")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1providerpending")
+	t.Setenv("POLYSTORE_OPERATOR_ADDRESS", "nil1pendingoperator")
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "shared-secret")
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/health" {
@@ -205,8 +205,8 @@ func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 	defer localSrv.Close()
 
 	publicEndpoint := mustStatusHTTPMultiaddr(t, localSrv.URL)
-	t.Setenv("NIL_LISTEN_ADDR", localSrv.URL)
-	t.Setenv("NIL_PROVIDER_ENDPOINTS", publicEndpoint)
+	t.Setenv("POLYSTORE_LISTEN_ADDR", localSrv.URL)
+	t.Setenv("POLYSTORE_PROVIDER_ENDPOINTS", publicEndpoint)
 
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -271,13 +271,13 @@ func TestGatewayStatusReportsPendingProviderPairing(t *testing.T) {
 
 func TestGatewayStatusReportsProviderDaemonIssues(t *testing.T) {
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
-	t.Setenv("NIL_PROVIDER_KEY", "provider-issues")
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1providerissues")
-	t.Setenv("NIL_OPERATOR_ADDRESS", "nil1operatorissues")
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "")
-	t.Setenv("NIL_LISTEN_ADDR", "http://127.0.0.1:1")
-	t.Setenv("NIL_PROVIDER_ENDPOINTS", "")
+	t.Setenv("POLYSTORE_RUNTIME_PERSONA", "provider-daemon")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "provider-issues")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1providerissues")
+	t.Setenv("POLYSTORE_OPERATOR_ADDRESS", "nil1operatorissues")
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "")
+	t.Setenv("POLYSTORE_LISTEN_ADDR", "http://127.0.0.1:1")
+	t.Setenv("POLYSTORE_PROVIDER_ENDPOINTS", "")
 
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -321,7 +321,7 @@ func TestGatewayStatusReportsProviderDaemonIssues(t *testing.T) {
 	if status.Dependencies["sp_reachable"] {
 		t.Fatal("expected sp_reachable=false")
 	}
-	requireIssueContains(t, status.Issues, "NIL_GATEWAY_SP_AUTH is missing")
+	requireIssueContains(t, status.Issues, "POLYSTORE_GATEWAY_SP_AUTH is missing")
 	requireIssueContains(t, status.Issues, "configured provider link request is not open on-chain")
 	requireIssueContains(t, status.Issues, "provider is not registered on-chain")
 	requireIssueContains(t, status.Issues, "provider endpoints are not configured")

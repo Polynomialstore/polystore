@@ -154,13 +154,13 @@ test('buildProviderBootstrapCommand emits a focused bootstrap command and opts i
   assert.doesNotMatch(command, /OPERATOR_ADDRESS=/)
   assert.match(command, /PROVIDER_KEY='provider-main'/)
   assert.match(command, /PROVIDER_ENDPOINT='\/ip4\/203\.0\.113\.10\/tcp\/8091\/http'/)
-  assert.match(command, /NIL_GATEWAY_SP_AUTH='shh it'\\''s secret'/)
+  assert.match(command, /POLYSTORE_GATEWAY_SP_AUTH='shh it'\\''s secret'/)
   assert.match(command, /run_devnet_provider\.sh bootstrap/)
   assert.doesNotMatch(command, /git clone/)
   assert.doesNotMatch(command, /run_devnet_provider\.sh init/)
   const continuationLines = command
     .split('\n')
-    .filter((line) => /(BOOTSTRAP_ALLOW_PARTIAL|PROVIDER_KEY|PROVIDER_ENDPOINT|NIL_GATEWAY_SP_AUTH)=/.test(line))
+    .filter((line) => /(BOOTSTRAP_ALLOW_PARTIAL|PROVIDER_KEY|PROVIDER_ENDPOINT|POLYSTORE_GATEWAY_SP_AUTH)=/.test(line))
   for (const line of continuationLines) {
     assert.match(line, / \\$/)
     assert.doesNotMatch(line, / \\\\$/)
@@ -319,7 +319,7 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
   const collaboratorPacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md')
   const polystorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_POLYNOMIALSTORE_COM.md')
 
-  assert.match(quickstart, /Treat `NIL_GATEWAY_SP_AUTH` as a secret/)
+  assert.match(quickstart, /Treat `POLYSTORE_GATEWAY_SP_AUTH` as a secret/)
   assert.match(quickstart, /https:\/\/polynomialstore\.com\/#\/sp-onboarding/)
   assert.match(remote, /BOOTSTRAP_ALLOW_PARTIAL=1/)
   assert.match(remote, /https:\/\/polynomialstore\.com\/#\/sp-onboarding/)

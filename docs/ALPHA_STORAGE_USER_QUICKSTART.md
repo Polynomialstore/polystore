@@ -20,8 +20,8 @@ Fallback target:
 - Confirm required tools are present (`bash`, `curl`, `jq`, `node`, `npm`, `python3`, and `polystorechaind`; `gh` optional).
 - Confirm the hosted LCD and faucet are reachable.
 - Use the repo-tracked public testnet bootstrap defaults from `.env.testnet.public` unless you intentionally need overrides.
-- Before running the burner helper, set a keystore password in `NIL_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
-- Do not rely on the helper's interactive password prompt during an agent-driven run; set `NIL_BURNER_KEYSTORE_PASSWORD` first.
+- Before running the burner helper, set a keystore password in `POLYSTORE_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
+- Do not rely on the helper's interactive password prompt during an agent-driven run; set `POLYSTORE_BURNER_KEYSTORE_PASSWORD` first.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file (recommended: `10-100 KiB`); use `[deal_id] [polyfs_path]` only when resuming or overriding defaults.
 - Capture the generated EVM address, mapped `nil1...` address, keystore path, deal ID, manifest root, create tx hash, and commit tx hash.
 - Treat this as the first autonomous completion milestone, then preserve that same wallet and deal state through the rest of the run.
@@ -74,7 +74,7 @@ Fallback target:
    - on macOS it should choose the matching Apple Silicon or Intel `.dmg`, install or open `polystore_gateway_gui.app`, and only pause for Gatekeeper approval
    - on Linux it should prefer `.deb` or `.rpm` release packages, launch `polystore_gateway_gui`, and only fall back to a source build if the packaged install path is blocked
    - it should use the repo-tracked public testnet defaults for hosted faucet or chain access instead of setting up a local faucet
-   - it should ask for the keystore import password before invoking `scripts/testnet_burner_upload.sh` if `NIL_BURNER_KEYSTORE_PASSWORD` is unset, rather than hanging on the helper's interactive prompt
+   - it should ask for the keystore import password before invoking `scripts/testnet_burner_upload.sh` if `POLYSTORE_BURNER_KEYSTORE_PASSWORD` is unset, rather than hanging on the helper's interactive prompt
    - it should create the tiny bootstrap file and complete `scripts/testnet_burner_upload.sh` first, then hand that wallet off to MetaMask
    - it should proceed autonomously through local setup and CLI bootstrap, and only pause for wallet approvals, OS security prompts, browser connection steps, or file-picker actions
    - it should preserve the same wallet, keystore, deal, and gateway state after Fast Bootstrap succeeds unless you explicitly ask it to reset

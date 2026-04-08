@@ -13,11 +13,11 @@ This specification defines the architectural split of the legacy combined gatewa
 
 ### 2.1 `nil_provider` (The Storage Provider)
 *   **Role:** Passive Server.
-*   **Key:** `NIL_PROVIDER_KEY` (e.g., `faucet` or a dedicated SP key).
+*   **Key:** `POLYSTORE_PROVIDER_KEY` (e.g., `faucet` or a dedicated SP key).
 *   **Responsibility:**
     *   **Store:** Accept raw MDUs via `PUT`.
     *   **Serve:** Serve raw MDUs via `GET`.
-    *   **Prove:** Accept signed `RetrievalReceipts` via `POST`, validate them, and batch-submit `MsgProveLiveness` to NilChain.
+    *   **Prove:** Accept signed `RetrievalReceipts` via `POST`, validate them, and batch-submit `MsgProveLiveness` to PolyStore Chain.
 *   **State:**
     *   `uploads/<manifest_root_key>/` (The Slab).
     *   `receipts.db` (Buffer of unsubmitted receipts).
@@ -42,7 +42,7 @@ This flow replaces the "Simulated Liveness" where the Gateway signed receipts on
 ### 3.1 Flow Diagram
 
 ```text
-User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
+User (Browser)        Gateway (Daemon)      Provider (SP)       PolyStore Chain
       |                      |                    |                 |
       |-- 1. GET File ------>|                    |                 |
       |                      |-- 2. Fetch MDU --->|                 |

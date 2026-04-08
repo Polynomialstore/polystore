@@ -90,7 +90,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Generation semantics:** mirrored bytes are provisional generation artifacts until the signed chain swap succeeds; the current live generation remains bound to the current on-chain `manifest_root`.
     *   **CAS preflight header:** artifact uploads may include `X-PolyStore-Previous-Manifest-Root` as an advisory expected-base root; stale values are rejected before the gateway/provider consumes upload bytes.
     *   **Devnet retention policy:** complete provisional generations older than 24 hours may be removed during startup/recovery cleanup if they were never promoted on-chain.
-    *   **Operator control:** `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
+    *   **Operator control:** `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
     *   **Observability:** `/status` reports the effective TTL and generation counters via `polyfs_generation_*` fields, plus stale CAS preflight counters via `polyfs_cas_preflight_conflicts_*`.
     *   **Inspection tooling:** `GET /gateway/deal-generations/{deal_id}` returns the local active/provisional/incomplete/invalid generations for a specific deal, including `previous_manifest_root`, age/classification, and on-disk bytes.
 
@@ -212,7 +212,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gat
 1.  **The "Faucet Relayer":**
     *   The gateway can relay user‑signed intents (e.g., `create-deal-from-evm`, `update-deal-content-evm`) and submit provider proofs using a local key.
     *   This acts as a "Meta-Transaction" layer, sponsoring gas for web users while keeping user authorization in MetaMask.
-    *   **Dev-only:** this path is disabled by default. Enable with `NIL_ENABLE_TX_RELAY=1`; optional auto-funding uses `NIL_AUTO_FAUCET_EVM=1` (or `NIL_AUTO_FAUCET=1`).
+    *   **Dev-only:** this path is disabled by default. Enable with `POLYSTORE_ENABLE_TX_RELAY=1`; optional auto-funding uses `POLYSTORE_AUTO_FAUCET_EVM=1` (or `POLYSTORE_AUTO_FAUCET=1`).
 
 2.  **Triple Proof Generation:**
     *   Session‑proof submission uses on‑disk PolyFS slabs to build `ChainedProof` objects for the requested blob range.

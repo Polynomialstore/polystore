@@ -277,7 +277,7 @@ test('provider onboarding renders the revised five-step happy path and preserves
   const hostCommands = await page.getByTestId('provider-host-commands').textContent()
   expect(hostCommands).toContain(`OPERATOR_ADDRESS='${nilAddress}'`)
   expect(hostCommands).toContain("./scripts/run_devnet_provider.sh bootstrap")
-  expect(hostCommands).toContain("NIL_GATEWAY_SP_AUTH='shared-provider-secret'")
+  expect(hostCommands).toContain("POLYSTORE_GATEWAY_SP_AUTH='shared-provider-secret'")
   expect(hostCommands).not.toMatch(/BOOTSTRAP_ALLOW_PARTIAL=1\s*\\/i)
   expect(hostCommands).not.toMatch(/run_devnet_provider\.sh init/i)
 
@@ -287,7 +287,7 @@ test('provider onboarding renders the revised five-step happy path and preserves
   await page.reload({ waitUntil: 'networkidle' })
   await connectWalletIfNeeded(page)
   await expect(page.getByTestId('provider-auth-token')).toHaveValue('shared-provider-secret')
-  await expect(page.getByTestId('provider-host-commands')).toContainText("NIL_GATEWAY_SP_AUTH='shared-provider-secret'")
+  await expect(page.getByTestId('provider-host-commands')).toContainText("POLYSTORE_GATEWAY_SP_AUTH='shared-provider-secret'")
   await expect(page.getByText(/Healthy \(daemon\)/)).toBeVisible()
 })
 
@@ -297,12 +297,12 @@ test('provider onboarding blocks bootstrap until the shared auth token is suppli
   })
 
   await expect(page.getByRole('heading', { name: /Step 4\. Configure Public Access/i })).toBeVisible()
-  await expect(page.getByText(/ask the hub operator for NIL_GATEWAY_SP_AUTH/i)).toBeVisible()
+  await expect(page.getByText(/ask the hub operator for POLYSTORE_GATEWAY_SP_AUTH/i)).toBeVisible()
   await expect(page.getByText(/Add the shared provider auth token from the hub operator before copying provider host commands\./)).toBeVisible()
   await expect(page.getByTestId('provider-host-commands')).toHaveCount(0)
 
   await page.getByTestId('provider-auth-token').fill('fresh-shared-secret')
-  await expect(page.getByTestId('provider-host-commands')).toContainText("NIL_GATEWAY_SP_AUTH='fresh-shared-secret'")
+  await expect(page.getByTestId('provider-host-commands')).toContainText("POLYSTORE_GATEWAY_SP_AUTH='fresh-shared-secret'")
 })
 
 test('provider onboarding blocks bootstrap until a public endpoint is described', async ({ page }) => {

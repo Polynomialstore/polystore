@@ -21,7 +21,7 @@ fi
 
 GATEWAY_BASE="http://localhost:8080"
 LCD_BASE="http://localhost:1317"
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/polystorechain_data}"
+CHAIN_HOME="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/polystorechain_data}"
 
 # By default the gateway uses fast-shard mode, which does not generate
 # manifest blobs/MDUs needed for on-chain retrieval proofs. Proof checking
@@ -157,7 +157,7 @@ if [ "$HTTP_CODE" != "200" ]; then
   exit 1
 fi
 
-if [ "${NIL_FULL_INGEST:-0}" != "1" ]; then
+if [ "${POLYSTORE_FULL_INGEST:-0}" != "1" ]; then
   banner "Skipping proof check (fast ingest mode)"
   exit 0
 fi

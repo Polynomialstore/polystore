@@ -9,7 +9,7 @@ import { createPublicClient, formatUnits, http } from 'viem'
 import { ArrowUpRight, Loader2, PlugZap } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { appConfig } from '../config'
-import { nilChain } from '../lib/web3Config'
+import { polyStoreChain } from '../lib/web3Config'
 import { polystoreBridgeAbi } from '../abi/polystoreBridge'
 
 function randomBytes32(): `0x${string}` {
@@ -40,7 +40,7 @@ export function BridgeActions() {
   const { openConnectModal } = useConnectModal()
   const { data: balance } = useBalance({
     address,
-    chainId: nilChain.id,
+    chainId: polyStoreChain.id,
     query: { enabled: Boolean(address) },
   })
 
@@ -57,7 +57,7 @@ export function BridgeActions() {
 
   const { isLoading: waitingReceipt, isSuccess: txConfirmed } = useWaitForTransactionReceipt({
     hash: txHash,
-    chainId: nilChain.id,
+    chainId: polyStoreChain.id,
   })
 
   // Prefill the next height from the on-chain bridge.
@@ -65,7 +65,7 @@ export function BridgeActions() {
     if (!bridgeAddress) return
     let cancelled = false
     const client = createPublicClient({
-      chain: nilChain,
+      chain: polyStoreChain,
       transport: http(appConfig.evmRpc),
     })
     client
@@ -119,7 +119,7 @@ export function BridgeActions() {
         abi: polystoreBridgeAbi,
         functionName: 'updateStateRoot',
         args: [height, root],
-        chainId: nilChain.id,
+        chainId: polyStoreChain.id,
       })
       setStatus(`Sent tx ${tx}`)
     } catch (e) {

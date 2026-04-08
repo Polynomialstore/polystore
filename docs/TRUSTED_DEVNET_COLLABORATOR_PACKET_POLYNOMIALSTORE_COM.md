@@ -23,7 +23,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 ## What Collaborators Need From Hub Operator
 
 - Faucet auth token (shared pre-alpha devnet bootstrap token; may already be embedded in the website build)
-- Router/provider shared secret `NIL_GATEWAY_SP_AUTH` (SP operators only)
+- Router/provider shared secret `POLYSTORE_GATEWAY_SP_AUTH` (SP operators only)
 
 ## Website Tester Quickstart
 
@@ -78,7 +78,7 @@ If the key is new and gas funding is still missing, fund the printed provider ad
 ```bash
 export PROVIDER_KEY="provider1"
 export PROVIDER_ENDPOINT="/dns4/sp1.polynomialstore.com/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
-export NIL_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
+export POLYSTORE_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"         # from website wallet step
 
 ./scripts/run_devnet_provider.sh bootstrap
@@ -89,7 +89,7 @@ Website-first operator flow:
 - connect the operator wallet
 - prepare the provider host checkout
 - pair provider identity (run one `pair` command, fund and rerun if needed, approve from wallet)
-- configure public access (endpoint + `NIL_GATEWAY_SP_AUTH`)
+- configure public access (endpoint + `POLYSTORE_GATEWAY_SP_AUTH`)
 - run bootstrap and finish verification from the website
 
 Use `scripts/run_devnet_provider.sh` for `pair`, `bootstrap`, `print-config`, `doctor`, and `verify`.

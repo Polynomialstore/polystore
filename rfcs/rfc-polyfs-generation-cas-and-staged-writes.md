@@ -65,8 +65,8 @@ Future policy needs:
 Current devnet reference policy:
 * complete provisional generations older than 24 hours may be garbage-collected during gateway/provider startup or recovery cleanup
 * the active committed generation is never subject to this provisional TTL
-* the gateway exposes the effective retention window as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports it in `/status` as `polyfs_generation_provisional_retention_ttl_seconds`
-* `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC
+* the gateway exposes the effective retention window as `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL` and reports it in `/status` as `polyfs_generation_provisional_retention_ttl_seconds`
+* `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC
 * the gateway SHOULD expose stale CAS preflight pressure in `/status` so concurrent-writer / abandoned-upload churn is observable; the current reference keys are `polyfs_cas_preflight_conflicts_total`, `polyfs_cas_preflight_conflicts_legacy`, `polyfs_cas_preflight_conflicts_evm`, and `polyfs_cas_preflight_conflicts_upload`
 * the gateway SHOULD expose per-deal local generation inspection; the current reference endpoint is `GET /gateway/deal-generations/{deal_id}`, which returns active/provisional/incomplete/invalid classification plus `previous_manifest_root` and on-disk byte counts
 

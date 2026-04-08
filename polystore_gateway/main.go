@@ -44,7 +44,7 @@ var uploadCopyBufferPool = sync.Pool{
 }
 
 var uploadRootDirCache sync.Map
-var verboseMode2UploadLogs = envDefault("NIL_VERBOSE_MODE2_UPLOAD_LOGS", "0") == "1"
+var verboseMode2UploadLogs = envDefault("POLYSTORE_VERBOSE_MODE2_UPLOAD_LOGS", "0") == "1"
 
 func copyUploadBody(dst io.Writer, src io.Reader) (int64, error) {
 	buf, _ := uploadCopyBufferPool.Get().([]byte)
@@ -183,44 +183,44 @@ func normalizeManifestRootOrEmpty(raw string) string {
 
 // Configurable paths & chain settings (overridable via env).
 var (
-	uploadDir       = envDefault("NIL_UPLOAD_DIR", "uploads")
-	sessionDBPath   = envDefault("NIL_SESSION_DB_PATH", filepath.Join(uploadDir, "sessions.db"))
-	providerBase    = envDefault("NIL_PROVIDER_BASE", "http://localhost:8080")
-	nilCliPath      = envDefault("NIL_CLI_BIN", "../polystore_cli/target/release/polystore_cli")
-	trustedSetup    = envDefault("NIL_TRUSTED_SETUP", "../polystorechain/trusted_setup.txt")
-	polystorechaindBin    = envDefault("NILCHAIND_BIN", "polystorechaind")
-	chainID         = envDefault("NIL_CHAIN_ID", "test-1")
-	nodeAddr        = envDefault("NIL_NODE", "tcp://127.0.0.1:26657")
-	homeDir         = envDefault("NIL_HOME", "../_artifacts/polystorechain_data")
-	gasPrices       = envDefault("NIL_GAS_PRICES", "0.001aatom")
-	defaultDuration = envDefault("NIL_DEFAULT_DEAL_DURATION_SECONDS", envDefault("NIL_DEFAULT_DURATION_BLOCKS", "1000"))
-	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
-	faucetBase      = envDefault("NIL_FAUCET_BASE", "http://localhost:8081")
-	cmdTimeout      = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 30)) * time.Second
+	uploadDir       = envDefault("POLYSTORE_UPLOAD_DIR", "uploads")
+	sessionDBPath   = envDefault("POLYSTORE_SESSION_DB_PATH", filepath.Join(uploadDir, "sessions.db"))
+	providerBase    = envDefault("POLYSTORE_PROVIDER_BASE", "http://localhost:8080")
+	nilCliPath      = envDefault("POLYSTORE_CLI_BIN", "../polystore_cli/target/release/polystore_cli")
+	trustedSetup    = envDefault("POLYSTORE_TRUSTED_SETUP", "../polystorechain/trusted_setup.txt")
+	polystorechaindBin    = envDefault("POLYSTORECHAIND_BIN", "polystorechaind")
+	chainID         = envDefault("POLYSTORE_CHAIN_ID", "test-1")
+	nodeAddr        = envDefault("POLYSTORE_NODE", "tcp://127.0.0.1:26657")
+	homeDir         = envDefault("POLYSTORE_HOME", "../_artifacts/polystorechain_data")
+	gasPrices       = envDefault("POLYSTORE_GAS_PRICES", "0.001aatom")
+	defaultDuration = envDefault("POLYSTORE_DEFAULT_DEAL_DURATION_SECONDS", envDefault("POLYSTORE_DEFAULT_DURATION_BLOCKS", "1000"))
+	lcdBase         = envDefault("POLYSTORE_LCD_BASE", "http://localhost:1317")
+	faucetBase      = envDefault("POLYSTORE_FAUCET_BASE", "http://localhost:8081")
+	cmdTimeout      = time.Duration(envInt("POLYSTORE_CMD_TIMEOUT_SECONDS", 30)) * time.Second
 	// Sharding (polystore_cli shard) is intentionally CPU/memory heavy; allow a larger default timeout.
-	shardTimeout = time.Duration(envInt("NIL_SHARD_TIMEOUT_SECONDS", 600)) * time.Second
+	shardTimeout = time.Duration(envInt("POLYSTORE_SHARD_TIMEOUT_SECONDS", 600)) * time.Second
 	// End-to-end upload ingest timeout (covers user sharding + witness + MDU #0 + aggregate).
 	// This is enforced per request so clients never see an infinite hang.
-	uploadIngestTimeout = time.Duration(envInt("NIL_GATEWAY_UPLOAD_TIMEOUT_SECONDS", envInt("NIL_UPLOAD_INGEST_TIMEOUT_SECONDS", 1800))) * time.Second
+	uploadIngestTimeout = time.Duration(envInt("POLYSTORE_GATEWAY_UPLOAD_TIMEOUT_SECONDS", envInt("POLYSTORE_UPLOAD_INGEST_TIMEOUT_SECONDS", 1800))) * time.Second
 	// Per-provider artifact upload timeout (Mode 2 metadata + shard uploads).
-	mode2UploadTaskTimeout = time.Duration(envInt("NIL_MODE2_UPLOAD_TASK_TIMEOUT_SECONDS", 60)) * time.Second
+	mode2UploadTaskTimeout = time.Duration(envInt("POLYSTORE_MODE2_UPLOAD_TASK_TIMEOUT_SECONDS", 60)) * time.Second
 	// Default to full KZG/MDU pipeline for correctness; fast shard mode is a local-only optimization.
-	fastShardMode = envDefault("NIL_FAST_SHARD", "0") == "1"
+	fastShardMode = envDefault("POLYSTORE_FAST_SHARD", "0") == "1"
 	// Devnet UX: allow unsigned range fetches (MetaMask-only txs) by default.
 	// When enabled, clients must provide EIP-712 request headers and the gateway
 	// enforces them before serving byte ranges.
-	requireRetrievalReqSig = envDefault("NIL_REQUIRE_RETRIEVAL_REQ_SIG", "0") == "1"
+	requireRetrievalReqSig = envDefault("POLYSTORE_REQUIRE_RETRIEVAL_REQ_SIG", "0") == "1"
 	// Testnet/mainnet posture: require an on-chain OPEN retrieval session for any
 	// endpoint that serves Deal bytes. (No session, no bytes.)
-	requireOnchainSession = envDefault("NIL_REQUIRE_ONCHAIN_SESSION", "1") == "1"
+	requireOnchainSession = envDefault("POLYSTORE_REQUIRE_ONCHAIN_SESSION", "1") == "1"
 	// Dev-only escape hatch: allow legacy gateway download_session fetches without
 	// an on-chain session id. MUST be disabled by default.
-	unsafeAllowLegacyDownloadSession = envDefault("NIL_UNSAFE_ALLOW_LEGACY_DOWNLOAD_SESSION", "0") == "1"
+	unsafeAllowLegacyDownloadSession = envDefault("POLYSTORE_UNSAFE_ALLOW_LEGACY_DOWNLOAD_SESSION", "0") == "1"
 	// Dev-only: allow the gateway to submit on-chain txs on behalf of users.
 	// Wallet-first posture expects this to be disabled by default.
-	txRelayEnabled = envDefault("NIL_ENABLE_TX_RELAY", "0") == "1"
+	txRelayEnabled = envDefault("POLYSTORE_ENABLE_TX_RELAY", "0") == "1"
 	// Optional: auto-fund creators via faucet when relaying EVM-signed intents.
-	autoFaucetEnabled = envDefault("NIL_AUTO_FAUCET_EVM", envDefault("NIL_AUTO_FAUCET", "0")) == "1"
+	autoFaucetEnabled = envDefault("POLYSTORE_AUTO_FAUCET_EVM", envDefault("POLYSTORE_AUTO_FAUCET", "0")) == "1"
 
 	// Optional PolyCE v1 compression layer for uploads (pre-alpha).
 	// When enabled, the gateway may store some files as a POLC header + ZSTD payload
@@ -234,7 +234,7 @@ var (
 )
 
 func configureDefaultUploadDir(routerMode bool, listenAddr string) {
-	if _, ok := os.LookupEnv("NIL_UPLOAD_DIR"); ok {
+	if _, ok := os.LookupEnv("POLYSTORE_UPLOAD_DIR"); ok {
 		return
 	}
 	if routerMode {
@@ -253,7 +253,7 @@ func configureDefaultUploadDir(routerMode bool, listenAddr string) {
 	}
 	uploadDir = filepath.Join("uploads", subdir)
 
-	if _, ok := os.LookupEnv("NIL_SESSION_DB_PATH"); !ok {
+	if _, ok := os.LookupEnv("POLYSTORE_SESSION_DB_PATH"); !ok {
 		sessionDBPath = filepath.Join(uploadDir, "sessions.db")
 	}
 }
@@ -350,7 +350,7 @@ func runCommand(ctx context.Context, name string, args []string, dir string) ([]
 
 func requireTxRelay(w http.ResponseWriter) bool {
 	if !txRelayEnabled {
-		http.Error(w, "tx relay disabled (set NIL_ENABLE_TX_RELAY=1 for dev)", http.StatusForbidden)
+		http.Error(w, "tx relay disabled (set POLYSTORE_ENABLE_TX_RELAY=1 for dev)", http.StatusForbidden)
 		return false
 	}
 	return true
@@ -467,7 +467,7 @@ func fundAddressOnce(addr string) {
 // "polystorechain/trusted_setup.txt". This keeps gateway CLI calls reliable even when
 // the gateway runs from a subdirectory.
 func deriveNilchaindDir() string {
-	if root := os.Getenv("NIL_ROOT_DIR"); root != "" {
+	if root := os.Getenv("POLYSTORE_ROOT_DIR"); root != "" {
 		return root
 	}
 
@@ -662,10 +662,10 @@ func applyDesktopSidecarDefaults() {
 		log.Printf("Desktop sidecar default applied: %s=%s", key, value)
 	}
 
-	applyIfUnset("NIL_P2P_ENABLED", "0")
-	applyIfUnset("NIL_DISABLE_SYSTEM_LIVENESS", "1")
-	applyIfUnset("NIL_LOCAL_IMPORT_ENABLED", "1")
-	applyIfUnset("NIL_LOCAL_IMPORT_ALLOW_ABS", "1")
+	applyIfUnset("POLYSTORE_P2P_ENABLED", "0")
+	applyIfUnset("POLYSTORE_DISABLE_SYSTEM_LIVENESS", "1")
+	applyIfUnset("POLYSTORE_LOCAL_IMPORT_ENABLED", "1")
+	applyIfUnset("POLYSTORE_LOCAL_IMPORT_ALLOW_ABS", "1")
 }
 
 // execNilchaind runs a polystorechaind command and returns its combined output.
@@ -750,7 +750,7 @@ func main() {
 	applyDesktopSidecarDefaults()
 
 	routerMode := isGatewayRouterMode()
-	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
+	listenAddr := envDefault("POLYSTORE_LISTEN_ADDR", ":8080")
 	persona := resolveRuntimePersona(routerMode)
 	if err := validateRuntimePersona(persona, routerMode, listenAddr); err != nil {
 		log.Fatalf("invalid runtime persona configuration: %v", err)
@@ -1450,8 +1450,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 
 			if chainCID == "" {
 				if stripe.mode == 2 {
-					if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
-						return nil, uploadFailure{status: http.StatusBadRequest, message: "mode2 ingest requires canonical mode (disable NIL_FAKE_INGEST/NIL_FAST_INGEST)"}
+					if os.Getenv("POLYSTORE_FAKE_INGEST") == "1" || os.Getenv("POLYSTORE_FAST_INGEST") == "1" {
+						return nil, uploadFailure{status: http.StatusBadRequest, message: "mode2 ingest requires canonical mode (disable POLYSTORE_FAKE_INGEST/POLYSTORE_FAST_INGEST)"}
 					}
 					res, err := mode2IngestAndUploadNewDeal(withUploadJob(ctx, job), ingestPath, dealID, serviceHint, fileRecordPath, fileFlags)
 					if err != nil {
@@ -1468,7 +1468,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					size = res.sizeBytes
 				} else {
 					switch {
-					case os.Getenv("NIL_FAKE_INGEST") == "1":
+					case os.Getenv("POLYSTORE_FAKE_INGEST") == "1":
 						var err2 error
 						cid, size, allocatedLength, err2 = fastShardQuick(ingestPath)
 						if err2 != nil {
@@ -1477,7 +1477,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 						fileSize = size
 						totalMdus = allocatedLength
 						witnessMdus = 1
-					case os.Getenv("NIL_FAST_INGEST") == "1":
+					case os.Getenv("POLYSTORE_FAST_INGEST") == "1":
 						b, manifestRoot, allocLen, err2 := IngestNewDealFast(ctx, ingestPath, maxMdus, fileRecordPath, fileFlags)
 						if err2 != nil {
 							if errors.Is(err2, context.Canceled) || errors.Is(err2, context.DeadlineExceeded) {
@@ -1535,7 +1535,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					fileSize = res.fileSize
 					size = res.sizeBytes
 				} else {
-					if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+					if os.Getenv("POLYSTORE_FAKE_INGEST") == "1" || os.Getenv("POLYSTORE_FAST_INGEST") == "1" {
 						return nil, uploadFailure{status: http.StatusBadRequest, message: "append is only supported in canonical ingest mode"}
 					}
 					b, manifestRoot, allocLen, err := IngestAppendToDeal(ctx, ingestPath, chainCID, maxMdus, fileRecordPath, fileFlags)
@@ -1561,7 +1561,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			switch {
-			case os.Getenv("NIL_FAKE_INGEST") == "1":
+			case os.Getenv("POLYSTORE_FAKE_INGEST") == "1":
 				var err2 error
 				cid, size, allocatedLength, err2 = fastShardQuick(ingestPath)
 				if err2 != nil {
@@ -1570,7 +1570,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				fileSize = size
 				totalMdus = allocatedLength
 				witnessMdus = 1
-			case os.Getenv("NIL_FAST_INGEST") == "1":
+			case os.Getenv("POLYSTORE_FAST_INGEST") == "1":
 				b, manifestRoot, allocLen, err2 := IngestNewDealFast(ctx, ingestPath, maxMdus, fileRecordPath, fileFlags)
 				if err2 != nil {
 					if errors.Is(err2, context.Canceled) || errors.Is(err2, context.DeadlineExceeded) {
@@ -2616,7 +2616,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 				w,
 				http.StatusConflict,
 				"manifest blob missing on disk",
-				"Re-upload or run the gateway in full ingest mode (not NIL_FAST_INGEST)",
+				"Re-upload or run the gateway in full ingest mode (not POLYSTORE_FAST_INGEST)",
 			)
 			return
 		}
@@ -2624,7 +2624,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 	if strings.TrimSpace(req.Provider) != "" {
 		name, err := resolveKeyNameForAddress(r.Context(), req.Provider)
 		if err != nil {
@@ -2849,7 +2849,7 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 
 	providerAddr := cachedProviderAddress(r.Context())
 	if strings.TrimSpace(providerAddr) == "" {
-		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY to a valid local key")
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set POLYSTORE_PROVIDER_ADDRESS or POLYSTORE_PROVIDER_KEY to a valid local key")
 		return
 	}
 
@@ -3525,7 +3525,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 					w,
 					http.StatusInternalServerError,
 					"provider address unavailable",
-					"provider-daemon mode requires NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY",
+					"provider-daemon mode requires POLYSTORE_PROVIDER_ADDRESS or POLYSTORE_PROVIDER_KEY",
 				)
 				return
 			}
@@ -4913,7 +4913,7 @@ func rawOffsetToEncodedBlobIndex(rawOffsetInMdu uint64) (uint32, error) {
 }
 
 func eip712ChainID() *big.Int {
-	// Prefer numeric chain IDs (local devnet uses 31337). If NIL_CHAIN_ID is not
+	// Prefer numeric chain IDs (local devnet uses 31337). If POLYSTORE_CHAIN_ID is not
 	// numeric (e.g. "test-1"), fall back to 31337 to match the web UI default.
 	raw := strings.TrimSpace(chainID)
 	if raw != "" {
@@ -5056,7 +5056,7 @@ func resolveKeyAddress(ctx context.Context, name string) (string, error) {
 // submitRetrievalProof submits a retrieval proof for the given deal and file
 // using the default provider key and epoch.
 func submitRetrievalProof(ctx context.Context, dealID uint64, filePath string) (string, error) {
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 	providerAddr, err := resolveKeyAddress(ctx, providerKeyName)
 	if err != nil {
 		return "", fmt.Errorf("resolveKeyAddress failed: %w", err)
@@ -5277,8 +5277,8 @@ type dealMetaCacheEntry struct {
 
 var (
 	dealMetaCache        sync.Map // map[uint64]dealMetaCacheEntry
-	dealMetaCacheTTL     = time.Duration(envInt("NIL_DEAL_META_CACHE_TTL_MS", 3000)) * time.Millisecond
-	freshnessMemoTTL     = time.Duration(envInt("NIL_MANIFEST_FRESHNESS_TTL_MS", 3000)) * time.Millisecond
+	dealMetaCacheTTL     = time.Duration(envInt("POLYSTORE_DEAL_META_CACHE_TTL_MS", 3000)) * time.Millisecond
+	freshnessMemoTTL     = time.Duration(envInt("POLYSTORE_MANIFEST_FRESHNESS_TTL_MS", 3000)) * time.Millisecond
 	freshnessReasonFresh = "fresh"
 	freshDealMetaGroup   singleflight.Group
 )
@@ -5677,7 +5677,7 @@ func SpSubmitReceipt(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpFile.Close()
 
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 	localProviderAddr := cachedProviderAddress(r.Context())
 	if strings.TrimSpace(localProviderAddr) == "" {
 		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
@@ -5759,7 +5759,7 @@ func SpSubmitReceipts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 	localProviderAddr := cachedProviderAddress(r.Context())
 	if strings.TrimSpace(localProviderAddr) == "" {
 		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
@@ -5988,7 +5988,7 @@ func SpSubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 	localProviderAddr := cachedProviderAddress(r.Context())
 	if strings.TrimSpace(localProviderAddr) == "" {
 		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
@@ -6185,7 +6185,7 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 	localProviderAddr := cachedProviderAddress(r.Context())
 	if strings.TrimSpace(localProviderAddr) == "" {
 		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
@@ -6195,7 +6195,7 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.TrimSpace(localProviderAddr) == "" {
-		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set NIL_PROVIDER_ADDRESS or NIL_PROVIDER_KEY")
+		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set POLYSTORE_PROVIDER_ADDRESS or POLYSTORE_PROVIDER_KEY")
 		return
 	}
 

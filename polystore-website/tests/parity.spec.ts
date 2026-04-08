@@ -6,7 +6,7 @@ import fs from 'fs';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { bech32 } from 'bech32';
 
-const NIL_CLI_PATH = path.resolve('..', 'polystore_cli/target/release/polystore_cli');
+const POLYSTORE_CLI_PATH = path.resolve('..', 'polystore_cli/target/release/polystore_cli');
 const TEST_FILE_SIZE = 1024 * 1024; // 1MB
 
 function ethToNil(ethAddress: string): string {
@@ -30,8 +30,8 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
   let referenceMduRoot = '';
   try {
     // Check if polystore_cli exists
-    if (!fs.existsSync(NIL_CLI_PATH)) {
-        console.warn(`polystore_cli not found at ${NIL_CLI_PATH}. Skipping parity check logic that requires CLI.`);
+    if (!fs.existsSync(POLYSTORE_CLI_PATH)) {
+        console.warn(`polystore_cli not found at ${POLYSTORE_CLI_PATH}. Skipping parity check logic that requires CLI.`);
         // Fail the test if CLI is missing, as requested
         test.fail(true, "polystore_cli binary missing");
         return;
@@ -42,7 +42,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
     console.log('File Path:', path.resolve(testFilePath));
     
     // Run CLI
-    execSync(`${NIL_CLI_PATH} shard ${path.resolve(testFilePath)} --out ${path.resolve(outJsonPath)}`, {
+    execSync(`${POLYSTORE_CLI_PATH} shard ${path.resolve(testFilePath)} --out ${path.resolve(outJsonPath)}`, {
         encoding: 'utf-8',
         env: { ...process.env, CKZG_TRUSTED_SETUP: trustedSetupPath }
     });
