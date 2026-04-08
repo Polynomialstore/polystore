@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import { appConfig } from '../config'
 import { encodeFunctionData, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../lib/polystorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { resolveActiveEvmAddress } from '../lib/walletAddress'
 import { classifyWalletError } from '../lib/walletErrors'
@@ -39,7 +39,7 @@ export function useUpdateDealContent() {
       if (!Number.isFinite(witnessMdus) || witnessMdus < 0) throw new Error('witnessMdus must be >= 0')
       if (totalMdus <= 1 + witnessMdus) throw new Error('totalMdus must be > 1 + witnessMdus')
       const data = encodeFunctionData({
-        abi: NILSTORE_PRECOMPILE_ABI,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealContent',
         args: [
           BigInt(input.dealId),
@@ -53,7 +53,7 @@ export function useUpdateDealContent() {
 
       const txHash = await walletClient.sendTransaction({
         account: evmAddress as Hex,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data,
         gas: 3_000_000n,
       })

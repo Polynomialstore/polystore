@@ -10,7 +10,7 @@ import { ArrowUpRight, Loader2, PlugZap } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { appConfig } from '../config'
 import { nilChain } from '../lib/web3Config'
-import { nilBridgeAbi } from '../abi/nilBridge'
+import { polystoreBridgeAbi } from '../abi/polystoreBridge'
 
 function randomBytes32(): `0x${string}` {
   const buf = new Uint8Array(32)
@@ -71,7 +71,7 @@ export function BridgeActions() {
     client
       .readContract({
         address: bridgeAddress,
-        abi: nilBridgeAbi,
+        abi: polystoreBridgeAbi,
         functionName: 'latestBlockHeight',
       })
       .then((h) => {
@@ -116,7 +116,7 @@ export function BridgeActions() {
       const root = normalizeBytes32(stateRoot)
       const tx = await writeContractAsync({
         address: bridgeAddress,
-        abi: nilBridgeAbi,
+        abi: polystoreBridgeAbi,
         functionName: 'updateStateRoot',
         args: [height, root],
         chainId: nilChain.id,

@@ -6,10 +6,10 @@ set -euo pipefail
 #
 # Examples:
 #   # Upload a directory into deal #0 (bucket deal-0)
-#   ./scripts/nilstore_s3_sync.sh upload 0 ./mydir
+#   ./scripts/polystore_s3_sync.sh upload 0 ./mydir
 #
 #   # Download entire deal #0 to ./out
-#   ./scripts/nilstore_s3_sync.sh download 0 ./out
+#   ./scripts/polystore_s3_sync.sh download 0 ./out
 #
 
 MODE="${1:-}"

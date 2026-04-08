@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { encodeAbiParameters, encodeFunctionResult, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const routePath = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
@@ -311,7 +311,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
     if (method === 'eth_call') {
       computeSessionCallCount += 1
       const computeResult = encodeFunctionResult({
-        abi: NILSTORE_PRECOMPILE_ABI,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'computeRetrievalSessionIds',
         result: [['nil1provider'], [sessionIds[Math.min(computeSessionCallCount - 1, sessionIds.length - 1)]]],
       })
@@ -325,10 +325,10 @@ test('Deal Explorer: missing local index requires provider sync before file view
     if (method === 'eth_getTransactionReceipt') {
       const [hash] = payload?.params ?? []
 
-      const openedTopic0 = getEventSelector(getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
+      const openedTopic0 = getEventSelector(getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
       const dealIdTopic = padHex(toHex(BigInt(dealId)), { size: 32 })
       const ownerTopic = padHex(account.address as Hex, { size: 32 })
-      const event = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
+      const event = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
       const openedData = encodeAbiParameters(
         event.inputs.filter((i: any) => !i.indexed),
             ['nil1provider', sessionIds[0]],
@@ -393,7 +393,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
           case 'eth_call':
             computeCount += 1
             return encodeFunctionResult({
-              abi: NILSTORE_PRECOMPILE_ABI,
+              abi: POLYSTORE_PRECOMPILE_ABI,
               functionName: 'computeRetrievalSessionIds',
               result: [['nil1provider'], [sessionIds[Math.min(computeCount - 1, sessionIds.length - 1)]]],
             })

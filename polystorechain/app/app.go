@@ -71,7 +71,7 @@ import (
 	"github.com/spf13/cast"
 
 	"polystorechain/docs"
-	nilstoreprecompile "polystorechain/precompiles/nilstore"
+	polystoreprecompile "polystorechain/precompiles/polystore"
 	polystorechainmodulekeeper "polystorechain/x/polystorechain/keeper"
 )
 
@@ -329,7 +329,7 @@ func New(
 			Decimals:      uint32(evmtypes.DefaultEVMDecimals),
 		},
 	)
-	app.EVMKeeper.RegisterStaticPrecompile(nilstoreprecompile.Address, nilstoreprecompile.MustNew(&app.NilchainKeeper))
+	app.EVMKeeper.RegisterStaticPrecompile(polystoreprecompile.Address, polystoreprecompile.MustNew(&app.NilchainKeeper))
 
 	addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
 	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)

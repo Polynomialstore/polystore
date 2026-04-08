@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import type { Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../lib/polystorePrecompile'
 import { appConfig } from '../config'
 import { classifyNilfsCommitError } from '../lib/nilfsCommitError'
 
@@ -46,8 +46,8 @@ export function useDirectCommit() {
 
     try {
       const txHash = await writeContractAsync({
-        address: appConfig.nilstorePrecompile as Hex,
-        abi: NILSTORE_PRECOMPILE_ABI,
+        address: appConfig.polystorePrecompile as Hex,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealContent',
         args: [
           BigInt(dealId),

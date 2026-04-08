@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { encodeAbiParameters, encodeFunctionResult, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
@@ -32,7 +32,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
   const txConfirm = (`0x${'33'.repeat(32)}` as Hex)
   const computeResult = encodeFunctionResult({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'computeRetrievalSessionIds',
     result: [['nil1provider'], [sessionId]],
   })
@@ -247,7 +247,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     }
     if (method === 'eth_getTransactionReceipt') {
       const hash = String(params?.[0] || '').toLowerCase()
-      const openedEvent = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
+      const openedEvent = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
       const openedTopic0 = getEventSelector(openedEvent)
       const dealIdTopic = toHex(BigInt(dealId), { size: 32 })
       const ownerTopic = padHex(account.address, { size: 32 })

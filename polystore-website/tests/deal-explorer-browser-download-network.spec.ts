@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { encodeAbiParameters, encodeFunctionResult, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
@@ -34,7 +34,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
   const txConfirm = (`0x${'33'.repeat(32)}` as Hex)
   const computeResult = encodeFunctionResult({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'computeRetrievalSessionIds',
     result: [['nil1provider'], [sessionId]],
   })
@@ -322,10 +322,10 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     if (method === 'eth_getTransactionReceipt') {
       const [hash] = params ?? []
 
-      const openedTopic0 = getEventSelector(getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
+      const openedTopic0 = getEventSelector(getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
       const dealIdTopic = padHex(toHex(BigInt(dealId)), { size: 32 })
       const ownerTopic = padHex(account.address as Hex, { size: 32 })
-      const event = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
+      const event = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
       const openedData = encodeAbiParameters(
         event.inputs.filter((i: any) => !i.indexed),
         ['nil1provider', sessionId],

@@ -287,7 +287,7 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
     `CF_TUNNEL_NAME=${shellQuote(tunnelName)} \\`,
     `CF_TUNNEL_HOSTNAME=${shellQuote(hostname)} \\`,
     `CF_TUNNEL_SERVICE_URL=${shellQuote(localServiceUrl)} \\`,
-    "bash <<'NILSTORE_CF_TUNNEL'",
+    "bash <<'POLYSTORE_CF_TUNNEL'",
     'set -euo pipefail',
     '',
     'if ! command -v cloudflared >/dev/null 2>&1; then',
@@ -322,7 +322,7 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
     '',
     'echo "Tunnel config written to $HOME/.cloudflared/config.yml"',
     'cloudflared --config "$HOME/.cloudflared/config.yml" tunnel run "$CF_TUNNEL_NAME"',
-    'NILSTORE_CF_TUNNEL',
+    'POLYSTORE_CF_TUNNEL',
   ].join('\n')
 }
 

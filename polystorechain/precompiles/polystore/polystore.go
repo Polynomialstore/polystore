@@ -1,4 +1,4 @@
-package nilstore
+package polystore
 
 import (
 	"encoding/hex"
@@ -24,7 +24,7 @@ const AddressHex = "0x0000000000000000000000000000000000000900"
 
 var Address = common.HexToAddress(AddressHex)
 
-const nilstoreABIJSON = `[
+const polystoreABIJSON = `[
   {
     "type":"function",
     "name":"createDeal",
@@ -276,7 +276,7 @@ type Precompile struct {
 }
 
 func New(keeper *nilkeeper.Keeper) (*Precompile, error) {
-	parsed, err := abi.JSON(strings.NewReader(nilstoreABIJSON))
+	parsed, err := abi.JSON(strings.NewReader(polystoreABIJSON))
 	if err != nil {
 		return nil, err
 	}
@@ -302,28 +302,28 @@ func (p *Precompile) RequiredGas(input []byte) uint64 {
 
 func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]byte, error) {
 	if readonly {
-		return nil, errors.New("nilstore precompile: readonly calls are not supported")
+		return nil, errors.New("polystore precompile: readonly calls are not supported")
 	}
 	if evm == nil || contract == nil {
-		return nil, errors.New("nilstore precompile: missing evm/contract")
+		return nil, errors.New("polystore precompile: missing evm/contract")
 	}
 	if p.keeper == nil {
-		return nil, errors.New("nilstore precompile: missing keeper")
+		return nil, errors.New("polystore precompile: missing keeper")
 	}
 
 	stateGetter, ok := evm.StateDB.(sdkContextGetter)
 	if !ok {
-		return nil, errors.New("nilstore precompile: statedb does not expose sdk context")
+		return nil, errors.New("polystore precompile: statedb does not expose sdk context")
 	}
 	ctx := stateGetter.GetContext()
 
 	input := contract.Input
 	if len(input) < 4 {
-		return nil, errors.New("nilstore precompile: missing selector")
+		return nil, errors.New("polystore precompile: missing selector")
 	}
 	method, err := p.abi.MethodById(input[:4])
 	if err != nil {
-		return nil, fmt.Errorf("nilstore precompile: unknown selector: %w", err)
+		return nil, fmt.Errorf("polystore precompile: unknown selector: %w", err)
 	}
 
 	switch method.Name {
@@ -362,7 +362,7 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 	case "confirmRetrievalSessions":
 		return p.runConfirmRetrievalSessions(ctx, evm, contract, method, input[4:])
 	default:
-		return nil, fmt.Errorf("nilstore precompile: unsupported method %q", method.Name)
+		return nil, fmt.Errorf("polystore precompile: unsupported method %q", method.Name)
 	}
 }
 

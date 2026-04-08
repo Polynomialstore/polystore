@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
@@ -138,7 +138,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   })
 
   // Mock EVM RPC receipts for createDeal/updateDealContent (waitForTransactionReceipt).
-  const dealCreatedEvent = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'DealCreated' }) as any
+  const dealCreatedEvent = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'DealCreated' }) as any
   const dealCreatedTopic0 = getEventSelector(dealCreatedEvent)
   const dealIdTopic = toHex(1n, { size: 32 })
   const ownerTopic = padHex(account.address, { size: 32 })

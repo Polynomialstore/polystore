@@ -27,7 +27,7 @@ NilStore exposes an EVM precompile at `0x000000000000000000000000000000000000090
 - `openRetrievalSessions(sessions[])` (`eth_sendTransaction`)
 - `confirmRetrievalSessions(sessionIds[])` (`eth_sendTransaction`)
 
-TypeScript ABI + helper encoders/decoders live at `src/lib/nilstorePrecompile.ts`.
+TypeScript ABI + helper encoders/decoders live at `src/lib/polystorePrecompile.ts`.
 
 ## Development
 

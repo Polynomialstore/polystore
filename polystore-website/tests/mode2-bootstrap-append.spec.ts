@@ -5,7 +5,7 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { decodeFunctionData, encodeFunctionResult, type Hex } from 'viem'
 
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 
@@ -295,7 +295,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
       try {
         const callData = String(payload?.params?.[0]?.data || '')
         const decoded = decodeFunctionData({
-          abi: NILSTORE_PRECOMPILE_ABI,
+          abi: POLYSTORE_PRECOMPILE_ABI,
           data: callData as Hex,
         })
         if (decoded.functionName === 'computeRetrievalSessionIds') {
@@ -311,7 +311,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
         return (`0x${byte.repeat(32)}` as Hex)
       })
       const computeResult = encodeFunctionResult({
-        abi: NILSTORE_PRECOMPILE_ABI,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'computeRetrievalSessionIds',
         result: [Array.from({ length: requestCount }, () => 'nil1providera'), computedSessionIds],
       })

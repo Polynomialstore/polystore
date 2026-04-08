@@ -1,4 +1,4 @@
-# NILSTORE DESIGN MANIFESTO: THE CYBER-INDUSTRIAL COMMAND CENTER
+# POLYSTORE DESIGN MANIFESTO: THE CYBER-INDUSTRIAL COMMAND CENTER
 
 ## I. THE CORE VISION
 NilStore is not a "cloud" service; it is a **Permanent Storage Protocol**. The interface must reject the ephemeral, soft, and "webby" trends of modern SaaS. Instead, it must embody the weight, reliability, and precision of industrial hardware and tactical military equipment.

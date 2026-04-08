@@ -13,7 +13,7 @@ import {
   encodeConfirmRetrievalSessionsData,
   encodeOpenRetrievalSessionsData,
   encodeOpenRetrievalSessionsSponsoredData,
-} from '../lib/nilstorePrecompile'
+} from '../lib/polystorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 import { decodeNilceV1 } from '../lib/nilce'
 import { classifyWalletError } from '../lib/walletErrors'
@@ -492,7 +492,7 @@ export function useFetch() {
       const computeData = encodeComputeRetrievalSessionIdsData(openRequests)
       const computeCall = await publicClient.call({
         account: signerAddress,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data: computeData,
       })
       const computeResult = computeCall.data as Hex
@@ -567,7 +567,7 @@ export function useFetch() {
         const sponsoredTxData = encodeOpenRetrievalSessionsSponsoredData(buildSponsoredOpenRequests(requests))
         const openTxHash = await walletClient.sendTransaction({
           account: signerAddress,
-          to: appConfig.nilstorePrecompile as Hex,
+          to: appConfig.polystorePrecompile as Hex,
           data: isDealOwner ? openTxData : sponsoredTxData,
           gas: 7_000_000n,
         })
@@ -598,7 +598,7 @@ export function useFetch() {
         const computeData = encodeComputeRetrievalSessionIdsData([request])
         const computeCall = await publicClient.call({
           account: signerAddress,
-          to: appConfig.nilstorePrecompile as Hex,
+          to: appConfig.polystorePrecompile as Hex,
           data: computeData,
         })
         const computeResult = computeCall.data as Hex
@@ -876,7 +876,7 @@ export function useFetch() {
         const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
         const confirmTxHash = await walletClient.sendTransaction({
           account: signerAddress,
-          to: appConfig.nilstorePrecompile as Hex,
+          to: appConfig.polystorePrecompile as Hex,
           data: confirmTxData,
           gas: 3_000_000n,
         })

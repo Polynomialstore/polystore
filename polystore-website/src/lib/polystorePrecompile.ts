@@ -1,6 +1,6 @@
 import { decodeFunctionResult, encodeFunctionData, type Abi, type Hex } from 'viem'
 
-export const NILSTORE_PRECOMPILE_ABI = [
+export const POLYSTORE_PRECOMPILE_ABI = [
   {
     type: 'function',
     name: 'createDeal',
@@ -337,7 +337,7 @@ export type ComputeRetrievalSessionIdsResult = {
 
 export function encodeComputeRetrievalSessionIdsData(sessions: readonly RetrievalSessionInput[]): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'computeRetrievalSessionIds',
     args: [sessions],
   })
@@ -345,7 +345,7 @@ export function encodeComputeRetrievalSessionIdsData(sessions: readonly Retrieva
 
 export function decodeComputeRetrievalSessionIdsResult(data: Hex): ComputeRetrievalSessionIdsResult {
   const decoded = decodeFunctionResult({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'computeRetrievalSessionIds',
     data,
   }) as unknown
@@ -363,7 +363,7 @@ export function decodeComputeRetrievalSessionIdsResult(data: Hex): ComputeRetrie
 
 export function encodeOpenRetrievalSessionsData(sessions: readonly RetrievalSessionInput[]): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'openRetrievalSessions',
     args: [sessions],
   })
@@ -371,7 +371,7 @@ export function encodeOpenRetrievalSessionsData(sessions: readonly RetrievalSess
 
 export function encodeOpenRetrievalSessionsSponsoredData(sessions: readonly SponsoredRetrievalSessionInput[]): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'openRetrievalSessionsSponsored',
     args: [sessions],
   })
@@ -379,7 +379,7 @@ export function encodeOpenRetrievalSessionsSponsoredData(sessions: readonly Spon
 
 export function encodeConfirmRetrievalSessionsData(sessionIds: readonly Hex[]): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'confirmRetrievalSessions',
     args: [sessionIds],
   })
@@ -387,7 +387,7 @@ export function encodeConfirmRetrievalSessionsData(sessionIds: readonly Hex[]): 
 
 export function encodeExtendDealData(dealId: bigint, additionalDurationBlocks: bigint): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'extendDeal',
     args: [dealId, additionalDurationBlocks],
   })
@@ -395,7 +395,7 @@ export function encodeExtendDealData(dealId: bigint, additionalDurationBlocks: b
 
 export function encodeRequestProviderLinkData(operator: string): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'requestProviderLink',
     args: [operator],
   })
@@ -403,7 +403,7 @@ export function encodeRequestProviderLinkData(operator: string): Hex {
 
 export function encodeApproveProviderLinkData(provider: string): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'approveProviderLink',
     args: [provider],
   })
@@ -411,7 +411,7 @@ export function encodeApproveProviderLinkData(provider: string): Hex {
 
 export function encodeCancelProviderLinkData(): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'cancelProviderLink',
     args: [],
   })
@@ -419,7 +419,7 @@ export function encodeCancelProviderLinkData(): Hex {
 
 export function encodeUnpairProviderData(provider: string): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'unpairProvider',
     args: [provider],
   })
@@ -432,7 +432,7 @@ export function encodeUpdateDealRetrievalPolicyData(
   voucherSigner: Hex,
 ): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'updateDealRetrievalPolicy',
     args: [dealId, mode, allowlistRoot, voucherSigner],
   })
@@ -440,7 +440,7 @@ export function encodeUpdateDealRetrievalPolicyData(
 
 export function encodeCancelRetrievalSessionData(sessionId: Hex): Hex {
   return encodeFunctionData({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'cancelRetrievalSession',
     args: [sessionId],
   })

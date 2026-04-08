@@ -57,7 +57,7 @@ import {
   encodeComputeRetrievalSessionIdsData,
   encodeConfirmRetrievalSessionsData,
   encodeOpenRetrievalSessionsData,
-} from '../lib/nilstorePrecompile'
+} from '../lib/polystorePrecompile'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -1307,7 +1307,7 @@ export function DealDetail({
       }))
       const computeCall = await publicClient.call({
         account: signer,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data: encodeComputeRetrievalSessionIdsData(requests),
       })
       const computeData = computeCall.data as Hex
@@ -1318,7 +1318,7 @@ export function DealDetail({
       }
       const openTxHash = await walletClient.sendTransaction({
         account: signer,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data: encodeOpenRetrievalSessionsData(requests),
         value: 0n,
         chain: walletClient.chain ?? undefined,
@@ -1340,7 +1340,7 @@ export function DealDetail({
       }
       const txHash = await walletClient.sendTransaction({
         account: signer,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data: encodeConfirmRetrievalSessionsData(sessionIds),
         value: 0n,
         chain: walletClient.chain ?? undefined,

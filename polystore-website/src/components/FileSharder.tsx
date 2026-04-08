@@ -58,7 +58,7 @@ import {
   encodeComputeRetrievalSessionIdsData,
   encodeConfirmRetrievalSessionsData,
   encodeOpenRetrievalSessionsData,
-} from '../lib/nilstorePrecompile';
+} from '../lib/polystorePrecompile';
 
 interface ShardItem {
   id: number;
@@ -732,7 +732,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       }))
       const computeCall = await publicClient.call({
         account: signer,
-        to: appConfig.nilstorePrecompile as `0x${string}`,
+        to: appConfig.polystorePrecompile as `0x${string}`,
         data: encodeComputeRetrievalSessionIdsData(requests),
       })
       const computeData = computeCall.data as `0x${string}`
@@ -741,7 +741,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       if (sessionIds.length !== requests.length) throw new Error('computeRetrievalSessionIds returned unexpected session count')
       const openTxHash = await walletClient.sendTransaction({
         account: signer,
-        to: appConfig.nilstorePrecompile as `0x${string}`,
+        to: appConfig.polystorePrecompile as `0x${string}`,
         data: encodeOpenRetrievalSessionsData(requests),
         value: 0n,
         chain: walletClient.chain ?? undefined,
@@ -761,7 +761,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       if (!signer || !String(signer).startsWith('0x')) throw new Error('Connect wallet to confirm retrieval sessions')
       const txHash = await walletClient.sendTransaction({
         account: signer,
-        to: appConfig.nilstorePrecompile as `0x${string}`,
+        to: appConfig.polystorePrecompile as `0x${string}`,
         data: encodeConfirmRetrievalSessionsData(sessionIds),
         value: 0n,
         chain: walletClient.chain ?? undefined,

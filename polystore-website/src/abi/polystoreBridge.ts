@@ -1,4 +1,4 @@
-export const nilBridgeAbi = [
+export const polystoreBridgeAbi = [
   {
     type: 'function',
     name: 'latestBlockHeight',
