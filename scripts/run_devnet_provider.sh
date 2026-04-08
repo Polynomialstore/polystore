@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# provider-daemon launcher for the shared NilStore testnet/devnet.
+# provider-daemon launcher for the shared PolyStore testnet/devnet.
 #
 # Usage:
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh init
@@ -44,7 +44,7 @@ Examples:
 Notes:
   - pair/link/register submit on-chain tx and require provider aatom gas balance.
   - By default, pair/link/register will auto-request faucet funds when NIL_PROVIDER_AUTO_FAUCET=1
-    and NIL_FAUCET_URL (or NILSTORE_TESTNET_FAUCET_URL) is configured.
+    and NIL_FAUCET_URL (or POLYSTORE_TESTNET_FAUCET_URL) is configured.
   - start/register/bootstrap will not auto-create provider keys; run init or pair first.
   - EXPECTED_PROVIDER_ADDRESS (or NIL_EXPECTED_PROVIDER_ADDRESS) can enforce identity safety.
 USAGE
@@ -64,13 +64,13 @@ if [ -z "$PROVIDER_KEY" ]; then
 fi
 
 OPERATOR_ADDRESS_RAW="${OPERATOR_ADDRESS:-${NIL_OPERATOR_ADDRESS:-}}"
-NETWORK_PROFILE="${NILSTORE_NETWORK_PROFILE:-nilstore-public-testnet}"
-CHAIN_ID="${CHAIN_ID:-${NIL_CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-20260211}}}"
-LCD_BASE="${HUB_LCD:-${NIL_LCD_BASE:-${NILSTORE_TESTNET_LCD_BASE:-https://lcd.nilstore.org}}}"
-NODE_ADDR="${HUB_NODE:-${NIL_NODE:-${NILSTORE_TESTNET_NODE:-https://rpc.nilstore.org}}}"
-GAS_PRICES="${NIL_GAS_PRICES:-${NILSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
-FAUCET_URL="${NIL_FAUCET_URL:-${NILSTORE_TESTNET_FAUCET_URL:-}}"
-FAUCET_AUTH_TOKEN="${NIL_FAUCET_AUTH_TOKEN:-${NILSTORE_TESTNET_FAUCET_AUTH_TOKEN:-}}"
+NETWORK_PROFILE="${POLYSTORE_NETWORK_PROFILE:-polystore-public-testnet}"
+CHAIN_ID="${CHAIN_ID:-${NIL_CHAIN_ID:-${POLYSTORE_TESTNET_CHAIN_ID:-20260211}}}"
+LCD_BASE="${HUB_LCD:-${NIL_LCD_BASE:-${POLYSTORE_TESTNET_LCD_BASE:-https://lcd.polynomialstore.com}}}"
+NODE_ADDR="${HUB_NODE:-${NIL_NODE:-${POLYSTORE_TESTNET_NODE:-https://rpc.polynomialstore.com}}}"
+GAS_PRICES="${NIL_GAS_PRICES:-${POLYSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
+FAUCET_URL="${NIL_FAUCET_URL:-${POLYSTORE_TESTNET_FAUCET_URL:-}}"
+FAUCET_AUTH_TOKEN="${NIL_FAUCET_AUTH_TOKEN:-${POLYSTORE_TESTNET_FAUCET_AUTH_TOKEN:-}}"
 PROVIDER_AUTO_FAUCET="${NIL_PROVIDER_AUTO_FAUCET:-1}"
 PROVIDER_FUNDING_WAIT_SECS="${NIL_PROVIDER_FUNDING_WAIT_SECS:-45}"
 PROVIDER_FUNDING_POLL_SECS="${NIL_PROVIDER_FUNDING_POLL_SECS:-2}"

@@ -171,7 +171,7 @@ printf '%s' "$body"
     HUB_LCD: 'http://stub-lcd.local',
     HUB_NODE: 'http://stub-rpc.local',
     CHAIN_ID: 'nilchain-stub',
-    NILSTORE_TESTNET_ENV_FILE: '/dev/null',
+    POLYSTORE_TESTNET_ENV_FILE: '/dev/null',
   }
 
   const result = spawnSync('./scripts/run_devnet_provider.sh', [opts.command], {

@@ -22,9 +22,9 @@ Options:
   --raw-key-out <path>            Optional path to write raw private key (requires --allow-raw-key-export)
   --destroy-local-key-after-export <0|1>
                                   Unset key material in-process after export (default: 1)
-  --faucet-url <url>              Faucet endpoint (default: https://faucet.nilstore.org/faucet)
+  --faucet-url <url>              Faucet endpoint (default: https://faucet.polynomialstore.com/faucet)
   --faucet-auth-env <name>        Env var for faucet auth token (default: NIL_FAUCET_AUTH_TOKEN)
-  --lcd-base <url>                LCD base for balance polling (default: https://lcd.nilstore.org)
+  --lcd-base <url>                LCD base for balance polling (default: https://lcd.polynomialstore.com)
   --wait-balance-timeout <secs>   Faucet balance wait timeout seconds (default: 120)
   --skip-faucet                   Skip faucet request + balance wait
   --help                          Show this help
@@ -52,9 +52,9 @@ KEYSTORE_PASSWORD_ENV="NIL_BURNER_KEYSTORE_PASSWORD"
 ALLOW_RAW_KEY_EXPORT=0
 RAW_KEY_OUT=""
 DESTROY_LOCAL_KEY_AFTER_EXPORT=1
-FAUCET_URL="${FAUCET_URL:-${NILSTORE_TESTNET_FAUCET_URL:-https://faucet.nilstore.org/faucet}}"
+FAUCET_URL="${FAUCET_URL:-${POLYSTORE_TESTNET_FAUCET_URL:-https://faucet.polynomialstore.com/faucet}}"
 FAUCET_AUTH_ENV="NIL_FAUCET_AUTH_TOKEN"
-LCD_BASE="${LCD_BASE:-${NILSTORE_TESTNET_LCD_BASE:-https://lcd.nilstore.org}}"
+LCD_BASE="${LCD_BASE:-${POLYSTORE_TESTNET_LCD_BASE:-https://lcd.polynomialstore.com}}"
 WAIT_BALANCE_TIMEOUT=120
 FAUCET_RETRY_ATTEMPTS="${FAUCET_RETRY_ATTEMPTS:-6}"
 FAUCET_RETRY_DELAY_SECS="${FAUCET_RETRY_DELAY_SECS:-10}"
@@ -155,16 +155,16 @@ fi
 
 export GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
 
-if [[ -z "${NIL_FAUCET_AUTH_TOKEN:-}" && -n "${NILSTORE_TESTNET_FAUCET_AUTH_TOKEN:-}" ]]; then
-  export NIL_FAUCET_AUTH_TOKEN="$NILSTORE_TESTNET_FAUCET_AUTH_TOKEN"
+if [[ -z "${NIL_FAUCET_AUTH_TOKEN:-}" && -n "${POLYSTORE_TESTNET_FAUCET_AUTH_TOKEN:-}" ]]; then
+  export NIL_FAUCET_AUTH_TOKEN="$POLYSTORE_TESTNET_FAUCET_AUTH_TOKEN"
 fi
-export CHAIN_ID="${CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-20260211}}"
-export EVM_CHAIN_ID="${EVM_CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-20260211}}"
-export NIL_NODE="${NIL_NODE:-${NILSTORE_TESTNET_NODE:-https://rpc.nilstore.org}}"
+export CHAIN_ID="${CHAIN_ID:-${POLYSTORE_TESTNET_CHAIN_ID:-20260211}}"
+export EVM_CHAIN_ID="${EVM_CHAIN_ID:-${POLYSTORE_TESTNET_CHAIN_ID:-20260211}}"
+export NIL_NODE="${NIL_NODE:-${POLYSTORE_TESTNET_NODE:-https://rpc.polynomialstore.com}}"
 export LCD_BASE
-export NIL_GAS_PRICES="${NIL_GAS_PRICES:-${NILSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
-export NIL_TX_SENDER_KEY="${NIL_TX_SENDER_KEY:-${NILSTORE_TESTNET_TX_SENDER_KEY:-faucet}}"
-export NIL_TX_SENDER_MNEMONIC="${NIL_TX_SENDER_MNEMONIC:-${NILSTORE_TESTNET_TX_SENDER_MNEMONIC:-}}"
+export NIL_GAS_PRICES="${NIL_GAS_PRICES:-${POLYSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
+export NIL_TX_SENDER_KEY="${NIL_TX_SENDER_KEY:-${POLYSTORE_TESTNET_TX_SENDER_KEY:-faucet}}"
+export NIL_TX_SENDER_MNEMONIC="${NIL_TX_SENDER_MNEMONIC:-${POLYSTORE_TESTNET_TX_SENDER_MNEMONIC:-}}"
 export NIL_TX_SUBMIT_MODE="${NIL_TX_SUBMIT_MODE:-direct}"
 
 if ! curl -fsS "${GATEWAY_BASE}/health" >/dev/null 2>&1; then
