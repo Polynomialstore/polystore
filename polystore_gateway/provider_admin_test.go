@@ -37,9 +37,9 @@ func providerAdminTestKey(t *testing.T) *ecdsa.PrivateKey {
 func providerAdminOperatorNilAddress(t *testing.T) string {
 	t.Helper()
 	key := providerAdminTestKey(t)
-	addr, err := evmHexToNilAddress(gethCrypto.PubkeyToAddress(key.PublicKey).Hex())
+	addr, err := evmHexToPolystoreAddress(gethCrypto.PubkeyToAddress(key.PublicKey).Hex())
 	if err != nil {
-		t.Fatalf("evmHexToNilAddress: %v", err)
+		t.Fatalf("evmHexToPolystoreAddress: %v", err)
 	}
 	return addr
 }

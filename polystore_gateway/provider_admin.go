@@ -246,9 +246,9 @@ func verifyProviderAdminRequest(ctx context.Context, req *providerAdminRequest, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to recover operator signer: %w", err)
 	}
-	operatorAddr, err := evmHexToNilAddress(evmAddr.Hex())
+	operatorAddr, err := evmHexToPolystoreAddress(evmAddr.Hex())
 	if err != nil {
-		return nil, fmt.Errorf("failed to map operator signer to nil address: %w", err)
+		return nil, fmt.Errorf("failed to map operator signer to PolyStore address: %w", err)
 	}
 
 	pairing, pairingStatus, pairingErr := fetchProviderPairingFromLCD(ctx, localProviderAddr)

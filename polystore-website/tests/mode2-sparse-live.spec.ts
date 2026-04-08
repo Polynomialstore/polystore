@@ -8,10 +8,10 @@ const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
 async function ensureWalletConnected(page: Page): Promise<void> {
   const walletAddressSelector = '[data-testid="wallet-address"], [data-testid="wallet-address-full"]'
   const walletAddress = page.locator(walletAddressSelector).first()
-  const cosmosIdentity = page.getByTestId('cosmos-identity')
+  const polystoreIdentity = page.getByTestId('polystore-identity')
   const connectBtn = page.getByTestId('connect-wallet').first()
 
-  await page.waitForSelector(`${walletAddressSelector}, [data-testid="cosmos-identity"], [data-testid="connect-wallet"]`, {
+  await page.waitForSelector(`${walletAddressSelector}, [data-testid="polystore-identity"], [data-testid="connect-wallet"]`, {
     timeout: 60_000,
     state: 'attached',
   })
@@ -20,8 +20,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const walletVisible = await walletAddress.isVisible().catch(() => false)
     if (walletVisible) return true
 
-    if (await cosmosIdentity.isVisible().catch(() => false)) {
-      const raw = ((await cosmosIdentity.textContent().catch(() => '')) || '').trim()
+    if (await polystoreIdentity.isVisible().catch(() => false)) {
+      const raw = ((await polystoreIdentity.textContent().catch(() => '')) || '').trim()
       if (raw && raw !== '—' && !/^not\s+connected$/i.test(raw)) return true
     }
     return false
@@ -49,7 +49,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 }
 
 async function ensureWalletFunded(page: Page, timeout = 120_000): Promise<void> {
-  const stakeBalance = page.getByTestId('cosmos-stake-balance')
+  const stakeBalance = page.getByTestId('polystore-stake-balance')
   const current = ((await stakeBalance.textContent().catch(() => '')) || '').trim()
   if (current && !/^(?:—|0 stake)$/.test(current)) return
 

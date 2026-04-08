@@ -33,7 +33,7 @@ sudo systemctl enable --now polystore-gateway-router
 sudo systemctl enable --now polystore-faucet
 ```
 
-### Nilchaind redeploy workflow
+### Polystorechaind Redeploy Workflow
 
 For recurring chain binary updates (build -> backup/install -> restart -> verify), use:
 

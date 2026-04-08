@@ -6,7 +6,7 @@ import { type Hex } from 'viem'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -20,11 +20,11 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   // We need distinct transaction hashes for commit content
   const txCommit = (`0x${'44'.repeat(32)}` as Hex)
 
-  console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
+  console.log(`Using random E2E wallet: ${account.address} -> ${polystoreAddress}`)
 
   let manifestUploadCalls = 0
   let dealCid = ''
@@ -157,7 +157,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
     const deal = {
       id: '1',
-      owner: nilAddress,
+      owner: polystoreAddress,
       cid: dealCid,
       size: '0',
       escrow_balance: '1000000',
@@ -360,16 +360,16 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   await page.reload({ waitUntil: 'networkidle' })
 
-  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]', {
+  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="polystore-identity"]', {
     timeout: 60_000,
     state: 'attached',
   })
 
   const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-  const cosmosIdentity = page.getByTestId('cosmos-identity')
-  if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
+  const polystoreIdentity = page.getByTestId('polystore-identity')
+  if (!(await walletAddress.isVisible().catch(() => false)) && !(await polystoreIdentity.isVisible().catch(() => false))) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
-    await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
+    await expect(page.locator('[data-testid="wallet-address"], [data-testid="polystore-identity"]')).toBeVisible({ timeout: 60_000 })
   }
 
   // Regression: after commit, Deal Explorer should show the PolyFS file list (from local OPFS fallback).

@@ -128,11 +128,11 @@ func testDealOwner(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("HexToECDSA failed: %v", err)
 	}
-	nilAddr, err := evmHexToNilAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
+	polystoreAddr, err := evmHexToPolystoreAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
 	if err != nil {
-		t.Fatalf("evmHexToNilAddress failed: %v", err)
+		t.Fatalf("evmHexToPolystoreAddress failed: %v", err)
 	}
-	return nilAddr
+	return polystoreAddr
 }
 
 func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, rangeStart uint64, rangeLen uint64, nonce uint64, expiresAt uint64) string {

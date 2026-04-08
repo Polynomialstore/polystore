@@ -219,7 +219,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 ### 4.3 `useUpload` (`src/hooks/useUpload.ts`)
 *   **Purpose:** Handles thin-client file upload via the transport router (gateway or direct SP).
 *   **Logic:**
-    1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
+    1.  Converts EVM address to the current PolyStore Chain bech32 format if needed using `ethToPolystoreAddress`.
     2.  Constructs `FormData` with `file`, `owner`, and optional controls (`deal_id`, `max_user_mdus`, `file_path`).
     3.  Calls `transport.uploadFile(...)` which selects `gatewayBase` or `spBase` based on routing preference and availability.
 *   **Returns:** `{ manifestRoot, sizeBytes, fileSizeBytes, allocatedLength?, filename }`.
@@ -262,7 +262,7 @@ The central hub for deal management.
     *   `activeTab`: 'alloc' (Allocation), 'content' (Commitment), 'mdu' (Thick client).
     *   `deals`: List of user's deals (fetched from LCD).
     *   `providers`: Active SP list.
-    *   `nilAddress`: Derived Cosmos address from connected EVM wallet.
+    *   `polystoreAddress`: Derived PolyStore Chain address from the connected EVM wallet.
 *   **Key Interactions:**
     *   **Allocation:** Form -> `useCreateDeal` (Mode 1 or Mode 2 with RS selector).
     *   **Commitment (Content tab):** File Input -> `useUpload` -> `useUpdateDealContent`.
@@ -362,7 +362,7 @@ The central hub for deal management.
 ## 7. Utilities & Libraries
 
 ### 7.1 Address (`src/lib/address.ts`)
-*   `ethToNil(ethAddress: string)`: Converts 0x Ethereum addresses to `nil1...` Bech32 format.
+*   `ethToPolystoreAddress(ethAddress: string)`: Converts 0x Ethereum addresses to the current PolyStore Chain bech32 format (`nil1...` today).
 
 ### 7.2 Status (`src/lib/status.ts`)
 *   `fetchStatus(chainId)`: Aggregates health checks from LCD, EVM RPC, and Faucet.

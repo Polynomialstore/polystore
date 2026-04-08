@@ -11,7 +11,7 @@ const largeUploadTimeoutMs = uploadSizeBytes > 32 * 1024 * 1024 ? 900_000 : 120_
 const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
 const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -24,7 +24,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const mduUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string }> = []
   const manifestUploads: Array<{ bodyLen: number; fullSize: number | null }> = []
@@ -174,7 +174,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
 
     const deal = {
       id: '1',
-      owner: nilAddress,
+      owner: polystoreAddress,
       cid: '',
       size: '0',
       escrow_balance: '1000000',

@@ -187,7 +187,7 @@ async function ensureWasmReady(): Promise<void> {
 
 interface DealDetailProps {
   deal: LcdDeal
-  nilAddress: string
+  polystoreAddress: string
   onFileActivity?: (activity: FileActivity) => void
   topPanel?: ReactNode
   uploadWorkflowActive?: boolean
@@ -973,7 +973,7 @@ function FileRow({
 
 export function DealDetail({
   deal,
-  nilAddress,
+  polystoreAddress,
   onFileActivity,
   topPanel,
   uploadWorkflowActive = false,
@@ -983,7 +983,7 @@ export function DealDetail({
   const serviceHint = parseServiceHint(deal?.service_hint)
   const dealOwner = String(deal.owner || '').trim()
   const fallbackManifestRoot = normalizeManifestRoot(String(deal.cid || ''))
-  const fallbackOwner = dealOwner || String(nilAddress || '').trim()
+  const fallbackOwner = dealOwner || String(polystoreAddress || '').trim()
   const [authoritativeManifestRoot, setAuthoritativeManifestRoot] = useState<string>(fallbackManifestRoot)
   const [authoritativeOwner, setAuthoritativeOwner] = useState<string>(fallbackOwner)
   const [authoritativeDealLoaded, setAuthoritativeDealLoaded] = useState(false)
@@ -1219,7 +1219,7 @@ export function DealDetail({
   const dealProviders = useMemo(() => deal.providers || [], [deal.providers])
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
-  const isDealOwner = Boolean(nilAddress && dealOwner === String(nilAddress).trim())
+  const isDealOwner = Boolean(polystoreAddress && dealOwner === String(polystoreAddress).trim())
   const [routeOverride, setRouteOverride] = useState<string>('')
   const [, setRouteModeOverride] = useState<string>('')
   const [cacheSourceOverride, setCacheSourceOverride] = useState<string>('')
@@ -3025,7 +3025,7 @@ export function DealDetail({
                           disabled={!selectedMduRecord || !explorerManifestRoot || loadingMduKzg}
                           onClick={() => {
                             if (!selectedMduRecord || !explorerManifestRoot) return
-                            void fetchMduKzg(explorerManifestRoot, selectedMduRecord.mdu_index, deal.id, nilAddress)
+                            void fetchMduKzg(explorerManifestRoot, selectedMduRecord.mdu_index, deal.id, polystoreAddress)
                           }}
                           className="text-[10px] px-3 py-2 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors disabled:opacity-50"
                         >
@@ -3241,7 +3241,7 @@ export function DealDetail({
                                 onClick={() => {
                                   setSelectedMdu(record.mdu_index)
                                   if (explorerManifestRoot) {
-                                    void fetchMduKzg(explorerManifestRoot, record.mdu_index, deal.id, nilAddress)
+                                    void fetchMduKzg(explorerManifestRoot, record.mdu_index, deal.id, polystoreAddress)
                                   }
                                 }}
                                 className="shrink-0 text-[10px] px-2 py-1 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"

@@ -117,7 +117,7 @@ Your job:
    - verify local gateway `/health`; use `/status` only if it exists or if debugging is needed
    - if `POLYSTORE_BURNER_KEYSTORE_PASSWORD` is unset, ask the user for the keystore import password before invoking `scripts/testnet_burner_upload.sh`
    - create a temporary tiny file locally and complete `scripts/testnet_burner_upload.sh <file_path>`
-   - capture wallet address, nil address, keystore path, deal ID, manifest root, file name, file size, create tx hash, and commit tx hash
+   - capture wallet address, PolyStore address (`nil1...` for now), keystore path, deal ID, manifest root, file name, file size, create tx hash, and commit tx hash
 4. Milestone 2, MetaMask Handoff:
    - guide keystore import
    - confirm MetaMask address exactly matches the bootstrap address before moving on

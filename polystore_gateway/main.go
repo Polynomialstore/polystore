@@ -429,7 +429,7 @@ func extractDealID(logs []txLog, events []txEvent) string {
 	return find(events)
 }
 
-func evmHexToNilAddress(hexAddr string) (string, error) {
+func evmHexToPolystoreAddress(hexAddr string) (string, error) {
 	trimmed := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(hexAddr)), "0x")
 	raw, err := hex.DecodeString(trimmed)
 	if err != nil {
@@ -442,6 +442,7 @@ func evmHexToNilAddress(hexAddr string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// The current chain HRP is still `nil` even though product branding is PolyStore.
 	return bech32.Encode("nil", converted)
 }
 
@@ -2025,16 +2026,16 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if creatorNil, err := evmHexToNilAddress(rawCreator); err == nil {
+	if creatorPolystoreAddress, err := evmHexToPolystoreAddress(rawCreator); err == nil {
 		// Only hit the faucet if the creator has no on-chain balance.
 		// This avoids bumping the faucet key sequence right before we submit
 		// MsgCreateDealFromEvm (which also signs with faucet), preventing
 		// avoidable account-sequence retries.
-		if ok, berr := creatorHasSomeBalance(creatorNil); berr != nil {
-			log.Printf("GatewayCreateDealFromEvm: balance check failed for %s: %v", creatorNil, berr)
+		if ok, berr := creatorHasSomeBalance(creatorPolystoreAddress); berr != nil {
+			log.Printf("GatewayCreateDealFromEvm: balance check failed for %s: %v", creatorPolystoreAddress, berr)
 		} else if !ok {
 			if autoFaucetEnabled {
-				fundAddressOnce(creatorNil)
+				fundAddressOnce(creatorPolystoreAddress)
 			} else {
 				http.Error(w, "creator has no on-chain balance; faucet disabled", http.StatusBadRequest)
 				return
@@ -4987,11 +4988,11 @@ func verifyRetrievalRequestSignature(dealOwner string, dealID uint64, filePath s
 	if err != nil {
 		return fmt.Errorf("failed to recover request signer: %w", err)
 	}
-	nilAddr, err := evmHexToNilAddress(evmAddr.Hex())
+	polystoreAddr, err := evmHexToPolystoreAddress(evmAddr.Hex())
 	if err != nil {
-		return fmt.Errorf("failed to map request signer to nil address: %w", err)
+		return fmt.Errorf("failed to map request signer to PolyStore address: %w", err)
 	}
-	if strings.TrimSpace(nilAddr) != strings.TrimSpace(dealOwner) {
+	if strings.TrimSpace(polystoreAddr) != strings.TrimSpace(dealOwner) {
 		return fmt.Errorf("request signer is not deal owner")
 	}
 	return nil
@@ -5050,7 +5051,7 @@ func resolveKeyAddress(ctx context.Context, name string) (string, error) {
 	if addr := extractNilAddress(trimmed); addr != "" {
 		return addr, nil
 	}
-	return "", fmt.Errorf("keys show returned no nil bech32 address (%q)", trimmed)
+	return "", fmt.Errorf("keys show returned no PolyStore bech32 address (%q)", trimmed)
 }
 
 // submitRetrievalProof submits a retrieval proof for the given deal and file
