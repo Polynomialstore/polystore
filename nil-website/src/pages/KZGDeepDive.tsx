@@ -17,7 +17,7 @@ export const KZGDeepDive = () => {
         </div>
 
         <p className="text-muted-foreground leading-relaxed mb-12">
-          NilStore's core security mechanism: <strong>Proof-of-Useful-Data (PoUD)</strong> ensures storage providers truly possess your data. It leverages <strong>KZG (Kate-Zaverucha-Goldberg) Commitments</strong>, allowing verification of a massive dataset with a tiny proof.
+          PolyStore's core security mechanism: <strong>Proof-of-Useful-Data (PoUD)</strong> ensures storage providers truly possess your data. It leverages <strong>KZG (Kate-Zaverucha-Goldberg) Commitments</strong>, allowing verification of a massive dataset with a tiny proof.
         </p>
 
         {/* Section 1: Trusted Setup */}
@@ -74,7 +74,7 @@ export const KZGDeepDive = () => {
             <CheckCircle className="w-5 h-5 text-accent" /> 3. The Triple Proof (Scale)
           </h3>
           <p className="text-muted-foreground mb-6">
-            How do you verify a 1 Petabyte dataset with a single hash? NilStore uses a <strong>3-Hop Verification Chain</strong> to bind every byte to the Deal Root.
+            How do you verify a 1 Petabyte dataset with a single hash? PolyStore uses a <strong>3-Hop Verification Chain</strong> to bind every byte to the Deal Root.
           </p>
           <div className="bg-card p-6 rounded-none border border-border mb-6 space-y-4">
             <div className="flex items-center gap-4">

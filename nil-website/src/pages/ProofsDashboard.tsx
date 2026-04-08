@@ -293,7 +293,7 @@ export const ProofsDashboard = () => {
             <h1 className="text-3xl md:text-4xl font-bold text-foreground">Retrieval Observatory</h1>
           </div>
           <p className="text-sm md:text-base text-muted-foreground">
-            Live view of on-chain retrieval sessions (and related liveness signals) flowing through the NilStore
+            Live view of on-chain retrieval sessions (and related liveness signals) flowing through the PolyStore
             network. On this devnet, retrieval activity is tracked via <span className="font-semibold">sessions</span>{' '}
             and heat counters; the legacy <span className="font-mono">/proofs</span> store may be empty.
           </p>

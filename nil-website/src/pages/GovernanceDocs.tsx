@@ -6,7 +6,7 @@ export const GovernanceDocs = () => {
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4 text-foreground">Governance & The Emergency Council</h1>
         <p className="text-xl text-muted-foreground">
-          NilStore is governed by the NilDAO. To ensure safety during the "Mainnet Beta" phase, a 5-of-9 Emergency Council holds specific hot-patch powers.
+          PolyStore is governed by the PolyDAO. To ensure safety during the "Mainnet Beta" phase, a 5-of-9 Emergency Council holds specific hot-patch powers.
         </p>
       </div>
 

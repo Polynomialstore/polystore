@@ -17,7 +17,7 @@ export const DeputySystem = () => {
         </div>
 
         <p className="text-muted-foreground leading-relaxed mb-12">
-          Decentralized networks often fail when users and providers blame each other for failures ("He said, she said"). NilStore solves this without centralized courts by using a <strong>Deputy (Proxy) System</strong>.
+          Decentralized networks often fail when users and providers blame each other for failures ("He said, she said"). PolyStore solves this without centralized courts by using a <strong>Deputy (Proxy) System</strong>.
         </p>
 
         {/* Section 1: The Problem */}

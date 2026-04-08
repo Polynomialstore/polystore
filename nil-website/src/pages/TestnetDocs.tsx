@@ -107,7 +107,7 @@ export const TestnetDocs = () => {
         <section className="space-y-4">
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Web Flow (MetaMask + Deal)</h2>
           <p className="text-muted-foreground">
-            All on-chain actions (create, update content, retrieval sessions) are signed by your wallet via the NilStore precompile.
+            All on-chain actions (create, update content, retrieval sessions) are signed by your wallet via the PolyStore precompile.
             The faucet is dev-only; the "Get Testnet NIL" button is auto-enabled on trusted-devnet public domains and can be forced with
             <code className="mx-1 px-1 py-0.5 rounded-none bg-secondary/60">VITE_ENABLE_FAUCET=1</code>
             or hidden with
@@ -132,7 +132,7 @@ export const TestnetDocs = () => {
               rel="noreferrer"
               className="mt-3 inline-flex items-center rounded-none border border-border bg-background/70 px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary/50"
             >
-              Download Nil Gateway GUI
+              Download PolyStore Gateway GUI
             </a>
           </div>
           <div className="bg-secondary/10 rounded-none p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
@@ -221,7 +221,7 @@ export const TestnetDocs = () => {
         <section className="space-y-4">
           <h2 className="text-2xl font-bold border-b pb-2 text-foreground">Interactive Playground</h2>
           <p className="text-muted-foreground">
-            Experience the "Sharding & Binding" process directly in your browser. Upload any file to see how the NilStore protocol splits it into 8 MiB Data Units (DUs) and computes the cryptographic binding for each.
+            Experience the "Sharding & Binding" process directly in your browser. Upload any file to see how the PolyStore protocol splits it into 8 MiB Data Units (DUs) and computes the cryptographic binding for each.
           </p>
           
           <div className="space-y-4">

@@ -240,10 +240,10 @@ export function FirstFile() {
               </button>
             ) : isWrongNetwork ? (
               <span>
-                Use the nav session controls to {genesisMismatch ? 'repair the NilStore network entry' : `switch to ${numberToHex(appConfig.chainId)}`}.
+                Use the nav session controls to {genesisMismatch ? 'repair the PolyStore network entry' : `switch to ${numberToHex(appConfig.chainId)}`}.
               </span>
             ) : (
-              <span>Wallet is connected on NilStore Testnet. Continue once the nav shows the session as ready.</span>
+              <span>Wallet is connected on PolyStore Testnet. Continue once the nav shows the session as ready.</span>
             )}
           </div>
         </div>

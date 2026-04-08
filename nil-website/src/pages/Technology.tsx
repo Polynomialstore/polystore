@@ -156,9 +156,9 @@ export const Technology = () => {
   return (
     <div className="pt-24 pb-12 px-4 max-w-5xl mx-auto space-y-12">
       <header className="space-y-4">
-        <h1 className="text-5xl font-bold text-foreground">How NilStore Works</h1>
+        <h1 className="text-5xl font-bold text-foreground">How PolyStore Works</h1>
         <p className="text-lg text-muted-foreground leading-relaxed">
-          NilStore is not just &ldquo;Dropbox on blockchain&rdquo;. It is an MDU-centric storage network where every byte
+          PolyStore is not just &ldquo;Dropbox on blockchain&rdquo;. It is an MDU-centric storage network where every byte
           is bound to an on-chain deal by a verifiable commitment chain.
         </p>
         <p className="text-sm text-muted-foreground leading-relaxed">
@@ -515,7 +515,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">At a glance</div>
             <h2 className="text-2xl font-bold text-foreground">The 4-hop chain that makes bytes verifiable</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              If you only read one thing on this page, make it this: NilStore binds bytes to a deal through a clean,
+              If you only read one thing on this page, make it this: PolyStore binds bytes to a deal through a clean,
               auditable chain of commitments.
             </p>
             <div className="grid gap-3 sm:grid-cols-4">

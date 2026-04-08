@@ -29,7 +29,7 @@ export const ArgonDeepDive = () => {
         </div>
 
         <p className="text-xl text-muted-foreground mb-12 leading-relaxed">
-          PoDE was an early timing-based anti-laziness mechanism. NilStore has since evolved to an <strong>unsealed</strong> design using the <strong>Performance Market</strong> and <strong>Unified Liveness</strong> (retrievals as proofs). This page is kept for historical context.
+          PoDE was an early timing-based anti-laziness mechanism. PolyStore has since evolved to an <strong>unsealed</strong> design using the <strong>Performance Market</strong> and <strong>Unified Liveness</strong> (retrievals as proofs). This page is kept for historical context.
         </p>
 
         {/* Section 1: The Concept & Mechanism */}
@@ -68,7 +68,7 @@ export const ArgonDeepDive = () => {
             <Clock className="w-5 h-5 text-accent" /> The Timing Defense
           </h3>
           <p className="text-muted-foreground mb-6">
-            PoDE relied on a strict submission deadline: if a node tried to fetch missing data from a remote source on demand, it would miss the deadline and be penalized. In practice, strict deadlines can be brittle, which is why NilStore now uses the Performance Market instead.
+            PoDE relied on a strict submission deadline: if a node tried to fetch missing data from a remote source on demand, it would miss the deadline and be penalized. In practice, strict deadlines can be brittle, which is why PolyStore now uses the Performance Market instead.
           </p>
           <div className="bg-card border border-border p-8 rounded-none shadow-sm">
             <div className="grid md:grid-cols-2 gap-8">

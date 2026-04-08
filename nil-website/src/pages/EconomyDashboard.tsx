@@ -26,7 +26,7 @@ export const EconomyDashboard = () => {
                     
                     <p className="text-xl text-muted-foreground mb-6">
                       Understanding the flow of tokens and data is critical. This dashboard visualizes an 
-                      <strong> Agent-Based Simulation (ABS)</strong> of the NilStore economy running over 
+                      <strong> Agent-Based Simulation (ABS)</strong> of the PolyStore economy running over 
                       {data.length} epochs (virtual days).
                     </p>
                     <p className="text-xs text-muted-foreground">

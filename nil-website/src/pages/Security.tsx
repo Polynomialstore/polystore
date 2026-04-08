@@ -13,7 +13,7 @@ export const Security = () => {
           <h1 className="text-4xl font-bold text-foreground">Security & Threat Model</h1>
         </div>
         <p className="text-muted-foreground text-lg leading-relaxed">
-          NilStore assumes untrusted providers, adversarial clients, and unreliable networks. Security is enforced by
+          PolyStore assumes untrusted providers, adversarial clients, and unreliable networks. Security is enforced by
           on-chain deal state, KZG commitments, Merkle inclusion proofs, and retrieval-session accounting. This page
           summarizes the threat model and the concrete mechanisms that keep storage and retrieval verifiable.
         </p>

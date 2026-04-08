@@ -775,7 +775,7 @@ export function SpOnboarding() {
               </div>
               <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">First Healthy Provider</h1>
               <p className="max-w-2xl text-muted-foreground">
-                This is the web-first operator flow for bringing up a NilStore <span className="font-mono">provider-daemon</span>.
+                This is the web-first operator flow for bringing up a PolyStore <span className="font-mono">provider-daemon</span>.
                 Connect the operator wallet, prepare the provider host, pair the provider identity, then publish endpoint plus bootstrap and verify from one final step.
               </p>
             </div>

@@ -7,7 +7,7 @@ export const S3AdapterDocs = () => {
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4 text-foreground">S3 Adapter & Web2 Gateway</h1>
         <p className="text-xl text-muted-foreground">
-          NilStore provides a native Go-based adapter (`nil_gateway`) that translates standard S3 `PUT` and `GET` requests into sharded, verifiable storage transactions on the NilChain.
+          PolyStore provides a native Go-based adapter (`nil_gateway`) that translates standard S3 `PUT` and `GET` requests into sharded, verifiable storage transactions on the NilChain.
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
           The gateway is optional for browser-native clients (WASM + OPFS), but it remains the easiest path for Web2/S3 compatibility and large-volume ingestion.

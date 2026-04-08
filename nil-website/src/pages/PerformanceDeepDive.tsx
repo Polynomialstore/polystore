@@ -28,7 +28,7 @@ export const PerformanceDeepDive = () => {
         </div>
 
         <p className="text-muted-foreground leading-relaxed mb-12">
-          NilStore moves beyond binary "Pass/Fail" checks. We use a tiered reward system based on response latency. Speed is revenue. This aligns incentives: users get fast data, and providers are paid to invest in high-performance NVMe hardware.
+          PolyStore moves beyond binary "Pass/Fail" checks. We use a tiered reward system based on response latency. Speed is revenue. This aligns incentives: users get fast data, and providers are paid to invest in high-performance NVMe hardware.
         </p>
 
         {/* Visualization: The Latency Racer */}
@@ -133,7 +133,7 @@ export const PerformanceDeepDive = () => {
             <Trophy className="w-5 h-5 text-primary" /> Fair Exchange: Retrieval Sessions
           </h3>
           <p className="text-muted-foreground mb-6">
-            Speed is worthless if the user refuses to pay. NilStore uses <strong>retrieval sessions</strong>: users open a
+            Speed is worthless if the user refuses to pay. PolyStore uses <strong>retrieval sessions</strong>: users open a
             session on-chain, lock a base fee plus a per-blob budget, and only release payment when the session is confirmed.
           </p>
           <div className="bg-card border border-border p-6 rounded-none shadow-sm grid md:grid-cols-3 gap-4 text-center">

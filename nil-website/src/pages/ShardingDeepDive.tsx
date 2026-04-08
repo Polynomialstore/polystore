@@ -17,7 +17,7 @@ export const ShardingDeepDive = () => {
         </div>
 
         <p className="text-muted-foreground leading-relaxed mb-6">
-          NilStore achieves unparalleled durability and performance through precise data fragmentation, not simple replication. Files are processed into standardized chunks called <strong>Data Units (DUs)</strong>.
+          PolyStore achieves unparalleled durability and performance through precise data fragmentation, not simple replication. Files are processed into standardized chunks called <strong>Data Units (DUs)</strong>.
         </p>
 
         {/* Section 1: Data Units (DUs) */}
@@ -26,7 +26,7 @@ export const ShardingDeepDive = () => {
             <File className="w-5 h-5 text-primary" /> 8 MiB Mega-Data Units (MDUs)
           </h3>
           <p className="text-muted-foreground mb-6">
-            Files are first packed into standardized Data Units. NilStore standardizes all data into <strong>8 MiB (8,388,608 bytes)</strong> Mega-Data Units. Each MDU contains <strong>64 × 128 KiB blobs</strong>, the atomic unit of KZG verification.
+            Files are first packed into standardized Data Units. PolyStore standardizes all data into <strong>8 MiB (8,388,608 bytes)</strong> Mega-Data Units. Each MDU contains <strong>64 × 128 KiB blobs</strong>, the atomic unit of KZG verification.
           </p>
           
           <div className="grid md:grid-cols-3 gap-4 items-center bg-secondary/10 p-8 rounded-none border">

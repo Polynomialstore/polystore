@@ -38,7 +38,7 @@ const MarkdownPage = ({ filePath, title, description }: MarkdownPageProps) => {
         <div className="relative overflow-hidden rounded-none border border-border bg-card shadow-sm">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-background opacity-90" />
           <div className="relative p-8 md:p-10 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">NilStore Research</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">PolyStore Research</p>
             <h1 className="text-4xl md:text-5xl font-bold text-foreground leading-tight">{title}</h1>
             {description ? (
               <p className="text-lg text-muted-foreground max-w-3xl">{description}</p>
@@ -89,15 +89,15 @@ const MarkdownPage = ({ filePath, title, description }: MarkdownPageProps) => {
 export const Litepaper = () => (
   <MarkdownPage
     filePath="/litepaper.md"
-    title="NilStore Litepaper"
-    description="An accessible overview of NilStore's architecture, incentives, and performance guarantees."
+    title="PolyStore Litepaper"
+    description="An accessible overview of PolyStore's architecture, incentives, and performance guarantees."
   />
 );
 
 export const Whitepaper = () => (
   <MarkdownPage
     filePath="/whitepaper.md"
-    title="NilStore Whitepaper"
-    description="The canonical research paper detailing NilStore's storage, retrieval, and verification model."
+    title="PolyStore Whitepaper"
+    description="The canonical research paper detailing PolyStore's storage, retrieval, and verification model."
   />
 );

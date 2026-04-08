@@ -9,10 +9,10 @@ const faqs = [
     icon: <Network className="w-5 h-5 text-primary" />,
     questions: [
       {
-        q: "What is NilStore?",
+        q: "What is PolyStore?",
         a: <>
-          NilStore is a decentralized storage network that works like a public cloud (think S3) but runs on a community of independent nodes.
-          Unlike other networks that rely on expensive sealing hardware, NilStore uses <strong>KZG commitments</strong> and erasure coding to keep data verifiable, retrievable, and censorship-resistant.
+          PolyStore is a decentralized storage network that works like a public cloud (think S3) but runs on a community of independent nodes.
+          Unlike other networks that rely on expensive sealing hardware, PolyStore uses <strong>KZG commitments</strong> and erasure coding to keep data verifiable, retrievable, and censorship-resistant.
         </>
       },
       {
@@ -23,19 +23,18 @@ const faqs = [
         </>
       },
       {
-        q: "Why \"Nil\"?",
+        q: "Why \"Poly\"?",
         a: (
           <>
             <p>
-              "Nil" signals <strong>zero privileged centers</strong>. We are building a storage network that behaves like
-              a homogeneous space: any node can serve, verify, and be replaced without a central coordinator deciding
-              who is allowed in.
+              "Poly" signals <strong>many cooperating parts</strong>: many providers, many shards, and many proof paths
+              working together without a privileged center deciding who is allowed in.
             </p>
             <p className="mt-2">
               Some networks still depend on centralized control planes or gatekeeping infrastructure, while others
-              focus on archival deals where retrieval is outside the protocol. NilStore makes retrieval first-class:
-              serving data is the proof and the payout. That is the "Nil" promise - fully decentralized operations with
-              performance as the currency.
+              focus on archival deals where retrieval is outside the protocol. PolyStore makes retrieval first-class:
+              serving data is the proof and the payout. That is the "Poly" promise - many independent operators working
+              as one verifiable market, with performance as the currency.
             </p>
           </>
         )
@@ -47,31 +46,31 @@ const faqs = [
     icon: <Scale className="w-5 h-5 text-primary" />,
     questions: [
       {
-        q: "How does NilStore compare to Filecoin?",
+        q: "How does PolyStore compare to Filecoin?",
         a: <>
           <p><strong>The Hardware Barrier.</strong> Filecoin relies on "Proof of Replication" (PoRep), which requires massive GPU clusters to seal data. This limits mining to industrial data centers.</p>
-          <p className="mt-2"><strong>NilStore's Advantage:</strong> We replaced sealing with <strong>KZG Commitments</strong>. This math is 100x lighter to compute. You can run a NilStore node on a standard server or high-end gaming PC, democratizing access.</p>
+          <p className="mt-2"><strong>PolyStore's Advantage:</strong> We replaced sealing with <strong>KZG Commitments</strong>. This math is 100x lighter to compute. You can run a PolyStore node on a standard server or high-end gaming PC, democratizing access.</p>
         </>
       },
       {
-        q: "How does NilStore compare to Arweave?",
+        q: "How does PolyStore compare to Arweave?",
         a: <>
           <p><strong>The Endowment Model.</strong> Arweave focuses on "Permanence" via a one-time endowment fee. This is great for NFTs but expensive for dynamic data or high-performance retrieval.</p>
-          <p className="mt-2"><strong>NilStore's Advantage:</strong> We focus on <strong>Performance</strong>. Our Unified Liveness model treats storage as a high-speed CDN. We are built for dynamic applications (AI models, videos, dApps) that need speed and predictable monthly billing, not just archival.</p>
+          <p className="mt-2"><strong>PolyStore's Advantage:</strong> We focus on <strong>Performance</strong>. Our Unified Liveness model treats storage as a high-speed CDN. We are built for dynamic applications (AI models, videos, dApps) that need speed and predictable monthly billing, not just archival.</p>
         </>
       },
       {
-        q: "How does NilStore compare to Walrus (Sui)?",
+        q: "How does PolyStore compare to Walrus (Sui)?",
         a: <>
           <p><strong>The Blob Approach.</strong> Walrus uses "Red Stuff" erasure coding for blobs on Sui. It's efficient but tightly coupled to the Sui ecosystem.</p>
-          <p className="mt-2"><strong>NilStore's Advantage:</strong> We are an <strong>AppChain</strong> built on Cosmos. This gives us sovereignty over our consensus and economics. Our "Unified Liveness" (User Retrieval = Storage Proof) is a unique economic innovation that ensures providers are paid for <em>serving</em> data, not just hoarding it.</p>
+          <p className="mt-2"><strong>PolyStore's Advantage:</strong> We are an <strong>AppChain</strong> built on Cosmos. This gives us sovereignty over our consensus and economics. Our "Unified Liveness" (User Retrieval = Storage Proof) is a unique economic innovation that ensures providers are paid for <em>serving</em> data, not just hoarding it.</p>
         </>
       },
       {
-        q: "How does NilStore compare to Storj?",
+        q: "How does PolyStore compare to Storj?",
         a: <>
           <p><strong>Centralized Coordination.</strong> Storj offers great S3 compatibility but relies on centralized "Satellites" for metadata and payments. It's "Decentralized Storage, Centralized Management."</p>
-          <p className="mt-2"><strong>NilStore's Advantage:</strong> We are <strong>Fully Decentralized</strong>. The blockchain itself manages metadata, payments, and repair logic. There is no central "Satellite" to shut down or censor your account.</p>
+          <p className="mt-2"><strong>PolyStore's Advantage:</strong> We are <strong>Fully Decentralized</strong>. The blockchain itself manages metadata, payments, and repair logic. There is no central "Satellite" to shut down or censor your account.</p>
         </>
       }
     ]
@@ -82,7 +81,7 @@ const faqs = [
     questions: [
       {
         q: "What are KZG Commitments?",
-        a: "Think of a KZG commitment as a 'cryptographic fingerprint' for a blob. NilStore commits to each 128 KiB blob with a 48-byte commitment. 64 blobs make up an 8 MiB MDU, and the deal’s manifest root binds all MDUs together for efficient verification."
+        a: "Think of a KZG commitment as a 'cryptographic fingerprint' for a blob. PolyStore commits to each 128 KiB blob with a 48-byte commitment. 64 blobs make up an 8 MiB MDU, and the deal’s manifest root binds all MDUs together for efficient verification."
       },
       {
         q: "What is 'Proof-of-Delayed-Encode' (PoDE)?",
@@ -90,7 +89,7 @@ const faqs = [
       },
       {
         q: "What is Unified Liveness?",
-        a: "In most networks, 'serving a user' and 'proving you have data' are separate tasks. In NilStore, they are the same. Retrieval sessions are opened on-chain; providers serve data with KZG proofs, and confirmed sessions become the liveness signal used for rewards."
+        a: "In most networks, 'serving a user' and 'proving you have data' are separate tasks. In PolyStore, they are the same. Retrieval sessions are opened on-chain; providers serve data with KZG proofs, and confirmed sessions become the liveness signal used for rewards."
       },
       {
         q: "Why 8 MiB Data Units?",
@@ -103,13 +102,13 @@ const faqs = [
       },
       {
         q: "Can I delete my data?",
-        a: "Yes. NilStore supports **Crypto-Erasure**. When you upload a file, it is encrypted client-side. If you want to 'delete' it, you simply destroy the encryption key. The data remaining on the network becomes mathematically irretrievable noise, effectively erasing it from existence."
+        a: "Yes. PolyStore supports **Crypto-Erasure**. When you upload a file, it is encrypted client-side. If you want to 'delete' it, you simply destroy the encryption key. The data remaining on the network becomes mathematically irretrievable noise, effectively erasing it from existence."
       },
       {
         q: "What are external resources to learn about the technology?",
         a: (
           <span className="space-y-2 block">
-            <span className="block">NilStore relies on cutting-edge cryptography also used in Ethereum's scaling roadmap (EIP-4844). Here are some excellent resources to understand the math:</span>
+            <span className="block">PolyStore relies on cutting-edge cryptography also used in Ethereum's scaling roadmap (EIP-4844). Here are some excellent resources to understand the math:</span>
             <a 
               href="https://scroll.io/blog/kzg" 
               target="_blank" 
@@ -161,7 +160,7 @@ export const FAQ = () => {
       <div className="mb-12 text-center">
         <h1 className="text-4xl font-bold mb-4 text-foreground">Frequently Asked Questions</h1>
         <p className="text-xl text-muted-foreground">
-          Everything you need to know about the NilStore Network, Technology, and Economics.
+          Everything you need to know about the PolyStore Network, Technology, and Economics.
         </p>
       </div>
 
