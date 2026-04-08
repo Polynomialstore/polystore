@@ -176,7 +176,7 @@ async function ensureWasmReady(): Promise<void> {
     const buf = await res.arrayBuffer()
     const trustedSetupBytes = new Uint8Array(buf)
     try {
-      await workerClient.initNilWasm(trustedSetupBytes)
+      await workerClient.initPolyStoreWasm(trustedSetupBytes)
     } catch (e) {
       // If the worker was already initialized, ignore and proceed.
       void e

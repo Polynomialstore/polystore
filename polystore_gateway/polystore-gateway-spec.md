@@ -1,4 +1,4 @@
-# NilGateway — S3 Adapter & Web2 Gateway Specification (`polystore_gateway`)
+# PolyStore Gateway — S3 Adapter & Web2 Gateway Specification (`polystore_gateway`)
 
 **Component:** `polystore_gateway`
 **Role:** Web2 Gateway, S3 Compatibility Layer, and Devnet Relayer.
@@ -131,9 +131,9 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Query Params (target):** `deal_id`, `owner`, `file_path` (**required**).
     *   **Logic:**
         1.  Verifies `deal_id` exists on-chain and matches `owner`.
-        2.  Enforces retrieval sessions when enabled: requests MUST include `X‑Nil‑Session‑Id`, and ranges must be within the opened session.
+        2.  Enforces retrieval sessions when enabled: requests MUST include `X‑PolyStore‑Session‑Id`, and ranges must be within the opened session.
         3.  Records per-blob proof artifacts for later submission.
-        4.  Streams the file content to the response and sets `X‑Nil‑Provider`.
+        4.  Streams the file content to the response and sets `X‑PolyStore‑Provider`.
     *   **Role:** Acts as a retrieval proxy and proof recorder; it does **not** sign user transactions.
     *   **Mode 2 behavior:** If the local slab is missing a user MDU, the gateway may fetch `K` shards from providers (slot 0..K-1 by default) via `/sp/shard`, reconstruct the MDU with RS decoding, and stream the requested range. Ranges must be slot-aligned (single-slot blob ranges).
     *   **PolyFS Path Fetch (target end state):**
@@ -159,7 +159,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Role:** Canonical proof submission path.
 
 *   **`GET /sp/shard`** *(Mode 2 Provider API; internal)*
-    *   **Headers:** `X‑Nil‑Gateway‑Auth: <shared token>` (**required**).
+    *   **Headers:** `X‑PolyStore‑Gateway‑Auth: <shared token>` (**required**).
     *   **Query Params:** `deal_id`, `manifest_root`, `mdu_index`, `slot`.
     *   **Logic:** Streams `mdu_<index>_slot_<slot>.bin` from the provider’s storage root.
     *   **Role:** Provider‑to‑provider shard reads used to reconstruct Mode 2 MDUs when local shards are missing. Browsers should fetch bytes via `/gateway/fetch/...` instead.

@@ -732,8 +732,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     blockGateway = true
     await page.evaluate(() => {
-      window.localStorage.setItem('nil_local_gateway_connected', '0')
-      window.localStorage.setItem('nil_transport_preference', 'auto')
+      window.localStorage.setItem('polystore_local_gateway_connected', '0')
+      window.localStorage.setItem('polystore_transport_preference', 'auto')
     })
     await clearBrowserCache()
     const fallbackGatewayFetchReqBefore = fetchGatewayRequests

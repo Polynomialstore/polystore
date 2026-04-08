@@ -69,11 +69,11 @@ If the faucet UI is not enabled, ask the hub operator to fund your address.
 5. Retrieve the file back and confirm it matches what you uploaded.
 
 Optional but recommended:
-- Install Nil Gateway GUI and run it locally (`http://localhost:8080`) for gateway-assisted workflows.
+- Install PolyStore Gateway GUI and run it locally (`http://localhost:8080`) for gateway-assisted workflows.
 - Download from: `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Fast full-local repo onboarding:
-- Start Nil Gateway GUI first and verify `curl -sf http://localhost:8080/health`.
+- Start PolyStore Gateway GUI first and verify `curl -sf http://localhost:8080/health`.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file to establish one wallet, one deal, and the MetaMask keystore export.
 - Import that same keystore into MetaMask.
 - Continue browser verification on `https://polynomialstore.com/#/dashboard` with the same wallet and local gateway after the first-file allocation step.

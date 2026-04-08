@@ -15,7 +15,7 @@ type WasmMdu0BuilderLike = {
     bytes: () => Uint8Array
 }
 
-async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike; wasmPath: string }> {
+async function loadPolyStoreCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike; wasmPath: string }> {
     const jsPath = path.resolve(__dirname, '../../public/wasm/polystore_core.js')
     const wasmPath = path.resolve(__dirname, '../../public/wasm/polystore_core_bg.wasm')
     try {
@@ -33,7 +33,7 @@ async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Prom
 }
 
 test('Mdu0Builder WASM', async (t) => {
-    const wasm = await loadNilCoreWasm()
+    const wasm = await loadPolyStoreCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
         return
@@ -85,7 +85,7 @@ test('Mdu0Builder WASM', async (t) => {
 });
 
 test('Mdu0Builder WASM rejects paths > 232 bytes', async (t) => {
-    const wasm = await loadNilCoreWasm()
+    const wasm = await loadPolyStoreCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
         return
@@ -101,7 +101,7 @@ test('Mdu0Builder WASM rejects paths > 232 bytes', async (t) => {
 });
 
 test('sanitizePolyfsRecordPath produces a path acceptable to Mdu0Builder', async (t) => {
-    const wasm = await loadNilCoreWasm()
+    const wasm = await loadPolyStoreCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
         return
@@ -117,7 +117,7 @@ test('sanitizePolyfsRecordPath produces a path acceptable to Mdu0Builder', async
 });
 
 test('sanitizePolyfsRecordPath produces a multibyte path acceptable to Mdu0Builder', async (t) => {
-    const wasm = await loadNilCoreWasm()
+    const wasm = await loadPolyStoreCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
         return

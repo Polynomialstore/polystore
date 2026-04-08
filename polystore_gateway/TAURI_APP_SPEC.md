@@ -1,4 +1,4 @@
-# NilGateway GUI (Tauri) — Build Specification (Codex-Executable)
+# PolyStore Gateway GUI (Tauri) — Build Specification (Codex-Executable)
 
 **Version:** 0.3.0  
 **Date:** 2026-01-16  
@@ -79,7 +79,7 @@ The GUI must run without requiring the user to install build tools or CLI binari
    - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `polystorechaind` client binary if `polystore_gateway` still shells out).
    - The host sets `POLYSTORE_TRUSTED_SETUP`, `POLYSTORECHAIND_BIN`, and other paths to bundle-resident locations.
 2. **Eliminate external exec dependencies (target hardening):**
-   - Remove `execNilchaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
+   - Remove `execPolystorechaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
    - Ensure Mode 2 ingest does not require `polystore_cli` subprocesses (prefer `crypto_ffi`, which already exists for RS + KZG primitives).
 
 The plan below assumes Strategy (1) first, then Strategy (2) as a follow-up hardening phase.
@@ -225,9 +225,9 @@ The GUI implementation must include an integration test that starts the sidecar 
 
 ### 6.4 App Config and Sidecar Env Mapping
 The GUI must maintain a single config file (JSON) in the OS app data directory, e.g.:
-- macOS: `~/Library/Application Support/NilGateway GUI/config.json`
-- Linux: `~/.config/nilgateway-gui/config.json`
-- Windows: `%APPDATA%\\NilGateway GUI\\config.json`
+- macOS: `~/Library/Application Support/PolyStore Gateway GUI/config.json`
+- Linux: `~/.config/com.polynomialstore.gatewaygui/config.json`
+- Windows: `%APPDATA%\\PolyStore Gateway GUI\\config.json`
 
 Normative config keys (names may differ on disk, but the meaning must match):
 - `chain.chain_id` (default `test-1`)
@@ -333,7 +333,7 @@ Each phase is small-commit friendly and includes a test gate.
 - [ ] Add nightly CI job for full stack if feasible.
 
 ### Phase 7 — Dependency-Free Sidecar (Hardening)
-- [ ] Remove `execNilchaind` usage from `polystore_gateway` (broadcast/query via libraries).
+- [ ] Remove `execPolystorechaind` usage from `polystore_gateway` (broadcast/query via libraries).
 - [ ] Ensure all ingest/commit paths used by the GUI do not shell out to `polystore_cli`.
 - [ ] Update GUI bundling to only include the `polystore_gateway` sidecar and required static assets.
 - **Test gate:** all previous tests still pass; add a “no external exec” unit test that fails if `POLYSTORECHAIND_BIN`/`POLYSTORE_CLI_BIN` is required.

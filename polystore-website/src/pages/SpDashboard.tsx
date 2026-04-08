@@ -435,7 +435,7 @@ export function SpDashboard() {
             <div className="font-mono-data text-foreground">{isConnected ? walletAddressShort : 'Not connected'}</div>
           </div>
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Nil operator</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">PolyStore operator</div>
             <div className="break-all font-mono-data text-foreground">{nilAddress || '—'}</div>
           </div>
           <div className="space-y-1">

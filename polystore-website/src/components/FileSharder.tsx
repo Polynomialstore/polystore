@@ -273,14 +273,14 @@ function roundPerfMs(value: number | null | undefined): number | null {
   return Math.round(Number(value) * 100) / 100
 }
 
-type NilBrowserPerfBundle = {
+type PolyStoreBrowserPerfBundle = {
   browserPerfLog: Array<Record<string, unknown>>
   browserPerfLast: Record<string, unknown> | null
-  prepareSummary: NilPrepareSummary | null
+  prepareSummary: PolyStorePrepareSummary | null
   prepareProfile: PreparePerfProfile | null
 }
 
-type NilPrepareSummary = PreparePerfProfile['summary'] & {
+type PolyStorePrepareSummary = PreparePerfProfile['summary'] & {
   prepareWallMs: number
   manifestMs: number
   userStageWallMs: number
@@ -588,7 +588,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const perfWindow = window as typeof window & {
           __nilBrowserPerfLog?: Array<Record<string, unknown>>
           __nilBrowserPerfLast?: Record<string, unknown>
-          __nilPerfBundle?: NilBrowserPerfBundle
+          __polyStorePerfBundle?: PolyStoreBrowserPerfBundle
         }
         if (!Array.isArray(perfWindow.__nilBrowserPerfLog)) {
           perfWindow.__nilBrowserPerfLog = []
@@ -598,11 +598,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           perfWindow.__nilBrowserPerfLog.splice(0, perfWindow.__nilBrowserPerfLog.length - MAX_BROWSER_PERF_EVENTS)
         }
         perfWindow.__nilBrowserPerfLast = payload
-        perfWindow.__nilPerfBundle = {
+        perfWindow.__polyStorePerfBundle = {
           browserPerfLog: perfWindow.__nilBrowserPerfLog,
           browserPerfLast: perfWindow.__nilBrowserPerfLast ?? null,
-          prepareSummary: perfWindow.__nilPerfBundle?.prepareSummary ?? null,
-          prepareProfile: perfWindow.__nilPerfBundle?.prepareProfile ?? null,
+          prepareSummary: perfWindow.__polyStorePerfBundle?.prepareSummary ?? null,
+          prepareProfile: perfWindow.__polyStorePerfBundle?.prepareProfile ?? null,
         }
       }
       if (import.meta.env.DEV) {
@@ -1901,7 +1901,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const buffer = await response.arrayBuffer()
         const trustedSetupBytes = new Uint8Array(buffer)
 
-        await workerClient.initNilWasm(trustedSetupBytes)
+        await workerClient.initPolyStoreWasm(trustedSetupBytes)
         setWasmStatus('ready')
         addLog('WASM and KZG context initialized in worker.')
       } catch (e: unknown) {
@@ -3788,8 +3788,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           (
             window as typeof window & {
               __nilPreparePerf?: PreparePerfProfile
-              __nilPrepareSummary?: NilPrepareSummary
-              __nilPerfBundle?: NilBrowserPerfBundle
+              __polyStorePrepareSummary?: PolyStorePrepareSummary
+              __polyStorePerfBundle?: PolyStoreBrowserPerfBundle
             }
           ).__nilPreparePerf = prepareProfile
           const prepareSummary = {
@@ -3806,19 +3806,19 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           }
           ;(
             window as typeof window & {
-              __nilPrepareSummary?: NilPrepareSummary
-              __nilPerfBundle?: NilBrowserPerfBundle
+              __polyStorePrepareSummary?: PolyStorePrepareSummary
+              __polyStorePerfBundle?: PolyStoreBrowserPerfBundle
               __nilBrowserPerfLog?: Array<Record<string, unknown>>
               __nilBrowserPerfLast?: Record<string, unknown>
             }
-          ).__nilPrepareSummary = prepareSummary
+          ).__polyStorePrepareSummary = prepareSummary
           ;(
             window as typeof window & {
-              __nilPerfBundle?: NilBrowserPerfBundle
+              __polyStorePerfBundle?: PolyStoreBrowserPerfBundle
               __nilBrowserPerfLog?: Array<Record<string, unknown>>
               __nilBrowserPerfLast?: Record<string, unknown>
             }
-          ).__nilPerfBundle = {
+          ).__polyStorePerfBundle = {
             browserPerfLog:
               (
                 window as typeof window & {
@@ -4494,7 +4494,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               <Wallet className="h-6 w-6 text-foreground" />
             </div>
           <div className="text-sm font-semibold text-foreground">Connect wallet to upload</div>
-          <div className="mt-1 text-xs text-muted-foreground">Deals and files are owned by your Nil address.</div>
+          <div className="mt-1 text-xs text-muted-foreground">Deals and files are owned by your PolyStore address.</div>
         </button>
       ) : (
         <>

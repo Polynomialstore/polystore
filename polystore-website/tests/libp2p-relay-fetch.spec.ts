@@ -23,7 +23,7 @@ test.describe('libp2p fetch (relay)', () => {
     })
 
     await page.addInitScript(() => {
-      window.localStorage.setItem('nil_transport_preference', 'prefer_p2p')
+      window.localStorage.setItem('polystore_transport_preference', 'prefer_p2p')
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })

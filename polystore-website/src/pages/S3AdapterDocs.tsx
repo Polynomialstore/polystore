@@ -55,7 +55,7 @@ export const S3AdapterDocs = () => {
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Deal-backed S3 (path-style)</h3>
               <p className="text-sm text-muted-foreground mb-2">
-                For standard tools, NilGateway exposes a minimal S3-compatible surface where buckets map 1:1 to deals:
+                For standard tools, PolyStore Gateway exposes a minimal S3-compatible surface where buckets map 1:1 to deals:
                 <span className="font-mono"> deal-{'{id}'}</span>.
               </p>
               <div className="bg-background/50 p-4 rounded-none font-mono text-sm text-foreground overflow-x-auto border border-border space-y-2">

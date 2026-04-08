@@ -124,7 +124,7 @@ export type SponsoredRetrievalAuth =
 
 const FETCH_STALL_HINT_MS = 20_000
 
-const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
+const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
 
 function readLocalGatewayConnectedHint(): boolean {
   if (typeof window === 'undefined') return false

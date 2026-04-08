@@ -53,9 +53,9 @@ type RecentFileEntry = {
   error?: string
 }
 
-const RECENT_FILES_KEY = 'nil_recent_files_v1'
+const RECENT_FILES_KEY = 'polystore_recent_files_v1'
 const MAX_RECENT_FILES = 3
-const DASHBOARD_DIAGNOSTICS_KEY = 'nil_dashboard_show_diagnostics_v1'
+const DASHBOARD_DIAGNOSTICS_KEY = 'polystore_dashboard_show_diagnostics_v1'
 const RETRIEVAL_SESSIONS_POLL_MS = 120_000
 const RETRIEVAL_SESSIONS_HIDDEN_POLL_MS = 600_000
 const RETRIEVAL_PARAMS_POLL_MS = 600_000

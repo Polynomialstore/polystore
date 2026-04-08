@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
 import { loadKZG, type TrustedSetup } from 'kzg-wasm'
-import init, { NilWasm } from '../public/wasm/polystore_core.js'
+import init, { PolyStoreWasm } from '../public/wasm/polystore_core.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -140,13 +140,13 @@ if (!Number.isFinite(measureRuns) || measureRuns <= 0) {
 
 const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
 const wasmBuffer = await fs.readFile(wasmPath)
-const nilInitStart = performance.now()
+const polyStoreInitStart = performance.now()
 await init({ module_or_path: wasmBuffer })
 
 const trustedSetupPath = path.resolve(websiteRoot, 'public', 'trusted_setup.txt')
 const trustedSetup = new Uint8Array(await fs.readFile(trustedSetupPath))
-const wasm = new NilWasm(trustedSetup)
-const nilInitMs = performance.now() - nilInitStart
+const wasm = new PolyStoreWasm(trustedSetup)
+const polyStoreInitMs = performance.now() - polyStoreInitStart
 
 const payload = makeDeterministicPayload(fileBytes)
 const totalMdus = Math.ceil(payload.byteLength / RAW_MDU_CAPACITY)
@@ -175,12 +175,12 @@ async function tryLoadCompatibleKzg(): Promise<
     for (let j = 1; j < 32; j += 1) blob[i + j] = (i + j) & 0xff
   }
   const blobHex = bytesToHex(blob)
-  const nilHex = bytesToHex(wasm.commit_blobs(blob))
+  const polyStoreHex = bytesToHex(wasm.commit_blobs(blob))
 
   const defaultInitStart = performance.now()
   const defaultKzg = await loadKZG()
   const defaultInitMs = performance.now() - defaultInitStart
-  if (defaultKzg.blobToKZGCommitment(blobHex) === nilHex) {
+  if (defaultKzg.blobToKZGCommitment(blobHex) === polyStoreHex) {
     return { supported: true, initMs: defaultInitMs, source: 'default', kzg: defaultKzg }
   }
 
@@ -190,7 +190,7 @@ async function tryLoadCompatibleKzg(): Promise<
     const exactInitStart = performance.now()
     const exactKzg = await loadKZG(0, exactSetup)
     const exactInitMs = performance.now() - exactInitStart
-    if (exactKzg.blobToKZGCommitment(blobHex) === nilHex) {
+    if (exactKzg.blobToKZGCommitment(blobHex) === polyStoreHex) {
       return { supported: true, initMs: exactInitMs, source: 'polystore_setup', kzg: exactKzg }
     }
     return {
@@ -291,7 +291,7 @@ function commitShardsWithKzgWasm(shardsFlat: Uint8Array): {
   return { witnessFlat, commitMs, hexEncodeMs, hexDecodeMs }
 }
 
-function runSplitIteration(backend: 'nil_wasm' | 'kzg_wasm'): IterationResult {
+function runSplitIteration(backend: 'polystore_wasm' | 'kzg_wasm'): IterationResult {
   const records: RecordWithWall[] = []
   const benchStart = performance.now()
 
@@ -312,7 +312,7 @@ function runSplitIteration(backend: 'nil_wasm' | 'kzg_wasm'): IterationResult {
     let hexEncodeMs = 0
     let hexDecodeMs = 0
     let commitPerf: CommitPerf = {}
-    if (backend === 'nil_wasm') {
+    if (backend === 'polystore_wasm') {
       const commitStart = performance.now()
       const committedRaw = wasm.commit_blobs_profiled(shardsFlat) as unknown
       commitMs = performance.now() - commitStart
@@ -428,28 +428,28 @@ function summarizeRuns(name: string, runs: IterationResult[]) {
 
 for (let i = 0; i < warmupRuns; i += 1) {
   runIntegratedIteration()
-  runSplitIteration('nil_wasm')
+  runSplitIteration('polystore_wasm')
   if (kzgResolution.supported) {
     runSplitIteration('kzg_wasm')
   }
 }
 
 const integratedRuns: IterationResult[] = []
-const splitNilRuns: IterationResult[] = []
+const splitPolyStoreRuns: IterationResult[] = []
 const splitKzgRuns: IterationResult[] = []
 for (let i = 0; i < measureRuns; i += 1) {
   integratedRuns.push(runIntegratedIteration())
-  splitNilRuns.push(runSplitIteration('nil_wasm'))
+  splitPolyStoreRuns.push(runSplitIteration('polystore_wasm'))
   if (kzgResolution.supported) {
     splitKzgRuns.push(runSplitIteration('kzg_wasm'))
   }
 }
 
-for (let runIndex = 0; runIndex < splitNilRuns.length; runIndex += 1) {
+for (let runIndex = 0; runIndex < splitPolyStoreRuns.length; runIndex += 1) {
   const integratedRoots = integratedRuns[runIndex].records.map((record) => record.mdu_root_hex)
-  const splitNilRoots = splitNilRuns[runIndex].records.map((record) => record.mdu_root_hex)
+  const splitNilRoots = splitPolyStoreRuns[runIndex].records.map((record) => record.mdu_root_hex)
   if (JSON.stringify(integratedRoots) !== JSON.stringify(splitNilRoots)) {
-    throw new Error(`split nil_wasm roots diverged on run ${runIndex + 1}`)
+    throw new Error(`split polystore_wasm roots diverged on run ${runIndex + 1}`)
   }
   if (kzgResolution.supported) {
     const splitKzgRoots = splitKzgRuns[runIndex].records.map((record) => record.mdu_root_hex)
@@ -468,7 +468,7 @@ const summary = {
   warmup_runs: warmupRuns,
   measure_runs: measureRuns,
   init: {
-    nil_wasm_ms: nilInitMs,
+    polystore_wasm_ms: polyStoreInitMs,
     kzg_wasm_ms: kzgResolution.initMs,
   },
   kzg_wasm: kzgResolution.supported
@@ -476,7 +476,7 @@ const summary = {
     : { supported: false, reason: kzgResolution.reason },
   variants: {
     integrated_nil_wasm: summarizeRuns('integrated_nil_wasm', integratedRuns),
-    split_nil_wasm: summarizeRuns('split_nil_wasm', splitNilRuns),
+    split_nil_wasm: summarizeRuns('split_nil_wasm', splitPolyStoreRuns),
     split_kzg_wasm: kzgResolution.supported
       ? summarizeRuns('split_kzg_wasm', splitKzgRuns)
       : null,

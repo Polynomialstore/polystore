@@ -49,7 +49,7 @@ type providerDaemonStatusDetail struct {
 	PublicHealthOK     bool     `json:"public_health_ok"`
 	SpAuthPresent      bool     `json:"sp_auth_present"`
 	UploadDir          string   `json:"upload_dir,omitempty"`
-	NilHome            string   `json:"nil_home,omitempty"`
+	PolyStoreHome      string   `json:"polystore_home,omitempty"`
 	ChainID            string   `json:"chain_id,omitempty"`
 	LCDBase            string   `json:"lcd_base,omitempty"`
 	NodeAddr           string   `json:"node_addr,omitempty"`
@@ -210,15 +210,15 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 
 func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReachable bool) (*providerDaemonStatusDetail, []string) {
 	detail := &providerDaemonStatusDetail{
-		KeyName:       strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_KEY")),
+		KeyName:            strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_KEY")),
 		ConfiguredOperator: strings.TrimSpace(os.Getenv("POLYSTORE_OPERATOR_ADDRESS")),
-		SpAuthPresent: strings.TrimSpace(os.Getenv("POLYSTORE_GATEWAY_SP_AUTH")) != "",
-		UploadDir:     uploadDir,
-		NilHome:       homeDir,
-		ChainID:       strings.TrimSpace(chainID),
-		LCDBase:       strings.TrimSpace(lcdBase),
-		NodeAddr:      strings.TrimSpace(nodeAddr),
-		UptimeSeconds: statusUptimeSeconds(),
+		SpAuthPresent:      strings.TrimSpace(os.Getenv("POLYSTORE_GATEWAY_SP_AUTH")) != "",
+		UploadDir:          uploadDir,
+		PolyStoreHome:      homeDir,
+		ChainID:            strings.TrimSpace(chainID),
+		LCDBase:            strings.TrimSpace(lcdBase),
+		NodeAddr:           strings.TrimSpace(nodeAddr),
+		UptimeSeconds:      statusUptimeSeconds(),
 	}
 	issues := make([]string, 0, 8)
 

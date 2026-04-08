@@ -41,7 +41,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 - upload → commit → retrieve
 
 Fast full-local repo onboarding:
-- Start Nil Gateway GUI on `http://localhost:8080`.
+- Start PolyStore Gateway GUI on `http://localhost:8080`.
 - Verify `curl -sf http://localhost:8080/health`.
 - Use the repo-tracked public bootstrap defaults in `.env.testnet.public` unless you need explicit overrides.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file.
@@ -49,7 +49,7 @@ Fast full-local repo onboarding:
 - Continue browser verification on `https://polynomialstore.com/#/dashboard` with that same wallet and local gateway after the first-file allocation step.
 
 Local gateway app (recommended for localhost gateway-assisted flows):
-- Start Nil Gateway GUI (or local `polystore_gateway`) on `http://localhost:8080`.
+- Start PolyStore Gateway GUI (or local `polystore_gateway`) on `http://localhost:8080`.
 - Download builds: `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Notes:

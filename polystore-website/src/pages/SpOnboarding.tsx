@@ -947,7 +947,7 @@ export function SpOnboarding() {
                       <div className="mt-2 font-mono-data text-foreground">{isConnected ? walletAddressShort : 'Not connected'}</div>
                     </div>
                     <div className="border border-border bg-background/40 p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Nil address</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">PolyStore address</div>
                       <div className="mt-2 break-all font-mono-data text-foreground">{nilAddress || '—'}</div>
                     </div>
                     <div className="border border-border bg-background/40 p-3">
@@ -1168,7 +1168,7 @@ export function SpOnboarding() {
                     </div>
                   ) : !hasOperatorAddress ? (
                     <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                      Finish Step 1 first so this page has the operator wallet Nil address.
+                      Finish Step 1 first so this page has the operator wallet PolyStore address.
                     </div>
                   ) : pairingConfirmed ? (
                     <div className="border border-accent/40 bg-background px-4 py-3 text-sm text-accent">

@@ -183,20 +183,20 @@ func normalizeManifestRootOrEmpty(raw string) string {
 
 // Configurable paths & chain settings (overridable via env).
 var (
-	uploadDir       = envDefault("POLYSTORE_UPLOAD_DIR", "uploads")
-	sessionDBPath   = envDefault("POLYSTORE_SESSION_DB_PATH", filepath.Join(uploadDir, "sessions.db"))
-	providerBase    = envDefault("POLYSTORE_PROVIDER_BASE", "http://localhost:8080")
-	nilCliPath      = envDefault("POLYSTORE_CLI_BIN", "../polystore_cli/target/release/polystore_cli")
-	trustedSetup    = envDefault("POLYSTORE_TRUSTED_SETUP", "../polystorechain/trusted_setup.txt")
-	polystorechaindBin    = envDefault("POLYSTORECHAIND_BIN", "polystorechaind")
-	chainID         = envDefault("POLYSTORE_CHAIN_ID", "test-1")
-	nodeAddr        = envDefault("POLYSTORE_NODE", "tcp://127.0.0.1:26657")
-	homeDir         = envDefault("POLYSTORE_HOME", "../_artifacts/polystorechain_data")
-	gasPrices       = envDefault("POLYSTORE_GAS_PRICES", "0.001aatom")
-	defaultDuration = envDefault("POLYSTORE_DEFAULT_DEAL_DURATION_SECONDS", envDefault("POLYSTORE_DEFAULT_DURATION_BLOCKS", "1000"))
-	lcdBase         = envDefault("POLYSTORE_LCD_BASE", "http://localhost:1317")
-	faucetBase      = envDefault("POLYSTORE_FAUCET_BASE", "http://localhost:8081")
-	cmdTimeout      = time.Duration(envInt("POLYSTORE_CMD_TIMEOUT_SECONDS", 30)) * time.Second
+	uploadDir          = envDefault("POLYSTORE_UPLOAD_DIR", "uploads")
+	sessionDBPath      = envDefault("POLYSTORE_SESSION_DB_PATH", filepath.Join(uploadDir, "sessions.db"))
+	providerBase       = envDefault("POLYSTORE_PROVIDER_BASE", "http://localhost:8080")
+	polystoreCliPath   = envDefault("POLYSTORE_CLI_BIN", "../polystore_cli/target/release/polystore_cli")
+	trustedSetup       = envDefault("POLYSTORE_TRUSTED_SETUP", "../polystorechain/trusted_setup.txt")
+	polystorechaindBin = envDefault("POLYSTORECHAIND_BIN", "polystorechaind")
+	chainID            = envDefault("POLYSTORE_CHAIN_ID", "test-1")
+	nodeAddr           = envDefault("POLYSTORE_NODE", "tcp://127.0.0.1:26657")
+	homeDir            = envDefault("POLYSTORE_HOME", "../_artifacts/polystorechain_data")
+	gasPrices          = envDefault("POLYSTORE_GAS_PRICES", "0.001aatom")
+	defaultDuration    = envDefault("POLYSTORE_DEFAULT_DEAL_DURATION_SECONDS", envDefault("POLYSTORE_DEFAULT_DURATION_BLOCKS", "1000"))
+	lcdBase            = envDefault("POLYSTORE_LCD_BASE", "http://localhost:1317")
+	faucetBase         = envDefault("POLYSTORE_FAUCET_BASE", "http://localhost:8081")
+	cmdTimeout         = time.Duration(envInt("POLYSTORE_CMD_TIMEOUT_SECONDS", 30)) * time.Second
 	// Sharding (polystore_cli shard) is intentionally CPU/memory heavy; allow a larger default timeout.
 	shardTimeout = time.Duration(envInt("POLYSTORE_SHARD_TIMEOUT_SECONDS", 600)) * time.Second
 	// End-to-end upload ingest timeout (covers user sharding + witness + MDU #0 + aggregate).
@@ -358,7 +358,7 @@ func requireTxRelay(w http.ResponseWriter) bool {
 
 // Simple txhash extractor, shared with faucet-style flows.
 var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
-var nilAddrRe = regexp.MustCompile(`\bnil1[0-9a-z]{20,}\b`)
+var polystoreAddressRe = regexp.MustCompile(`\bnil1[0-9a-z]{20,}\b`)
 
 var lcdHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
@@ -372,7 +372,7 @@ func extractJSONBody(b []byte) []byte {
 	return b[start : end+1]
 }
 
-type NilCliOutput struct {
+type PolyStoreCliOutput struct {
 	ManifestRootHex string    `json:"manifest_root_hex"`
 	ManifestBlobHex string    `json:"manifest_blob_hex"`
 	FileSize        uint64    `json:"file_size_bytes"`
@@ -462,11 +462,11 @@ func fundAddressOnce(addr string) {
 	}
 }
 
-// deriveNilchaindDir attempts to find a working directory where polystorechaind
+// derivePolystorechaindDir attempts to find a working directory where polystorechaind
 // can locate its trusted setup file via the default relative path
 // "polystorechain/trusted_setup.txt". This keeps gateway CLI calls reliable even when
 // the gateway runs from a subdirectory.
-func deriveNilchaindDir() string {
+func derivePolystorechaindDir() string {
 	if root := os.Getenv("POLYSTORE_ROOT_DIR"); root != "" {
 		return root
 	}
@@ -513,7 +513,7 @@ func fileExists(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func nilCliBinaryName() string {
+func polystoreCliBinaryName() string {
 	if runtime.GOOS == "windows" {
 		return "polystore_cli.exe"
 	}
@@ -557,7 +557,7 @@ func resolveTrustedSetupPath(configured string) string {
 		}
 	}
 
-	if root := deriveNilchaindDir(); root != "" {
+	if root := derivePolystorechaindDir(); root != "" {
 		add(filepath.Join(root, "polystorechain", "trusted_setup.txt"))
 	}
 
@@ -569,7 +569,7 @@ func resolveTrustedSetupPath(configured string) string {
 	return configured
 }
 
-func resolveNilCliPath(configured string) string {
+func resolvePolystoreCliPath(configured string) string {
 	if fileExists(configured) {
 		return configured
 	}
@@ -587,7 +587,7 @@ func resolveNilCliPath(configured string) string {
 		candidates = append(candidates, path)
 	}
 
-	binaryName := nilCliBinaryName()
+	binaryName := polystoreCliBinaryName()
 
 	if exePath, err := os.Executable(); err == nil {
 		if realExePath, err := filepath.EvalSymlinks(exePath); err == nil {
@@ -597,7 +597,7 @@ func resolveNilCliPath(configured string) string {
 		add(filepath.Join(binDir, binaryName))
 	}
 
-	if root := deriveNilchaindDir(); root != "" {
+	if root := derivePolystorechaindDir(); root != "" {
 		add(filepath.Join(root, "polystore_cli", "target", "release", binaryName))
 	}
 
@@ -637,7 +637,7 @@ func looksLikeDesktopSidecarLayout() bool {
 	//   .../polystore_gateway_gui/bin/polystore_gateway
 	//   .../polystore_gateway_gui/bin/polystore_cli
 	//   .../polystore_gateway_gui/trusted_setup.txt
-	if !fileExists(filepath.Join(binDir, nilCliBinaryName())) {
+	if !fileExists(filepath.Join(binDir, polystoreCliBinaryName())) {
 		return false
 	}
 	if !fileExists(filepath.Join(rootDir, "trusted_setup.txt")) {
@@ -668,10 +668,10 @@ func applyDesktopSidecarDefaults() {
 	applyIfUnset("POLYSTORE_LOCAL_IMPORT_ALLOW_ABS", "1")
 }
 
-// execNilchaind runs a polystorechaind command and returns its combined output.
-func execNilchaind(ctx context.Context, args ...string) ([]byte, error) {
+// execPolystorechaind runs a polystorechaind command and returns its combined output.
+func execPolystorechaind(ctx context.Context, args ...string) ([]byte, error) {
 	args = maybeWithNodeArg(args)
-	return runCommand(ctx, polystorechaindBin, args, deriveNilchaindDir())
+	return runCommand(ctx, polystorechaindBin, args, derivePolystorechaindDir())
 }
 
 func maybeWithNodeArg(args []string) []string {
@@ -690,9 +690,9 @@ func maybeWithNodeArg(args []string) []string {
 	return append(args, "--node", nodeAddr)
 }
 
-// execNilCli runs a polystore_cli command and returns its combined output.
-func execNilCli(ctx context.Context, args ...string) ([]byte, error) {
-	return runCommand(ctx, nilCliPath, args, "")
+// execPolystoreCli runs a polystore_cli command and returns its combined output.
+func execPolystoreCli(ctx context.Context, args ...string) ([]byte, error) {
+	return runCommand(ctx, polystoreCliPath, args, "")
 }
 
 func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
@@ -710,7 +710,7 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 		attemptCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 		var cmdOut []byte
 		var cmdErr error
-		cmdOut, cmdErr = execNilchaind(attemptCtx, args...) // Use the new execNilchaind
+		cmdOut, cmdErr = execPolystorechaind(attemptCtx, args...) // Use the new execPolystorechaind
 		cancel()
 		out = cmdOut
 		err = cmdErr
@@ -774,9 +774,9 @@ func main() {
 		log.Printf("Resolved trusted setup path: %s", resolvedTrustedSetup)
 		trustedSetup = resolvedTrustedSetup
 	}
-	if resolvedNilCliPath := resolveNilCliPath(nilCliPath); resolvedNilCliPath != nilCliPath {
-		log.Printf("Resolved polystore_cli path: %s", resolvedNilCliPath)
-		nilCliPath = resolvedNilCliPath
+	if resolvedPolystoreCliPath := resolvePolystoreCliPath(polystoreCliPath); resolvedPolystoreCliPath != polystoreCliPath {
+		log.Printf("Resolved polystore_cli path: %s", resolvedPolystoreCliPath)
+		polystoreCliPath = resolvedPolystoreCliPath
 	}
 
 	// Ensure upload dir
@@ -2166,7 +2166,7 @@ func GatewayCreateDealFromEvm(w http.ResponseWriter, r *http.Request) {
 		log.Printf("deal_id not found in tx events; falling back to list-deals. TxHash: %s", txHash)
 		fallbackCtx, cancel := context.WithTimeout(r.Context(), cmdTimeout)
 		defer cancel()
-		listOut, _ := execNilchaind(
+		listOut, _ := execPolystorechaind(
 			fallbackCtx,
 			"query", "polystorechain", "list-deals",
 			"--home", homeDir,
@@ -4639,7 +4639,7 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 }
 
 // shardFile runs nil-cli shard on the given path and extracts the full output.
-func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*NilCliOutput, error) {
+func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*PolyStoreCliOutput, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -4659,8 +4659,8 @@ func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*
 		args = append(args, "--save-mdu-prefix", savePrefix)
 	}
 
-	// Use execNilCli which now returns ([]byte, error)
-	outBytes, err := execNilCli(ctx, args...)
+	// Use execPolystoreCli which now returns ([]byte, error)
+	outBytes, err := execPolystoreCli(ctx, args...)
 	if err != nil {
 		return nil, fmt.Errorf("nil-cli shard failed: %w", err)
 	}
@@ -4672,7 +4672,7 @@ func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*
 		if err != nil {
 			return nil, fmt.Errorf("failed to read shard output file: %w", err)
 		}
-		var out NilCliOutput
+		var out PolyStoreCliOutput
 		if err := json.Unmarshal(data, &out); err != nil {
 			return nil, fmt.Errorf("failed to parse shard output file: %w", err)
 		}
@@ -4685,7 +4685,7 @@ func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*
 		return nil, fmt.Errorf("failed to extract JSON from shard output (and output file missing): %s", string(outBytes))
 	}
 
-	var out NilCliOutput
+	var out PolyStoreCliOutput
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("failed to parse shard output: %w", err)
 	}
@@ -4850,7 +4850,7 @@ func extractTxHash(out string) string {
 
 func extractNilAddress(out string) string {
 	normalized := strings.ToLower(out)
-	matches := nilAddrRe.FindAllString(normalized, -1)
+	matches := polystoreAddressRe.FindAllString(normalized, -1)
 	if len(matches) == 0 {
 		return ""
 	}
@@ -5023,7 +5023,7 @@ func resolveKeyAddress(ctx context.Context, name string) (string, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	out, err := execNilchaind(
+	out, err := execPolystorechaind(
 		cctx,
 		"keys", "show", name,
 		"-a",
@@ -5141,7 +5141,7 @@ func submitRetrievalProofWithParams(ctx context.Context, dealID, epoch uint64, p
 	// 1) Generate a RetrievalReceipt JSON via the CLI (offline signing).
 	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	signOut, err := execNilchaind(
+	signOut, err := execPolystorechaind(
 		signCtx,
 		"tx", "polystorechain", "sign-retrieval-receipt",
 		dealIDStr,

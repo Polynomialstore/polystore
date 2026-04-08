@@ -169,8 +169,8 @@ type App struct {
 	evmMempool         sdkmempool.ExtMempool
 
 	// simulation manager
-	sm             *module.SimulationManager
-	NilchainKeeper polystorechainmodulekeeper.Keeper
+	sm                   *module.SimulationManager
+	PolyStoreChainKeeper polystorechainmodulekeeper.Keeper
 
 	// cached server options and logger (used by runtime-wired components like the EVM mempool)
 	appOpts servertypes.AppOptions
@@ -246,7 +246,7 @@ func New(
 		&app.CircuitBreakerKeeper,
 		&app.ParamsKeeper,
 		&app.FeegrantKeeper,
-		&app.NilchainKeeper,
+		&app.PolyStoreChainKeeper,
 	); err != nil {
 		panic(err)
 	}
@@ -329,7 +329,7 @@ func New(
 			Decimals:      uint32(evmtypes.DefaultEVMDecimals),
 		},
 	)
-	app.EVMKeeper.RegisterStaticPrecompile(polystoreprecompile.Address, polystoreprecompile.MustNew(&app.NilchainKeeper))
+	app.EVMKeeper.RegisterStaticPrecompile(polystoreprecompile.Address, polystoreprecompile.MustNew(&app.PolyStoreChainKeeper))
 
 	addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
 	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)

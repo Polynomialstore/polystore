@@ -384,7 +384,7 @@ The website depends on the following services (configured in `config.ts`):
 ### Key Endpoints
 *   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, witness_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
 *   `POST /sp/upload_shard`: Raw shard bytes with headers `X-PolyStore-Deal-ID`, `X-PolyStore-Mdu-Index`, `X-PolyStore-Slot`, `X-PolyStore-Manifest-Root` (Mode 2).
-*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2; internal provider↔provider only; requires `X‑Nil‑Gateway‑Auth`).
+*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2; internal provider↔provider only; requires `X‑PolyStore‑Gateway‑Auth`).
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
 *   `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`: Returns blob-range plan for retrieval sessions.
@@ -447,7 +447,7 @@ The website depends on the following services (configured in `config.ts`):
 *   **Actual (Gamma‑4):**
     1.  Client plans a retrieval session via `GET /gateway/plan-retrieval-session/...` (gateway or direct SP).
     2.  Client opens the session(s) on-chain (MetaMask `openRetrievalSession` or `openRetrievalSessions` for multi-provider).
-    3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑Nil‑Session‑Id` header.
+    3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑PolyStore‑Session‑Id` header.
     4.  Client confirms completion on-chain (`confirmRetrievalSession` or `confirmRetrievalSessions`).
     5.  Gateway forwards `POST /gateway/session-proof` to submit provider proofs.
 *   **Implication:** Browser holds the **Liveness Authority** (on‑chain session open/confirm). Gateway is a relay/compute helper, not a signer.

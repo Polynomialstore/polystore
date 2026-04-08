@@ -32,7 +32,7 @@ func resolveKeyNameForAddress(ctx context.Context, addrOrName string) (string, e
 	cctx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
 
-	out, err := execNilchaind(
+	out, err := execPolystorechaind(
 		cctx,
 		"keys", "list",
 		"--home", homeDir,

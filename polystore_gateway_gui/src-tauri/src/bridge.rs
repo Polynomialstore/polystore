@@ -167,7 +167,7 @@ fn bridge_html() -> &'static str {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>NilGateway Signature Bridge</title>
+    <title>PolyStore Gateway Signature Bridge</title>
     <style>
       body { font-family: Arial, sans-serif; margin: 32px; }
       .card { max-width: 520px; padding: 24px; border: 1px solid #ddd; border-radius: 12px; }
@@ -178,7 +178,7 @@ fn bridge_html() -> &'static str {
   </head>
   <body>
     <div class="card">
-      <h1>NilGateway Authorization</h1>
+      <h1>PolyStore Gateway Authorization</h1>
       <p>Use MetaMask to sign the PolyStore intent.</p>
       <button id="sign">Sign with MetaMask</button>
       <div class="status" id="status">Waiting for wallet...</div>
