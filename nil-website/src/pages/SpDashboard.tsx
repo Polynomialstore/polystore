@@ -502,7 +502,7 @@ export function SpDashboard() {
               <p className="max-w-2xl text-sm text-muted-foreground">
                 {needsReconnect
                   ? 'MetaMask account permissions are stale. Reconnect the wallet used for provider pairing.'
-                  : 'Switch MetaMask onto the PolyStore testnet before relying on the operator view.'}
+                  : 'Switch MetaMask onto the PolyStore Devnet before relying on the operator view.'}
               </p>
             </div>
             <button

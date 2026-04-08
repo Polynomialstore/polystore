@@ -43,7 +43,7 @@ export const PROVIDER_ONBOARDING_STEPS: ProviderOnboardingStepDefinition[] = [
     id: 'wallet',
     label: 'Connect Operator Wallet',
     anchor: 'step-wallet',
-    doneWhen: 'wallet is connected, on PolyStore testnet, and funded for approval',
+    doneWhen: 'wallet is connected, on PolyStore Devnet, and funded for approval',
   },
   {
     id: 'host',
@@ -98,7 +98,7 @@ function walletNextAction(input: ProviderOnboardingFlowInput): string {
     return 'Connect the operator wallet so this page can capture the Nil address used for provider approval.'
   }
   if (!input.walletReady) {
-    return 'Switch the browser wallet to PolyStore testnet before moving on.'
+    return 'Switch the browser wallet to PolyStore Devnet before moving on.'
   }
   if (!input.funded) {
     return 'Fund the browser wallet so it can approve the provider link transaction.'
