@@ -19,7 +19,7 @@ We are currently in **Phase 3: Code Implementation** of the NilStore Network dev
     *   **Stripe-Aligned Elasticity:** Scaling now happens in units of `n=12` shards to ensure balanced throughput.
     *   **MDU Architecture:** Standardized on **8 MiB Mega-Data Units** composed of 64 x 128 KiB KZG blobs.
 2.  **Codebase Updates:**
-    *   **`nil_core` (Rust):** Removed deprecated `argon2` logic. Added `rs-merkle` and `blake2` for MDU Merkle root computation. Updated FFI bindings to support MDU-centric verification.
+    *   **`polystore_core` (Rust):** Removed deprecated `argon2` logic. Added `rs-merkle` and `blake2` for MDU Merkle root computation. Updated FFI bindings to support MDU-centric verification.
     *   **`nilchain` (Go):** 
         *   Defined new Protobuf types (`Deal`, `Provider`, `KzgProof`, `RetrievalReceipt`) in `types.proto`.
         *   Updated `tx.proto` with `MsgRegisterProvider`, `MsgCreateDeal`, `MsgProveLiveness`, `MsgSignalSaturation`.
@@ -42,8 +42,8 @@ The next agent should focus on **verifying and refining the implementation**.
     *   `SignalSaturation`: Verify budget checks and replica counts.
 
 ### 2. Core Cryptography (Rust)
-*   **Verify MDU Logic**: Ensure `nil_core` correctly computes Merkle roots for 64-blob batches.
-*   **FFI Integration**: The Go `crypto_ffi` package is calling Rust functions. Ensure the `libnil_core.a` is built and linked correctly for `go test` to pass.
+*   **Verify MDU Logic**: Ensure `polystore_core` correctly computes Merkle roots for 64-blob batches.
+*   **FFI Integration**: The Go `crypto_ffi` package is calling Rust functions. Ensure the `libpolystore_core.a` is built and linked correctly for `go test` to pass.
 
 ### 3. End-to-End Simulation
 *   Run a simulated "Deal Lifecycle":
@@ -59,7 +59,7 @@ The next agent should focus on **verifying and refining the implementation**.
 *   **`whitepaper.md`**: High-level unified economy logic.
 
 ## Prompt for Next Agent
-"You are resuming the implementation of the NilStore Network in Phase 3. The previous agent has implemented the core Message Handlers for `CreateDeal`, `ProveLiveness`, and `SignalSaturation` in `nilchain/x/nilchain/keeper/msg_server.go`, and updated the Rust `nil_core` cryptography library to support MDU Merkle proofs.
+"You are resuming the implementation of the NilStore Network in Phase 3. The previous agent has implemented the core Message Handlers for `CreateDeal`, `ProveLiveness`, and `SignalSaturation` in `nilchain/x/nilchain/keeper/msg_server.go`, and updated the Rust `polystore_core` cryptography library to support MDU Merkle proofs.
 
 Your goal is to **stabilize and verify** this code.
 1.  Run the build (`go build ./...` in `nilchain`). Fix any syntax errors or missing imports in the new `msg_server.go` code.

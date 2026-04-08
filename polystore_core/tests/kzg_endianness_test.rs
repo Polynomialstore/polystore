@@ -1,5 +1,5 @@
-use nil_core::kzg::{BLOB_SIZE, KzgContext};
-use nil_core::utils::{frs_to_blobs, z_for_cell};
+use polystore_core::kzg::{BLOB_SIZE, KzgContext};
+use polystore_core::utils::{frs_to_blobs, z_for_cell};
 use num_bigint::BigUint;
 use num_traits::One;
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ fn get_trusted_setup_path() -> PathBuf {
 
 #[test]
 fn test_kzg_big_endian_compatibility() {
-    // This test ensures that nil_core generates Blobs and evaluation points (z)
+    // This test ensures that polystore_core generates Blobs and evaluation points (z)
     // in the Big Endian format expected by the c-kzg library (v2.1.5) and the trusted setup.
     // Regression test for the "Slashing Issue" where LE encoding caused verification failures.
 

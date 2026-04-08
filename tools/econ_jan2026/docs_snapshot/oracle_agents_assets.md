@@ -67,7 +67,7 @@ Companion docs:
 - [ ] Add unit tests per evidence type + e2e demonstrating slash on proven bad data (`scripts/`, `tests/`).
 
 ## Stage 7 — Deputy market + proxy retrieval + audit debt (P0-P2P-001)
-- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`nil_p2p/`, `nilchain/`, `nil_gateway/`).
+- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `nil_gateway/`).
 - [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`nilchain/`).
 - [ ] Add ghosting-provider e2e: still retrieve via deputy and record evidence (`scripts/`).
 
@@ -109,9 +109,9 @@ This document tracks **what is missing** between the current implementation in t
 - Prefer tracking **code ownership** by directory:
   - Chain: `nilchain/`
   - Gateway/SP: `nil_gateway/`
-  - Core crypto/WASM: `nil_core/`
-  - CLI automation: `nil_cli/`
-  - P2P: `nil_p2p/`
+  - Core crypto/WASM: `polystore_core/`
+  - CLI automation: `polystore_cli/`
+  - P2P: `polystore_p2p/`
   - Web UX: `polystore-website/`
 
 ## Status Legend
@@ -148,7 +148,7 @@ This document tracks **what is missing** between the current implementation in t
 ### P0-P2P-001 — Deputy system + proxy retrieval market + audit debt
 - **Status:** PARTIAL (stub only)
 - **Spec:** `spec.md` §7.7–§7.8; `rfcs/rfc-retrieval-validation.md`; Appendix B (7)
-- **Current state:** `nil_p2p` has an `AskForProxy` message stub, but no end-to-end deputy selection, relay, compensation, or evidence.
+- **Current state:** `polystore_p2p` has an `AskForProxy` message stub, but no end-to-end deputy selection, relay, compensation, or evidence.
 - **DoD:** proxy retrieval works when an SP “ghosts”; failure evidence is produced and aggregated; audit debt tasks are assignable/trackable; griefing mitigations.
 - **Test gate:** e2e “ghosting provider” scenario that still retrieves via deputy and records evidence.
 
@@ -162,8 +162,8 @@ This document tracks **what is missing** between the current implementation in t
 ### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
-- **Current state:** `nil_gateway` contains NilFS/layout logic in Go, while the browser uses `nil_core` WASM for crypto; risk of drift.
-- **DoD:** NilFS builder/layout + commitment logic live in `nil_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
+- **Current state:** `nil_gateway` contains NilFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
+- **DoD:** NilFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
 - **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
 
 ### P0-ECON-001 — Mainnet escrow accounting + lock-in pricing (pay-at-ingest)
@@ -245,7 +245,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Source:** `polystore-website/AGENTS.md` §8
 
-### Core crypto / WASM (`nil_core/`)
+### Core crypto / WASM (`polystore_core/`)
 
 #### CORE-401 — WebGPU KZG commitments/proofs (client-side velocity)
 - **Status:** MISSING
@@ -255,7 +255,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** PARTIAL (DEVNET)
 - **DoD:** stable outputs for commitments across Mac/Linux and browser/gateway; fuzzers for edge-cases.
 
-### CLI / Automation (`nil_cli/`, `scripts/`)
+### CLI / Automation (`polystore_cli/`, `scripts/`)
 
 #### CLI-501 — Enterprise upload job runner (delegated key, scoped funding, teardown)
 - **Status:** MISSING
@@ -265,7 +265,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** PARTIAL (DEVNET)
 - **Notes:** `notes/launch_todos.md`
 
-### P2P (`nil_p2p/`)
+### P2P (`polystore_p2p/`)
 
 #### P2P-601 — Production transport + discovery (beyond stubs)
 - **Status:** PARTIAL (DEVNET)
@@ -308,9 +308,9 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 
 ### Sprint 1 — “One core” foundation (NilFS + commitments unified)
 - **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
-- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `nil_core`.
+- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `polystore_core`.
 - **Delivers:**
-  - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `nil_core` (Rust) with a stable API surface.
+  - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
   - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
@@ -438,7 +438,7 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
 - `sprint22-wallet-unlock-detection`: detect MetaMask authorization (`eth_accounts`) early so “Create deal” prompts unlock before submit.
 - `sprint23-gap-tracker-status`: record sprint22 execution status in the tracker (doc hygiene).
-- `sprint24-one-core-payload-ffi`: move NilFS payload encode/decode into `nil_core` FFI to reduce cross-runtime drift.
+- `sprint24-one-core-payload-ffi`: move NilFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.
 
 ```
 
@@ -1527,7 +1527,7 @@ GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
 DENOM="${NIL_DENOM:-stake}"
 
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
-NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli"
+NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
 NIL_GATEWAY_BIN="$ROOT_DIR/nil_gateway/nil_gateway"
 TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
@@ -1546,17 +1546,17 @@ mkdir -p "$LOG_DIR" "$PID_DIR"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-ensure_nil_core() {
-  local lib_dir="$ROOT_DIR/nil_core/target/release"
+ensure_polystore_core() {
+  local lib_dir="$ROOT_DIR/polystore_core/target/release"
 
-  nil_core_has_symbols() {
+  polystore_core_has_symbols() {
     local sym
     local file=""
 
     # Prefer dynamic libraries because `nm` on archive `.a` can return non-zero
     # (causing false negatives under `set -o pipefail`).
-    if [ -f "$lib_dir/libnil_core.so" ]; then
-      file="$lib_dir/libnil_core.so"
+    if [ -f "$lib_dir/libpolystore_core.so" ]; then
+      file="$lib_dir/libpolystore_core.so"
 
 ```
 
@@ -1836,9 +1836,9 @@ echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-ensure_nil_core() {
-  local lib_dir="$ROOT_DIR/nil_core/target/release"
-  nil_core_has_symbols() {
+ensure_polystore_core() {
+  local lib_dir="$ROOT_DIR/polystore_core/target/release"
+  polystore_core_has_symbols() {
     local sym
     local file=""
 

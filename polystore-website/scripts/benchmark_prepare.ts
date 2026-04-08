@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
 import { loadKZG, type TrustedSetup } from 'kzg-wasm'
-import init, { NilWasm } from '../public/wasm/nil_core.js'
+import init, { NilWasm } from '../public/wasm/polystore_core.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -138,7 +138,7 @@ if (!Number.isFinite(measureRuns) || measureRuns <= 0) {
   throw new Error(`invalid MEASURE_RUNS: ${process.env.MEASURE_RUNS ?? ''}`)
 }
 
-const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
+const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
 const wasmBuffer = await fs.readFile(wasmPath)
 const nilInitStart = performance.now()
 await init({ module_or_path: wasmBuffer })
@@ -196,7 +196,7 @@ async function tryLoadCompatibleKzg(): Promise<
     return {
       supported: false,
       initMs: defaultInitMs + exactInitMs,
-      reason: 'kzg-wasm commitments did not match nil_core commitments for a canonical blob',
+      reason: 'kzg-wasm commitments did not match polystore_core commitments for a canonical blob',
     }
   } catch (error) {
     return {

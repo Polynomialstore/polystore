@@ -4,7 +4,7 @@ import { parentPort, workerData } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-import init, { NilWasm } from '../public/wasm/nil_core.js'
+import init, { NilWasm } from '../public/wasm/polystore_core.js'
 
 type BasisMode = 'blst' | 'affine' | 'projective'
 

@@ -62,8 +62,8 @@ To build the full release bundle locally:
 ## Components
 
 - `nilchain` (L1): Cosmos-SDK chain (deals, proofs, economics, retrieval sessions)
-- `nil_core` (Rust): cryptographic primitives (KZG, Merkle, Reed-Solomon), exposed via C-FFI and WASM
-- `nil_cli`: client tooling (sharding / commitment generation)
+- `polystore_core` (Rust): cryptographic primitives (KZG, Merkle, Reed-Solomon), exposed via C-FFI and WASM
+- `polystore_cli`: client tooling (sharding / commitment generation)
 - `nil_gateway`: user-gateway and provider-daemon HTTP APIs (retrieval/session enforcement)
 - `nil_faucet`: devnet faucet service (token-auth capable)
 - `polystore-website`: web UI (React/Vite) for onboarding + deal flows

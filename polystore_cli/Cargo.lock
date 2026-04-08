@@ -900,53 +900,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nil_cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake2",
- "clap",
- "hex",
- "nil_core",
- "num-bigint",
- "rand",
- "reqwest",
- "rs_merkle",
- "serde",
- "serde_json",
- "sha2",
-]
-
-[[package]]
-name = "nil_core"
-version = "0.1.0"
-dependencies = [
- "blake2",
- "bls12_381",
- "blst",
- "console_error_panic_hook",
- "ff",
- "getrandom 0.3.4",
- "group",
- "hex",
- "js-sys",
- "libc",
- "num-bigint",
- "num-integer",
- "num-traits",
- "pairing",
- "rand",
- "reed-solomon-erasure",
- "rs_merkle",
- "serde",
- "serde-wasm-bindgen",
- "serde_json",
- "sha2",
- "thiserror",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "num-bigint"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1097,6 +1050,53 @@ name = "pkg-config"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
+
+[[package]]
+name = "polystore_cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake2",
+ "clap",
+ "hex",
+ "num-bigint",
+ "polystore_core",
+ "rand",
+ "reqwest",
+ "rs_merkle",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "polystore_core"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "bls12_381",
+ "blst",
+ "console_error_panic_hook",
+ "ff",
+ "getrandom 0.3.4",
+ "group",
+ "hex",
+ "js-sys",
+ "libc",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "pairing",
+ "rand",
+ "reed-solomon-erasure",
+ "rs_merkle",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "potential_utf"

@@ -179,7 +179,7 @@ To manage this, it is recommended to organize development efforts into these thr
 *   [x] **Hook:** Instrumented `ProveLiveness` to track bytes served.
 
 ### 3. Work Stream: The Deputy System (Phase 1)
-*   [x] **P2P:** Added `AskForProxy` message structure and handler stub in `nil_p2p`.
+*   [x] **P2P:** Added `AskForProxy` message structure and handler stub in `polystore_p2p`.
 *   [x] **CLI:** Added `proxy` command to `nil-p2p` REPL.
 
 ---
@@ -195,13 +195,13 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
     *   [x] **File:** `nilchain/proto/nilchain/nilchain/v1/types.proto`
     *   [x] **Task:** Update `Deal` struct: replace `string cid` with `bytes manifest_root` (48-byte) and add `uint64 total_mdus`.
     *   [x] **Task:** Define `message ChainedProof`: `mdu_index`, `mdu_root_fr`, `manifest_opening` (Hop 1), `blob_commitment`, `merkle_path` (Hop 2), `z`, `y`, `kzg_opening` (Hop 3).
-*   **Step B: Core Cryptography (`nil_core`) (Executed)**
+*   **Step B: Core Cryptography (`polystore_core`) (Executed)**
     *   [x] **Task:** Implement `ManifestMDU` generation:
         *   Input: List of MDU Roots (hashes).
         *   Process: Map hashes to Scalars -> Blob -> KZG Commitment.
         *   Output: `ManifestRoot` (G1) and `ManifestBlob` data.
 *   **Step C: Chain Verification Logic**
-    *   [x] **Task (Core):** Implement `verify_manifest_inclusion` in `nil_core` (Need to handle Roots of Unity coordinate mapping).
+    *   [x] **Task (Core):** Implement `verify_manifest_inclusion` in `polystore_core` (Need to handle Roots of Unity coordinate mapping).
     *   [x] **Task (FFI):** Expose `nil_verify_chained_proof` (Hop 1 + 3) and `nil_compute_manifest_commitment`.
     *   [x] **File:** `nilchain/x/nilchain/keeper/msg_server.go` (or dedicated verifier).
     *   [x] **Task:** Implement `VerifyChainedProof` algorithm using FFI:
@@ -248,8 +248,8 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
 **Goal:** Enable client-side encryption, erasure coding, and KZG commitment generation in the browser (Thick Client) to support the Mode 2 (StripeReplica) architecture.
 
 ### 1. WASM Foundation (Rust)
-*   [x] **Build:** Configure `nil_core` to compile to `wasm32-unknown-unknown` (replaced `c-kzg` with `bls12_381` manual impl).
-*   [x] **Trusted Setup:** Implement `KzgContext::load_from_reader` in `nil_core` to accept raw setup data from JS.
+*   [x] **Build:** Configure `polystore_core` to compile to `wasm32-unknown-unknown` (replaced `c-kzg` with `bls12_381` manual impl).
+*   [x] **Trusted Setup:** Implement `KzgContext::load_from_reader` in `polystore_core` to accept raw setup data from JS.
 *   [x] **Bindgen:** Expose `expand_file` to JS via `wasm-bindgen`.
 
 ### 2. Mode 2 Logic (Rust)
@@ -281,7 +281,7 @@ Future agents utilizing this documentation must be aware of the following archit
 - **Triple Proof Model:** The frontend **does not** currently implement the Triple Proof verification logic described in `@notes/triple-proof.md`. It relies on the Gateway (`nil_gateway` / `nil_gateway`) to perform these checks.
 - **MDU Packing:** The frontend **does not** pack files into MDUs (as defined in `@spec.md`). It streams raw bytes to the Gateway via `useUpload`.
 - **Simulation vs. Reality:** The `FileSharder.tsx` component is a visual simulation using SHA-256 and is **not** part of the actual transaction pipeline.
-- **Action Item:** Future work involves compiling the Rust `nil_core` crate to Wasm to enable true "Thick Client" functionality (Local KZG generation, MDU packing, and autonomous SP negotiation) directly in the browser.
+- **Action Item:** Future work involves compiling the Rust `polystore_core` crate to Wasm to enable true "Thick Client" functionality (Local KZG generation, MDU packing, and autonomous SP negotiation) directly in the browser.
 
 ## 9. Current Architecture State: Mode 2 & NilFS (As of Dec 2025)
 
@@ -380,7 +380,7 @@ This section outlines the Test-Driven Development (TDD) plan for refactoring the
 **TDD Plan:** Create `nil_gateway/main_test.go` (or a dedicated integration test package for handlers).
 
 1.  **`TestUploadNewDealLifecycle`**:
-    *   Mock `nil_cli` `shardFile` call to return dummy MDUs and roots for user data.
+    *   Mock `polystore_cli` `shardFile` call to return dummy MDUs and roots for user data.
     *   Call `GatewayUpload` for "file_A.txt" (no `deal_id` provided, `max_user_mdus` specified).
     *   **Assert:** The response includes a *newly generated* `deal_id` (simulated) and the initial `manifest_root` for MDU #0.
     *   **Crucial:** `nil_gateway` must now:
@@ -477,7 +477,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Test gate:** `npm run test:unit`
 
 - [x] **Goal 2: Implement WASM Worker Harness.**
-    - **Step 1:** Create `src/workers/gateway.worker.ts` importing `nil_core`.
+    - **Step 1:** Create `src/workers/gateway.worker.ts` importing `polystore_core`.
     - **Step 2:** Implement message passing for `ShardFile` (chunked) and `ComputeCommitments`.
     - **Step 3:** Update `FileSharder.tsx` or create `useThickClient` hook to use the worker.
     - **Test gate:** Browser E2E smoke test (ensure no UI freeze on large file).
@@ -550,7 +550,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Refund:** if a session expires/cancels without completion, refund only the locked `variable` amount back to `Deal.escrow_balance` (base fee remains burned/spent).
     - **Refund mechanism:** implement `MsgCancelRetrievalSession` (owner-only) to unlock `variable` after expiry; do not rely on an expensive “scan all sessions” EndBlocker sweep for devnet.
 
-- [x] **Goal 1: Port `Mdu0Builder` to Rust (`nil_core`).**
+- [x] **Goal 1: Port `Mdu0Builder` to Rust (`polystore_core`).**
 - [x] **Goal 2: Expose Layout Logic via WASM.**
 - [x] **Goal 3: Expose Layout Logic via C-FFI (CGO).**
 - [x] **Goal 4: Refactor `nil_gateway` to use Rust Core.**
@@ -674,10 +674,10 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 #### 11.3.B Delta Sprint Checklist: Native↔WASM Parity Tests
 
-**Goal:** Add automated parity checks so native (`nil_core`) and browser/WASM (`nil_core` wasm build) produce identical outputs for core flows.
+**Goal:** Add automated parity checks so native (`polystore_core`) and browser/WASM (`polystore_core` wasm build) produce identical outputs for core flows.
 
 - [x] **Task 1: Choose parity fixtures + “what exactly must match”.**
-  - **Fixtures directory:** `nil_core/fixtures/parity/`
+  - **Fixtures directory:** `polystore_core/fixtures/parity/`
     - `blob_128k.bin` (deterministic bytes)
     - `mdu_8m.bin` (deterministic bytes; can be repeated pattern)
     - `slab_small/` (few small files → deterministic layout inputs)
@@ -693,19 +693,19 @@ This section tracks the currently active TODOs for the AI agent working in this 
       - If proofs are deterministic: compare proof bytes hashes.
       - If proofs are not deterministic: compare `proof_hash` + `verify(proof)==true` (and ensure `proof_hash` is computed deterministically from canonical fields).
   - **Indices selection:** use a fixed‑seed PRNG to pick non‑trivial `mdu_index`/`blob_index` (avoid 0), so parity runs are deterministic but closer to realistic randomness.
-  - **Pass gate:** fixtures + output spec are committed and documented in `nil_core/fixtures/parity/README.md`.
+  - **Pass gate:** fixtures + output spec are committed and documented in `polystore_core/fixtures/parity/README.md`.
 
 - [x] **Task 2: Implement native parity runner (Rust).**
-  - Add a small Rust binary: `nil_core/src/bin/parity_native.rs`
-    - Reads fixtures from `nil_core/fixtures/parity/`.
+  - Add a small Rust binary: `polystore_core/src/bin/parity_native.rs`
+    - Reads fixtures from `polystore_core/fixtures/parity/`.
     - Emits a single JSON blob to stdout with the fields defined above.
     - Must not require network or wall-clock randomness.
   - Add a Rust unit test that runs the binary logic in-process (optional) to keep coverage.
-  - **Pass gate:** `cd nil_core && cargo run --release --bin parity_native` produces JSON on Linux/macOS and is stable across runs.
+  - **Pass gate:** `cd polystore_core && cargo run --release --bin parity_native` produces JSON on Linux/macOS and is stable across runs.
 
 - [x] **Task 3: Implement WASM parity runner (Node).**
   - Build wasm using the repo’s existing pattern:
-    - `cd nil_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name nil_core`
+    - `cd polystore_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name polystore_core`
   - Add Node runner script: `polystore-website/scripts/parity_wasm.ts`
     - Imports the wasm bundle and computes the same JSON output for the same fixtures.
     - Uses Node fs to read fixture bytes; does not require a browser.
@@ -720,7 +720,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] **Task 5: CI integration (dedicated parity job).**
   - Extend `.github/workflows/ci.yml` with a new job `native-wasm-parity` that:
     - Sets up Rust + Node.
-    - Builds native `nil_core` and runs `cargo run --release --bin parity_native > native.json`.
+    - Builds native `polystore_core` and runs `cargo run --release --bin parity_native > native.json`.
     - Builds wasm via `wasm-pack` and runs the Node wasm runner > wasm.json.
     - Runs the comparator and fails CI on mismatch.
   - Keep runtime bounded (fixtures small; limit blobs; avoid full 8MiB if too slow in CI).
@@ -759,7 +759,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - Require provider is assigned to the relevant `slot`.
   - Pin `manifest_root` at session open as today.
 
-#### 11.4.B Core Crypto (`nil_core`) + FFI
+#### 11.4.B Core Crypto (`polystore_core`) + FFI
 - [x] **Task 1: Parametric RS expansion.**
   - Add `expand_mdu_rs(k, m)` (WASM + native) to return:
     - `shards`: `N` shards of `MDU_SIZE / K` bytes
@@ -804,7 +804,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - Recompute roots/manifest and persist the updated slab back to OPFS.
 
 #### 11.4.E Tests (Unit + E2E)
-- [x] **Unit:** nil_core RS param + decode tests (missing shards, invalid K|64).
+- [x] **Unit:** polystore_core RS param + decode tests (missing shards, invalid K|64).
 - [x] **Unit:** gateway Mode 2 reconstruction test (data shard -> MDU).
 - [x] **E2E:** a new script that spins up **12+ SPs**, creates a Mode 2 deal, uploads data, and retrieves bytes successfully.
   - Simple routing: slot 0..N-1 -> providers[slot] (ordered list from chain).
@@ -823,7 +823,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
 
 #### 11.4.2.A Canonical artifact spec (shared contract)
 - [x] Define `mode2-artifacts-v1` naming + bytes contract (deal-scoped dirs, stable filenames, deterministic shard ordering).
-- [x] Publish golden vectors (small set) used by: `nil_core` tests, gateway tests, and web unit tests.
+- [x] Publish golden vectors (small set) used by: `polystore_core` tests, gateway tests, and web unit tests.
 
 #### 11.4.2.B Gateway Mode 2 ingest (preferred path when present)
 - [x] Extend `/status` to advertise `capabilities.mode2_rs=true` and `extra.rs_profile`, `extra.artifact_spec`.
@@ -1117,7 +1117,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
         - Unit: shared EIP-712 golden vectors (CreateDealV2 + UpdateContent) match between the chain verifier and the web signer.
         - Integration: `create-deal-from-evm` succeeds with an intent that omits `size_tier` (and legacy intent support is explicit if kept during transition).
     - **Pass gate:** No `DealSize`/`deal_size`/`size_tier` remnants; CreateDeal is thin-provisioned until `UpdateDealContent*`.
-    - **Test gate:** `cd nilchain && go test ./...` and `cd polystore-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
+    - **Test gate:** `cd nilchain && go test ./...` and `cd polystore-website && npm run test:unit` and `./e2e_create_deal_from_evm.sh` and `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website nilchain nil_gateway polystore_cli scripts tests e2e_*.sh`
 
 - [x] **Goal 3: Add a real browser smoke E2E suite (runs against `./scripts/run_local_stack.sh start`).**
     - **Steps:** `11.4.1` deterministic E2E wallet; `11.4.2` stable selectors; `11.4.3` dashboard lifecycle smoke; `11.4.4` deal explorer smoke; `11.4.5` one-command runner.
@@ -1208,7 +1208,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 - [x] **11.2.3 Sweep + delete tier remnants in scripts/docs/debug.**
     - **Files:** `scripts/e2e_lifecycle.sh`, `e2e_create_deal_from_evm.sh`, `tests/e2e_full_stack.py`, `polystore-website/website-spec.md`, `polystore-website/debug/*`
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes without `SIZE_TIER`/`size_tier` anywhere in the payloads; docs no longer instruct “tiers”.
-    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website nilchain nil_gateway nil_cli scripts tests e2e_*.sh`
+    - **Test gate:** `./scripts/e2e_lifecycle.sh` and `rg -n "size_tier|SIZE_TIER|SizeTier|DealSize|deal_size" -S polystore-website nilchain nil_gateway polystore_cli scripts tests e2e_*.sh`
     - **Commit gate:** After pass, commit `chore: remove tier remnants` and push to `origin`.
 
 - [x] **11.2.4 (Optional but preferred) Remove deprecated `size_tier` from `EvmCreateDealIntent` proto.**
@@ -1224,7 +1224,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - *Status:* **COMPLETED**.
     - *Note:* Fixed syntax errors in `msg_server.go` and verified the full lifecycle (Create -> Upload -> Update -> Fetch) works with EIP-712 signatures using ChainID 31337.
 - [x] Fix `/gateway/upload` “hangs” (very slow canonical ingest):
-    - **Fixed:** Speed up KZG commitments in `nil_core` and ensure gateway ingest propagates cancellation/timeouts into `nil_cli` subprocesses.
+    - **Fixed:** Speed up KZG commitments in `polystore_core` and ensure gateway ingest propagates cancellation/timeouts into `polystore_cli` subprocesses.
     - **Tests:** Go unit tests for `nil_gateway` (timeout/cancel + MDU #0 `--raw`) and JS unit tests in `polystore-website` (AbortController timeout).
     - **E2E:** `scripts/e2e_lifecycle.sh` upload timeout reduced to `<=60s`.
 
@@ -1275,7 +1275,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 - [x] Add an opt-in Node e2e test that runs the lifecycle against a running local stack and asserts LCD + gateway observables match.
 
 ### 11.5 Core & WASM Health
-- [ ] Keep `nil_core` and `nil_cli` warning-free across `cargo build` and `cargo test`, and expand unit/integration tests as new KZG/coding functionality is added.
+- [ ] Keep `polystore_core` and `polystore_cli` warning-free across `cargo build` and `cargo test`, and expand unit/integration tests as new KZG/coding functionality is added.
 - [ ] Ensure the WASM Mode 2 path (`expand_mdu` / `expand_file`) is exercised by tests (Rust integration tests and, where feasible, frontend tests) so “Invalid scalar”/encoding issues are caught automatically.
 
 ### 11.6 Canonical NilFS Upload + Thick Client Parity (Option D)
@@ -1336,13 +1336,13 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 
 #### 11.6.B Thick‑Client WASM Stabilization (Parallel Track)
 - [x] **B1. Fix WASM “Invalid scalar” in `expand_mdu/expand_file`.**
-    - **Change:** Repair scalar field mapping / roots‑of‑unity coordinate logic in `nil_core` WASM so browser outputs match native.
-    - **Pass gate:** `cargo test -p nil_core` + WASM unit/integration tests pass, and `Local MDU (WASM)` tab can expand a sample file without errors.
-    - **Commit gate:** After pass, commit `fix(nil_core): WASM expand_mdu scalar mapping` and push.
+    - **Change:** Repair scalar field mapping / roots‑of‑unity coordinate logic in `polystore_core` WASM so browser outputs match native.
+    - **Pass gate:** `cargo test -p polystore_core` + WASM unit/integration tests pass, and `Local MDU (WASM)` tab can expand a sample file without errors.
+    - **Commit gate:** After pass, commit `fix(polystore_core): WASM expand_mdu scalar mapping` and push.
 
 - [x] **B2. (Back burner) Add native↔WASM parity tests for MDU expansion.**
     - **Change:** For a fixed fixture file, assert:
-        1. WASM `expand_file` MDUs/roots/commitments equal `nil_cli shard` output,
+        1. WASM `expand_file` MDUs/roots/commitments equal `polystore_cli shard` output,
         2. resulting ManifestRoot equals canonical gateway ingest ManifestRoot.
     - **Pass gate:** Parity tests run in CI/local (Rust + JS) and fail on drift.
     - **Commit gate:** After pass, commit `test: WASM/native expansion parity` and push.

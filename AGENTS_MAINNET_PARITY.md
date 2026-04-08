@@ -2,7 +2,7 @@
 
 ## 0) Header
 
-This file is the **Codex-executable** execution punch list for completing remaining **Mainnet econ/security parity** work (plus the devnet/testnet launch-critical pieces) across `nilchain/`, `nil_gateway/`, and `nil_p2p/`. It is derived from the staged checklist and the frozen/approved economic and repair policies; tasks are written to be **low ambiguity**, **test-gated**, and small enough to land in **1–3 commits** each.
+This file is the **Codex-executable** execution punch list for completing remaining **Mainnet econ/security parity** work (plus the devnet/testnet launch-critical pieces) across `nilchain/`, `nil_gateway/`, and `polystore_p2p/`. It is derived from the staged checklist and the frozen/approved economic and repair policies; tasks are written to be **low ambiguity**, **test-gated**, and small enough to land in **1–3 commits** each.
 
 ### How to run locally
 
@@ -1226,15 +1226,15 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 * **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
 * **Owner:**
-* **Area:** `nil_p2p/`, `nil_gateway/`
+* **Area:** `polystore_p2p/`, `nil_gateway/`
 * **Depends on:** `P0-DEPUTY-001`, `P0-DEPUTY-002`, `P0-AUDIT-001`
 * **Context:**
 
-  * `MAINNET_GAP_TRACKER.md` P0-P2P-001: `nil_p2p` has an `AskForProxy` stub that must be implemented.
+  * `MAINNET_GAP_TRACKER.md` P0-P2P-001: `polystore_p2p` has an `AskForProxy` stub that must be implemented.
   * Stage 7 requires end-to-end proxy retrieval (selection, routing, settlement).
 * **Work plan:**
 
-  1. Implement `AskForProxy` request/response flow in `nil_p2p/`:
+  1. Implement `AskForProxy` request/response flow in `polystore_p2p/`:
 
      * request identifies deal/range/provider and premium offer
      * response provides a deputy endpoint/identity
@@ -1246,7 +1246,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
   3. Add logging/metrics hooks aligned with monitoring signals (proxy success rate, deputy fraction).
 * **Artifacts:**
 
-  * `nil_p2p/` AskForProxy implementation
+  * `polystore_p2p/` AskForProxy implementation
   * `nil_gateway/` fallback routing integration
 * **DoD:**
 

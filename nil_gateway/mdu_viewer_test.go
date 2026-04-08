@@ -110,7 +110,7 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 	if resp.Roots[0].MduIndex != 0 || resp.Roots[0].Kind != "mdu0" {
 		t.Fatalf("expected roots[0] to be mdu0, got %+v", resp.Roots[0])
 	}
-	// The mocked nil_cli helper returns root_hex=0x1111 for raw sharding.
+	// The mocked polystore_cli helper returns root_hex=0x1111 for raw sharding.
 	if resp.Roots[0].RootHex != "0x1111" {
 		t.Fatalf("expected mdu0 root_hex 0x1111, got %q", resp.Roots[0].RootHex)
 	}

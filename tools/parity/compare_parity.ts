@@ -18,7 +18,7 @@ function getPath(obj: Record<string, unknown>, pathExpr: string): unknown {
   }, obj)
 }
 
-const nativeRaw = run('cargo', ['run', '--release', '--bin', 'parity_native'], path.join(repoRoot, 'nil_core'))
+const nativeRaw = run('cargo', ['run', '--release', '--bin', 'parity_native'], path.join(repoRoot, 'polystore_core'))
 const tsxBin = path.join(
   repoRoot,
   'polystore-website',

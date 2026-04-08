@@ -88,7 +88,7 @@ The application uses Vite for building and handling environment variables. Confi
 *   **Vite (`vite.config.ts`):** Standard React plugin setup.
 *   **TypeScript (`tsconfig.json`):** Strict mode enabled, Target ES2020.
 *   **Tailwind (`tailwind.config.js`):** Configured for CSS variable-based theming (HSL values) with `darkMode: 'class'`.
-*   **WASM (`nil_core`):** `npm run dev` first runs `wasm:ensure`, which reuses `public/wasm/` when `nil_core.js` and `nil_core_bg.wasm` are already present and only falls back to `wasm-pack build` when the bundle is missing or `NIL_FORCE_WASM_BUILD=1` is set. `npm run build:full` still performs a fresh `wasm-pack build`. Fresh WASM builds require `wasm-pack` + a Rust toolchain on the machine/CI runner.
+*   **WASM (`polystore_core`):** `npm run dev` first runs `wasm:ensure`, which reuses `public/wasm/` when `polystore_core.js` and `polystore_core_bg.wasm` are already present and only falls back to `wasm-pack build` when the bundle is missing or `NIL_FORCE_WASM_BUILD=1` is set. `npm run build:full` still performs a fresh `wasm-pack build`. Fresh WASM builds require `wasm-pack` + a Rust toolchain on the machine/CI runner.
 
 ### 1.3 Key Dependencies
 *   **Web3:** `wagmi`, `viem`
@@ -320,7 +320,7 @@ The central hub for deal management.
 ### 5.7 Utility Components
 *   **`ModeToggle.tsx`:** Sun/Moon icon toggle using `useTheme`.
 *   **`FaucetWidget.tsx`:** Standalone button triggering `useFaucet`.
-*   **`FileSharder.tsx`:** Thick-client sharder. Uses `nil_core` WASM to expand MDUs, generate commitments, and (for Mode 2) produce RS shards. Uploads via the transport router and supports direct-to-SP flows.
+*   **`FileSharder.tsx`:** Thick-client sharder. Uses `polystore_core` WASM to expand MDUs, generate commitments, and (for Mode 2) produce RS shards. Uploads via the transport router and supports direct-to-SP flows.
 
 ---
 
@@ -467,7 +467,7 @@ Example (viem-style):
 ```
 
 ### 8.3 Visualizations vs. Logic
-*   **`FileSharder.tsx`:** Uses `nil_core` WASM to generate real MDU roots, manifest commitments, and Mode 2 shards; outputs are valid for on-chain commit.
+*   **`FileSharder.tsx`:** Uses `polystore_core` WASM to generate real MDU roots, manifest commitments, and Mode 2 shards; outputs are valid for on-chain commit.
 *   **Real Data Flow:** The actual data flow for a deal is:
     1.  `useCreateDeal` -> Creates a thin-provisioned Deal on-chain.
     2.  **Gateway path:** `useUpload` streams raw file to Gateway -> Gateway returns `manifest_root`.

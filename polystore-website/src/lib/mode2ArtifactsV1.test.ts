@@ -15,8 +15,8 @@ type NilWasmLike = {
 }
 
 async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; NilWasm: new (trustedSetupBytes: Uint8Array) => NilWasmLike; wasmPath: string }> {
-  const jsPath = path.resolve(__dirname, '../../public/wasm/nil_core.js')
-  const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm')
+  const jsPath = path.resolve(__dirname, '../../public/wasm/polystore_core.js')
+  const wasmPath = path.resolve(__dirname, '../../public/wasm/polystore_core_bg.wasm')
   try {
     await fs.access(jsPath)
     await fs.access(wasmPath)

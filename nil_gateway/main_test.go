@@ -925,7 +925,7 @@ func TestHelperProcess(t *testing.T) {
 	}
 }
 
-// handleSavePrefix mimics nil_cli behavior by creating dummy MDU files if --save-mdu-prefix is set.
+// handleSavePrefix mimics polystore_cli behavior by creating dummy MDU files if --save-mdu-prefix is set.
 func handleSavePrefix(args []string) error {
 	savePrefix := ""
 	for i, arg := range args {

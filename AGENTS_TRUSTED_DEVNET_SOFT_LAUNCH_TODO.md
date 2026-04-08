@@ -36,7 +36,7 @@ Checklist:
 - [x] Fix doc index and onboarding docs (`DOCS.md`, `HAPPY_PATH.md`, `docs/TESTNET_READINESS_REPORT.md`).
 - [x] Update repo-anchored agent runbook (`docs/AGENTS_RUNBOOK_REPO_ANCHORED.md`).
 - [x] Replace Ignite boilerplate chain readme (`nilchain/readme.md`).
-- [x] Fix `install.sh` CLI binary name (`nil_cli` vs `nil-cli`).
+- [x] Fix `install.sh` CLI binary name (`polystore_cli` vs `nil-cli`).
 
 ---
 

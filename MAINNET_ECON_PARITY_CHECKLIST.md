@@ -50,8 +50,8 @@ Companion docs:
 - [ ] E2E gates: owner-only deal rejects non-owner; public deal allows non-owner sponsored open; voucher replay fails; allowlist proof required (`tests/`, `scripts/`).
 
 ## Stage 2c — Content encoding / compression (A2c)
-- [ ] Implement NilCEv1 header (`NILC`) + `ContentEncoding` enum and zstd (level 3) compress-before-encrypt pipeline in both gateway and WASM (`nil_gateway/`, `nil_core/`).
-- [ ] Retrieval path parses header and decompresses after decrypt; partial reads fetch header blobs first (`nil_gateway/`, `nil_core/`).
+- [ ] Implement NilCEv1 header (`NILC`) + `ContentEncoding` enum and zstd (level 3) compress-before-encrypt pipeline in both gateway and WASM (`nil_gateway/`, `polystore_core/`).
+- [ ] Retrieval path parses header and decompresses after decrypt; partial reads fetch header blobs first (`nil_gateway/`, `polystore_core/`).
 - [ ] UI shows original vs stored size and cost delta; compression default ON with opt-out (`polystore-website/`).
 - [ ] Tests: round-trip equality; corrupt header fails safely; zip-bomb defense; gateway vs WASM parity (`tests/`).
 
@@ -79,7 +79,7 @@ Companion docs:
 - [ ] Add unit tests per evidence type + e2e demonstrating slash on proven bad data (`scripts/`, `tests/`).
 
 ## Stage 7 — Deputy market + proxy retrieval + audit debt (P0-P2P-001)
-- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`nil_p2p/`, `nilchain/`, `nil_gateway/`).
+- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `nil_gateway/`).
 - [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`nilchain/`).
 - [ ] Add ghosting-provider e2e: still retrieve via deputy and record evidence (`scripts/`).
 

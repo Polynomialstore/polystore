@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-import init, { NilWasm } from '../public/wasm/nil_core.js'
+import init, { NilWasm } from '../public/wasm/polystore_core.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -57,7 +57,7 @@ function stats(values: number[]) {
 }
 
 async function loadNilWasm() {
-  const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
+  const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
   const wasmBuffer = await fs.readFile(wasmPath)
   const initStart = performance.now()
   await init({ module_or_path: wasmBuffer })

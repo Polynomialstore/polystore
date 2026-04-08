@@ -10,7 +10,7 @@ Enable the browser to act as a full "Thick Client" capable of client-side encryp
 
 ## 2. Technical Scope
 
-### 2.1 Core Cryptography (`nil_core` - Rust)
+### 2.1 Core Cryptography (`polystore_core` - Rust)
 *   **WASM Support:** Update dependencies (`getrandom`, `c-kzg`) to compile to `wasm32-unknown-unknown`.
 *   **Erasure Coding:** Implement `reed-solomon-erasure` for RS(K, K+M) (default `K=8`, `M=4`). Each slot stores `8 MiB / K` bytes per SP‑MDU (default 1 MiB when `K=8`).
 *   **Expansion Pipeline:** Implement the full `expand_mdu(bytes)` function:
@@ -35,7 +35,7 @@ Enable the browser to act as a full "Thick Client" capable of client-side encryp
 *   Update `AGENTS.md` with granular Todo list.
 
 ### Phase 2: WASM Foundation
-*   Fix `nil_core` WASM build.
+*   Fix `polystore_core` WASM build.
 *   Implement `load_trusted_setup_bytes`.
 *   Expose basic KZG to JS.
 

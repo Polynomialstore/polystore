@@ -1,5 +1,5 @@
 [package]
-name = "nil_cli"
+name = "polystore_cli"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,7 +8,7 @@ anyhow = "1.0.100"
 blake2 = "0.10.6"
 clap = { version = "4.5.53", features = ["derive", "env"] }
 hex = "0.4.3"
-nil_core = { version = "0.1.0", path = "../nil_core" }
+polystore_core = { version = "0.1.0", path = "../polystore_core" }
 num-bigint = "0.4.6"
 rand = "0.9.2"
 reqwest = { version = "0.12.24", features = ["json", "blocking"] }

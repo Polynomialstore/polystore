@@ -1,9 +1,9 @@
 package crypto_ffi
 
 /*
-#cgo linux LDFLAGS: -L${SRCDIR}/../../../nil_core/target/release -lnil_core -ldl -lpthread -lm
-#cgo darwin LDFLAGS: -L${SRCDIR}/../../../nil_core/target/release -lnil_core -lpthread -lm
-#cgo windows LDFLAGS: -L${SRCDIR}/../../../nil_core/target/x86_64-pc-windows-gnu/release -lnil_core -lws2_32 -lbcrypt -luserenv -lntdll
+#cgo linux LDFLAGS: -L${SRCDIR}/../../../polystore_core/target/release -lpolystore_core -ldl -lpthread -lm
+#cgo darwin LDFLAGS: -L${SRCDIR}/../../../polystore_core/target/release -lpolystore_core -lpthread -lm
+#cgo windows LDFLAGS: -L${SRCDIR}/../../../polystore_core/target/x86_64-pc-windows-gnu/release -lpolystore_core -lws2_32 -lbcrypt -luserenv -lntdll
 #include <stdlib.h> // For C.free
 
 	// FFI declarations for Rust functions
@@ -294,7 +294,7 @@ func Init(path string) error {
 	if res == 0 {
 		return nil
 	}
-	return errors.New("failed to initialize nil_core KZG (check path or file format)")
+	return errors.New("failed to initialize polystore_core KZG (check path or file format)")
 }
 
 // ComputeMduMerkleRoot computes the Merkle root of KZG commitments for an 8 MiB MDU.

@@ -300,35 +300,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
-name = "nil_core"
-version = "0.1.0"
-dependencies = [
- "blake2",
- "bls12_381",
- "blst",
- "console_error_panic_hook",
- "ff",
- "getrandom 0.3.4",
- "group",
- "hex",
- "js-sys",
- "libc",
- "num-bigint",
- "num-integer",
- "num-traits",
- "pairing",
- "rand",
- "reed-solomon-erasure",
- "rs_merkle",
- "serde",
- "serde-wasm-bindgen",
- "serde_json",
- "sha2",
- "thiserror",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "num-bigint"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -404,6 +375,35 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "winapi",
+]
+
+[[package]]
+name = "polystore_core"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "bls12_381",
+ "blst",
+ "console_error_panic_hook",
+ "ff",
+ "getrandom 0.3.4",
+ "group",
+ "hex",
+ "js-sys",
+ "libc",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "pairing",
+ "rand",
+ "reed-solomon-erasure",
+ "rs_merkle",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "wasm-bindgen",
 ]
 
 [[package]]

@@ -2,8 +2,8 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 
-use nil_core::coding::{expand_mdu, expand_mdu_encoded};
-use nil_core::kzg::KzgContext;
+use polystore_core::coding::{expand_mdu, expand_mdu_encoded};
+use polystore_core::kzg::KzgContext;
 
 #[derive(serde::Serialize)]
 struct FixtureInfo {

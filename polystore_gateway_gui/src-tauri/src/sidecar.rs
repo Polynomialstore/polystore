@@ -181,9 +181,9 @@ impl SidecarManager {
         configure_sidecar_from_binary_layout(&mut cmd, &binary);
 
         if let Ok(resource_dir) = app.path().resource_dir() {
-            let nil_cli_path = resource_dir.join("bin").join(binary_filename("nil_cli"));
-            if is_resource_ready(&nil_cli_path) {
-                cmd.env("NIL_CLI_BIN", &nil_cli_path);
+            let polystore_cli_path = resource_dir.join("bin").join(binary_filename("polystore_cli"));
+            if is_resource_ready(&polystore_cli_path) {
+                cmd.env("NIL_CLI_BIN", &polystore_cli_path);
             }
             for trusted_setup_path in [
                 resource_dir.join("bin").join("trusted_setup.txt"),
@@ -456,17 +456,17 @@ fn configure_sidecar_runtime_env(cmd: &mut Command, resource_dir: &Path) {
 
 fn configure_sidecar_runtime_env_for_bin_dir(cmd: &mut Command, bin_dir: &Path) {
     #[cfg(target_os = "linux")]
-    if has_any_resource(bin_dir, &["libnil_core.so"]) {
+    if has_any_resource(bin_dir, &["libpolystore_core.so"]) {
         extend_env_path_list(cmd, "LD_LIBRARY_PATH", bin_dir);
     }
 
     #[cfg(target_os = "macos")]
-    if has_any_resource(bin_dir, &["libnil_core.dylib"]) {
+    if has_any_resource(bin_dir, &["libpolystore_core.dylib"]) {
         extend_env_path_list(cmd, "DYLD_LIBRARY_PATH", bin_dir);
     }
 
     #[cfg(target_os = "windows")]
-    if has_any_resource(bin_dir, &["nil_core.dll", "libnil_core.dll"]) {
+    if has_any_resource(bin_dir, &["polystore_core.dll", "libpolystore_core.dll"]) {
         extend_env_path_list(cmd, "PATH", bin_dir);
     }
 }
@@ -496,9 +496,9 @@ fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
         return;
     };
 
-    let nil_cli_path = bin_dir.join(binary_filename("nil_cli"));
-    if is_resource_ready(&nil_cli_path) {
-        cmd.env("NIL_CLI_BIN", &nil_cli_path);
+    let polystore_cli_path = bin_dir.join(binary_filename("polystore_cli"));
+    if is_resource_ready(&polystore_cli_path) {
+        cmd.env("NIL_CLI_BIN", &polystore_cli_path);
     }
 
     for trusted_setup_path in {

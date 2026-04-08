@@ -80,7 +80,7 @@ The GUI must run without requiring the user to install build tools or CLI binari
    - The host sets `NIL_TRUSTED_SETUP`, `NILCHAIND_BIN`, and other paths to bundle-resident locations.
 2. **Eliminate external exec dependencies (target hardening):**
    - Remove `execNilchaind` usage from `nil_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
-   - Ensure Mode 2 ingest does not require `nil_cli` subprocesses (prefer `crypto_ffi`, which already exists for RS + KZG primitives).
+   - Ensure Mode 2 ingest does not require `polystore_cli` subprocesses (prefer `crypto_ffi`, which already exists for RS + KZG primitives).
 
 The plan below assumes Strategy (1) first, then Strategy (2) as a follow-up hardening phase.
  
@@ -334,7 +334,7 @@ Each phase is small-commit friendly and includes a test gate.
 
 ### Phase 7 — Dependency-Free Sidecar (Hardening)
 - [ ] Remove `execNilchaind` usage from `nil_gateway` (broadcast/query via libraries).
-- [ ] Ensure all ingest/commit paths used by the GUI do not shell out to `nil_cli`.
+- [ ] Ensure all ingest/commit paths used by the GUI do not shell out to `polystore_cli`.
 - [ ] Update GUI bundling to only include the `nil_gateway` sidecar and required static assets.
 - **Test gate:** all previous tests still pass; add a “no external exec” unit test that fails if `NILCHAIND_BIN`/`NIL_CLI_BIN` is required.
  

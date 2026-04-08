@@ -22,7 +22,7 @@ If you need to reference code locations, prefer these likely areas (verify in re
 - Chain params/proto: `nilchain/proto/nilchain/nilchain/v1/params.proto`
 - Chain keeper logic: `nilchain/x/nilchain/keeper/`
 - Gateway/router: `nil_gateway/`
-- P2P deputy stubs: `nil_p2p/`
+- P2P deputy stubs: `polystore_p2p/`
 
 ## Output (single file)
 

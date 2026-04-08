@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use nil_p2p::{Command, NilNode};
+use polystore_p2p::{Command, NilNode};
 use tokio::sync::mpsc;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -18,7 +18,7 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("nil_p2p=info".parse().unwrap()))
+        .with_env_filter(EnvFilter::from_default_env().add_directive("polystore_p2p=info".parse().unwrap()))
         .init();
 
     let cli = Cli::parse();

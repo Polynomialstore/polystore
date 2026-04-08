@@ -2,7 +2,7 @@
 
 **Status:** Approved Normative (Updated)
 **Scope:** Core Protocol / Economics
-**Depends on:** `spec.md`, `nil_core`
+**Depends on:** `spec.md`, `polystore_core`
 **Supersedes:** legacy capacity tier / deal sizing language, `rfc_granularity_v1`
 
 **Changelog (v2.0):**
@@ -100,7 +100,7 @@ The maximum batch size is bounded by the Deal’s committed content (`Deal.size`
 ---
 
 ## 6. Implementation Directives
-1.  **Core Cryptography:** Hardcode `MDU_SIZE = 8,388,608` in `nil_core`.
+1.  **Core Cryptography:** Hardcode `MDU_SIZE = 8,388,608` in `polystore_core`.
 2.  **Chain Logic (Thin Provisioning):**
     *   `MsgCreateDeal*` initializes `size = 0`, `manifest_root = empty`, `total_mdus = 0` (until first content commit).
     *   `MsgUpdateDealContent*` enforces `size ≤ MAX_DEAL_BYTES` and advances the committed state.

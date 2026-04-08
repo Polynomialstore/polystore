@@ -13,7 +13,7 @@ type NilCliAggregateOutput struct {
 	ManifestBlobHex string `json:"manifest_blob_hex"`
 }
 
-// aggregateRoots calls `nil_cli aggregate --roots <file> --out <out>`.
+// aggregateRoots calls `polystore_cli aggregate --roots <file> --out <out>`.
 // roots is a list of hex strings (e.g. "0x...")
 func aggregateRoots(roots []string) (string, string, error) {
 	return aggregateRootsWithContext(context.Background(), roots)
@@ -49,7 +49,7 @@ func aggregateRootsWithContext(ctx context.Context, roots []string) (string, str
 
 	if err != nil {
 		if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
-			return "", "", fmt.Errorf("nil_cli aggregate timed out after %s: %w", cmdTimeout, execCtx.Err())
+			return "", "", fmt.Errorf("polystore_cli aggregate timed out after %s: %w", cmdTimeout, execCtx.Err())
 		}
 		if errors.Is(execCtx.Err(), context.Canceled) {
 			return "", "", execCtx.Err()

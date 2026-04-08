@@ -31,8 +31,8 @@ FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride commo
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
 GATEWAY_BIN="$LOG_DIR/nil_gateway"
-NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-$ROOT_DIR/nil_core/target/release}"
-NIL_CORE_LIB_SO="$NIL_CORE_LIB_DIR/libnil_core.so"
+NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-$ROOT_DIR/polystore_core/target/release}"
+NIL_CORE_LIB_SO="$NIL_CORE_LIB_DIR/libpolystore_core.so"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
 BRIDGE_STATUS="not deployed"
@@ -175,20 +175,20 @@ EOF
   rm -rf "$CHAIN_HOME"
 }
 
-ensure_nil_core() {
-  local lib_dir="$ROOT_DIR/nil_core/target/release"
-  nil_core_has_symbols() {
+ensure_polystore_core() {
+  local lib_dir="$ROOT_DIR/polystore_core/target/release"
+  polystore_core_has_symbols() {
     local sym
     local file=""
 
     # Prefer dynamic libraries because `nm` on archive `.a` can return non-zero
     # (causing false negatives under `set -o pipefail`).
-    if [ -f "$lib_dir/libnil_core.so" ]; then
-      file="$lib_dir/libnil_core.so"
-    elif [ -f "$lib_dir/libnil_core.dylib" ]; then
-      file="$lib_dir/libnil_core.dylib"
-    elif [ -f "$lib_dir/libnil_core.a" ]; then
-      file="$lib_dir/libnil_core.a"
+    if [ -f "$lib_dir/libpolystore_core.so" ]; then
+      file="$lib_dir/libpolystore_core.so"
+    elif [ -f "$lib_dir/libpolystore_core.dylib" ]; then
+      file="$lib_dir/libpolystore_core.dylib"
+    elif [ -f "$lib_dir/libpolystore_core.a" ]; then
+      file="$lib_dir/libpolystore_core.a"
     else
       return 1
     fi
@@ -226,28 +226,28 @@ ensure_nil_core() {
     return 0
   }
 
-  if nil_core_has_symbols; then
+  if polystore_core_has_symbols; then
     return 0
   fi
-  banner "Building nil_core (native)"
-  (cd "$ROOT_DIR/nil_core" && cargo build --release)
-  if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
+  banner "Building polystore_core (native)"
+  (cd "$ROOT_DIR/polystore_core" && cargo build --release)
+  if [ ! -f "$lib_dir/libpolystore_core.a" ] && [ ! -f "$lib_dir/libpolystore_core.so" ] && [ ! -f "$lib_dir/libpolystore_core.dylib" ]; then
     local alt=""
     for ext in a so dylib; do
-      alt=$(ls "$ROOT_DIR"/nil_core/target/*/release/libnil_core."$ext" 2>/dev/null | head -n1 || true)
+      alt=$(ls "$ROOT_DIR"/polystore_core/target/*/release/libpolystore_core."$ext" 2>/dev/null | head -n1 || true)
       if [ -n "$alt" ]; then
         mkdir -p "$lib_dir"
-        cp "$alt" "$lib_dir/libnil_core.$ext"
+        cp "$alt" "$lib_dir/libpolystore_core.$ext"
         break
       fi
     done
   fi
-  if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
-    echo "nil_core native library not found after build" >&2
+  if [ ! -f "$lib_dir/libpolystore_core.a" ] && [ ! -f "$lib_dir/libpolystore_core.so" ] && [ ! -f "$lib_dir/libpolystore_core.dylib" ]; then
+    echo "polystore_core native library not found after build" >&2
     exit 1
   fi
-  if ! nil_core_has_symbols; then
-    echo "nil_core native library is missing required symbols (stale build?)" >&2
+  if ! polystore_core_has_symbols; then
+    echo "polystore_core native library is missing required symbols (stale build?)" >&2
     exit 1
   fi
 }
@@ -405,7 +405,7 @@ wait_for_local_gateway_health() {
 }
 
 ensure_nilchaind() {
-  ensure_nil_core_shared
+  ensure_polystore_core_shared
   banner "Building and installing nilchaind (via $GO_BIN)"
   
   # Reconstruct vendor directory to handle partial vendoring strategy
@@ -424,13 +424,13 @@ ensure_nilchaind() {
   (cd "$ROOT_DIR/nilchain" && "$GO_BIN" install ./cmd/nilchaind)
 }
 
-ensure_nil_cli() {
-  banner "Building nil_cli (release)"
-  (cd "$ROOT_DIR/nil_cli" && cargo build --release)
+ensure_polystore_cli() {
+  banner "Building polystore_cli (release)"
+  (cd "$ROOT_DIR/polystore_cli" && cargo build --release)
 }
 
 ensure_nil_gateway() {
-  ensure_nil_core_shared
+  ensure_polystore_core_shared
   # Rebuild when sources changed; the stack script reuses a single binary path
   # under _artifacts/, so a simple "exists" check can lead to stale behavior.
   if [ -x "$GATEWAY_BIN" ]; then
@@ -442,17 +442,17 @@ ensure_nil_gateway() {
   (cd "$ROOT_DIR/nil_gateway" && "$GO_BIN" build -o "$GATEWAY_BIN" .)
 }
 
-ensure_nil_core_shared() {
+ensure_polystore_core_shared() {
   if [ -f "$NIL_CORE_LIB_SO" ]; then
     return 0
   fi
-  banner "Building nil_core shared library (release)"
+  banner "Building polystore_core shared library (release)"
   (
-    cd "$ROOT_DIR/nil_core"
+    cd "$ROOT_DIR/polystore_core"
     cargo build --release
   )
   if [ ! -f "$NIL_CORE_LIB_SO" ]; then
-    echo "ERROR: nil_core shared library missing after build: $NIL_CORE_LIB_SO" >&2
+    echo "ERROR: polystore_core shared library missing after build: $NIL_CORE_LIB_SO" >&2
     exit 1
   fi
   export LD_LIBRARY_PATH="$NIL_CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -916,7 +916,7 @@ start_faucet() {
 
 start_sp_gateway() {
   banner "Starting SP gateway service(s) (ports starting at 8082)"
-  ensure_nil_cli
+  ensure_polystore_cli
   ensure_nil_gateway
   local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-6}"
   if [ "$provider_count" -lt 1 ]; then
@@ -968,7 +968,7 @@ start_sp_gateway() {
       NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS_SP:-}" \
       NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS_SP:-}" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-        NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
+        NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
         NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
         "$GATEWAY_BIN" \
         >"$LOG_DIR/$log_name" 2>&1 &
@@ -996,7 +996,7 @@ start_user_gateway() {
   fi
 
   banner "Starting User gateway service (Port 8080)"
-  ensure_nil_cli
+  ensure_polystore_cli
   ensure_nil_gateway
   local user_gateway_proxy_mode="$NIL_USER_GATEWAY_PROXY_MODE"
   if [ "$user_gateway_proxy_mode" != "1" ]; then
@@ -1028,7 +1028,7 @@ start_user_gateway() {
     NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS:-}" \
     NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS:-}" \
     NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
+      NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
       "$GATEWAY_BIN" \
       >"$LOG_DIR/gateway_user.log" 2>&1 &
@@ -1234,7 +1234,7 @@ stop_gateway_user() {
 start_all() {
   stop_all
   rm -rf "$LOG_DIR/uploads_sp" "$LOG_DIR/uploads_user"
-  ensure_nil_core
+  ensure_polystore_core
   ensure_nilchaind
   init_chain
   start_chain

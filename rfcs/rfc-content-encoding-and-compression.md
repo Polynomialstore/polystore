@@ -2,7 +2,7 @@
 
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23  
-**Scope:** Client/WASM (`nil_core`), Gateway ingest (`nil_gateway`), download UX, and provider storage format (bytes only)  
+**Scope:** Client/WASM (`polystore_core`), Gateway ingest (`nil_gateway`), download UX, and provider storage format (bytes only)
 **Hard constraints respected:** does not modify escrow settlement; no oracles; deterministic on-chain.
 
 ---
@@ -148,4 +148,3 @@ Therefore:
 2) Upload a non-compressible file → encoding NONE; download identical.
 3) Corrupt header → download path fails with a clear error.
 4) Zip-bomb defense: malformed compressed payload triggers safe abort.
-

@@ -76,7 +76,7 @@ PROVIDER_FUNDING_WAIT_SECS="${NIL_PROVIDER_FUNDING_WAIT_SECS:-45}"
 PROVIDER_FUNDING_POLL_SECS="${NIL_PROVIDER_FUNDING_POLL_SECS:-2}"
 
 NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/nilchain/nilchaind}"
-NIL_CLI_BIN="${NIL_CLI_BIN:-$ROOT_DIR/nil_cli/target/release/nil_cli}"
+NIL_CLI_BIN="${NIL_CLI_BIN:-$ROOT_DIR/polystore_cli/target/release/polystore_cli}"
 TRUSTED_SETUP="${NIL_TRUSTED_SETUP:-$ROOT_DIR/nilchain/trusted_setup.txt}"
 
 PROVIDER_LISTEN="${PROVIDER_LISTEN:-${NIL_LISTEN_ADDR:-:8091}}"
@@ -293,18 +293,18 @@ provider_public_base_url() {
   multiaddr_to_url "$endpoint"
 }
 
-find_nil_core_lib_dir() {
+find_polystore_core_lib_dir() {
   local candidate
   local candidates=(
     "$NIL_CORE_LIB_DIR"
     "$ROOT_DIR/nilchain/lib"
-    "$ROOT_DIR/nil_core/target/release"
+    "$ROOT_DIR/polystore_core/target/release"
     "$ROOT_DIR/polystore_gateway_gui/src-tauri/bin"
   )
 
   for candidate in "${candidates[@]}"; do
     [ -n "$candidate" ] || continue
-    if [ -f "$candidate/libnil_core.so" ] || [ -f "$candidate/libnil_core.dylib" ]; then
+    if [ -f "$candidate/libpolystore_core.so" ] || [ -f "$candidate/libpolystore_core.dylib" ]; then
       echo "$candidate"
       return 0
     fi
@@ -313,20 +313,20 @@ find_nil_core_lib_dir() {
   return 1
 }
 
-ensure_nil_core_runtime() {
+ensure_polystore_core_runtime() {
   local lib_dir
-  lib_dir="$(find_nil_core_lib_dir || true)"
+  lib_dir="$(find_polystore_core_lib_dir || true)"
 
   if [ -z "$lib_dir" ]; then
-    echo "==> Building nil_core runtime library..."
-    (cd "$ROOT_DIR/nil_core" && cargo build --release >/dev/null)
-    lib_dir="$ROOT_DIR/nil_core/target/release"
+    echo "==> Building polystore_core runtime library..."
+    (cd "$ROOT_DIR/polystore_core" && cargo build --release >/dev/null)
+    lib_dir="$ROOT_DIR/polystore_core/target/release"
   fi
 
-  if [ -f "$lib_dir/libnil_core.so" ]; then
+  if [ -f "$lib_dir/libpolystore_core.so" ]; then
     export LD_LIBRARY_PATH="$lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   fi
-  if [ -f "$lib_dir/libnil_core.dylib" ]; then
+  if [ -f "$lib_dir/libpolystore_core.dylib" ]; then
     export DYLD_LIBRARY_PATH="$lib_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
   fi
   if [ -d "$lib_dir" ]; then
@@ -345,19 +345,19 @@ ensure_nilchaind() {
   if [ -x "$NILCHAIND_BIN" ]; then
     return 0
   fi
-  ensure_nil_core_runtime
+  ensure_polystore_core_runtime
   local build_goflags="${GOFLAGS:-}"
   build_goflags="${build_goflags} -mod=mod"
   echo "==> Building nilchaind..."
   (cd "$ROOT_DIR/nilchain" && GOFLAGS="$build_goflags" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
 }
 
-ensure_nil_cli() {
+ensure_polystore_cli() {
   if [ -x "$NIL_CLI_BIN" ]; then
     return 0
   fi
-  echo "==> Building nil_cli..."
-  (cd "$ROOT_DIR/nil_cli" && cargo build --release)
+  echo "==> Building polystore_cli..."
+  (cd "$ROOT_DIR/polystore_cli" && cargo build --release)
 }
 
 provider_addr() {
@@ -931,7 +931,7 @@ print_config() {
   "nil_upload_dir": "$(json_escape "$UPLOAD_DIR")",
   "trusted_setup": "$(json_escape "$TRUSTED_SETUP")",
   "nilchaind_bin": "$(json_escape "$NILCHAIND_BIN")",
-  "nil_cli_bin": "$(json_escape "$NIL_CLI_BIN")",
+  "polystore_cli_bin": "$(json_escape "$NIL_CLI_BIN")",
   "go_bin": "$(json_escape "$GO_BIN")",
   "pid_file": "$(json_escape "$pid_file")",
   "pid": "$(json_escape "$pid")",
@@ -980,9 +980,9 @@ doctor_provider() {
   fi
 
   if [ -x "$NIL_CLI_BIN" ] || [ -f "$NIL_CLI_BIN" ]; then
-    echo "OK: nil_cli binary present at $NIL_CLI_BIN"
+    echo "OK: polystore_cli binary present at $NIL_CLI_BIN"
   else
-    echo "WARN: nil_cli binary missing at $NIL_CLI_BIN"
+    echo "WARN: polystore_cli binary missing at $NIL_CLI_BIN"
   fi
 
   if [ -f "$TRUSTED_SETUP" ]; then
@@ -1341,8 +1341,8 @@ link_provider() {
 
 start_provider() {
   require_existing_provider_key "start"
-  ensure_nil_cli
-  ensure_nil_core_runtime
+  ensure_polystore_cli
+  ensure_polystore_core_runtime
   assert_expected_provider_address
 
   if [ ! -f "$TRUSTED_SETUP" ]; then

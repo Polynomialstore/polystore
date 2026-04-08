@@ -20,11 +20,11 @@ This document outlines the milestones required to execute this transition.
 
 ### Execution Strategy: The "One Core" Migration
 To enable the Browser Gateway without creating protocol drift, we must unify the core logic.
-*   **Current State:** Cryptography is in Rust (`nil_core`), but Filesystem Layout (`Mdu0Builder`) is in Go.
-*   **Target State:** All "Thinking" (Crypto + Layout) moves to `nil_core` (Rust).
+*   **Current State:** Cryptography is in Rust (`polystore_core`), but Filesystem Layout (`Mdu0Builder`) is in Go.
+*   **Target State:** All "Thinking" (Crypto + Layout) moves to `polystore_core` (Rust).
 *   **Bindings:**
-    *   **Browser:** Calls `nil_core` via WASM.
-    *   **Go Gateway:** Calls `nil_core` via CGO (FFI).
+    *   **Browser:** Calls `polystore_core` via WASM.
+    *   **Go Gateway:** Calls `polystore_core` via CGO (FFI).
 *   **Result:** A single source of truth for the NilFS format, preventing bugs where the browser and gateway produce different roots for the same file.
 
 *   **Consulting Analysis:** Currently, the Gateway signs transactions on behalf of users. This masks gas costs and creates a central point of failure. We must shift to a model where the Browser is the primary "User Agent" (Thick Client), capable of operating independently via WASM, while optionally delegating heavy compute to a local Gateway. Simultaneously, we must deploy the real economic logic so users pay for what they use.
@@ -48,8 +48,8 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 
 *   **Consulting Analysis:** The `kzg_upload_bottleneck_report.md` is a critical red flag. CPU-based KZG generation (~8MB/s) is insufficient for the protocol's target use case. We cannot launch Mainnet with "dial-up" upload speeds for "broadband" data.
 *   **Key Deliverables:**
-    *   **GPU Acceleration (Icicle):** Integrate CUDA-accelerated KZG (e.g., Ingonyama's Icicle) into `nil_cli` and `nil_gateway`. Target >500 MB/s throughput.
-    *   **Thick Client (WASM) Finalization:** Complete the Rust-to-WASM compilation pipeline (`nil_core`) so that small files (<100MB) can be sharded and committed directly in the browser, bypassing the Gateway for small deals.
+    *   **GPU Acceleration (Icicle):** Integrate CUDA-accelerated KZG (e.g., Ingonyama's Icicle) into `polystore_cli` and `nil_gateway`. Target >500 MB/s throughput.
+    *   **Thick Client (WASM) Finalization:** Complete the Rust-to-WASM compilation pipeline (`polystore_core`) so that small files (<100MB) can be sharded and committed directly in the browser, bypassing the Gateway for small deals.
     *   **Parallel Ingest:** Refactor the Gateway ingest pipeline to handle parallel blob commitment generation across multiple GPU streams.
 
 ## Milestone 3: Mode 2 Implementation (StripeReplica)

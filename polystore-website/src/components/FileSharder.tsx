@@ -3948,7 +3948,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     }
   }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, browserPerfEndPhase, browserPerfLog, browserPerfStartPhase, browserPerfStartRun, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded]);
 
-  // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
+  // Helper for encoding (matches polystore_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
       const MDU_SIZE = 8 * 1024 * 1024;
       const SCALAR_BYTES = 32;

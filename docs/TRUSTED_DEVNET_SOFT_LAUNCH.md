@@ -175,7 +175,7 @@ Minimum required edits:
 - set `NIL_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
 - set `NIL_GATEWAY_SP_AUTH` on the router and providers (shared secret)
 - set `NIL_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
-- set `LD_LIBRARY_PATH=/opt/nilstore/nil_core/target/release` in all nilstore env files
+- set `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` in all nilstore env files
 - recommended (hub behind Caddy or Cloudflare Tunnel): bind services to localhost and expose only via the public edge:
   - `nilchaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
   - `nil-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080` (or another free local port if `8080` is occupied)
@@ -391,7 +391,7 @@ The website is built with Vite.
 - Recommended local Gateway distribution for collaborators: `polystore_gateway_gui` release artifacts from `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Build requirements:
-- Rust + `wasm-pack` (the build compiles `nil_core` → WASM)
+- Rust + `wasm-pack` (the build compiles `polystore_core` → WASM)
 - `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
 
 Build example:
@@ -696,8 +696,8 @@ Important:
   - sessions are **required by default** (`NIL_REQUIRE_ONCHAIN_SESSION=1`)
 - systemd service exits with `203/EXEC`:
   - ensure unit templates use the shell wrapper in `ops/systemd/*.service` and run `systemctl daemon-reload`
-- nil services fail with `libnil_core.so: cannot open shared object file`:
-  - ensure `LD_LIBRARY_PATH=/opt/nilstore/nil_core/target/release` is set in each `/etc/nilstore/*.env`
+- nil services fail with `libpolystore_core.so: cannot open shared object file`:
+  - ensure `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` is set in each `/etc/nilstore/*.env`
 - `nilchaind` fails binding gRPC `localhost:9090`:
   - set a free port in `/var/lib/nilstore/nilchaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
 - Multiple providers on one host fail to start (port bind errors):

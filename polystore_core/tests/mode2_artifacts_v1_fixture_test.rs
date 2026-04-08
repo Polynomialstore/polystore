@@ -1,5 +1,5 @@
-use nil_core::coding::{expand_mdu_encoded, reconstruct_mdu_from_shards};
-use nil_core::kzg::{BLOB_SIZE, KzgCommitment, KzgContext, MDU_SIZE};
+use polystore_core::coding::{expand_mdu_encoded, reconstruct_mdu_from_shards};
+use polystore_core::kzg::{BLOB_SIZE, KzgCommitment, KzgContext, MDU_SIZE};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;

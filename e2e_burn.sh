@@ -6,7 +6,7 @@ set -e
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHAIN_DIR="$ROOT_DIR/nilchain"
-CORE_DIR="$ROOT_DIR/nil_core"
+CORE_DIR="$ROOT_DIR/polystore_core"
 HOME_DIR="$ROOT_DIR/.nilchain_burn"
 CHAIN_ID="nilchain"
 LOG_FILE="$ROOT_DIR/e2e_burn.log"
@@ -15,7 +15,7 @@ TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
 echo "[E2E-BURN] Building..."
 pushd "$CHAIN_DIR" >/dev/null
 cp "$ROOT_DIR/demos/kzg/trusted_setup.txt" ./trusted_setup.txt
-export CGO_LDFLAGS="-L$CORE_DIR/target/release -lnil_core"
+export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
 go build -o "$ROOT_DIR/nilchaind" ./cmd/nilchaind
 popd >/dev/null
 

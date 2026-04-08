@@ -1,4 +1,4 @@
-declare module '/wasm/nil_core.js' {
+declare module '/wasm/polystore_core.js' {
   const init: (
     input?:
       | RequestInfo
@@ -42,7 +42,7 @@ declare module '/wasm/nil_core.js' {
   }
 }
 
-declare module '../../public/wasm/nil_core.js' {
+declare module '../../public/wasm/polystore_core.js' {
   const init: (
     input?:
       | RequestInfo

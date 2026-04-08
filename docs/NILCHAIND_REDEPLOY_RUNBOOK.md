@@ -85,5 +85,5 @@ sudo systemctl restart nilchaind
 ## Notes
 
 - The script defaults to building with `-mod=mod` so local rebuilds do not get stuck on stale vendor state.
-- If `libnil_core` is missing, the script attempts to build `nil_core` in the selected source checkout.
+- If `libpolystore_core` is missing, the script attempts to build `polystore_core` in the selected source checkout.
 - Default runtime paths are tuned to this environment (`/opt/nilstore`, `/etc/nilstore/nilchaind.env`) and can be overridden with flags.

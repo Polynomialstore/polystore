@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use nil_core::{
+use polystore_core::{
     kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext, MDU_SIZE},
     utils::{frs_to_blobs, z_for_cell},
 };
@@ -11,7 +11,7 @@ use rs_merkle::{Hasher, MerkleTree};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-// Define local Hasher to match nil_core's behavior
+// Define local Hasher to match polystore_core's behavior
 #[derive(Clone)]
 pub struct Blake2s256Hasher;
 impl rs_merkle::Hasher for Blake2s256Hasher {

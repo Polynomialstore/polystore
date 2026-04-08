@@ -1,11 +1,15 @@
 // Computes SHA-256 digests of NilWasm.expand_file outputs for a fixed 8MiB fixture.
+// Uses the *web-target* wasm-pack bundle that polystore-website serves from `public/wasm`.
+//
 // Intended to be invoked from Rust tests (see expand_parity_test.rs).
 
-const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const { NilWasm } = require("../pkg/nil_core.js");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function fixtureData() {
   const size = 8 * 1024 * 1024;
@@ -37,14 +41,23 @@ function sha256Hex(chunks) {
   return hasher.digest("hex");
 }
 
-function main() {
-  const trustedSetupPath = path.resolve(
-    __dirname,
-    "../../demos/kzg/trusted_setup.txt",
-  );
+async function main() {
+  const repoRoot = path.resolve(__dirname, "../..");
+
+  const trustedSetupPath = path.resolve(repoRoot, "demos/kzg/trusted_setup.txt");
   const trustedSetup = fs.readFileSync(trustedSetupPath);
 
-  const wasm = new NilWasm(trustedSetup);
+  const wasmJsPath = path.resolve(repoRoot, "polystore-website/public/wasm/polystore_core.js");
+  const wasmWasmPath = path.resolve(
+    repoRoot,
+    "polystore-website/public/wasm/polystore_core_bg.wasm",
+  );
+  const wasmBytes = fs.readFileSync(wasmWasmPath);
+
+  const wasmModule = await import(pathToFileURL(wasmJsPath).toString());
+  await wasmModule.default({ module_or_path: wasmBytes });
+
+  const wasm = new wasmModule.NilWasm(trustedSetup);
   const expanded = wasm.expand_file(fixtureData());
 
   const witnessHex = sha256Hex(expanded.witness);
@@ -53,5 +66,7 @@ function main() {
   process.stdout.write(`${witnessHex}\n${shardsHex}\n`);
 }
 
-main();
-
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

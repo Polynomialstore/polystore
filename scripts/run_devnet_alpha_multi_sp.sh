@@ -38,7 +38,7 @@ NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
 NIL_REINIT_HOME="${NIL_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
 
 NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
-NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli"
+NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
 NIL_GATEWAY_BIN="$ROOT_DIR/nil_gateway/nil_gateway"
 TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
@@ -148,21 +148,21 @@ EOF
   rm -rf "$CHAIN_HOME"
 }
 
-ensure_nil_core() {
-  local lib_dir="$ROOT_DIR/nil_core/target/release"
+ensure_polystore_core() {
+  local lib_dir="$ROOT_DIR/polystore_core/target/release"
 
-  nil_core_has_symbols() {
+  polystore_core_has_symbols() {
     local sym
     local file=""
 
     # Prefer dynamic libraries because `nm` on archive `.a` can return non-zero
     # (causing false negatives under `set -o pipefail`).
-    if [ -f "$lib_dir/libnil_core.so" ]; then
-      file="$lib_dir/libnil_core.so"
-    elif [ -f "$lib_dir/libnil_core.dylib" ]; then
-      file="$lib_dir/libnil_core.dylib"
-    elif [ -f "$lib_dir/libnil_core.a" ]; then
-      file="$lib_dir/libnil_core.a"
+    if [ -f "$lib_dir/libpolystore_core.so" ]; then
+      file="$lib_dir/libpolystore_core.so"
+    elif [ -f "$lib_dir/libpolystore_core.dylib" ]; then
+      file="$lib_dir/libpolystore_core.dylib"
+    elif [ -f "$lib_dir/libpolystore_core.a" ]; then
+      file="$lib_dir/libpolystore_core.a"
     else
       return 1
     fi
@@ -200,29 +200,29 @@ ensure_nil_core() {
     return 0
   }
 
-  if nil_core_has_symbols; then
+  if polystore_core_has_symbols; then
     return 0
   fi
 
-  banner "Building nil_core (native)"
-  (cd "$ROOT_DIR/nil_core" && cargo build --release)
-  if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
+  banner "Building polystore_core (native)"
+  (cd "$ROOT_DIR/polystore_core" && cargo build --release)
+  if [ ! -f "$lib_dir/libpolystore_core.a" ] && [ ! -f "$lib_dir/libpolystore_core.so" ] && [ ! -f "$lib_dir/libpolystore_core.dylib" ]; then
     local alt=""
     for ext in a so dylib; do
-      alt=$(ls "$ROOT_DIR"/nil_core/target/*/release/libnil_core."$ext" 2>/dev/null | head -n1 || true)
+      alt=$(ls "$ROOT_DIR"/polystore_core/target/*/release/libpolystore_core."$ext" 2>/dev/null | head -n1 || true)
       if [ -n "$alt" ]; then
         mkdir -p "$lib_dir"
-        cp "$alt" "$lib_dir/libnil_core.$ext"
+        cp "$alt" "$lib_dir/libpolystore_core.$ext"
         break
       fi
     done
   fi
-  if [ ! -f "$lib_dir/libnil_core.a" ] && [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
-    echo "nil_core native library not found after build" >&2
+  if [ ! -f "$lib_dir/libpolystore_core.a" ] && [ ! -f "$lib_dir/libpolystore_core.so" ] && [ ! -f "$lib_dir/libpolystore_core.dylib" ]; then
+    echo "polystore_core native library not found after build" >&2
     exit 1
   fi
-  if ! nil_core_has_symbols; then
-    echo "nil_core native library is missing required symbols (stale build?)" >&2
+  if ! polystore_core_has_symbols; then
+    echo "polystore_core native library is missing required symbols (stale build?)" >&2
     exit 1
   fi
 }
@@ -312,9 +312,9 @@ ensure_nilchaind() {
   (cd "$ROOT_DIR/nilchain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" install ./cmd/nilchaind)
 }
 
-ensure_nil_cli() {
-  banner "Building nil_cli (release)"
-  (cd "$ROOT_DIR/nil_cli" && cargo build --release)
+ensure_polystore_cli() {
+  banner "Building polystore_cli (release)"
+  (cd "$ROOT_DIR/polystore_cli" && cargo build --release)
 }
 
 ensure_nil_gateway() {
@@ -790,9 +790,9 @@ start_all() {
     fi
   fi
 
-  ensure_nil_core
+  ensure_polystore_core
   ensure_nilchaind
-  ensure_nil_cli
+  ensure_polystore_cli
   ensure_nil_gateway
   init_chain
   start_chain

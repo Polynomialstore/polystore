@@ -108,7 +108,7 @@ export const S3AdapterDocs = () => {
             <p>$ go build</p>
             <br/>
             <p className="text-muted-foreground"># 2. Ensure dependencies (CLI & Trusted Setup)</p>
-            <p>$ cd ../nil_cli && cargo build</p>
+            <p>$ cd ../polystore_cli && cargo build</p>
             <br/>
             <p className="text-muted-foreground"># 3. Run</p>
             <p>$ ./nil_gateway</p>

@@ -105,10 +105,10 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
 - Gateway:
   - `go test ./nil_gateway/...`
 - Rust crates:
-  - `cd nil_core && cargo test`
-  - `cd nil_cli && cargo test`
-  - `cd nil_p2p && cargo test`
-  - `cd nil_mock_l1 && cargo test`
+  - `cd polystore_core && cargo test`
+  - `cd polystore_cli && cargo test`
+  - `cd polystore_p2p && cargo test`
+  - `cd polystore_mock_l1 && cargo test`
 - Website:
   - `npm -C polystore-website run test:unit`
   - `npm -C polystore-website run build`
@@ -126,10 +126,10 @@ The authoritative source of “what CI runs” is `.github/workflows/ci.yml`.
 
 At a high level, CI exercises:
 - Go unit tests: `nilchain`, `nil_faucet`, `nil_gateway`, `nil_relayer`
-- Rust unit tests: `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
+- Rust unit tests: `polystore_core`, `polystore_cli`, `polystore_p2p`, `polystore_mock_l1`
 - Frontend: build + unit tests + lint (`polystore-website`)
 - Tauri GUI: build + unit tests + clippy (`polystore_gateway_gui`)
-- Native/WASM parity: `nil_core` wasm-pack build + `tools/parity/compare_parity.ts`
+- Native/WASM parity: `polystore_core` wasm-pack build + `tools/parity/compare_parity.ts`
 - Local-stack E2E: lifecycle (with and without a local gateway), retrieval fees, and retrieval sessions (Mode1 + Mode2)
 - Browser E2E (Playwright): gateway-absent, libp2p-relay, Mode2 stripe (12 SPs)
 - Multi-SP regression: `scripts/ci_e2e_gateway_retrieval_multi_sp.sh`

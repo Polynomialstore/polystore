@@ -25,7 +25,7 @@ Requirements:
 Build the native crypto library first (used via cgo/FFI):
 
 ```bash
-cd ../nil_core
+cd ../polystore_core
 cargo build --release
 ```
 
@@ -33,15 +33,15 @@ Build `nilchaind`:
 
 ```bash
 cd ../nilchain
-export CGO_LDFLAGS="-L$(pwd)/../nil_core/target/release -lnil_core -ldl -lpthread -lm"
+export CGO_LDFLAGS="-L$(pwd)/../polystore_core/target/release -lpolystore_core -ldl -lpthread -lm"
 go build -o ../bin/nilchaind ./cmd/nilchaind
 ```
 
 Notes:
 - The trusted setup is `nilchain/trusted_setup.txt`. Many local scripts export
   `KZG_TRUSTED_SETUP` automatically; if you run manually, set it explicitly.
-- On Linux, set `LD_LIBRARY_PATH` to include `../nil_core/target/release`.
-- On macOS, set `DYLD_LIBRARY_PATH` to include `../nil_core/target/release`.
+- On Linux, set `LD_LIBRARY_PATH` to include `../polystore_core/target/release`.
+- On macOS, set `DYLD_LIBRARY_PATH` to include `../polystore_core/target/release`.
 
 ## Tests
 
@@ -49,10 +49,10 @@ Notes:
 go test ./...
 ```
 
-If tests fail to load `libnil_core`, set:
+If tests fail to load `libpolystore_core`, set:
 
 ```bash
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$(pwd)/../nil_core/target/release"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$(pwd)/../polystore_core/target/release"
 ```
 
 ## Code map

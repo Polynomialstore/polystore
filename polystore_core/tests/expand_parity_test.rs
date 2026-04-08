@@ -1,5 +1,5 @@
-use nil_core::coding::{ExpandedMdu, expand_mdu};
-use nil_core::kzg::KzgContext;
+use polystore_core::coding::{ExpandedMdu, expand_mdu};
+use polystore_core::kzg::KzgContext;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::process::Command;

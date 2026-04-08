@@ -145,7 +145,7 @@ Test gates:
 ### B6) Compression / content-encoding (CORE-403 + GW-205)
 
 - Implement NilCEv1 header and codecs (NONE + ZSTD) in:
-  - `nil_core` (WASM client)
+  - `polystore_core` (WASM client)
   - `nil_gateway` ingest path
 - Ensure download returns original bytes (decompress after decrypt).
 - Add UI quoting:

@@ -6,7 +6,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHAIN_DIR="$ROOT_DIR/nilchain"
-CORE_DIR="$ROOT_DIR/nil_core"
+CORE_DIR="$ROOT_DIR/polystore_core"
 HOME_DIR="$ROOT_DIR/nilchain/.nilchain/open_session_mode2"
 CHAIN_ID="nilchain"
 LOG_FILE="$ROOT_DIR/e2e_open_retrieval_session_mode2.log"
@@ -98,7 +98,7 @@ require_cmd jq
 require_cmd curl
 require_cmd python3
 
-banner "Building nil_core"
+banner "Building polystore_core"
 pushd "$CORE_DIR" >/dev/null
 cargo build --release
 popd >/dev/null
@@ -108,7 +108,7 @@ export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}:$CORE_DIR/target/release"
 
 banner "Building nilchaind"
 pushd "$CHAIN_DIR" >/dev/null
-export CGO_LDFLAGS="-L$CORE_DIR/target/release -lnil_core"
+export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
 go build -o "$BINARY" ./cmd/nilchaind
 popd >/dev/null
 

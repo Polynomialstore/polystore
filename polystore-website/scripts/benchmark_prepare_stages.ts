@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-import init, { NilWasm, WasmMdu0Builder } from '../public/wasm/nil_core.js'
+import init, { NilWasm, WasmMdu0Builder } from '../public/wasm/polystore_core.js'
 import { sanitizeNilfsRecordPath } from '../src/lib/nilfsPath'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -173,7 +173,7 @@ if (!['blst', 'affine', 'projective'].includes(basisMode)) {
   throw new Error(`invalid BASIS_MODE: ${process.env.BASIS_MODE ?? ''}`)
 }
 
-const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
+const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
 const wasmBuffer = await fs.readFile(wasmPath)
 const wasmInitStart = performance.now()
 await init({ module_or_path: wasmBuffer })

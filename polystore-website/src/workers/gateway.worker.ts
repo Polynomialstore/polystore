@@ -5,7 +5,7 @@
 // Import the WASM module
 // The `init` function loads the WASM binary.
 // The `Mdu0Builder` and `NilWasm` classes are exposed by wasm-bindgen.
-import init, { WasmMdu0Builder, NilWasm } from '../lib/nilCoreRuntime.js';
+import init, { WasmMdu0Builder, NilWasm } from '../lib/polystoreCoreRuntime.js';
 
 let wasmInitialized = false;
 let wasmInitPromise: Promise<void> | null = null;
@@ -30,7 +30,7 @@ function initializeWasm(): Promise<void> {
     if (wasmInitError) return Promise.reject(wasmInitError);
     if (wasmInitPromise) return wasmInitPromise;
 
-    const wasmUrl = new URL('/wasm/nil_core_bg.wasm', self.location.origin);
+    const wasmUrl = new URL('/wasm/polystore_core_bg.wasm', self.location.origin);
     wasmInitPromise = (async () => {
         await init({ module_or_path: wasmUrl });
         wasmInitialized = true;

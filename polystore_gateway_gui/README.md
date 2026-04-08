@@ -51,12 +51,12 @@ npm run tauri build
 
 `npm run tauri build` runs `scripts/build_sidecars.mjs`, which builds/stages:
 - `nil_gateway`
-- `nil_cli`
-- `nil_core` shared library (`.so`/`.dylib`/`.dll`)
+- `polystore_cli`
+- `polystore_core` shared library (`.so`/`.dylib`/`.dll`)
 - `trusted_setup.txt`
 
 On Linux and macOS, the sidecar build stamps a runtime library search path
-(`$ORIGIN` / `@loader_path`) into `nil_gateway` so it can find `libnil_core`
+(`$ORIGIN` / `@loader_path`) into `nil_gateway` so it can find `libpolystore_core`
 next to the binary without manual `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`.
 
 ## Local Development Commands

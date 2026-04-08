@@ -14,7 +14,7 @@ dist/
 nilchain/nilchain_data/
 nilchain/validator_key.json
 validator_key.json
-libnil_core.dylib
+libpolystore_core.dylib
 .nilchain_retrieval
 .nilchain_open_session/
 .nilchain_retrieval_fees/

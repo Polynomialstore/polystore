@@ -16,10 +16,10 @@ echo ">>> Cleaning..."
 rm -rf dist
 mkdir -p dist/bin
 
-# 2. Build nil_core (Rust)
-echo ">>> Building nil_core..."
+# 2. Build polystore_core (Rust)
+echo ">>> Building polystore_core..."
 (
-    cd nil_core
+    cd polystore_core
     cargo build --release
     # Copy static lib if needed, but Go build handles it via CGO flags usually
     # For release, we might want to package the dylib/staticlib?
@@ -32,16 +32,16 @@ echo ">>> Building nilchaind..."
     cd nilchain
     make proto-gen
     # Link against release lib
-    export CGO_LDFLAGS="-L$(pwd)/../nil_core/target/release -lnil_core"
+    export CGO_LDFLAGS="-L$(pwd)/../polystore_core/target/release -lpolystore_core"
     go build -ldflags "-X main.Version=$VERSION" -o ../dist/bin/nilchaind ./cmd/nilchaind
 )
 
-# 4. Build nil_cli (Rust)
-echo ">>> Building nil_cli..."
+# 4. Build polystore_cli (Rust)
+echo ">>> Building polystore_cli..."
 (
-    cd nil_cli
+    cd polystore_cli
     cargo build --release
-    cp target/release/nil_cli ../dist/bin/
+    cp target/release/polystore_cli ../dist/bin/
 )
 
 # 5. Build nil_gateway (Go)

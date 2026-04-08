@@ -9,7 +9,7 @@ set -e
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHAIN_DIR="$ROOT_DIR/nilchain"
-CORE_DIR="$ROOT_DIR/nil_core"
+CORE_DIR="$ROOT_DIR/polystore_core"
 HOME_DIR="$ROOT_DIR/.nilchain_test"
 CHAIN_ID="nilchain"
 LOG_FILE="$ROOT_DIR/e2e_chain.log"
@@ -17,7 +17,7 @@ TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
 
 echo "[E2E] Starting End-to-End Test..."
 
-echo "[E2E] Building nil_core..."
+echo "[E2E] Building polystore_core..."
 pushd "$CORE_DIR" >/dev/null
 cargo build --release
 popd >/dev/null
@@ -25,7 +25,7 @@ popd >/dev/null
 echo "[E2E] Building nilchaind..."
 pushd "$CHAIN_DIR" >/dev/null
 cp "$ROOT_DIR/demos/kzg/trusted_setup.txt" ./trusted_setup.txt
-export CGO_LDFLAGS="-L$CORE_DIR/target/release -lnil_core"
+export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
 go build -o "$ROOT_DIR/nilchaind" ./cmd/nilchaind
 popd >/dev/null
 

@@ -11,11 +11,11 @@ NUM_NODES = 5
 START_PORT = 9000
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "../../"))
-NIL_P2P_BIN = os.path.join(PROJECT_ROOT, "nil_p2p/target/debug/nil_p2p")
+NIL_P2P_BIN = os.path.join(PROJECT_ROOT, "polystore_p2p/target/debug/polystore_p2p")
 TEST_DURATION_SEC = 30
 
 def start_node(port, seed):
-    """Starts a nil_p2p node process."""
+    """Starts a polystore_p2p node process."""
     cmd = [NIL_P2P_BIN, "--port", str(port), "--seed", str(seed)]
     # We capture stdout/stderr to verify gossip reception
     process = subprocess.Popen(
@@ -40,7 +40,7 @@ def main():
     
     # Ensure binary exists
     if not os.path.exists(NIL_P2P_BIN):
-        print(f"Error: Binary not found at {NIL_P2P_BIN}. Please run 'cargo build -p nil_p2p' first.")
+        print(f"Error: Binary not found at {NIL_P2P_BIN}. Please run 'cargo build -p polystore_p2p' first.")
         sys.exit(1)
 
     nodes = []

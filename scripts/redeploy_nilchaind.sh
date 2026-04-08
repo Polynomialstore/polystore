@@ -49,7 +49,7 @@ Options:
 
 Environment knobs:
   NILCHAIN_BUILD_GOFLAGS    GOFLAGS override for build (default appends -mod=mod)
-  NIL_CORE_LIB_DIR          Override path containing libnil_core.so / libnil_core.dylib
+  NIL_CORE_LIB_DIR          Override path containing libpolystore_core.so / libpolystore_core.dylib
 USAGE
 }
 
@@ -208,15 +208,15 @@ preflight_build() {
   fi
 }
 
-find_nil_core_lib_dir() {
+find_polystore_core_lib_dir() {
   local candidate
   for candidate in \
     "${NIL_CORE_LIB_DIR:-}" \
-    "$TARGET_ROOT/nil_core/target/release" \
-    "$SOURCE_ROOT/nil_core/target/release"
+    "$TARGET_ROOT/polystore_core/target/release" \
+    "$SOURCE_ROOT/polystore_core/target/release"
   do
     [ -n "$candidate" ] || continue
-    if [ -f "$candidate/libnil_core.so" ] || [ -f "$candidate/libnil_core.dylib" ]; then
+    if [ -f "$candidate/libpolystore_core.so" ] || [ -f "$candidate/libpolystore_core.dylib" ]; then
       printf '%s\n' "$candidate"
       return 0
     fi
@@ -224,20 +224,20 @@ find_nil_core_lib_dir() {
   return 1
 }
 
-ensure_nil_core_runtime() {
+ensure_polystore_core_runtime() {
   local lib_dir
-  lib_dir="$(find_nil_core_lib_dir || true)"
+  lib_dir="$(find_polystore_core_lib_dir || true)"
 
   if [ -z "$lib_dir" ]; then
-    [ -d "$SOURCE_ROOT/nil_core" ] || die "nil_core not found under source root and no runtime lib discovered"
+    [ -d "$SOURCE_ROOT/polystore_core" ] || die "polystore_core not found under source root and no runtime lib discovered"
     require_cmd cargo
-    log "libnil_core runtime not found; building nil_core in source checkout"
-    run_in_dir "$SOURCE_ROOT/nil_core" cargo build --release
-    lib_dir="$SOURCE_ROOT/nil_core/target/release"
+    log "libpolystore_core runtime not found; building polystore_core in source checkout"
+    run_in_dir "$SOURCE_ROOT/polystore_core" cargo build --release
+    lib_dir="$SOURCE_ROOT/polystore_core/target/release"
   fi
 
-  if [ ! -f "$lib_dir/libnil_core.so" ] && [ ! -f "$lib_dir/libnil_core.dylib" ]; then
-    die "nil_core runtime library not found in $lib_dir after build"
+  if [ ! -f "$lib_dir/libpolystore_core.so" ] && [ ! -f "$lib_dir/libpolystore_core.dylib" ]; then
+    die "polystore_core runtime library not found in $lib_dir after build"
   fi
 
   export LD_LIBRARY_PATH="$lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -252,7 +252,7 @@ ensure_nil_core_runtime() {
     export CGO_LDFLAGS="-L$lib_dir"
   fi
 
-  log "using nil_core runtime from $lib_dir"
+  log "using polystore_core runtime from $lib_dir"
 }
 
 build_nilchaind() {
@@ -436,7 +436,7 @@ main() {
   fi
 
   preflight_build
-  ensure_nil_core_runtime
+  ensure_polystore_core_runtime
   build_nilchaind
   install_nilchaind
   restart_or_handoff

@@ -159,7 +159,7 @@ This preserves “fair exchange” while reducing signatures from `O(chunks)` �
 *   **Logic:**
     1.  `curl` the file.
     2.  Extract headers.
-    3.  Use `nil_cli` (or a helper script) to sign the receipt with the `User Key`.
+    3.  Use `polystore_cli` (or a helper script) to sign the receipt with the `User Key`.
     4.  `curl POST` the receipt to the Gateway.
     5.  Assert success.
 

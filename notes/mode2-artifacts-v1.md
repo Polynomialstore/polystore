@@ -53,7 +53,7 @@ Raw payload bytes are encoded into an 8 MiB user MDU using the NilFS scalar pack
 
 This must match:
 - `nil_gateway/ingest_mode2.go:encodePayloadToMdu`
-- `nil_core` scalar packing implementation used by WASM/FFI
+- `polystore_core` scalar packing implementation used by WASM/FFI
 
 ### RS shard ordering (slot-major)
 

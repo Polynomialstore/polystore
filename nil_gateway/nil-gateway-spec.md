@@ -15,8 +15,8 @@ In the current **Devnet** architecture, the browser can operate without a local 
 ## 2. Architecture
 
 The service wraps a mix of native libraries and CLI tools:
-*   **`nil_core` (FFI):** NilFS layout helpers (MDU #0 builder, record parsing) and cryptographic helpers shared with Rust.
-*   **`nil_cli`:** Used for **Sharding** (erasure coding) and **KZG Commitment** generation in devnet flows.
+*   **`polystore_core` (FFI):** NilFS layout helpers (MDU #0 builder, record parsing) and cryptographic helpers shared with Rust.
+*   **`polystore_cli`:** Used for **Sharding** (erasure coding) and **KZG Commitment** generation in devnet flows.
 *   **`nilchaind`:** Used for **Querying** and for relaying on-chain transactions that already carry user signatures (e.g., EVM precompile intents). The gateway does **not** replace MetaMask for user authorization.
 
 ### 2.1 Storage Model
@@ -67,7 +67,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 #### Data Ingestion
 *   **`POST /gateway/upload`**
     *   **Input:** Multipart form data (`file`, `owner`, optional `file_path`).
-*   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`). Sharding/KZG uses `nil_cli`; NilFS table construction uses `nil_core` FFI. Work is request-scoped: cancellation/timeouts propagate into `nil_cli` subprocesses.
+*   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`). Sharding/KZG uses `polystore_cli`; NilFS table construction uses `polystore_core` FFI. Work is request-scoped: cancellation/timeouts propagate into `polystore_cli` subprocesses.
     *   **Options:** Supports `deal_id` (append into an existing deal), `max_user_mdus` (devnet sizing hint for witness region), and `file_path` (NilFS-relative destination path; default is a sanitized `filename`).
         *   **NilFS path rules (target):** Decode at most once (HTTP frameworks already decode query/form values); reject empty/whitespace-only, leading `/`, `..` traversal, `\\` separators, NUL bytes, and control characters. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-unescape).
         *   **Uniqueness (target):** `file_path` MUST be unique within a deal. If `deal_id` is provided and the target `file_path` already exists, the gateway MUST overwrite deterministically (update-in-place or tombstone + replace) so later fetch/prove cannot return stale bytes.
@@ -225,6 +225,6 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `nil_gateway` 
 
 ## 5. Future Roadmap
 
-1.  **WASM Migration:** Move `shardFile` and `manifest` generation logic into `nil_core` WASM bindings for the browser.
+1.  **WASM Migration:** Move `shardFile` and `manifest` generation logic into `polystore_core` WASM bindings for the browser.
 2.  **Decoupling:** Separate the "S3 Adapter" (Provider logic) from the "Gateway" (Client relay logic).
-3.  **P2P Integration:** The Gateway should fetch data from the actual `nil_p2p` network rather than serving from local disk.
+3.  **P2P Integration:** The Gateway should fetch data from the actual `polystore_p2p` network rather than serving from local disk.

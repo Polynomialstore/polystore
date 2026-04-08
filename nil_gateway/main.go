@@ -186,7 +186,7 @@ var (
 	uploadDir       = envDefault("NIL_UPLOAD_DIR", "uploads")
 	sessionDBPath   = envDefault("NIL_SESSION_DB_PATH", filepath.Join(uploadDir, "sessions.db"))
 	providerBase    = envDefault("NIL_PROVIDER_BASE", "http://localhost:8080")
-	nilCliPath      = envDefault("NIL_CLI_BIN", "../nil_cli/target/release/nil_cli")
+	nilCliPath      = envDefault("NIL_CLI_BIN", "../polystore_cli/target/release/polystore_cli")
 	trustedSetup    = envDefault("NIL_TRUSTED_SETUP", "../nilchain/trusted_setup.txt")
 	nilchaindBin    = envDefault("NILCHAIND_BIN", "nilchaind")
 	chainID         = envDefault("NIL_CHAIN_ID", "test-1")
@@ -197,7 +197,7 @@ var (
 	lcdBase         = envDefault("NIL_LCD_BASE", "http://localhost:1317")
 	faucetBase      = envDefault("NIL_FAUCET_BASE", "http://localhost:8081")
 	cmdTimeout      = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 30)) * time.Second
-	// Sharding (nil_cli shard) is intentionally CPU/memory heavy; allow a larger default timeout.
+	// Sharding (polystore_cli shard) is intentionally CPU/memory heavy; allow a larger default timeout.
 	shardTimeout = time.Duration(envInt("NIL_SHARD_TIMEOUT_SECONDS", 600)) * time.Second
 	// End-to-end upload ingest timeout (covers user sharding + witness + MDU #0 + aggregate).
 	// This is enforced per request so clients never see an infinite hang.
@@ -515,9 +515,9 @@ func fileExists(path string) bool {
 
 func nilCliBinaryName() string {
 	if runtime.GOOS == "windows" {
-		return "nil_cli.exe"
+		return "polystore_cli.exe"
 	}
-	return "nil_cli"
+	return "polystore_cli"
 }
 
 func resolveTrustedSetupPath(configured string) string {
@@ -598,13 +598,13 @@ func resolveNilCliPath(configured string) string {
 	}
 
 	if root := deriveNilchaindDir(); root != "" {
-		add(filepath.Join(root, "nil_cli", "target", "release", binaryName))
+		add(filepath.Join(root, "polystore_cli", "target", "release", binaryName))
 	}
 
 	if wd, err := os.Getwd(); err == nil {
 		dir := wd
 		for i := 0; i < 8; i++ {
-			add(filepath.Join(dir, "nil_cli", "target", "release", binaryName))
+			add(filepath.Join(dir, "polystore_cli", "target", "release", binaryName))
 			parent := filepath.Dir(dir)
 			if parent == dir {
 				break
@@ -635,7 +635,7 @@ func looksLikeDesktopSidecarLayout() bool {
 
 	// Typical desktop app layout:
 	//   .../polystore_gateway_gui/bin/nil_gateway
-	//   .../polystore_gateway_gui/bin/nil_cli
+	//   .../polystore_gateway_gui/bin/polystore_cli
 	//   .../polystore_gateway_gui/trusted_setup.txt
 	if !fileExists(filepath.Join(binDir, nilCliBinaryName())) {
 		return false
@@ -690,7 +690,7 @@ func maybeWithNodeArg(args []string) []string {
 	return append(args, "--node", nodeAddr)
 }
 
-// execNilCli runs a nil_cli command and returns its combined output.
+// execNilCli runs a polystore_cli command and returns its combined output.
 func execNilCli(ctx context.Context, args ...string) ([]byte, error) {
 	return runCommand(ctx, nilCliPath, args, "")
 }
@@ -775,7 +775,7 @@ func main() {
 		trustedSetup = resolvedTrustedSetup
 	}
 	if resolvedNilCliPath := resolveNilCliPath(nilCliPath); resolvedNilCliPath != nilCliPath {
-		log.Printf("Resolved nil_cli path: %s", resolvedNilCliPath)
+		log.Printf("Resolved polystore_cli path: %s", resolvedNilCliPath)
 		nilCliPath = resolvedNilCliPath
 	}
 
@@ -4665,7 +4665,7 @@ func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*
 		return nil, fmt.Errorf("nil-cli shard failed: %w", err)
 	}
 
-	// nil_cli with --out writes to file, but might print logs to stdout.
+	// polystore_cli with --out writes to file, but might print logs to stdout.
 	// We should read the file if it exists.
 	if _, err := os.Stat(outPath); err == nil {
 		data, err := os.ReadFile(outPath)

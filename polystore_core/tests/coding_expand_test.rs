@@ -1,5 +1,5 @@
-use nil_core::coding::{CodingError, ExpandedMdu, expand_mdu};
-use nil_core::kzg::KzgContext;
+use polystore_core::coding::{CodingError, ExpandedMdu, expand_mdu};
+use polystore_core::kzg::KzgContext;
 use std::path::PathBuf;
 
 fn get_trusted_setup_path() -> PathBuf {

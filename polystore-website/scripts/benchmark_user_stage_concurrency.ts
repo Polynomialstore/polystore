@@ -130,7 +130,7 @@ function chunkPayload(payload: Uint8Array): Uint8Array[] {
 async function runUserStageIteration(chunks: Uint8Array[], concurrency: number, pipelineMode: PipelineMode) {
   const workerCount = Math.max(1, Math.min(concurrency, chunks.length))
   const workerFile = new URL('./benchmark_user_stage_worker.ts', import.meta.url)
-  const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
+  const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
   const trustedSetupPath = path.resolve(websiteRoot, 'public', 'trusted_setup.txt')
 
   const workers = Array.from({ length: workerCount }, () =>

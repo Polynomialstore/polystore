@@ -18,10 +18,10 @@ case "$PROFILE" in
     ;;
 esac
 
-LIB_DIR="$ROOT_DIR/nil_core/target/release"
-if [ ! -f "$LIB_DIR/libnil_core.so" ] && [ ! -f "$LIB_DIR/libnil_core.dylib" ] && [ ! -f "$LIB_DIR/libnil_core.a" ]; then
-  echo "Building nil_core first (missing native lib) ..."
-  (cd "$ROOT_DIR/nil_core" && cargo build --release)
+LIB_DIR="$ROOT_DIR/polystore_core/target/release"
+if [ ! -f "$LIB_DIR/libpolystore_core.so" ] && [ ! -f "$LIB_DIR/libpolystore_core.dylib" ] && [ ! -f "$LIB_DIR/libpolystore_core.a" ]; then
+  echo "Building polystore_core first (missing native lib) ..."
+  (cd "$ROOT_DIR/polystore_core" && cargo build --release)
 fi
 export LD_LIBRARY_PATH="$LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
