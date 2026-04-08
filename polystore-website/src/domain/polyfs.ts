@@ -1,4 +1,4 @@
-export interface NilfsFileEntry {
+export interface PolyfsFileEntry {
   path: string
   size_bytes: number
   logical_size_bytes?: number

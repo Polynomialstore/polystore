@@ -4,7 +4,7 @@
 # Scenario:
 # 1) Start devnet alpha multi-SP stack.
 # 2) Create a Mode 2 deal.
-# 3) Upload + commit a file (NilFS).
+# 3) Upload + commit a file (PolyFS).
 # 4) Plan a retrieval session for the first blob and open it on-chain.
 # 5) Kill the assigned slot provider ("ghost").
 # 6) Fetch through the router: it should fall back to a deputy provider.

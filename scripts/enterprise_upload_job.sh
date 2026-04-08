@@ -19,10 +19,10 @@ source "$ROOT_DIR/scripts/load_testnet_public_env.sh"
 
 FILE_PATH="${1:-}"
 DEAL_ID="${2:-}"
-NILFS_PATH="${3:-}"
+POLYFS_PATH="${3:-}"
 
 if [[ -z "${FILE_PATH}" ]]; then
-  echo "usage: $0 <file_path> [deal_id] [nilfs_path]" >&2
+  echo "usage: $0 <file_path> [deal_id] [polyfs_path]" >&2
   exit 1
 fi
 
@@ -347,8 +347,8 @@ direct_update_deal_content() {
 FILE_NAME="$(basename "${FILE_PATH}")"
 FILE_SIZE_BYTES="$(wc -c <"${FILE_PATH}" | tr -d '[:space:]')"
 
-if [[ -z "${NILFS_PATH}" ]]; then
-  NILFS_PATH="${FILE_NAME}"
+if [[ -z "${POLYFS_PATH}" ]]; then
+  POLYFS_PATH="${FILE_NAME}"
 fi
 
 sign_intent() {
@@ -420,7 +420,7 @@ PY
 echo ">> Uploading file via gateway (upload_id=${UPLOAD_ID})..."
 UPLOAD_RESP="$(curl -sS -X POST "${GATEWAY_BASE}/gateway/upload?deal_id=${DEAL_ID}&upload_id=${UPLOAD_ID}" \
   -F "deal_id=${DEAL_ID}" \
-  -F "file_path=${NILFS_PATH}" \
+  -F "file_path=${POLYFS_PATH}" \
   -F "upload_id=${UPLOAD_ID}" \
   -F "file_size_bytes=${FILE_SIZE_BYTES}" \
   -F "file=@${FILE_PATH}")"
@@ -544,4 +544,4 @@ if [[ -n "$CREATE_TX_HASH" ]]; then
 fi
 echo "deal_id=${DEAL_ID}"
 echo "manifest_root=${MANIFEST_ROOT}"
-echo "nilfs_path=${NILFS_PATH}"
+echo "polyfs_path=${POLYFS_PATH}"

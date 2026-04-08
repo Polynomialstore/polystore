@@ -82,7 +82,7 @@ test(
     const dealId = String(createJson.deal_id)
 
     // 2) Upload file (gateway canonical ingest)
-    const content = Buffer.from('hello nilfs\n', 'utf8')
+    const content = Buffer.from('hello polyfs\n', 'utf8')
     const form = new FormData()
     form.append('file', new Blob([content]), 'hello.txt')
     form.append('owner', ownerNil)

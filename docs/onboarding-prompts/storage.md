@@ -73,7 +73,7 @@ Canonical onboarding milestones (run in order unless the user asks to skip):
    - hosted LCD + faucet reachable
    - Nil Gateway GUI is installed or opened by the agent and the local gateway is healthy at `http://localhost:8080`
    - create a temporary local file (`10-100 KiB`) yourself
-   - run `scripts/testnet_burner_upload.sh <file_path>`; use `[deal_id] [nilfs_path]` only when resuming or overriding defaults
+   - run `scripts/testnet_burner_upload.sh <file_path>`; use `[deal_id] [polyfs_path]` only when resuming or overriding defaults
    - capture the generated EVM address, mapped `nil1...` address, exported keystore path, deal ID, manifest root, create tx hash, and commit tx hash
    - treat this as the first identity + upload bootstrap milestone
 2. MetaMask Handoff
@@ -91,7 +91,7 @@ Canonical onboarding milestones (run in order unless the user asks to skip):
    - re-run upload/commit/retrieve with a larger file (`64 MiB+`)
    - capture gateway health, cache or route behavior, and provider endpoint details if shown
 5. Advanced CLI Check
-   - local-gateway environments: use `scripts/enterprise_upload_job.sh <file_path> [deal_id] [nilfs_path]` only after the burner flow or another step has already provided `EVM_PRIVKEY` and a healthy local gateway at `http://localhost:8080`
+   - local-gateway environments: use `scripts/enterprise_upload_job.sh <file_path> [deal_id] [polyfs_path]` only after the burner flow or another step has already provided `EVM_PRIVKEY` and a healthy local gateway at `http://localhost:8080`
    - wallet-first/public environments: follow `Public CLI smoke` in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
    - capture friction points and any remaining setup gaps
 

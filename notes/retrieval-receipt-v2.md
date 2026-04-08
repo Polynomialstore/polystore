@@ -156,7 +156,7 @@ This phase removes the remaining “short-circuit” surfaces and improves the a
 
 ### 8.4 HTTP Range Support (User-Level Files)
 
-**Requirement:** `/gateway/fetch` must support `Range: bytes=start-end` for NilFS files.
+**Requirement:** `/gateway/fetch` must support `Range: bytes=start-end` for PolyFS files.
 
 **Constraints (devnet acceptable):**
 - Support single-range requests (no multipart ranges).

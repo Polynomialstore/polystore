@@ -176,7 +176,7 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 	for k, v := range dealGenerationStatusSnapshotForStatus() {
 		status.Extra[k] = v
 	}
-	for k, v := range nilfsCASStatusSnapshotForStatus() {
+	for k, v := range polyfsCASStatusSnapshotForStatus() {
 		status.Extra[k] = v
 	}
 

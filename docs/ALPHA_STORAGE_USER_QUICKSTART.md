@@ -22,7 +22,7 @@ Fallback target:
 - Use the repo-tracked public testnet bootstrap defaults from `.env.testnet.public` unless you intentionally need overrides.
 - Before running the burner helper, set a keystore password in `NIL_BURNER_KEYSTORE_PASSWORD` so the exported JSON can be imported into MetaMask.
 - Do not rely on the helper's interactive password prompt during an agent-driven run; set `NIL_BURNER_KEYSTORE_PASSWORD` first.
-- Run `scripts/testnet_burner_upload.sh <file_path>` with a small file (recommended: `10-100 KiB`); use `[deal_id] [nilfs_path]` only when resuming or overriding defaults.
+- Run `scripts/testnet_burner_upload.sh <file_path>` with a small file (recommended: `10-100 KiB`); use `[deal_id] [polyfs_path]` only when resuming or overriding defaults.
 - Capture the generated EVM address, mapped `nil1...` address, keystore path, deal ID, manifest root, create tx hash, and commit tx hash.
 - Treat this as the first autonomous completion milestone, then preserve that same wallet and deal state through the rest of the run.
 
@@ -45,9 +45,9 @@ Fallback target:
 - Capture evidence: gateway health, route/cache behavior, retrieval match, and any provider endpoint details shown.
 
 5. Run Advanced CLI Checks
-- Preferred local-gateway helper: `scripts/enterprise_upload_job.sh <file_path> [deal_id] [nilfs_path]`
+- Preferred local-gateway helper: `scripts/enterprise_upload_job.sh <file_path> [deal_id] [polyfs_path]`
   - use it only after the burner flow or another step has already provided `EVM_PRIVKEY` and a healthy local gateway at `http://localhost:8080`
-- Testnet bootstrap helper: `scripts/testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]`
+- Testnet bootstrap helper: `scripts/testnet_burner_upload.sh <file_path> [deal_id] [polyfs_path]`
 - Wallet-first/public path (relay disabled): follow the `Public CLI smoke` section in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 - Capture evidence: command log, deal ID, manifest root, tx hash(es), retrieval match, and friction points.
 

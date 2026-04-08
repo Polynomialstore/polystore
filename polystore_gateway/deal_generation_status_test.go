@@ -140,20 +140,20 @@ func TestGatewayStatusIncludesDealGenerationSnapshot(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&status); err != nil {
 		t.Fatalf("decode status response: %v", err)
 	}
-	if status.Extra["nilfs_generation_active"] != "1" {
-		t.Fatalf("expected nilfs_generation_active=1, got=%q", status.Extra["nilfs_generation_active"])
+	if status.Extra["polyfs_generation_active"] != "1" {
+		t.Fatalf("expected polyfs_generation_active=1, got=%q", status.Extra["polyfs_generation_active"])
 	}
-	if status.Extra["nilfs_generation_deals"] != "1" {
-		t.Fatalf("expected nilfs_generation_deals=1, got=%q", status.Extra["nilfs_generation_deals"])
+	if status.Extra["polyfs_generation_deals"] != "1" {
+		t.Fatalf("expected polyfs_generation_deals=1, got=%q", status.Extra["polyfs_generation_deals"])
 	}
-	if status.Extra["nilfs_generation_provisional_retention_ttl_seconds"] != strconv.FormatInt(int64(provisionalGenerationRetentionTTL/time.Second), 10) {
-		t.Fatalf("unexpected retention TTL seconds: got=%q", status.Extra["nilfs_generation_provisional_retention_ttl_seconds"])
+	if status.Extra["polyfs_generation_provisional_retention_ttl_seconds"] != strconv.FormatInt(int64(provisionalGenerationRetentionTTL/time.Second), 10) {
+		t.Fatalf("unexpected retention TTL seconds: got=%q", status.Extra["polyfs_generation_provisional_retention_ttl_seconds"])
 	}
-	bytesTotal, err := strconv.ParseUint(status.Extra["nilfs_generation_bytes_total"], 10, 64)
+	bytesTotal, err := strconv.ParseUint(status.Extra["polyfs_generation_bytes_total"], 10, 64)
 	if err != nil {
-		t.Fatalf("parse nilfs_generation_bytes_total: %v", err)
+		t.Fatalf("parse polyfs_generation_bytes_total: %v", err)
 	}
 	if bytesTotal == 0 {
-		t.Fatal("expected nilfs_generation_bytes_total > 0")
+		t.Fatal("expected polyfs_generation_bytes_total > 0")
 	}
 }

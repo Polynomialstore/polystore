@@ -1344,11 +1344,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		fileRecordPath = strings.TrimSpace(filename)
 	}
 	if fileRecordPath != "" {
-		if validated, err := validateNilfsFilePath(fileRecordPath); err == nil {
+		if validated, err := validatePolyfsFilePath(fileRecordPath); err == nil {
 			fileRecordPath = validated
 		}
 	}
-	fileRecordPath = normalizeNilfsRecordBasename(fileRecordPath, filename)
+	fileRecordPath = normalizePolyfsRecordBasename(fileRecordPath, filename)
 
 	if dealIDStr == "" && dealIDQueryOK {
 		dealIDStr = strconv.FormatUint(dealIDQuery, 10)
@@ -1752,7 +1752,7 @@ func totalSizeBytesFromMdu0(b *crypto_ffi.Mdu0Builder) uint64 {
 		if err != nil {
 			continue
 		}
-		// Path[0]==0 marks a tombstone in NilFS V1.
+		// Path[0]==0 marks a tombstone in PolyFS V1.
 		if rec.Path[0] == 0 {
 			continue
 		}
@@ -1920,7 +1920,7 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if normalizeManifestRootOrEmpty(meta.ManifestRoot) != normalizeManifestRootOrEmpty(req.PreviousManifestRoot) {
-		recordNilfsCASPreflightConflict(nilfsCASPreflightConflictLegacy)
+		recordPolyfsCASPreflightConflict(polyfsCASPreflightConflictLegacy)
 		http.Error(w, fmt.Sprintf("stale previous_manifest_root: expected %s", normalizeManifestRootOrEmpty(meta.ManifestRoot)), http.StatusConflict)
 		return
 	}
@@ -2263,7 +2263,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if normalizeManifestRootOrEmpty(meta.ManifestRoot) != normalizeManifestRootOrEmpty(rawPreviousManifestRoot) {
-		recordNilfsCASPreflightConflict(nilfsCASPreflightConflictEvm)
+		recordPolyfsCASPreflightConflict(polyfsCASPreflightConflictEvm)
 		http.Error(w, fmt.Sprintf("stale previous_manifest_root: expected %s", normalizeManifestRootOrEmpty(meta.ManifestRoot)), http.StatusConflict)
 		return
 	}
@@ -2491,7 +2491,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dealID := *req.DealID
-	filePath, err := validateNilfsFilePath(req.FilePath)
+	filePath, err := validatePolyfsFilePath(req.FilePath)
 	if err != nil {
 		writeJSONError(
 			w,
@@ -2694,7 +2694,7 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	}
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
-	filePath, err := validateNilfsFilePath(q.Get("file_path"))
+	filePath, err := validatePolyfsFilePath(q.Get("file_path"))
 	reqSig := strings.TrimSpace(r.Header.Get("X-Nil-Req-Sig"))
 	if reqSig == "" {
 		reqSig = strings.TrimSpace(q.Get("req_sig"))
@@ -2900,7 +2900,7 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GatewayFetch serves back a stored file by its manifest root, resolving the NilFS file_path.
+// GatewayFetch serves back a stored file by its manifest root, resolving the PolyFS file_path.
 //
 // Retrieval is interactive: the gateway returns enough metadata for the client to sign a receipt,
 // and records a short-lived session so the provider can later submit MsgProveLiveness.
@@ -2950,7 +2950,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	filePath, err := validateNilfsFilePath(q.Get("file_path"))
+	filePath, err := validatePolyfsFilePath(q.Get("file_path"))
 	reqSig := strings.TrimSpace(r.Header.Get("X-Nil-Req-Sig"))
 	if reqSig == "" {
 		reqSig = strings.TrimSpace(q.Get("req_sig"))
@@ -3233,7 +3233,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Resolve NilFS file.
+	// 2. Resolve PolyFS file.
 	rangeHeader := strings.TrimSpace(r.Header.Get("Range"))
 	var rangeHeaderStart uint64
 	var rangeHeaderLen uint64
@@ -3376,14 +3376,14 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		totalFileLen uint64
 	)
 	if stripe.mode == 2 {
-		content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err = resolveNilfsFileSegmentForFetchDecoded(
+		content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err = resolvePolyfsFileSegmentForFetchDecoded(
 			dealDir,
 			filePath,
 			reqRangeStart,
 			reqRangeLen,
 		)
 	} else {
-		content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err = resolveNilfsFileSegmentForFetch(
+		content, mduIdx, mduPath, absOffset, servedLen, totalFileLen, err = resolvePolyfsFileSegmentForFetch(
 			dealDir,
 			filePath,
 			reqRangeStart,
@@ -3400,7 +3400,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		log.Printf("resolveNilfsFileSegmentForFetch failed: %v", err)
+		log.Printf("resolvePolyfsFileSegmentForFetch failed: %v", err)
 		writeJSONError(w, http.StatusInternalServerError, "failed to resolve file", "")
 		return
 	}
@@ -3710,7 +3710,7 @@ func GatewayDownload(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
-	filePath, ferr := validateNilfsFilePath(q.Get("file_path"))
+	filePath, ferr := validatePolyfsFilePath(q.Get("file_path"))
 	if dealIDStr == "" || owner == "" {
 		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
 		return
@@ -3880,7 +3880,7 @@ func GatewayDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if stripe.mode != 2 {
-		reader, _, _, _, servedLen, _, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
+		reader, _, _, _, servedLen, _, err := resolvePolyfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
 		if err != nil {
 			return
 		}
@@ -3909,7 +3909,7 @@ func GatewayDownload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		reader, _, _, _, servedLen, _, err := resolveNilfsFileSegmentForFetchDecoded(dealDir, filePath, chunkRangeStart, chunkLen)
+		reader, _, _, _, servedLen, _, err := resolvePolyfsFileSegmentForFetchDecoded(dealDir, filePath, chunkRangeStart, chunkLen)
 		if err != nil {
 			return
 		}
@@ -3932,7 +3932,7 @@ func GatewayDownload(w http.ResponseWriter, r *http.Request) {
 var resolveProviderForRetrievalPlanFn = resolveProviderForRetrievalPlan
 
 // GatewayPlanRetrievalSession plans an on-chain RetrievalSession for a file byte-range by
-// mapping it to a contiguous blob interval over the NilFS slab.
+// mapping it to a contiguous blob interval over the PolyFS slab.
 func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -3955,7 +3955,7 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
-	filePath, ferr := validateNilfsFilePath(q.Get("file_path"))
+	filePath, ferr := validatePolyfsFilePath(q.Get("file_path"))
 	if dealIDStr == "" || owner == "" {
 		writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "")
 		return
@@ -4179,7 +4179,7 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type nilfsFileEntry struct {
+type polyfsFileEntry struct {
 	Path             string `json:"path"`
 	SizeBytes        uint64 `json:"size_bytes"`
 	LogicalSizeBytes uint64 `json:"logical_size_bytes,omitempty"`
@@ -4209,11 +4209,11 @@ type slabLayoutResponse struct {
 	Segments       []slabSegment `json:"segments"`
 }
 
-func readNilceHeaderForNilfsFile(dealDir string, slabStartIdx uint64, fileStartOffset uint64, fileLen uint64) (nilceHeader, bool, error) {
+func readNilceHeaderForPolyfsFile(dealDir string, slabStartIdx uint64, fileStartOffset uint64, fileLen uint64) (nilceHeader, bool, error) {
 	if fileLen < nilceHeaderSize {
 		return nilceHeader{}, false, nil
 	}
-	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, fileStartOffset, fileLen, fileStartOffset, nilceHeaderSize)
+	reader, err := newPolyfsDecodedReader(dealDir, slabStartIdx, fileStartOffset, fileLen, fileStartOffset, nilceHeaderSize)
 	if err != nil {
 		return nilceHeader{}, false, err
 	}
@@ -4226,7 +4226,7 @@ func readNilceHeaderForNilfsFile(dealDir string, slabStartIdx uint64, fileStartO
 	return readNilceV1Header(bytes.NewReader(buf))
 }
 
-// GatewayListFiles returns the NilFS V1 file table for a manifest root.
+// GatewayListFiles returns the PolyFS V1 file table for a manifest root.
 func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -4339,7 +4339,7 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 	slabStartIdx := uint64(1) + witnessCount
 
 	count := b.GetRecordCount()
-	latest := make(map[string]nilfsFileEntry, count)
+	latest := make(map[string]polyfsFileEntry, count)
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
@@ -4351,14 +4351,14 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		name := string(bytes.TrimRight(rec.Path[:], "\x00"))
 		length, flags := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
-		entry := nilfsFileEntry{
+		entry := polyfsFileEntry{
 			Path:         name,
 			SizeBytes:    length,
 			StartOffset:  rec.StartOffset,
 			Flags:        flags,
 			CachePresent: true,
 		}
-		if hdr, ok, err := readNilceHeaderForNilfsFile(dealDir, slabStartIdx, rec.StartOffset, length); err == nil && ok {
+		if hdr, ok, err := readNilceHeaderForPolyfsFile(dealDir, slabStartIdx, rec.StartOffset, length); err == nil && ok {
 			if hdr.UncompressedLen > 0 {
 				entry.LogicalSizeBytes = hdr.UncompressedLen
 			}
@@ -4369,7 +4369,7 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		latest[name] = entry
 	}
 
-	files := make([]nilfsFileEntry, 0, len(latest))
+	files := make([]polyfsFileEntry, 0, len(latest))
 	var total uint64
 	for _, entry := range latest {
 		files = append(files, entry)
@@ -4519,7 +4519,7 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 		if end > maxEnd {
 			maxEnd = end
 		}
-		// Path[0]==0 marks a tombstone in NilFS V1.
+		// Path[0]==0 marks a tombstone in PolyFS V1.
 		if rec.Path[0] == 0 {
 			continue
 		}
@@ -4893,18 +4893,18 @@ func parseHTTPRange(header string) (start uint64, length uint64, err error) {
 }
 
 func rawOffsetToEncodedBlobIndex(rawOffsetInMdu uint64) (uint32, error) {
-	// Map a raw NilFS payload offset to the underlying encoded MDU byte position
+	// Map a raw PolyFS payload offset to the underlying encoded MDU byte position
 	// (32-byte scalars, right-aligned payload), then to a 128 KiB blob index.
 	//
-	// Note: This assumes the standard NilFS packing (31 payload bytes per 32-byte scalar).
+	// Note: This assumes the standard PolyFS packing (31 payload bytes per 32-byte scalar).
 	if rawOffsetInMdu >= RawMduCapacity {
 		return 0, fmt.Errorf("raw offset out of bounds: %d", rawOffsetInMdu)
 	}
-	scalarIdx := rawOffsetInMdu / nilfsScalarPayloadBytes
-	payloadOffset := rawOffsetInMdu % nilfsScalarPayloadBytes
+	scalarIdx := rawOffsetInMdu / polyfsScalarPayloadBytes
+	payloadOffset := rawOffsetInMdu % polyfsScalarPayloadBytes
 	// Most scalars have a 1-byte left pad (32-31). The very last scalar of a
 	// partially-filled MDU can have a larger pad, but in devnet we treat it as 1.
-	encodedPos := scalarIdx*nilfsScalarBytes + 1 + payloadOffset
+	encodedPos := scalarIdx*polyfsScalarBytes + 1 + payloadOffset
 	blobIdx := encodedPos / uint64(types.BLOB_SIZE)
 	if blobIdx >= uint64(types.BLOBS_PER_MDU) {
 		return 0, fmt.Errorf("derived blob index out of range: %d", blobIdx)
@@ -6373,9 +6373,9 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	validatePrevStarted := time.Now()
-	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
+	if err := validatePolyfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
 		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		statusCode = classifyPolyfsUploadPreviousManifestRootError(err)
 		switch statusCode {
 		case http.StatusBadRequest:
 			outcome = "validate_previous_root_failed"
@@ -6617,9 +6617,9 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	validatePrevStarted := time.Now()
-	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
+	if err := validatePolyfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
 		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		statusCode = classifyPolyfsUploadPreviousManifestRootError(err)
 		switch statusCode {
 		case http.StatusBadRequest:
 			outcome = "validate_previous_root_failed"
@@ -6933,9 +6933,9 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	validatePrevStarted := time.Now()
-	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
+	if err := validatePolyfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
 		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		statusCode = classifyPolyfsUploadPreviousManifestRootError(err)
 		switch statusCode {
 		case http.StatusBadRequest:
 			outcome = "validate_previous_root_failed"

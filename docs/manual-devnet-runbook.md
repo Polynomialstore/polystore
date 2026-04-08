@@ -184,7 +184,7 @@ echo "Deal ID: $DEAL_ID"
 
 ### 2.2 Upload + commit content
 
-Upload a file into the deal (captures a new `manifest_root` / NilFS slab state):
+Upload a file into the deal (captures a new `manifest_root` / PolyFS slab state):
 
 ```bash
 UPLOAD_FILE="${UPLOAD_FILE:-README.md}"
@@ -400,7 +400,7 @@ Manual checks derived from keeper tests:
 Whenever the scripts above change, mirror the updated commands back into this runbook. This doc should remain the human-readable companion to the scripted automation.
 ### Provisional generation retention
 
-The gateway keeps newly uploaded NilFS generations in a provisional state until the signed chain swap succeeds.
+The gateway keeps newly uploaded PolyFS generations in a provisional state until the signed chain swap succeeds.
 
 - Default devnet retention: `24h`
 - Override with: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL`
@@ -410,10 +410,10 @@ The gateway keeps newly uploaded NilFS generations in a provisional state until 
 Inspect the effective policy and current generation inventory with:
 
 ```bash
-curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | startswith("nilfs_generation_")))'
+curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | startswith("polyfs_generation_")))'
 
 # Observe stale CAS / concurrent-writer pressure at the gateway preflight layer.
-curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | startswith("nilfs_cas_preflight_conflicts_")))'
+curl -s http://127.0.0.1:8080/status | jq '.extra | with_entries(select(.key | startswith("polyfs_cas_preflight_conflicts_")))'
 
 # Inspect a single deal's local staged generations before forcing cleanup.
 curl -s http://127.0.0.1:8080/gateway/deal-generations/$DEAL_ID | jq

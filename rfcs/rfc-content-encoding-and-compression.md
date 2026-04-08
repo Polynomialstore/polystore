@@ -1,4 +1,4 @@
-# RFC: Content-Encoding (Compression) for NilFS Files (Draft)
+# RFC: Content-Encoding (Compression) for PolyFS Files (Draft)
 
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23  
@@ -26,7 +26,7 @@ Key constraint: **encryption destroys compressibility**. Therefore compression M
 1) Strongly encourage compressible data to be compressed **before being shared with SPs**.
 2) Store compression metadata in-band in a way that:
    - works for both gateway and browser/WASM ingestion,
-   - remains compatible with NilFS,
+   - remains compatible with PolyFS,
    - does not require new on-chain state.
 3) Ensure the user receives the original bytes on download (decompress after decrypt).
 4) Ensure economics charge on **stored bytes** (compressed+encrypted), not on uncompressed logical bytes.
@@ -61,7 +61,7 @@ For each file payload (plaintext):
 
 ## 4. Encoding header format (v1)
 
-To avoid NilFS schema churn, we store encoding metadata **inside the file bytes** as a fixed header, then encrypt the entire wrapped content.
+To avoid PolyFS schema churn, we store encoding metadata **inside the file bytes** as a fixed header, then encrypt the entire wrapped content.
 
 ### 4.1 Byte layout
 
@@ -136,7 +136,7 @@ Therefore:
 ## 8. Compatibility notes
 
 - This header is inside the encrypted payload; SPs remain oblivious.
-- NilFS path semantics are unchanged.
+- PolyFS path semantics are unchanged.
 - Partial-range reads remain valid; clients that download a subrange MUST ensure they include the header region to interpret encoding.  
   (UI should avoid “start from middle” downloads unless it also fetches the header blob(s).)
 

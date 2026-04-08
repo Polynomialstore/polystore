@@ -14,7 +14,7 @@ import {
   encodeOpenRetrievalSessionsData,
   encodeOpenRetrievalSessionsSponsoredData,
 } from '../lib/polystorePrecompile'
-import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
+import { planPolyfsFileRangeChunks } from '../lib/rangeChunker'
 import { decodeNilceV1 } from '../lib/nilce'
 import { classifyWalletError } from '../lib/walletErrors'
 import {
@@ -249,7 +249,7 @@ export function useFetch() {
 
       const chunks =
         hasMeta
-          ? planNilfsFileRangeChunks({
+          ? planPolyfsFileRangeChunks({
               fileStartOffset: input.fileStartOffset!,
               fileSizeBytes: input.fileSizeBytes!,
               rangeStart: wantRangeStart,

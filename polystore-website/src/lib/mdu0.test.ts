@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { sanitizeNilfsRecordPath } from './nilfsPath'
+import { sanitizePolyfsRecordPath } from './polyfsPath'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,7 +100,7 @@ test('Mdu0Builder WASM rejects paths > 232 bytes', async (t) => {
     }, /path too long/i);
 });
 
-test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async (t) => {
+test('sanitizePolyfsRecordPath produces a path acceptable to Mdu0Builder', async (t) => {
     const wasm = await loadNilCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
@@ -110,13 +110,13 @@ test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async 
     await wasm.init({ module_or_path: wasmBuffer });
 
     const mdu = new wasm.WasmMdu0Builder(10n);
-    const sanitized = sanitizeNilfsRecordPath('a/b/' + 'x'.repeat(400) + '.txt');
+    const sanitized = sanitizePolyfsRecordPath('a/b/' + 'x'.repeat(400) + '.txt');
     assert.doesNotThrow(() => {
         mdu.append_file(sanitized, 1n, 0n);
     });
 });
 
-test('sanitizeNilfsRecordPath produces a multibyte path acceptable to Mdu0Builder', async (t) => {
+test('sanitizePolyfsRecordPath produces a multibyte path acceptable to Mdu0Builder', async (t) => {
     const wasm = await loadNilCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
@@ -126,7 +126,7 @@ test('sanitizeNilfsRecordPath produces a multibyte path acceptable to Mdu0Builde
     await wasm.init({ module_or_path: wasmBuffer });
 
     const mdu = new wasm.WasmMdu0Builder(10n);
-    const sanitized = sanitizeNilfsRecordPath('Desktop/' + '📸'.repeat(20) + '.png');
+    const sanitized = sanitizePolyfsRecordPath('Desktop/' + '📸'.repeat(20) + '.png');
     assert.doesNotThrow(() => {
         mdu.append_file(sanitized, 1n, 0n);
     });

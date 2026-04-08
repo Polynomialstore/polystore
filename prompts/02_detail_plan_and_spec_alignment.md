@@ -12,7 +12,7 @@ You are working in `nilcoin2`. Prompt 1 created/updated an “Immediate Goals”
    - Web: `polystore-website/website-spec.md` and relevant pages/docs if the flow changes.
 3. Ensure the specs are consistent about:
    - “No tiers / thin provisioning” semantics.
-   - NilFS as the source of truth (no CID/index dependence).
+   - PolyFS as the source of truth (no CID/index dependence).
    - Browser E2E expectations and how the wallet is handled in tests (real extension vs injected shim).
 4. Commit the spec/doc updates with a descriptive message.
 

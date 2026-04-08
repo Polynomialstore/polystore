@@ -224,7 +224,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
     3.  Calls `transport.uploadFile(...)` which selects `gatewayBase` or `spBase` based on routing preference and availability.
 *   **Returns:** `{ manifestRoot, sizeBytes, fileSizeBytes, allocatedLength?, filename }`.
     *   **Compatibility:** Responses may include legacy aliases `cid == manifest_root` and `allocated_length == total_mdus` (count).
-    *   **NilFS invariant:** `filePath` is the authoritative identifier for later fetch/prove and MUST be unique within a deal (re-upload is overwrite).
+    *   **PolyFS invariant:** `filePath` is the authoritative identifier for later fetch/prove and MUST be unique within a deal (re-upload is overwrite).
 
 ### 4.4 `useTransportRouter` (`src/hooks/useTransportRouter.ts`)
 *   **Purpose:** Centralizes routing between local gateway and direct SP endpoints.
@@ -286,14 +286,14 @@ The central hub for deal management.
     *   **MDU Inspector:** For a selected MDU, fetches and displays the 64 blob commitments and the derived MDU root.
 *   **APIs (gateway or direct SP base):**
     *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
-    *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
-    *   **Fetch file (NilFS path):**
+    *   **PolyFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
+    *   **Fetch file (PolyFS path):**
         *   Plan range: `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`.
         *   Data plane: `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` with `X-Nil-Session-Id` header (session opened on-chain via MetaMask).
-        *   Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch), `404` (not found/tombstone), `409` (stale `manifest_root` or inconsistent NilFS state).
+        *   Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch), `404` (not found/tombstone), `409` (stale `manifest_root` or inconsistent PolyFS state).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
-    *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as NilFS-only flows harden).
+    *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as PolyFS-only flows harden).
 
 ### 5.4 Deal Liveness Heatmap (`src/components/DealLivenessHeatmap.tsx`)
 *   **Props:** `proofs: ProofRow[]`.
@@ -439,7 +439,7 @@ The website depends on the following services (configured in `config.ts`):
 ### 8.1 Data Ingestion (Upload)
 *   **Spec:** Client locally packs files into 8 MiB MDUs, computes KZG commitments (Triple Proof root), and uploads encrypted shards to SPs.
 *   **Actual (two paths):**
-    1. **Gateway ingest (Content tab):** Client uploads raw `FormData` to `/gateway/upload` (gateway or SP base). The server performs sharding, KZG commitments, and NilFS packing, returning `manifest_root` and `size_bytes`.
+    1. **Gateway ingest (Content tab):** Client uploads raw `FormData` to `/gateway/upload` (gateway or SP base). The server performs sharding, KZG commitments, and PolyFS packing, returning `manifest_root` and `size_bytes`.
     2. **Thick client ingest (MDU tab):** Client uses WASM to shard locally, uploads metadata MDUs to all slots (`/sp/upload_mdu`) and user shards via `/sp/upload_shard` (Mode 2), then commits the `manifest_root` on-chain.
 
 ### 8.2 Data Retrieval (Download)
@@ -487,7 +487,7 @@ This sprint prioritizes a clean separation between:
 *   **Deal (LCD):** `GET /polystorechain/polystorechain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
 *   **Heat (LCD):** `GET /polystorechain/polystorechain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
 *   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
-*   **NilFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
+*   **PolyFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
 *   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,witness_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.
 
 ### 9.2 Tests

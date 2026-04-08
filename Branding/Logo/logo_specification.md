@@ -28,7 +28,7 @@ This section defines the aesthetic properties for brand consistency.
 
 ### A. Geometry & Structure
 *   **The Frame (Container):** A neon wireframe depicting a **Tesseract** (hypercube) projection. It represents the rigid, immutable structure of the ledger and the consensus layer. It is defined by sharp $90^\circ$ vertices and straight, glowing lines.
-*   **The Ribbon (Flow):** Intertwined with the frame is a continuous tubular structure forming a distorted **Torus Knot** or Möbius loop. It represents the fluid data layer (NilFS) and the self-healing "Ricci Flow" of the network.
+*   **The Ribbon (Flow):** Intertwined with the frame is a continuous tubular structure forming a distorted **Torus Knot** or Möbius loop. It represents the fluid data layer (PolyFS) and the self-healing "Ricci Flow" of the network.
 *   **Interaction:** The ribbon weaves *through* the rigid faces of the cube, symbolizing the seamless movement of data across the immutable lattice.
 
 ### B. Texture & Pattern

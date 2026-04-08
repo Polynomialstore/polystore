@@ -13,8 +13,8 @@ import (
 
 func TestSpUploadManifest_WritesManifestBin(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-manifest")
 	dealID := uint64(1)
@@ -85,8 +85,8 @@ func TestSpUploadManifest_RequiresHeaders(t *testing.T) {
 
 func TestSpUploadManifest_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-manifest-sparse")
 	dealID := uint64(1)
@@ -134,8 +134,8 @@ func TestSpUploadManifest_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 
 func TestSpUploadManifest_RejectsStalePreviousManifestRoot(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-manifest-stale")
 	currentRoot := mustTestManifestRoot(t, "sp-upload-manifest-current")
@@ -168,7 +168,7 @@ func TestSpUploadManifest_RejectsStalePreviousManifestRoot(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
 		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
 	}
-	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_upload"]; got != "1" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_upload=1, got %q", got)
+	if got := polyfsCASStatusSnapshotForStatus()["polyfs_cas_preflight_conflicts_upload"]; got != "1" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_upload=1, got %q", got)
 	}
 }

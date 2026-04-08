@@ -160,7 +160,7 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
-  // Seed OPFS with a minimal NilFS MDU0 + 1 witness + 1 user MDU.
+  // Seed OPFS with a minimal PolyFS MDU0 + 1 witness + 1 user MDU.
   await page.evaluate(async ({ dealId, manifestRoot, filePath, fileSize }) => {
     const MDU_SIZE_BYTES = 8 * 1024 * 1024
     const BLOB_SIZE_BYTES = 128 * 1024

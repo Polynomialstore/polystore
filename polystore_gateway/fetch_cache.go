@@ -141,11 +141,11 @@ func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
 	return entry, nil
 }
 
-// resolveNilfsFileForFetch resolves the NilFS file record once and returns:
+// resolvePolyfsFileForFetch resolves the PolyFS file record once and returns:
 // - a streaming reader for the decoded file bytes
 // - the MDU index/path for the first user-data MDU that contains the file
 // - the file length
-func resolveNilfsFileForFetch(dealDir string, filePath string) (io.ReadCloser, uint64, string, uint64, error) {
+func resolvePolyfsFileForFetch(dealDir string, filePath string) (io.ReadCloser, uint64, string, uint64, error) {
 	entry, err := loadSlabIndex(dealDir)
 	if err != nil {
 		return nil, 0, "", 0, err
@@ -157,7 +157,7 @@ func resolveNilfsFileForFetch(dealDir string, filePath string) (io.ReadCloser, u
 	}
 
 	slabStartIdx := 1 + entry.witnessCount
-	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, info.StartOffset, info.Length, info.StartOffset, info.Length)
+	reader, err := newPolyfsDecodedReader(dealDir, slabStartIdx, info.StartOffset, info.Length, info.StartOffset, info.Length)
 	if err != nil {
 		return nil, 0, "", 0, err
 	}
@@ -167,9 +167,9 @@ func resolveNilfsFileForFetch(dealDir string, filePath string) (io.ReadCloser, u
 	return reader, mduIdx, mduPath, info.Length, nil
 }
 
-// resolveNilfsFileSegmentForFetch resolves a NilFS file and returns a reader for a subrange.
+// resolvePolyfsFileSegmentForFetch resolves a PolyFS file and returns a reader for a subrange.
 // If rangeLen is 0, it returns bytes from rangeStart to EOF (of the file record).
-func resolveNilfsFileSegmentForFetch(dealDir string, filePath string, rangeStart uint64, rangeLen uint64) (io.ReadCloser, uint64, string, uint64, uint64, uint64, error) {
+func resolvePolyfsFileSegmentForFetch(dealDir string, filePath string, rangeStart uint64, rangeLen uint64) (io.ReadCloser, uint64, string, uint64, uint64, uint64, error) {
 	entry, err := loadSlabIndex(dealDir)
 	if err != nil {
 		return nil, 0, "", 0, 0, 0, err
@@ -191,7 +191,7 @@ func resolveNilfsFileSegmentForFetch(dealDir string, filePath string, rangeStart
 	}
 
 	slabStartIdx := 1 + entry.witnessCount
-	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, info.StartOffset, info.Length, info.StartOffset+rangeStart, segmentLen)
+	reader, err := newPolyfsDecodedReader(dealDir, slabStartIdx, info.StartOffset, info.Length, info.StartOffset+rangeStart, segmentLen)
 	if err != nil {
 		return nil, 0, "", 0, fileLen, 0, err
 	}
@@ -202,10 +202,10 @@ func resolveNilfsFileSegmentForFetch(dealDir string, filePath string, rangeStart
 	return reader, mduIdx, mduPath, absOffset, segmentLen, fileLen, nil
 }
 
-// resolveNilfsFileSegmentForFetchDecoded resolves a NilFS file segment by decoding the
+// resolvePolyfsFileSegmentForFetchDecoded resolves a PolyFS file segment by decoding the
 // full user MDU payload via the Rust FFI decoder, then slicing the requested range.
 // This is slower than streaming, but ensures byte-accurate decoding for Mode 2 reads.
-func resolveNilfsFileSegmentForFetchDecoded(dealDir string, filePath string, rangeStart uint64, rangeLen uint64) (io.ReadCloser, uint64, string, uint64, uint64, uint64, error) {
+func resolvePolyfsFileSegmentForFetchDecoded(dealDir string, filePath string, rangeStart uint64, rangeLen uint64) (io.ReadCloser, uint64, string, uint64, uint64, uint64, error) {
 	entry, err := loadSlabIndex(dealDir)
 	if err != nil {
 		return nil, 0, "", 0, 0, 0, err

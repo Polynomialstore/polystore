@@ -231,7 +231,7 @@ message RetrievalReceipt {
   bytes user_signature = 6; // User's signature over the retrieval fields
   uint64 nonce = 7;         // Strictly increasing per (deal_id, file_path) to prevent replay
   uint64 expires_at = 8;    // Optional block height/timestamp after which this receipt is invalid (0 = no expiry)
-  string file_path = 9;     // NilFS file path (opaque to chain; used for nonce scoping and audits)
+  string file_path = 9;     // PolyFS file path (opaque to chain; used for nonce scoping and audits)
   uint64 range_start = 10;  // Byte range start within file (for auditability/accounting)
   uint64 range_len = 11;    // Byte range length within file (MUST equal bytes_served)
 }

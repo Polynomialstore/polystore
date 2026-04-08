@@ -16,12 +16,12 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-// GatewayDebugRawFetch serves file bytes directly from an on-disk NilFS slab without
+// GatewayDebugRawFetch serves file bytes directly from an on-disk PolyFS slab without
 // requiring retrieval-session / receipt flows. This is intended for devnet debugging.
 //
 // Query params:
 // - deal_id, owner: optional but recommended; when provided they are validated against chain state.
-// - file_path: required NilFS path.
+// - file_path: required PolyFS path.
 // - range_start, range_len: optional byte range within the file; len=0 means "to EOF".
 func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
@@ -131,7 +131,7 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	filePath, err := validateNilfsFilePath(q.Get("file_path"))
+	filePath, err := validatePolyfsFilePath(q.Get("file_path"))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid file_path", "")
 		return
@@ -187,7 +187,7 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content, mduIdx, _, absOffset, servedLen, _, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
+	content, mduIdx, _, absOffset, servedLen, _, err := resolvePolyfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "file not found in deal", "")

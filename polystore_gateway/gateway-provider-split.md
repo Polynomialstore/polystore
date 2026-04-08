@@ -26,7 +26,7 @@ This specification defines the architectural split of the legacy combined gatewa
 *   **Role:** Active Client Helper / "Thick Client" Daemon.
 *   **Key:** None (Delegates to Frontend/CLI). *Exception: E2E testing mode.*
 *   **Responsibility:**
-    *   **Upload (Packer):** Accept files -> Generate MDUs (NilFS) -> Push to `nil_provider`.
+    *   **Upload (Packer):** Accept files -> Generate MDUs (PolyFS) -> Push to `nil_provider`.
     *   **Download (Verifier):** Fetch MDUs from `nil_provider` -> Verify (Triple Proof) -> Stream to User -> **Proxy Receipt to Provider**.
 *   **State:**
     *   Stateless (mostly). May cache `trusted_setup` or temporary artifacts.

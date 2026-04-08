@@ -16,7 +16,7 @@ This repository now uses **PolyStore** as the canonical product and public-facin
 The following technical identifiers remain intentionally unchanged for now:
 
 - `polystorechain`
-- `NilFS`
+- `PolyFS`
 - `X-Nil-*` protocol headers
 - `nil_*`/`nil-*` module, package, service, and implementation-surface names such as `polystore_gateway`, `polystore_core`, and `polystore_cli`
 - existing generated or protocol-bound identifiers that still encode `nil`

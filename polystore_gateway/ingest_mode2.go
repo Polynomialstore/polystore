@@ -155,7 +155,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		}
 	}
 
-	fileRecordPath = normalizeNilfsRecordBasename(fileRecordPath, filePath)
+	fileRecordPath = normalizePolyfsRecordBasename(fileRecordPath, filePath)
 
 	commitmentsPerMdu := stripe.leafCount
 	builder := crypto_ffi.NewMdu0BuilderWithCommitments(userMdus, commitmentsPerMdu)
@@ -870,7 +870,7 @@ func mode2BuildArtifactsAppend(
 	}
 	totalUserMdus := oldUserMdus + newUserMdus
 
-	fileRecordPath = normalizeNilfsRecordBasename(fileRecordPath, filePath)
+	fileRecordPath = normalizePolyfsRecordBasename(fileRecordPath, filePath)
 
 	// Stage artifacts under uploads/deals/<dealID>/.staging-<ts>/, then atomically rename to the manifest-root key.
 	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))

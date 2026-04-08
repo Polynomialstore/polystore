@@ -263,7 +263,7 @@ print(os.path.getsize(sys.argv[1]))
 PY
 )"
 echo "==> Uploading file '$(basename "$UPLOAD_FILE")' (${UPLOAD_BYTES} bytes) to Gateway (deal_id=$DEAL_ID)..."
-# Canonical NilFS ingest should be fast; enforce a bounded timeout (override with UPLOAD_TIMEOUT=...).
+# Canonical PolyFS ingest should be fast; enforce a bounded timeout (override with UPLOAD_TIMEOUT=...).
 UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-60s}"
 UPLOAD_START_TS="$(python3 -c 'import time; print(time.time())')"
 UPLOAD_RESP=$(timeout "$UPLOAD_TIMEOUT" curl --verbose -X POST -F "file=@$UPLOAD_FILE" \
@@ -385,7 +385,7 @@ if [ "$CHAIN_CID" != "$MANIFEST_ROOT" ]; then
 fi
 echo "    Success: Deal $DEAL_ID has correct CID $CHAIN_CID"
 
-# 5.5 Restart gateway to prove NilFS is restart-safe source of truth.
+# 5.5 Restart gateway to prove PolyFS is restart-safe source of truth.
 echo "==> Restarting gateway (restart-safety check)..."
 "$STACK_SCRIPT" restart-gateway
 wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 1
@@ -393,7 +393,7 @@ wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 1
 # 6. Fetch File (Gateway)
 echo "==> Fetching file from Gateway..."
 echo "==> Opening on-chain retrieval session (precompile)..."
-# Resolve file layout from NilFS (start_offset and file length).
+# Resolve file layout from PolyFS (start_offset and file length).
 LIST_JSON=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
 START_OFFSET=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('start_offset') or f.get('startOffset') or 0))")
 FILE_LEN=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('size_bytes') or f.get('sizeBytes') or 0))")

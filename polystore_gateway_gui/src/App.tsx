@@ -1556,7 +1556,7 @@ export default function App() {
                           />
                         </label>
                         <label className="text-sm text-muted-foreground/90">
-                          NilFS path
+                          PolyFS path
                           <input
                             className={formFieldClass}
                             value={uploadFilePath}

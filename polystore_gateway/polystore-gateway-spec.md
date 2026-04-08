@@ -15,7 +15,7 @@ In the current **Devnet** architecture, the browser can operate without a local 
 ## 2. Architecture
 
 The service wraps a mix of native libraries and CLI tools:
-*   **`polystore_core` (FFI):** NilFS layout helpers (MDU #0 builder, record parsing) and cryptographic helpers shared with Rust.
+*   **`polystore_core` (FFI):** PolyFS layout helpers (MDU #0 builder, record parsing) and cryptographic helpers shared with Rust.
 *   **`polystore_cli`:** Used for **Sharding** (erasure coding) and **KZG Commitment** generation in devnet flows.
 *   **`polystorechaind`:** Used for **Querying** and for relaying on-chain transactions that already carry user signatures (e.g., EVM precompile intents). The gateway does **not** replace MetaMask for user authorization.
 
@@ -30,7 +30,7 @@ The service wraps a mix of native libraries and CLI tools:
         *   where `manifest_root_key` is lowercase hex **without** `0x` (96 chars), derived by decoding the 48-byte `manifest_root` then re-encoding (not by string trimming alone).
         *   This avoids collisions across deals and allows multiple roots per deal over time.
         *   Any extra debug artifacts (e.g., shard JSON, `manifest_blob_hex`) are optional and must not be required for fetch/prove.
-*   **NilFS is the Source of Truth (Target End State):**
+*   **PolyFS is the Source of Truth (Target End State):**
     *   The gateway MUST be able to list files, fetch bytes, and generate proofs by reading `uploads/deals/<deal_id>/<manifest_root_key>/mdu_0.bin` (File Table) and the on-disk `mdu_*.bin` slab — without any auxiliary index or in-memory state.
 
 ---
@@ -40,24 +40,24 @@ The service wraps a mix of native libraries and CLI tools:
 ### 3.1 S3 Compatibility (Legacy)
 | Method | Path | Description |
 |:---|:---|:---|
-| `PUT` | `/api/v1/object/{key}` | **Legacy:** saves a raw object to disk for quick demos (not deal-backed). **Target:** treats `{key}` as a NilFS `file_path` within a Deal and ingests it into NilFS, returning `manifest_root` (legacy alias: `cid`). |
-| `GET` | `/api/v1/object/{key}` | **Legacy:** serves a raw object by filename. **Target:** resolves and streams from NilFS by `file_path` (no `uploads/index.json` dependency). |
+| `PUT` | `/api/v1/object/{key}` | **Legacy:** saves a raw object to disk for quick demos (not deal-backed). **Target:** treats `{key}` as a PolyFS `file_path` within a Deal and ingests it into PolyFS, returning `manifest_root` (legacy alias: `cid`). |
+| `GET` | `/api/v1/object/{key}` | **Legacy:** serves a raw object by filename. **Target:** resolves and streams from PolyFS by `file_path` (no `uploads/index.json` dependency). |
 
 #### 3.1.1 Path-Style S3 (Deal-Backed Buckets) — Devnet/Enterprise
 The gateway also exposes a **minimal, path-style S3 surface** at the HTTP root for compatibility with standard tooling (`aws-cli`, `rclone`):
 
 - **Bucket naming convention:** `deal-<deal_id>` (example: `deal-0`)
 - **Bucket semantics:** a bucket maps 1:1 to an on-chain Deal.
-- **Key semantics:** the object key maps to a NilFS `file_path` inside that deal.
+- **Key semantics:** the object key maps to a PolyFS `file_path` inside that deal.
 
 | Method | Path | Description |
 |:---|:---|:---|
 | `GET` | `/` | List buckets (on-chain deals) as `deal-<id>` names. |
 | `HEAD` | `/{bucket}` | Bucket existence check (Deal exists on chain). |
-| `GET` | `/{bucket}` | List objects (NilFS file table) for the Deal’s current `manifest_root`. |
-| `GET` / `HEAD` | `/{bucket}/{key...}` | Fetch an object from NilFS by `file_path` (supports explicit `Range: bytes=start-end`). |
+| `GET` | `/{bucket}` | List objects (PolyFS file table) for the Deal’s current `manifest_root`. |
+| `GET` / `HEAD` | `/{bucket}/{key...}` | Fetch an object from PolyFS by `file_path` (supports explicit `Range: bytes=start-end`). |
 | `PUT` | `/{bucket}/{key...}` | Upload an object, ingest via Mode 2, upload to providers, and **commit** via `update-deal-content` (devnet: requires a faucet-authorized deal). |
-| `DELETE` | `/{bucket}/{key...}` | Not implemented yet (NilFS tombstoning still needs wiring). |
+| `DELETE` | `/{bucket}/{key...}` | Not implemented yet (PolyFS tombstoning still needs wiring). |
 
 ### 3.2 Gateway (Web Frontend Support)
 These endpoints support the `polystore-website` "Thin Client" flow.
@@ -67,9 +67,9 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 #### Data Ingestion
 *   **`POST /gateway/upload`**
     *   **Input:** Multipart form data (`file`, `owner`, optional `file_path`).
-*   **Logic:** Saves the file, then performs *canonical NilFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`). Sharding/KZG uses `polystore_cli`; NilFS table construction uses `polystore_core` FFI. Work is request-scoped: cancellation/timeouts propagate into `polystore_cli` subprocesses.
-    *   **Options:** Supports `deal_id` (append into an existing deal), `max_user_mdus` (devnet sizing hint for witness region), and `file_path` (NilFS-relative destination path; default is a sanitized `filename`).
-        *   **NilFS path rules (target):** Decode at most once (HTTP frameworks already decode query/form values); reject empty/whitespace-only, leading `/`, `..` traversal, `\\` separators, NUL bytes, and control characters. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-unescape).
+*   **Logic:** Saves the file, then performs *canonical PolyFS ingest* (MDU #0 + Witness MDUs + User MDUs + `manifest_root`). Sharding/KZG uses `polystore_cli`; PolyFS table construction uses `polystore_core` FFI. Work is request-scoped: cancellation/timeouts propagate into `polystore_cli` subprocesses.
+    *   **Options:** Supports `deal_id` (append into an existing deal), `max_user_mdus` (devnet sizing hint for witness region), and `file_path` (PolyFS-relative destination path; default is a sanitized `filename`).
+        *   **PolyFS path rules (target):** Decode at most once (HTTP frameworks already decode query/form values); reject empty/whitespace-only, leading `/`, `..` traversal, `\\` separators, NUL bytes, and control characters. Matching is case-sensitive and byte-exact (no `path.Clean` / no double-unescape).
         *   **Uniqueness (target):** `file_path` MUST be unique within a deal. If `deal_id` is provided and the target `file_path` already exists, the gateway MUST overwrite deterministically (update-in-place or tombstone + replace) so later fetch/prove cannot return stale bytes.
         *   **Encoding note:** Go’s query parser treats `+` as space. Clients should encode spaces as `%20` (JS `encodeURIComponent`) and servers should treat decoded strings as canonical.
     *   **Output (target):** JSON `{ "manifest_root": "0x...", "size_bytes": 123, "file_size_bytes": 123, "total_mdus": 3, "witness_mdus": 1, "file_path": "dir/file.txt", "filename": "file.txt" }`.
@@ -91,7 +91,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **CAS preflight header:** artifact uploads may include `X-Nil-Previous-Manifest-Root` as an advisory expected-base root; stale values are rejected before the gateway/provider consumes upload bytes.
     *   **Devnet retention policy:** complete provisional generations older than 24 hours may be removed during startup/recovery cleanup if they were never promoted on-chain.
     *   **Operator control:** `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
-    *   **Observability:** `/status` reports the effective TTL and generation counters via `nilfs_generation_*` fields, plus stale CAS preflight counters via `nilfs_cas_preflight_conflicts_*`.
+    *   **Observability:** `/status` reports the effective TTL and generation counters via `polyfs_generation_*` fields, plus stale CAS preflight counters via `polyfs_cas_preflight_conflicts_*`.
     *   **Inspection tooling:** `GET /gateway/deal-generations/{deal_id}` returns the local active/provisional/incomplete/invalid generations for a specific deal, including `previous_manifest_root`, age/classification, and on-disk bytes.
 
 #### Health & Status
@@ -105,7 +105,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
         *   `extra.artifact_spec = "mode2-artifacts-v1"`
             *   Canonical contract: `notes/mode2-artifacts-v1.md`
 *   **`GET /gateway/deal-generations/{deal_id}`**
-    *   **Role:** Operator/debug inspection endpoint for local NilFS generation state by deal.
+    *   **Role:** Operator/debug inspection endpoint for local PolyFS generation state by deal.
     *   **Returns:** active pointer root, configured provisional retention TTL, and generation entries with status (`active`, `provisional_recent`, `provisional_expired`, `incomplete`, `invalid`), `previous_manifest_root`, file count, MDU counts, and bytes on disk.
 
 #### Deal Management (EVM Bridge, Optional Relay)
@@ -124,7 +124,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 #### Data Retrieval & Proofs
 *   **`GET /gateway/plan-retrieval-session/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner`, `file_path` (required; optional `range_start`, `range_len`).
-    *   **Logic:** Resolves NilFS offsets and returns a blob-range plan (`start_mdu_index`, `start_blob_index`, `blob_count`) plus the selected provider.
+    *   **Logic:** Resolves PolyFS offsets and returns a blob-range plan (`start_mdu_index`, `start_blob_index`, `blob_count`) plus the selected provider.
     *   **Role:** Planning helper for browser/CLI clients before they open a retrieval session on-chain.
 
 *   **`GET /gateway/fetch/{manifest_root}`**
@@ -136,7 +136,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
         4.  Streams the file content to the response and sets `X‑Nil‑Provider`.
     *   **Role:** Acts as a retrieval proxy and proof recorder; it does **not** sign user transactions.
     *   **Mode 2 behavior:** If the local slab is missing a user MDU, the gateway may fetch `K` shards from providers (slot 0..K-1 by default) via `/sp/shard`, reconstruct the MDU with RS decoding, and stream the requested range. Ranges must be slot-aligned (single-slot blob ranges).
-    *   **NilFS Path Fetch (target end state):**
+    *   **PolyFS Path Fetch (target end state):**
         *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
         *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\\` separators, whitespace-only, NUL bytes, and control characters).
         *   Unknown `file_path` (or tombstone record) returns `404`.
@@ -145,7 +145,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
         *   Owner mismatch (or invalid owner format) should return a clear non-200 (prefer `403`) as JSON.
         *   If `manifest_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
         *   The gateway MUST canonicalize `manifest_root` consistently (decode → re-encode) for filesystem paths and logs to avoid duplicate deal directories.
-        *   The gateway resolves the file from `uploads/<manifest_root_key>/mdu_0.bin` (NilFS File Table) and streams the requested bytes. Proof submission is performed separately via `/gateway/session-proof` or `/sp/session-proof`.
+        *   The gateway resolves the file from `uploads/<manifest_root_key>/mdu_0.bin` (PolyFS File Table) and streams the requested bytes. Proof submission is performed separately via `/gateway/session-proof` or `/sp/session-proof`.
         *   Non-200 responses MUST be JSON with a short remediation hint (even though the success path is a byte stream) and set `Content-Type: application/json`, e.g. `{ "error": "...", "hint": "..." }`.
 
 *   **`POST /gateway/session-proof`**
@@ -167,7 +167,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.
     *   **Logic (target):**
-        1. Resolve the file from NilFS (`mdu_0.bin` + on-disk slab) using `file_path`.
+        1. Resolve the file from PolyFS (`mdu_0.bin` + on-disk slab) using `file_path`.
         2. Generate and submit `MsgProveLiveness` using the gateway/provider key.
     *   **Notes (target):** `file_path` in JSON is already an unescaped string; gateways must not URL-decode it again (no double-unescape).
     *   **Compatibility:** Legacy request bodies that only include `cid` are deprecated; do not rely on `uploads/index.json` lookups.
@@ -176,9 +176,9 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 
 *   **`GET /gateway/list-files/{manifest_root}`**
     *   **Query Params:** `deal_id`, `owner` (required for access control / deal-owner match).
-    *   **Logic:** Reads `uploads/<manifest_root_key>/mdu_0.bin`, parses the NilFS File Table, and returns a deduplicated list of active files (latest non-tombstone record per `file_path`) plus computed total size.
+    *   **Logic:** Reads `uploads/<manifest_root_key>/mdu_0.bin`, parses the PolyFS File Table, and returns a deduplicated list of active files (latest non-tombstone record per `file_path`) plus computed total size.
     *   **Response (target):** `{ "manifest_root": "0x...", "total_size_bytes": 123, "files": [{ "path": "dir/file.txt", "size_bytes": 123, "start_offset": 0, "flags": 0 }] }`.
-    *   **Role:** The authoritative source for the Deal Explorer “Files (NilFS)” list.
+    *   **Role:** The authoritative source for the Deal Explorer “Files (PolyFS)” list.
     *   **Errors (target):** Missing/invalid params return `400`; owner mismatch returns a clear non-200 (prefer `403`); stale `manifest_root` should return a clear non-200 (prefer `409`).
 
 *   **`GET /gateway/slab/{manifest_root}`**
@@ -200,7 +200,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Role:** Educational/visualization endpoint; **not** required for fetch/prove.
 
 *   **`GET /gateway/manifest/{cid}`** *(Deprecated)*
-    *   **Role:** Legacy debug endpoint for per-upload artifacts. It MUST NOT be required for fetch/prove flows and is expected to be removed once NilFS-only flows are fully enforced.
+    *   **Role:** Legacy debug endpoint for per-upload artifacts. It MUST NOT be required for fetch/prove flows and is expected to be removed once PolyFS-only flows are fully enforced.
     *   **Compatibility:** If still present, `{cid}` MUST be treated as an alias for `manifest_root` only; callers should migrate to `/gateway/slab/{manifest_root}` and `/gateway/list-files/{manifest_root}`.
 
 ---
@@ -215,8 +215,8 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gat
     *   **Dev-only:** this path is disabled by default. Enable with `NIL_ENABLE_TX_RELAY=1`; optional auto-funding uses `NIL_AUTO_FAUCET_EVM=1` (or `NIL_AUTO_FAUCET=1`).
 
 2.  **Triple Proof Generation:**
-    *   Session‑proof submission uses on‑disk NilFS slabs to build `ChainedProof` objects for the requested blob range.
-    *   **Target (NilFS SSoT):** Proof inputs are derived from the on-disk slab (`uploads/<manifest_root_key>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
+    *   Session‑proof submission uses on‑disk PolyFS slabs to build `ChainedProof` objects for the requested blob range.
+    *   **Target (PolyFS SSoT):** Proof inputs are derived from the on-disk slab (`uploads/<manifest_root_key>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
     *   **Gap:** In a production "Thick Client", the browser would generate or verify these proofs locally. Here, the Gateway can generate and relay them, effectively simulating a "perfect" SP.
 
 3.  **Local Storage:**

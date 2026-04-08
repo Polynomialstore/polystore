@@ -915,7 +915,7 @@ func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID 
 	commitmentSpan := leafCount * commitmentBytes
 	startOffset := userOrdinal * commitmentSpan
 
-	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
+	witnessReader, err := newPolyfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
 	if err != nil {
 		return nil, err
 	}

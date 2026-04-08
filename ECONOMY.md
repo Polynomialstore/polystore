@@ -238,7 +238,7 @@ This makes protocol audit/repair possible even for owner-only deals without conf
 
 A public explorer can:
 1) Query chain state for deals with `retrieval_policy == Public`.
-2) For each public deal, open a paid session to fetch **metadata MDUs** (MDU #0 + witness) and parse NilFS.
+2) For each public deal, open a paid session to fetch **metadata MDUs** (MDU #0 + witness) and parse PolyFS.
 3) Host metadata (file lists, sizes, hashes, previews) and facilitate broad public retrieval demand.
 
 This creates:

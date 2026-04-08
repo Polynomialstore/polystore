@@ -1,25 +1,25 @@
-# Mode 2 Framing (NilFS + RS Striping)
+# Mode 2 Framing (PolyFS + RS Striping)
 
 This note memorializes the current shared framing for Mode 2 (StripeReplica) so we can converge on a coherent spec + implementation.
 
 ## 1) Two Layers: Logical vs Physical
 
-### Logical layer: NilFS “volume semantics” (what the deal *means*)
-- A Deal represents a logical byte-addressed volume (NilFS) containing files keyed by `file_path`.
-- NilFS is responsible for the namespace and offset mapping (MDU #0 file table), not for deciding replication vs striping.
+### Logical layer: PolyFS “volume semantics” (what the deal *means*)
+- A Deal represents a logical byte-addressed volume (PolyFS) containing files keyed by `file_path`.
+- PolyFS is responsible for the namespace and offset mapping (MDU #0 file table), not for deciding replication vs striping.
 
 ### Physical/service unit: 8 MiB **SP‑MDUs**
 - The protocol’s fundamental service unit is an 8 MiB chunk (an “MDU”).
 - To avoid confusion with earlier wording, we’ll call these **SP‑MDUs**: they are the canonical 8 MiB units that providers are accountable for *in some form*.
 - Metadata MDUs exist alongside SP‑MDUs:
-  - **MDU #0** (NilFS super-manifest: file table + root table)
+  - **MDU #0** (PolyFS super-manifest: file table + root table)
   - **Witness MDUs** (commitment cache / acceleration structure)
 
 ### Physical distribution policy: Mode 1 vs Mode 2
 - **Mode 1 (FullReplica):** each assigned provider stores the full set of SP‑MDUs + metadata.
 - **Mode 2 (StripeReplica / RS):** each SP‑MDU is encoded under RS(K, K+M) and providers store *their share* (shards) of each SP‑MDU, while metadata is fully replicated.
 
-Key point: NilFS defines the *logical bytes*; Mode 2 defines how each 8 MiB SP‑MDU is encoded and distributed.
+Key point: PolyFS defines the *logical bytes*; Mode 2 defines how each 8 MiB SP‑MDU is encoded and distributed.
 
 ## 2) What the chain commits to (client perspective)
 
@@ -51,7 +51,7 @@ Mode 2 relies on fully replicated metadata so any repairer can know “what the 
 
 ### 4.1 Required replicated metadata
 
-- **MDU #0 (NilFS super-manifest):** file table + root table (points to the other MDUs)
+- **MDU #0 (PolyFS super-manifest):** file table + root table (points to the other MDUs)
 - **Witness MDUs:** packed array of expected 48-byte blob commitments for each *data-bearing* SP‑MDU (see §6 and §5 Design A)
 - **Manifest openings material:** enough information to produce Hop‑1 openings against on-chain `Deal.manifest_root`.
   - In devnet today this is commonly stored as `manifest.bin` (the 128 KiB manifest blob).
@@ -65,7 +65,7 @@ Witness size formula:
 - Witness bytes = `S * L * 48`
 - Witness MDUs `W = ceil(witness_bytes / 8 MiB)`
 
-Root table capacity constraint (NilFS V1):
+Root table capacity constraint (PolyFS V1):
 - RootTable in MDU #0 is 2 MiB of 32-byte roots → max `65,536` roots.
 - Therefore the slab must satisfy: `1 + W + S <= 65,536`.
 - This is why “512 GiB logical minus a few MDUs” happens (metadata consumes some root slots).
@@ -88,7 +88,7 @@ In Design A:
   - Parity providers are first-class accountable: they can be challenged/slashed with the same Triple Proof shape.
   - Repair is trustless: fetched parity blobs can be verified against expected commitments.
 
-### Design B (alternative): Parity stored as NilFS-internal content
+### Design B (alternative): Parity stored as PolyFS-internal content
 - Keep Hop 2 exactly as Mode 1: each physical 8 MiB MDU has a 64-leaf tree.
 - Store parity bytes in extra “parity MDUs/files” inside the slab (reserved/hidden paths).
 - Outcome:
@@ -128,7 +128,7 @@ This section defines the missing glue so “non-compliance by slot” is enforce
 ### 7.1 Two index spaces
 
 - `slab_mdu_index`: the index used by `ChainedProof.mdu_index` and Hop 1.
-  - This is in **slab order**: `mdu_0` (NilFS), then witness region, then data-bearing SP‑MDUs.
+  - This is in **slab order**: `mdu_0` (PolyFS), then witness region, then data-bearing SP‑MDUs.
 - `W`: witness MDUs count for this deal (derivable from policy + sizing, and/or inferable from on-disk slab layout in devnet).
 - `data_ordinal`: the 0-based index of a data-bearing SP‑MDU within the deal.
   - Defined only when `slab_mdu_index > W`:
@@ -162,4 +162,4 @@ For **metadata** MDUs (`slab_mdu_index <= W`):
 4) **Sizing semantics:** clarify caps:
    - per-SP cap (e.g. 512 GiB) vs client-visible logical cap
    - RS overhead factor `N/K` and metadata overhead (Witness + MDU #0 + manifest openings material)
-   - RootTable ceiling `1 + W + S <= 65,536` for NilFS V1
+   - RootTable ceiling `1 + W + S <= 65,536` for PolyFS V1

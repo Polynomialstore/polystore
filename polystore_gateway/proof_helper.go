@@ -246,7 +246,7 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	commitmentSpan := leafCount * commitmentBytes
 	startOffset := userOrdinal * commitmentSpan
 
-	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
+	witnessReader, err := newPolyfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to open witness reader: %w", err)
 	}

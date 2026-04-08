@@ -17,8 +17,8 @@ import (
 
 func TestSpUploadBundle_AcceptsSparseArtifacts(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-bundle")
 	dealID := uint64(0)
@@ -154,8 +154,8 @@ func TestSpUploadBundle_AcceptsSparseArtifacts(t *testing.T) {
 
 func TestSpUploadBundle_AcceptsBinaryBundleV2(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-bundle-v2")
 	dealID := uint64(2)

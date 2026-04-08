@@ -1,12 +1,12 @@
-import type { NilfsFileEntry } from '../domain/nilfs'
+import type { PolyfsFileEntry } from '../domain/polyfs'
 import { listDealFiles, readManifestRoot, readMdu, readSlabMetadata } from './storage/OpfsAdapter'
 
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
-const NILFS_SCALAR_BYTES = 32
-const NILFS_SCALAR_PAYLOAD_BYTES = 31
-const NILFS_SCALARS_PER_MDU = Math.floor(MDU_SIZE_BYTES / NILFS_SCALAR_BYTES)
+const POLYFS_SCALAR_BYTES = 32
+const POLYFS_SCALAR_PAYLOAD_BYTES = 31
+const POLYFS_SCALARS_PER_MDU = Math.floor(MDU_SIZE_BYTES / POLYFS_SCALAR_BYTES)
 
-export const RAW_MDU_CAPACITY = NILFS_SCALARS_PER_MDU * NILFS_SCALAR_PAYLOAD_BYTES
+export const RAW_MDU_CAPACITY = POLYFS_SCALARS_PER_MDU * POLYFS_SCALAR_PAYLOAD_BYTES
 
 function parseMduIndex(fileName: string): number | null {
   const match = /^mdu_(\d+)\.bin$/.exec(fileName)
@@ -16,7 +16,7 @@ function parseMduIndex(fileName: string): number | null {
   return idx
 }
 
-function inferMaxEnd(files: NilfsFileEntry[]): number {
+function inferMaxEnd(files: PolyfsFileEntry[]): number {
   let maxEnd = 0
   for (const f of files) {
     const start = Number(f.start_offset)
@@ -43,7 +43,7 @@ function hasContiguousMduRange(indices: Set<number>, totalMdus: number): boolean
   return true
 }
 
-export async function inferWitnessCountFromOpfs(dealId: string, files: NilfsFileEntry[]): Promise<{
+export async function inferWitnessCountFromOpfs(dealId: string, files: PolyfsFileEntry[]): Promise<{
   witnessCount: number
   slabStartIdx: number
   totalMdus: number
@@ -67,7 +67,7 @@ export async function inferWitnessCountFromOpfs(dealId: string, files: NilfsFile
     const metadataMduLayoutSane = metadataCountsSane && hasContiguousMduRange(mduIndices, meta.total_mdus)
 
     if (manifestMatches && metadataMduLayoutSane) {
-      const metadataFiles: NilfsFileEntry[] = meta.file_records.map((rec) => ({
+      const metadataFiles: PolyfsFileEntry[] = meta.file_records.map((rec) => ({
         path: rec.path,
         size_bytes: rec.size_bytes,
         start_offset: rec.start_offset,
@@ -109,25 +109,25 @@ function decodeRawSliceFromMdu(opts: {
   if (rawStart + rawLen > rawValidLen) throw new Error('raw range exceeds valid data length')
 
   const out = new Uint8Array(rawLen)
-  const rem = rawValidLen % NILFS_SCALAR_PAYLOAD_BYTES
-  const fullScalars = rem === 0 ? rawValidLen / NILFS_SCALAR_PAYLOAD_BYTES : Math.floor(rawValidLen / NILFS_SCALAR_PAYLOAD_BYTES)
-  const lastPartialLen = rem === 0 ? NILFS_SCALAR_PAYLOAD_BYTES : rem
+  const rem = rawValidLen % POLYFS_SCALAR_PAYLOAD_BYTES
+  const fullScalars = rem === 0 ? rawValidLen / POLYFS_SCALAR_PAYLOAD_BYTES : Math.floor(rawValidLen / POLYFS_SCALAR_PAYLOAD_BYTES)
+  const lastPartialLen = rem === 0 ? POLYFS_SCALAR_PAYLOAD_BYTES : rem
 
   let cursor = rawStart
   let remaining = rawLen
   let outOffset = 0
 
   while (remaining > 0) {
-    const scalarIdx = Math.floor(cursor / NILFS_SCALAR_PAYLOAD_BYTES)
-    const offsetInScalar = cursor % NILFS_SCALAR_PAYLOAD_BYTES
+    const scalarIdx = Math.floor(cursor / POLYFS_SCALAR_PAYLOAD_BYTES)
+    const offsetInScalar = cursor % POLYFS_SCALAR_PAYLOAD_BYTES
     const isPartialScalar = rem !== 0 && scalarIdx === fullScalars
-    const scalarLen = isPartialScalar ? lastPartialLen : NILFS_SCALAR_PAYLOAD_BYTES
+    const scalarLen = isPartialScalar ? lastPartialLen : POLYFS_SCALAR_PAYLOAD_BYTES
 
     const available = scalarLen - offsetInScalar
     const take = Math.min(remaining, available)
 
-    const scalarBase = scalarIdx * NILFS_SCALAR_BYTES
-    const payloadStart = scalarBase + (isPartialScalar ? (NILFS_SCALAR_BYTES - lastPartialLen) : 1)
+    const scalarBase = scalarIdx * POLYFS_SCALAR_BYTES
+    const payloadStart = scalarBase + (isPartialScalar ? (POLYFS_SCALAR_BYTES - lastPartialLen) : 1)
     const encStart = payloadStart + offsetInScalar
 
     out.set(mdu.slice(encStart, encStart + take), outOffset)
@@ -145,10 +145,10 @@ export function decodeRawPrefixFromMdu(mdu: Uint8Array, rawValidLen: number): Ui
   return decodeRawSliceFromMdu({ mdu, rawStart: 0, rawLen: safeLen, rawValidLen: safeLen })
 }
 
-export async function readNilfsFileFromOpfs(opts: {
+export async function readPolyfsFileFromOpfs(opts: {
   dealId: string
-  file: NilfsFileEntry
-  allFiles: NilfsFileEntry[]
+  file: PolyfsFileEntry
+  allFiles: PolyfsFileEntry[]
   rangeStart?: number
   rangeLen?: number
 }): Promise<Uint8Array> {

@@ -7,7 +7,7 @@ import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { appConfig } from '../config';
-import { NILFS_RECORD_PATH_MAX_BYTES, sanitizeNilfsRecordPath } from '../lib/nilfsPath';
+import { POLYFS_RECORD_PATH_MAX_BYTES, sanitizePolyfsRecordPath } from '../lib/polyfsPath';
 import {
   deleteDealDirectory,
   listDealFiles,
@@ -21,11 +21,11 @@ import {
 } from '../lib/storage/OpfsAdapter';
 import {
   mode2RowsForK,
-  parseNilfsFilesFromMdu0,
-  parseNilfsRootTableFromMdu0,
+  parsePolyfsFilesFromMdu0,
+  parsePolyfsRootTableFromMdu0,
   reconstructMduFromMode2SlotSlices,
-} from '../lib/nilfsLocal';
-import { decodeRawPrefixFromMdu, inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/nilfsOpfsFetch';
+} from '../lib/polyfsLocal';
+import { decodeRawPrefixFromMdu, inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
 import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient';
 import { providerFetchMduWindowWithSession } from '../api/providerClient';
@@ -51,7 +51,7 @@ import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../l
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
 import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../lib/upload/gatewayRecovery';
-import { classifyNilfsCommitError } from '../lib/nilfsCommitError';
+import { classifyPolyfsCommitError } from '../lib/polyfsCommitError';
 import { waitForTransactionReceipt } from '../lib/evmRpc';
 import {
   decodeComputeRetrievalSessionIdsResult,
@@ -932,7 +932,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
               if (!fileRecords.length) {
                 const fallbackRawPath = String(lastFileMetaRef.current?.filePath || '').trim() || 'upload.bin'
-                const fallbackPath = sanitizeNilfsRecordPath(fallbackRawPath)
+                const fallbackPath = sanitizePolyfsRecordPath(fallbackRawPath)
                 if (fallbackPath) {
                   fileRecords = [{
                     path: fallbackPath,
@@ -1006,7 +1006,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           mdu0Artifact?.data && mdu0Artifact.fullSize && mdu0Artifact.data.byteLength < mdu0Artifact.fullSize
             ? expandSparseBytes(mdu0Artifact.data, mdu0Artifact.fullSize)
             : mdu0Artifact?.data
-        const parsedFiles = mdu0Bytes ? parseNilfsFilesFromMdu0(mdu0Bytes) : []
+        const parsedFiles = mdu0Bytes ? parsePolyfsFilesFromMdu0(mdu0Bytes) : []
         const fileRecords = parsedFiles.map((file) => ({
           path: file.path,
           start_offset: Number(file.start_offset) || 0,
@@ -1126,12 +1126,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       return
     }
     if (!dealId) return
-    const classified = classifyNilfsCommitError(commitError)
+    const classified = classifyPolyfsCommitError(commitError)
     if (!classified.staleBase) return
     if (lastStaleCommitMessageRef.current === classified.message) return
     lastStaleCommitMessageRef.current = classified.message
 
-    addLog('> Commit rejected: local NilFS base is stale. Clearing browser slab cache for this deal...')
+    addLog('> Commit rejected: local PolyFS base is stale. Clearing browser slab cache for this deal...')
     addLog('> Refresh the deal state and retry. The browser will bootstrap the current committed slab before append.')
 
     void deleteDealDirectory(dealId)
@@ -1243,15 +1243,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       return false
     }
 
-    const nilfsFiles = parseNilfsFilesFromMdu0(mdu0)
-    if (nilfsFiles.length === 0) {
+    const polyfsFiles = parsePolyfsFilesFromMdu0(mdu0)
+    if (polyfsFiles.length === 0) {
       addLog('> Gateway rehydrate skipped: local MDU #0 has no file records.')
       return false
     }
 
     let witnessCount = 0
     try {
-      const inferred = await inferWitnessCountFromOpfs(dealId, nilfsFiles)
+      const inferred = await inferWitnessCountFromOpfs(dealId, polyfsFiles)
       witnessCount = inferred.witnessCount
       if (inferred.userCount <= 0) {
         addLog('> Gateway rehydrate skipped: no local user MDUs found in OPFS.')
@@ -1464,13 +1464,13 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
     addLog('> Mode 2 append: local slab missing/stale; bootstrapping committed slab from provider retrieval...')
     const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0')
-    const files = parseNilfsFilesFromMdu0(mdu0Bytes)
+    const files = parsePolyfsFilesFromMdu0(mdu0Bytes)
     if (!files.length) {
-      addLog('> Mode 2 append bootstrap: no committed NilFS files found on provider.')
+      addLog('> Mode 2 append bootstrap: no committed PolyFS files found on provider.')
       return null
     }
 
-    const roots = parseNilfsRootTableFromMdu0(mdu0Bytes)
+    const roots = parsePolyfsRootTableFromMdu0(mdu0Bytes)
     let maxEnd = 0
     for (const file of files) {
       const start = Number(file.start_offset || 0)
@@ -1499,7 +1499,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       decodeRawMdu: decodeRawPrefixFromMdu,
     })
     if (!bootstrapped) {
-      addLog('> Mode 2 append bootstrap: no committed NilFS files found on provider.')
+      addLog('> Mode 2 append bootstrap: no committed PolyFS files found on provider.')
       return null
     }
 
@@ -2836,7 +2836,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       const loadLocalAppendBase = async () => {
         const mdu0 = await readMdu(dealId, 0)
         if (!mdu0) return null
-        const files = parseNilfsFilesFromMdu0(mdu0)
+        const files = parsePolyfsFilesFromMdu0(mdu0)
         if (files.length <= 0) return null
         const existing = await inferWitnessCountFromOpfs(dealId, files)
         if (existing.userCount <= 0) return null
@@ -3502,9 +3502,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         }
 
         const fileStartOffset = appendMode2 ? uploadPlan.appendStartOffset : 0;
-        const recordPath = sanitizeNilfsRecordPath(file.name);
+        const recordPath = sanitizePolyfsRecordPath(file.name);
         if (recordPath !== file.name) {
-          addLog(`> NilFS path truncated for record table (max ${NILFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
+          addLog(`> PolyFS path truncated for record table (max ${POLYFS_RECORD_PATH_MAX_BYTES} bytes): ${recordPath}`);
         }
         addLog(`> Finalizing MDU #0...`);
         const opStartMdu0 = performance.now();

@@ -1,10 +1,10 @@
-export const NILFS_RECORD_PATH_MAX_BYTES = 232
+export const POLYFS_RECORD_PATH_MAX_BYTES = 232
 
-export function sanitizeNilfsRecordPath(input: string): string {
+export function sanitizePolyfsRecordPath(input: string): string {
   let value = String(input ?? '').trim()
   if (!value) return 'file'
 
-  // Treat common OS path separators as delimiters; NilFS V1 currently stores basename only.
+  // Treat common OS path separators as delimiters; PolyFS V1 currently stores basename only.
   value = value.replace(/\\/g, '/')
   if (value.includes('/')) {
     const parts = value.split('/').filter(Boolean)
@@ -22,14 +22,14 @@ export function sanitizeNilfsRecordPath(input: string): string {
   value = value.trim()
   if (!value) return 'file'
 
-  // Match current NilFS fixed 232-byte path field. Truncate by UTF-8 bytes, not JS code units,
+  // Match current PolyFS fixed 232-byte path field. Truncate by UTF-8 bytes, not JS code units,
   // so multibyte filenames from macOS/Chrome cannot slip through and trip the WASM builder.
   const encoder = new TextEncoder()
-  if (encoder.encode(value).length > NILFS_RECORD_PATH_MAX_BYTES) {
+  if (encoder.encode(value).length > POLYFS_RECORD_PATH_MAX_BYTES) {
     let truncated = ''
     for (const ch of value) {
       const next = truncated + ch
-      if (encoder.encode(next).length > NILFS_RECORD_PATH_MAX_BYTES) break
+      if (encoder.encode(next).length > POLYFS_RECORD_PATH_MAX_BYTES) break
       truncated = next
     }
     value = truncated.trim()

@@ -824,7 +824,7 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus must exceed metadata mdus (got total_mdus=%d witness_mdus=%d)", msg.TotalMdus, msg.WitnessMdus)
 	}
 
-	// Append-only invariants (NilFS on slab).
+	// Append-only invariants (PolyFS on slab).
 	if deal.TotalMdus != 0 && msg.TotalMdus < deal.TotalMdus {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus cannot decrease (old=%d new=%d)", deal.TotalMdus, msg.TotalMdus)
 	}

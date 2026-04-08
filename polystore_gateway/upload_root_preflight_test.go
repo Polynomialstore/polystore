@@ -9,15 +9,15 @@ import (
 	"time"
 )
 
-func TestValidateNilfsUploadPreviousManifestRoot_CachesSequentialHits(t *testing.T) {
-	resetNilfsUploadRootPreflightCacheForTest()
+func TestValidatePolyfsUploadPreviousManifestRoot_CachesSequentialHits(t *testing.T) {
+	resetPolyfsUploadRootPreflightCacheForTest()
 	clearDealMetaCache()
-	t.Cleanup(resetNilfsUploadRootPreflightCacheForTest)
+	t.Cleanup(resetPolyfsUploadRootPreflightCacheForTest)
 	t.Cleanup(clearDealMetaCache)
 
-	origTTL := nilfsUploadRootPreflightCacheTTL
-	nilfsUploadRootPreflightCacheTTL = time.Minute
-	t.Cleanup(func() { nilfsUploadRootPreflightCacheTTL = origTTL })
+	origTTL := polyfsUploadRootPreflightCacheTTL
+	polyfsUploadRootPreflightCacheTTL = time.Minute
+	t.Cleanup(func() { polyfsUploadRootPreflightCacheTTL = origTTL })
 
 	currentRoot := mustTestManifestRoot(t, "upload-root-preflight-cache-current")
 	nextRoot := mustTestManifestRoot(t, "upload-root-preflight-cache-next")
@@ -35,7 +35,7 @@ func TestValidateNilfsUploadPreviousManifestRoot_CachesSequentialHits(t *testing
 	t.Cleanup(func() { lcdBase = oldLCD })
 
 	for i := 0; i < 2; i += 1 {
-		if err := validateNilfsUploadPreviousManifestRoot(t.Context(), 7, nextRoot.Canonical, currentRoot.Canonical); err != nil {
+		if err := validatePolyfsUploadPreviousManifestRoot(t.Context(), 7, nextRoot.Canonical, currentRoot.Canonical); err != nil {
 			t.Fatalf("validate call %d failed: %v", i, err)
 		}
 	}
@@ -45,15 +45,15 @@ func TestValidateNilfsUploadPreviousManifestRoot_CachesSequentialHits(t *testing
 	}
 }
 
-func TestValidateNilfsUploadPreviousManifestRoot_SingleflightConcurrentHits(t *testing.T) {
-	resetNilfsUploadRootPreflightCacheForTest()
+func TestValidatePolyfsUploadPreviousManifestRoot_SingleflightConcurrentHits(t *testing.T) {
+	resetPolyfsUploadRootPreflightCacheForTest()
 	clearDealMetaCache()
-	t.Cleanup(resetNilfsUploadRootPreflightCacheForTest)
+	t.Cleanup(resetPolyfsUploadRootPreflightCacheForTest)
 	t.Cleanup(clearDealMetaCache)
 
-	origTTL := nilfsUploadRootPreflightCacheTTL
-	nilfsUploadRootPreflightCacheTTL = time.Minute
-	t.Cleanup(func() { nilfsUploadRootPreflightCacheTTL = origTTL })
+	origTTL := polyfsUploadRootPreflightCacheTTL
+	polyfsUploadRootPreflightCacheTTL = time.Minute
+	t.Cleanup(func() { polyfsUploadRootPreflightCacheTTL = origTTL })
 
 	currentRoot := mustTestManifestRoot(t, "upload-root-preflight-sf-current")
 	nextRoot := mustTestManifestRoot(t, "upload-root-preflight-sf-next")
@@ -78,7 +78,7 @@ func TestValidateNilfsUploadPreviousManifestRoot_SingleflightConcurrentHits(t *t
 	for i := 0; i < workers; i += 1 {
 		go func() {
 			defer wg.Done()
-			errs <- validateNilfsUploadPreviousManifestRoot(t.Context(), 9, nextRoot.Canonical, currentRoot.Canonical)
+			errs <- validatePolyfsUploadPreviousManifestRoot(t.Context(), 9, nextRoot.Canonical, currentRoot.Canonical)
 		}()
 	}
 	wg.Wait()
@@ -95,15 +95,15 @@ func TestValidateNilfsUploadPreviousManifestRoot_SingleflightConcurrentHits(t *t
 	}
 }
 
-func TestValidateNilfsUploadPreviousManifestRoot_SingleflightIgnoresCandidateManifestRoot(t *testing.T) {
-	resetNilfsUploadRootPreflightCacheForTest()
+func TestValidatePolyfsUploadPreviousManifestRoot_SingleflightIgnoresCandidateManifestRoot(t *testing.T) {
+	resetPolyfsUploadRootPreflightCacheForTest()
 	clearDealMetaCache()
-	t.Cleanup(resetNilfsUploadRootPreflightCacheForTest)
+	t.Cleanup(resetPolyfsUploadRootPreflightCacheForTest)
 	t.Cleanup(clearDealMetaCache)
 
-	origTTL := nilfsUploadRootPreflightCacheTTL
-	nilfsUploadRootPreflightCacheTTL = time.Minute
-	t.Cleanup(func() { nilfsUploadRootPreflightCacheTTL = origTTL })
+	origTTL := polyfsUploadRootPreflightCacheTTL
+	polyfsUploadRootPreflightCacheTTL = time.Minute
+	t.Cleanup(func() { polyfsUploadRootPreflightCacheTTL = origTTL })
 
 	currentRoot := mustTestManifestRoot(t, "upload-root-preflight-sf-current-shared")
 	nextRootA := mustTestManifestRoot(t, "upload-root-preflight-sf-next-a")
@@ -124,10 +124,10 @@ func TestValidateNilfsUploadPreviousManifestRoot_SingleflightIgnoresCandidateMan
 
 	errs := make(chan error, 2)
 	go func() {
-		errs <- validateNilfsUploadPreviousManifestRoot(t.Context(), 11, nextRootA.Canonical, currentRoot.Canonical)
+		errs <- validatePolyfsUploadPreviousManifestRoot(t.Context(), 11, nextRootA.Canonical, currentRoot.Canonical)
 	}()
 	go func() {
-		errs <- validateNilfsUploadPreviousManifestRoot(t.Context(), 11, nextRootB.Canonical, currentRoot.Canonical)
+		errs <- validatePolyfsUploadPreviousManifestRoot(t.Context(), 11, nextRootB.Canonical, currentRoot.Canonical)
 	}()
 
 	for i := 0; i < 2; i += 1 {

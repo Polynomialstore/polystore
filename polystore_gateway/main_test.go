@@ -106,14 +106,14 @@ func encodeRawToMdu(raw []byte) []byte {
 	}
 	encoded := make([]byte, types.MDU_SIZE)
 	scalarIdx := 0
-	for i := 0; i < len(raw) && scalarIdx < nilfsScalarsPerMdu; i += nilfsScalarPayloadBytes {
-		end := i + nilfsScalarPayloadBytes
+	for i := 0; i < len(raw) && scalarIdx < polyfsScalarsPerMdu; i += polyfsScalarPayloadBytes {
+		end := i + polyfsScalarPayloadBytes
 		if end > len(raw) {
 			end = len(raw)
 		}
 		chunk := raw[i:end]
-		pad := nilfsScalarBytes - len(chunk)
-		offset := scalarIdx*nilfsScalarBytes + pad
+		pad := polyfsScalarBytes - len(chunk)
+		offset := scalarIdx*polyfsScalarBytes + pad
 		copy(encoded[offset:offset+len(chunk)], chunk)
 		scalarIdx++
 	}
@@ -316,8 +316,8 @@ func TestSpUploadMdu_DrainsBodyOnEarlyError(t *testing.T) {
 
 func TestSpUploadMdu_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-mdu-sparse")
 	dealID := uint64(1)
@@ -366,8 +366,8 @@ func TestSpUploadMdu_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 
 func TestSpUploadMdu_RejectsStalePreviousManifestRoot(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-mdu-stale")
 	currentRoot := mustTestManifestRoot(t, "sp-upload-mdu-current")
@@ -399,15 +399,15 @@ func TestSpUploadMdu_RejectsStalePreviousManifestRoot(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
 		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
 	}
-	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_upload"]; got != "1" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_upload=1, got %q", got)
+	if got := polyfsCASStatusSnapshotForStatus()["polyfs_cas_preflight_conflicts_upload"]; got != "1" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_upload=1, got %q", got)
 	}
 }
 
 func TestSpUploadShard_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-shard-sparse")
 	dealID := uint64(1)
@@ -458,8 +458,8 @@ func TestSpUploadShard_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 
 func TestSpUploadShard_RejectsStalePreviousManifestRoot(t *testing.T) {
 	useTempUploadDir(t)
-	resetNilfsCASStatusCountersForTest()
-	resetNilfsUploadRootPreflightCacheForTest()
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
 
 	manifestRoot := mustTestManifestRoot(t, "sp-upload-shard-stale")
 	currentRoot := mustTestManifestRoot(t, "sp-upload-shard-current")
@@ -492,8 +492,8 @@ func TestSpUploadShard_RejectsStalePreviousManifestRoot(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
 		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
 	}
-	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_upload"]; got != "1" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_upload=1, got %q", got)
+	if got := polyfsCASStatusSnapshotForStatus()["polyfs_cas_preflight_conflicts_upload"]; got != "1" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_upload=1, got %q", got)
 	}
 }
 
@@ -1269,7 +1269,7 @@ func TestGatewayOpenSession_UnsignedDoesNotRequireNonce(t *testing.T) {
 	requireRetrievalReqSig = false
 	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })
 
-	// Minimal NilFS slab with a single small file.
+	// Minimal PolyFS slab with a single small file.
 	fileContent := []byte("hello from open-session")
 	manifestRoot := mustTestManifestRoot(t, "open-session-unsigned")
 	dealDir := filepath.Join(uploadDir, manifestRoot.Key)

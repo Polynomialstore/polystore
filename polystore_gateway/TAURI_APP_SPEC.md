@@ -12,7 +12,7 @@ This document is written to be **unambiguous enough that a Codex agent can imple
 - Provide a **desktop GUI** for NilStore’s devnet workflows using **Tauri**.
 - Ship a **self-contained app** that runs a local gateway sidecar and supports:
   - Deal creation (EVM intent + wallet signature)
-  - File ingest/upload into NilFS / Mode 2 slab
+  - File ingest/upload into PolyFS / Mode 2 slab
   - Commit content (EVM intent + wallet signature)
   - Browse deal state, list files, fetch/download, and view proof/receipt status
 - Keep UX **“no private key import”**: user ownership is via an external wallet signature flow; the app holds **only a relayer/provider key** for gas sponsorship / proof submission.
@@ -160,7 +160,7 @@ Where `intent` uses the on-chain JSON field names (see `polystorechain/proto/pol
  
 ### 5.3 Upload + Commit Content
 1. User selects a `deal_id`.
-2. User chooses a NilFS `file_path` and local file to upload.
+2. User chooses a PolyFS `file_path` and local file to upload.
 3. App calls `POST /gateway/upload` (multipart) with `deal_id`, `owner`, `file_path`.
 4. Sidecar responds with `cid` (= new manifest root), `size_bytes`, `total_mdus`, `witness_mdus`.
 5. App constructs `UpdateContent` intent and requests wallet signature.
@@ -317,7 +317,7 @@ Each phase is small-commit friendly and includes a test gate.
 - **Test gate:** mocked-sidecar E2E test verifies correct payload.
  
 ### Phase 4 — Upload + Commit Content
-- [ ] File picker + NilFS path entry.
+- [ ] File picker + PolyFS path entry.
 - [ ] Upload progress UI driven by host events.
 - [ ] Commit intent builder uses upload response (`cid`, `size_bytes`, `total_mdus`, `witness_mdus`).
 - **Test gate:** integration tests for upload encoding and commit payload.

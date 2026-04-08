@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
 import init, { NilWasm, WasmMdu0Builder } from '../public/wasm/polystore_core.js'
-import { sanitizeNilfsRecordPath } from '../src/lib/nilfsPath'
+import { sanitizePolyfsRecordPath } from '../src/lib/polyfsPath'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -305,7 +305,7 @@ function runPrepareStagesIteration(): PrepareRun {
   for (let i = 0; i < userRoots.length; i += 1) {
     builder.set_root(BigInt(totalWitnessMdus + i), userRoots[i])
   }
-  const filePath = sanitizeNilfsRecordPath(fileName)
+  const filePath = sanitizePolyfsRecordPath(fileName)
   if (typeof (builder as unknown as { append_file_with_flags?: unknown }).append_file_with_flags === 'function') {
     (builder as unknown as {
       append_file_with_flags: (path: string, size: bigint, startOffset: bigint, flags: number) => void

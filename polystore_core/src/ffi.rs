@@ -266,7 +266,7 @@ pub extern "C" fn nil_expand_payload_rs(
     0
 }
 
-/// Encodes a raw NilFS payload (up to 8,126,464 bytes) into a full 8 MiB MDU buffer using the
+/// Encodes a raw PolyFS payload (up to 8,126,464 bytes) into a full 8 MiB MDU buffer using the
 /// field-aligned layout (31-byte chunks right-aligned in 32-byte scalars).
 ///
 /// This is used to materialize witness MDUs deterministically from commitment bytes.
@@ -308,7 +308,7 @@ pub extern "C" fn nil_encode_payload_to_mdu(
     0
 }
 
-/// Decodes a NilFS payload from an encoded 8 MiB MDU buffer.
+/// Decodes a PolyFS payload from an encoded 8 MiB MDU buffer.
 ///
 /// The caller specifies the desired `raw_len` (<= 8,126,464) so that trailing zero padding in the
 /// final scalar is not returned.

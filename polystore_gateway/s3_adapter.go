@@ -326,7 +326,7 @@ func S3GetObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := vars["key"]
-	filePath, err := validateNilfsFilePath(key)
+	filePath, err := validatePolyfsFilePath(key)
 	if err != nil {
 		writeS3Error(w, http.StatusBadRequest, "InvalidArgument", err.Error())
 		return
@@ -376,7 +376,7 @@ func S3GetObject(w http.ResponseWriter, r *http.Request) {
 		isRange = true
 	}
 
-	reader, _, _, _, segmentLen, fileLen, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
+	reader, _, _, _, segmentLen, fileLen, err := resolvePolyfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeS3Error(w, http.StatusNotFound, "NoSuchKey", "object not found")
@@ -423,7 +423,7 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := vars["key"]
-	filePath, err := validateNilfsFilePath(key)
+	filePath, err := validatePolyfsFilePath(key)
 	if err != nil {
 		writeS3Error(w, http.StatusBadRequest, "InvalidArgument", err.Error())
 		return
@@ -538,7 +538,7 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 }
 
 func S3DeleteObject(w http.ResponseWriter, r *http.Request) {
-	// NilFS delete/tombstone support is not wired into this adapter yet.
+	// PolyFS delete/tombstone support is not wired into this adapter yet.
 	// Return a clear S3-style error instead of silently corrupting state.
 	writeS3Error(w, http.StatusNotImplemented, "NotImplemented", "DELETE is not supported yet")
 }

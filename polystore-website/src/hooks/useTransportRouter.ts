@@ -10,7 +10,7 @@ import {
 } from '../api/gatewayClient'
 import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
 import { providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
-import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 import { useTransportContext } from '../context/TransportContext'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
 import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
@@ -167,14 +167,14 @@ export function useTransportRouter() {
     return undefined
   }, [])
 
-  const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
+  const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<PolyfsFileEntry[]>> => {
     const effectivePreference = resolvePreference(req.preference)
     const gatewayEnabled = isGatewayTransportEnabled({
       gatewayDisabled: appConfig.gatewayDisabled,
       gatewayBase: appConfig.gatewayBase,
       localGatewayConnected: readLocalGatewayConnectedHint(),
     })
-    const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
+    const candidates: TransportCandidate<PolyfsFileEntry[]>[] = [
       ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,

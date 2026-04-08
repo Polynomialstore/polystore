@@ -7,7 +7,7 @@ source "$ROOT_DIR/scripts/load_testnet_public_env.sh"
 
 usage() {
   cat <<'USAGE'
-usage: testnet_burner_upload.sh [options] <file_path> [deal_id] [nilfs_path]
+usage: testnet_burner_upload.sh [options] <file_path> [deal_id] [polyfs_path]
 
 Testnet-only burner-key helper:
 - generates a burner EVM key locally
@@ -128,7 +128,7 @@ done
 
 FILE_PATH="${POSITIONAL[0]:-}"
 DEAL_ID="${POSITIONAL[1]:-}"
-NILFS_PATH="${POSITIONAL[2]:-}"
+POLYFS_PATH="${POSITIONAL[2]:-}"
 
 if [[ -z "$FILE_PATH" ]]; then
   usage
@@ -253,8 +253,8 @@ fi
 
 echo "Running create/upload/commit via enterprise_upload_job.sh..."
 export EVM_PRIVKEY="$PRIVATE_KEY"
-if [[ -n "$DEAL_ID" && -n "$NILFS_PATH" ]]; then
-  "$ROOT_DIR/scripts/enterprise_upload_job.sh" "$FILE_PATH" "$DEAL_ID" "$NILFS_PATH"
+if [[ -n "$DEAL_ID" && -n "$POLYFS_PATH" ]]; then
+  "$ROOT_DIR/scripts/enterprise_upload_job.sh" "$FILE_PATH" "$DEAL_ID" "$POLYFS_PATH"
 elif [[ -n "$DEAL_ID" ]]; then
   "$ROOT_DIR/scripts/enterprise_upload_job.sh" "$FILE_PATH" "$DEAL_ID"
 else

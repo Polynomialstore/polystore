@@ -159,11 +159,11 @@ This document tracks **what is missing** between the current implementation in t
 - **DoD:** CUDA (server) and/or WebGPU (client) path that materially raises sustained throughput; pipeline parallelism is default.
 - **Test gate:** reproducible perf benchmark suite (CI “doesn’t regress”) + local benchmark script with thresholds.
 
-### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
+### P0-CORE-001 — “One core” migration (PolyFS + crypto single source of truth)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
-- **Current state:** `polystore_gateway` contains NilFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
-- **DoD:** NilFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
+- **Current state:** `polystore_gateway` contains PolyFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
+- **DoD:** PolyFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
 - **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
 
 ### P0-ECON-001 — Mainnet escrow accounting + lock-in pricing (pay-at-ingest)
@@ -306,11 +306,11 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
   - `spec.md` naming + Appendix B references aligned to the RFCs
 - **Exit criteria:** updated RFCs/spec deltas + a checklist of exact protobuf/state transitions to implement in the next sprints.
 
-### Sprint 1 — “One core” foundation (NilFS + commitments unified)
+### Sprint 1 — “One core” foundation (PolyFS + commitments unified)
 - **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
-- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `polystore_core`.
+- **Goal:** eliminate browser/gateway drift risk by centralizing PolyFS layout + commitment computation in `polystore_core`.
 - **Delivers:**
-  - Port NilFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
+  - Port PolyFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
   - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `polystore_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
@@ -438,7 +438,7 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
 - `sprint22-wallet-unlock-detection`: detect MetaMask authorization (`eth_accounts`) early so “Create deal” prompts unlock before submit.
 - `sprint23-gap-tracker-status`: record sprint22 execution status in the tracker (doc hygiene).
-- `sprint24-one-core-payload-ffi`: move NilFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.
+- `sprint24-one-core-payload-ffi`: move PolyFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.
 
 ```
 
@@ -1244,7 +1244,7 @@ This RFC freezes a **concrete on-chain representation** for Mode 2 and a minimal
 
 ### 1.3 Slab accounting fields (naming freeze)
 For chain policy and bounds checks we freeze:
-- `size_bytes`: total logical bytes of file contents in NilFS (sum of non-tombstone file lengths)
+- `size_bytes`: total logical bytes of file contents in PolyFS (sum of non-tombstone file lengths)
 - `total_mdus`: total number of committed MDU roots in the Manifest commitment (includes metadata + witness + user MDUs)
 - `witness_mdus`: number of witness MDUs committed after MDU #0 (metadata region size)
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)

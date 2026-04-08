@@ -372,7 +372,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
   }
 
-  // Regression: after commit, Deal Explorer should show the NilFS file list (from local OPFS fallback).
+  // Regression: after commit, Deal Explorer should show the PolyFS file list (from local OPFS fallback).
   await expect(page.getByTestId('deal-row-1')).toBeVisible({ timeout: 60_000 })
   await page.getByTestId('deal-row-1').click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })

@@ -63,7 +63,7 @@ We are effectively moving the `polystore_gateway` logic into a TypeScript/WASM l
 ### Phase 1: WASM Parity (The Core)
 *   **Goal:** `polystore_core` WASM can do everything the Go Gateway needs to do for a single file.
 *   **Tasks:**
-    1.  Expose `Mdu0Builder` logic (building the NilFS file table) via WASM. currently this logic is in Go (`polystore_gateway/pkg/builder`). **Decision:** Port `Mdu0Builder` to Rust in `polystore_core` to share logic between CLI and Browser.
+    1.  Expose `Mdu0Builder` logic (building the PolyFS file table) via WASM. currently this logic is in Go (`polystore_gateway/pkg/builder`). **Decision:** Port `Mdu0Builder` to Rust in `polystore_core` to share logic between CLI and Browser.
     2.  Implement `StreamingSharder` in WASM (input: stream of bytes, output: stream of blobs/commitments).
 
 ### Phase 2: The Virtual Gateway (State & Storage)
@@ -149,5 +149,5 @@ We should not "rewrite" the Go Gateway in JS. We should **move logic to Rust**, 
     *   Takes a file drop.
     *   Uses WASM to generate the `ManifestRoot` and `MDU #0` bytes.
     *   Stores them in OPFS.
-    *   Displays the resulting NilFS structure.
+    *   Displays the resulting PolyFS structure.
     *   *No networking yet—just proof of data structures.*

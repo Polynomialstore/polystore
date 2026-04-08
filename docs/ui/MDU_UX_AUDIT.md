@@ -20,9 +20,9 @@ Recommended stable, user-facing baseline:
 
 - **Blob (128 KiB)**: atomic KZG unit (commitment + receipt granularity).
 - **MDU (8 MiB)**: 64 blobs; the slab/service unit users reason about (“chunks”).
-- **MDU #0 (NilFS Super-Manifest)**: file table + root table.
+- **MDU #0 (PolyFS Super-Manifest)**: file table + root table.
 - **Witness MDUs**: commitment cache/acceleration structure.
-- **User MDUs**: data-bearing MDUs (file bytes packed into NilFS).
+- **User MDUs**: data-bearing MDUs (file bytes packed into PolyFS).
 - **Mode 2 slot shard**: the per-provider share of an MDU (`8 MiB / K` bytes) plus parity shards (conceptually).
 
 If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and phase it out.
@@ -43,7 +43,7 @@ If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and
   - Shows:
     - Slab layout summary: total MDUs and breakdown (MDU #0 / witness / user).
     - Segmented layout bar (`mdu0`, `witness`, `user`).
-    - NilFS summary (“files”, “records”).
+    - PolyFS summary (“files”, “records”).
     - A per-MDU inspector: select `MDU #n` and load commitments; shows:
       - MDU root (Merkle root over commitments)
       - blob commitment count
@@ -99,7 +99,7 @@ If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and
 1) **File ↔ MDU mapping**
 - Users can’t answer: “Which MDUs does this file occupy?” or “Why did a small append allocate a whole new MDU?”
 
-2) **NilFS artifacts**
+2) **PolyFS artifacts**
 - MDU #0 is conceptually important (filesystem on slab), but the UI doesn’t surface:
   - file record limits/path truncation implications
   - tombstones and reuse behavior (why “allocated length” changes or stays stable)
@@ -126,7 +126,7 @@ If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and
 ### A) Quick wins (copy + labeling)
 
 - Make MDU tiles in `FileSharder` label type and index:
-  - `MDU #0 (NilFS)` / `Witness #i` / `User #i` (instead of always “8MiB”).
+  - `MDU #0 (PolyFS)` / `Witness #i` / `User #i` (instead of always “8MiB”).
 - Standardize copy on **MDU** (avoid “DU” except as a legacy alias).
 - Add tooltips in “Manifest & MDUs” to define:
   - manifest root (KZG), MDU root (Merkle), blob commitment (KZG)
@@ -164,7 +164,7 @@ In `polystore_gateway_gui`, add a “Slab / MDUs” panel for the selected deal/
 
 ## Proposed marketing angle (what we should make visually obvious)
 
-- “**Your file becomes verifiable structure**”: file → NilFS → MDUs → blobs → commitments → manifest root.
+- “**Your file becomes verifiable structure**”: file → PolyFS → MDUs → blobs → commitments → manifest root.
 - “**Shared-nothing verification**”: any provider can prove a shard without trusting neighbors.
 - “**MDU-level observability**”: users can see which MDU/blob ranges were served and paid for.
 

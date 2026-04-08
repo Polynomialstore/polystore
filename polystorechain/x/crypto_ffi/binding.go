@@ -386,7 +386,7 @@ func ExpandMduRs(mdu_bytes []byte, k uint64, m uint64) (witness_flat []byte, sha
 
 // ExpandPayloadRs expands a raw payload (up to RawMduCapacity / 8,126,464 bytes) into RS shards and witness commitments.
 //
-// This matches the NilFS field-aligned MDU encoding used by the gateway/browser (31-byte chunks right-aligned in 32-byte scalars).
+// This matches the PolyFS field-aligned MDU encoding used by the gateway/browser (31-byte chunks right-aligned in 32-byte scalars).
 //
 // Returns:
 // - witness_flat: slot-major commitments (48 bytes each), length = (k+m)*(64/k)*48
@@ -436,7 +436,7 @@ func ExpandPayloadRs(payload []byte, k uint64, m uint64) (witness_flat []byte, s
 	return witness_flat, shards, nil
 }
 
-// EncodePayloadToMdu encodes a raw NilFS payload (<= 8,126,464 bytes) into a full 8 MiB MDU buffer
+// EncodePayloadToMdu encodes a raw PolyFS payload (<= 8,126,464 bytes) into a full 8 MiB MDU buffer
 // using the field-aligned layout (31-byte chunks right-aligned in 32-byte scalars).
 func EncodePayloadToMdu(payload []byte) ([]byte, error) {
 	if len(payload) > 0 && len(payload) > MDU_PAYLOAD_BYTES {
@@ -460,7 +460,7 @@ func EncodePayloadToMdu(payload []byte) ([]byte, error) {
 	return out, nil
 }
 
-// DecodePayloadFromMdu decodes a raw NilFS payload of the given length from an encoded 8 MiB MDU buffer.
+// DecodePayloadFromMdu decodes a raw PolyFS payload of the given length from an encoded 8 MiB MDU buffer.
 func DecodePayloadFromMdu(mduBytes []byte, rawLen uint64) ([]byte, error) {
 	if len(mduBytes) != types.MDU_SIZE {
 		return nil, fmt.Errorf("invalid mdu_bytes length: expected %d, got %d", types.MDU_SIZE, len(mduBytes))
