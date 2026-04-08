@@ -33,10 +33,10 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   // Intercept SP Upload
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
-    const dealId = headers['x-nil-deal-id']
-    const manifestRoot = headers['x-nil-manifest-root']
-    const mduIndex = headers['x-nil-mdu-index']
-    const fullSizeHeader = headers['x-nil-full-size']
+    const dealId = headers['x-polystore-deal-id']
+    const manifestRoot = headers['x-polystore-manifest-root']
+    const mduIndex = headers['x-polystore-mdu-index']
+    const fullSizeHeader = headers['x-polystore-full-size']
     const body = route.request().postDataBuffer()
 
     if (!dealId || !manifestRoot || !mduIndex) {
@@ -54,7 +54,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     manifestUploadCalls += 1
     const headers = route.request().headers()
     const body = route.request().postDataBuffer()
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     if (fullSizeHeader && body && body.length < Number(fullSizeHeader)) {
       sparseUploadObserved = true
     }
@@ -64,7 +64,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   await page.route('**/sp/upload_shard', async (route) => {
     const headers = route.request().headers()
     const body = route.request().postDataBuffer()
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     if (fullSizeHeader && body && body.length < Number(fullSizeHeader)) {
       sparseUploadObserved = true
     }
@@ -207,7 +207,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
           isMetaMask: true,
 
-          isNilStoreE2E: true,
+          isPolyStoreE2E: true,
 
           selectedAddress: address,
 

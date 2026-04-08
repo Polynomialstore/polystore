@@ -21,7 +21,7 @@ const (
 	spUploadBundleKindShard    = "shard"
 	spUploadBundleKindManifest = "manifest"
 	spUploadBundleV2Magic      = "NLB2"
-	spUploadBundleV2MediaType  = "application/x.nilstore-bundle-v2"
+	spUploadBundleV2MediaType  = "application/x.polystore-bundle-v2"
 )
 
 type spUploadBundleRequest struct {

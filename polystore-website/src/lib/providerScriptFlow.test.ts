@@ -214,7 +214,7 @@ test('run_devnet_provider link auto-funds from faucet then submits provider-link
     command: 'link',
     scenario: 'missing-then-funded',
     autoFaucet: '1',
-    faucetUrl: 'https://faucet.nilstore.test/faucet',
+    faucetUrl: 'https://faucet.polystore.test/faucet',
   })
 
   assert.equal(result.status, 0)
@@ -229,7 +229,7 @@ test('run_devnet_provider pair creates a missing key, auto-funds it, and submits
     command: 'pair',
     scenario: 'missing-then-funded',
     autoFaucet: '1',
-    faucetUrl: 'https://faucet.nilstore.test/faucet',
+    faucetUrl: 'https://faucet.polystore.test/faucet',
     keyState: 'missing',
   })
 

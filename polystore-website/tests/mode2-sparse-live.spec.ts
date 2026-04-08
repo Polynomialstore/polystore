@@ -97,18 +97,18 @@ test.describe('mode2 sparse live', () => {
     await page.route('**/sp/upload_mdu', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       mduUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-        mduIndex: headers['x-nil-mdu-index'] || '',
+        mduIndex: headers['x-polystore-mdu-index'] || '',
       })
       await recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'ok' }))
     })
     await page.route('**/sp/upload_manifest', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       manifestUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
@@ -118,12 +118,12 @@ test.describe('mode2 sparse live', () => {
     await page.route('**/sp/upload_shard', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       shardUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-        mduIndex: headers['x-nil-mdu-index'] || '',
-        slot: headers['x-nil-slot'] || '',
+        mduIndex: headers['x-polystore-mdu-index'] || '',
+        slot: headers['x-polystore-slot'] || '',
       })
       await recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'ok' }))
     })

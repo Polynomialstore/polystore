@@ -209,7 +209,7 @@ if [[ "$SKIP_FAUCET" != "1" ]]; then
   faucet_body=""
   for attempt in $(seq 1 "$FAUCET_RETRY_ATTEMPTS"); do
     if [[ -n "$faucet_auth_token" ]]; then
-      faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" -H "Content-Type: application/json" -H "X-Nil-Faucet-Auth: $faucet_auth_token" --data "$faucet_payload")"
+      faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" -H "Content-Type: application/json" -H "X-PolyStore-Faucet-Auth: $faucet_auth_token" --data "$faucet_payload")"
     else
       faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" -H "Content-Type: application/json" --data "$faucet_payload")"
     fi

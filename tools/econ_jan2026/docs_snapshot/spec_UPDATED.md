@@ -399,7 +399,7 @@ The intended end state is: a provider only gets credit for a retrieval once the 
     *   **Session identity:** `session_id = keccak256(canonical_encode(fields...))` (canonical encoding MUST be specified and test-vectored; EVM precompile uses `abi.encode(...)`).
 
 2.  **Serve bytes (Provider, off-chain):**
-    *   Providers SHOULD refuse remote fetches that are not bound to an `OPEN` session (`X-Nil-Session-Id`).
+    *   Providers SHOULD refuse remote fetches that are not bound to an `OPEN` session (`X-PolyStore-Session-Id`).
     *   Each HTTP `Range` response MUST map to exactly one blob (bounded by blob boundaries); a session is satisfied by fetching the declared contiguous blob range (chunking is a client/gateway concern).
 
 3.  **Submit proof-of-retrieval (Provider, on-chain tx):**

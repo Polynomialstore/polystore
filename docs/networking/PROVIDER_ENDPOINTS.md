@@ -116,8 +116,8 @@ NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .
 
 ```bash
 cloudflared tunnel login
-cloudflared tunnel create nilstore-sp
-cloudflared tunnel route dns nilstore-sp sp.example.com
+cloudflared tunnel create polystore-sp
+cloudflared tunnel route dns polystore-sp sp.example.com
 ```
 
 3) Configure ingress (example `~/.cloudflared/config.yml`):
@@ -134,7 +134,7 @@ ingress:
 4) Run the tunnel:
 
 ```bash
-cloudflared tunnel run nilstore-sp
+cloudflared tunnel run polystore-sp
 ```
 
 5) Print the multiaddr to register:

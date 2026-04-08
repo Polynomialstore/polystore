@@ -96,7 +96,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   // Intercept SP Upload and capture manifest root.
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
-    const manifestRoot = headers['x-nil-manifest-root']
+    const manifestRoot = headers['x-polystore-manifest-root']
     if (typeof manifestRoot === 'string' && manifestRoot.startsWith('0x')) {
       committedRoot = manifestRoot
     }
@@ -248,7 +248,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     if (w.ethereum) return
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},
@@ -438,7 +438,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     if (w.ethereum) return
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

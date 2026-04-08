@@ -34,7 +34,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 - Currency: `ATOM`
 3) Fund test address:
 - Use website faucet flow (this deployment may include a preconfigured faucet token), or
-- POST to `https://faucet.polynomialstore.com/faucet` with header `X-Nil-Faucet-Auth: <token>`.
+- POST to `https://faucet.polynomialstore.com/faucet` with header `X-PolyStore-Faucet-Auth: <token>`.
 4) Run the flow:
 - create the deal on `/#/first-file`
 - continue to `/#/dashboard`
@@ -122,5 +122,5 @@ When reporting failures, include:
 - action (`create`, `upload`, `commit`, `retrieve`)
 - deal id (if present)
 - timestamp (UTC)
-- for retrieval issues: response header `X-Nil-Provider`
+- for retrieval issues: response header `X-PolyStore-Provider`
 - if using curl: relevant request/response headers (especially session headers)

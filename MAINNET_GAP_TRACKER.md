@@ -158,7 +158,7 @@ This document tracks **what is missing** between the current implementation in t
 #### GW-201 — Strict session enforcement on data-plane fetches
 - **Status:** PARTIAL (DEVNET)
 - **Spec:** `spec.md` Appendix A “Gateway/API note”, §7.2; `rfcs/rfc-mandatory-retrieval-sessions-and-batching.md`
-- **DoD:** gateway/SP enforce `X-Nil-Session-Id` for **all served bytes** (no out-of-session reads); blob alignment + session range subset enforced; batching/segmentation preserved (multiple range requests per session allowed); consistent error JSON.
+- **DoD:** gateway/SP enforce `X-PolyStore-Session-Id` for **all served bytes** (no out-of-session reads); blob alignment + session range subset enforced; batching/segmentation preserved (multiple range requests per session allowed); consistent error JSON.
 
 #### GW-202 — Repair tooling + deterministic reconstruction for Mode 2 slots
 - **Status:** PARTIAL (DEVNET)

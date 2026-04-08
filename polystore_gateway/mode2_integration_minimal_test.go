@@ -184,20 +184,20 @@ func newProviderServer(t *testing.T) (*httptest.Server, *sync.Map) {
 				http.Error(w, "missing Expect header", http.StatusBadRequest)
 				return
 			}
-			manifest := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
-			mduIdx := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
-			slot := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
+			manifest := strings.TrimSpace(r.Header.Get("X-PolyStore-Manifest-Root"))
+			mduIdx := strings.TrimSpace(r.Header.Get("X-PolyStore-Mdu-Index"))
+			slot := strings.TrimSpace(r.Header.Get("X-PolyStore-Slot"))
 			body, _ := ioReadAllLimit(r, 12<<20)
-			if fullHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size")); fullHeader != "" {
+			if fullHeader := strings.TrimSpace(r.Header.Get("X-PolyStore-Full-Size")); fullHeader != "" {
 				fullSize, err := strconv.ParseInt(fullHeader, 10, 64)
 				if err != nil || fullSize <= 0 {
-					t.Errorf("invalid X-Nil-Full-Size header %q", fullHeader)
-					http.Error(w, "invalid X-Nil-Full-Size", http.StatusBadRequest)
+					t.Errorf("invalid X-PolyStore-Full-Size header %q", fullHeader)
+					http.Error(w, "invalid X-PolyStore-Full-Size", http.StatusBadRequest)
 					return
 				}
 				if int64(len(body)) > fullSize {
-					t.Errorf("body larger than X-Nil-Full-Size: body=%d full=%d", len(body), fullSize)
-					http.Error(w, "body larger than X-Nil-Full-Size", http.StatusBadRequest)
+					t.Errorf("body larger than X-PolyStore-Full-Size: body=%d full=%d", len(body), fullSize)
+					http.Error(w, "body larger than X-PolyStore-Full-Size", http.StatusBadRequest)
 					return
 				}
 				if int64(len(body)) < fullSize {

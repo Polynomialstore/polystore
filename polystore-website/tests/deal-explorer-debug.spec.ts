@@ -188,9 +188,9 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
       status: 206,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
+        'Access-Control-Expose-Headers': 'X-PolyStore-Provider',
         'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1provider',
+        'X-PolyStore-Provider': 'nil1provider',
       },
       body: fileBytes,
     })
@@ -298,7 +298,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     let sendCount = 0
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

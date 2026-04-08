@@ -18,7 +18,7 @@ This is intentionally scoped so an independent contributor can implement it with
 2) **Fetch metadata MDUs**
    - For each deal, pay to retrieve MDU #0 (and witness MDUs as required) via a sponsored session open:
      - `MsgOpenRetrievalSessionSponsored`
-   - Download bytes using `X-Nil-Session-Id`
+   - Download bytes using `X-PolyStore-Session-Id`
 
 3) **Parse PolyFS file table**
    - Extract file list, paths, sizes, and any metadata.

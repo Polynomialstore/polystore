@@ -54,8 +54,8 @@ const REPO_CLONE_SSH = 'git clone git@github.com:Polynomialstore/polystore.git'
 const REPO_CLONE_GH = 'gh repo clone Polynomialstore/polystore'
 const REPO_ENTER_DIR = 'cd polystore'
 const LOCAL_HEALTH_URL = 'http://127.0.0.1:8091/health'
-const PROVIDER_DRAFT_KEY = 'nilstore.provider-onboarding.v2'
-const PROVIDER_AUTH_SESSION_KEY = 'nilstore.provider-onboarding.auth.v1'
+const PROVIDER_DRAFT_KEY = 'polystore.provider-onboarding.v2'
+const PROVIDER_AUTH_SESSION_KEY = 'polystore.provider-onboarding.auth.v1'
 
 type PendingLinksState = Awaited<ReturnType<typeof lcdFetchPendingProviderLinksByOperator>>
 type OperatorPairingsState = Awaited<ReturnType<typeof lcdFetchProvidersByOperator>>
@@ -88,7 +88,7 @@ function loadStoredDraft(): StoredProviderDraft {
       endpointMode: 'domain',
       endpointValue: '',
       publicPort: '443',
-      tunnelName: 'nilstore-sp',
+      tunnelName: 'polystore-sp',
       providerKey: 'provider1',
       providerRepoReady: false,
       providerAddress: '',
@@ -108,7 +108,7 @@ function loadStoredDraft(): StoredProviderDraft {
           : 'domain',
       endpointValue: String(parsed.endpointValue || ''),
       publicPort: String(parsed.publicPort || '443'),
-      tunnelName: String(parsed.tunnelName || 'nilstore-sp'),
+      tunnelName: String(parsed.tunnelName || 'polystore-sp'),
       providerKey: String(parsed.providerKey || 'provider1'),
       providerRepoReady: Boolean(parsed.providerRepoReady),
       providerAddress: String(parsed.providerAddress || ''),
@@ -120,7 +120,7 @@ function loadStoredDraft(): StoredProviderDraft {
       endpointMode: 'domain',
       endpointValue: '',
       publicPort: '443',
-      tunnelName: 'nilstore-sp',
+      tunnelName: 'polystore-sp',
       providerKey: 'provider1',
       providerRepoReady: false,
       providerAddress: '',
@@ -475,7 +475,7 @@ export function SpOnboarding() {
   )
   const cloudflareTunnelManualCommands = useMemo(() => {
     const normalizedHost = effectiveEndpointPlan?.normalizedHost || '<public-hostname>'
-    const normalizedTunnelName = String(tunnelName || '').trim() || 'nilstore-sp'
+    const normalizedTunnelName = String(tunnelName || '').trim() || 'polystore-sp'
     return [
       `cloudflared tunnel login`,
       `cloudflared tunnel create ${normalizedTunnelName}`,
@@ -1667,7 +1667,7 @@ export function SpOnboarding() {
                             <input
                               value={tunnelName}
                               onChange={(event) => setTunnelName(event.target.value)}
-                              placeholder="nilstore-sp"
+                              placeholder="polystore-sp"
                               className="w-full border border-border bg-background px-3 py-2 text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring/30"
                             />
                           </label>

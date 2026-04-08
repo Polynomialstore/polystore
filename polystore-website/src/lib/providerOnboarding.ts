@@ -46,9 +46,9 @@ export interface ProviderRunbookReadiness {
 const DEFAULT_PROVIDER_KEY = 'provider1'
 const DEFAULT_DOMAIN_PORT = 443
 const DEFAULT_IPV4_PORT = 8091
-export const DEVNET_SHARED_GATEWAY_AUTH_TOKEN = 'nilstore-devnet-shared-gateway-auth'
+export const DEVNET_SHARED_GATEWAY_AUTH_TOKEN = 'polystore-devnet-shared-gateway-auth'
 const AUTH_PLACEHOLDER = '<shared-provider-auth-token>'
-const DEFAULT_TUNNEL_NAME = 'nilstore-sp'
+const DEFAULT_TUNNEL_NAME = 'polystore-sp'
 const DEFAULT_TUNNEL_LOCAL_SERVICE_URL = 'http://127.0.0.1:8091'
 
 function trimNonEmpty(input: unknown): string {
@@ -69,7 +69,7 @@ function suggestTunnelNameFromHost(hostname: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
   if (!slug) return DEFAULT_TUNNEL_NAME
-  const suggested = `nilstore-${slug}`
+  const suggested = `polystore-${slug}`
   return suggested.length <= 63 ? suggested : suggested.slice(0, 63).replace(/-+$/g, '')
 }
 

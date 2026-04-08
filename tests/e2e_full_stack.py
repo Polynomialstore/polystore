@@ -136,7 +136,7 @@ def verify_deal(deal_id):
 
 # --- 3. Upload Content ---
 def upload_content():
-    content = b"Hello NilStore E2E Test" * 100
+    content = b"Hello PolyStore E2E Test" * 100
     files = {'file': ('test.txt', content)}
     
     print("Uploading file...")

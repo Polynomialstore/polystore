@@ -195,7 +195,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
       w.ethereum = {
         isMetaMask: true,
-        isNilStoreE2E: true,
+        isPolyStoreE2E: true,
         selectedAddress: address,
         on: () => {},
         removeListener: () => {},

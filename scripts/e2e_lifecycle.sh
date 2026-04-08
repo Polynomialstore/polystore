@@ -547,12 +547,12 @@ FETCH_RANGE_START=0
 FETCH_RANGE_LEN="$FILE_LEN"
 FETCH_RANGE_END=$((FETCH_RANGE_START + FETCH_RANGE_LEN - 1))
 if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_README.md "$FETCH_URL" \
-  -H "X-Nil-Session-Id: $SESSION_ID" \
-  -H "X-Nil-Req-Sig: $REQ_SIG" \
-  -H "X-Nil-Req-Nonce: $REQ_NONCE" \
-  -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT" \
-  -H "X-Nil-Req-Range-Start: $FETCH_RANGE_START" \
-  -H "X-Nil-Req-Range-Len: $FETCH_RANGE_LEN" \
+  -H "X-PolyStore-Session-Id: $SESSION_ID" \
+  -H "X-PolyStore-Req-Sig: $REQ_SIG" \
+  -H "X-PolyStore-Req-Nonce: $REQ_NONCE" \
+  -H "X-PolyStore-Req-Expires-At: $REQ_EXPIRES_AT" \
+  -H "X-PolyStore-Req-Range-Start: $FETCH_RANGE_START" \
+  -H "X-PolyStore-Req-Range-Len: $FETCH_RANGE_LEN" \
   -H "Range: bytes=$FETCH_RANGE_START-$FETCH_RANGE_END"; then
   echo "ERROR: Fetch request failed (non-2xx) for README.md" >&2
   if [ -s fetched_README.md ]; then
@@ -857,12 +857,12 @@ FETCH_URL_1="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEA
 FETCH_URL_2="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md$FETCH_EXTRA_QUERY"
 
 if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_README.bin "$FETCH_URL_1" \
-  -H "X-Nil-Session-Id: $SESSION_ID_1" \
-  -H "X-Nil-Req-Sig: $REQ_SIG_1" \
-  -H "X-Nil-Req-Nonce: $REQ_NONCE_1" \
-  -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_1" \
-  -H "X-Nil-Req-Range-Start: 0" \
-  -H "X-Nil-Req-Range-Len: $FILE_LEN_1" \
+  -H "X-PolyStore-Session-Id: $SESSION_ID_1" \
+  -H "X-PolyStore-Req-Sig: $REQ_SIG_1" \
+  -H "X-PolyStore-Req-Nonce: $REQ_NONCE_1" \
+  -H "X-PolyStore-Req-Expires-At: $REQ_EXPIRES_AT_1" \
+  -H "X-PolyStore-Req-Range-Start: 0" \
+  -H "X-PolyStore-Req-Range-Len: $FILE_LEN_1" \
   -H "Range: bytes=0-$((FILE_LEN_1 - 1))"; then
   echo "ERROR: Fetch request failed (non-2xx) for README.md (multi-file)" >&2
   if [ -s fetched_README.bin ]; then
@@ -874,12 +874,12 @@ if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_README.bin "$FETCH_U
 fi
 
 if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_ECONOMY.bin "$FETCH_URL_2" \
-  -H "X-Nil-Session-Id: $SESSION_ID_2" \
-  -H "X-Nil-Req-Sig: $REQ_SIG_2" \
-  -H "X-Nil-Req-Nonce: $REQ_NONCE_2" \
-  -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT_2" \
-  -H "X-Nil-Req-Range-Start: 0" \
-  -H "X-Nil-Req-Range-Len: $FILE_LEN_2" \
+  -H "X-PolyStore-Session-Id: $SESSION_ID_2" \
+  -H "X-PolyStore-Req-Sig: $REQ_SIG_2" \
+  -H "X-PolyStore-Req-Nonce: $REQ_NONCE_2" \
+  -H "X-PolyStore-Req-Expires-At: $REQ_EXPIRES_AT_2" \
+  -H "X-PolyStore-Req-Range-Start: 0" \
+  -H "X-PolyStore-Req-Range-Len: $FILE_LEN_2" \
   -H "Range: bytes=0-$((FILE_LEN_2 - 1))"; then
   echo "ERROR: Fetch request failed (non-2xx) for ECONOMY.md (multi-file)" >&2
   if [ -s fetched_ECONOMY.bin ]; then

@@ -43,7 +43,7 @@ export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export E2E_LOCAL_STACK=1
 export VITE_P2P_ENABLED=1
-export VITE_P2P_PROTOCOL="/nilstore/fetch/1.0.0"
+export VITE_P2P_PROTOCOL="/polystore/fetch/1.0.0"
 export NIL_P2P_ENABLED=1
 export NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}"
 

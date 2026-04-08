@@ -82,7 +82,7 @@ func providerAdminNonceStorePath() string {
 	if upload := strings.TrimSpace(uploadDir); upload != "" {
 		return filepath.Join(upload, ".provider_admin_nonces.json")
 	}
-	return filepath.Join(os.TempDir(), "nilstore-provider-admin-nonces.json")
+	return filepath.Join(os.TempDir(), "polystore-provider-admin-nonces.json")
 }
 
 func loadProviderAdminNonceStore(path string) (*providerAdminNonceStore, error) {

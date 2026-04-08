@@ -121,7 +121,7 @@ function decodeGatewayHttpError(status: number, bodyText: string): string {
     const err = typeof parsed.error === 'string' ? parsed.error.trim() : ''
     const hint = typeof parsed.hint === 'string' ? parsed.hint.trim() : ''
     const message = typeof parsed.message === 'string' ? parsed.message.trim() : ''
-    if (/missing X-Nil-Session-Id/i.test(err)) {
+    if (/missing X-PolyStore-Session-Id/i.test(err)) {
       return 'Gateway requires an on-chain retrieval session. Use Onchain Retrieval (or Auto source) and approve wallet access.'
     }
     if (err && hint) return `${err} (${hint})`
@@ -1028,7 +1028,7 @@ export function DealDetail({
   const [, setPolicyError] = useState<string | null>(null)
   const [, setPolicyStatus] = useState<string | null>(null)
   const [sponsoredAuth, setSponsoredAuth] = useState<SponsoredRetrievalAuth>({ type: 'none' })
-  const authStorageKey = useMemo(() => `nilstore.retrievalAuth.${deal.id}`, [deal.id])
+  const authStorageKey = useMemo(() => `polystore.retrievalAuth.${deal.id}`, [deal.id])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')

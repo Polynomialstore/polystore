@@ -198,8 +198,8 @@ Please capture:
 - What path you were following (A: website tester, B: provider operator)
 - Deal ID (if visible) and the action that failed (create / upload / commit / retrieve)
 - For retrieval failures:
-  - request headers you used (notably `X-Nil-Session-Id`, if you were using curl)
-  - hub response header `X-Nil-Provider` (who served the bytes)
+  - request headers you used (notably `X-PolyStore-Session-Id`, if you were using curl)
+  - hub response header `X-PolyStore-Provider` (who served the bytes)
   - whether you were using a local gateway (`http://localhost:8080`) and timestamp
 - A screenshot + browser console log (website), or command output (CLI)
 

@@ -148,7 +148,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
 
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

@@ -43,7 +43,7 @@ The owner signs an update intent containing both values. The chain only accepts 
 ### 3. Staged generations at providers/gateways
 * Uploaded bytes for `new_manifest_root` SHOULD be staged provisionally until the chain swap succeeds.
 * The currently committed generation `previous_manifest_root` MUST remain available while `new_manifest_root` is provisional.
-* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-Nil-Previous-Manifest-Root`.
+* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-PolyStore-Previous-Manifest-Root`.
 * If that expected-base header is present and stale, the provider/gateway SHOULD reject the upload before consuming artifact bytes.
 * A stale or failed chain swap MUST NOT delete or replace the current generation.
 

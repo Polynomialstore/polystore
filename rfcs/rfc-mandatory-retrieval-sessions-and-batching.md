@@ -46,7 +46,7 @@ This updated draft also clarifies how session gating composes with:
 
 Any node that serves Deal bytes (provider, gateway proxy, deputy) MUST require an on-chain `OPEN` retrieval session:
 
-- inbound requests MUST include `X-Nil-Session-Id = session_id`,
+- inbound requests MUST include `X-PolyStore-Session-Id = session_id`,
 - the server MUST refuse to serve bytes if:
   - the header is missing, or
   - the referenced session is not `OPEN` at the current chain height.

@@ -36,7 +36,7 @@ This is a practical checklist that turns the current drafts into code + test gat
    - Keep faucet as dev/test tooling only (off by default in UI).
 
 6) **Mandatory retrieval sessions (data-plane enforcement)**
-   - Confirm: all served bytes require an on-chain retrieval session (`X-Nil-Session-Id` mandatory).
+   - Confirm: all served bytes require an on-chain retrieval session (`X-PolyStore-Session-Id` mandatory).
    - Confirm batching posture: segmented/range downloads within one session are supported; keep door open to future batching optimizations.
 
 7) **Escrow end-of-life semantics**

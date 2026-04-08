@@ -7,7 +7,7 @@
 ## 1. Overview
 
 `polystore_gateway` is a dual-purpose service that acts as:
-1.  **S3-Compatible Adapter:** Allows legacy applications to `PUT` and `GET` objects using standard S3 semantics, transparently handling NilStore sharding and on-chain storage.
+1.  **S3-Compatible Adapter:** Allows legacy applications to `PUT` and `GET` objects using standard S3 semantics, transparently handling PolyStore sharding and on-chain storage.
 2.  **Optional Web Gateway:** Provides REST endpoints for the `polystore-website` frontend to offload heavy cryptographic operations (MDU packing, KZG commitments) and to relay provider proofs.
 
 In the current **Devnet** architecture, the browser can operate without a local gateway (direct SP + MetaMask). The gateway is an **optional sidecar** that improves performance and UX, but it is not a signing authority.
@@ -78,7 +78,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 
 *   **`POST /sp/upload_shard`** *(Mode 2 Provider API)*
     *   **Input:** Raw shard bytes (body) with headers:
-        * `X-Nil-Deal-ID` (uint64), `X-Nil-Mdu-Index` (uint64), `X-Nil-Slot` (uint64), `X-Nil-Manifest-Root` (`0x` + 96 hex).
+        * `X-PolyStore-Deal-ID` (uint64), `X-PolyStore-Mdu-Index` (uint64), `X-PolyStore-Slot` (uint64), `X-PolyStore-Manifest-Root` (`0x` + 96 hex).
     *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<manifest_root_key>/`.
     *   **Role:** Slot-specific shard ingestion for Mode 2 (StripeReplica).
         *   **Provider is a dumb pipe:** the server does not need to understand Mode 1 vs Mode 2 beyond writing/serving bytes addressed by the headers.
@@ -88,7 +88,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
     *   **Role:** Optional browser-side mirroring into a local user-gateway cache (used when the user-gateway is running in proxy mode and `/sp/*` endpoints are not exposed on that process).
     *   **Generation semantics:** mirrored bytes are provisional generation artifacts until the signed chain swap succeeds; the current live generation remains bound to the current on-chain `manifest_root`.
-    *   **CAS preflight header:** artifact uploads may include `X-Nil-Previous-Manifest-Root` as an advisory expected-base root; stale values are rejected before the gateway/provider consumes upload bytes.
+    *   **CAS preflight header:** artifact uploads may include `X-PolyStore-Previous-Manifest-Root` as an advisory expected-base root; stale values are rejected before the gateway/provider consumes upload bytes.
     *   **Devnet retention policy:** complete provisional generations older than 24 hours may be removed during startup/recovery cleanup if they were never promoted on-chain.
     *   **Operator control:** `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
     *   **Observability:** `/status` reports the effective TTL and generation counters via `polyfs_generation_*` fields, plus stale CAS preflight counters via `polyfs_cas_preflight_conflicts_*`.

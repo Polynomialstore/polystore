@@ -25,7 +25,7 @@ async function main() {
   const client = createPublicClient({
     chain: {
       id: chainId,
-      name: 'nilstore-e2e',
+      name: 'polystore-e2e',
       nativeCurrency: { name: 'ATOM', symbol: 'ATOM', decimals: 18 },
       rpcUrls: { default: { http: [rpcUrl] } },
     },

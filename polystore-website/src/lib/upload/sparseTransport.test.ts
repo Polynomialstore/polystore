@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { postSparseArtifact } from './sparseTransport'
 
-test('postSparseArtifact sends truncated body with X-Nil-Full-Size', async () => {
+test('postSparseArtifact sends truncated body with X-PolyStore-Full-Size', async () => {
   const calls: Array<{ headers: Record<string, string>; bytes: Uint8Array }> = []
   const fetchImpl: typeof fetch = async (_url, init) => {
     const headers = init?.headers as Record<string, string>
@@ -14,7 +14,7 @@ test('postSparseArtifact sends truncated body with X-Nil-Full-Size', async () =>
 
   const response = await postSparseArtifact({
     url: 'http://example.test/sp/upload_mdu',
-    headers: { 'X-Nil-Deal-ID': '1' },
+    headers: { 'X-PolyStore-Deal-ID': '1' },
     artifact: {
       kind: 'mdu',
       index: 0,
@@ -25,7 +25,7 @@ test('postSparseArtifact sends truncated body with X-Nil-Full-Size', async () =>
 
   assert.equal(response.status, 200)
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].headers['X-Nil-Full-Size'], '4')
+  assert.equal(calls[0].headers['X-PolyStore-Full-Size'], '4')
   assert.deepStrictEqual(calls[0].bytes, new Uint8Array([1, 2]))
 })
 
@@ -40,7 +40,7 @@ test('postSparseArtifact retries once with full payload on sparse rollout reject
 
   const response = await postSparseArtifact({
     url: 'http://example.test/sp/upload_manifest',
-    headers: { 'X-Nil-Deal-ID': '1' },
+    headers: { 'X-PolyStore-Deal-ID': '1' },
     artifact: {
       kind: 'manifest',
       bytes: new Uint8Array([9, 0, 0]),
@@ -50,9 +50,9 @@ test('postSparseArtifact retries once with full payload on sparse rollout reject
 
   assert.equal(response.status, 200)
   assert.equal(calls.length, 2)
-  assert.equal(calls[0].headers['X-Nil-Full-Size'], '3')
+  assert.equal(calls[0].headers['X-PolyStore-Full-Size'], '3')
   assert.deepStrictEqual(calls[0].bytes, new Uint8Array([9]))
-  assert.equal(calls[1].headers['X-Nil-Full-Size'], undefined)
+  assert.equal(calls[1].headers['X-PolyStore-Full-Size'], undefined)
   assert.deepStrictEqual(calls[1].bytes, new Uint8Array([9, 0, 0]))
 })
 
@@ -67,7 +67,7 @@ test('postSparseArtifact keeps non-empty all-zero payloads sparse', async () => 
 
   await postSparseArtifact({
     url: 'http://example.test/sp/upload_shard',
-    headers: { 'X-Nil-Deal-ID': '1', 'X-Nil-Slot': '0' },
+    headers: { 'X-PolyStore-Deal-ID': '1', 'X-PolyStore-Slot': '0' },
     artifact: {
       kind: 'shard',
       index: 3,
@@ -78,7 +78,7 @@ test('postSparseArtifact keeps non-empty all-zero payloads sparse', async () => 
   })
 
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].headers['X-Nil-Full-Size'], '16')
+  assert.equal(calls[0].headers['X-PolyStore-Full-Size'], '16')
   assert.deepStrictEqual(calls[0].bytes, new Uint8Array([0]))
 })
 
@@ -92,7 +92,7 @@ test('postSparseArtifact sends direct typed-array bodies without blob wrapping',
 
   await postSparseArtifact({
     url: 'http://example.test/sp/upload_mdu',
-    headers: { 'X-Nil-Deal-ID': '1' },
+    headers: { 'X-PolyStore-Deal-ID': '1' },
     artifact: {
       kind: 'mdu',
       index: 0,
@@ -107,7 +107,7 @@ test('postSparseArtifact sends direct typed-array bodies without blob wrapping',
 
 test('postSparseArtifact reuses headers object when no sparse header is needed', async () => {
   const headers = {
-    'X-Nil-Deal-ID': '1',
+    'X-PolyStore-Deal-ID': '1',
     'Content-Type': 'application/octet-stream',
   }
   let seenHeaders: HeadersInit | undefined

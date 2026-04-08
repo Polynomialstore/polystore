@@ -171,7 +171,7 @@ type cachedProof struct {
 var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
 
 // generateProofHeaderJSON generates the JSON payload expected by the browser header
-// `X-Nil-Proof-JSON`. The payload is a small wrapper object:
+// `X-PolyStore-Proof-JSON`. The payload is a small wrapper object:
 //
 //	{ "proof_details": <ChainedProof> }
 //

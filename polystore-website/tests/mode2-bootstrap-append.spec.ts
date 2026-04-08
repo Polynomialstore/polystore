@@ -161,17 +161,17 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   await page.route('http://localhost:8080/health', failGatewayProbe)
 
   await page.route('**/sp/upload_mdu', async (route) => {
-    uploadPreviousRoots.push(route.request().headers()['x-nil-previous-manifest-root'] || '')
+    uploadPreviousRoots.push(route.request().headers()['x-polystore-previous-manifest-root'] || '')
     await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
   await page.route('**/sp/upload_manifest', async (route) => {
     uploadManifestCalls += 1
-    uploadPreviousRoots.push(route.request().headers()['x-nil-previous-manifest-root'] || '')
+    uploadPreviousRoots.push(route.request().headers()['x-polystore-previous-manifest-root'] || '')
     await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
   })
   await page.route('**/sp/upload_shard', async (route) => {
-    uploadPreviousRoots.push(route.request().headers()['x-nil-previous-manifest-root'] || '')
-    const rawIndex = route.request().headers()['x-nil-mdu-index']
+    uploadPreviousRoots.push(route.request().headers()['x-polystore-previous-manifest-root'] || '')
+    const rawIndex = route.request().headers()['x-polystore-mdu-index']
     const parsedIndex = Number(rawIndex)
     if (Number.isInteger(parsedIndex)) uploadedShardIndices.push(parsedIndex)
     await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'OK' })
@@ -210,22 +210,22 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
 
   await page.route('**/sp/retrieval/mdu/**', async (route) => {
     const request = route.request()
-    const sessionId = request.headers()['x-nil-session-id']
+    const sessionId = request.headers()['x-polystore-session-id']
     if (!sessionId) {
       sessionlessMduCalls += 1
       await route.fulfill({
         status: 400,
         contentType: 'application/json',
         headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'missing X-Nil-Session-Id' }),
+        body: JSON.stringify({ error: 'missing X-PolyStore-Session-Id' }),
       })
       return
     }
     const url = new URL(request.url())
     const manifestRoot = decodeURIComponent(url.pathname.split('/').slice(-2, -1)[0] || '')
     const index = Number(url.pathname.split('/').pop() || '-1')
-    const startBlobIndex = Number(url.searchParams.get('start_blob_index') || request.headers()['x-nil-start-blob-index'] || '0')
-    const blobCount = Number(url.searchParams.get('blob_count') || request.headers()['x-nil-blob-count'] || '64')
+    const startBlobIndex = Number(url.searchParams.get('start_blob_index') || request.headers()['x-polystore-start-blob-index'] || '0')
+    const blobCount = Number(url.searchParams.get('blob_count') || request.headers()['x-polystore-blob-count'] || '64')
     if (!dealCid || manifestRoot.toLowerCase() !== dealCid.toLowerCase()) {
       await route.fulfill({
         status: 404,
@@ -243,7 +243,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/octet-stream',
-          'X-Nil-Mdu-Index': '0',
+          'X-PolyStore-Mdu-Index': '0',
         },
         body: synthesizeMode2SlotWindow(capturedMdu0, 2, startBlobIndex, blobCount),
       })
@@ -256,7 +256,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/octet-stream',
-          'X-Nil-Mdu-Index': String(index),
+          'X-PolyStore-Mdu-Index': String(index),
         },
         body: synthesizeMode2SlotWindow(capturedUserMdu, 2, startBlobIndex, blobCount),
       })
@@ -421,7 +421,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
     let sendCount = 0
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

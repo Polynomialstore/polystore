@@ -55,14 +55,14 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 		stripe         stripeParams
 	)
 	if requireOnchainSession {
-		rawSession := strings.TrimSpace(r.Header.Get("X-Nil-Session-Id"))
+		rawSession := strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id"))
 		if rawSession == "" {
-			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
+			writeJSONError(w, http.StatusBadRequest, "missing X-PolyStore-Session-Id", "")
 			return
 		}
 		sessionID, _, nerr := parseSessionIDHex(rawSession)
 		if nerr != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Session-Id", nerr.Error())
+			writeJSONError(w, http.StatusBadRequest, "invalid X-PolyStore-Session-Id", nerr.Error())
 			return
 		}
 		sess, serr := fetchRetrievalSession(sessionID)
@@ -255,8 +255,8 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	// Provide a small, parseable hint for debug tooling (not used by the main UI yet).
-	w.Header().Set("X-Nil-Debug-Range-Start", strconv.FormatUint(rangeStart, 10))
-	w.Header().Set("X-Nil-Debug-Range-Len", strconv.FormatUint(servedLen, 10))
+	w.Header().Set("X-PolyStore-Debug-Range-Start", strconv.FormatUint(rangeStart, 10))
+	w.Header().Set("X-PolyStore-Debug-Range-Len", strconv.FormatUint(servedLen, 10))
 
 	_, _ = io.Copy(w, content)
 	if flusher, ok := w.(http.Flusher); ok {

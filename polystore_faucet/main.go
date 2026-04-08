@@ -32,7 +32,7 @@ var (
 	polystorechaindBin = envDefault("NILCHAIND_BIN", "polystorechaind")
 	cmdTimeout   = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 20)) * time.Second
 
-	// Optional: when set, POST endpoints require X-Nil-Faucet-Auth header.
+	// Optional: when set, POST endpoints require X-PolyStore-Faucet-Auth header.
 	authToken = envDefault("NIL_FAUCET_AUTH_TOKEN", "")
 )
 
@@ -177,14 +177,14 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Nil-Faucet-Auth")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-PolyStore-Faucet-Auth")
 }
 
 func authorizeRequest(w http.ResponseWriter, r *http.Request) bool {
 	if authToken == "" {
 		return true
 	}
-	given := strings.TrimSpace(r.Header.Get("X-Nil-Faucet-Auth"))
+	given := strings.TrimSpace(r.Header.Get("X-PolyStore-Faucet-Auth"))
 	if given == "" || subtle.ConstantTimeCompare([]byte(given), []byte(authToken)) != 1 {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return false

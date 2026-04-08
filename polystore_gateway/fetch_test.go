@@ -106,11 +106,11 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	reqSig := signRetrievalRequest(t, dealID, "video.mp4", reqRangeStart, reqRangeLen, nonce, expiresAt)
 	u := fmt.Sprintf("/gateway/fetch/%s?deal_id=%d&owner=%s&file_path=video.mp4", manifestRoot.Canonical, dealID, owner)
 	req := httptest.NewRequest("GET", u, nil)
-	req.Header.Set("X-Nil-Req-Sig", reqSig)
-	req.Header.Set("X-Nil-Req-Nonce", fmt.Sprintf("%d", nonce))
-	req.Header.Set("X-Nil-Req-Expires-At", fmt.Sprintf("%d", expiresAt))
-	req.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", reqRangeStart))
-	req.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", reqRangeLen))
+	req.Header.Set("X-PolyStore-Req-Sig", reqSig)
+	req.Header.Set("X-PolyStore-Req-Nonce", fmt.Sprintf("%d", nonce))
+	req.Header.Set("X-PolyStore-Req-Expires-At", fmt.Sprintf("%d", expiresAt))
+	req.Header.Set("X-PolyStore-Req-Range-Start", fmt.Sprintf("%d", reqRangeStart))
+	req.Header.Set("X-PolyStore-Req-Range-Len", fmt.Sprintf("%d", reqRangeLen))
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", reqRangeStart, reqRangeStart+reqRangeLen-1))
 	w := httptest.NewRecorder()
 
@@ -225,11 +225,11 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 		owner,
 	)
 	req := httptest.NewRequest(http.MethodGet, u, nil)
-	req.Header.Set("X-Nil-Req-Sig", reqSig)
-	req.Header.Set("X-Nil-Req-Nonce", fmt.Sprintf("%d", nonce))
-	req.Header.Set("X-Nil-Req-Expires-At", fmt.Sprintf("%d", expiresAt))
-	req.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", reqRangeStart))
-	req.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", reqRangeLen))
+	req.Header.Set("X-PolyStore-Req-Sig", reqSig)
+	req.Header.Set("X-PolyStore-Req-Nonce", fmt.Sprintf("%d", nonce))
+	req.Header.Set("X-PolyStore-Req-Expires-At", fmt.Sprintf("%d", expiresAt))
+	req.Header.Set("X-PolyStore-Req-Range-Start", fmt.Sprintf("%d", reqRangeStart))
+	req.Header.Set("X-PolyStore-Req-Range-Len", fmt.Sprintf("%d", reqRangeLen))
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", reqRangeStart, reqRangeStart+reqRangeLen-1))
 	w := httptest.NewRecorder()
 
@@ -238,11 +238,11 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 	if w.Code != http.StatusPartialContent {
 		t.Fatalf("Fetch failed: %d, body: %s", w.Code, w.Body.String())
 	}
-	if got := strings.TrimSpace(w.Header().Get("X-Nil-Provider")); got != metadataProvider {
-		t.Fatalf("expected X-Nil-Provider=%q, got %q", metadataProvider, got)
+	if got := strings.TrimSpace(w.Header().Get("X-PolyStore-Provider")); got != metadataProvider {
+		t.Fatalf("expected X-PolyStore-Provider=%q, got %q", metadataProvider, got)
 	}
-	if got := strings.TrimSpace(w.Header().Get("X-Nil-Deputy")); got != "1" {
-		t.Fatalf("expected X-Nil-Deputy=1, got %q", got)
+	if got := strings.TrimSpace(w.Header().Get("X-PolyStore-Deputy")); got != "1" {
+		t.Fatalf("expected X-PolyStore-Deputy=1, got %q", got)
 	}
 	if w.Body.String() != string(fileContent) {
 		t.Errorf("Content mismatch. Want %q, got %q", string(fileContent), w.Body.String())

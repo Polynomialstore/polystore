@@ -153,7 +153,7 @@ For each `(deal_id, slot)` assigned:
 5) Emit a local log line and metrics counter (`nilstore_gc_deletes_total`).
 
 Providers MUST enforce **retrieval-session gating** on the data plane:
-- providers MUST refuse to serve Deal bytes unless the request is bound to an on-chain `OPEN` retrieval session (`X-Nil-Session-Id`),
+- providers MUST refuse to serve Deal bytes unless the request is bound to an on-chain `OPEN` retrieval session (`X-PolyStore-Session-Id`),
 - requests MUST be blob-aligned and a subset of the session’s declared blob-range,
 - this applies even while the deal is ACTIVE (not only after expiry).
 

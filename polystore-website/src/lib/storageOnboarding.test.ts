@@ -31,7 +31,7 @@ test('buildStorageAgentPrompt captures the current storage onboarding contract',
 test('storage quickstart points users at the current route map and password prerequisite', () => {
   const quickstart = readRepoFile('docs/ALPHA_STORAGE_USER_QUICKSTART.md')
   const collaboratorPacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md')
-  const nilstorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_POLYNOMIALSTORE_COM.md')
+  const polystorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_POLYNOMIALSTORE_COM.md')
 
   assert.match(quickstart, /https:\/\/polynomialstore\.com\/#\/first-file/)
   assert.match(quickstart, /#\/dashboard/)
@@ -40,6 +40,6 @@ test('storage quickstart points users at the current route map and password prer
   assert.match(quickstart, /EVM_PRIVKEY/)
   assert.match(collaboratorPacket, /https:\/\/polynomialstore\.com\/#\/first-file/)
   assert.match(collaboratorPacket, /https:\/\/polynomialstore\.com\/#\/dashboard/)
-  assert.match(nilstorePacket, /https:\/\/polynomialstore\.com\/#\/first-file/)
-  assert.match(nilstorePacket, /https:\/\/polynomialstore\.com\/#\/dashboard/)
+  assert.match(polystorePacket, /https:\/\/polynomialstore\.com\/#\/first-file/)
+  assert.match(polystorePacket, /https:\/\/polynomialstore\.com\/#\/dashboard/)
 })

@@ -66,7 +66,7 @@ NilStore’s retrieval market is **session-based** and (for testnet/mainnet pari
    - locks `variable_fee = retrieval_price_per_blob * blob_count` against the deal escrow.
 
 2) **Serve bytes (off-chain, provider/gateway)**  
-   Providers (and any gateway proxy path) MUST refuse to serve Deal bytes unless the request carries `X-Nil-Session-Id = session_id`.  
+   Providers (and any gateway proxy path) MUST refuse to serve Deal bytes unless the request carries `X-PolyStore-Session-Id = session_id`.
    Batching is allowed: one session can be downloaded via many range requests, or via larger MDU-sized chunks, as long as all served bytes remain within the session’s blob-range.
 
 3) **Complete settlement (on-chain)**  

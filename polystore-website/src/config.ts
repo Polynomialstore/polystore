@@ -108,7 +108,7 @@ const P2P_ENABLED = (() => {
   return true
 })()
 const P2P_BOOTSTRAP = ENV.VITE_P2P_BOOTSTRAP || ''
-const P2P_PROTOCOL = ENV.VITE_P2P_PROTOCOL || '/nilstore/http/1.0.0'
+const P2P_PROTOCOL = ENV.VITE_P2P_PROTOCOL || '/polystore/http/1.0.0'
 const FAUCET_ENABLED = (() => {
   const raw = ENV.VITE_ENABLE_FAUCET
   if (typeof raw === 'string') {
@@ -139,7 +139,7 @@ export const appConfig = {
   gatewayDisabled: GATEWAY_DISABLED,
   p2pEnabled: P2P_ENABLED,
   p2pBootstrap: P2P_BOOTSTRAP.split(',').map((value: string) => value.trim()).filter(Boolean),
-  p2pProtocol: P2P_PROTOCOL.trim() || '/nilstore/http/1.0.0',
+  p2pProtocol: P2P_PROTOCOL.trim() || '/polystore/http/1.0.0',
   faucetEnabled: FAUCET_ENABLED,
   cosmosChainId: COSMOS_CHAIN_ID,
   bridgeAddress: BRIDGE_ADDRESS,

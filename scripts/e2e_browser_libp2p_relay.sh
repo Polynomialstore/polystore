@@ -142,7 +142,7 @@ export NIL_ENABLE_TX_RELAY=0
 
 # Ensure the browser libp2p client is enabled and uses the same protocol id.
 export VITE_P2P_ENABLED=1
-export VITE_P2P_PROTOCOL="/nilstore/fetch/1.0.0"
+export VITE_P2P_PROTOCOL="/polystore/fetch/1.0.0"
 
 # Force provider relay path: provider reserves on relay, and chain endpoints include only the relay dial addr.
 export NIL_P2P_ENABLED_SP=1

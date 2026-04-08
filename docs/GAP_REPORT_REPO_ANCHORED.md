@@ -74,7 +74,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
-| Data-plane requests MUST include `X-Nil-Session-Id` | DONE | `polystore_gateway/main.go`: `NIL_REQUIRE_ONCHAIN_SESSION=1` default; enforced in `GatewayFetch` and `SpFetchShard` | `polystore_gateway/session_enforcement_test.go`; `e2e_open_retrieval_session_cli.sh` | — |
+| Data-plane requests MUST include `X-PolyStore-Session-Id` | DONE | `polystore_gateway/main.go`: `NIL_REQUIRE_ONCHAIN_SESSION=1` default; enforced in `GatewayFetch` and `SpFetchShard` | `polystore_gateway/session_enforcement_test.go`; `e2e_open_retrieval_session_cli.sh` | — |
 | Validate session is `OPEN`, unexpired, and bound to (deal, provider/slot, manifest_root) | DONE | `polystore_gateway/main.go` (`SpFetchShard` validates deal+root+status+expiry); chain validates on open | `polystore_gateway/session_enforcement_test.go`; `polystorechain/x/polystorechain/keeper/msg_server_retrieval_sessions_test.go` | Gateway-wide “all endpoints” auditing is not automated (human review needed when adding new byte-serving endpoints) |
 | Enforce Mode2 slot confinement + subset-of-session-range (batching preserved) | DONE | Chain range invariants in `polystorechain/x/polystorechain/keeper/msg_server.go`; gateway enforces slot mapping in `SpFetchShard` | `e2e_open_retrieval_session_mode2_cli.sh`; keeper tests | — |
 

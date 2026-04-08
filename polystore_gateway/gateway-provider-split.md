@@ -69,12 +69,12 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
     *   (Future) Verifies KZG Proof.
     *   Streams bytes to Browser.
     *   **Crucial Change:** The Gateway response headers MUST include the **Receipt Metadata** needed for the client to sign.
-        *   `X-Nil-Deal-ID`: `<uint64>`
-        *   `X-Nil-Epoch`: `<uint64>`
-        *   `X-Nil-Bytes-Served`: `<uint64>`
-        *   `X-Nil-Provider`: `<bech32_address>`
-        *   `X-Nil-Proof-JSON`: base64 JSON wrapper containing `proof_details` (and optionally `proof_hash`).
-        *   `X-Nil-Proof-Hash`: `0x` + 32-byte keccak256 of canonical `ChainedProof` encoding.
+        *   `X-PolyStore-Deal-ID`: `<uint64>`
+        *   `X-PolyStore-Epoch`: `<uint64>`
+        *   `X-PolyStore-Bytes-Served`: `<uint64>`
+        *   `X-PolyStore-Provider`: `<bech32_address>`
+        *   `X-PolyStore-Proof-JSON`: base64 JSON wrapper containing `proof_details` (and optionally `proof_hash`).
+        *   `X-PolyStore-Proof-Hash`: `0x` + 32-byte keccak256 of canonical `ChainedProof` encoding.
 
 #### Step 5: Client Signing
 *   **Browser:**
@@ -118,7 +118,7 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
 
 *   **`GET /gateway/fetch/{manifest_root}`** (Updated)
     *   **Behavior:** Streams file.
-    *   **Headers:** Adds `X-Nil-Receipt-*` headers.
+    *   **Headers:** Adds `X-PolyStore-Receipt-*` headers.
     *   **Logic:** Does **NOT** auto-submit proofs anymore.
 
 *   **`POST /gateway/receipt`** (New)

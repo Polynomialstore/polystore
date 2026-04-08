@@ -236,7 +236,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 *   **Flow:**
     1.  Plan blob-range via `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...` (gateway or direct SP).
     2.  Open session on-chain via MetaMask (`openRetrievalSession` precompile).
-    3.  Fetch bytes with `X-Nil-Session-Id` header via `/gateway/fetch/{manifest_root}` (gateway or direct SP).
+    3.  Fetch bytes with `X-PolyStore-Session-Id` header via `/gateway/fetch/{manifest_root}` (gateway or direct SP).
     4.  Confirm completion on-chain (`confirmRetrievalSession`).
     5.  Submit proof relay via `POST /gateway/session-proof` (gateway forwards to provider).
 *   **Mode 2:** When the deal is striped, the fetch path is slot-aware (blob ranges must stay within a slot); gateways may reconstruct missing MDUs from `/sp/shard`.
@@ -289,7 +289,7 @@ The central hub for deal management.
     *   **PolyFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
     *   **Fetch file (PolyFS path):**
         *   Plan range: `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`.
-        *   Data plane: `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` with `X-Nil-Session-Id` header (session opened on-chain via MetaMask).
+        *   Data plane: `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` with `X-PolyStore-Session-Id` header (session opened on-chain via MetaMask).
         *   Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch), `404` (not found/tombstone), `409` (stale `manifest_root` or inconsistent PolyFS state).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
@@ -383,12 +383,12 @@ The website depends on the following services (configured in `config.ts`):
 
 ### Key Endpoints
 *   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, witness_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
-*   `POST /sp/upload_shard`: Raw shard bytes with headers `X-Nil-Deal-ID`, `X-Nil-Mdu-Index`, `X-Nil-Slot`, `X-Nil-Manifest-Root` (Mode 2).
+*   `POST /sp/upload_shard`: Raw shard bytes with headers `X-PolyStore-Deal-ID`, `X-PolyStore-Mdu-Index`, `X-PolyStore-Slot`, `X-PolyStore-Manifest-Root` (Mode 2).
 *   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2; internal provider↔provider only; requires `X‑Nil‑Gateway‑Auth`).
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
 *   `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`: Returns blob-range plan for retrieval sessions.
-*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes with `X-Nil-Session-Id` header (encode `file_path` with `encodeURIComponent`; errors are JSON `{error,hint}`).
+*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes with `X-PolyStore-Session-Id` header (encode `file_path` with `encodeURIComponent`; errors are JSON `{error,hint}`).
 *   `POST /gateway/session-proof`: `{session_id}` -> `{session_id}` (gateway forwards provider proof submission).
 *   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (legacy devnet helper; deprecated).
 *   `GET /gateway/status`: Local gateway status/capabilities (optional).

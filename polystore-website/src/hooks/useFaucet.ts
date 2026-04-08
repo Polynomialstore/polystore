@@ -29,7 +29,7 @@ export function useFaucet() {
             const token = getFaucetAuthToken()
             const headers: Record<string, string> = { 'Content-Type': 'application/json' }
             if (token) {
-                headers['X-Nil-Faucet-Auth'] = token
+                headers['X-PolyStore-Faucet-Auth'] = token
             }
 
             const response = await fetch(`${appConfig.apiBase}/faucet`, {

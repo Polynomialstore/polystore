@@ -614,7 +614,7 @@ request_provider_faucet_funds() {
     if [ -n "$FAUCET_AUTH_TOKEN" ]; then
       faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" \
         -H "Content-Type: application/json" \
-        -H "X-Nil-Faucet-Auth: $FAUCET_AUTH_TOKEN" \
+        -H "X-PolyStore-Faucet-Auth: $FAUCET_AUTH_TOKEN" \
         --data "$payload" 2>/dev/null || true)"
     else
       faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" \
@@ -676,7 +676,7 @@ print_provider_funding_help() {
   if [ -n "$FAUCET_URL" ]; then
     if [ -n "$FAUCET_AUTH_TOKEN" ]; then
       echo "Faucet request:" >&2
-      echo "  curl -sS -X POST '$FAUCET_URL' -H 'Content-Type: application/json' -H 'X-Nil-Faucet-Auth: $FAUCET_AUTH_TOKEN' --data '{\"address\":\"$addr\"}'" >&2
+      echo "  curl -sS -X POST '$FAUCET_URL' -H 'Content-Type: application/json' -H 'X-PolyStore-Faucet-Auth: $FAUCET_AUTH_TOKEN' --data '{\"address\":\"$addr\"}'" >&2
     else
       echo "Faucet request:" >&2
       echo "  curl -sS -X POST '$FAUCET_URL' -H 'Content-Type: application/json' --data '{\"address\":\"$addr\"}'" >&2

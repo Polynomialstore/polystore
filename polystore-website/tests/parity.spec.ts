@@ -110,7 +110,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
     if (w.ethereum) return;
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

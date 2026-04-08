@@ -187,10 +187,10 @@ test('buildCloudflareTunnelBootstrapCommand emits an easy bootstrap flow for tun
     hostMode: 'home-tunnel',
     endpointMode: 'domain',
     endpointValue: 'https://sp.example.com/path',
-    tunnelName: 'nilstore-sp1',
+    tunnelName: 'polystore-sp1',
   })
 
-  assert.match(command, /CF_TUNNEL_NAME='nilstore-sp1'/)
+  assert.match(command, /CF_TUNNEL_NAME='polystore-sp1'/)
   assert.match(command, /CF_TUNNEL_HOSTNAME='sp\.example\.com'/)
   assert.match(command, /CF_TUNNEL_SERVICE_URL='http:\/\/127\.0\.0\.1:8091'/)
   assert.match(command, /cloudflared tunnel login/)
@@ -317,7 +317,7 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
   const remote = readRepoFile('docs/REMOTE_SP_JOIN_QUICKSTART.md')
   const endpoints = readRepoFile('docs/networking/PROVIDER_ENDPOINTS.md')
   const collaboratorPacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md')
-  const nilstorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_POLYNOMIALSTORE_COM.md')
+  const polystorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_POLYNOMIALSTORE_COM.md')
 
   assert.match(quickstart, /Treat `NIL_GATEWAY_SP_AUTH` as a secret/)
   assert.match(quickstart, /https:\/\/polynomialstore\.com\/#\/sp-onboarding/)
@@ -333,9 +333,9 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
   assert.match(collaboratorPacket, /run_devnet_provider\.sh bootstrap/)
   assert.doesNotMatch(collaboratorPacket, /run_devnet_provider\.sh register/)
   assert.doesNotMatch(collaboratorPacket, /run_devnet_provider\.sh start/)
-  assert.match(nilstorePacket, /website-first bootstrap/)
-  assert.match(nilstorePacket, /run_devnet_provider\.sh pair/)
-  assert.match(nilstorePacket, /run_devnet_provider\.sh bootstrap/)
+  assert.match(polystorePacket, /website-first bootstrap/)
+  assert.match(polystorePacket, /run_devnet_provider\.sh pair/)
+  assert.match(polystorePacket, /run_devnet_provider\.sh bootstrap/)
 })
 
 test('run_devnet_provider.sh help prints usage without requiring PROVIDER_KEY', () => {

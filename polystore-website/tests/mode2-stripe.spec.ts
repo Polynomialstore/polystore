@@ -627,7 +627,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       if (!isFetchPath) return
       if (viaGateway) fetchGatewayRequests += 1
       const headers = req.headers()
-      const hasAuth = Boolean(headers.authorization || headers['x-nil-auth'] || headers['x-nil-signature'] || headers['x-nil-voucher'])
+      const hasAuth = Boolean(headers.authorization || headers['x-polystore-auth'] || headers['x-polystore-signature'] || headers['x-polystore-voucher'])
       const range = String(headers.range || '').trim()
       if (!hasAuth && !/^bytes=\d+-\d*$/.test(range)) {
         unsignedMissingRangeRequests.push(`${req.method()} ${url} range=${range || '<none>'}`)
@@ -799,7 +799,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       const url = req.url()
       if (!url.includes('/gateway/fetch/') && !url.includes('/sp/retrieval/fetch/')) return
       const headers = req.headers()
-      const hasAuth = Boolean(headers.authorization || headers['x-nil-auth'] || headers['x-nil-signature'] || headers['x-nil-voucher'])
+      const hasAuth = Boolean(headers.authorization || headers['x-polystore-auth'] || headers['x-polystore-signature'] || headers['x-polystore-voucher'])
       const range = String(headers.range || '').trim()
       if (!hasAuth && !/^bytes=\d+-\d*$/.test(range)) {
         unsignedMissingRangeRequests.push(`${req.method()} ${url} range=${range || '<none>'}`)
@@ -810,18 +810,18 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await page.route('**/sp/upload_mdu', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       mduUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-        mduIndex: headers['x-nil-mdu-index'] || '',
+        mduIndex: headers['x-polystore-mdu-index'] || '',
       })
       await route.fulfill({ status: 200, body: 'ok' })
     })
     await page.route('**/sp/upload_manifest', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       manifestUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
@@ -831,12 +831,12 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await page.route('**/sp/upload_shard', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       shardUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-        mduIndex: headers['x-nil-mdu-index'] || '',
-        slot: headers['x-nil-slot'] || '',
+        mduIndex: headers['x-polystore-mdu-index'] || '',
+        slot: headers['x-polystore-slot'] || '',
       })
       await route.fulfill({ status: 200, body: 'ok' })
     })

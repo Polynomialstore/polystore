@@ -308,10 +308,10 @@ export const TestnetDocs = () => {
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># One-time setup (Cloudflare account + DNS)</p>
                 <p>$ cloudflared tunnel login</p>
-                <p>$ cloudflared tunnel create nilstore-sp</p>
-                <p>$ cloudflared tunnel route dns nilstore-sp sp.example.com</p>
+                <p>$ cloudflared tunnel create polystore-sp</p>
+                <p>$ cloudflared tunnel route dns polystore-sp sp.example.com</p>
                 <p className="text-accent"># Run the tunnel (ingress to the local gateway)</p>
-                <p>$ cloudflared tunnel run nilstore-sp</p>
+                <p>$ cloudflared tunnel run polystore-sp</p>
                 <p className="text-accent"># Print the multiaddr to register</p>
                 <p>$ NIL_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints</p>
               </div>

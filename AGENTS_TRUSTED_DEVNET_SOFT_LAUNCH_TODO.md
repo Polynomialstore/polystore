@@ -175,7 +175,7 @@ Checklist:
   - `cd polystore_faucet && go test ./...`
 
 Checklist:
-- [x] Add optional auth token (`NIL_FAUCET_AUTH_TOKEN`) required via `X-Nil-Faucet-Auth`.
+- [x] Add optional auth token (`NIL_FAUCET_AUTH_TOKEN`) required via `X-PolyStore-Faucet-Auth`.
 - [x] Improve rate limiting IP parsing (use forwarded headers / host-only).
 - [x] Remove stale `/create-deal` endpoint from `polystore_faucet`.
 - [x] Update trusted devnet docs + systemd env template with the auth knob.
@@ -193,7 +193,7 @@ Checklist:
 
 Checklist:
 - [x] Add localStorage-backed faucet auth token helper.
-- [x] Send `X-Nil-Faucet-Auth` header from `useFaucet` when token is set.
+- [x] Send `X-PolyStore-Faucet-Auth` header from `useFaucet` when token is set.
 - [x] Add UI input (Dashboard + First File wizard + Testnet Docs) for collaborators to paste/save/clear the token.
 - [x] Update trusted devnet docs with the UI token flow.
 

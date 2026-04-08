@@ -1561,22 +1561,22 @@ func mode2UploadArtifactsToProviders(
 				req.Header.Set("Expect", "100-continue")
 			}
 			if sparseUploads && currentSendSize > 0 && currentSendSize < fullSize {
-				req.Header.Set("X-Nil-Full-Size", strconv.FormatInt(fullSize, 10))
+				req.Header.Set("X-PolyStore-Full-Size", strconv.FormatInt(fullSize, 10))
 			}
 			if task.dealID != "" {
-				req.Header.Set("X-Nil-Deal-ID", task.dealID)
+				req.Header.Set("X-PolyStore-Deal-ID", task.dealID)
 			}
 			if task.mduIndex != "" {
-				req.Header.Set("X-Nil-Mdu-Index", task.mduIndex)
+				req.Header.Set("X-PolyStore-Mdu-Index", task.mduIndex)
 			}
 			if task.slot != "" {
-				req.Header.Set("X-Nil-Slot", task.slot)
+				req.Header.Set("X-PolyStore-Slot", task.slot)
 			}
 			if task.manifestRoot != "" {
-				req.Header.Set("X-Nil-Manifest-Root", task.manifestRoot)
+				req.Header.Set("X-PolyStore-Manifest-Root", task.manifestRoot)
 			}
 			if strings.TrimSpace(task.previousManifestRoot) != "" {
-				req.Header.Set(nilUploadPreviousManifestRootHeader, strings.TrimSpace(task.previousManifestRoot))
+				req.Header.Set(polystoreUploadPreviousManifestRootHeader, strings.TrimSpace(task.previousManifestRoot))
 			}
 
 			resp, err := client.Do(req)

@@ -1330,9 +1330,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const res = await postSparseArtifact({
           url: `${gatewayBase}${mirrorMduPath}`,
           headers: {
-            'X-Nil-Deal-ID': dealId,
-            'X-Nil-Mdu-Index': String(idx),
-            'X-Nil-Manifest-Root': manifestRoot,
+            'X-PolyStore-Deal-ID': dealId,
+            'X-PolyStore-Mdu-Index': String(idx),
+            'X-PolyStore-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
           artifact: {
@@ -1352,8 +1352,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const manifestRes = await postSparseArtifact({
           url: `${gatewayBase}${mirrorManifestPath}`,
           headers: {
-            'X-Nil-Deal-ID': dealId,
-            'X-Nil-Manifest-Root': manifestRoot,
+            'X-PolyStore-Deal-ID': dealId,
+            'X-PolyStore-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
           artifact: {
@@ -1377,10 +1377,10 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const res = await postSparseArtifact({
           url: `${gatewayBase}${mirrorShardPath}`,
           headers: {
-            'X-Nil-Deal-ID': dealId,
-            'X-Nil-Mdu-Index': String(entry.mduIndex),
-            'X-Nil-Slot': String(entry.slot),
-            'X-Nil-Manifest-Root': manifestRoot,
+            'X-PolyStore-Deal-ID': dealId,
+            'X-PolyStore-Mdu-Index': String(entry.mduIndex),
+            'X-PolyStore-Slot': String(entry.slot),
+            'X-PolyStore-Manifest-Root': manifestRoot,
             'Content-Type': 'application/octet-stream',
           },
           artifact: {
@@ -1779,10 +1779,10 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const res = await postSparseArtifact({
           url: `${gatewayBase}${mirrorMduPath}`,
           headers: {
-            'X-Nil-Deal-ID': dealId,
-            'X-Nil-Mdu-Index': String(mdu.index),
-            'X-Nil-Manifest-Root': manifestRoot,
-            'X-Nil-Previous-Manifest-Root': baseManifestRoot || '',
+            'X-PolyStore-Deal-ID': dealId,
+            'X-PolyStore-Mdu-Index': String(mdu.index),
+            'X-PolyStore-Manifest-Root': manifestRoot,
+            'X-PolyStore-Previous-Manifest-Root': baseManifestRoot || '',
             'Content-Type': 'application/octet-stream',
           },
           artifact: {
@@ -1801,9 +1801,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       const manifestRes = await postSparseArtifact({
         url: `${gatewayBase}${mirrorManifestPath}`,
         headers: {
-            'X-Nil-Deal-ID': dealId,
-            'X-Nil-Manifest-Root': manifestRoot,
-            'X-Nil-Previous-Manifest-Root': baseManifestRoot || '',
+            'X-PolyStore-Deal-ID': dealId,
+            'X-PolyStore-Manifest-Root': manifestRoot,
+            'X-PolyStore-Previous-Manifest-Root': baseManifestRoot || '',
             'Content-Type': 'application/octet-stream',
           },
         artifact: {
@@ -1828,11 +1828,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             const res = await postSparseArtifact({
               url: `${gatewayBase}${mirrorShardPath}`,
               headers: {
-                'X-Nil-Deal-ID': dealId,
-                'X-Nil-Mdu-Index': String(slabIndex),
-                'X-Nil-Slot': String(slot),
-                'X-Nil-Manifest-Root': manifestRoot,
-                'X-Nil-Previous-Manifest-Root': baseManifestRoot || '',
+                'X-PolyStore-Deal-ID': dealId,
+                'X-PolyStore-Mdu-Index': String(slabIndex),
+                'X-PolyStore-Slot': String(slot),
+                'X-PolyStore-Manifest-Root': manifestRoot,
+                'X-PolyStore-Previous-Manifest-Root': baseManifestRoot || '',
                 'Content-Type': 'application/octet-stream',
               },
               artifact: {

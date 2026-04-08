@@ -257,9 +257,9 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
       status: 206,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
+        'Access-Control-Expose-Headers': 'X-PolyStore-Provider',
         'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1provider',
+        'X-PolyStore-Provider': 'nil1provider',
       },
       body: fileBytes,
     })
@@ -270,9 +270,9 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
       status: 206,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
+        'Access-Control-Expose-Headers': 'X-PolyStore-Provider',
         'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1provider',
+        'X-PolyStore-Provider': 'nil1provider',
       },
       body: fileBytes,
     })

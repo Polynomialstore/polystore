@@ -53,7 +53,7 @@ This is intentional. It enables routing and batching without changing accounting
 
 **Happy path**
 1) The user opens a session (or a sponsored session for public deals).
-2) The user (or their gateway) downloads bytes from an assigned provider using `X-Nil-Session-Id`.
+2) The user (or their gateway) downloads bytes from an assigned provider using `X-PolyStore-Session-Id`.
 
 **Sad path**
 1) The user opens a session as usual, but direct retrieval fails (timeouts/connection errors/invalid responses).

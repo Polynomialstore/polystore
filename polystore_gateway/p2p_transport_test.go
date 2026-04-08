@@ -173,7 +173,7 @@ func TestP2PFetch_EndToEnd(t *testing.T) {
 	if !bytes.Equal(body, fileContent) {
 		t.Fatalf("response body mismatch: got %q", string(body))
 	}
-	if resp.Headers["X-Nil-Proof-Hash"] == "" {
+	if resp.Headers["x-polystore-proof-hash"] == "" {
 		t.Fatalf("expected proof hash header")
 	}
 }

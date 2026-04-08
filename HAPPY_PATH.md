@@ -69,7 +69,7 @@ scripts/run_local_stack.sh stop
 
 ## Common “why did fetch fail?”
 
-- `missing X-Nil-Session-Id`: sessions are **required by default** on byte-serving
+- `missing X-PolyStore-Session-Id`: sessions are **required by default** on byte-serving
   endpoints (`NIL_REQUIRE_ONCHAIN_SESSION=1`).
 - If you want legacy behavior (dev-only), you must explicitly opt-in:
   - `NIL_UNSAFE_ALLOW_LEGACY_DOWNLOAD_SESSION=1` (do not use for testnet posture)

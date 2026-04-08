@@ -344,12 +344,12 @@ Fetch bytes (requires the session id + signed request headers):
 FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=$ENC_FILE_PATH"
 RANGE_END="$((FILE_SIZE_BYTES - 1))"
 curl -fsS -o fetched.bin "$FETCH_URL" \
-  -H "X-Nil-Session-Id: $SESSION_ID" \
-  -H "X-Nil-Req-Sig: $REQ_SIG" \
-  -H "X-Nil-Req-Nonce: $REQ_NONCE" \
-  -H "X-Nil-Req-Expires-At: $REQ_EXPIRES_AT" \
-  -H "X-Nil-Req-Range-Start: 0" \
-  -H "X-Nil-Req-Range-Len: $FILE_SIZE_BYTES" \
+  -H "X-PolyStore-Session-Id: $SESSION_ID" \
+  -H "X-PolyStore-Req-Sig: $REQ_SIG" \
+  -H "X-PolyStore-Req-Nonce: $REQ_NONCE" \
+  -H "X-PolyStore-Req-Expires-At: $REQ_EXPIRES_AT" \
+  -H "X-PolyStore-Req-Range-Start: 0" \
+  -H "X-PolyStore-Req-Range-Len: $FILE_SIZE_BYTES" \
   -H "Range: bytes=0-$RANGE_END"
 
 cmp -s "$UPLOAD_FILE" fetched.bin && echo "OK: fetched bytes match"
@@ -381,7 +381,7 @@ Mirrors `scripts/e2e_gateway_retrieval_multi_sp.sh`:
 Following the latter half of `scripts/e2e_deputy_ghost_repair_multi_sp.sh`:
 
 1. Create another deal (Mode2), upload/commit, and request a retrieval plan with `curl http://localhost:8080/gateway/plan-retrieval-session/<manifest>?deal_id=<id>&owner=<owner>&file_path=<file>&range_start=0&range_len=<bytes>`. Capture the returned provider; this is the planned slot owner.
-2. Fetch bytes via `/gateway/fetch/...` using the owner signature. Inspect `X-Nil-Provider` in the response headers—if the planner routes around the busy slot, the header should show a deputy provider.
+2. Fetch bytes via `/gateway/fetch/...` using the owner signature. Inspect `X-PolyStore-Provider` in the response headers—if the planner routes around the busy slot, the header should show a deputy provider.
 3. Submit a deputy session proof: POST to `/gateway/session-proof` with the same `session_id` and the deputy provider address. The gateway should reply `{"status":"success"}`.
 4. Wait for the next epoch boundary (see the script’s `wait_for_height` logic) and inspect `polystorechain query polystorechain get-deal --id <id>` to confirm the targeted `mode2_slots` entry shows `status=REPAIRING` with a `pending_provider`.
 5. Use the planner again to ensure it now returns the pending provider, proving the healing path defers traffic away from repairing slots.
@@ -405,7 +405,7 @@ The gateway keeps newly uploaded PolyFS generations in a provisional state until
 - Default devnet retention: `24h`
 - Override with: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL`
 - Disable age-based provisional GC: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0`
-- Browser/gateway/provider artifact uploads may send `X-Nil-Previous-Manifest-Root` to reject stale append bases before large upload bodies are consumed
+- Browser/gateway/provider artifact uploads may send `X-PolyStore-Previous-Manifest-Root` to reject stale append bases before large upload bodies are consumed
 
 Inspect the effective policy and current generation inventory with:
 

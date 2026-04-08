@@ -187,8 +187,8 @@ func S3ListBuckets(w http.ResponseWriter, r *http.Request) {
 	_ = xml.NewEncoder(w).Encode(&s3ListBucketsResult{
 		XMLNS: s3XMLNS,
 		Owner: s3Owner{
-			ID:          "nilstore",
-			DisplayName: "nilstore",
+			ID:          "polystore",
+			DisplayName: "polystore",
 		},
 		Buckets: s3Buckets{Buckets: buckets},
 	})
@@ -532,8 +532,8 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 
 	etag := hex.EncodeToString(hasher.Sum(nil))
 	w.Header().Set("ETag", fmt.Sprintf("\"%s\"", etag))
-	w.Header().Set("X-Nil-Deal-ID", dealIDStr)
-	w.Header().Set("X-Nil-Manifest-Root", res.manifestRoot.Canonical)
+	w.Header().Set("X-PolyStore-Deal-ID", dealIDStr)
+	w.Header().Set("X-PolyStore-Manifest-Root", res.manifestRoot.Canonical)
 	w.WriteHeader(http.StatusOK)
 }
 

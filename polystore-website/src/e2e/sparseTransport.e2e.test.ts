@@ -82,8 +82,8 @@ test(
     const manifestRes = await postSparseArtifact({
       url: `${providerBase}/sp/upload_manifest`,
       headers: {
-        'X-Nil-Deal-ID': dealId,
-        'X-Nil-Manifest-Root': manifestRoot,
+        'X-PolyStore-Deal-ID': dealId,
+        'X-PolyStore-Manifest-Root': manifestRoot,
       },
       artifact: {
         kind: 'manifest',
@@ -96,9 +96,9 @@ test(
     const mduRes = await postSparseArtifact({
       url: `${providerBase}/sp/upload_mdu`,
       headers: {
-        'X-Nil-Deal-ID': dealId,
-        'X-Nil-Manifest-Root': manifestRoot,
-        'X-Nil-Mdu-Index': '0',
+        'X-PolyStore-Deal-ID': dealId,
+        'X-PolyStore-Manifest-Root': manifestRoot,
+        'X-PolyStore-Mdu-Index': '0',
       },
       artifact: {
         kind: 'mdu',
@@ -112,10 +112,10 @@ test(
     const shardRes = await postSparseArtifact({
       url: `${providerBase}/sp/upload_shard`,
       headers: {
-        'X-Nil-Deal-ID': dealId,
-        'X-Nil-Manifest-Root': manifestRoot,
-        'X-Nil-Mdu-Index': '1',
-        'X-Nil-Slot': '2',
+        'X-PolyStore-Deal-ID': dealId,
+        'X-PolyStore-Manifest-Root': manifestRoot,
+        'X-PolyStore-Mdu-Index': '1',
+        'X-PolyStore-Slot': '2',
       },
       artifact: {
         kind: 'shard',

@@ -139,7 +139,7 @@ direct_create_deal() {
         .intent.duration_blocks // .intent.duration_seconds // 0
       )
     ')"
-    payload_file="$(mktemp "${TMPDIR:-/tmp}/nilstore-create-deal-XXXXXX")"
+    payload_file="$(mktemp "${TMPDIR:-/tmp}/polystore-create-deal-XXXXXX")"
     printf '%s\n' "$payload_json" >"$payload_file"
 
     cmd_status=0
@@ -266,7 +266,7 @@ direct_update_deal_content() {
       "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" update-content
     )"
 
-    update_file="$(mktemp "${TMPDIR:-/tmp}/nilstore-update-content-XXXXXX")"
+    update_file="$(mktemp "${TMPDIR:-/tmp}/polystore-update-content-XXXXXX")"
     printf '%s\n' "$update_json" >"$update_file"
 
     cmd_status=0

@@ -245,7 +245,7 @@ func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 
 	req2 := httptest.NewRequest(http.MethodGet, u, nil)
 	req2.Header.Set("Range", fmt.Sprintf("bytes=0-%d", len(fileContent)-1))
-	req2.Header.Set("X-Nil-Session-Id", sessionHex)
+	req2.Header.Set("X-PolyStore-Session-Id", sessionHex)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusForbidden {
@@ -260,7 +260,7 @@ func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 
 	req3 := httptest.NewRequest(http.MethodGet, u, nil)
 	req3.Header.Set("Range", fmt.Sprintf("bytes=0-%d", len(fileContent)-1))
-	req3.Header.Set("X-Nil-Session-Id", sessionHex)
+	req3.Header.Set("X-PolyStore-Session-Id", sessionHex)
 	w3 := httptest.NewRecorder()
 	r.ServeHTTP(w3, req3)
 	if w3.Code != http.StatusPartialContent {
@@ -402,7 +402,7 @@ func TestGatewayDebugRawFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 	}
 
 	req2 := httptest.NewRequest(http.MethodGet, "/gateway/debug/raw-fetch/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
-	req2.Header.Set("X-Nil-Session-Id", sessionHex)
+	req2.Header.Set("X-PolyStore-Session-Id", sessionHex)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {

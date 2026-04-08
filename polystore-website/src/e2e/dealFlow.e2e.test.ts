@@ -188,11 +188,11 @@ test(
     )}`
     const fetchRes = await fetch(fetchUrl, {
       headers: {
-        'X-Nil-Req-Sig': reqSig,
-        'X-Nil-Req-Nonce': String(reqNonce),
-        'X-Nil-Req-Expires-At': String(expiresAt),
-        'X-Nil-Req-Range-Start': String(rangeStart),
-        'X-Nil-Req-Range-Len': String(rangeLen),
+        'X-PolyStore-Req-Sig': reqSig,
+        'X-PolyStore-Req-Nonce': String(reqNonce),
+        'X-PolyStore-Req-Expires-At': String(expiresAt),
+        'X-PolyStore-Req-Range-Start': String(rangeStart),
+        'X-PolyStore-Req-Range-Len': String(rangeLen),
         Range: `bytes=${rangeStart}-${rangeStart + rangeLen - 1}`,
       },
     })
@@ -203,25 +203,25 @@ test(
     const fetched = new Uint8Array(await fetchRes.arrayBuffer())
     assert.equal(Buffer.from(fetched).toString('utf8'), Buffer.from(content).toString('utf8'))
 
-    const hDealId = fetchRes.headers.get('X-Nil-Deal-ID')
-    const hEpoch = fetchRes.headers.get('X-Nil-Epoch')
-    const hProvider = fetchRes.headers.get('X-Nil-Provider')
-    const hFilePath = fetchRes.headers.get('X-Nil-File-Path')
-    const hRangeStart = fetchRes.headers.get('X-Nil-Range-Start')
-    const hRangeLen = fetchRes.headers.get('X-Nil-Range-Len')
-    const hBytes = fetchRes.headers.get('X-Nil-Bytes-Served')
-    const hProofHash = fetchRes.headers.get('X-Nil-Proof-Hash')
-    const hProofJson = fetchRes.headers.get('X-Nil-Proof-JSON')
-    const hFetchSession = fetchRes.headers.get('X-Nil-Fetch-Session')
-    assert.ok(hDealId, 'missing X-Nil-Deal-ID')
-    assert.ok(hEpoch, 'missing X-Nil-Epoch')
-    assert.ok(hProvider, 'missing X-Nil-Provider')
-    assert.ok(hFilePath, 'missing X-Nil-File-Path')
-    assert.ok(hRangeStart, 'missing X-Nil-Range-Start')
-    assert.ok(hRangeLen, 'missing X-Nil-Range-Len')
-    assert.ok(hBytes, 'missing X-Nil-Bytes-Served')
-    assert.ok(hProofHash, 'missing X-Nil-Proof-Hash')
-    assert.ok(hProofJson, 'missing X-Nil-Proof-JSON')
+    const hDealId = fetchRes.headers.get('X-PolyStore-Deal-ID')
+    const hEpoch = fetchRes.headers.get('X-PolyStore-Epoch')
+    const hProvider = fetchRes.headers.get('X-PolyStore-Provider')
+    const hFilePath = fetchRes.headers.get('X-PolyStore-File-Path')
+    const hRangeStart = fetchRes.headers.get('X-PolyStore-Range-Start')
+    const hRangeLen = fetchRes.headers.get('X-PolyStore-Range-Len')
+    const hBytes = fetchRes.headers.get('X-PolyStore-Bytes-Served')
+    const hProofHash = fetchRes.headers.get('X-PolyStore-Proof-Hash')
+    const hProofJson = fetchRes.headers.get('X-PolyStore-Proof-JSON')
+    const hFetchSession = fetchRes.headers.get('X-PolyStore-Fetch-Session')
+    assert.ok(hDealId, 'missing X-PolyStore-Deal-ID')
+    assert.ok(hEpoch, 'missing X-PolyStore-Epoch')
+    assert.ok(hProvider, 'missing X-PolyStore-Provider')
+    assert.ok(hFilePath, 'missing X-PolyStore-File-Path')
+    assert.ok(hRangeStart, 'missing X-PolyStore-Range-Start')
+    assert.ok(hRangeLen, 'missing X-PolyStore-Range-Len')
+    assert.ok(hBytes, 'missing X-PolyStore-Bytes-Served')
+    assert.ok(hProofHash, 'missing X-PolyStore-Proof-Hash')
+    assert.ok(hProofJson, 'missing X-PolyStore-Proof-JSON')
     const proofWrapper = JSON.parse(Buffer.from(hProofJson!, 'base64').toString('utf8')) as any
     assert.ok(proofWrapper.proof_details, 'missing proof_details')
 

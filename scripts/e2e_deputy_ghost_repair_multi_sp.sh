@@ -445,7 +445,7 @@ HDR_FILE="$(mktemp)"
 start_end="$((RAW_BLOB_PAYLOAD_BYTES - 1))"
 FETCH_EXIT=0
 HTTP_CODE="$(timeout 120s curl -sS -D "$HDR_FILE" -o "$OUT_FILE" \
-  -H "X-Nil-Session-Id: $SESSION_HEX" \
+  -H "X-PolyStore-Session-Id: $SESSION_HEX" \
   -H "Range: bytes=0-${start_end}" \
   "$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$FILENAME")" \
   -w '%{http_code}')" || FETCH_EXIT=$?
@@ -473,9 +473,9 @@ if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "206" ]; then
   exit 1
 fi
 
-DEPUTY_PROVIDER="$(grep -i '^X-Nil-Provider:' "$HDR_FILE" | tail -n 1 | awk '{print $2}' | tr -d '\r')"
+DEPUTY_PROVIDER="$(grep -i '^X-PolyStore-Provider:' "$HDR_FILE" | tail -n 1 | awk '{print $2}' | tr -d '\r')"
 if [ -z "$DEPUTY_PROVIDER" ]; then
-  echo "ERROR: missing X-Nil-Provider header" >&2
+  echo "ERROR: missing X-PolyStore-Provider header" >&2
   cat "$HDR_FILE" >&2 || true
   exit 1
 fi

@@ -55,18 +55,18 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
 
 - HTTP router + handlers:
   - `polystore_gateway/main.go`
-    - `GatewayFetch` (user-facing download path; **requires** `X-Nil-Session-Id` by default via `NIL_REQUIRE_ONCHAIN_SESSION=1`)
+    - `GatewayFetch` (user-facing download path; **requires** `X-PolyStore-Session-Id` by default via `NIL_REQUIRE_ONCHAIN_SESSION=1`)
     - `SpFetchShard` (provider shard fetch; validates on-chain session + Mode2 slot/range constraints when sessions are required)
     - dev-only tx relay flows (`NIL_ENABLE_TX_RELAY=0` by default; CI lifecycle scripts enable it explicitly)
   - `polystore_gateway/router_proxy.go` (gateway proxy/router for provider requests)
-  - `polystore_gateway/p2p_server.go` (P2P requests; forwards `X-Nil-Session-Id` when present)
+  - `polystore_gateway/p2p_server.go` (P2P requests; forwards `X-PolyStore-Session-Id` when present)
 
 ### Web UI
 
 - Main UX:
   - `polystore-website/src/components/Dashboard.tsx` (create deal, faucet UX, upload/commit, retrieval flows)
   - `polystore-website/src/hooks/useFaucet.ts` (browser-triggered faucet calls; should be dev-only in wallet-first mode)
-  - `polystore-website/src/hooks/useTransportRouter.ts` (adds `X-Nil-Session-Id` when downloading)
+  - `polystore-website/src/hooks/useTransportRouter.ts` (adds `X-PolyStore-Session-Id` when downloading)
   - `polystore-website/src/lib/e2eWallet.ts` (Playwright: injects an in-page “wallet” when `VITE_E2E=1`)
 - Web contract doc:
   - `polystore-website/website-spec.md`

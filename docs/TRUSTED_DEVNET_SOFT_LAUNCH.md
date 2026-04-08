@@ -214,13 +214,13 @@ Use this when the hub is behind NAT and you cannot expose inbound `80/443`.
 
 ```bash
 cloudflared tunnel login
-cloudflared tunnel create nilstore-hub
-cloudflared tunnel route dns nilstore-hub rpc.<domain>
-cloudflared tunnel route dns nilstore-hub lcd.<domain>
-cloudflared tunnel route dns nilstore-hub evm.<domain>
-cloudflared tunnel route dns nilstore-hub faucet.<domain>
+cloudflared tunnel create polystore-hub
+cloudflared tunnel route dns polystore-hub rpc.<domain>
+cloudflared tunnel route dns polystore-hub lcd.<domain>
+cloudflared tunnel route dns polystore-hub evm.<domain>
+cloudflared tunnel route dns polystore-hub faucet.<domain>
 # Optional if this host serves web.<domain>:
-cloudflared tunnel route dns nilstore-hub web.<domain>
+cloudflared tunnel route dns polystore-hub web.<domain>
 ```
 
 2) Create `/etc/cloudflared/config.yml`:
@@ -312,10 +312,10 @@ If you run multiple provider gateways on the hub host (for example local RS `2+1
 Recommended pattern: use a **separate** tunnel for provider hostnames so hub ingress config and provider ingress config are independent.
 
 ```bash
-cloudflared tunnel create nilstore-providers
-cloudflared tunnel route dns nilstore-providers sp1.<domain>
-cloudflared tunnel route dns nilstore-providers sp2.<domain>
-cloudflared tunnel route dns nilstore-providers sp3.<domain>
+cloudflared tunnel create polystore-providers
+cloudflared tunnel route dns polystore-providers sp1.<domain>
+cloudflared tunnel route dns polystore-providers sp2.<domain>
+cloudflared tunnel route dns polystore-providers sp3.<domain>
 ```
 
 Example user-level config (`~/.config/cloudflared/providers.<domain>.yml`):
@@ -592,13 +592,13 @@ Collaborators must have funds for gas (and any protocol fees). For the current d
 
 Faucet access control (recommended for invite-only):
 - Deploy behind reverse-proxy auth, and/or set `NIL_FAUCET_AUTH_TOKEN` on the faucet service.
-  - When set, requests MUST include `X-Nil-Faucet-Auth: <token>`.
+  - When set, requests MUST include `X-PolyStore-Faucet-Auth: <token>`.
 
 Faucet request (example):
 
 ```bash
 curl -X POST -H "Content-Type: application/json" \
-  -H "X-Nil-Faucet-Auth: <token>" \
+  -H "X-PolyStore-Faucet-Auth: <token>" \
   -d '{"address":"nil1..."}' \
   https://faucet.<domain>/faucet
 ```
@@ -632,7 +632,7 @@ curl -sf "http://127.0.0.1:8093/gateway/list-files/<manifest_root_hex>?deal_id=<
 
 6) Retrieve it back (byte-for-byte).
 7) If retrieval fails, grab:
-   - the hub `X-Nil-Provider` response header (who served the bytes)
+   - the hub `X-PolyStore-Provider` response header (who served the bytes)
    - the provider’s `/health` response
    - the hub router logs around the request
 
@@ -689,10 +689,10 @@ Important:
   - provider tunnel misconfigured (`cloudflared` down, wrong hostname, or wrong local service port)
   - `NIL_GATEWAY_SP_AUTH` mismatch between router and provider
 - Mode2 upload feels unexpectedly slow for small files:
-  - ensure router + providers are on a build that supports sparse upload transport (`X-Nil-Full-Size`)
+  - ensure router + providers are on a build that supports sparse upload transport (`X-PolyStore-Full-Size`)
   - sparse transport is enabled by default; verify it wasn't disabled via `NIL_MODE2_SPARSE_UPLOAD=0`
   - restart router + providers after updating binaries/config so the optimization applies end-to-end
-- Fetch fails with “missing X-Nil-Session-Id”:
+- Fetch fails with “missing X-PolyStore-Session-Id”:
   - sessions are **required by default** (`NIL_REQUIRE_ONCHAIN_SESSION=1`)
 - systemd service exits with `203/EXEC`:
   - ensure unit templates use the shell wrapper in `ops/systemd/*.service` and run `systemctl daemon-reload`
@@ -755,8 +755,8 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 
 - From the website: create deal → upload → commit → retrieve a file; verify the retrieved bytes match the upload.
 - Confirm requests are session-scoped (sessions are required by default):
-  - successful fetch includes `X-Nil-Session-Id` on the request path
-  - hub response includes `X-Nil-Provider` (who served the bytes)
+  - successful fetch includes `X-PolyStore-Session-Id` on the request path
+  - hub response includes `X-PolyStore-Provider` (who served the bytes)
 
 ### Rollback / safety (know before inviting)
 

@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	p2pFetchProtocolID  = "/nilstore/fetch/1.0.0"
+	p2pFetchProtocolID  = "/polystore/fetch/1.0.0"
 	p2pMaxRequestBytes  = 256 * 1024
 	p2pMaxHeaderBytes   = 1 * 1024 * 1024
 	p2pDefaultTimeout   = 45 * time.Second
@@ -332,29 +332,29 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 	})
 	httpReq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", req.RangeStart, req.RangeStart+req.RangeLen-1))
 	if req.DownloadSession != "" {
-		httpReq.Header.Set("X-Nil-Download-Session", req.DownloadSession)
+		httpReq.Header.Set("X-PolyStore-Download-Session", req.DownloadSession)
 	}
 	if req.OnchainSession != "" {
-		httpReq.Header.Set("X-Nil-Session-Id", req.OnchainSession)
+		httpReq.Header.Set("X-PolyStore-Session-Id", req.OnchainSession)
 	}
 	if req.ReqSig != "" {
-		httpReq.Header.Set("X-Nil-Req-Sig", req.ReqSig)
+		httpReq.Header.Set("X-PolyStore-Req-Sig", req.ReqSig)
 	}
 	if req.ReqNonce != 0 {
-		httpReq.Header.Set("X-Nil-Req-Nonce", fmt.Sprintf("%d", req.ReqNonce))
+		httpReq.Header.Set("X-PolyStore-Req-Nonce", fmt.Sprintf("%d", req.ReqNonce))
 	}
 	if req.ReqExpiresAt != 0 {
-		httpReq.Header.Set("X-Nil-Req-Expires-At", fmt.Sprintf("%d", req.ReqExpiresAt))
+		httpReq.Header.Set("X-PolyStore-Req-Expires-At", fmt.Sprintf("%d", req.ReqExpiresAt))
 	}
 	if req.ReqRangeStart != nil {
-		httpReq.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", *req.ReqRangeStart))
+		httpReq.Header.Set("X-PolyStore-Req-Range-Start", fmt.Sprintf("%d", *req.ReqRangeStart))
 	} else {
-		httpReq.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", req.RangeStart))
+		httpReq.Header.Set("X-PolyStore-Req-Range-Start", fmt.Sprintf("%d", req.RangeStart))
 	}
 	if req.ReqRangeLen != nil {
-		httpReq.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", *req.ReqRangeLen))
+		httpReq.Header.Set("X-PolyStore-Req-Range-Len", fmt.Sprintf("%d", *req.ReqRangeLen))
 	} else {
-		httpReq.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", req.RangeLen))
+		httpReq.Header.Set("X-PolyStore-Req-Range-Len", fmt.Sprintf("%d", req.RangeLen))
 	}
 
 	w := httptest.NewRecorder()
@@ -376,8 +376,9 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 		if len(vals) == 0 {
 			continue
 		}
-		if strings.HasPrefix(key, "X-Nil-") || key == "Content-Type" {
-			resp.Headers[key] = vals[0]
+		lowerKey := strings.ToLower(key)
+		if strings.HasPrefix(lowerKey, "x-polystore-") || lowerKey == "content-type" {
+			resp.Headers[lowerKey] = vals[0]
 		}
 	}
 

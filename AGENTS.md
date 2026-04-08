@@ -778,7 +778,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - User data MDUs are expanded into shards and uploaded per slot; metadata MDUs are replicated to all slots.
   - Manifest root is computed from Mode 2 MDU roots and committed on-chain.
 - [x] **Task 2: SP shard upload API.**
-  - Add `/sp/upload_shard` with `X-Nil-Deal-ID`, `X-Nil-Mdu-Index`, `X-Nil-Slot`, `X-Nil-Manifest-Root`.
+  - Add `/sp/upload_shard` with `X-PolyStore-Deal-ID`, `X-PolyStore-Mdu-Index`, `X-PolyStore-Slot`, `X-PolyStore-Manifest-Root`.
   - Store shards as `mdu_<index>_slot_<slot>.bin`.
   - Keep MDU #0 + Witness replicated to all slots via `/sp/upload_mdu`.
 - [x] **Task 3: Mode 2 retrieval aggregator.**
@@ -953,12 +953,12 @@ This sprint turns the current “single-machine” gateway/provider implementati
 #### Goal 2: Gateway becomes a router/proxy (no local proving)
 - [x] **Gateway:** Add “router mode” (env-gated) where `GatewayFetch`, `GatewayListFiles`, `GatewaySlab`, `GatewayUpload`, and session/receipt endpoints route to the assigned provider.
 - [x] **Gateway:** Implement provider selection using `Deal.providers[]` and provider endpoints from chain; pick an HTTP Multiaddr and convert to URL.
-- [x] **Gateway:** Forward streaming fetch responses without buffering; preserve receipt headers (`X-Nil-*`).
+- [x] **Gateway:** Forward streaming fetch responses without buffering; preserve receipt headers (`X-PolyStore-*`).
 - **Pass gate:** UI fetch/download works when gateway has no deal bytes on disk.
 - **Test gate:** `cd polystore_gateway && go test ./...`
 
 #### Goal 3: Provider is the serving/proving party (source of bytes + proof headers)
-- [x] **Provider:** Ensure provider-side `GatewayFetch` is the only place that generates `X-Nil-Proof-*` headers and session IDs.
+- [x] **Provider:** Ensure provider-side `GatewayFetch` is the only place that generates `X-PolyStore-Proof-*` headers and session IDs.
 - [x] **Provider:** Ensure download session chunks are recorded on the provider (not the gateway) in router mode.
 - **Pass gate:** Receipts/session receipts verify and submit even if the gateway restarts mid-download (provider session survives).
 
@@ -1168,7 +1168,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Test gate:** `cd polystore-website && npm run test:e2e`
 
 - [x] **Goal 4: Gateway/SP: enforce session-bound fetch and durable session proof assembly.**
-    - **Fetch contract:** remote fetches require `X-Nil-Session-Id`; the gateway verifies on-chain session is `OPEN` and provider matches before serving.
+    - **Fetch contract:** remote fetches require `X-PolyStore-Session-Id`; the gateway verifies on-chain session is `OPEN` and provider matches before serving.
     - **Range contract:** each HTTP range maps to exactly one blob; session covers `{start_mdu_index,start_blob_index}+blob_count` contiguous blobs (gateway may choose chunking).
     - **Proof assembly:** gateway records one `ChainedProof` per served blob under `session_id` (restart-safe).
     - **Provider submission:** provider submits `MsgSubmitRetrievalSessionProof(session_id, proofs...)`; chain marks `PROOF_SUBMITTED` and only increments “successful retrievals” once `COMPLETED`.

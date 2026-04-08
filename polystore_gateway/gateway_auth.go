@@ -7,8 +7,8 @@ import (
 	"sync"
 )
 
-const gatewayAuthHeader = "X-Nil-Gateway-Auth"
-const defaultGatewayToProviderAuthToken = "nilstore-devnet-shared-gateway-auth"
+const gatewayAuthHeader = "X-PolyStore-Gateway-Auth"
+const defaultGatewayToProviderAuthToken = "polystore-devnet-shared-gateway-auth"
 
 var (
 	gatewayAuthToken string

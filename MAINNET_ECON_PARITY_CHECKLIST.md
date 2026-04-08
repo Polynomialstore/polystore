@@ -30,7 +30,7 @@ Companion docs:
 - [ ] Add e2e: expire → renew → read; expire → GC delete (`scripts/`, `tests/`).
 ## Stage 2 — Retrieval session economics (A2)
 - [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`polystorechain/`).
-- [ ] Enforce **mandatory sessions for all served bytes**: provider + gateway reject out-of-session reads (`X-Nil-Session-Id` required); blob alignment + session range subset enforced; segmented/batched downloads within one session supported (`nil-provider/`, `polystore_gateway/`, `polystore-website/`).
+- [ ] Enforce **mandatory sessions for all served bytes**: provider + gateway reject out-of-session reads (`X-PolyStore-Session-Id` required); blob alignment + session range subset enforced; segmented/batched downloads within one session supported (`nil-provider/`, `polystore_gateway/`, `polystore-website/`).
 - [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`polystorechain/`).
 - [ ] Extend econ e2e: open → complete; open → cancel/expire; verify burns/payouts/refunds (`scripts/`, `tests/`).
 

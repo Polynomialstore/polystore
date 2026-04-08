@@ -101,11 +101,11 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     mduUploads.push({
       bodyLen: body.length,
       fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-      mduIndex: headers['x-nil-mdu-index'] || '',
+      mduIndex: headers['x-polystore-mdu-index'] || '',
     })
     return recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'OK' }))
   })
@@ -113,7 +113,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('**/sp/upload_manifest', async (route) => {
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     manifestUploads.push({
       bodyLen: body.length,
       fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
@@ -124,12 +124,12 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('**/sp/upload_shard', async (route) => {
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     shardUploads.push({
       bodyLen: body.length,
       fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-      mduIndex: headers['x-nil-mdu-index'] || '',
-      slot: headers['x-nil-slot'] || '',
+      mduIndex: headers['x-polystore-mdu-index'] || '',
+      slot: headers['x-polystore-slot'] || '',
     })
     return recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'OK' }))
   })
@@ -222,7 +222,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
 
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

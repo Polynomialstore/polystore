@@ -366,7 +366,7 @@ For browser clients:
 Providers and gateways SHOULD treat incoming PolyFS writes as **provisional generations** until the signed chain swap succeeds:
 * New bytes for `new_manifest_root` MAY be uploaded before the chain update is finalized.
 * The previously committed generation `previous_manifest_root` MUST remain readable while the new generation is provisional.
-* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-Nil-Previous-Manifest-Root`.
+* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-PolyStore-Previous-Manifest-Root`.
 * If that expected-base header is present and stale, the provider/gateway SHOULD reject the upload before consuming artifact bytes.
 * A failed or stale chain swap MUST NOT cause the live generation to be discarded.
 
@@ -494,7 +494,7 @@ The intended end state is: a provider only gets credit for a retrieval once the 
     *   **Session identity:** `session_id = keccak256(canonical_encode(fields...))` (canonical encoding MUST be specified and test-vectored; EVM precompile uses `abi.encode(...)`).
 
 2.  **Serve bytes (Provider / Gateway / Deputy, off-chain):**
-    *   Serving nodes MUST refuse remote fetches that are not bound to an `OPEN` session (`X-Nil-Session-Id`).
+    *   Serving nodes MUST refuse remote fetches that are not bound to an `OPEN` session (`X-PolyStore-Session-Id`).
     *   Served ranges MUST be:
         *   blob-aligned (`BLOB_SIZE` boundaries), and
         *   a subset of the session’s declared blob-range.

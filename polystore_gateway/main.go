@@ -832,7 +832,7 @@ func main() {
 		log.Printf("LibP2P listening on %s", strings.Join(addrs, ", "))
 	}
 
-	log.Printf("Starting NilStore Gateway/S3 Adapter on %s", listenAddr)
+	log.Printf("Starting PolyStore Gateway/S3 Adapter on %s", listenAddr)
 	log.Fatal(http.ListenAndServe(listenAddr, withPanicRecovery(withGlobalCORS(r))))
 }
 
@@ -2695,23 +2695,23 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	dealIDStr := strings.TrimSpace(q.Get("deal_id"))
 	owner := strings.TrimSpace(q.Get("owner"))
 	filePath, err := validatePolyfsFilePath(q.Get("file_path"))
-	reqSig := strings.TrimSpace(r.Header.Get("X-Nil-Req-Sig"))
+	reqSig := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Sig"))
 	if reqSig == "" {
 		reqSig = strings.TrimSpace(q.Get("req_sig"))
 	}
-	reqNonceStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Nonce"))
+	reqNonceStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Nonce"))
 	if reqNonceStr == "" {
 		reqNonceStr = strings.TrimSpace(q.Get("req_nonce"))
 	}
-	reqExpiresStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Expires-At"))
+	reqExpiresStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Expires-At"))
 	if reqExpiresStr == "" {
 		reqExpiresStr = strings.TrimSpace(q.Get("req_expires_at"))
 	}
-	reqRangeStartStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Range-Start"))
+	reqRangeStartStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Range-Start"))
 	if reqRangeStartStr == "" {
 		reqRangeStartStr = strings.TrimSpace(q.Get("req_range_start"))
 	}
-	reqRangeLenStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Range-Len"))
+	reqRangeLenStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Range-Len"))
 	if reqRangeLenStr == "" {
 		reqRangeLenStr = strings.TrimSpace(q.Get("req_range_len"))
 	}
@@ -2907,7 +2907,7 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 //
 // Modes:
 //   - Per-chunk receipts: validates a signed RetrievalRequest (req_sig), creates a one-time fetch_session,
-//     and returns `X-Nil-Fetch-Session` for receipt submission.
+//     and returns `X-PolyStore-Fetch-Session` for receipt submission.
 //   - Bundled download sessions: accepts a `download_session` created by GatewayOpenSession and records
 //     chunk proofs server-side; the client later submits a single DownloadSessionReceipt.
 func GatewayFetch(w http.ResponseWriter, r *http.Request) {
@@ -2943,7 +2943,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !allowDeputy {
-		if raw := strings.TrimSpace(r.Header.Get("X-Nil-Deputy")); raw != "" {
+		if raw := strings.TrimSpace(r.Header.Get("X-PolyStore-Deputy")); raw != "" {
 			switch strings.ToLower(raw) {
 			case "1", "true", "yes", "y":
 				allowDeputy = true
@@ -2951,29 +2951,29 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	filePath, err := validatePolyfsFilePath(q.Get("file_path"))
-	reqSig := strings.TrimSpace(r.Header.Get("X-Nil-Req-Sig"))
+	reqSig := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Sig"))
 	if reqSig == "" {
 		reqSig = strings.TrimSpace(q.Get("req_sig"))
 	}
-	reqNonceStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Nonce"))
+	reqNonceStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Nonce"))
 	if reqNonceStr == "" {
 		reqNonceStr = strings.TrimSpace(q.Get("req_nonce"))
 	}
-	reqExpiresStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Expires-At"))
+	reqExpiresStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Expires-At"))
 	if reqExpiresStr == "" {
 		reqExpiresStr = strings.TrimSpace(q.Get("req_expires_at"))
 	}
-	reqRangeStartStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Range-Start"))
+	reqRangeStartStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Range-Start"))
 	if reqRangeStartStr == "" {
 		reqRangeStartStr = strings.TrimSpace(q.Get("req_range_start"))
 	}
-	reqRangeLenStr := strings.TrimSpace(r.Header.Get("X-Nil-Req-Range-Len"))
+	reqRangeLenStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Req-Range-Len"))
 	if reqRangeLenStr == "" {
 		reqRangeLenStr = strings.TrimSpace(q.Get("req_range_len"))
 	}
 
-	onchainSessionID := strings.TrimSpace(r.Header.Get("X-Nil-Session-Id"))
-	downloadSessionID := strings.TrimSpace(r.Header.Get("X-Nil-Download-Session"))
+	onchainSessionID := strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id"))
+	downloadSessionID := strings.TrimSpace(r.Header.Get("X-PolyStore-Download-Session"))
 	if downloadSessionID == "" {
 		downloadSessionID = strings.TrimSpace(q.Get("download_session"))
 	}
@@ -2983,7 +2983,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		// use the exact same key (hex case differences otherwise break lookups).
 		normalized, _, nerr := parseSessionIDHex(onchainSessionID)
 		if nerr != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Session-Id", nerr.Error())
+			writeJSONError(w, http.StatusBadRequest, "invalid X-PolyStore-Session-Id", nerr.Error())
 			return
 		}
 		onchainSessionID = normalized
@@ -2991,7 +2991,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 	isDownloadSession := downloadSessionID != ""
 	if requireOnchainSession && !isOnchainSession && !isDownloadSession {
-		writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "open an on-chain retrieval session first")
+		writeJSONError(w, http.StatusBadRequest, "missing X-PolyStore-Session-Id", "open an on-chain retrieval session first")
 		return
 	}
 	if dealIDStr == "" || owner == "" {
@@ -3186,7 +3186,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 					writeJSONError(w, http.StatusForbidden, "session provider mismatch", fmt.Sprintf("expected %s, got %s", onchainSession.Provider, providerAddr))
 					return
 				}
-				w.Header().Set("X-Nil-Deputy", "1")
+				w.Header().Set("X-PolyStore-Deputy", "1")
 			}
 			if onchainSession.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
 				writeJSONError(w, http.StatusConflict, "session not OPEN", fmt.Sprintf("status: %s", onchainSession.Status))
@@ -3482,12 +3482,12 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		case isOnchainSession && onchainSession != nil && strings.TrimSpace(onchainSession.Provider) != "":
 			providerAddr = strings.TrimSpace(onchainSession.Provider)
 			if allowDeputy {
-				w.Header().Set("X-Nil-Deputy", "1")
+				w.Header().Set("X-PolyStore-Deputy", "1")
 			}
 		case isDownloadSession && !isOnchainSession && strings.TrimSpace(dlSession.Provider) != "":
 			providerAddr = strings.TrimSpace(dlSession.Provider)
 			if allowDeputy {
-				w.Header().Set("X-Nil-Deputy", "1")
+				w.Header().Set("X-PolyStore-Deputy", "1")
 			}
 		}
 	}
@@ -3548,7 +3548,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 			providerAddr = localProviderAddr
 		} else if providerAddr == "" && expectedForSlot != "" {
 			providerAddr = expectedForSlot
-			w.Header().Set("X-Nil-Deputy", "1")
+			w.Header().Set("X-PolyStore-Deputy", "1")
 		}
 	}
 
@@ -3557,7 +3557,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		if err == nil && len(providers) > 0 {
 			providerAddr = strings.TrimSpace(providers[0])
 			if providerAddr != "" {
-				w.Header().Set("X-Nil-Deputy", "1")
+				w.Header().Set("X-PolyStore-Deputy", "1")
 			}
 		}
 	}
@@ -3647,27 +3647,27 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add Retrieval Headers for Client Signing (Interactive Protocol)
-	w.Header().Set("X-Nil-Deal-ID", dealIDStr)
-	w.Header().Set("X-Nil-Epoch", strconv.FormatUint(epochID, 10))
-	w.Header().Set("X-Nil-Bytes-Served", strconv.FormatUint(servedLen, 10))
-	w.Header().Set("X-Nil-Provider", providerAddr)
-	w.Header().Set("X-Nil-File-Path", filePath)
-	w.Header().Set("X-Nil-Range-Start", strconv.FormatUint(reqRangeStart, 10))
-	w.Header().Set("X-Nil-Range-Len", strconv.FormatUint(servedLen, 10))
-	w.Header().Set("X-Nil-Gateway-Proof-MS", strconv.FormatInt(proofMs, 10))
-	w.Header().Set("X-Nil-Gateway-Fetch-MS", strconv.FormatInt(time.Since(startTotal).Milliseconds(), 10))
+	w.Header().Set("X-PolyStore-Deal-ID", dealIDStr)
+	w.Header().Set("X-PolyStore-Epoch", strconv.FormatUint(epochID, 10))
+	w.Header().Set("X-PolyStore-Bytes-Served", strconv.FormatUint(servedLen, 10))
+	w.Header().Set("X-PolyStore-Provider", providerAddr)
+	w.Header().Set("X-PolyStore-File-Path", filePath)
+	w.Header().Set("X-PolyStore-Range-Start", strconv.FormatUint(reqRangeStart, 10))
+	w.Header().Set("X-PolyStore-Range-Len", strconv.FormatUint(servedLen, 10))
+	w.Header().Set("X-PolyStore-Gateway-Proof-MS", strconv.FormatInt(proofMs, 10))
+	w.Header().Set("X-PolyStore-Gateway-Fetch-MS", strconv.FormatInt(time.Since(startTotal).Milliseconds(), 10))
 	if isDownloadSession {
-		w.Header().Set("X-Nil-Download-Session", downloadSessionID)
+		w.Header().Set("X-PolyStore-Download-Session", downloadSessionID)
 	} else {
 		if fetchSessionID != "" {
-			w.Header().Set("X-Nil-Fetch-Session", fetchSessionID)
+			w.Header().Set("X-PolyStore-Fetch-Session", fetchSessionID)
 		}
 	}
 	if proofHash != "" {
-		w.Header().Set("X-Nil-Proof-Hash", proofHash)
+		w.Header().Set("X-PolyStore-Proof-Hash", proofHash)
 	}
 	if proofPayload != nil {
-		w.Header().Set("X-Nil-Proof-JSON", base64.StdEncoding.EncodeToString(proofPayload))
+		w.Header().Set("X-PolyStore-Proof-JSON", base64.StdEncoding.EncodeToString(proofPayload))
 	}
 
 	// Serve as attachment so browsers will download instead of inline JSON.
@@ -3866,10 +3866,10 @@ func GatewayDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(filePath)))
 	w.Header().Set("Accept-Ranges", "bytes")
-	w.Header().Set("X-Nil-Download-Source", "gateway_cache")
-	w.Header().Set("X-Nil-Manifest-Root", dealRoot.Canonical)
-	w.Header().Set("X-Nil-Range-Start", strconv.FormatUint(rangeStart, 10))
-	w.Header().Set("X-Nil-Range-Len", strconv.FormatUint(rangeLen, 10))
+	w.Header().Set("X-PolyStore-Download-Source", "gateway_cache")
+	w.Header().Set("X-PolyStore-Manifest-Root", dealRoot.Canonical)
+	w.Header().Set("X-PolyStore-Range-Start", strconv.FormatUint(rangeStart, 10))
+	w.Header().Set("X-PolyStore-Range-Len", strconv.FormatUint(rangeLen, 10))
 	w.Header().Set("Content-Length", strconv.FormatUint(rangeLen, 10))
 	if isPartial {
 		rangeEnd := rangeStart + rangeLen - 1
@@ -4720,9 +4720,9 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 
 const defaultCORSAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
 
-const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-Nil-Req-Sig, X-Nil-Req-Nonce, X-Nil-Req-Expires-At, X-Nil-Req-Range-Start, X-Nil-Req-Range-Len, X-Nil-Download-Session, X-Nil-Session-Id, X-Nil-Manifest-Root, X-Nil-Previous-Manifest-Root, X-Nil-Deal-ID, X-Nil-Mdu-Index, X-Nil-Slot, X-Nil-Full-Size, X-Nil-Gateway-Auth, X-Nil-Deputy"
+const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-PolyStore-Req-Sig, X-PolyStore-Req-Nonce, X-PolyStore-Req-Expires-At, X-PolyStore-Req-Range-Start, X-PolyStore-Req-Range-Len, X-PolyStore-Download-Session, X-PolyStore-Session-Id, X-PolyStore-Manifest-Root, X-PolyStore-Previous-Manifest-Root, X-PolyStore-Deal-ID, X-PolyStore-Mdu-Index, X-PolyStore-Slot, X-PolyStore-Full-Size, X-PolyStore-Gateway-Auth, X-PolyStore-Deputy"
 
-const defaultCORSExposeHeaders = "Accept-Ranges, Content-Range, X-Nil-Deal-ID, X-Nil-Epoch, X-Nil-Bytes-Served, X-Nil-Provider, X-Nil-File-Path, X-Nil-Range-Start, X-Nil-Range-Len, X-Nil-Proof-JSON, X-Nil-Proof-Hash, X-Nil-Fetch-Session, X-Nil-Gateway-Proof-MS, X-Nil-Gateway-Fetch-MS"
+const defaultCORSExposeHeaders = "Accept-Ranges, Content-Range, X-PolyStore-Deal-ID, X-PolyStore-Epoch, X-PolyStore-Bytes-Served, X-PolyStore-Provider, X-PolyStore-File-Path, X-PolyStore-Range-Start, X-PolyStore-Range-Len, X-PolyStore-Proof-JSON, X-PolyStore-Proof-Hash, X-PolyStore-Fetch-Session, X-PolyStore-Gateway-Proof-MS, X-PolyStore-Gateway-Fetch-MS"
 
 func withGlobalCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5289,8 +5289,8 @@ func clearDealMetaCache() {
 }
 
 func setCacheFreshnessHeaders(w http.ResponseWriter, status, reason string) {
-	w.Header().Set("X-Nil-Cache-Freshness", strings.TrimSpace(status))
-	w.Header().Set("X-Nil-Cache-Freshness-Reason", strings.TrimSpace(reason))
+	w.Header().Set("X-PolyStore-Cache-Freshness", strings.TrimSpace(status))
+	w.Header().Set("X-PolyStore-Cache-Freshness-Reason", strings.TrimSpace(reason))
 }
 
 // fetchDealMetaUncached calls the LCD to retrieve the deal owner, manifest_root, and end_block.
@@ -6342,10 +6342,10 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		_ = r.Body.Close()
 	}()
 
-	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
-	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
-	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
-	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Deal-ID"))
+	mduIndexStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Mdu-Index"))
+	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-PolyStore-Manifest-Root"))
+	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-PolyStore-Full-Size"))
 	if r.ContentLength > 0 {
 		profile.setCount("content_length_bytes", uint64(r.ContentLength))
 	}
@@ -6353,7 +6353,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	if dealIDStr == "" || mduIndexStr == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_headers"
-		http.Error(w, "X-Nil-Deal-ID and X-Nil-Mdu-Index headers are required", http.StatusBadRequest)
+		http.Error(w, "X-PolyStore-Deal-ID and X-PolyStore-Mdu-Index headers are required", http.StatusBadRequest)
 		return
 	}
 
@@ -6369,7 +6369,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	if clientManifestRoot == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_manifest_root"
-		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
+		http.Error(w, "X-PolyStore-Manifest-Root header is required", http.StatusBadRequest)
 		return
 	}
 	validatePrevStarted := time.Now()
@@ -6401,7 +6401,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		if err != nil || n <= 0 {
 			statusCode = http.StatusBadRequest
 			outcome = "invalid_full_size"
-			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
+			http.Error(w, "invalid X-PolyStore-Full-Size header", http.StatusBadRequest)
 			return
 		}
 		declaredFullSize = n
@@ -6475,19 +6475,19 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		if declaredFullSize != int64(types.MDU_SIZE) {
 			statusCode = http.StatusBadRequest
 			outcome = "invalid_declared_full_size"
-			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (want %d)", declaredFullSize, types.MDU_SIZE), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("invalid X-PolyStore-Full-Size: got %d (want %d)", declaredFullSize, types.MDU_SIZE), http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize < n {
 			statusCode = http.StatusBadRequest
 			outcome = "declared_full_size_too_small"
-			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
+			http.Error(w, "X-PolyStore-Full-Size smaller than received body", http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize > (10 << 20) {
 			statusCode = http.StatusBadRequest
 			outcome = "declared_full_size_too_large"
-			http.Error(w, "X-Nil-Full-Size exceeds max allowed size", http.StatusBadRequest)
+			http.Error(w, "X-PolyStore-Full-Size exceeds max allowed size", http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize > n {
@@ -6577,11 +6577,11 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		_ = r.Body.Close()
 	}()
 
-	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
-	mduIndexStr := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
-	slotStr := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
-	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
-	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Deal-ID"))
+	mduIndexStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Mdu-Index"))
+	slotStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Slot"))
+	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-PolyStore-Manifest-Root"))
+	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-PolyStore-Full-Size"))
 	if r.ContentLength > 0 {
 		profile.setCount("content_length_bytes", uint64(r.ContentLength))
 	}
@@ -6589,7 +6589,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	if dealIDStr == "" || mduIndexStr == "" || slotStr == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_headers"
-		http.Error(w, "X-Nil-Deal-ID, X-Nil-Mdu-Index, and X-Nil-Slot headers are required", http.StatusBadRequest)
+		http.Error(w, "X-PolyStore-Deal-ID, X-PolyStore-Mdu-Index, and X-PolyStore-Slot headers are required", http.StatusBadRequest)
 		return
 	}
 
@@ -6613,7 +6613,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	if clientManifestRoot == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_manifest_root"
-		http.Error(w, "X-Nil-Manifest-Root header is required", http.StatusBadRequest)
+		http.Error(w, "X-PolyStore-Manifest-Root header is required", http.StatusBadRequest)
 		return
 	}
 	validatePrevStarted := time.Now()
@@ -6645,13 +6645,13 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		if err != nil || n <= 0 {
 			statusCode = http.StatusBadRequest
 			outcome = "invalid_full_size"
-			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
+			http.Error(w, "invalid X-PolyStore-Full-Size header", http.StatusBadRequest)
 			return
 		}
 		if n > int64(types.MDU_SIZE) {
 			statusCode = http.StatusBadRequest
 			outcome = "invalid_declared_full_size"
-			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (max %d)", n, types.MDU_SIZE), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("invalid X-PolyStore-Full-Size: got %d (max %d)", n, types.MDU_SIZE), http.StatusBadRequest)
 			return
 		}
 		declaredFullSize = n
@@ -6727,7 +6727,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		if declaredFullSize < n {
 			statusCode = http.StatusBadRequest
 			outcome = "declared_full_size_too_small"
-			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
+			http.Error(w, "X-PolyStore-Full-Size smaller than received body", http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize > n {
@@ -6888,9 +6888,9 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		_ = r.Body.Close()
 	}()
 
-	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
-	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
-	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size"))
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Deal-ID"))
+	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-PolyStore-Manifest-Root"))
+	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-PolyStore-Full-Size"))
 	if r.ContentLength > 0 {
 		profile.setCount("content_length_bytes", uint64(r.ContentLength))
 	}
@@ -6898,7 +6898,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	if dealIDStr == "" || clientManifestRoot == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_headers"
-		http.Error(w, "X-Nil-Deal-ID and X-Nil-Manifest-Root headers are required", http.StatusBadRequest)
+		http.Error(w, "X-PolyStore-Deal-ID and X-PolyStore-Manifest-Root headers are required", http.StatusBadRequest)
 		return
 	}
 	declaredFullSize := int64(0)
@@ -6908,7 +6908,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		if err != nil || n <= 0 {
 			statusCode = http.StatusBadRequest
 			outcome = "invalid_full_size"
-			http.Error(w, "invalid X-Nil-Full-Size header", http.StatusBadRequest)
+			http.Error(w, "invalid X-PolyStore-Full-Size header", http.StatusBadRequest)
 			return
 		}
 		declaredFullSize = n
@@ -7008,13 +7008,13 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		if declaredFullSize != int64(types.BLOB_SIZE) {
 			statusCode = http.StatusBadRequest
 			outcome = "invalid_declared_full_size"
-			http.Error(w, fmt.Sprintf("invalid X-Nil-Full-Size: got %d (want %d)", declaredFullSize, types.BLOB_SIZE), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("invalid X-PolyStore-Full-Size: got %d (want %d)", declaredFullSize, types.BLOB_SIZE), http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize < n {
 			statusCode = http.StatusBadRequest
 			outcome = "declared_full_size_too_small"
-			http.Error(w, "X-Nil-Full-Size smaller than received body", http.StatusBadRequest)
+			http.Error(w, "X-PolyStore-Full-Size smaller than received body", http.StatusBadRequest)
 			return
 		}
 		if declaredFullSize > n {

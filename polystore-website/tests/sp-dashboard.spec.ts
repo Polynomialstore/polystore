@@ -30,7 +30,7 @@ test('provider dashboard uses provider-daemon status and can unpair a provider',
     if (w.ethereum) return
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

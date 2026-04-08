@@ -108,17 +108,17 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
 
   await page.addInitScript(({ address, chainIdHex, draft, authToken }) => {
     const w = window as any
-    window.localStorage.setItem('nilstore.provider-onboarding.v2', JSON.stringify(draft))
+    window.localStorage.setItem('polystore.provider-onboarding.v2', JSON.stringify(draft))
     if (authToken) {
-      window.sessionStorage.setItem('nilstore.provider-onboarding.auth.v1', authToken)
+      window.sessionStorage.setItem('polystore.provider-onboarding.auth.v1', authToken)
     } else {
-      window.sessionStorage.removeItem('nilstore.provider-onboarding.auth.v1')
+      window.sessionStorage.removeItem('polystore.provider-onboarding.auth.v1')
     }
 
     if (w.ethereum) return
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

@@ -123,7 +123,7 @@ test('repro bug: download from commit content widget', async ({
 
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
 
       on: () => {},
@@ -322,7 +322,7 @@ test('repro bug: download from commit content widget', async ({
           'access-control-allow-methods': 'GET, OPTIONS',
           'access-control-allow-headers': 'Range, Content-Type',
           'access-control-expose-headers':
-            'X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Range-Start, X-Nil-Range-Len, Content-Range, Accept-Ranges',
+            'X-PolyStore-Provider, X-PolyStore-Proof-JSON, X-PolyStore-Range-Start, X-PolyStore-Range-Len, Content-Range, Accept-Ranges',
         },
         body: '',
       })
@@ -346,11 +346,11 @@ test('repro bug: download from commit content widget', async ({
       headers: {
         'access-control-allow-origin': '*',
         'access-control-expose-headers':
-          'X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Range-Start, X-Nil-Range-Len, Content-Range, Accept-Ranges',
-        'x-nil-provider': 'nil1mockprovideraddress0000000000000000000000',
-        'x-nil-proof-json': proofJsonB64,
-        'x-nil-range-start': '0',
-        'x-nil-range-len': String(body.length),
+          'X-PolyStore-Provider, X-PolyStore-Proof-JSON, X-PolyStore-Range-Start, X-PolyStore-Range-Len, Content-Range, Accept-Ranges',
+        'x-polystore-provider': 'nil1mockprovideraddress0000000000000000000000',
+        'x-polystore-proof-json': proofJsonB64,
+        'x-polystore-range-start': '0',
+        'x-polystore-range-len': String(body.length),
         'accept-ranges': 'bytes',
         'content-range': `bytes 0-${body.length - 1}/${body.length}`,
         'content-length': String(body.length),
