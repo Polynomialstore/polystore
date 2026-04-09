@@ -2,14 +2,14 @@
 # S3 Adapter E2E Test
 
 # 1. Start S3 Server
-cd nil_gateway
-./nil_gateway &
+cd polystore_gateway
+./polystore_gateway &
 S3_PID=$!
 echo "S3 Server started at PID $S3_PID"
 sleep 2
 
 # 2. Create a test file
-echo "Hello NilStore S3 World!" > test_obj.txt
+echo "Hello PolyStore S3 World!" > test_obj.txt
 
 # 3. Upload file
 echo "Uploading file..."

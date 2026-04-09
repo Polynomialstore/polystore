@@ -7,17 +7,17 @@ set -euo pipefail
 # - Cancel after expiry and verify escrow refund.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CHAIN_DIR="$ROOT_DIR/nilchain"
-CORE_DIR="$ROOT_DIR/nil_core"
-HOME_DIR="$ROOT_DIR/.nilchain_retrieval_fees"
-CHAIN_ID="nilchain"
+CHAIN_DIR="$ROOT_DIR/polystorechain"
+CORE_DIR="$ROOT_DIR/polystore_core"
+HOME_DIR="$ROOT_DIR/.polystorechain_retrieval_fees"
+CHAIN_ID="polystorechain"
 LOG_FILE="$ROOT_DIR/e2e_retrieval_fees.log"
-TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
-BINARY="$ROOT_DIR/nilchaind"
+TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
+BINARY="$ROOT_DIR/polystorechaind"
 LCD_BASE="http://127.0.0.1:1317"
 RPC_STATUS="http://127.0.0.1:26657/status"
 
-DYNAMIC_PRICING_E2E="${NIL_DYNAMIC_PRICING_E2E:-0}"
+DYNAMIC_PRICING_E2E="${POLYSTORE_DYNAMIC_PRICING_E2E:-0}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -59,7 +59,7 @@ wait_for_lcd() {
   local delay="${2:-1}"
   local i
   for i in $(seq 1 "$attempts"); do
-    if timeout 10s curl -s --max-time 2 "$LCD_BASE/nilchain/nilchain/v1/params" >/dev/null 2>&1; then
+    if timeout 10s curl -s --max-time 2 "$LCD_BASE/polystorechain/polystorechain/v1/params" >/dev/null 2>&1; then
       return 0
     fi
     sleep "$delay"
@@ -97,7 +97,7 @@ require_cmd jq
 require_cmd curl
 require_cmd python3
 
-banner "Building nil_core"
+banner "Building polystore_core"
 pushd "$CORE_DIR" >/dev/null
 cargo build --release
 popd >/dev/null
@@ -105,14 +105,14 @@ popd >/dev/null
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$CORE_DIR/target/release"
 export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}:$CORE_DIR/target/release"
 
-banner "Building nilchaind"
+banner "Building polystorechaind"
 pushd "$CHAIN_DIR" >/dev/null
-export CGO_LDFLAGS="-L$CORE_DIR/target/release -lnil_core"
-go build -o "$BINARY" ./cmd/nilchaind
+export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
+go build -o "$BINARY" ./cmd/polystorechaind
 popd >/dev/null
 
 banner "Resetting chain"
-pkill -f nilchaind >/dev/null 2>&1 || true
+pkill -f polystorechaind >/dev/null 2>&1 || true
 rm -rf "$HOME_DIR"
 "$BINARY" init retrievalfees --chain-id "$CHAIN_ID" --home "$HOME_DIR" >/dev/null 2>&1
 "$BINARY" config set client chain-id "$CHAIN_ID" --home "$HOME_DIR"
@@ -166,8 +166,8 @@ import json, sys
 path = sys.argv[1]
 data = json.load(open(path))
 
-nilchain = data.get("app_state", {}).get("nilchain", {})
-params = nilchain.get("params", {})
+polystorechain = data.get("app_state", {}).get("polystorechain", {})
+params = polystorechain.get("params", {})
 
 params["dynamic_pricing_enabled"] = True
 params["dynamic_pricing_max_step_bps"] = 0
@@ -184,8 +184,8 @@ params["retrieval_price_per_blob_min"] = {"denom": "stake", "amount": "1"}
 params["retrieval_price_per_blob_max"] = {"denom": "stake", "amount": "10"}
 params["retrieval_price_per_blob"] = {"denom": "stake", "amount": "1"}
 
-nilchain["params"] = params
-data["app_state"]["nilchain"] = nilchain
+polystorechain["params"] = params
+data["app_state"]["polystorechain"] = polystorechain
 
 json.dump(data, open(path, "w"), indent=1)
 PY
@@ -206,7 +206,7 @@ wait_for_lcd 40 1 || { echo "LCD failed to start"; exit 1; }
 
 banner "Registering providers"
 for i in {1..3}; do
-  run_yes "$BINARY" tx nilchain register-provider General 1000000000 \
+  run_yes "$BINARY" tx polystorechain register-provider General 1000000000 \
     --from "provider$i" \
     --endpoint "/ip4/127.0.0.1/tcp/8082/http" \
     --chain-id "$CHAIN_ID" \
@@ -215,7 +215,7 @@ done
 sleep 2
 
 banner "Creating deal"
-CREATE_RES=$(run_yes "$BINARY" tx nilchain create-deal 50 1000000 5000 --service-hint "General" \
+CREATE_RES=$(run_yes "$BINARY" tx polystorechain create-deal 50 1000000 5000 --service-hint "General" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
 CREATE_TX=$(wait_for_tx "$CREATE_HASH" 30 1) || { echo "CreateDeal tx not found"; exit 1; }
@@ -233,18 +233,18 @@ PY
 SIZE_BYTES=131072
 
 banner "Updating deal content"
-run_yes "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" --total-mdus 3 --witness-mdus 1 \
+run_yes "$BINARY" tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" --total-mdus 3 --witness-mdus 1 \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 sleep 2
 
-DEAL_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
+DEAL_JSON=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID")
 PROVIDER=$(echo "$DEAL_JSON" | jq -r '.deal.providers[0] // empty')
 if [ -z "$PROVIDER" ]; then
   echo "Failed to resolve assigned provider"
   exit 1
 fi
 
-PARAMS_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/params")
+PARAMS_JSON=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/params")
 BASE_FEE=$(echo "$PARAMS_JSON" | jq -r '.params.base_retrieval_fee.amount // "0"')
 PER_BLOB_FEE=$(echo "$PARAMS_JSON" | jq -r '.params.retrieval_price_per_blob.amount // "0"')
 
@@ -260,7 +260,7 @@ PY
 BLOB_COUNT=2
 
 banner "Opening retrieval session"
-OPEN_RES=$(run_yes "$BINARY" tx nilchain open-retrieval-session \
+OPEN_RES=$(run_yes "$BINARY" tx polystorechain open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER" \
   --manifest-root "$MANIFEST_ROOT" \
@@ -284,7 +284,7 @@ fi
 
 SESSION_ID=""
 for i in {1..30}; do
-  SESSION_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/retrieval-sessions/by-owner/$ALICE_ADDR")
+  SESSION_JSON=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/retrieval-sessions/by-owner/$ALICE_ADDR")
   SESSION_ID=$(echo "$SESSION_JSON" | jq -r --arg deal "$DEAL_ID" '.sessions[]? | select((.deal_id | tostring) == $deal) | .session_id' | head -n 1)
   if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ]; then
     break
@@ -296,7 +296,7 @@ if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
   exit 1
 fi
 
-ESCROW_AFTER_OPEN=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID" | jq -r '.deal.escrow_balance // "0"')
+ESCROW_AFTER_OPEN=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID" | jq -r '.deal.escrow_balance // "0"')
 EXPECTED_AFTER_OPEN=$(python3 - <<PY
 before = int("$ESCROW_BEFORE")
 base = int("$BASE_FEE")
@@ -314,11 +314,11 @@ banner "Waiting for expiry at height > $EXPIRES_AT"
 wait_for_height $((EXPIRES_AT + 1)) 60 1 || { echo "Expiry height not reached"; exit 1; }
 
 banner "Canceling retrieval session"
-run_yes "$BINARY" tx nilchain cancel-retrieval-session "$SESSION_ID" \
+run_yes "$BINARY" tx polystorechain cancel-retrieval-session "$SESSION_ID" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 sleep 2
 
-ESCROW_AFTER_CANCEL=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID" | jq -r '.deal.escrow_balance // "0"')
+ESCROW_AFTER_CANCEL=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID" | jq -r '.deal.escrow_balance // "0"')
 EXPECTED_AFTER_CANCEL=$(python3 - <<PY
 before = int("$ESCROW_BEFORE")
 base = int("$BASE_FEE")
@@ -342,7 +342,7 @@ if [ "$DYNAMIC_PRICING_E2E" = "1" ]; then
   NEXT_EPOCH_START=$((EPOCH_ID_OPEN * EPOCH_LEN + 1))
   wait_for_height "$NEXT_EPOCH_START" 60 1 || { echo "Next epoch start not reached (target=$NEXT_EPOCH_START)"; exit 1; }
 
-  UPDATED_PARAMS_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/params")
+  UPDATED_PARAMS_JSON=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/params")
   UPDATED_PRICE=$(echo "$UPDATED_PARAMS_JSON" | jq -r '.params.retrieval_price_per_blob.amount // "0"')
   if [ "$UPDATED_PRICE" != "10" ]; then
     echo "Dynamic pricing did not update retrieval_price_per_blob as expected: got $UPDATED_PRICE, expected 10"

@@ -6,7 +6,7 @@ import os
 
 # Configuration
 EPOCHS = 50
-SIMULATION_FILE = "nil-website/src/data/simulation_data.json"
+SIMULATION_FILE = "polystore-website/src/data/simulation_data.json"
 
 # Reward Constants
 REWARD_PLATINUM = 1.0

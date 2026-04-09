@@ -1,0 +1,15 @@
+[Unit]
+Description=PolyStore devnet faucet (polystore_faucet)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/polystore/polystore-faucet.env
+WorkingDirectory=/opt/polystore
+ExecStart=/bin/bash -lc 'exec "$POLYSTORE_FAUCET_BIN"'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

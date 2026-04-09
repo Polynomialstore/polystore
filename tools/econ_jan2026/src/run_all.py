@@ -1,5 +1,5 @@
 """
-Generate figures + CSV for the Jan 2026 NilStore econ modeling draft.
+Generate figures + CSV for the Jan 2026 PolyStore econ modeling draft.
 
 Usage:
   python -m pip install -r requirements.txt

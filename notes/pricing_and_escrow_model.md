@@ -37,7 +37,7 @@ The user initializes a "Drive" (Deal container). This action reserves the Deal I
 *   **Cost:** `deal_creation_fee` (base denom) + optional `initial_escrow_amount` (base denom).
 *   **Action:**
     *   Transfer `deal_creation_fee` from user to fee collector (if non-zero).
-    *   Transfer `initial_escrow_amount` from user to the `nilchain` module account.
+    *   Transfer `initial_escrow_amount` from user to the `polystorechain` module account.
     *   Create `Deal` with `size = 0`, `manifest_root` empty, `start_block = now`, `end_block = now + duration_blocks`.
 
 ### 3.2 Ingest / Commit Content (`MsgUpdateDealContent`)
@@ -51,7 +51,7 @@ The user uploads files (e.g., 1 GB) and commits them to the Drive. At this momen
     *   `duration_blocks = deal.end_block - deal.start_block`.
     *   `cost = ceil(storage_price * delta_size * duration_blocks)`.
 *   **Action:**
-    *   Transfer `cost` from user to the `nilchain` module account (if `cost > 0`).
+    *   Transfer `cost` from user to the `polystorechain` module account (if `cost > 0`).
     *   Increase `deal.escrow_balance` by `cost` (accounting / TVL).
     *   Update `deal.manifest_root` and `deal.size`.
 

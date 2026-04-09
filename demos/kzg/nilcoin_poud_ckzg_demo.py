@@ -12,7 +12,7 @@ What this shows (plaintext mode):
 Design choices (demo‑oriented):
   • Evaluation form (no FFT/IFFT needed).
   • Openings at domain indices z = ω^j (the standard 4096‑point domain).
-  • DU root = Blake2s("NIL_DEMO_C_ROOT" || concat(blob commitments)).
+  • DU root = Blake2s("POLYSTORE_DEMO_C_ROOT" || concat(blob commitments)).
     (Production would use Poseidon/Merkle per spec; this is demo‑simple.)
 
 Spec alignment (plaintext PoUD):
@@ -146,7 +146,7 @@ def commit_du(ys: List[int], ts) -> Tuple[List[Shard], DUCommitment]:
         shards.append(Shard(start=start, count=count, commitment=C, blob=b))
         start += count
     h = hashlib.blake2s()
-    h.update(b"NIL_DEMO_C_ROOT")
+    h.update(b"POLYSTORE_DEMO_C_ROOT")
     for c in commits:
         h.update(c)
     du = DUCommitment(C_root=h.digest(), commitments=commits, total_symbols=len(ys))
@@ -195,7 +195,7 @@ def verify(du: DUCommitment, proof_obj: dict, shards: List[Shard], blocks: List[
     local = proof_obj["local_cell"]
     # recompute DU root (demo-only aggregator)
     h = hashlib.blake2s()
-    h.update(b"NIL_DEMO_C_ROOT")
+    h.update(b"POLYSTORE_DEMO_C_ROOT")
     for c in du.commitments:
         h.update(c)
     if h.digest() != du.C_root:

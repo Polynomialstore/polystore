@@ -14,7 +14,7 @@ This note answers common questions about how **long-lived user deals** interact 
 
 A long deal (“5 years”) SHOULD NOT imply the same storage provider must hold the data for 5 years.
 
-NilStore should decouple:
+PolyStore should decouple:
 - **user permanence** (the deal can be long), from
 - **provider ephemerality** (providers can drain/exit; the system repairs/replaces slots).
 
@@ -27,7 +27,7 @@ Operationally:
 
 ## 2) What is locked in: service or token?
 
-NilStore pricing is denominated in **NIL**. There is no fiat peg and no oracle.
+PolyStore pricing is denominated in **NIL**. There is no fiat peg and no oracle.
 
 Users lock in a *service obligation* (store bytes for N blocks), priced in NIL at the time funds are deposited/charged.
 
@@ -51,7 +51,7 @@ Implication:
 
 ## 4) Extending a deal (renewal)
 
-NilStore renewal semantics are specified in `rfcs/rfc-deal-expiry-and-extension.md`:
+PolyStore renewal semantics are specified in `rfcs/rfc-deal-expiry-and-extension.md`:
 
 - Renewal uses **spot `storage_price` at extension time**.
 - Extending appends time after the current end (or from now if already expired, within grace).
