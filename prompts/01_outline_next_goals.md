@@ -3,7 +3,7 @@
 You are working in `nilcoin2`.
 
 ## Immediate Goals (High-Level)
-1. **Close NilFS “single source of truth”**: remove CID/index fallback fetch paths so the system derives state from the on-disk slab (`MDU #0` + Witness/User MDUs) and works after restart.
+1. **Close PolyFS “single source of truth”**: remove CID/index fallback fetch paths so the system derives state from the on-disk slab (`MDU #0` + Witness/User MDUs) and works after restart.
 2. **Finish “dynamic sizing / no capacity tiers” cleanup** end-to-end.
 3. **Add a real browser smoke E2E suite** (Playwright or Cypress) that runs against `./scripts/run_local_stack.sh start`.
 

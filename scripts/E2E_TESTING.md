@@ -1,4 +1,4 @@
-# NilStore E2E testing profiles
+# PolyStore E2E testing profiles
 
 This repo now supports two standard E2E profiles for browser + gateway flows.
 Deterministic upload, commit, and sparse transport assertions should prefer the
@@ -18,7 +18,7 @@ without requiring the local stack.
   - one gateway-backed Mode 2 upload/commit/download smoke
   - one gateway-absent direct-SP download smoke
   - one browser-only sparse upload proof asserting:
-    - truncated request bodies with `X-Nil-Full-Size`
+    - truncated request bodies with `X-PolyStore-Full-Size`
     - bounded in-flight upload overlap (`peakActiveUploads > 1`)
 
 ```bash
@@ -55,4 +55,4 @@ scripts/e2e_stack_down.sh
 - Push CI also keeps the gateway-absent Playwright smoke for browser-only no-gateway behavior.
 - Push CI also runs `scripts/e2e_sparse_browser_upload.sh` as the fast browser-only
   proof for sparse + parallel uploads.
-- LibP2P relay Playwright is removed from push gating and available only in `NilStore E2E Heavy` via manual dispatch.
+- LibP2P relay Playwright is removed from push gating and available only in `PolyStore E2E Heavy` via manual dispatch.

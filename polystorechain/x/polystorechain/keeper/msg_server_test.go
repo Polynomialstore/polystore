@@ -59,15 +59,15 @@ func mustDeriveMode1Challenge(
 	require.Greater(t, totalMdus, metaMdus, "total_mdus must be > 1+witness_mdus")
 	userMdus := totalMdus - metaMdus
 
-	buf := make([]byte, 0, len("nilstore/epoch/v1")+len(chainID)+8+len(headerHash))
-	buf = append(buf, []byte("nilstore/epoch/v1")...)
+	buf := make([]byte, 0, len("polystore/epoch/v1")+len(chainID)+8+len(headerHash))
+	buf = append(buf, []byte("polystore/epoch/v1")...)
 	buf = append(buf, []byte(chainID)...)
 	buf = binary.BigEndian.AppendUint64(buf, epochID)
 	buf = append(buf, headerHash...)
 	epochSeed := sha256.Sum256(buf)
 
-	chal := make([]byte, 0, len("nilstore/chal/v1")+32+8*3+len(providerBytes))
-	chal = append(chal, []byte("nilstore/chal/v1")...)
+	chal := make([]byte, 0, len("polystore/chal/v1")+32+8*3+len(providerBytes))
+	chal = append(chal, []byte("polystore/chal/v1")...)
 	chal = append(chal, epochSeed[:]...)
 	chal = binary.BigEndian.AppendUint64(chal, dealID)
 	chal = binary.BigEndian.AppendUint64(chal, currentGen)
@@ -108,15 +108,15 @@ func mustDeriveMode2Challenge(
 	require.Greater(t, totalMdus, metaMdus, "total_mdus must be > 1+witness_mdus")
 	userMdus := totalMdus - metaMdus
 
-	buf := make([]byte, 0, len("nilstore/epoch/v1")+len(chainID)+8+len(headerHash))
-	buf = append(buf, []byte("nilstore/epoch/v1")...)
+	buf := make([]byte, 0, len("polystore/epoch/v1")+len(chainID)+8+len(headerHash))
+	buf = append(buf, []byte("polystore/epoch/v1")...)
 	buf = append(buf, []byte(chainID)...)
 	buf = binary.BigEndian.AppendUint64(buf, epochID)
 	buf = append(buf, headerHash...)
 	epochSeed := sha256.Sum256(buf)
 
-	chal := make([]byte, 0, len("nilstore/chal/v1")+32+8*4)
-	chal = append(chal, []byte("nilstore/chal/v1")...)
+	chal := make([]byte, 0, len("polystore/chal/v1")+32+8*4)
+	chal = append(chal, []byte("polystore/chal/v1")...)
 	chal = append(chal, epochSeed[:]...)
 	chal = binary.BigEndian.AppendUint64(chal, dealID)
 	chal = binary.BigEndian.AppendUint64(chal, currentGen)

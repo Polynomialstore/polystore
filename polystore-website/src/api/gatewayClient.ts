@@ -1,5 +1,5 @@
 import { fetchWithTimeout } from '../lib/http'
-import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -251,7 +251,7 @@ export async function gatewayListFiles(
   manifestRoot: string,
   params: { dealId: string; owner: string },
   fetchFn: typeof fetch = fetch,
-): Promise<NilfsFileEntry[]> {
+): Promise<PolyfsFileEntry[]> {
   const url = `${gatewayBase}/gateway/list-files/${encodeURIComponent(
     manifestRoot,
   )}?deal_id=${encodeURIComponent(params.dealId)}&owner=${encodeURIComponent(params.owner)}`
@@ -269,7 +269,7 @@ export async function gatewayListFiles(
 
   return files
     .filter((f): f is Record<string, unknown> => isRecord(f) && typeof f['path'] === 'string')
-    .map((f): NilfsFileEntry => ({
+    .map((f): PolyfsFileEntry => ({
       path: String(f['path']),
       size_bytes: asNumber(f['size_bytes']) ?? 0,
       logical_size_bytes: asNumber(f['logical_size_bytes']),

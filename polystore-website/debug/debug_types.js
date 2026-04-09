@@ -7,7 +7,7 @@ function hexToBytes(hex) {
 // VALUES
 const chainId = 31337
 const verifyingContract = '0x0000000000000000000000000000000000000000'
-const name = 'NilStore'
+const name = 'PolyStore'
 const version = '1'
 
 const message = {

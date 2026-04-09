@@ -14,7 +14,7 @@ import (
 
 // Constants for EIP-712
 const (
-	EIP712DomainName    = "NilStore"
+	EIP712DomainName    = "PolyStore"
 	EIP712DomainVersion = "1"
 	// Using a zero address for verifying contract as we validate off-chain (in Cosmos).
 	// Note: Some wallets might warn about zero address.

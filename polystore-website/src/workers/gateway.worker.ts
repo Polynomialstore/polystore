@@ -4,14 +4,14 @@
 
 // Import the WASM module
 // The `init` function loads the WASM binary.
-// The `Mdu0Builder` and `NilWasm` classes are exposed by wasm-bindgen.
-import init, { WasmMdu0Builder, NilWasm } from '../lib/polystoreCoreRuntime.js';
+// The `Mdu0Builder` and `PolyStoreWasm` classes are exposed by wasm-bindgen.
+import init, { WasmMdu0Builder, PolyStoreWasm } from '../lib/polystoreCoreRuntime.js';
 
 let wasmInitialized = false;
 let wasmInitPromise: Promise<void> | null = null;
 let wasmInitError: unknown = null;
 let mdu0BuilderInstance: WasmMdu0Builder | null = null;
-let nilWasmInstance: NilWasm | null = null;
+let polyStoreWasmInstance: PolyStoreWasm | null = null;
 
 type CommitWorkerPending = {
     resolve: (value: unknown) => void;
@@ -101,7 +101,7 @@ function initializeCommitPool(trustedSetupBytes: Uint8Array): Promise<void> {
                     resolve: () => resolve(),
                     reject,
                 });
-                w.postMessage({ id, type: 'initNilWasm', payload: { trustedSetupBytes: setupCopy } }, [setupCopy.buffer]);
+                w.postMessage({ id, type: 'initPolyStoreWasm', payload: { trustedSetupBytes: setupCopy } }, [setupCopy.buffer]);
             });
         });
 
@@ -114,8 +114,8 @@ function initializeCommitPool(trustedSetupBytes: Uint8Array): Promise<void> {
 
 function commitBlobsWithPool(data: Uint8Array): Promise<Uint8Array> {
     if (!commitWorkers || commitWorkers.length === 0) {
-        if (!nilWasmInstance) return Promise.reject(new Error('NilWasm not initialized'));
-        const commitments = nilWasmInstance.commit_blobs(data) as unknown;
+        if (!polyStoreWasmInstance) return Promise.reject(new Error('PolyStoreWasm not initialized'));
+        const commitments = polyStoreWasmInstance.commit_blobs(data) as unknown;
         const bytes = commitments instanceof Uint8Array ? commitments : new Uint8Array(commitments as ArrayBufferLike);
         return Promise.resolve(bytes);
     }
@@ -172,14 +172,14 @@ self.onmessage = async (event) => {
         };
 
         switch (type) {
-            case 'initNilWasm': {
+            case 'initPolyStoreWasm': {
                 const { trustedSetupBytes } = payload;
-                if (nilWasmInstance) {
-                    result = 'NilWasm already initialized';
+                if (polyStoreWasmInstance) {
+                    result = 'PolyStoreWasm already initialized';
                     break;
                 }
-                if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for NilWasm initialization');
-                nilWasmInstance = new NilWasm(trustedSetupBytes);
+                if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for PolyStoreWasm initialization');
+                polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes);
                 // Initialize the blob-commit compute pool (best-effort).
                 try {
                     await initializeCommitPool(trustedSetupBytes);
@@ -188,11 +188,11 @@ self.onmessage = async (event) => {
                     commitWorkers = [];
                     commitWorkersReady = Promise.resolve();
                 }
-                result = 'NilWasm initialized';
+                result = 'PolyStoreWasm initialized';
                 break;
             }
             case 'initMdu0Builder': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { maxUserMdus, commitmentsPerMdu } = payload as { maxUserMdus: number; commitmentsPerMdu?: number };
                 if (commitmentsPerMdu && Number(commitmentsPerMdu) > 0) {
                     mdu0BuilderInstance = WasmMdu0Builder.new_with_commitments(
@@ -206,7 +206,7 @@ self.onmessage = async (event) => {
                 break;
             }
             case 'loadMdu0Builder': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { data, maxUserMdus, commitmentsPerMdu } = payload as {
                     data: Uint8Array;
                     maxUserMdus: number;
@@ -332,7 +332,7 @@ self.onmessage = async (event) => {
             }
             case 'prepareAndCommitMdu0': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const {
                     witnessRootsFlat,
                     userRootStartIndex,
@@ -411,7 +411,7 @@ self.onmessage = async (event) => {
                     perf.witnessRootSetMs + perf.userRootSetMs + perf.appendMs + perf.bytesMs;
 
                 const commitStart = performance.now();
-                const committedRaw = nilWasmInstance.commit_blobs_profiled(mdu0Bytes) as {
+                const committedRaw = polyStoreWasmInstance.commit_blobs_profiled(mdu0Bytes) as {
                     witness_flat?: Uint8Array | ArrayBufferLike;
                     perf?: {
                         decode_ms?: unknown;
@@ -444,7 +444,7 @@ self.onmessage = async (event) => {
                 perf.rustCommitMs = Number(commitPerf?.total_ms ?? perf.commitMs);
 
                 const rootStart = performance.now();
-                const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
+                const root = polyStoreWasmInstance.compute_mdu_root(witnessFlat) as unknown;
                 perf.rootMs = performance.now() - rootStart;
                 const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
                 perf.totalMs = performance.now() - totalStart;
@@ -462,14 +462,14 @@ self.onmessage = async (event) => {
                 break;
             }
             case 'shardFile': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { data } = payload; // data is Uint8Array
-                const commitResult = nilWasmInstance.commit_mdu(data);
+                const commitResult = polyStoreWasmInstance.commit_mdu(data);
                 result = typeof commitResult === 'string' ? JSON.parse(commitResult) : commitResult;
                 break;
             }
             case 'shardFileProgressive': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { data, batchBlobs } = payload as { data: Uint8Array; batchBlobs?: number };
 
                 const BLOB_SIZE = 128 * 1024;
@@ -522,7 +522,7 @@ self.onmessage = async (event) => {
                 }
 
                 const rootStart = performance.now();
-                const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
+                const root = polyStoreWasmInstance.compute_mdu_root(witnessFlat) as unknown;
                 const rootMs = performance.now() - rootStart;
                 const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
                 result = {
@@ -540,7 +540,7 @@ self.onmessage = async (event) => {
                 break;
             }
             case 'commitMduProfiled': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { data } = payload as { data: Uint8Array };
                 const BLOBS_PER_MDU = 64;
                 if (!(data instanceof Uint8Array)) throw new Error('data must be a Uint8Array');
@@ -548,7 +548,7 @@ self.onmessage = async (event) => {
 
                 const opStart = performance.now();
                 const commitStart = performance.now();
-                const committedRaw = nilWasmInstance.commit_blobs_profiled(data) as {
+                const committedRaw = polyStoreWasmInstance.commit_blobs_profiled(data) as {
                     witness_flat?: Uint8Array | ArrayBufferLike;
                     perf?: {
                         decode_ms?: unknown;
@@ -573,7 +573,7 @@ self.onmessage = async (event) => {
                 const commitPerf = committedRaw?.perf;
 
                 const rootStart = performance.now();
-                const root = nilWasmInstance.compute_mdu_root(witnessFlat) as unknown;
+                const root = polyStoreWasmInstance.compute_mdu_root(witnessFlat) as unknown;
                 const rootMs = performance.now() - rootStart;
                 const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
                 result = {
@@ -602,7 +602,7 @@ self.onmessage = async (event) => {
                 break;
             }
             case 'expandMduRs': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { data, k, m, profile = true } = payload as {
                     data: Uint8Array;
                     k: number;
@@ -612,8 +612,8 @@ self.onmessage = async (event) => {
                 if (!(data instanceof Uint8Array)) throw new Error('data must be a Uint8Array');
                 const expanded = (
                     profile
-                        ? nilWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m))
-                        : nilWasmInstance.expand_mdu_rs_flat_committed(data, Number(k), Number(m))
+                        ? polyStoreWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m))
+                        : polyStoreWasmInstance.expand_mdu_rs_flat_committed(data, Number(k), Number(m))
                 ) as unknown;
                 const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded;
                 const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat;
@@ -681,7 +681,7 @@ self.onmessage = async (event) => {
                 break;
             }
             case 'expandPayloadRs': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { data, k, m, profile = true } = payload as {
                     data: Uint8Array;
                     k: number;
@@ -692,8 +692,8 @@ self.onmessage = async (event) => {
 
                 const expanded = (
                     profile
-                        ? nilWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m))
-                        : nilWasmInstance.expand_payload_rs_flat_committed(data, Number(k), Number(m))
+                        ? polyStoreWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m))
+                        : polyStoreWasmInstance.expand_payload_rs_flat_committed(data, Number(k), Number(m))
                 ) as unknown;
                 const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded;
                 const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat;
@@ -764,15 +764,15 @@ self.onmessage = async (event) => {
                 break;
             }
             case 'computeManifest': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { roots } = payload; // roots is Uint8Array (concatenated 32-byte roots)
-                result = nilWasmInstance.compute_manifest(roots);
+                result = polyStoreWasmInstance.compute_manifest(roots);
                 break;
             }
             case 'computeMduRoot': {
-                if (!nilWasmInstance) throw new Error('NilWasm not initialized. Call initNilWasm first.');
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { witness } = payload; // witness is Uint8Array
-                result = nilWasmInstance.compute_mdu_root(witness);
+                result = polyStoreWasmInstance.compute_mdu_root(witness);
                 break;
             }
             default:

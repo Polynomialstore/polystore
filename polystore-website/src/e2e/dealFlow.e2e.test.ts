@@ -8,14 +8,14 @@ import {
   buildRetrievalRequestTypedData,
   buildUpdateContentTypedData,
 } from '../lib/eip712'
-import { ethToNil } from '../lib/address'
+import { ethToPolystoreAddress } from '../lib/address'
 import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { lcdFetchDeals } from '../api/lcdClient'
 import { hexToBytes } from '../lib/merkle'
 import { resolveProviderEndpoint } from '../lib/providerDiscovery'
 
-const DEFAULT_EIP712_CHAIN_ID = Number(process.env.NIL_EIP712_CHAIN_ID ?? 20260211)
-const COSMOS_CHAIN_ID = process.env.NIL_COSMOS_CHAIN_ID ?? '31337'
+const DEFAULT_EIP712_CHAIN_ID = Number(process.env.POLYSTORE_EIP712_CHAIN_ID ?? 20260211)
+const COSMOS_CHAIN_ID = process.env.POLYSTORE_COSMOS_CHAIN_ID ?? '31337'
 
 // viem's typed-data helpers require domain.chainId as bigint.
 function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T) {
@@ -40,18 +40,18 @@ async function resolveEip712ChainId(lcdBase: string): Promise<number> {
 
 test(
   'e2e: create deal → upload → commit → slab/files (requires local stack)',
-  { skip: process.env.NIL_E2E !== '1' },
+  { skip: process.env.POLYSTORE_E2E !== '1' },
   async () => {
-    const gatewayBase = process.env.NIL_GATEWAY_BASE ?? 'http://localhost:8080'
-    const providerBase = process.env.NIL_PROVIDER_BASE ?? 'http://127.0.0.1:8082'
-    const lcdBase = process.env.NIL_LCD_BASE ?? 'http://localhost:1317'
+    const gatewayBase = process.env.POLYSTORE_GATEWAY_BASE ?? 'http://localhost:8080'
+    const providerBase = process.env.POLYSTORE_PROVIDER_BASE ?? 'http://127.0.0.1:8082'
+    const lcdBase = process.env.POLYSTORE_LCD_BASE ?? 'http://localhost:1317'
     const eip712ChainId = await resolveEip712ChainId(lcdBase)
 
     const account = privateKeyToAccount(
-      (process.env.NIL_E2E_PRIVKEY ??
+      (process.env.POLYSTORE_E2E_PRIVKEY ??
         '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1') as `0x${string}`,
     )
-    const ownerNil = ethToNil(account.address)
+    const ownerPolystoreAddress = ethToPolystoreAddress(account.address)
 
     // 1) Create Deal
     const dealIntent = {
@@ -82,10 +82,10 @@ test(
     const dealId = String(createJson.deal_id)
 
     // 2) Upload file (gateway canonical ingest)
-    const content = Buffer.from('hello nilfs\n', 'utf8')
+    const content = Buffer.from('hello polyfs\n', 'utf8')
     const form = new FormData()
     form.append('file', new Blob([content]), 'hello.txt')
-    form.append('owner', ownerNil)
+    form.append('owner', ownerPolystoreAddress)
     form.append('deal_id', dealId)
 
     const uploadRes = await fetch(`${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}`, {
@@ -128,11 +128,11 @@ test(
     }
 
     // 4) Verify slab layout + file list via the same TS clients used by the UI.
-    const slab = await gatewayFetchSlabLayout(gatewayBase, manifestRoot, { dealId, owner: ownerNil })
+    const slab = await gatewayFetchSlabLayout(gatewayBase, manifestRoot, { dealId, owner: ownerPolystoreAddress })
     assert.ok(slab.total_mdus >= 1)
     assert.equal(slab.manifest_root, manifestRoot)
 
-    const files = await gatewayListFiles(gatewayBase, manifestRoot, { dealId, owner: ownerNil })
+    const files = await gatewayListFiles(gatewayBase, manifestRoot, { dealId, owner: ownerPolystoreAddress })
     assert.equal(files.some((f) => f.path === 'hello.txt'), true)
 
     // 5) Verify deal shows committed CID on LCD (best-effort; may take a moment).
@@ -183,16 +183,16 @@ test(
 
     const fetchUrl = `${retrievalBase}/sp/retrieval/fetch/${encodeURIComponent(
       manifestRoot,
-    )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(ownerNil)}&file_path=${encodeURIComponent(
+    )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(ownerPolystoreAddress)}&file_path=${encodeURIComponent(
       filePath,
     )}`
     const fetchRes = await fetch(fetchUrl, {
       headers: {
-        'X-Nil-Req-Sig': reqSig,
-        'X-Nil-Req-Nonce': String(reqNonce),
-        'X-Nil-Req-Expires-At': String(expiresAt),
-        'X-Nil-Req-Range-Start': String(rangeStart),
-        'X-Nil-Req-Range-Len': String(rangeLen),
+        'X-PolyStore-Req-Sig': reqSig,
+        'X-PolyStore-Req-Nonce': String(reqNonce),
+        'X-PolyStore-Req-Expires-At': String(expiresAt),
+        'X-PolyStore-Req-Range-Start': String(rangeStart),
+        'X-PolyStore-Req-Range-Len': String(rangeLen),
         Range: `bytes=${rangeStart}-${rangeStart + rangeLen - 1}`,
       },
     })
@@ -203,25 +203,25 @@ test(
     const fetched = new Uint8Array(await fetchRes.arrayBuffer())
     assert.equal(Buffer.from(fetched).toString('utf8'), Buffer.from(content).toString('utf8'))
 
-    const hDealId = fetchRes.headers.get('X-Nil-Deal-ID')
-    const hEpoch = fetchRes.headers.get('X-Nil-Epoch')
-    const hProvider = fetchRes.headers.get('X-Nil-Provider')
-    const hFilePath = fetchRes.headers.get('X-Nil-File-Path')
-    const hRangeStart = fetchRes.headers.get('X-Nil-Range-Start')
-    const hRangeLen = fetchRes.headers.get('X-Nil-Range-Len')
-    const hBytes = fetchRes.headers.get('X-Nil-Bytes-Served')
-    const hProofHash = fetchRes.headers.get('X-Nil-Proof-Hash')
-    const hProofJson = fetchRes.headers.get('X-Nil-Proof-JSON')
-    const hFetchSession = fetchRes.headers.get('X-Nil-Fetch-Session')
-    assert.ok(hDealId, 'missing X-Nil-Deal-ID')
-    assert.ok(hEpoch, 'missing X-Nil-Epoch')
-    assert.ok(hProvider, 'missing X-Nil-Provider')
-    assert.ok(hFilePath, 'missing X-Nil-File-Path')
-    assert.ok(hRangeStart, 'missing X-Nil-Range-Start')
-    assert.ok(hRangeLen, 'missing X-Nil-Range-Len')
-    assert.ok(hBytes, 'missing X-Nil-Bytes-Served')
-    assert.ok(hProofHash, 'missing X-Nil-Proof-Hash')
-    assert.ok(hProofJson, 'missing X-Nil-Proof-JSON')
+    const hDealId = fetchRes.headers.get('X-PolyStore-Deal-ID')
+    const hEpoch = fetchRes.headers.get('X-PolyStore-Epoch')
+    const hProvider = fetchRes.headers.get('X-PolyStore-Provider')
+    const hFilePath = fetchRes.headers.get('X-PolyStore-File-Path')
+    const hRangeStart = fetchRes.headers.get('X-PolyStore-Range-Start')
+    const hRangeLen = fetchRes.headers.get('X-PolyStore-Range-Len')
+    const hBytes = fetchRes.headers.get('X-PolyStore-Bytes-Served')
+    const hProofHash = fetchRes.headers.get('X-PolyStore-Proof-Hash')
+    const hProofJson = fetchRes.headers.get('X-PolyStore-Proof-JSON')
+    const hFetchSession = fetchRes.headers.get('X-PolyStore-Fetch-Session')
+    assert.ok(hDealId, 'missing X-PolyStore-Deal-ID')
+    assert.ok(hEpoch, 'missing X-PolyStore-Epoch')
+    assert.ok(hProvider, 'missing X-PolyStore-Provider')
+    assert.ok(hFilePath, 'missing X-PolyStore-File-Path')
+    assert.ok(hRangeStart, 'missing X-PolyStore-Range-Start')
+    assert.ok(hRangeLen, 'missing X-PolyStore-Range-Len')
+    assert.ok(hBytes, 'missing X-PolyStore-Bytes-Served')
+    assert.ok(hProofHash, 'missing X-PolyStore-Proof-Hash')
+    assert.ok(hProofJson, 'missing X-PolyStore-Proof-JSON')
     const proofWrapper = JSON.parse(Buffer.from(hProofJson!, 'base64').toString('utf8')) as any
     assert.ok(proofWrapper.proof_details, 'missing proof_details')
 

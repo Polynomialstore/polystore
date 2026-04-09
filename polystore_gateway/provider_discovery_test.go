@@ -141,14 +141,14 @@ func TestResolveDealMode2Slots_PreservesSlotOrder(t *testing.T) {
 
 func TestResolveProviderHTTPBaseURL_ProviderOverrideBypassesLCD(t *testing.T) {
 	origLCD := lcdBase
-	origOverrides := os.Getenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES")
+	origOverrides := os.Getenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES")
 	origCache := providerBaseCache
 	t.Cleanup(func() {
 		lcdBase = origLCD
 		if origOverrides == "" {
-			_ = os.Unsetenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES")
+			_ = os.Unsetenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES")
 		} else {
-			_ = os.Setenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES", origOverrides)
+			_ = os.Setenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES", origOverrides)
 		}
 		providerBaseCache = origCache
 	})
@@ -162,7 +162,7 @@ func TestResolveProviderHTTPBaseURL_ProviderOverrideBypassesLCD(t *testing.T) {
 	t.Cleanup(srv.Close)
 	lcdBase = srv.URL
 
-	_ = os.Setenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES", "nil1providerx=http://127.0.0.1:8091")
+	_ = os.Setenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES", "nil1providerx=http://127.0.0.1:8091")
 	base, err := resolveProviderHTTPBaseURL(context.Background(), "nil1providerx")
 	if err != nil {
 		t.Fatalf("resolveProviderHTTPBaseURL returned error: %v", err)
@@ -177,14 +177,14 @@ func TestResolveProviderHTTPBaseURL_ProviderOverrideBypassesLCD(t *testing.T) {
 
 func TestResolveProviderHTTPBaseURL_HostOverrideFromEndpoint(t *testing.T) {
 	origLCD := lcdBase
-	origOverrides := os.Getenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES")
+	origOverrides := os.Getenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES")
 	origCache := providerBaseCache
 	t.Cleanup(func() {
 		lcdBase = origLCD
 		if origOverrides == "" {
-			_ = os.Unsetenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES")
+			_ = os.Unsetenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES")
 		} else {
-			_ = os.Setenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES", origOverrides)
+			_ = os.Setenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES", origOverrides)
 		}
 		providerBaseCache = origCache
 	})
@@ -205,7 +205,7 @@ func TestResolveProviderHTTPBaseURL_HostOverrideFromEndpoint(t *testing.T) {
 	t.Cleanup(srv.Close)
 	lcdBase = srv.URL
 
-	_ = os.Setenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES", "sp2.polynomialstore.com=http://127.0.0.1:8092")
+	_ = os.Setenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES", "sp2.polynomialstore.com=http://127.0.0.1:8092")
 	base, err := resolveProviderHTTPBaseURL(context.Background(), "nil1providerz")
 	if err != nil {
 		t.Fatalf("resolveProviderHTTPBaseURL returned error: %v", err)
@@ -218,7 +218,7 @@ func TestResolveProviderHTTPBaseURL_HostOverrideFromEndpoint(t *testing.T) {
 func TestResolveProviderForRetrievalPlan_Mode2UsesPendingProvider(t *testing.T) {
 	origLCD := lcdBase
 	t.Cleanup(func() { lcdBase = origLCD })
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1localprovider")
 
 	const dealID uint64 = 55
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -259,8 +259,8 @@ func TestResolveProviderForRetrievalPlan_Mode2UsesPendingProvider(t *testing.T) 
 func TestResolveProviderForRetrievalPlan_FallsBackToLocalWhenMetadataUnavailable(t *testing.T) {
 	origLCD := lcdBase
 	t.Cleanup(func() { lcdBase = origLCD })
-	t.Setenv("NIL_ALLOW_PLAN_PROVIDER_FALLBACK", "1")
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localfallback")
+	t.Setenv("POLYSTORE_ALLOW_PLAN_PROVIDER_FALLBACK", "1")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1localfallback")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -286,8 +286,8 @@ func TestResolveProviderForRetrievalPlan_FallsBackToLocalWhenMetadataUnavailable
 func TestResolveProviderForRetrievalPlan_FailsWithoutFallbackWhenMetadataUnavailable(t *testing.T) {
 	origLCD := lcdBase
 	t.Cleanup(func() { lcdBase = origLCD })
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localfallback")
-	t.Setenv("NIL_ALLOW_PLAN_PROVIDER_FALLBACK", "")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1localfallback")
+	t.Setenv("POLYSTORE_ALLOW_PLAN_PROVIDER_FALLBACK", "")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)

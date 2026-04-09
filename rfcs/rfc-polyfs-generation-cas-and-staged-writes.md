@@ -1,17 +1,17 @@
-# RFC: NilFS Generation CAS and Staged Writes
+# RFC: PolyFS Generation CAS and Staged Writes
 
 ## Status
 Draft
 
 ## Problem
-NilFS is a mutable filesystem layered on top of content-committed slab generations. Without an explicit compare-and-swap rule, two browser or gateway instances can both derive new NilFS states from the same base generation and race to overwrite each other. Without staged-generation semantics, providers and gateways can also discard live bytes too early when an upload churns or aborts.
+PolyFS is a mutable filesystem layered on top of content-committed slab generations. Without an explicit compare-and-swap rule, two browser or gateway instances can both derive new PolyFS states from the same base generation and race to overwrite each other. Without staged-generation semantics, providers and gateways can also discard live bytes too early when an upload churns or aborts.
 
 This creates two distinct risks:
 1. **Stale overwrite risk:** a second writer can unintentionally replace a newer committed generation with a mutation built from an older base.
 2. **Upload-churn griefing risk:** repeated provisional uploads can consume storage, bandwidth, and operator attention even when the final chain swap never succeeds.
 
 ## Goals
-* Define the authoritative overwrite guard for NilFS generation updates.
+* Define the authoritative overwrite guard for PolyFS generation updates.
 * Define the client/browser bootstrap rule for append and rewrite flows.
 * Define provider/gateway staged-generation behavior before and after chain confirmation.
 * Make the griefing surface explicit so cleanup/accounting policy can evolve intentionally.
@@ -21,7 +21,7 @@ This creates two distinct risks:
 * This RFC does not require providers to understand filesystem semantics beyond generation identifiers and byte-addressed artifacts.
 
 ## Model
-Every NilFS mutation is a generation swap:
+Every PolyFS mutation is a generation swap:
 * base generation: `previous_manifest_root = H1`
 * proposed generation: `new_manifest_root = H2`
 
@@ -43,12 +43,12 @@ The owner signs an update intent containing both values. The chain only accepts 
 ### 3. Staged generations at providers/gateways
 * Uploaded bytes for `new_manifest_root` SHOULD be staged provisionally until the chain swap succeeds.
 * The currently committed generation `previous_manifest_root` MUST remain available while `new_manifest_root` is provisional.
-* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-Nil-Previous-Manifest-Root`.
+* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-PolyStore-Previous-Manifest-Root`.
 * If that expected-base header is present and stale, the provider/gateway SHOULD reject the upload before consuming artifact bytes.
 * A stale or failed chain swap MUST NOT delete or replace the current generation.
 
 ## Browser OPFS Guidance
-Browser clients should persist reconstructed slab generations in OPFS, keyed by deal and manifest root. The browser happy path for reads should prefer a fresh OPFS generation over network retrieval. A fresh browser append flow should reconstruct the committed generation into OPFS before computing new NilFS state.
+Browser clients should persist reconstructed slab generations in OPFS, keyed by deal and manifest root. The browser happy path for reads should prefer a fresh OPFS generation over network retrieval. A fresh browser append flow should reconstruct the committed generation into OPFS before computing new PolyFS state.
 
 ## Griefing / Churn Surface
 Provisional generations can be abused to create storage churn:
@@ -65,9 +65,9 @@ Future policy needs:
 Current devnet reference policy:
 * complete provisional generations older than 24 hours may be garbage-collected during gateway/provider startup or recovery cleanup
 * the active committed generation is never subject to this provisional TTL
-* the gateway exposes the effective retention window as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports it in `/status` as `nilfs_generation_provisional_retention_ttl_seconds`
-* `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC
-* the gateway SHOULD expose stale CAS preflight pressure in `/status` so concurrent-writer / abandoned-upload churn is observable; the current reference keys are `nilfs_cas_preflight_conflicts_total`, `nilfs_cas_preflight_conflicts_legacy`, `nilfs_cas_preflight_conflicts_evm`, and `nilfs_cas_preflight_conflicts_upload`
+* the gateway exposes the effective retention window as `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL` and reports it in `/status` as `polyfs_generation_provisional_retention_ttl_seconds`
+* `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC
+* the gateway SHOULD expose stale CAS preflight pressure in `/status` so concurrent-writer / abandoned-upload churn is observable; the current reference keys are `polyfs_cas_preflight_conflicts_total`, `polyfs_cas_preflight_conflicts_legacy`, `polyfs_cas_preflight_conflicts_evm`, and `polyfs_cas_preflight_conflicts_upload`
 * the gateway SHOULD expose per-deal local generation inspection; the current reference endpoint is `GET /gateway/deal-generations/{deal_id}`, which returns active/provisional/incomplete/invalid classification plus `previous_manifest_root` and on-disk byte counts
 
 ## Implementation Notes

@@ -3,7 +3,7 @@
 This report estimates the total "Time to Completion" for processing and uploading a **512 GB** dataset. It evaluates performance across two hardware environments (Disk-Limited vs. Network-Limited) and varying degrees of cryptographic parallelization.
 
 #### **1. Cryptographic Assumptions & Overhead**
-The primary throughput constraint for NilStore is the generation of KZG commitments. This assessment assumes the following cryptographic workload:
+The primary throughput constraint for PolyStore is the generation of KZG commitments. This assessment assumes the following cryptographic workload:
 
 * **Algorithm:** KZG Commitments over the **BLS12-381** elliptic curve.
 * **Operation:** Variable-Base Multi-Scalar Multiplication (MSM).

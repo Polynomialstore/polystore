@@ -351,7 +351,7 @@ export function DealSlabPanel(props: {
               </p>
               <ul className="mt-1 space-y-1 text-xs text-foreground">
                 <li>
-                  <span className="font-semibold">MDU #0</span>: NilFS metadata
+                  <span className="font-semibold">MDU #0</span>: PolyFS metadata
                   (file table + root table)
                 </li>
                 <li>
@@ -360,7 +360,7 @@ export function DealSlabPanel(props: {
                 </li>
                 <li>
                   <span className="font-semibold">User MDUs</span>: file bytes
-                  laid out by NilFS offsets
+                  laid out by PolyFS offsets
                 </li>
               </ul>
             </div>

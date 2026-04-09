@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 contract PolyStoreBridge {
-    // The latest state root of the NilStore Network (L1)
+    // The latest state root of the PolyStore Network (L1)
     bytes32 public latestStateRoot;
     
     // The block height of the latest update

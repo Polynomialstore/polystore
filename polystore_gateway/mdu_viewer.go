@@ -79,9 +79,9 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") {
-		sessionID := strings.TrimSpace(r.Header.Get("X-Nil-Session-Id"))
+		sessionID := strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id"))
 		if sessionID == "" {
-			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "open an on-chain retrieval session first")
+			writeJSONError(w, http.StatusBadRequest, "missing X-PolyStore-Session-Id", "open an on-chain retrieval session first")
 			return
 		}
 		if !hasDealQuery {
@@ -153,10 +153,10 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Length", strconv.Itoa(len(windowBytes)))
-		w.Header().Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
-		w.Header().Set("X-Nil-Mdu-Index", strconv.FormatUint(mduIndex, 10))
-		w.Header().Set("X-Nil-Start-Blob-Index", strconv.FormatUint(uint64(onchainSession.StartBlobIndex), 10))
-		w.Header().Set("X-Nil-Blob-Count", strconv.FormatUint(onchainSession.BlobCount, 10))
+		w.Header().Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
+		w.Header().Set("X-PolyStore-Mdu-Index", strconv.FormatUint(mduIndex, 10))
+		w.Header().Set("X-PolyStore-Start-Blob-Index", strconv.FormatUint(uint64(onchainSession.StartBlobIndex), 10))
+		w.Header().Set("X-PolyStore-Blob-Count", strconv.FormatUint(onchainSession.BlobCount, 10))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(windowBytes)
 		return
@@ -212,8 +212,8 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.Header().Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
-	w.Header().Set("X-Nil-Mdu-Index", strconv.FormatUint(mduIndex, 10))
+	w.Header().Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
+	w.Header().Set("X-PolyStore-Mdu-Index", strconv.FormatUint(mduIndex, 10))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
@@ -344,13 +344,13 @@ func loadSlabMeta(dealDir string) (*slabMeta, error) {
 	}, nil
 }
 
-func shardFileCached(ctx context.Context, path string, raw bool) (*NilCliOutput, error) {
+func shardFileCached(ctx context.Context, path string, raw bool) (*PolyStoreCliOutput, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	outPath := path + ".json"
 	if data, err := os.ReadFile(outPath); err == nil {
-		var parsed NilCliOutput
+		var parsed PolyStoreCliOutput
 		if err := json.Unmarshal(data, &parsed); err == nil && parsed.ManifestRootHex != "" && len(parsed.Mdus) > 0 {
 			return &parsed, nil
 		}

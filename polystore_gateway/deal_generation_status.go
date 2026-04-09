@@ -56,17 +56,17 @@ func dealGenerationStatusSnapshotForStatus() map[string]string {
 
 func (s dealGenerationStatusSnapshot) toStatusMap() map[string]string {
 	return map[string]string{
-		"nilfs_generation_deals":                             strconv.FormatUint(s.Deals, 10),
-		"nilfs_generation_active":                            strconv.FormatUint(s.Active, 10),
-		"nilfs_generation_provisional":                       strconv.FormatUint(s.Provisional, 10),
-		"nilfs_generation_provisional_recent":                strconv.FormatUint(s.ProvisionalRecent, 10),
-		"nilfs_generation_provisional_expired":               strconv.FormatUint(s.ProvisionalExpired, 10),
-		"nilfs_generation_incomplete":                        strconv.FormatUint(s.Incomplete, 10),
-		"nilfs_generation_invalid":                           strconv.FormatUint(s.Invalid, 10),
-		"nilfs_generation_bytes_active":                      strconv.FormatUint(s.BytesActive, 10),
-		"nilfs_generation_bytes_provisional":                 strconv.FormatUint(s.BytesProvisional, 10),
-		"nilfs_generation_bytes_total":                       strconv.FormatUint(s.BytesTotal, 10),
-		"nilfs_generation_provisional_retention_ttl_seconds": strconv.FormatInt(int64(s.RetentionTTL/time.Second), 10),
+		"polyfs_generation_deals":                             strconv.FormatUint(s.Deals, 10),
+		"polyfs_generation_active":                            strconv.FormatUint(s.Active, 10),
+		"polyfs_generation_provisional":                       strconv.FormatUint(s.Provisional, 10),
+		"polyfs_generation_provisional_recent":                strconv.FormatUint(s.ProvisionalRecent, 10),
+		"polyfs_generation_provisional_expired":               strconv.FormatUint(s.ProvisionalExpired, 10),
+		"polyfs_generation_incomplete":                        strconv.FormatUint(s.Incomplete, 10),
+		"polyfs_generation_invalid":                           strconv.FormatUint(s.Invalid, 10),
+		"polyfs_generation_bytes_active":                      strconv.FormatUint(s.BytesActive, 10),
+		"polyfs_generation_bytes_provisional":                 strconv.FormatUint(s.BytesProvisional, 10),
+		"polyfs_generation_bytes_total":                       strconv.FormatUint(s.BytesTotal, 10),
+		"polyfs_generation_provisional_retention_ttl_seconds": strconv.FormatInt(int64(s.RetentionTTL/time.Second), 10),
 	}
 }
 

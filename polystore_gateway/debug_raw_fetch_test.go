@@ -34,7 +34,7 @@ func TestGatewayDebugRawFetch_ByPath_NoManifestBin(t *testing.T) {
 		t.Fatalf("parseManifestRoot failed: %v", err)
 	}
 
-	// Create a minimal NilFS slab:
+	// Create a minimal PolyFS slab:
 	// - mdu_0.bin: file record
 	// - mdu_1.bin: user-data MDU containing the file bytes
 	// (No manifest.bin required for debug raw fetch.)

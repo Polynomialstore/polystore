@@ -62,7 +62,7 @@ test('buildProviderAdminTypedData signs and recovers the operator wallet', async
   const digest = hashTypedData(viemTypedData)
   assert.equal(
     digest.toLowerCase(),
-    '0x27f461c45cf75ddc1bcf10ae0f99d060e71d8ecd12af28d334d0b36b7dcb6322',
+    '0x349210cdce73ebb49aa4d4bd6d1b5acbf1aa0651a442392b241ad9fef502a9c6',
   )
 
   const signature = await TEST_ACCOUNT.signTypedData(viemTypedData)

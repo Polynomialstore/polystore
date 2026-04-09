@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPublicClient, http } from 'viem'
 import { appConfig } from '../config'
-import { nilChain } from '../lib/web3Config'
+import { polyStoreChain } from '../lib/web3Config'
 import { polystoreBridgeAbi } from '../abi/polystoreBridge'
 
 export function BridgeStatus() {
@@ -17,7 +17,7 @@ export function BridgeStatus() {
     }
 
     const client = createPublicClient({
-      chain: nilChain,
+      chain: polyStoreChain,
       transport: http(appConfig.evmRpc),
     })
 

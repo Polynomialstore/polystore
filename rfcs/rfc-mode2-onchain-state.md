@@ -37,7 +37,7 @@ This RFC freezes a **concrete on-chain representation** for Mode 2 and a minimal
 
 ### 1.3 Slab accounting fields (naming freeze)
 For chain policy and bounds checks we freeze:
-- `size_bytes`: total logical bytes of file contents in NilFS (sum of non-tombstone file lengths)
+- `size_bytes`: total logical bytes of file contents in PolyFS (sum of non-tombstone file lengths)
 - `total_mdus`: total number of committed MDU roots in the Manifest commitment (includes metadata + witness + user MDUs)
 - `witness_mdus`: number of witness MDUs committed after MDU #0 (metadata region size)
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)

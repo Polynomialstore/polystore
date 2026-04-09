@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use polystore_p2p::{Command, NilNode};
+use polystore_p2p::{Command, PolyStoreNode};
 use tokio::sync::mpsc;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -18,15 +18,17 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("polystore_p2p=info".parse().unwrap()))
+        .with_env_filter(
+            EnvFilter::from_default_env().add_directive("polystore_p2p=info".parse().unwrap()),
+        )
         .init();
 
     let cli = Cli::parse();
 
     let (tx, rx) = mpsc::channel(32);
 
-    let node = NilNode::new(cli.seed, cli.port, rx).await?;
-    
+    let node = PolyStoreNode::new(cli.seed, cli.port, rx).await?;
+
     // Spawn the node
     tokio::spawn(async move {
         if let Err(e) = node.run().await {
@@ -48,23 +50,30 @@ async fn main() -> Result<()> {
         match parts[0] {
             "announce" => {
                 if parts.len() > 1 {
-                    tx.send(Command::AnnounceShard { shard_id: parts[1].to_string() }).await?;
+                    tx.send(Command::AnnounceShard {
+                        shard_id: parts[1].to_string(),
+                    })
+                    .await?;
                 } else {
                     println!("Usage: announce <shard_id>");
                 }
             }
             "dial" => {
                 if parts.len() > 1 {
-                     if let Ok(addr) = parts[1].parse() {
-                         tx.send(Command::Dial { addr }).await?;
-                     } else {
-                         println!("Invalid multiaddr");
-                     }
+                    if let Ok(addr) = parts[1].parse() {
+                        tx.send(Command::Dial { addr }).await?;
+                    } else {
+                        println!("Invalid multiaddr");
+                    }
                 }
             }
             "proxy" => {
                 if parts.len() > 2 {
-                    tx.send(Command::RequestProxy { cid: parts[1].to_string(), deputy: parts[2].to_string() }).await?;
+                    tx.send(Command::RequestProxy {
+                        cid: parts[1].to_string(),
+                        deputy: parts[2].to_string(),
+                    })
+                    .await?;
                 } else {
                     println!("Usage: proxy <cid> <deputy_peer_id>");
                 }

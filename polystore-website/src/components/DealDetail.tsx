@@ -17,7 +17,7 @@ import { useFetch, type FetchInput, type FetchResult, type SponsoredRetrievalAut
 import { useUpdateDealRetrievalPolicy, type RetrievalPolicyMode } from '../hooks/useUpdateDealRetrievalPolicy'
 import type { Hex } from 'viem'
 import { DealLivenessHeatmap } from './DealLivenessHeatmap'
-import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
 import {
@@ -36,11 +36,11 @@ import {
 } from '../lib/storage/OpfsAdapter'
 import {
   mode2RowsForK,
-  parseNilfsFilesFromMdu0,
-  parseNilfsRootTableFromMdu0,
+  parsePolyfsFilesFromMdu0,
+  parsePolyfsRootTableFromMdu0,
   reconstructMduFromMode2SlotSlices,
-} from '../lib/nilfsLocal'
-import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY, readNilfsFileFromOpfs } from '../lib/nilfsOpfsFetch'
+} from '../lib/polyfsLocal'
+import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY, readPolyfsFileFromOpfs } from '../lib/polyfsOpfsFetch'
 import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
@@ -48,7 +48,7 @@ import { parseServiceHint } from '../lib/serviceHint'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
-import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
+import { planPolyfsFileRangeChunks } from '../lib/rangeChunker'
 import { providerFetchMduWindowWithSession } from '../api/providerClient'
 import { lcdFetchDeal } from '../api/lcdClient'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
@@ -72,12 +72,12 @@ function bytesTo0xHex(bytes: Uint8Array): string {
   return out
 }
 
-function deriveSlabLayoutFromMdu0(mdu0: Uint8Array, files: NilfsFileEntry[]): {
+function deriveSlabLayoutFromMdu0(mdu0: Uint8Array, files: PolyfsFileEntry[]): {
   totalMdus: number
   witnessMdus: number
   userMdus: number
 } {
-  const roots = parseNilfsRootTableFromMdu0(mdu0)
+  const roots = parsePolyfsRootTableFromMdu0(mdu0)
   let maxEnd = 0
   for (const file of files) {
     const start = Number(file.start_offset || 0)
@@ -121,7 +121,7 @@ function decodeGatewayHttpError(status: number, bodyText: string): string {
     const err = typeof parsed.error === 'string' ? parsed.error.trim() : ''
     const hint = typeof parsed.hint === 'string' ? parsed.hint.trim() : ''
     const message = typeof parsed.message === 'string' ? parsed.message.trim() : ''
-    if (/missing X-Nil-Session-Id/i.test(err)) {
+    if (/missing X-PolyStore-Session-Id/i.test(err)) {
       return 'Gateway requires an on-chain retrieval session. Use Onchain Retrieval (or Auto source) and approve wallet access.'
     }
     if (err && hint) return `${err} (${hint})`
@@ -176,7 +176,7 @@ async function ensureWasmReady(): Promise<void> {
     const buf = await res.arrayBuffer()
     const trustedSetupBytes = new Uint8Array(buf)
     try {
-      await workerClient.initNilWasm(trustedSetupBytes)
+      await workerClient.initPolyStoreWasm(trustedSetupBytes)
     } catch (e) {
       // If the worker was already initialized, ignore and proceed.
       void e
@@ -187,7 +187,7 @@ async function ensureWasmReady(): Promise<void> {
 
 interface DealDetailProps {
   deal: LcdDeal
-  nilAddress: string
+  polystoreAddress: string
   onFileActivity?: (activity: FileActivity) => void
   topPanel?: ReactNode
   uploadWorkflowActive?: boolean
@@ -251,7 +251,7 @@ interface DealIndexRequirement {
 }
 
 interface FileRowProps {
-  file: NilfsFileEntry
+  file: PolyfsFileEntry
   deal: LcdDeal
   manifestRoot: string
   owner: string
@@ -288,7 +288,7 @@ interface FileRowProps {
   setBusyFilePath: (path: string | null) => void
   downloadRangeStart: number
   downloadRangeLen: number
-  allFiles: NilfsFileEntry[]
+  allFiles: PolyfsFileEntry[]
   transportPreference?: string
   gatewayModePreferred: boolean
   setSelectedMdu: React.Dispatch<React.SetStateAction<number>>
@@ -424,7 +424,7 @@ function FileRow({
     }
 
     return withTimeout(
-      readNilfsFileFromOpfs({
+      readPolyfsFileFromOpfs({
         dealId,
         file,
         allFiles,
@@ -973,7 +973,7 @@ function FileRow({
 
 export function DealDetail({
   deal,
-  nilAddress,
+  polystoreAddress,
   onFileActivity,
   topPanel,
   uploadWorkflowActive = false,
@@ -983,7 +983,7 @@ export function DealDetail({
   const serviceHint = parseServiceHint(deal?.service_hint)
   const dealOwner = String(deal.owner || '').trim()
   const fallbackManifestRoot = normalizeManifestRoot(String(deal.cid || ''))
-  const fallbackOwner = dealOwner || String(nilAddress || '').trim()
+  const fallbackOwner = dealOwner || String(polystoreAddress || '').trim()
   const [authoritativeManifestRoot, setAuthoritativeManifestRoot] = useState<string>(fallbackManifestRoot)
   const [authoritativeOwner, setAuthoritativeOwner] = useState<string>(fallbackOwner)
   const [authoritativeDealLoaded, setAuthoritativeDealLoaded] = useState(false)
@@ -1028,14 +1028,14 @@ export function DealDetail({
   const [, setPolicyError] = useState<string | null>(null)
   const [, setPolicyStatus] = useState<string | null>(null)
   const [sponsoredAuth, setSponsoredAuth] = useState<SponsoredRetrievalAuth>({ type: 'none' })
-  const authStorageKey = useMemo(() => `nilstore.retrievalAuth.${deal.id}`, [deal.id])
+  const authStorageKey = useMemo(() => `polystore.retrievalAuth.${deal.id}`, [deal.id])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
   const [heat, setHeat] = useState<HeatState | null>(null)
   const [providersByAddr, setProvidersByAddr] = useState<Record<string, ProviderInfo>>({})
   const [loadingSlab, setLoadingSlab] = useState(false)
-  const [files, setFiles] = useState<NilfsFileEntry[] | null>(null)
+  const [files, setFiles] = useState<PolyfsFileEntry[] | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [dealIndexRequirement, setDealIndexRequirement] = useState<DealIndexRequirement>({
     status: 'ready',
@@ -1219,7 +1219,7 @@ export function DealDetail({
   const dealProviders = useMemo(() => deal.providers || [], [deal.providers])
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
-  const isDealOwner = Boolean(nilAddress && dealOwner === String(nilAddress).trim())
+  const isDealOwner = Boolean(polystoreAddress && dealOwner === String(polystoreAddress).trim())
   const [routeOverride, setRouteOverride] = useState<string>('')
   const [, setRouteModeOverride] = useState<string>('')
   const [cacheSourceOverride, setCacheSourceOverride] = useState<string>('')
@@ -1500,10 +1500,10 @@ export function DealDetail({
         setFiles([])
         return
       }
-      const parsed = parseNilfsFilesFromMdu0(mdu0)
+      const parsed = parsePolyfsFilesFromMdu0(mdu0)
       setFiles(parsed)
     } catch (e) {
-      console.error('Failed to fetch local NilFS file list', e)
+      console.error('Failed to fetch local PolyFS file list', e)
       setFiles([])
     } finally {
       setLoadingFiles(false)
@@ -1666,7 +1666,7 @@ export function DealDetail({
     const effectiveMduSizeBytes = Math.max(1, Number(mduSizeBytes ?? slab?.mdu_size_bytes ?? 8 * 1024 * 1024))
     const hasChunkMeta = Number.isFinite(Number(fileStartOffset)) && sizeBytes > 0
     const legacyChunks = hasChunkMeta
-      ? planNilfsFileRangeChunks({
+      ? planPolyfsFileRangeChunks({
           fileStartOffset: Number(fileStartOffset),
           fileSizeBytes: sizeBytes,
           rangeStart: safeStart,
@@ -1689,7 +1689,7 @@ export function DealDetail({
 
     const downloadViaLegacyChunkedFetch = async (gatewayBase: string): Promise<Blob> => {
       if (legacyChunks.length === 0) {
-        throw new Error('Gateway compatibility mode requires NILFS metadata for multi-blob ranges')
+        throw new Error('Gateway compatibility mode requires POLYFS metadata for multi-blob ranges')
       }
       const legacySearch = new URLSearchParams({
         deal_id: normalizedDealId,
@@ -1889,7 +1889,7 @@ export function DealDetail({
           metadataManifestRoot === persistedManifestRoot &&
           (expectedManifestRoot === '' || metadataManifestRoot === expectedManifestRoot)
 
-        let localFiles: NilfsFileEntry[] = []
+        let localFiles: PolyfsFileEntry[] = []
         let witnessCount = 0
         let totalMdus = 0
         let userCount = 0
@@ -1918,7 +1918,7 @@ export function DealDetail({
           }
           const mdu0 = await readMdu(String(dealId), 0)
           if (!mdu0) return
-          localFiles = parseNilfsFilesFromMdu0(mdu0)
+          localFiles = parsePolyfsFilesFromMdu0(mdu0)
           const inferred = await inferWitnessCountFromOpfs(String(dealId), localFiles)
           witnessCount = inferred.witnessCount
           totalMdus = inferred.totalMdus
@@ -1968,7 +1968,7 @@ export function DealDetail({
       }
       await fetchLocalFiles(dealId)
     } catch (e) {
-      console.error('Failed to fetch NilFS file list', e)
+      console.error('Failed to fetch PolyFS file list', e)
       setDealIndexRequirement((prev) => ({
         ...prev,
         status: 'sync_failed',
@@ -2009,7 +2009,7 @@ export function DealDetail({
 
         const mdu0 = await readMdu(String(dealId), 0)
         if (!mdu0) throw new Error('missing local MDU #0')
-        const localFiles = parseNilfsFilesFromMdu0(mdu0)
+        const localFiles = parsePolyfsFilesFromMdu0(mdu0)
         const { witnessCount, totalMdus, userCount } = await inferWitnessCountFromOpfs(String(dealId), localFiles)
 
         await ensureWasmReady()
@@ -2179,9 +2179,9 @@ export function DealDetail({
       }
 
       const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0')
-      const parsedFiles = parseNilfsFilesFromMdu0(mdu0Bytes)
+      const parsedFiles = parsePolyfsFilesFromMdu0(mdu0Bytes)
       const { totalMdus, witnessMdus, userMdus } = deriveSlabLayoutFromMdu0(mdu0Bytes, parsedFiles)
-      const rootTable = parseNilfsRootTableFromMdu0(mdu0Bytes)
+      const rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes)
       if (rootTable.length !== totalMdus - 1) {
         throw new Error('invalid root table length for committed mdu_0')
       }
@@ -2776,7 +2776,7 @@ export function DealDetail({
                             <div className="space-y-2">
                               <div className="text-sm font-semibold text-foreground">Deal Index Required</div>
                               <div className="text-xs text-muted-foreground max-w-2xl">
-                                This browser does not have the committed NilFS index for this deal. Sync the committed slab
+                                This browser does not have the committed PolyFS index for this deal. Sync the committed slab
                                 index from providers before viewing files, appending safely, or relying on local deal state.
                               </div>
                               <div className="nil-detail-meta uppercase tracking-widest">
@@ -2864,7 +2864,7 @@ export function DealDetail({
                           ))}
                         </div>
                       ) : (
-                        <div className="nil-tab-panel text-xs text-muted-foreground italic">No files found in the committed NilFS generation.</div>
+                        <div className="nil-tab-panel text-xs text-muted-foreground italic">No files found in the committed PolyFS generation.</div>
                       )}
                     </div>
                   )}
@@ -2887,7 +2887,7 @@ export function DealDetail({
                   <div className="nil-tab-panel border-primary/20 bg-gradient-to-br from-background via-secondary/30 to-primary/10 p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                       <div>
-                        <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-primary">NilFS Explorer</div>
+                        <div className="text-[10px] uppercase tracking-[0.2em] font-bold font-mono-data text-primary">PolyFS Explorer</div>
                         <div className="mt-1 text-sm font-semibold text-foreground">Manifest & MDUs</div>
                         <div className="mt-1 text-[11px] text-muted-foreground max-w-3xl">
                           Explore how this deal is packed: MDU #0 stores the filesystem index, witness MDUs track commitment metadata, and user MDUs store file bytes.
@@ -2914,7 +2914,7 @@ export function DealDetail({
                         </div>
                       </div>
                       <div className="nil-tab-inset px-3 py-2">
-                        <div className="text-muted-foreground uppercase tracking-[0.16em]">NilFS Files</div>
+                        <div className="text-muted-foreground uppercase tracking-[0.16em]">PolyFS Files</div>
                         <div className="mt-1 text-foreground">{slab.file_count} files</div>
                         <div className="text-muted-foreground">{formatBytes(slab.total_size_bytes)}</div>
                       </div>
@@ -3025,7 +3025,7 @@ export function DealDetail({
                           disabled={!selectedMduRecord || !explorerManifestRoot || loadingMduKzg}
                           onClick={() => {
                             if (!selectedMduRecord || !explorerManifestRoot) return
-                            void fetchMduKzg(explorerManifestRoot, selectedMduRecord.mdu_index, deal.id, nilAddress)
+                            void fetchMduKzg(explorerManifestRoot, selectedMduRecord.mdu_index, deal.id, polystoreAddress)
                           }}
                           className="text-[10px] px-3 py-2 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors disabled:opacity-50"
                         >
@@ -3056,7 +3056,7 @@ export function DealDetail({
 
                           {selectedMduRecord.kind === 'mdu0' ? (
                             <div className="bg-background/50 border border-border p-3 text-[11px] text-muted-foreground space-y-2">
-                              <div>MDU #0 is the NilFS super-manifest. It contains file table entries and the root table that points to all non-zero MDUs.</div>
+                              <div>MDU #0 is the PolyFS super-manifest. It contains file table entries and the root table that points to all non-zero MDUs.</div>
                               <div className="font-mono-data text-[10px]">
                                 File records: {slab.file_records} • Root table entries: {rootTableRecords.length}
                               </div>
@@ -3075,7 +3075,7 @@ export function DealDetail({
                           {selectedMduRecord.kind === 'user' ? (
                             <div className="bg-background/50 border border-border p-3 text-[11px] space-y-2">
                               <div className="text-muted-foreground">
-                                User MDUs store raw file bytes. The overlaps below show which NilFS files occupy this MDU window.
+                                User MDUs store raw file bytes. The overlaps below show which PolyFS files occupy this MDU window.
                               </div>
                               {selectedUserMduRange ? (
                                 <div className="font-mono-data text-[10px] text-muted-foreground">
@@ -3241,7 +3241,7 @@ export function DealDetail({
                                 onClick={() => {
                                   setSelectedMdu(record.mdu_index)
                                   if (explorerManifestRoot) {
-                                    void fetchMduKzg(explorerManifestRoot, record.mdu_index, deal.id, nilAddress)
+                                    void fetchMduKzg(explorerManifestRoot, record.mdu_index, deal.id, polystoreAddress)
                                   }
                                 }}
                                 className="shrink-0 text-[10px] px-2 py-1 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"

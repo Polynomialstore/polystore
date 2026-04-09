@@ -36,7 +36,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		manifestPath = abs
 	}
 	if strings.TrimSpace(providerKeyName) == "" {
-		providerKeyName = envDefault("NIL_PROVIDER_KEY", "faucet")
+		providerKeyName = envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 	}
 	providerAddr, err := resolveKeyAddress(ctx, providerKeyName)
 	if err != nil {
@@ -83,7 +83,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		signer = name
 	}
 
-	signOut, err := execNilchaind(
+	signOut, err := execPolystorechaind(
 		signCtx,
 		"tx", "polystorechain", "sign-retrieval-receipt",
 		dealIDStr,
@@ -171,7 +171,7 @@ type cachedProof struct {
 var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
 
 // generateProofHeaderJSON generates the JSON payload expected by the browser header
-// `X-Nil-Proof-JSON`. The payload is a small wrapper object:
+// `X-PolyStore-Proof-JSON`. The payload is a small wrapper object:
 //
 //	{ "proof_details": <ChainedProof> }
 //
@@ -246,7 +246,7 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	commitmentSpan := leafCount * commitmentBytes
 	startOffset := userOrdinal * commitmentSpan
 
-	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
+	witnessReader, err := newPolyfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to open witness reader: %w", err)
 	}

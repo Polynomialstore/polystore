@@ -12,7 +12,7 @@ use std::sync::OnceLock;
 static KZG_CTX: OnceLock<KzgContext> = OnceLock::new();
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_init(trusted_setup_path: *const c_char) -> c_int {
+pub extern "C" fn polystore_init(trusted_setup_path: *const c_char) -> c_int {
     if trusted_setup_path.is_null() {
         return -1; // Null path
     }
@@ -28,7 +28,7 @@ pub extern "C" fn nil_init(trusted_setup_path: *const c_char) -> c_int {
         Err(_) => return -2, // Invalid UTF-8 in path
     };
 
-    // println!("DEBUG: nil_init called with path: {}", path_str);
+    // println!("DEBUG: polystore_init called with path: {}", path_str);
 
     match KzgContext::load_from_file(path_str) {
         Ok(ctx) => {
@@ -47,7 +47,7 @@ pub extern "C" fn nil_init(trusted_setup_path: *const c_char) -> c_int {
 /// Computes the Merkle root of KZG commitments for an 8 MiB MDU.
 /// Input `mdu_bytes` must be exactly 8 MiB. Output `mdu_merkle_root` must be 32 bytes.
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_compute_mdu_merkle_root(
+pub extern "C" fn polystore_compute_mdu_merkle_root(
     mdu_bytes: *const u8,
     mdu_bytes_len: usize,
     out_mdu_merkle_root: *mut u8,
@@ -101,7 +101,7 @@ pub extern "C" fn nil_compute_mdu_merkle_root(
 /// Output:
 /// - out_mdu_merkle_root: 32-byte merkle root
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_compute_mdu_root_from_witness_flat(
+pub extern "C" fn polystore_compute_mdu_root_from_witness_flat(
     witness_flat: *const u8,
     witness_flat_len: usize,
     out_mdu_merkle_root: *mut u8,
@@ -142,7 +142,7 @@ pub extern "C" fn nil_compute_mdu_root_from_witness_flat(
 /// - witness_flat: slot-major commitments, 48 bytes each (length = N*rows*48)
 /// - shards_flat: slot-major shard bytes (length = N*rows*BLOB_SIZE)
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_expand_mdu_rs(
+pub extern "C" fn polystore_expand_mdu_rs(
     mdu_bytes: *const u8,
     mdu_bytes_len: usize,
     data_shards: u64,
@@ -201,7 +201,7 @@ pub extern "C" fn nil_expand_mdu_rs(
 ///
 /// This matches the MDU encoding used by the gateway/browser: 31-byte chunks right-aligned in 32-byte scalars.
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_expand_payload_rs(
+pub extern "C" fn polystore_expand_payload_rs(
     payload_bytes: *const u8,
     payload_bytes_len: usize,
     data_shards: u64,
@@ -266,12 +266,12 @@ pub extern "C" fn nil_expand_payload_rs(
     0
 }
 
-/// Encodes a raw NilFS payload (up to 8,126,464 bytes) into a full 8 MiB MDU buffer using the
+/// Encodes a raw PolyFS payload (up to 8,126,464 bytes) into a full 8 MiB MDU buffer using the
 /// field-aligned layout (31-byte chunks right-aligned in 32-byte scalars).
 ///
 /// This is used to materialize witness MDUs deterministically from commitment bytes.
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_encode_payload_to_mdu(
+pub extern "C" fn polystore_encode_payload_to_mdu(
     payload_bytes: *const u8,
     payload_bytes_len: usize,
     out_mdu_bytes: *mut u8,
@@ -308,12 +308,12 @@ pub extern "C" fn nil_encode_payload_to_mdu(
     0
 }
 
-/// Decodes a NilFS payload from an encoded 8 MiB MDU buffer.
+/// Decodes a PolyFS payload from an encoded 8 MiB MDU buffer.
 ///
 /// The caller specifies the desired `raw_len` (<= 8,126,464) so that trailing zero padding in the
 /// final scalar is not returned.
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_decode_payload_from_mdu(
+pub extern "C" fn polystore_decode_payload_from_mdu(
     mdu_bytes: *const u8,
     mdu_bytes_len: usize,
     raw_len: u64,
@@ -366,7 +366,7 @@ pub extern "C" fn nil_decode_payload_from_mdu(
 /// - shards_flat_len must equal N * (rows*BLOB_SIZE)
 /// - present_len must equal N
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_reconstruct_mdu_rs(
+pub extern "C" fn polystore_reconstruct_mdu_rs(
     shards_flat: *const u8,
     shards_flat_len: usize,
     present: *const u8,
@@ -427,7 +427,7 @@ pub extern "C" fn nil_reconstruct_mdu_rs(
 
 /// Verifies a KZG proof for a single 128 KiB blob within an MDU, including Merkle proof verification.
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_verify_mdu_proof(
+pub extern "C" fn polystore_verify_mdu_proof(
     mdu_merkle_root: *const u8,           // 32-byte MDU Merkle Root
     challenged_kzg_commitment: *const u8, // 48-byte KZG commitment of the challenged blob
     merkle_path_bytes: *const u8,         // Serialized Merkle path
@@ -517,7 +517,7 @@ pub extern "C" fn nil_verify_mdu_proof(
 /// - out_y: 32 bytes (evaluation)
 /// - out_kzg_proof: 48 bytes
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_compute_mdu_proof_test(
+pub extern "C" fn polystore_compute_mdu_proof_test(
     mdu_bytes: *const u8,
     mdu_bytes_len: usize,
     chunk_index: u32,
@@ -614,7 +614,7 @@ pub extern "C" fn nil_compute_mdu_proof_test(
 /// - out_commitment: Buffer for 48-byte KZG Commitment.
 /// - out_manifest_blob: Buffer for 128 KiB Manifest MDU.
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_compute_manifest_commitment(
+pub extern "C" fn polystore_compute_manifest_commitment(
     hashes_ptr: *const u8,
     num_hashes: usize,
     out_commitment: *mut u8,
@@ -670,7 +670,7 @@ pub extern "C" fn nil_compute_manifest_commitment(
 /// - out_proof: Buffer for 48-byte KZG Proof.
 /// - out_y: Buffer for 32-byte Value (MDU Root).
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_compute_manifest_proof(
+pub extern "C" fn polystore_compute_manifest_proof(
     manifest_blob_ptr: *const u8,
     mdu_index: u64,
     out_proof: *mut u8,
@@ -718,7 +718,7 @@ pub extern "C" fn nil_compute_manifest_proof(
 /// - out_proof: Buffer for 48-byte KZG proof.
 /// - out_y: Buffer for 32-byte evaluation.
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_compute_blob_proof(
+pub extern "C" fn polystore_compute_blob_proof(
     blob_ptr: *const u8,
     blob_len: usize,
     z_ptr: *const u8,
@@ -764,7 +764,7 @@ pub extern "C" fn nil_compute_blob_proof(
 /// Hop 2: Verify Blob Commitment is in MDU (Merkle).
 /// Hop 3: Verify Data is in Blob (KZG).
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_verify_chained_proof(
+pub extern "C" fn polystore_verify_chained_proof(
     // Hop 1 Inputs
     manifest_commitment: *const u8, // 48 bytes
     mdu_index: u64,                 // Index of MDU in Manifest
@@ -879,13 +879,13 @@ pub extern "C" fn nil_verify_chained_proof(
 // --- Layout FFI ---
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_builder_new(max_user_mdus: u64) -> *mut Mdu0Builder {
+pub extern "C" fn polystore_mdu0_builder_new(max_user_mdus: u64) -> *mut Mdu0Builder {
     let builder = Mdu0Builder::new(max_user_mdus);
     Box::into_raw(Box::new(builder))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_builder_new_with_commitments(
+pub extern "C" fn polystore_mdu0_builder_new_with_commitments(
     max_user_mdus: u64,
     commitments_per_mdu: u64,
 ) -> *mut Mdu0Builder {
@@ -894,7 +894,7 @@ pub extern "C" fn nil_mdu0_builder_new_with_commitments(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_builder_free(ptr: *mut Mdu0Builder) {
+pub extern "C" fn polystore_mdu0_builder_free(ptr: *mut Mdu0Builder) {
     if ptr.is_null() {
         return;
     }
@@ -904,7 +904,7 @@ pub extern "C" fn nil_mdu0_builder_free(ptr: *mut Mdu0Builder) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_builder_load(
+pub extern "C" fn polystore_mdu0_builder_load(
     data_ptr: *const u8,
     len: usize,
     max_user_mdus: u64,
@@ -920,7 +920,7 @@ pub extern "C" fn nil_mdu0_builder_load(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_builder_load_with_commitments(
+pub extern "C" fn polystore_mdu0_builder_load_with_commitments(
     data_ptr: *const u8,
     len: usize,
     max_user_mdus: u64,
@@ -937,7 +937,7 @@ pub extern "C" fn nil_mdu0_builder_load_with_commitments(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_builder_bytes(
+pub extern "C" fn polystore_mdu0_builder_bytes(
     ptr: *mut Mdu0Builder,
     out_ptr: *mut u8,
     out_len: usize,
@@ -954,17 +954,17 @@ pub extern "C" fn nil_mdu0_builder_bytes(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_append_file(
+pub extern "C" fn polystore_mdu0_append_file(
     ptr: *mut Mdu0Builder,
     path_ptr: *const c_char,
     size: u64,
     start_offset: u64,
 ) -> c_int {
-    nil_mdu0_append_file_with_flags(ptr, path_ptr, size, start_offset, 0)
+    polystore_mdu0_append_file_with_flags(ptr, path_ptr, size, start_offset, 0)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_append_file_with_flags(
+pub extern "C" fn polystore_mdu0_append_file_with_flags(
     ptr: *mut Mdu0Builder,
     path_ptr: *const c_char,
     size: u64,
@@ -1003,7 +1003,7 @@ pub extern "C" fn nil_mdu0_append_file_with_flags(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_set_root(
+pub extern "C" fn polystore_mdu0_set_root(
     ptr: *mut Mdu0Builder,
     index: u64,
     root_ptr: *const u8,
@@ -1023,7 +1023,11 @@ pub extern "C" fn nil_mdu0_set_root(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_get_root(ptr: *mut Mdu0Builder, index: u64, root_ptr: *mut u8) -> c_int {
+pub extern "C" fn polystore_mdu0_get_root(
+    ptr: *mut Mdu0Builder,
+    index: u64,
+    root_ptr: *mut u8,
+) -> c_int {
     if ptr.is_null() || root_ptr.is_null() {
         return -1;
     }
@@ -1040,7 +1044,7 @@ pub extern "C" fn nil_mdu0_get_root(ptr: *mut Mdu0Builder, index: u64, root_ptr:
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_get_witness_count(ptr: *mut Mdu0Builder) -> u64 {
+pub extern "C" fn polystore_mdu0_get_witness_count(ptr: *mut Mdu0Builder) -> u64 {
     if ptr.is_null() {
         return 0;
     }
@@ -1049,7 +1053,7 @@ pub extern "C" fn nil_mdu0_get_witness_count(ptr: *mut Mdu0Builder) -> u64 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_get_record_count(ptr: *mut Mdu0Builder) -> u32 {
+pub extern "C" fn polystore_mdu0_get_record_count(ptr: *mut Mdu0Builder) -> u32 {
     if ptr.is_null() {
         return 0;
     }
@@ -1058,7 +1062,7 @@ pub extern "C" fn nil_mdu0_get_record_count(ptr: *mut Mdu0Builder) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nil_mdu0_get_record(
+pub extern "C" fn polystore_mdu0_get_record(
     ptr: *mut Mdu0Builder,
     index: u32,
     out_rec: *mut FileRecordV1,

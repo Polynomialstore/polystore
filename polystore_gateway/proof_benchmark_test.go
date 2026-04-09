@@ -26,7 +26,7 @@ func buildProofBenchmarkFixture(t testing.TB) (manifestPath string, mduPath stri
 	tmpDir := t.TempDir()
 
 	// Create a minimal slab layout:
-	// - mdu_0.bin (valid NilFS header + one file record so userCount=1)
+	// - mdu_0.bin (valid PolyFS header + one file record so userCount=1)
 	// - mdu_1.bin (witness, zero-filled)
 	// - mdu_2.bin (user, zero-filled)
 	builder := crypto_ffi.NewMdu0Builder(1)

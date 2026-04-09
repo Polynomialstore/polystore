@@ -108,7 +108,7 @@ func TestS3_ListBuckets_UsesDealIDs(t *testing.T) {
 	}
 }
 
-func TestS3_ListObjects_ListsNilfsFileTable(t *testing.T) {
+func TestS3_ListObjects_ListsPolyfsFileTable(t *testing.T) {
 	useTempUploadDir(t)
 
 	root := mustTestManifestRoot(t, "s3-list")

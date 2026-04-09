@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	p2pFetchProtocolID  = "/nilstore/fetch/1.0.0"
+	p2pFetchProtocolID  = "/polystore/fetch/1.0.0"
 	p2pMaxRequestBytes  = 256 * 1024
 	p2pMaxHeaderBytes   = 1 * 1024 * 1024
 	p2pDefaultTimeout   = 45 * time.Second
@@ -127,23 +127,23 @@ func startLibp2pServer(ctx context.Context, listenAddrs []string) (*p2pServer, e
 }
 
 func startLibp2pServerFromEnv(ctx context.Context) (*p2pServer, error) {
-	// Default: enabled (dev/test posture). Disable explicitly via NIL_P2P_ENABLED=0.
-	if envDefault("NIL_P2P_ENABLED", "1") != "1" {
+	// Default: enabled (dev/test posture). Disable explicitly via POLYSTORE_P2P_ENABLED=0.
+	if envDefault("POLYSTORE_P2P_ENABLED", "1") != "1" {
 		return nil, nil
 	}
-	raw := envDefault("NIL_P2P_LISTEN_ADDRS", p2pDefaultListenRaw)
+	raw := envDefault("POLYSTORE_P2P_LISTEN_ADDRS", p2pDefaultListenRaw)
 	addrs := parseCommaList(raw)
 	if len(addrs) == 0 {
-		return nil, fmt.Errorf("NIL_P2P_LISTEN_ADDRS is empty")
+		return nil, fmt.Errorf("POLYSTORE_P2P_LISTEN_ADDRS is empty")
 	}
 	server, err := startLibp2pServer(ctx, addrs)
 	if err != nil {
 		return nil, err
 	}
 
-	announce := parseCommaList(envDefault("NIL_P2P_ANNOUNCE_ADDRS", ""))
+	announce := parseCommaList(envDefault("POLYSTORE_P2P_ANNOUNCE_ADDRS", ""))
 	if len(announce) == 0 {
-		relayDial, err := reserveRelayAddrs(ctx, server.host, parseCommaList(envDefault("NIL_P2P_RELAY_ADDRS", "")))
+		relayDial, err := reserveRelayAddrs(ctx, server.host, parseCommaList(envDefault("POLYSTORE_P2P_RELAY_ADDRS", "")))
 		if err != nil {
 			log.Printf("p2p relay reservation failed: %v", err)
 		}
@@ -183,25 +183,25 @@ func p2pAnnounceAddrs(h host.Host) []string {
 }
 
 func loadP2PIdentityFromEnv() (crypto.PrivKey, error) {
-	if raw := strings.TrimSpace(envDefault("NIL_P2P_IDENTITY_B64", "")); raw != "" {
+	if raw := strings.TrimSpace(envDefault("POLYSTORE_P2P_IDENTITY_B64", "")); raw != "" {
 		decoded, err := base64.StdEncoding.DecodeString(raw)
 		if err != nil {
-			return nil, fmt.Errorf("decode NIL_P2P_IDENTITY_B64: %w", err)
+			return nil, fmt.Errorf("decode POLYSTORE_P2P_IDENTITY_B64: %w", err)
 		}
 		priv, err := crypto.UnmarshalPrivateKey(decoded)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal NIL_P2P_IDENTITY_B64: %w", err)
+			return nil, fmt.Errorf("unmarshal POLYSTORE_P2P_IDENTITY_B64: %w", err)
 		}
 		return priv, nil
 	}
-	if path := strings.TrimSpace(envDefault("NIL_P2P_IDENTITY_PATH", "")); path != "" {
+	if path := strings.TrimSpace(envDefault("POLYSTORE_P2P_IDENTITY_PATH", "")); path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read NIL_P2P_IDENTITY_PATH: %w", err)
+			return nil, fmt.Errorf("read POLYSTORE_P2P_IDENTITY_PATH: %w", err)
 		}
 		raw := strings.TrimSpace(string(data))
 		if raw == "" {
-			return nil, fmt.Errorf("NIL_P2P_IDENTITY_PATH is empty")
+			return nil, fmt.Errorf("POLYSTORE_P2P_IDENTITY_PATH is empty")
 		}
 		decoded, err := base64.StdEncoding.DecodeString(raw)
 		if err == nil {
@@ -209,7 +209,7 @@ func loadP2PIdentityFromEnv() (crypto.PrivKey, error) {
 		}
 		priv, err := crypto.UnmarshalPrivateKey(data)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal NIL_P2P_IDENTITY_PATH: %w", err)
+			return nil, fmt.Errorf("unmarshal POLYSTORE_P2P_IDENTITY_PATH: %w", err)
 		}
 		return priv, nil
 	}
@@ -332,29 +332,29 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 	})
 	httpReq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", req.RangeStart, req.RangeStart+req.RangeLen-1))
 	if req.DownloadSession != "" {
-		httpReq.Header.Set("X-Nil-Download-Session", req.DownloadSession)
+		httpReq.Header.Set("X-PolyStore-Download-Session", req.DownloadSession)
 	}
 	if req.OnchainSession != "" {
-		httpReq.Header.Set("X-Nil-Session-Id", req.OnchainSession)
+		httpReq.Header.Set("X-PolyStore-Session-Id", req.OnchainSession)
 	}
 	if req.ReqSig != "" {
-		httpReq.Header.Set("X-Nil-Req-Sig", req.ReqSig)
+		httpReq.Header.Set("X-PolyStore-Req-Sig", req.ReqSig)
 	}
 	if req.ReqNonce != 0 {
-		httpReq.Header.Set("X-Nil-Req-Nonce", fmt.Sprintf("%d", req.ReqNonce))
+		httpReq.Header.Set("X-PolyStore-Req-Nonce", fmt.Sprintf("%d", req.ReqNonce))
 	}
 	if req.ReqExpiresAt != 0 {
-		httpReq.Header.Set("X-Nil-Req-Expires-At", fmt.Sprintf("%d", req.ReqExpiresAt))
+		httpReq.Header.Set("X-PolyStore-Req-Expires-At", fmt.Sprintf("%d", req.ReqExpiresAt))
 	}
 	if req.ReqRangeStart != nil {
-		httpReq.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", *req.ReqRangeStart))
+		httpReq.Header.Set("X-PolyStore-Req-Range-Start", fmt.Sprintf("%d", *req.ReqRangeStart))
 	} else {
-		httpReq.Header.Set("X-Nil-Req-Range-Start", fmt.Sprintf("%d", req.RangeStart))
+		httpReq.Header.Set("X-PolyStore-Req-Range-Start", fmt.Sprintf("%d", req.RangeStart))
 	}
 	if req.ReqRangeLen != nil {
-		httpReq.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", *req.ReqRangeLen))
+		httpReq.Header.Set("X-PolyStore-Req-Range-Len", fmt.Sprintf("%d", *req.ReqRangeLen))
 	} else {
-		httpReq.Header.Set("X-Nil-Req-Range-Len", fmt.Sprintf("%d", req.RangeLen))
+		httpReq.Header.Set("X-PolyStore-Req-Range-Len", fmt.Sprintf("%d", req.RangeLen))
 	}
 
 	w := httptest.NewRecorder()
@@ -376,8 +376,9 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 		if len(vals) == 0 {
 			continue
 		}
-		if strings.HasPrefix(key, "X-Nil-") || key == "Content-Type" {
-			resp.Headers[key] = vals[0]
+		lowerKey := strings.ToLower(key)
+		if strings.HasPrefix(lowerKey, "x-polystore-") || lowerKey == "content-type" {
+			resp.Headers[lowerKey] = vals[0]
 		}
 	}
 

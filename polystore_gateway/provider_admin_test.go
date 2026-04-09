@@ -22,7 +22,7 @@ const providerAdminTestPrivKey = "4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b
 
 func configureProviderAdminNonceStoreForTest(t *testing.T) {
 	t.Helper()
-	t.Setenv("NIL_PROVIDER_ADMIN_NONCES_PATH", filepath.Join(t.TempDir(), "provider_admin_nonces.json"))
+	t.Setenv("POLYSTORE_PROVIDER_ADMIN_NONCES_PATH", filepath.Join(t.TempDir(), "provider_admin_nonces.json"))
 }
 
 func providerAdminTestKey(t *testing.T) *ecdsa.PrivateKey {
@@ -34,12 +34,12 @@ func providerAdminTestKey(t *testing.T) *ecdsa.PrivateKey {
 	return key
 }
 
-func providerAdminOperatorNilAddress(t *testing.T) string {
+func providerAdminOperatorPolystoreAddress(t *testing.T) string {
 	t.Helper()
 	key := providerAdminTestKey(t)
-	addr, err := evmHexToNilAddress(gethCrypto.PubkeyToAddress(key.PublicKey).Hex())
+	addr, err := evmHexToPolystoreAddress(gethCrypto.PubkeyToAddress(key.PublicKey).Hex())
 	if err != nil {
-		t.Fatalf("evmHexToNilAddress: %v", err)
+		t.Fatalf("evmHexToPolystoreAddress: %v", err)
 	}
 	return addr
 }
@@ -76,16 +76,16 @@ func setupProviderAdminStatusEnv(t *testing.T, providerAddress string, localURL 
 	t.Helper()
 	resetProviderAddressCacheForTest(t)
 	configureProviderAdminNonceStoreForTest(t)
-	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
-	t.Setenv("NIL_PROVIDER_KEY", "provider-admin")
-	t.Setenv("NIL_PROVIDER_ADDRESS", providerAddress)
-	t.Setenv("NIL_LISTEN_ADDR", localURL)
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "shared-secret")
+	t.Setenv("POLYSTORE_RUNTIME_PERSONA", "provider-daemon")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "provider-admin")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", providerAddress)
+	t.Setenv("POLYSTORE_LISTEN_ADDR", localURL)
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "shared-secret")
 	withProviderStatusGlobals(t, lcdURL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.polynomialstore.com")
 }
 
 func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradminstatus"
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +166,7 @@ func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
 }
 
 func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradmindoctor"
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +229,7 @@ func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
 }
 
 func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradminrotate"
 	const endpoint = "/dns4/new.example.com/tcp/443/https"
 

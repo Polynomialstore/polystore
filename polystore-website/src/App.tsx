@@ -31,7 +31,7 @@ import { AlphaStatus } from "./pages/AlphaStatus";
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="system" storageKey="nilstore-theme">
+    <ThemeProvider defaultTheme="system" storageKey="polystore-theme">
       <TransportProvider>
         <HashRouter>
           <Routes>

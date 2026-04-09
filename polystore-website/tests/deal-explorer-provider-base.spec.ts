@@ -14,7 +14,7 @@ const FILE_TABLE_HEADER_SIZE = 128
 const FILE_RECORD_SIZE = 256
 const FILE_RECORD_PATH_BYTES = FILE_RECORD_SIZE - 24
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -41,7 +41,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const dealId = '1'
   const filePath = 'provider-base.txt'
@@ -70,7 +70,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
         deals: [
           {
             id: dealId,
-            owner: nilAddress,
+            owner: polystoreAddress,
             cid: staleManifestRoot,
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
@@ -89,7 +89,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
       body: JSON.stringify({
         deal: {
           id: dealId,
-          owner: nilAddress,
+          owner: polystoreAddress,
           manifest_root: manifestRootBase64,
           size: String(24 * 1024 * 1024),
           escrow_balance: '1000000',
@@ -192,14 +192,14 @@ test('Deal Explorer: missing local index requires provider sync before file view
     const index = Number(parts[parts.length - 1] || -1)
     const startBlobIndex = url.searchParams.get('start_blob_index')
     const blobCount = url.searchParams.get('blob_count')
-    const sessionId = route.request().headers()['x-nil-session-id']
+    const sessionId = route.request().headers()['x-polystore-session-id']
     if (!sessionId) {
       sessionlessMduRequests += 1
       await route.fulfill({
         status: 400,
         contentType: 'application/json',
         headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'missing X-Nil-Session-Id' }),
+        body: JSON.stringify({ error: 'missing X-PolyStore-Session-Id' }),
       })
       return
     }
@@ -221,7 +221,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/octet-stream',
-          'X-Nil-Mdu-Index': '0',
+          'X-PolyStore-Mdu-Index': '0',
         },
         body: mdu0Bytes,
       })
@@ -234,7 +234,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/octet-stream',
-          'X-Nil-Mdu-Index': '1',
+          'X-PolyStore-Mdu-Index': '1',
         },
         body: witnessMduBytes,
       })

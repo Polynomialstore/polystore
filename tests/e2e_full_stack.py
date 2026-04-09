@@ -58,7 +58,7 @@ def create_deal():
     service_hint = "General"
 
     domain_data = {
-        "name": "NilStore",
+        "name": "PolyStore",
         "version": "1",
         "chainId": EVM_CHAIN_ID,
         "verifyingContract": VERIFYING_CONTRACT,
@@ -136,7 +136,7 @@ def verify_deal(deal_id):
 
 # --- 3. Upload Content ---
 def upload_content():
-    content = b"Hello NilStore E2E Test" * 100
+    content = b"Hello PolyStore E2E Test" * 100
     files = {'file': ('test.txt', content)}
     
     print("Uploading file...")
@@ -154,7 +154,7 @@ def update_content(deal_id, cid, size_bytes):
     nonce = 2 # Increment nonce
     
     domain_data = {
-        "name": "NilStore",
+        "name": "PolyStore",
         "version": "1",
         "chainId": EVM_CHAIN_ID,
         "verifyingContract": VERIFYING_CONTRACT,
