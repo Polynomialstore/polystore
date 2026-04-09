@@ -14,7 +14,7 @@ Start the full local stack (chain + faucet + gateways + optional web UI):
 
 Notes:
 - `run_local_stack.sh start` **always re-initializes** the chain home.
-- Default home is `_artifacts/polystorechain_data`. If you set `NIL_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `NIL_REINIT_HOME=1`.
+- Default home is `_artifacts/polystorechain_data`. If you set `POLYSTORE_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `POLYSTORE_REINIT_HOME=1`.
 
 Stop everything started by the script:
 
@@ -27,7 +27,7 @@ Stop everything started by the script:
 Run the same local stack but without the dev faucet, auto-funding, or tx relay:
 
 ```bash
-NIL_START_FAUCET=0 NIL_AUTO_FAUCET_EVM=0 NIL_ENABLE_TX_RELAY=0 ./scripts/run_local_stack.sh start
+POLYSTORE_START_FAUCET=0 POLYSTORE_AUTO_FAUCET_EVM=0 POLYSTORE_ENABLE_TX_RELAY=0 ./scripts/run_local_stack.sh start
 ```
 
 Notes:
@@ -78,7 +78,7 @@ All items below are expected to be verifiable via the unit tests and/or the e2e 
   - Audit budget + task derivation tests: `polystorechain/x/polystorechain/keeper/epoch_audit_test.go`
   - Protocol session open/consume tests: `polystorechain/x/polystorechain/keeper/msg_server_protocol_sessions_test.go`
 - Compression round-trip:
-  - PolyCE v1 is **opt-in** (`NIL_POLYCE=0` by default). The encode/decode helpers are unit-tested in `polystore_gateway/polyce_test.go`.
+  - PolyCE v1 is **opt-in** (`POLYSTORE_POLYCE=0` by default). The encode/decode helpers are unit-tested in `polystore_gateway/polyce_test.go`.
   - CI does not currently require PolyCE-enabled end-to-end coverage.
 - Wallet-first chain writes (MetaMask/EVM signed intents; no relayer required):
   - Covered by Playwright E2E flows (in-page E2E wallet when `VITE_E2E=1`), not by `scripts/e2e_lifecycle.sh`.

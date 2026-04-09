@@ -44,9 +44,9 @@ Useful flags:
 
 Environment variables used by the helper:
 
-- `NIL_PUBLIC_HTTP_MULTIADDR` (highest precedence): explicit multiaddr to print
-- `NIL_CLOUDFLARE_TUNNEL_HOSTNAME`: if set, prints `/dns4/<host>/tcp/443/https` and labels as `cloudflare-tunnel`
-- `NIL_PUBLIC_HTTP_HOST` / `NIL_PUBLIC_HTTP_PORT` / `NIL_PUBLIC_HTTP_SCHEME`: used for `direct` derivation (falls back to `NIL_LISTEN_ADDR`)
+- `POLYSTORE_PUBLIC_HTTP_MULTIADDR` (highest precedence): explicit multiaddr to print
+- `POLYSTORE_CLOUDFLARE_TUNNEL_HOSTNAME`: if set, prints `/dns4/<host>/tcp/443/https` and labels as `cloudflare-tunnel`
+- `POLYSTORE_PUBLIC_HTTP_HOST` / `POLYSTORE_PUBLIC_HTTP_PORT` / `POLYSTORE_PUBLIC_HTTP_SCHEME`: used for `direct` derivation (falls back to `POLYSTORE_LISTEN_ADDR`)
 
 ## Type: direct (recommended when public ingress is already available)
 
@@ -59,7 +59,7 @@ One straightforward approach is to run the provider gateway locally on `:8082` a
 ```bash
 # Provider machine
 cd polystore_gateway
-NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .
+POLYSTORE_LISTEN_ADDR=:8082 POLYSTORE_GATEWAY_ROUTER=0 go run .
 ```
 
 Example TLS reverse proxy (Caddy):
@@ -73,7 +73,7 @@ Now print the endpoint to register:
 
 ```bash
 cd polystore_gateway
-NIL_PUBLIC_HTTP_HOST=sp.example.com NIL_PUBLIC_HTTP_SCHEME=https NIL_PUBLIC_HTTP_PORT=443 \
+POLYSTORE_PUBLIC_HTTP_HOST=sp.example.com POLYSTORE_PUBLIC_HTTP_SCHEME=https POLYSTORE_PUBLIC_HTTP_PORT=443 \
   go run . --print-endpoints
 ```
 
@@ -109,7 +109,7 @@ This routes traffic through Cloudflare, but is simple and works behind NAT.
 
 ```bash
 cd polystore_gateway
-NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .
+POLYSTORE_LISTEN_ADDR=:8082 POLYSTORE_GATEWAY_ROUTER=0 go run .
 ```
 
 2) Create a tunnel and map DNS:
@@ -141,7 +141,7 @@ cloudflared tunnel run polystore-sp
 
 ```bash
 cd polystore_gateway
-NIL_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints
+POLYSTORE_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints
 ```
 
 6) Register the endpoint on-chain:

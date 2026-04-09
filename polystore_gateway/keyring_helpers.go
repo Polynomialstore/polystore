@@ -21,7 +21,7 @@ func resolveKeyNameForAddress(ctx context.Context, addrOrName string) (string, e
 	if signer == "" {
 		return "", fmt.Errorf("empty signer")
 	}
-	// If it doesn't look like a nil bech32 address, assume it's already a key name.
+	// If it doesn't look like the current PolyStore nil1 bech32 address, assume it's already a key name.
 	if !strings.HasPrefix(signer, "nil1") {
 		return signer, nil
 	}
@@ -32,7 +32,7 @@ func resolveKeyNameForAddress(ctx context.Context, addrOrName string) (string, e
 	cctx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
 
-	out, err := execNilchaind(
+	out, err := execPolystorechaind(
 		cctx,
 		"keys", "list",
 		"--home", homeDir,

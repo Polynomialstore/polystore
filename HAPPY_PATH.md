@@ -15,8 +15,8 @@ scripts/e2e_lifecycle.sh
 
 Notes:
 - This script **enables gateway tx relay + faucet** for convenience:
-  - `NIL_ENABLE_TX_RELAY=1`
-  - `NIL_START_FAUCET=1`
+  - `POLYSTORE_ENABLE_TX_RELAY=1`
+  - `POLYSTORE_START_FAUCET=1`
 
 ## Option B — Scripted lifecycle (no local gateway)
 
@@ -32,7 +32,7 @@ These are “wallet-first” flows (no gateway tx relay). They install an in-pag
 E2E wallet when `VITE_E2E=1`.
 
 Notes:
-- These scripts run with gateway tx relay explicitly disabled (`NIL_ENABLE_TX_RELAY=0`).
+- These scripts run with gateway tx relay explicitly disabled (`POLYSTORE_ENABLE_TX_RELAY=0`).
 
 ```bash
 # Upload falls back to direct SP (gateway absent)
@@ -63,13 +63,13 @@ scripts/run_local_stack.sh stop
 
 `scripts/run_local_stack.sh start` **always re-initializes** the chain home.
 
-- Default behavior (safe): if you do **not** set `NIL_HOME`, the script uses `_artifacts/polystorechain_data` and will wipe/re-init that directory on each `start`.
-- Persistent home safety: if you set `NIL_HOME` to a path **outside** `_artifacts/`, the script will **refuse** to wipe it unless you explicitly opt in with `NIL_REINIT_HOME=1`.
-  - Example: `NIL_HOME=/var/lib/polystore/local NIL_REINIT_HOME=1 scripts/run_local_stack.sh start`
+- Default behavior (safe): if you do **not** set `POLYSTORE_HOME`, the script uses `_artifacts/polystorechain_data` and will wipe/re-init that directory on each `start`.
+- Persistent home safety: if you set `POLYSTORE_HOME` to a path **outside** `_artifacts/`, the script will **refuse** to wipe it unless you explicitly opt in with `POLYSTORE_REINIT_HOME=1`.
+  - Example: `POLYSTORE_HOME=/var/lib/polystore/local POLYSTORE_REINIT_HOME=1 scripts/run_local_stack.sh start`
 
 ## Common “why did fetch fail?”
 
 - `missing X-PolyStore-Session-Id`: sessions are **required by default** on byte-serving
-  endpoints (`NIL_REQUIRE_ONCHAIN_SESSION=1`).
+  endpoints (`POLYSTORE_REQUIRE_ONCHAIN_SESSION=1`).
 - If you want legacy behavior (dev-only), you must explicitly opt-in:
-  - `NIL_UNSAFE_ALLOW_LEGACY_DOWNLOAD_SESSION=1` (do not use for testnet posture)
+  - `POLYSTORE_UNSAFE_ALLOW_LEGACY_DOWNLOAD_SESSION=1` (do not use for testnet posture)

@@ -17,7 +17,7 @@ BINARY="$ROOT_DIR/polystorechaind"
 LCD_BASE="http://127.0.0.1:1317"
 RPC_STATUS="http://127.0.0.1:26657/status"
 
-DYNAMIC_PRICING_E2E="${NIL_DYNAMIC_PRICING_E2E:-0}"
+DYNAMIC_PRICING_E2E="${POLYSTORE_DYNAMIC_PRICING_E2E:-0}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then

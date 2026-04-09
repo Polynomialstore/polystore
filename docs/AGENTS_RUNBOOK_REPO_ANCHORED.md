@@ -55,9 +55,9 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
 
 - HTTP router + handlers:
   - `polystore_gateway/main.go`
-    - `GatewayFetch` (user-facing download path; **requires** `X-PolyStore-Session-Id` by default via `NIL_REQUIRE_ONCHAIN_SESSION=1`)
+    - `GatewayFetch` (user-facing download path; **requires** `X-PolyStore-Session-Id` by default via `POLYSTORE_REQUIRE_ONCHAIN_SESSION=1`)
     - `SpFetchShard` (provider shard fetch; validates on-chain session + Mode2 slot/range constraints when sessions are required)
-    - dev-only tx relay flows (`NIL_ENABLE_TX_RELAY=0` by default; CI lifecycle scripts enable it explicitly)
+    - dev-only tx relay flows (`POLYSTORE_ENABLE_TX_RELAY=0` by default; CI lifecycle scripts enable it explicitly)
   - `polystore_gateway/router_proxy.go` (gateway proxy/router for provider requests)
   - `polystore_gateway/p2p_server.go` (P2P requests; forwards `X-PolyStore-Session-Id` when present)
 
@@ -80,7 +80,7 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
   - `./scripts/run_devnet_alpha_multi_sp.sh stop`
 - Single-node stack:
   - `./scripts/run_local_stack.sh`
-  - Safety note: `run_local_stack.sh start` always re-initializes the chain home. Default home is `_artifacts/polystorechain_data`. If you set `NIL_HOME` outside `_artifacts/`, wiping requires `NIL_REINIT_HOME=1`.
+  - Safety note: `run_local_stack.sh start` always re-initializes the chain home. Default home is `_artifacts/polystorechain_data`. If you set `POLYSTORE_HOME` outside `_artifacts/`, wiping requires `POLYSTORE_REINIT_HOME=1`.
 
 ### E2E scripts
 
@@ -177,7 +177,7 @@ CI signals:
 - Unit tests only: `go test ./polystore_gateway/...` (PolyCE helpers)
 
 Not proven:
-- PolyCE-enabled end-to-end upload/fetch semantics are not required by CI E2E (and are opt-in via `NIL_POLYCE=1`).
+- PolyCE-enabled end-to-end upload/fetch semantics are not required by CI E2E (and are opt-in via `POLYSTORE_POLYCE=1`).
 
 ### Phase 6 — Wallet-first UX (DONE)
 

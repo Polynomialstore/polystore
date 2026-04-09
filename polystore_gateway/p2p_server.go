@@ -127,23 +127,23 @@ func startLibp2pServer(ctx context.Context, listenAddrs []string) (*p2pServer, e
 }
 
 func startLibp2pServerFromEnv(ctx context.Context) (*p2pServer, error) {
-	// Default: enabled (dev/test posture). Disable explicitly via NIL_P2P_ENABLED=0.
-	if envDefault("NIL_P2P_ENABLED", "1") != "1" {
+	// Default: enabled (dev/test posture). Disable explicitly via POLYSTORE_P2P_ENABLED=0.
+	if envDefault("POLYSTORE_P2P_ENABLED", "1") != "1" {
 		return nil, nil
 	}
-	raw := envDefault("NIL_P2P_LISTEN_ADDRS", p2pDefaultListenRaw)
+	raw := envDefault("POLYSTORE_P2P_LISTEN_ADDRS", p2pDefaultListenRaw)
 	addrs := parseCommaList(raw)
 	if len(addrs) == 0 {
-		return nil, fmt.Errorf("NIL_P2P_LISTEN_ADDRS is empty")
+		return nil, fmt.Errorf("POLYSTORE_P2P_LISTEN_ADDRS is empty")
 	}
 	server, err := startLibp2pServer(ctx, addrs)
 	if err != nil {
 		return nil, err
 	}
 
-	announce := parseCommaList(envDefault("NIL_P2P_ANNOUNCE_ADDRS", ""))
+	announce := parseCommaList(envDefault("POLYSTORE_P2P_ANNOUNCE_ADDRS", ""))
 	if len(announce) == 0 {
-		relayDial, err := reserveRelayAddrs(ctx, server.host, parseCommaList(envDefault("NIL_P2P_RELAY_ADDRS", "")))
+		relayDial, err := reserveRelayAddrs(ctx, server.host, parseCommaList(envDefault("POLYSTORE_P2P_RELAY_ADDRS", "")))
 		if err != nil {
 			log.Printf("p2p relay reservation failed: %v", err)
 		}
@@ -183,25 +183,25 @@ func p2pAnnounceAddrs(h host.Host) []string {
 }
 
 func loadP2PIdentityFromEnv() (crypto.PrivKey, error) {
-	if raw := strings.TrimSpace(envDefault("NIL_P2P_IDENTITY_B64", "")); raw != "" {
+	if raw := strings.TrimSpace(envDefault("POLYSTORE_P2P_IDENTITY_B64", "")); raw != "" {
 		decoded, err := base64.StdEncoding.DecodeString(raw)
 		if err != nil {
-			return nil, fmt.Errorf("decode NIL_P2P_IDENTITY_B64: %w", err)
+			return nil, fmt.Errorf("decode POLYSTORE_P2P_IDENTITY_B64: %w", err)
 		}
 		priv, err := crypto.UnmarshalPrivateKey(decoded)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal NIL_P2P_IDENTITY_B64: %w", err)
+			return nil, fmt.Errorf("unmarshal POLYSTORE_P2P_IDENTITY_B64: %w", err)
 		}
 		return priv, nil
 	}
-	if path := strings.TrimSpace(envDefault("NIL_P2P_IDENTITY_PATH", "")); path != "" {
+	if path := strings.TrimSpace(envDefault("POLYSTORE_P2P_IDENTITY_PATH", "")); path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read NIL_P2P_IDENTITY_PATH: %w", err)
+			return nil, fmt.Errorf("read POLYSTORE_P2P_IDENTITY_PATH: %w", err)
 		}
 		raw := strings.TrimSpace(string(data))
 		if raw == "" {
-			return nil, fmt.Errorf("NIL_P2P_IDENTITY_PATH is empty")
+			return nil, fmt.Errorf("POLYSTORE_P2P_IDENTITY_PATH is empty")
 		}
 		decoded, err := base64.StdEncoding.DecodeString(raw)
 		if err == nil {
@@ -209,7 +209,7 @@ func loadP2PIdentityFromEnv() (crypto.PrivKey, error) {
 		}
 		priv, err := crypto.UnmarshalPrivateKey(data)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal NIL_P2P_IDENTITY_PATH: %w", err)
+			return nil, fmt.Errorf("unmarshal POLYSTORE_P2P_IDENTITY_PATH: %w", err)
 		}
 		return priv, nil
 	}

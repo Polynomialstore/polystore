@@ -17,13 +17,13 @@ var (
 
 func gatewayToProviderAuthToken() string {
 	gatewayAuthOnce.Do(func() {
-		if v := strings.TrimSpace(os.Getenv("NIL_GATEWAY_SP_AUTH")); v != "" {
+		if v := strings.TrimSpace(os.Getenv("POLYSTORE_GATEWAY_SP_AUTH")); v != "" {
 			gatewayAuthToken = v
 			return
 		}
 		// Devnet default: shared deterministic token so multi-process gateways/providers
 		// can authenticate each other without per-host manual provisioning.
-		// Production deployments should override with NIL_GATEWAY_SP_AUTH.
+		// Production deployments should override with POLYSTORE_GATEWAY_SP_AUTH.
 		gatewayAuthToken = defaultGatewayToProviderAuthToken
 	})
 	return gatewayAuthToken

@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { concat, type Hex, hexToBytes, keccak256 } from 'viem'
 
-import { ethToNil } from '../src/lib/address'
+import { ethToPolystoreAddress } from '../src/lib/address'
 
 type Mode = 'generate' | 'export-keystore'
 
@@ -36,19 +36,19 @@ function normalizePrivateKey(raw: string): Hex {
 function generateWallet() {
   const privateKey = generatePrivateKey()
   const account = privateKeyToAccount(privateKey)
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   process.stdout.write(
     JSON.stringify({
       private_key: privateKey,
       address: account.address,
-      nil_address: nilAddress,
+      polystore_address: polystoreAddress,
     }),
   )
 }
 
 function exportKeystore() {
   const privateKey = normalizePrivateKey(
-    argValue('--private-key') || process.env.EVM_PRIVKEY || process.env.NIL_EVM_DEV_PRIVKEY || '',
+    argValue('--private-key') || process.env.EVM_PRIVKEY || process.env.POLYSTORE_EVM_DEV_PRIVKEY || '',
   )
   const password = argValue('--password') || process.env.KEYSTORE_PASSWORD || ''
   const out = argValue('--out') || process.env.KEYSTORE_OUT || ''
@@ -108,7 +108,7 @@ function exportKeystore() {
   process.stdout.write(
     JSON.stringify({
       address: account.address,
-      nil_address: ethToNil(account.address),
+      polystore_address: ethToPolystoreAddress(account.address),
       keystore_path: outPath,
     }),
   )

@@ -11,7 +11,7 @@ Companion docs:
 
 ## Stage 0.5 — Wallet-first chain writes (MetaMask / EVM bridge)
 - [ ] Ensure all user actions land via EVM bridge/precompile (no gateway relayer in production mode).
-- [ ] Disable auto-faucet behavior by default; keep faucet as dev-only toggle (`NIL_AUTO_FAUCET_EVM=0` by default).
+- [ ] Disable auto-faucet behavior by default; keep faucet as dev-only toggle (`POLYSTORE_AUTO_FAUCET_EVM=0` by default).
 - [ ] UI: implement MetaMask flows for create/top-up/commit/extend/open/confirm/cancel (no server-side signing).
 
 ## Stage 1 — Storage lock-in pricing + escrow accounting (A1)

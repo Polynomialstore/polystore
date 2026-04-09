@@ -37,7 +37,7 @@ The system state is a bipartite graph of **Deals** ($D$) and **Providers** ($P$)
 
 ### 2.2 Roles
 1.  **Solver Committees:** Off-chain actors (randomly selected Validators or specialized nodes) that compute optimal placements.
-2.  **Verifiers:** The L1 Chain (NilChain) checks validity proofs (Constraints).
+2.  **Verifiers:** The L1 Chain (PolyStore Chain) checks validity proofs (Constraints).
 3.  **Challengers:** Any actor can submit a fraud proof against an invalid proposal.
 
 ---

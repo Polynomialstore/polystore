@@ -42,7 +42,7 @@ npm run dev
 ```
 The site will launch at `http://localhost:5173`.
 When `public/wasm/polystore_core.js` and `public/wasm/polystore_core_bg.wasm` are already present, `npm run dev`
-reuses that bundle for fast startup. Force a fresh WASM rebuild with `NIL_FORCE_WASM_BUILD=1 npm run dev`.
+reuses that bundle for fast startup. Force a fresh WASM rebuild with `POLYSTORE_FORCE_WASM_BUILD=1 npm run dev`.
 
 ### Build for Production
 ```bash

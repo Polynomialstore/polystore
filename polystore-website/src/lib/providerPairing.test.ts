@@ -18,7 +18,7 @@ function jsonResponse(status: number, body: unknown): Response {
   })
 }
 
-test('operatorAddressFromWalletAddress converts wallet address into nil bech32', () => {
+test('operatorAddressFromWalletAddress converts wallet address into the current PolyStore bech32 format', () => {
   assert.equal(
     operatorAddressFromWalletAddress('0x0000000000000000000000000000000000000001'),
     'nil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp3x4xu4',

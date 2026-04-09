@@ -1,4 +1,4 @@
-# Nilchaind Redeploy Runbook
+# polystorechaind Redeploy Runbook
 
 Use this runbook whenever you need to rebuild and roll out a new `polystorechaind` binary for a systemd-managed hub node.
 

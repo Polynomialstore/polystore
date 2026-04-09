@@ -6,7 +6,7 @@ import {
 } from '../api/lcdClient'
 import { appConfig } from '../config'
 import type { LcdPendingProviderLink, LcdProviderPairing } from '../domain/lcd'
-import { ethToNil } from './address'
+import { ethToPolystoreAddress } from './address'
 
 function normalizeNonEmpty(input: string): string {
   return String(input || '').trim()
@@ -15,8 +15,8 @@ function normalizeNonEmpty(input: string): string {
 export function operatorAddressFromWalletAddress(walletAddress: string): string | null {
   const normalized = normalizeNonEmpty(walletAddress)
   if (!normalized) return null
-  const nilAddress = ethToNil(normalized)
-  return nilAddress || null
+  const polystoreAddress = ethToPolystoreAddress(normalized)
+  return polystoreAddress || null
 }
 
 export async function fetchProviderPairing(

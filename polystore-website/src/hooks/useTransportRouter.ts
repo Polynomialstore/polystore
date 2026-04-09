@@ -24,7 +24,7 @@ import {
   resolveTransportPreference,
 } from '../lib/transport/mode'
 
-const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
+const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
 
 function readLocalGatewayConnectedHint(): boolean {
   if (typeof window === 'undefined') return false

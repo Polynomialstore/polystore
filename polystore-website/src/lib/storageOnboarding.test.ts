@@ -21,7 +21,7 @@ test('buildStorageAgentPrompt captures the current storage onboarding contract',
   assert.match(prompt, /Proceed autonomously through repo sync, local checks, Gateway GUI setup/)
   assert.match(prompt, /https:\/\/polynomialstore\.com\/#\/first-file/)
   assert.match(prompt, /https:\/\/polynomialstore\.com\/#\/dashboard/)
-  assert.match(prompt, /NIL_BURNER_KEYSTORE_PASSWORD/)
+  assert.match(prompt, /POLYSTORE_BURNER_KEYSTORE_PASSWORD/)
   assert.match(prompt, /interactive password prompt/)
   assert.match(prompt, /create_tx_hash/)
   assert.match(prompt, /milestone_fast_bootstrap/)
@@ -35,7 +35,7 @@ test('storage quickstart points users at the current route map and password prer
 
   assert.match(quickstart, /https:\/\/polynomialstore\.com\/#\/first-file/)
   assert.match(quickstart, /#\/dashboard/)
-  assert.match(quickstart, /NIL_BURNER_KEYSTORE_PASSWORD/)
+  assert.match(quickstart, /POLYSTORE_BURNER_KEYSTORE_PASSWORD/)
   assert.match(quickstart, /interactive password prompt/)
   assert.match(quickstart, /EVM_PRIVKEY/)
   assert.match(collaboratorPacket, /https:\/\/polynomialstore\.com\/#\/first-file/)

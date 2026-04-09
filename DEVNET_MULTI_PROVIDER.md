@@ -36,7 +36,7 @@ Share these values with providers:
 - Hub LCD: `http://<hub-host>:1317`
 - Gateway router: `http://<hub-host>:8080`
 - EVM RPC: `http://<hub-host>:8545` (chain id `31337` by default)
-- The shared router↔provider auth token: `NIL_GATEWAY_SP_AUTH=...` (printed by the hub script)
+- The shared router↔provider auth token: `POLYSTORE_GATEWAY_SP_AUTH=...` (printed by the hub script)
 
 ### 2) Provider operator (remote machine)
 
@@ -67,10 +67,10 @@ export PROVIDER_ENDPOINT="/ip4/<public-ip>/tcp/8091/http"
 Start your provider gateway:
 
 ```bash
-export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
-export NIL_LCD_BASE="$HUB_LCD"
-export NIL_NODE="$HUB_NODE"
-export NIL_CHAIN_ID="$CHAIN_ID"
+export POLYSTORE_GATEWAY_SP_AUTH="<shared-from-hub>"
+export POLYSTORE_LCD_BASE="$HUB_LCD"
+export POLYSTORE_NODE="$HUB_NODE"
+export POLYSTORE_CHAIN_ID="$CHAIN_ID"
 export PROVIDER_KEY="provider1"
 export PROVIDER_LISTEN=":8091"
 
@@ -92,6 +92,6 @@ Create a deal, upload a file, and downloads will route through the hub gateway t
   - ensure you passed a reachable `--endpoint` multiaddr
 - Router can’t reach provider:
   - check firewall/NAT, and confirm `PROVIDER_ENDPOINT` is reachable *from the hub*
-  - ensure both router + provider share the same `NIL_GATEWAY_SP_AUTH`
+  - ensure both router + provider share the same `POLYSTORE_GATEWAY_SP_AUTH`
 - Remote provider submitting txs to the wrong node:
-  - set `NIL_NODE=tcp://<hub-host>:26657` (provider gateway uses this for `polystorechaind tx/query`)
+  - set `POLYSTORE_NODE=tcp://<hub-host>:26657` (provider gateway uses this for `polystorechaind tx/query`)

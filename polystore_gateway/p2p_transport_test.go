@@ -92,7 +92,7 @@ func pickTestAddr(t *testing.T, addrs []multiaddr.Multiaddr) multiaddr.Multiaddr
 func TestP2PFetch_EndToEnd(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 
 	oldReqSig := requireRetrievalReqSig
 	requireRetrievalReqSig = false

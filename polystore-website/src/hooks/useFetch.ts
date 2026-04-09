@@ -3,7 +3,7 @@ import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
 import { type Hex } from 'viem'
 
 import { appConfig } from '../config'
-import { ethToNil } from '../lib/address'
+import { ethToPolystoreAddress } from '../lib/address'
 import { normalizeDealId } from '../lib/dealId'
 import { buildRetrievalRequestTypedData } from '../lib/eip712'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
@@ -124,7 +124,7 @@ export type SponsoredRetrievalAuth =
 
 const FETCH_STALL_HINT_MS = 20_000
 
-const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
+const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
 
 function readLocalGatewayConnectedHint(): boolean {
   if (typeof window === 'undefined') return false
@@ -514,8 +514,8 @@ export function useFetch() {
         }
       }
 
-      const callerNil = ethToNil(signerAddress)
-      const isDealOwner = callerNil && callerNil === owner
+      const callerPolystoreAddress = ethToPolystoreAddress(signerAddress)
+      const isDealOwner = callerPolystoreAddress && callerPolystoreAddress === owner
       const sponsoredAuth = input.sponsoredAuth ?? { type: 'none' }
       const authType =
         sponsoredAuth.type === 'allowlist' ? 1 : sponsoredAuth.type === 'voucher' ? 2 : 0

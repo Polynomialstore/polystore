@@ -13,11 +13,11 @@ Fallback target:
 ## What you need from the hub operator
 
 - Repo URL: `https://github.com/Polynomialstore/polystore`
-- Shared `user-gateway` to `provider-daemon` auth token: `NIL_GATEWAY_SP_AUTH=...`
+- Shared `user-gateway` to `provider-daemon` auth token: `POLYSTORE_GATEWAY_SP_AUTH=...`
 - Recommended hostname: `sp.<domain>` or `spN.<domain>`
 - Operator wallet address from website onboarding: `OPERATOR_ADDRESS=nil1...` (or `0x...`)
 
-Treat `NIL_GATEWAY_SP_AUTH` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
+Treat `POLYSTORE_GATEWAY_SP_AUTH` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
 
 The happy path now uses the canonical public testnet defaults built into `scripts/run_devnet_provider.sh`.
 You only need to override RPC/LCD/chain settings if you are deliberately targeting a non-public hub.
@@ -29,13 +29,13 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
 3. Follow the website flow in order:
    - Prepare provider host: clone the repo on the provider machine.
    - Pair provider identity: run one `pair` command on the provider host, let it create the key if needed, fund it and rerun if auto-funding is unavailable, then approve the provider link from the website wallet.
-   - Configure public access: enter the provider hostname or multiaddr and paste `NIL_GATEWAY_SP_AUTH`.
+   - Configure public access: enter the provider hostname or multiaddr and paste `POLYSTORE_GATEWAY_SP_AUTH`.
    - Bootstrap and verify: run the generated provider-host bootstrap command, then watch registration and health converge.
 4. Optional: open your coding agent locally in the repo.
 5. Paste the provider prompt from:
    - `docs/onboarding-prompts/provider.md`
 6. Give the agent:
-   - `NIL_GATEWAY_SP_AUTH`
+   - `POLYSTORE_GATEWAY_SP_AUTH`
    - your public hostname or multiaddr
    - `OPERATOR_ADDRESS` from the website onboarding flow
 7. Let the agent:

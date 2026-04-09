@@ -60,6 +60,6 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 ## When something breaks (quick triage)
 
 - **Chain stuck**: check disk full first, then `polystorechaind` logs for consensus errors; restart only after disk/IO is healthy.
-- **Provider missing**: re-check funding for provider key (gas), endpoint multiaddr reachability, and `NIL_GATEWAY_SP_AUTH` match.
+- **Provider missing**: re-check funding for provider key (gas), endpoint multiaddr reachability, and `POLYSTORE_GATEWAY_SP_AUTH` match.
 - **Fetch failing**: confirm sessions are opening on-chain and clients are sending `X-PolyStore-Session-Id` (sessions are required by default).
 - **Mode2 fetch intermittently failing**: inspect `mode2_reconstruct_*` counters and verify at least `K` shards remain available across assigned + fallback providers.

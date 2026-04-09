@@ -19,7 +19,7 @@ import (
 func TestGatewayFetch_ByPath(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 
 	if err := crypto_ffi.Init(trustedSetup); err != nil {
@@ -129,8 +129,8 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "")
-	t.Setenv("NIL_PROVIDER_KEY", "")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "")
 	oldRequireSig := requireRetrievalReqSig
 	requireRetrievalReqSig = false
 	t.Cleanup(func() { requireRetrievalReqSig = oldRequireSig })

@@ -3,7 +3,7 @@ import { test, expect, type Page, type Route } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -59,7 +59,7 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
   const account = privateKeyToAccount(generatePrivateKey())
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   const providerAddress = options.draft?.providerAddress || 'nil1provideronboarding0000000000000000000000000'
   const defaultPublicBase = options.draft?.endpointMode === 'ipv4'
     ? `http://${options.draft.endpointValue || '203.0.113.10'}:${options.draft.publicPort || '8091'}`
@@ -81,14 +81,14 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
   const pendingLinks = options.pendingLinks ?? [
     {
       provider: providerAddress,
-      operator: nilAddress,
+      operator: polystoreAddress,
       requested_height: '95',
     },
   ]
   const pairings = options.pairings ?? [
     {
       provider: providerAddress,
-      operator: nilAddress,
+      operator: polystoreAddress,
       paired_height: '90',
     },
   ]
@@ -195,7 +195,7 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
     })
   })
 
-  await page.route(`**/polystorechain/polystorechain/v1/provider-pairings/pending-by-operator/${nilAddress}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/provider-pairings/pending-by-operator/${polystoreAddress}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -203,7 +203,7 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
     })
   })
 
-  await page.route(`**/polystorechain/polystorechain/v1/provider-pairings/by-operator/${nilAddress}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/provider-pairings/by-operator/${polystoreAddress}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -230,7 +230,7 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
           provider: {
             address: providerAddress,
             pairing_status: pairings.length ? 'paired' : pendingLinks.length ? 'pending' : 'unpaired',
-            paired_operator: nilAddress,
+            paired_operator: polystoreAddress,
             registration_status: providers.length ? 'registered' : 'pending',
             public_base: publicBase,
             public_health_url: `${publicBase}/health`,
@@ -255,11 +255,11 @@ async function setupSpOnboardingFixture(page: Page, options: SpOnboardingFixture
   await page.goto('/#/sp-onboarding', { waitUntil: 'networkidle' })
   await connectWalletIfNeeded(page)
 
-  return { account, nilAddress, providerAddress, publicBase, providerDraft }
+  return { account, polystoreAddress, providerAddress, publicBase, providerDraft }
 }
 
 test('provider onboarding renders the revised five-step happy path and preserves auth across refresh', async ({ page }) => {
-  const { nilAddress } = await setupSpOnboardingFixture(page, {
+  const { polystoreAddress } = await setupSpOnboardingFixture(page, {
     authToken: 'shared-provider-secret',
   })
 
@@ -275,9 +275,9 @@ test('provider onboarding renders the revised five-step happy path and preserves
 
   await expect(page.getByTestId('provider-auth-token')).toHaveValue('shared-provider-secret')
   const hostCommands = await page.getByTestId('provider-host-commands').textContent()
-  expect(hostCommands).toContain(`OPERATOR_ADDRESS='${nilAddress}'`)
+  expect(hostCommands).toContain(`OPERATOR_ADDRESS='${polystoreAddress}'`)
   expect(hostCommands).toContain("./scripts/run_devnet_provider.sh bootstrap")
-  expect(hostCommands).toContain("NIL_GATEWAY_SP_AUTH='shared-provider-secret'")
+  expect(hostCommands).toContain("POLYSTORE_GATEWAY_SP_AUTH='shared-provider-secret'")
   expect(hostCommands).not.toMatch(/BOOTSTRAP_ALLOW_PARTIAL=1\s*\\/i)
   expect(hostCommands).not.toMatch(/run_devnet_provider\.sh init/i)
 
@@ -287,7 +287,7 @@ test('provider onboarding renders the revised five-step happy path and preserves
   await page.reload({ waitUntil: 'networkidle' })
   await connectWalletIfNeeded(page)
   await expect(page.getByTestId('provider-auth-token')).toHaveValue('shared-provider-secret')
-  await expect(page.getByTestId('provider-host-commands')).toContainText("NIL_GATEWAY_SP_AUTH='shared-provider-secret'")
+  await expect(page.getByTestId('provider-host-commands')).toContainText("POLYSTORE_GATEWAY_SP_AUTH='shared-provider-secret'")
   await expect(page.getByText(/Healthy \(daemon\)/)).toBeVisible()
 })
 
@@ -297,12 +297,12 @@ test('provider onboarding blocks bootstrap until the shared auth token is suppli
   })
 
   await expect(page.getByRole('heading', { name: /Step 4\. Configure Public Access/i })).toBeVisible()
-  await expect(page.getByText(/ask the hub operator for NIL_GATEWAY_SP_AUTH/i)).toBeVisible()
+  await expect(page.getByText(/ask the hub operator for POLYSTORE_GATEWAY_SP_AUTH/i)).toBeVisible()
   await expect(page.getByText(/Add the shared provider auth token from the hub operator before copying provider host commands\./)).toBeVisible()
   await expect(page.getByTestId('provider-host-commands')).toHaveCount(0)
 
   await page.getByTestId('provider-auth-token').fill('fresh-shared-secret')
-  await expect(page.getByTestId('provider-host-commands')).toContainText("NIL_GATEWAY_SP_AUTH='fresh-shared-secret'")
+  await expect(page.getByTestId('provider-host-commands')).toContainText("POLYSTORE_GATEWAY_SP_AUTH='fresh-shared-secret'")
 })
 
 test('provider onboarding blocks bootstrap until a public endpoint is described', async ({ page }) => {

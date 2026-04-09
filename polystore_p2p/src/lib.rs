@@ -1,15 +1,15 @@
 use anyhow::Result;
 use futures::StreamExt;
 use libp2p::{
-    gossipsub, mdns, noise, swarm::NetworkBehaviour, swarm::SwarmEvent, tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
-    Transport,
+    gossipsub, mdns, noise, swarm::NetworkBehaviour, swarm::SwarmEvent, tcp, yamux, Multiaddr,
+    Swarm, SwarmBuilder,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{info, error};
+use tracing::{error, info};
 
 // --- Messages ---
 
@@ -29,15 +29,15 @@ pub struct AskForProxy {
 // --- Network Behaviour ---
 
 #[derive(NetworkBehaviour)]
-struct NilBehaviour {
+struct PolyStoreBehaviour {
     gossipsub: gossipsub::Behaviour,
     mdns: mdns::tokio::Behaviour,
 }
 
 // --- Main Node Struct ---
 
-pub struct NilNode {
-    swarm: Swarm<NilBehaviour>,
+pub struct PolyStoreNode {
+    swarm: Swarm<PolyStoreBehaviour>,
     command_rx: mpsc::Receiver<Command>,
 }
 
@@ -47,13 +47,12 @@ pub enum Command {
     RequestProxy { cid: String, deputy: String },
 }
 
-impl NilNode {
+impl PolyStoreNode {
     pub async fn new(
         _secret_key_seed: u64, // Ignored for now, generating random identity
         port: u16,
-        command_rx: mpsc::Receiver<Command>
+        command_rx: mpsc::Receiver<Command>,
     ) -> Result<Self> {
-        
         // 1. Swarm Builder (libp2p v0.53+)
         let mut swarm = SwarmBuilder::with_new_identity()
             .with_tokio()
@@ -63,7 +62,7 @@ impl NilNode {
                 yamux::Config::default,
             )?
             .with_behaviour(|key| {
-                 // 2. Gossipsub
+                // 2. Gossipsub
                 let message_id_fn = |message: &gossipsub::Message| {
                     let mut s = DefaultHasher::new();
                     message.data.hash(&mut s);
@@ -80,15 +79,16 @@ impl NilNode {
                 let gossipsub = gossipsub::Behaviour::new(
                     gossipsub::MessageAuthenticity::Signed(key.clone()),
                     gossipsub_config,
-                ).map_err(|msg| std::io::Error::new(std::io::ErrorKind::Other, msg))?;
+                )
+                .map_err(|msg| std::io::Error::new(std::io::ErrorKind::Other, msg))?;
 
                 // 3. MDNS
                 let mdns = mdns::tokio::Behaviour::new(
-                    mdns::Config::default(), 
-                    key.public().to_peer_id()
+                    mdns::Config::default(),
+                    key.public().to_peer_id(),
                 )?;
-                
-                Ok(NilBehaviour { gossipsub, mdns })
+
+                Ok(PolyStoreBehaviour { gossipsub, mdns })
             })?
             .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
@@ -101,10 +101,16 @@ impl NilNode {
         swarm.listen_on(listen_addr)?;
 
         // Subscribe to default topics
-        swarm.behaviour_mut().gossipsub.subscribe(&gossipsub::IdentTopic::new("nil-shards"))
-             .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-shards"))?;
-        swarm.behaviour_mut().gossipsub.subscribe(&gossipsub::IdentTopic::new("nil-proxy"))
-             .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-proxy"))?;
+        swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&gossipsub::IdentTopic::new("nil-shards"))
+            .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-shards"))?;
+        swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&gossipsub::IdentTopic::new("polystore-proxy"))
+            .map_err(|_| anyhow::anyhow!("Failed to subscribe to polystore-proxy"))?;
 
         Ok(Self { swarm, command_rx })
     }
@@ -122,7 +128,7 @@ impl NilNode {
                             };
                             let encoded = serde_json::to_vec(&msg)?;
                             let topic = gossipsub::IdentTopic::new("nil-shards");
-                            
+
                             if let Err(e) = self.swarm.behaviour_mut().gossipsub.publish(topic, encoded) {
                                 error!("Publish error: {:?}", e);
                             } else {
@@ -143,8 +149,8 @@ impl NilNode {
                                 max_price: 100,
                             };
                             let encoded = serde_json::to_vec(&msg)?;
-                            let topic = gossipsub::IdentTopic::new("nil-proxy");
-                            
+                            let topic = gossipsub::IdentTopic::new("polystore-proxy");
+
                             if let Err(e) = self.swarm.behaviour_mut().gossipsub.publish(topic, encoded) {
                                 error!("Publish proxy error: {:?}", e);
                             } else {
@@ -160,19 +166,19 @@ impl NilNode {
                         SwarmEvent::NewListenAddr { address, .. } => {
                             info!("👂 Listening on {:?}", address);
                         }
-                        SwarmEvent::Behaviour(NilBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+                        SwarmEvent::Behaviour(PolyStoreBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                             for (peer_id, _multiaddr) in list {
                                 info!("👀 mDNS discovered: {:?}", peer_id);
                                 self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                             }
                         }
-                        SwarmEvent::Behaviour(NilBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
+                        SwarmEvent::Behaviour(PolyStoreBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
                             for (peer_id, _multiaddr) in list {
                                 info!("😴 mDNS expired: {:?}", peer_id);
                                 self.swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
                             }
                         }
-                        SwarmEvent::Behaviour(NilBehaviourEvent::Gossipsub(gossipsub::Event::Message {
+                        SwarmEvent::Behaviour(PolyStoreBehaviourEvent::Gossipsub(gossipsub::Event::Message {
                             propagation_source: peer_id,
                             message_id: _,
                             message,
@@ -184,7 +190,7 @@ impl NilNode {
                             // Try to decode as AskForProxy
                             if let Ok(proxy_req) = serde_json::from_slice::<AskForProxy>(&message.data) {
                                 info!("🕵️‍♀️ Received PROXY REQUEST from {}: Need CID {} via Peer {}", peer_id, proxy_req.cid, proxy_req.target_peer);
-                                
+
                                 // Logic: Am I the deputy?
                                 let my_id = self.swarm.local_peer_id().to_string();
                                 if proxy_req.target_peer == my_id {
@@ -192,10 +198,10 @@ impl NilNode {
                                     // 1. "Fetch" data from the *actual* target (not in message, usually implicitly the Deal SP)
                                     // For Phase 2, we just simulate the fetch delay.
                                     info!("   Fetching CID {} from network...", proxy_req.cid);
-                                    
+
                                     // 2. "Verify" (Simulate KZG check)
                                     info!("   Verifying KZG proof... OK.");
-                                    
+
                                     // 3. "Return" (Simulate sending data back)
                                     // In a real implementation, we would open a direct stream to 'peer_id' (requester)
                                     // and pipe the data. For now, we just log.

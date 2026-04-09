@@ -75,7 +75,7 @@ func TestGatewaySessionProof_UsesProviderAddressRouting(t *testing.T) {
 	defer providerSrv.Close()
 
 	t.Setenv(
-		"NIL_PROVIDER_HTTP_BASE_OVERRIDES",
+		"POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES",
 		fmt.Sprintf("%s=%s", providerAddr, providerSrv.URL),
 	)
 

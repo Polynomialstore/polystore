@@ -4,7 +4,7 @@ import { parentPort, workerData } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-import init, { NilWasm } from '../public/wasm/polystore_core.js'
+import init, { PolyStoreWasm } from '../public/wasm/polystore_core.js'
 
 type BasisMode = 'blst' | 'affine' | 'projective'
 
@@ -94,7 +94,7 @@ if (!parentPort) {
 const wasmBuffer = await fs.readFile(input.wasmPath)
 await init({ module_or_path: wasmBuffer })
 const trustedSetup = new Uint8Array(await fs.readFile(input.trustedSetupPath))
-const wasm = new NilWasm(trustedSetup)
+const wasm = new PolyStoreWasm(trustedSetup)
 wasm.set_wasm_msm_basis_mode(input.basisMode)
 
 parentPort.on('message', (message: TaskPayload) => {
