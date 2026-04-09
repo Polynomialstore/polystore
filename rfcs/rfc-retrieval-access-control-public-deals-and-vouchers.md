@@ -9,7 +9,7 @@
 
 ## 1. Motivation
 
-NilStore needs retrieval authorization semantics that are both **product‑meaningful** and **protocol‑safe**:
+PolyStore needs retrieval authorization semantics that are both **product‑meaningful** and **protocol‑safe**:
 
 - Some datasets should be **public**: anyone can pay to retrieve, enabling community mirroring and public explorers.
 - Some datasets should be **restricted**: only the deal owner (and the protocol for health/audit/repair) can request retrievals.
@@ -17,7 +17,7 @@ NilStore needs retrieval authorization semantics that are both **product‑meani
   - allowlists (specific accounts can request retrievals),
   - one-time “voucher” retrieval authorizations (pay-to-download-once).
 
-Separately, NilStore’s frozen accounting RFC currently assumes `MsgOpenRetrievalSession` is **owner‑paid** (fees charged against `Deal.escrow_balance`). If we simply allow “anyone can open a retrieval session” for public deals, strangers could drain the owner’s long‑term escrow. This RFC therefore introduces:
+Separately, PolyStore’s frozen accounting RFC currently assumes `MsgOpenRetrievalSession` is **owner‑paid** (fees charged against `Deal.escrow_balance`). If we simply allow “anyone can open a retrieval session” for public deals, strangers could drain the owner’s long‑term escrow. This RFC therefore introduces:
 
 1) **Sponsored** session opens (requester pays), and  
 2) **Protocol** session opens (audit/repair/healing; protocol budget pays),

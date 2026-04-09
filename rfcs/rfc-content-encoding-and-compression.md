@@ -9,7 +9,7 @@
 
 ## 1. Motivation
 
-NilStore charges for storage and retrieval as a function of stored bytes (ciphertext) and blob counts. If clients upload highly-compressible plaintext **without** compressing before encryption, they pay more than necessary and (depending on SP storage stacks) may inadvertently enable storage “data reduction arbitrage”.
+PolyStore charges for storage and retrieval as a function of stored bytes (ciphertext) and blob counts. If clients upload highly-compressible plaintext **without** compressing before encryption, they pay more than necessary and (depending on SP storage stacks) may inadvertently enable storage “data reduction arbitrage”.
 
 We want:
 - a **default-on** compression pipeline for compressible inputs,

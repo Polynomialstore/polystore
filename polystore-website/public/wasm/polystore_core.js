@@ -170,7 +170,7 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-const NilWasmFinalization = (typeof FinalizationRegistry === 'undefined')
+const PolyStoreWasmFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_nilwasm_free(ptr >>> 0, 1));
 
@@ -178,11 +178,11 @@ const WasmMdu0BuilderFinalization = (typeof FinalizationRegistry === 'undefined'
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_wasmmdu0builder_free(ptr >>> 0, 1));
 
-export class NilWasm {
+export class PolyStoreWasm {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
         this.__wbg_ptr = 0;
-        NilWasmFinalization.unregister(this);
+        PolyStoreWasmFinalization.unregister(this);
         return ptr;
     }
     free() {
@@ -403,7 +403,7 @@ export class NilWasm {
             throw takeFromExternrefTable0(ret[1]);
         }
         this.__wbg_ptr = ret[0] >>> 0;
-        NilWasmFinalization.register(this, this.__wbg_ptr, this);
+        PolyStoreWasmFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
     /**
@@ -422,7 +422,7 @@ export class NilWasm {
         return takeFromExternrefTable0(ret[0]);
     }
 }
-if (Symbol.dispose) NilWasm.prototype[Symbol.dispose] = NilWasm.prototype.free;
+if (Symbol.dispose) PolyStoreWasm.prototype[Symbol.dispose] = PolyStoreWasm.prototype.free;
 
 export class WasmMdu0Builder {
     static __wrap(ptr) {

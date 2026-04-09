@@ -8,7 +8,7 @@ import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/das
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -24,12 +24,12 @@ test('repro bug: download from commit content widget', async ({
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   const txCreate = (`0x${'11'.repeat(32)}` as Hex)
   const txUpdate = (`0x${'22'.repeat(32)}` as Hex)
   const txProve = (`0x${'33'.repeat(32)}` as Hex)
   
-  console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
+  console.log(`Using random E2E wallet: ${account.address} -> ${polystoreAddress}`)
 
   // Mock EVM RPC receipts for the precompile-based flow.
   const dealCreatedEvent = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'DealCreated' }) as any
@@ -245,7 +245,7 @@ test('repro bug: download from commit content widget', async ({
                     id: '0',
                     cid: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
                     size: '1024',
-                    owner: nilAddress,
+                    owner: polystoreAddress,
                     escrow: '1000',
                     end_block: '99999999',
                     start_block: '1',
@@ -426,7 +426,7 @@ test('repro bug: download from commit content widget', async ({
 
   console.log('Requesting faucet...')
   await page.getByTestId('faucet-request').click()
-  await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
+  await expect(page.getByTestId('polystore-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
   console.log('Faucet received.')
 
   console.log('Creating deal...')

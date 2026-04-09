@@ -24,7 +24,7 @@ import (
 func TestGatewayFetch_AllowsBundledDownloadSession_WhenOnchainSessionsRequired(t *testing.T) {
 	requireOnchainSessionForTest(t, true)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 	dealMetaCache = sync.Map{}
 
@@ -106,7 +106,7 @@ func TestGatewayFetch_AllowsBundledDownloadSession_WhenOnchainSessionsRequired(t
 func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 	requireOnchainSessionForTest(t, true)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 	dealMetaCache = sync.Map{}
 

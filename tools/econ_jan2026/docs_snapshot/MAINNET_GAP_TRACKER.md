@@ -1,4 +1,4 @@
-# Mainnet Gap Tracker (NilStore)
+# Mainnet Gap Tracker (PolyStore)
 
 This document tracks **what is missing** between the current implementation in this repo and the **long‑term Mainnet plan** described by `spec.md` (canonical), `rfcs/`, and `notes/`.
 
@@ -134,7 +134,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### GW-204 — S3 adapter polish + bidirectional sync scripts (nilstore ↔ S3)
+#### GW-204 — S3 adapter polish + bidirectional sync scripts (polystore ↔ S3)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
 
@@ -168,7 +168,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### CLI-502 — Fast download / mirror scripts (provider → local, nilstore → S3)
+#### CLI-502 — Fast download / mirror scripts (provider → local, polystore → S3)
 - **Status:** PARTIAL (DEVNET)
 - **Notes:** `notes/launch_todos.md`
 
@@ -290,7 +290,7 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Delivers:**
   - S3 adapter correctness + compatibility testing (aws-cli/rclone).
   - Third-party uploader pattern: scoped key funding + teardown + audit workflow.
-  - Fast download / mirroring scripts (nilstore ↔ S3) with documented performance expectations.
+  - Fast download / mirroring scripts (polystore ↔ S3) with documented performance expectations.
 - **Test gate:** integration tests + scripted “upload from S3 → verify on-chain → retrieve to S3” pipeline.
 
 ### Sprint 10 — Mainnet hardening + audits + launch readiness

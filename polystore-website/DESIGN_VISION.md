@@ -1,9 +1,9 @@
 # POLYSTORE DESIGN MANIFESTO: THE CYBER-INDUSTRIAL COMMAND CENTER
 
 ## I. THE CORE VISION
-NilStore is not a "cloud" service; it is a **Permanent Storage Protocol**. The interface must reject the ephemeral, soft, and "webby" trends of modern SaaS. Instead, it must embody the weight, reliability, and precision of industrial hardware and tactical military equipment.
+PolyStore is not a "cloud" service; it is a **Permanent Storage Protocol**. The interface must reject the ephemeral, soft, and "webby" trends of modern SaaS. Instead, it must embody the weight, reliability, and precision of industrial hardware and tactical military equipment.
 
-The design language of NilStore is **Cyber-Industrial**. It is the intersection of a high-fidelity engineering blueprint and a high-end tactical HUD.
+The design language of PolyStore is **Cyber-Industrial**. It is the intersection of a high-fidelity engineering blueprint and a high-end tactical HUD.
 
 ---
 
@@ -30,7 +30,7 @@ The design language of NilStore is **Cyber-Industrial**. It is the intersection 
 *   **Weight:** Use minimal, tight shadows (1-4px) in Light Mode to maintain a "Cleanroom" aesthetic. In Dark Mode, rely on rim-lighting and solid borders to ground modules, avoiding soft black blurs.
 
 ### 2. Absolute Geometry
-*   **The 90-Degree Mandate:** There are **zero** rounded corners in the NilStore universe. Every edge is sharp, precise, and industrial.
+*   **The 90-Degree Mandate:** There are **zero** rounded corners in the PolyStore universe. Every edge is sharp, precise, and industrial.
 *   **Hierarchy via Thickness:** Distinguish between primary containers and secondary dividers using border-weight (1px vs 2px) rather than color shifts.
 
 ### 3. Tactical Typography
@@ -55,4 +55,4 @@ The design language of NilStore is **Cyber-Industrial**. It is the intersection 
 ---
 
 ## V. THE DESIGN GOAL
-When a user opens NilStore, they should feel like they have just stepped into a high-security server room or a tactical operations center. The UI is a **tool**, not a toy. It is built for the long-term, for reliability, and for the permanent storage of human knowledge.
+When a user opens PolyStore, they should feel like they have just stepped into a high-security server room or a tactical operations center. The UI is a **tool**, not a toy. It is built for the long-term, for reliability, and for the permanent storage of human knowledge.

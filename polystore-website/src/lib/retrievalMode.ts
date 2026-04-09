@@ -1,7 +1,7 @@
 import { appConfig } from '../config'
 import { isTrustedLocalGatewayBase } from './transport/mode'
 
-export const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
+export const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
 
 export interface GatewayModeInput {
   preference?: string

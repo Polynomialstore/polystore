@@ -35,20 +35,20 @@ fn now_ms() -> f64 {
 }
 
 #[wasm_bindgen]
-pub struct NilWasm {
+pub struct PolyStoreWasm {
     kzg_ctx: KzgContext,
 }
 
 #[wasm_bindgen]
-impl NilWasm {
+impl PolyStoreWasm {
     #[wasm_bindgen(constructor)]
-    pub fn new(trusted_setup_bytes: &[u8]) -> Result<NilWasm, JsValue> {
+    pub fn new(trusted_setup_bytes: &[u8]) -> Result<PolyStoreWasm, JsValue> {
         console_error_panic_hook::set_once();
         // Use std::io::Cursor to adapt bytes to Read trait
         let cursor = std::io::Cursor::new(trusted_setup_bytes);
         let ctx = KzgContext::load_from_reader(cursor)
             .map_err(|e| JsValue::from_str(&format!("Failed to load setup: {:?}", e)))?;
-        Ok(NilWasm { kzg_ctx: ctx })
+        Ok(PolyStoreWasm { kzg_ctx: ctx })
     }
 
     pub fn expand_file(&self, data: &[u8]) -> Result<JsValue, JsValue> {

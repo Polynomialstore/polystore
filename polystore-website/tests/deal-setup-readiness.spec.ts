@@ -5,7 +5,7 @@ import { bech32 } from 'bech32'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -15,7 +15,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
   const account = privateKeyToAccount(generatePrivateKey())
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   const dealId = '32'
   let gatewayProbeAttempts = 0
   let detailAttempts = 0
@@ -81,7 +81,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
 
     const deal = {
       id: dealId,
-      owner: nilAddress,
+      owner: polystoreAddress,
       cid: '',
       size: '0',
       escrow_balance: '1000000',

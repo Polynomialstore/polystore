@@ -20,7 +20,7 @@ func (AppModule) IsOnePerModuleType() {}
 
 func init() {
 	appconfig.Register(
-	    &types.Module{},
+		&types.Module{},
 		appconfig.Provide(ProvideModule),
 	)
 }
@@ -29,21 +29,19 @@ type ModuleInputs struct {
 	depinject.In
 
 	Config       *types.Module
-	StoreService  store.KVStoreService
+	StoreService store.KVStoreService
 	Cdc          codec.Codec
 	AddressCodec address.Codec
 
 	AuthKeeper types.AuthKeeper
 	BankKeeper types.BankKeeper
-
-    
 }
 
 type ModuleOutputs struct {
 	depinject.Out
 
-	NilchainKeeper keeper.Keeper
-	Module appmodule.AppModule
+	PolyStoreChainKeeper keeper.Keeper
+	Module               appmodule.AppModule
 }
 
 func ProvideModule(in ModuleInputs) ModuleOutputs {
@@ -54,13 +52,13 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	}
 	k := keeper.NewKeeper(
 		in.StoreService,
-	    in.Cdc,
+		in.Cdc,
 		in.AddressCodec,
-	    authority, 
+		authority,
 		in.BankKeeper,
 		in.AuthKeeper, // ADDED
 	)
 	m := NewAppModule(in.Cdc, k, in.AuthKeeper, in.BankKeeper)
 
-	return ModuleOutputs{NilchainKeeper: k, Module: m}
+	return ModuleOutputs{PolyStoreChainKeeper: k, Module: m}
 }

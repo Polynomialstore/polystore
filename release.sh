@@ -68,8 +68,8 @@ cp -r performance/ dist/performance/
 echo ">>> Creating Tarball..."
 (
     cd dist
-    tar -czvf nilstore-$VERSION-$(uname -s)-$(uname -m).tar.gz bin config performance
+    tar -czvf polystore-$VERSION-$(uname -s)-$(uname -m).tar.gz bin config performance
 )
 
-echo ">>> Release Ready: dist/nilstore-$VERSION-$(uname -s)-$(uname -m).tar.gz"
+echo ">>> Release Ready: dist/polystore-$VERSION-$(uname -s)-$(uname -m).tar.gz"
 ls -lh dist/*.tar.gz

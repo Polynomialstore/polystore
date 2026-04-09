@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-import init, { NilWasm, WasmMdu0Builder } from '../public/wasm/polystore_core.js'
+import init, { PolyStoreWasm, WasmMdu0Builder } from '../public/wasm/polystore_core.js'
 import { sanitizePolyfsRecordPath } from '../src/lib/polyfsPath'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -179,7 +179,7 @@ const wasmInitStart = performance.now()
 await init({ module_or_path: wasmBuffer })
 const trustedSetupPath = path.resolve(websiteRoot, 'public', 'trusted_setup.txt')
 const trustedSetup = new Uint8Array(await fs.readFile(trustedSetupPath))
-const wasm = new NilWasm(trustedSetup)
+const wasm = new PolyStoreWasm(trustedSetup)
 wasm.set_wasm_msm_basis_mode(basisMode)
 const wasmInitMs = performance.now() - wasmInitStart
 
@@ -374,7 +374,7 @@ const summary = {
   warmup_runs: warmupRuns,
   measure_runs: measureRuns,
   init: {
-    nil_wasm_ms: wasmInitMs,
+    polystore_wasm_ms: wasmInitMs,
   },
   stages: {
     total_ms: readStats(runs.map((run) => run.total_ms)),

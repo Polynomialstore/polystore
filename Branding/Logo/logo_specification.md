@@ -1,4 +1,4 @@
-# NilStore Logo: Visual Identity & Technical Specification
+# PolyStore Logo: Visual Identity & Technical Specification
 
 **Document Version:** 1.1  
 **Date:** 2025-12-04  
@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-The NilStore logo is a visual synthesis of the network's core philosophy: **"Structured Infinity."** It combines rigid, higher-dimensional geometry (the Tesseract/Hypercube) with fluid, self-healing topology (the Möbius Lattice). This document serves as the source of truth for reproducing, analyzing, or briefing designers on the brand mark.
+The PolyStore logo is a visual synthesis of the network's core philosophy: **"Structured Infinity."** It combines rigid, higher-dimensional geometry (the Tesseract/Hypercube) with fluid, self-healing topology (the Möbius Lattice). This document serves as the source of truth for reproducing, analyzing, or briefing designers on the brand mark.
 
 ## 2. Typography
 
@@ -51,7 +51,7 @@ The palette is high-contrast "Synthwave" set against a deep void.
 ## 4. Asset Usage Guide
 
 ### Theme Compatibility
-NilStore uses a theme-aware logo strategy to ensure visibility across different environments.
+PolyStore uses a theme-aware logo strategy to ensure visibility across different environments.
 
 *   **Standard Logo (`logo_light.jpg`):**
     *   **Description:** The original "Neon on Black" rendering.

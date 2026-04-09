@@ -1,7 +1,7 @@
-# NilStore econ bundle (Jan 2026)
+# PolyStore econ bundle (Jan 2026)
 
 Contents:
-- `docs/NilStore_Economic_Modeling_Report_Jan2026.md`: rendered report (inline figures)
+- `docs/PolyStore_Economic_Modeling_Report_Jan2026.md`: rendered report (inline figures)
 - `outputs/`: figures + CSV used by the report
 - `src/`: reproducible modeling code
 - `docs/spec_UPDATED.md`: minimal patch to spec Appendix B (adds RFC targets)

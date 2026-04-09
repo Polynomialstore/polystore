@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end lifecycle test for NilStore:
+# End-to-end lifecycle test for PolyStore:
 # 1. Upload a file via Gateway -> get Manifest Root & Size.
 # 2. Create a Deal via Gateway (EVM signed) -> get Deal ID.
 # 3. Commit Content via Gateway (EVM signed) -> update Deal with Manifest Root.
@@ -33,9 +33,9 @@ export EVM_PRIVKEY EVM_CHAIN_ID CHAIN_ID VERIFYING_CONTRACT
 # This E2E script exercises the gateway "tx relay" endpoints (e.g. /gateway/create-deal-evm),
 # so ensure the local stack is started with the relay enabled by default. The stack itself
 # can still default to relay-off for manual/wallet-first runs.
-export NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}"
+export POLYSTORE_ENABLE_TX_RELAY="${POLYSTORE_ENABLE_TX_RELAY:-1}"
 # This script also relies on the faucet to fund the EVM-derived NIL address.
-export NIL_START_FAUCET="${NIL_START_FAUCET:-1}"
+export POLYSTORE_START_FAUCET="${POLYSTORE_START_FAUCET:-1}"
 
 if ! command -v curl >/dev/null 2>&1; then echo "ERROR: curl required" >&2; exit 1; fi
 if ! command -v python3 >/dev/null 2>&1; then echo "ERROR: python3 required" >&2; exit 1; fi
@@ -197,14 +197,14 @@ print(nil_addr)
 PY
 )
 EVM_ADDRESS=$(echo "$ADDR_JSON" | sed -n '1p')
-NIL_ADDRESS=$(echo "$ADDR_JSON" | sed -n '2p')
+POLYSTORE_ADDRESS=$(echo "$ADDR_JSON" | sed -n '2p')
 echo "    EVM: $EVM_ADDRESS"
-echo "    NIL: $NIL_ADDRESS"
+echo "    NIL: $POLYSTORE_ADDRESS"
 
-fund_account "$NIL_ADDRESS" "$FAUCET_BASE"
-wait_for_positive_balance "$NIL_ADDRESS" "$LCD_BASE" 30 0.5
-echo "==> Verifying balance for $NIL_ADDRESS..."
-BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$NIL_ADDRESS" || echo "{}")
+fund_account "$POLYSTORE_ADDRESS" "$FAUCET_BASE"
+wait_for_positive_balance "$POLYSTORE_ADDRESS" "$LCD_BASE" 30 0.5
+echo "==> Verifying balance for $POLYSTORE_ADDRESS..."
+BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$POLYSTORE_ADDRESS" || echo "{}")
 echo "$BAL_JSON" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
 
 # 2. Create Deal (EVM)
@@ -267,7 +267,7 @@ echo "==> Uploading file '$(basename "$UPLOAD_FILE")' (${UPLOAD_BYTES} bytes) to
 UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-60s}"
 UPLOAD_START_TS="$(python3 -c 'import time; print(time.time())')"
 UPLOAD_RESP=$(timeout "$UPLOAD_TIMEOUT" curl --verbose -X POST -F "file=@$UPLOAD_FILE" \
-  -F "owner=$NIL_ADDRESS" \
+  -F "owner=$POLYSTORE_ADDRESS" \
   "$GATEWAY_BASE/gateway/upload?deal_id=$DEAL_ID")
 UPLOAD_END_TS="$(python3 -c 'import time; print(time.time())')"
 python3 - <<PY
@@ -394,7 +394,7 @@ wait_for_http "Gateway" "$GATEWAY_BASE/gateway/create-deal-evm" 40 1
 echo "==> Fetching file from Gateway..."
 echo "==> Opening on-chain retrieval session (precompile)..."
 # Resolve file layout from PolyFS (start_offset and file length).
-LIST_JSON=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
+LIST_JSON=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$POLYSTORE_ADDRESS")
 START_OFFSET=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('start_offset') or f.get('startOffset') or 0))")
 FILE_LEN=$(echo "$LIST_JSON" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('size_bytes') or f.get('sizeBytes') or 0))")
 if [ "$FILE_LEN" -le 0 ]; then
@@ -478,10 +478,10 @@ if [ -z "$PROVIDER_ADDR" ]; then
   exit 1
 fi
 
-# For direct-to-provider retrieval runs (NIL_FORCE_DIRECT_FETCH=1), fetch must
+# For direct-to-provider retrieval runs (POLYSTORE_FORCE_DIRECT_FETCH=1), fetch must
 # go to the provider that owns the relevant slot. Resolve its HTTP endpoint
 # from chain.
-DIRECT_PROVIDER_FETCH="${NIL_FORCE_DIRECT_FETCH:-${NIL_DISABLE_GATEWAY:-0}}"
+DIRECT_PROVIDER_FETCH="${POLYSTORE_FORCE_DIRECT_FETCH:-${POLYSTORE_DISABLE_GATEWAY:-0}}"
 FETCH_GATEWAY_BASE="$GATEWAY_BASE"
 FETCH_PATH_PREFIX="/gateway/fetch"
 FETCH_EXTRA_QUERY="&deputy=1"
@@ -542,7 +542,7 @@ if [ -z "$SESSION_ID" ]; then
   exit 1
 fi
 
-FETCH_URL="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md$FETCH_EXTRA_QUERY"
+FETCH_URL="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$POLYSTORE_ADDRESS&file_path=README.md$FETCH_EXTRA_QUERY"
 FETCH_RANGE_START=0
 FETCH_RANGE_LEN="$FILE_LEN"
 FETCH_RANGE_END=$((FETCH_RANGE_START + FETCH_RANGE_LEN - 1))
@@ -577,7 +577,7 @@ rm fetched_README.md
 # 7. Upload Second File into Existing Deal
 echo "==> Uploading second file 'ECONOMY.md' into existing deal..."
 UPLOAD2_RESP=$(timeout 600s curl --verbose -X POST -F "file=@$ROOT_DIR/ECONOMY.md" \
-  -F "owner=$NIL_ADDRESS" \
+  -F "owner=$POLYSTORE_ADDRESS" \
   "$GATEWAY_BASE/gateway/upload?deal_id=$DEAL_ID")
 echo "    Response: $UPLOAD2_RESP"
 
@@ -682,7 +682,7 @@ echo "    Success: Deal $DEAL_ID updated to CID $CHAIN_CID_2"
 # 10. Fetch Both Files by Path from New Slab (verify sizes)
 echo "==> Fetching both files by path from new slab..."
 echo "==> Opening on-chain retrieval session for README (precompile)..."
-LIST_JSON_2=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS")
+LIST_JSON_2=$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/list-files/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$POLYSTORE_ADDRESS")
 START_OFFSET_1=$(echo "$LIST_JSON_2" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('start_offset') or f.get('startOffset') or 0))")
 FILE_LEN_1=$(echo "$LIST_JSON_2" | python3 -c "import sys,json; j=json.load(sys.stdin); p='README.md'; f=next((x for x in (j.get('files') or []) if x.get('path')==p), {}); print(int(f.get('size_bytes') or f.get('sizeBytes') or 0))")
 START_MDU_INDEX_1=$(python3 - "$START_OFFSET_1" "$WITNESS_MDUS_2" <<'PY'
@@ -853,8 +853,8 @@ REQ_SIG_JSON_2=$(
 )
 REQ_SIG_2=$(echo "$REQ_SIG_JSON_2" | python3 -c "import sys, json; print(json.load(sys.stdin).get('evm_signature',''))")
 
-FETCH_URL_1="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=README.md$FETCH_EXTRA_QUERY"
-FETCH_URL_2="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=ECONOMY.md$FETCH_EXTRA_QUERY"
+FETCH_URL_1="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$POLYSTORE_ADDRESS&file_path=README.md$FETCH_EXTRA_QUERY"
+FETCH_URL_2="$FETCH_GATEWAY_BASE$FETCH_PATH_PREFIX/$MANIFEST_ROOT_2?deal_id=$DEAL_ID&owner=$POLYSTORE_ADDRESS&file_path=ECONOMY.md$FETCH_EXTRA_QUERY"
 
 if ! timeout 10s curl "${CURL_FAIL_ARGS[@]}" -sS -o fetched_README.bin "$FETCH_URL_1" \
   -H "X-PolyStore-Session-Id: $SESSION_ID_1" \

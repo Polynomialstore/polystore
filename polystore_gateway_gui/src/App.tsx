@@ -44,7 +44,7 @@ const RECOVERY_COOLDOWN_MS = 20_000;
 const RECENT_DEAL_LIMIT = 6;
 const RECENT_FILE_LIMIT = 8;
 const RECENT_ACTIVITY_LIMIT = 5;
-const TECHNOLOGY_MDU_PRIMER_URL = "https://nil.store/#/technology?section=mdu-primer";
+const TECHNOLOGY_MDU_PRIMER_URL = "https://polynomialstore.com/#/technology?section=mdu-primer";
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -927,7 +927,7 @@ export default function App() {
             <div className="flex items-center gap-4">
               <img
                 src={theme === "dark" ? logoDark : logoLight}
-                alt="NilStore"
+                alt="PolyStore"
                 className="h-8 w-8 rounded-none border border-border bg-card p-1.5"
               />
               <div className="flex items-center gap-3">

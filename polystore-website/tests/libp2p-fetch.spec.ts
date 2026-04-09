@@ -23,7 +23,7 @@ test.describe('libp2p fetch', () => {
     })
 
     await page.addInitScript(() => {
-      window.localStorage.setItem('nil_transport_preference', 'prefer_p2p')
+      window.localStorage.setItem('polystore_transport_preference', 'prefer_p2p')
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })
@@ -62,7 +62,7 @@ test.describe('libp2p fetch', () => {
     await transportSelect.selectOption('prefer_p2p')
 
     await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+    await expect(page.getByTestId('polystore-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
     const placementSelect = page.getByTestId('alloc-placement-profile')
     if (!(await placementSelect.isVisible().catch(() => false))) {

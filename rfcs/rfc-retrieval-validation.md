@@ -8,14 +8,14 @@
 
 ## 1. Why we need this
 
-NilStore has two fundamental goals that are in tension:
+PolyStore has two fundamental goals that are in tension:
 
 1) Users must be able to reliably retrieve bytes (“service works”).  
 2) The protocol must be able to **attribute failures** without trusting off-chain claims (“service is accountable”).
 
 Classic “he said / she said” disputes (user claims provider is offline; provider claims user is lying) are a trap unless the protocol has a logistics system that can **route around disputes** and generate verifiable evidence.
 
-NilStore’s approach is:
+PolyStore’s approach is:
 
 - **Mandatory retrieval sessions** for all served bytes (no session, no bytes).  
 - A **deputy/proxy market** for the user “sad path” (user can’t retrieve directly).  

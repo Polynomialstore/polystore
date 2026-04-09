@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-NilStore has successfully demonstrated the core cryptographic primitives (Triple Proof, PolyFS) and the interaction model (Gateway, Retrieval Sessions) in a "Mode 1" (Full Replica) environment. The critical path to Mainnet requires solving three major challenges:
+PolyStore has successfully demonstrated the core cryptographic primitives (Triple Proof, PolyFS) and the interaction model (Gateway, Retrieval Sessions) in a "Mode 1" (Full Replica) environment. The critical path to Mainnet requires solving three major challenges:
 1.  **Trustlessness:** Removing the Gateway as a custodian of user keys (Devnet Gamma).
 2.  **Throughput:** Overcoming the CPU-bound KZG generation bottleneck to match S3 upload speeds.
 3.  **Efficiency:** Transitioning from Mode 1 (12x overhead) to Mode 2 (1.5x overhead via Erasure Coding).

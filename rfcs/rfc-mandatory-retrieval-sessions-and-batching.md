@@ -9,7 +9,7 @@
 
 ## 1. Motivation
 
-NilStore’s “Retrieval IS Storage” model only works if **served bytes are accountable**:
+PolyStore’s “Retrieval IS Storage” model only works if **served bytes are accountable**:
 
 - retrieval fees settle deterministically through the chain,
 - liveness/credits are attributable to specific providers/slots,

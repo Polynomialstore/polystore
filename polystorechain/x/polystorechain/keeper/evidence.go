@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 )
 
-var evidenceSeedTag = []byte("nilstore/evidence/v1")
+var evidenceSeedTag = []byte("polystore/evidence/v1")
 
 func deriveEvidenceID(kind string, dealID uint64, epochID uint64, extra []byte) [32]byte {
 	buf := make([]byte, 0, len(evidenceSeedTag)+len(kind)+8+8+len(extra))

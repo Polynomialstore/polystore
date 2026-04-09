@@ -90,7 +90,7 @@ func resolveEVMChainID(appOpts servertypes.AppOptions) uint64 {
 	}
 
 	// Fall back to environment if service wiring provides chain ID there.
-	if id := cast.ToUint64(strings.TrimSpace(os.Getenv("NIL_CHAIN_ID"))); id != 0 {
+	if id := cast.ToUint64(strings.TrimSpace(os.Getenv("POLYSTORE_CHAIN_ID"))); id != 0 {
 		return id
 	}
 	if id := cast.ToUint64(strings.TrimSpace(os.Getenv("EVM_CHAIN_ID"))); id != 0 {
@@ -169,8 +169,8 @@ type App struct {
 	evmMempool         sdkmempool.ExtMempool
 
 	// simulation manager
-	sm             *module.SimulationManager
-	NilchainKeeper polystorechainmodulekeeper.Keeper
+	sm                   *module.SimulationManager
+	PolyStoreChainKeeper polystorechainmodulekeeper.Keeper
 
 	// cached server options and logger (used by runtime-wired components like the EVM mempool)
 	appOpts servertypes.AppOptions
@@ -246,7 +246,7 @@ func New(
 		&app.CircuitBreakerKeeper,
 		&app.ParamsKeeper,
 		&app.FeegrantKeeper,
-		&app.NilchainKeeper,
+		&app.PolyStoreChainKeeper,
 	); err != nil {
 		panic(err)
 	}
@@ -329,7 +329,7 @@ func New(
 			Decimals:      uint32(evmtypes.DefaultEVMDecimals),
 		},
 	)
-	app.EVMKeeper.RegisterStaticPrecompile(polystoreprecompile.Address, polystoreprecompile.MustNew(&app.NilchainKeeper))
+	app.EVMKeeper.RegisterStaticPrecompile(polystoreprecompile.Address, polystoreprecompile.MustNew(&app.PolyStoreChainKeeper))
 
 	addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
 	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)

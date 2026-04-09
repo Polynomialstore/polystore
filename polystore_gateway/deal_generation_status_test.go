@@ -105,7 +105,7 @@ func TestDealGenerationStatusSnapshotAt(t *testing.T) {
 
 func TestDealGenerationStatusSnapshotAt_UsesConfiguredRetentionTTL(t *testing.T) {
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVISIONAL_GENERATION_RETENTION_TTL", "36h")
+	t.Setenv("POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL", "36h")
 
 	snapshot := dealGenerationStatusSnapshotAt(time.Now().UTC())
 	if snapshot.RetentionTTL != 36*time.Hour {

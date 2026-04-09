@@ -216,7 +216,7 @@ export function SpOnboarding() {
   const session = useSessionStatus()
   const {
     address,
-    nilAddress,
+    polystoreAddress,
     walletAddressShort,
     isConnected,
     hasFunds,
@@ -311,12 +311,12 @@ export function SpOnboarding() {
   )
 
   const confirmedPairing = useMemo(
-    () => findConfirmedProviderPairing(operatorPairings, nilAddress || ''),
-    [nilAddress, operatorPairings],
+    () => findConfirmedProviderPairing(operatorPairings, polystoreAddress || ''),
+    [polystoreAddress, operatorPairings],
   )
   const pendingLink = useMemo(
-    () => findMostRecentPendingProviderLink(pendingLinks, nilAddress || ''),
-    [nilAddress, pendingLinks],
+    () => findMostRecentPendingProviderLink(pendingLinks, polystoreAddress || ''),
+    [polystoreAddress, pendingLinks],
   )
   const activeProviderAddress = useMemo(
     () =>
@@ -378,7 +378,7 @@ export function SpOnboarding() {
   const authTokenOverride = String(authToken || '').trim()
   const effectiveGatewayAuthToken = authTokenOverride || DEVNET_SHARED_GATEWAY_AUTH_TOKEN
   const hasCustomAuthToken = Boolean(authTokenOverride)
-  const hasOperatorAddress = Boolean(String(nilAddress || '').trim())
+  const hasOperatorAddress = Boolean(String(polystoreAddress || '').trim())
   const providerKeyLabel = String(providerKey || '').trim()
   const providerKeyReady = Boolean(providerKeyLabel)
   const selectedCloneOption = CLONE_METHOD_OPTIONS.find((option) => option.id === cloneMethod) ?? CLONE_METHOD_OPTIONS[0]
@@ -442,13 +442,13 @@ export function SpOnboarding() {
         endpointMode,
         endpointValue,
         publicPort: Number(publicPort),
-        operatorAddress: nilAddress || '',
+        operatorAddress: polystoreAddress || '',
         providerKey,
         authToken: authTokenOverride,
         providerEndpoint: effectiveEndpointPlan?.providerEndpoint || '',
         expectedProviderAddress: approvedProviderAddress || '',
       }),
-    [approvedProviderAddress, authTokenOverride, effectiveEndpointPlan?.providerEndpoint, endpointMode, endpointValue, hostMode, nilAddress, providerKey, publicPort],
+    [approvedProviderAddress, authTokenOverride, effectiveEndpointPlan?.providerEndpoint, endpointMode, endpointValue, hostMode, polystoreAddress, providerKey, publicPort],
   )
   const healthCommands = useMemo(
     () => buildProviderHealthCommands(authoritativePublicBase, providerKey),
@@ -459,7 +459,7 @@ export function SpOnboarding() {
     return [
       '# Start or restart provider-daemon only.',
       `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} ./scripts/run_devnet_provider.sh stop || true`,
-      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh start`,
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} POLYSTORE_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh start`,
     ].join('\n')
   }, [effectiveGatewayAuthToken, providerKeyLabel])
   const cloudflareTunnelCommand = useMemo(
@@ -484,16 +484,16 @@ export function SpOnboarding() {
     ].join('\n')
   }, [effectiveEndpointPlan?.normalizedHost, tunnelName])
   const pairCommand = useMemo(
-    () => buildProviderPairCommand(providerKey, nilAddress || ''),
-    [nilAddress, providerKey],
+    () => buildProviderPairCommand(providerKey, polystoreAddress || ''),
+    [polystoreAddress, providerKey],
   )
   const linkRepairCommand = useMemo(
-    () => buildProviderLinkCommand(providerKey, nilAddress || ''),
-    [nilAddress, providerKey],
+    () => buildProviderLinkCommand(providerKey, polystoreAddress || ''),
+    [polystoreAddress, providerKey],
   )
   const wrongProviderFix = useMemo(() => {
     const normalizedProviderKey = String(providerKeyLabel || '').trim()
-    const normalizedOperatorAddress = String(nilAddress || '').trim()
+    const normalizedOperatorAddress = String(polystoreAddress || '').trim()
     const normalizedProviderEndpoint = String(effectiveEndpointPlan?.providerEndpoint || '').trim()
     const normalizedStatusBase = String(authoritativePublicBase || effectivePublicBase || '').trim()
     const normalizedApprovedProviderAddress = String(approvedProviderAddress || '').trim()
@@ -519,7 +519,7 @@ export function SpOnboarding() {
       '  for p in $(lsof -tiTCP:9100 -sTCP:LISTEN 2>/dev/null); do kill "$p" || true; done',
       'fi',
       'sleep 1',
-      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} EXPECTED_PROVIDER_ADDRESS=${shellQuote(normalizedApprovedProviderAddress)} PROVIDER_ENDPOINT=${shellQuote(normalizedProviderEndpoint)} NIL_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh bootstrap`,
+      `PROVIDER_KEY=${shellQuote(normalizedProviderKey)} OPERATOR_ADDRESS=${shellQuote(normalizedOperatorAddress)} EXPECTED_PROVIDER_ADDRESS=${shellQuote(normalizedApprovedProviderAddress)} PROVIDER_ENDPOINT=${shellQuote(normalizedProviderEndpoint)} POLYSTORE_GATEWAY_SP_AUTH=${shellQuote(effectiveGatewayAuthToken)} ./scripts/run_devnet_provider.sh bootstrap`,
       `ACTUAL_PROVIDER_ADDRESS="$(curl -sS ${shellQuote(statusUrl)} | jq -r '.provider.address // empty')"`,
       `echo "Approved provider: ${normalizedApprovedProviderAddress}"`,
       'echo "Served provider:   $ACTUAL_PROVIDER_ADDRESS"',
@@ -535,18 +535,18 @@ export function SpOnboarding() {
     effectiveEndpointPlan?.providerEndpoint,
     effectiveGatewayAuthToken,
     effectivePublicBase,
-    nilAddress,
+    polystoreAddress,
     providerKeyLabel,
   ])
   const agentPrompt = useMemo(
     () =>
       buildProviderAgentPrompt({
-        operatorAddress: nilAddress || '',
+        operatorAddress: polystoreAddress || '',
         providerEndpoint: effectiveEndpointPlan?.providerEndpoint,
         publicBase: authoritativePublicBase,
         providerKey,
       }),
-    [authoritativePublicBase, effectiveEndpointPlan?.providerEndpoint, nilAddress, providerKey],
+    [authoritativePublicBase, effectiveEndpointPlan?.providerEndpoint, polystoreAddress, providerKey],
   )
 
   const handleCopy = useCallback(async (label: string, text: string) => {
@@ -565,8 +565,8 @@ export function SpOnboarding() {
     try {
       const [height, pending, pairings] = await Promise.all([
         lcdFetchLatestHeight(appConfig.lcdBase).catch(() => null),
-        nilAddress ? lcdFetchPendingProviderLinksByOperator(appConfig.lcdBase, nilAddress).catch(() => []) : Promise.resolve([]),
-        nilAddress ? lcdFetchProvidersByOperator(appConfig.lcdBase, nilAddress).catch(() => []) : Promise.resolve([]),
+        polystoreAddress ? lcdFetchPendingProviderLinksByOperator(appConfig.lcdBase, polystoreAddress).catch(() => []) : Promise.resolve([]),
+        polystoreAddress ? lcdFetchProvidersByOperator(appConfig.lcdBase, polystoreAddress).catch(() => []) : Promise.resolve([]),
       ])
 
       setLatestHeight(height)
@@ -582,7 +582,7 @@ export function SpOnboarding() {
     } finally {
       setLoadingLiveState(false)
     }
-  }, [nilAddress])
+  }, [polystoreAddress])
 
   const refreshPublicStatus = useCallback(async (base: string) => {
     const normalizedBase = String(base || '').trim().replace(/\/$/, '')
@@ -632,7 +632,7 @@ export function SpOnboarding() {
   }, [])
 
   useEffect(() => {
-    if (!nilAddress) {
+    if (!polystoreAddress) {
       setPendingLinks([])
       setOperatorPairings([])
       setProviders([])
@@ -646,7 +646,7 @@ export function SpOnboarding() {
     }, 8000)
 
     return () => window.clearInterval(timer)
-  }, [nilAddress, refreshLiveState])
+  }, [polystoreAddress, refreshLiveState])
 
   useEffect(() => {
     if (!effectivePublicBase || !pairingConfirmed) {
@@ -947,8 +947,8 @@ export function SpOnboarding() {
                       <div className="mt-2 font-mono-data text-foreground">{isConnected ? walletAddressShort : 'Not connected'}</div>
                     </div>
                     <div className="border border-border bg-background/40 p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Nil address</div>
-                      <div className="mt-2 break-all font-mono-data text-foreground">{nilAddress || '—'}</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">PolyStore address</div>
+                      <div className="mt-2 break-all font-mono-data text-foreground">{polystoreAddress || '—'}</div>
                     </div>
                     <div className="border border-border bg-background/40 p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Balance</div>
@@ -1146,7 +1146,7 @@ export function SpOnboarding() {
                   <div className="grid gap-3 border border-border bg-background p-4 text-sm text-muted-foreground md:grid-cols-3">
                     <div className="min-w-0">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operator address</div>
-                      <div className="mt-1 break-all font-mono-data text-foreground">{nilAddress || 'required from Step 1'}</div>
+                      <div className="mt-1 break-all font-mono-data text-foreground">{polystoreAddress || 'required from Step 1'}</div>
                     </div>
                     <div className="min-w-0">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider key</div>
@@ -1168,7 +1168,7 @@ export function SpOnboarding() {
                     </div>
                   ) : !hasOperatorAddress ? (
                     <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
-                      Finish Step 1 first so this page has the operator wallet Nil address.
+                      Finish Step 1 first so this page has the operator wallet PolyStore address.
                     </div>
                   ) : pairingConfirmed ? (
                     <div className="border border-accent/40 bg-background px-4 py-3 text-sm text-accent">
@@ -1399,7 +1399,7 @@ export function SpOnboarding() {
                   <summary className="cursor-pointer text-sm font-semibold text-foreground">Advanced: gateway auth override</summary>
                   <div className="mt-3 space-y-4 text-sm text-muted-foreground">
                     <p>
-                      Bootstrap commands include <span className="font-mono">NIL_GATEWAY_SP_AUTH</span> automatically using the devnet default value.
+                      Bootstrap commands include <span className="font-mono">POLYSTORE_GATEWAY_SP_AUTH</span> automatically using the devnet default value.
                       Only override it if your hub operator gave you a custom secret.
                     </p>
                     <label className="block max-w-xl space-y-2 text-sm">
@@ -1437,7 +1437,7 @@ export function SpOnboarding() {
                       : !pairingConfirmed
                         ? 'Finish Step 3 by running the pair command and approving the provider link before bootstrap.'
                       : !hasOperatorAddress
-                        ? 'Finish Step 1 so the website can capture the connected operator wallet nil address.'
+                        ? 'Finish Step 1 so the website can capture the connected operator wallet PolyStore address.'
                         : !endpointReady
                         ? 'Describe the public endpoint so the website can derive the provider endpoint and health URL.'
                         : 'Endpoint is ready. Run bootstrap and watch registration plus health converge below.'}
@@ -1731,7 +1731,7 @@ export function SpOnboarding() {
                   </div>
                   <div className="min-w-0">
                     <span>Operator address</span>
-                    <div className="mt-1 break-all font-mono-data text-foreground">{nilAddress || 'required'}</div>
+                    <div className="mt-1 break-all font-mono-data text-foreground">{polystoreAddress || 'required'}</div>
                   </div>
                   <div className="min-w-0">
                     <span>Provider endpoint</span>

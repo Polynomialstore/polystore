@@ -12,7 +12,7 @@ This mirrors `scripts/e2e_lifecycle.sh` and uses the gateway relay endpoints (`/
 Start the stack with tx relay enabled:
 
 ```bash
-NIL_ENABLE_TX_RELAY=1 scripts/run_local_stack.sh start
+POLYSTORE_ENABLE_TX_RELAY=1 scripts/run_local_stack.sh start
 ```
 
 ### Profile B — Wallet-first (mainnet parity; no relay)
@@ -42,10 +42,10 @@ Tx relay is **off by default** and should remain off for mainnet parity.
 
    Notes:
    - `scripts/run_local_stack.sh start` **always re-initializes** the chain home.
-   - Default home is `_artifacts/polystorechain_data`. If you set `NIL_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `NIL_REINIT_HOME=1`.
-     - Example: `NIL_HOME=/var/lib/nilstore/local NIL_REINIT_HOME=1 scripts/run_local_stack.sh start`
+   - Default home is `_artifacts/polystorechain_data`. If you set `POLYSTORE_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `POLYSTORE_REINIT_HOME=1`.
+     - Example: `POLYSTORE_HOME=/var/lib/polystore/local POLYSTORE_REINIT_HOME=1 scripts/run_local_stack.sh start`
    - Tx relay is **off by default**; enable it only if you’re following **Profile A**:
-     - `NIL_ENABLE_TX_RELAY=1 scripts/run_local_stack.sh start`
+     - `POLYSTORE_ENABLE_TX_RELAY=1 scripts/run_local_stack.sh start`
 
 4. Confirm endpoints are healthy:
 
@@ -72,7 +72,7 @@ export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export EVM_PRIVKEY="${EVM_PRIVKEY:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1}"
 ```
 
-Note: the `/gateway/*-evm` relay endpoints used below require `NIL_ENABLE_TX_RELAY=1` (Profile A).
+Note: the `/gateway/*-evm` relay endpoints used below require `POLYSTORE_ENABLE_TX_RELAY=1` (Profile A).
 
 ### 2.1 Create deal (EVM intent + optional relay)
 
@@ -98,7 +98,7 @@ print(json.loads('''$CREATE_PAYLOAD''')["intent"]["creator_evm"])
 PY
 )"
 
-NIL_ADDRESS="$(python3 - "$EVM_ADDRESS" <<'PY'
+POLYSTORE_ADDRESS="$(python3 - "$EVM_ADDRESS" <<'PY'
 import sys
 
 CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
@@ -158,14 +158,14 @@ PY
 )"
 
 echo "EVM: $EVM_ADDRESS"
-echo "NIL: $NIL_ADDRESS"
+echo "NIL: $POLYSTORE_ADDRESS"
 ```
 
 Fund the NIL address (local faucet):
 
 ```bash
 curl -sS -X POST -H "Content-Type: application/json" \
-  -d "{\"address\":\"$NIL_ADDRESS\"}" \
+  -d "{\"address\":\"$POLYSTORE_ADDRESS\"}" \
   "$FAUCET_BASE/faucet"
 ```
 
@@ -189,7 +189,7 @@ Upload a file into the deal (captures a new `manifest_root` / PolyFS slab state)
 ```bash
 UPLOAD_FILE="${UPLOAD_FILE:-README.md}"
 FILE_PATH="$(basename "$UPLOAD_FILE")"
-UPLOAD_RESP="$(curl -sS -X POST -F "file=@$UPLOAD_FILE" -F "owner=$NIL_ADDRESS" \
+UPLOAD_RESP="$(curl -sS -X POST -F "file=@$UPLOAD_FILE" -F "owner=$POLYSTORE_ADDRESS" \
   "$GATEWAY_BASE/gateway/upload?deal_id=$DEAL_ID")"
 
 MANIFEST_ROOT="$(python3 - <<PY
@@ -261,7 +261,7 @@ print(urllib.parse.quote('''$FILE_PATH'''))
 PY
 )"
 PLAN_RESP="$(curl -sS \
-  "$GATEWAY_BASE/gateway/plan-retrieval-session/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=$ENC_FILE_PATH&range_start=0&range_len=$FILE_SIZE_BYTES")"
+  "$GATEWAY_BASE/gateway/plan-retrieval-session/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$POLYSTORE_ADDRESS&file_path=$ENC_FILE_PATH&range_start=0&range_len=$FILE_SIZE_BYTES")"
 
 PROVIDER_ADDR="$(python3 - <<PY
 import json
@@ -341,7 +341,7 @@ PY
 Fetch bytes (requires the session id + signed request headers):
 
 ```bash
-FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$NIL_ADDRESS&file_path=$ENC_FILE_PATH"
+FETCH_URL="$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$POLYSTORE_ADDRESS&file_path=$ENC_FILE_PATH"
 RANGE_END="$((FILE_SIZE_BYTES - 1))"
 curl -fsS -o fetched.bin "$FETCH_URL" \
   -H "X-PolyStore-Session-Id: $SESSION_ID" \
@@ -403,8 +403,8 @@ Whenever the scripts above change, mirror the updated commands back into this ru
 The gateway keeps newly uploaded PolyFS generations in a provisional state until the signed chain swap succeeds.
 
 - Default devnet retention: `24h`
-- Override with: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL`
-- Disable age-based provisional GC: `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0`
+- Override with: `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL`
+- Disable age-based provisional GC: `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL=0`
 - Browser/gateway/provider artifact uploads may send `X-PolyStore-Previous-Manifest-Root` to reject stale append bases before large upload bodies are consumed
 
 Inspect the effective policy and current generation inventory with:

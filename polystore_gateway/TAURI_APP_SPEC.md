@@ -1,4 +1,4 @@
-# NilGateway GUI (Tauri) — Build Specification (Codex-Executable)
+# PolyStore Gateway GUI (Tauri) — Build Specification (Codex-Executable)
 
 **Version:** 0.3.0  
 **Date:** 2026-01-16  
@@ -9,7 +9,7 @@ This document is written to be **unambiguous enough that a Codex agent can imple
 ## 0. Goals, Non‑Goals, and Definition of Done
 
 ### 0.1 Goals
-- Provide a **desktop GUI** for NilStore’s devnet workflows using **Tauri**.
+- Provide a **desktop GUI** for PolyStore’s devnet workflows using **Tauri**.
 - Ship a **self-contained app** that runs a local gateway sidecar and supports:
   - Deal creation (EVM intent + wallet signature)
   - File ingest/upload into PolyFS / Mode 2 slab
@@ -18,7 +18,7 @@ This document is written to be **unambiguous enough that a Codex agent can imple
 - Keep UX **“no private key import”**: user ownership is via an external wallet signature flow; the app holds **only a relayer/provider key** for gas sponsorship / proof submission.
  
 ### 0.2 Non‑Goals (explicit)
-- Building a general-purpose “NilChain desktop wallet”.
+- Building a general-purpose “PolyStore Chain desktop wallet”.
 - Full replacement of the existing web app (`polystore-website`).
 - Production-grade key custody / HSM integration (devnet-grade custody is acceptable; mainnet hardening is a separate spec).
  
@@ -77,9 +77,9 @@ The GUI must run without requiring the user to install build tools or CLI binari
 1. **Bundle required binaries (recommended MVP):**
    - Bundle a `polystore_gateway` sidecar binary per platform.
    - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `polystorechaind` client binary if `polystore_gateway` still shells out).
-   - The host sets `NIL_TRUSTED_SETUP`, `NILCHAIND_BIN`, and other paths to bundle-resident locations.
+   - The host sets `POLYSTORE_TRUSTED_SETUP`, `POLYSTORECHAIND_BIN`, and other paths to bundle-resident locations.
 2. **Eliminate external exec dependencies (target hardening):**
-   - Remove `execNilchaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
+   - Remove `execPolystorechaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
    - Ensure Mode 2 ingest does not require `polystore_cli` subprocesses (prefer `crypto_ffi`, which already exists for RS + KZG primitives).
 
 The plan below assumes Strategy (1) first, then Strategy (2) as a follow-up hardening phase.
@@ -105,7 +105,7 @@ The implementation must choose **WalletConnect** as the default and treat the br
 
 ### 4.1 EIP-712 Domain
 The domain is defined in `polystorechain/x/polystorechain/types/eip712.go`:
-- `name`: `"NilStore"`
+- `name`: `"PolyStore"`
 - `version`: `"1"`
 - `chainId`: **numeric** `Params.eip712_chain_id` (default devnet: `31337`)
 - `verifyingContract`: `"0x0000000000000000000000000000000000000000"`
@@ -225,9 +225,9 @@ The GUI implementation must include an integration test that starts the sidecar 
 
 ### 6.4 App Config and Sidecar Env Mapping
 The GUI must maintain a single config file (JSON) in the OS app data directory, e.g.:
-- macOS: `~/Library/Application Support/NilGateway GUI/config.json`
-- Linux: `~/.config/nilgateway-gui/config.json`
-- Windows: `%APPDATA%\\NilGateway GUI\\config.json`
+- macOS: `~/Library/Application Support/PolyStore Gateway GUI/config.json`
+- Linux: `~/.config/com.polynomialstore.gatewaygui/config.json`
+- Windows: `%APPDATA%\\PolyStore Gateway GUI\\config.json`
 
 Normative config keys (names may differ on disk, but the meaning must match):
 - `chain.chain_id` (default `test-1`)
@@ -239,14 +239,14 @@ Normative config keys (names may differ on disk, but the meaning must match):
 - `wallet.mode` (`walletconnect` | `bridge`)
 
 The host must map config to sidecar env vars consistently:
-- `NIL_UPLOAD_DIR` ← `storage.upload_dir`
-- `NIL_LCD_BASE` ← `chain.lcd_base`
-- `NIL_CHAIN_ID` ← `chain.chain_id`
-- `NIL_GAS_PRICES` ← `chain.gas_prices`
-- `NIL_NODE` ← `chain.node_rpc`
-- `NIL_PROVIDER_BASE` ← `gateway.provider_base`
-- `NIL_TRUSTED_SETUP` ← bundle-resident `trusted_setup.txt` path (Strategy 1)
-- `NILCHAIND_BIN` ← bundle-resident `polystorechaind` path (Strategy 1, only if still used)
+- `POLYSTORE_UPLOAD_DIR` ← `storage.upload_dir`
+- `POLYSTORE_LCD_BASE` ← `chain.lcd_base`
+- `POLYSTORE_CHAIN_ID` ← `chain.chain_id`
+- `POLYSTORE_GAS_PRICES` ← `chain.gas_prices`
+- `POLYSTORE_NODE` ← `chain.node_rpc`
+- `POLYSTORE_PROVIDER_BASE` ← `gateway.provider_base`
+- `POLYSTORE_TRUSTED_SETUP` ← bundle-resident `trusted_setup.txt` path (Strategy 1)
+- `POLYSTORECHAIND_BIN` ← bundle-resident `polystorechaind` path (Strategy 1, only if still used)
  
 ## 7. Testing Plan (Thorough, CI-Friendly)
 
@@ -333,10 +333,10 @@ Each phase is small-commit friendly and includes a test gate.
 - [ ] Add nightly CI job for full stack if feasible.
 
 ### Phase 7 — Dependency-Free Sidecar (Hardening)
-- [ ] Remove `execNilchaind` usage from `polystore_gateway` (broadcast/query via libraries).
+- [ ] Remove `execPolystorechaind` usage from `polystore_gateway` (broadcast/query via libraries).
 - [ ] Ensure all ingest/commit paths used by the GUI do not shell out to `polystore_cli`.
 - [ ] Update GUI bundling to only include the `polystore_gateway` sidecar and required static assets.
-- **Test gate:** all previous tests still pass; add a “no external exec” unit test that fails if `NILCHAIND_BIN`/`NIL_CLI_BIN` is required.
+- **Test gate:** all previous tests still pass; add a “no external exec” unit test that fails if `POLYSTORECHAIND_BIN`/`POLYSTORE_CLI_BIN` is required.
  
 ## 10. Open Questions (Need Your Clarifications)
 

@@ -15,11 +15,11 @@ import (
 )
 
 var (
-	epochSeedTag     = []byte("nilstore/epoch/v1")
-	challengeSeedTag = []byte("nilstore/chal/v1")
-	creditSeenTag    = []byte("nilstore/credit/v1")
-	syntheticSeenTag = []byte("nilstore/synth/v1")
-	deputySeenTag    = []byte("nilstore/deputy/v1")
+	epochSeedTag     = []byte("polystore/epoch/v1")
+	challengeSeedTag = []byte("polystore/chal/v1")
+	creditSeenTag    = []byte("polystore/credit/v1")
+	syntheticSeenTag = []byte("polystore/synth/v1")
+	deputySeenTag    = []byte("polystore/deputy/v1")
 )
 
 func (k Keeper) BeginBlock(goCtx context.Context) error {
@@ -113,7 +113,7 @@ func deriveEpochSeed(chainID string, epochID uint64, headerHash []byte) [32]byte
 
 func (k Keeper) getEpochSeed(ctx sdk.Context, epochID uint64) [32]byte {
 	if epochID == 0 {
-		return sha256.Sum256([]byte("nilstore/epoch/zero"))
+		return sha256.Sum256([]byte("polystore/epoch/zero"))
 	}
 	seed, err := k.EpochSeeds.Get(ctx, epochID)
 	if err == nil && len(seed) == 32 {

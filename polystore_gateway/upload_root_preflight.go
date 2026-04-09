@@ -38,7 +38,7 @@ type polyfsUploadRootPreflightCacheEntry struct {
 
 var (
 	polyfsUploadRootPreflightCache    sync.Map
-	polyfsUploadRootPreflightCacheTTL = time.Duration(envInt("NIL_UPLOAD_ROOT_PREFLIGHT_CACHE_TTL_MS", 15000)) * time.Millisecond
+	polyfsUploadRootPreflightCacheTTL = time.Duration(envInt("POLYSTORE_UPLOAD_ROOT_PREFLIGHT_CACHE_TTL_MS", 15000)) * time.Millisecond
 	polyfsUploadRootPreflightGroup    singleflight.Group
 )
 

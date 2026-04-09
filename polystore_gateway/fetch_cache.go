@@ -271,11 +271,11 @@ var (
 )
 
 func cachedProviderAddress(ctx context.Context) string {
-	if override := strings.TrimSpace(os.Getenv("NIL_PROVIDER_ADDRESS")); override != "" {
+	if override := strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_ADDRESS")); override != "" {
 		return override
 	}
 
-	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 
 	providerAddrMu.Lock()
 	if providerAddrCached != "" {

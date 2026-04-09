@@ -89,7 +89,7 @@ If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and
 
 ### Desktop GUI app (Tauri): local gateway UI
 
-8) **Nil Gateway GUI**
+8) **PolyStore Gateway GUI**
 - `polystore_gateway_gui/src/App.tsx`
   - Today: user sees manifest root, can list files, and download files.
   - Gap: there is effectively **no MDU visibility** (no slab layout, no MDU #0/witness/user breakdown, no commitments, no “this download will generate N receipts”).

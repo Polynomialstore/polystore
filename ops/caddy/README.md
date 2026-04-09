@@ -19,12 +19,12 @@ Why:
 4) Build the website once:
 
 ```bash
-cd /opt/nilstore/polystore-website
+cd /opt/polystore/polystore-website
 npm ci
 npm run build
 ```
 
-Then `web.<domain>` serves `/opt/nilstore/polystore-website/dist`.
+Then `web.<domain>` serves `/opt/polystore/polystore-website/dist`.
 
 ## Provider (remote SP)
 

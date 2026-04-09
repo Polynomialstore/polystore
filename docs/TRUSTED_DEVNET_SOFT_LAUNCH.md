@@ -24,7 +24,7 @@ Related:
 
 Security posture:
 - This is **trusted** and **invite-only** (not Sybil resistant).
-- The router↔provider channel uses a shared secret (`NIL_GATEWAY_SP_AUTH`). Treat it like a password.
+- The router↔provider channel uses a shared secret (`POLYSTORE_GATEWAY_SP_AUTH`). Treat it like a password.
 
 ## Public endpoints (recommended)
 
@@ -116,29 +116,29 @@ This produces a persistent chain home directory and prints the router↔provider
 
 ```bash
 sudo mkdir -p /opt && sudo chown "$USER":"$USER" /opt
-git clone https://github.com/Polynomialstore/polystore.git /opt/nilstore
-cd /opt/nilstore
+git clone https://github.com/Polynomialstore/polystore.git /opt/polystore
+cd /opt/polystore
 
 # Use a persistent chain home outside the repo (matches `ops/systemd/env/polystorechaind.env` defaults).
-sudo mkdir -p /var/lib/nilstore
-sudo chown -R "$USER":"$USER" /var/lib/nilstore
+sudo mkdir -p /var/lib/polystore
+sudo chown -R "$USER":"$USER" /var/lib/polystore
 
 # One-time init (hub only; no local providers; no web).
-NIL_HOME=/var/lib/nilstore/polystorechaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+POLYSTORE_HOME=/var/lib/polystore/polystorechaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
 If you need to re-run bootstrap later, the script will refuse to delete an existing non-`_artifacts/` home unless you explicitly opt in:
 
 ```bash
-NIL_HOME=/var/lib/nilstore/polystorechaind NIL_REINIT_HOME=1 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+POLYSTORE_HOME=/var/lib/polystore/polystorechaind POLYSTORE_REINIT_HOME=1 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
 Note: the bootstrap script binds LCD + EVM JSON-RPC to localhost by default (safe for the hub-behind-Caddy profile).
-If you intentionally want to bind them to `0.0.0.0` for LAN / non-proxy debugging, set `NIL_BIND_ALL=1` and firewall accordingly.
+If you intentionally want to bind them to `0.0.0.0` for LAN / non-proxy debugging, set `POLYSTORE_BIND_ALL=1` and firewall accordingly.
 
 Copy out (and store safely):
 - the printed `SP Auth` token (also at `_artifacts/devnet_alpha_multi_sp/sp_auth.txt`)
-- the printed `Home:` directory (should match the `NIL_HOME` you chose; keep it for systemd)
+- the printed `Home:` directory (should match the `POLYSTORE_HOME` you chose; keep it for systemd)
 
 Stop the script-managed processes:
 
@@ -146,7 +146,7 @@ Stop the script-managed processes:
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
 ```
 
-Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its chain home when the home is under `_artifacts/` (default) or when `NIL_REINIT_HOME=1` is set. Use it only for bootstrap and local smoke tests.
+Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its chain home when the home is under `_artifacts/` (default) or when `POLYSTORE_REINIT_HOME=1` is set. Use it only for bootstrap and local smoke tests.
 
 ### 3) systemd (hub services)
 
@@ -162,24 +162,24 @@ sudo systemctl daemon-reload
 2) Install env files and fill in the `<set-me>` values:
 
 ```bash
-sudo mkdir -p /etc/nilstore
-sudo cp ops/systemd/env/*.env /etc/nilstore/
+sudo mkdir -p /etc/polystore
+sudo cp ops/systemd/env/*.env /etc/polystore/
 
-sudoedit /etc/nilstore/polystorechaind.env
-sudoedit /etc/nilstore/polystore-gateway-router.env
-sudoedit /etc/nilstore/polystore-faucet.env
+sudoedit /etc/polystore/polystorechaind.env
+sudoedit /etc/polystore/polystore-gateway-router.env
+sudoedit /etc/polystore/polystore-faucet.env
 ```
 
 Minimum required edits:
-- set `NIL_HOME` to the persistent chain home printed by the bootstrap script
-- set `NIL_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
-- set `NIL_GATEWAY_SP_AUTH` on the router and providers (shared secret)
-- set `NIL_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
-- set `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` in all nilstore env files
+- set `POLYSTORE_HOME` to the persistent chain home printed by the bootstrap script
+- set `POLYSTORE_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
+- set `POLYSTORE_GATEWAY_SP_AUTH` on the router and providers (shared secret)
+- set `POLYSTORE_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
+- set `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release` in all polystore env files
 - recommended (hub behind Caddy or Cloudflare Tunnel): bind services to localhost and expose only via the public edge:
-  - `polystorechaind.env`: `NIL_RPC_LADDR=tcp://127.0.0.1:26657`
-  - `polystore-gateway-router.env`: `NIL_LISTEN_ADDR=127.0.0.1:8080` (or another free local port if `8080` is occupied)
-  - `polystore-faucet.env`: `NIL_LISTEN_ADDR=127.0.0.1:8081`
+  - `polystorechaind.env`: `POLYSTORE_RPC_LADDR=tcp://127.0.0.1:26657`
+  - `polystore-gateway-router.env`: `POLYSTORE_LISTEN_ADDR=127.0.0.1:8080` (or another free local port if `8080` is occupied)
+  - `polystore-faucet.env`: `POLYSTORE_LISTEN_ADDR=127.0.0.1:8081`
 
 3) Enable + start (recommended order):
 
@@ -196,7 +196,7 @@ If you are using Profile B (Cloudflare Tunnel), skip this section and use sectio
 1) Copy the hub example and replace `example.com`:
 
 ```bash
-sudo cp /opt/nilstore/ops/caddy/Caddyfile.hub.example /etc/caddy/Caddyfile
+sudo cp /opt/polystore/ops/caddy/Caddyfile.hub.example /etc/caddy/Caddyfile
 sudoedit /etc/caddy/Caddyfile
 ```
 
@@ -253,7 +253,7 @@ sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
 
 :8088 {
   bind 127.0.0.1
-  root * /opt/nilstore/polystore-website/dist
+  root * /opt/polystore/polystore-website/dist
   encode zstd gzip
   file_server
 }
@@ -262,11 +262,11 @@ sudo systemctl restart caddy
 ```
 
 Operational note:
-- `web.<domain>` serves whatever files exist under `/opt/nilstore/polystore-website/dist` (or whatever path you configure in Caddy).
+- `web.<domain>` serves whatever files exist under `/opt/polystore/polystore-website/dist` (or whatever path you configure in Caddy).
 - If you build the website from a different checkout than the one Caddy serves, you **must** publish that build output into the served `dist/` directory or `web.<domain>` will keep showing the older site.
 - Recommended pattern for this host profile:
   - build from the checkout you actually want to publish
-  - sync the resulting `polystore-website/dist/` into `/opt/nilstore/polystore-website/dist`
+  - sync the resulting `polystore-website/dist/` into `/opt/polystore/polystore-website/dist`
   - then verify `http://127.0.0.1:8088/` before checking `https://web.<domain>/`
 
 4) Install the tunnel credentials/config under `/etc/cloudflared/`, then run the tunnel as a service.
@@ -366,10 +366,10 @@ Then register provider endpoints on-chain as:
 If the router/local Gateway runs on the same host as those provider processes, set a local upload fast-path override so Mode2 uploads avoid Cloudflare round-trips:
 
 ```bash
-export NIL_PROVIDER_HTTP_BASE_OVERRIDES="sp1.<domain>=http://127.0.0.1:8091,sp2.<domain>=http://127.0.0.1:8092,sp3.<domain>=http://127.0.0.1:8093"
+export POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES="sp1.<domain>=http://127.0.0.1:8091,sp2.<domain>=http://127.0.0.1:8092,sp3.<domain>=http://127.0.0.1:8093"
 ```
 
-- Supported keys in `NIL_PROVIDER_HTTP_BASE_OVERRIDES` are:
+- Supported keys in `POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES` are:
   - provider address (`nil1...`)
   - endpoint hostname (`sp1.<domain>`)
   - full endpoint multiaddr (`/dns4/sp1.<domain>/tcp/443/https`)
@@ -397,7 +397,7 @@ Build requirements:
 Build example:
 
 ```bash
-cd /opt/nilstore/polystore-website
+cd /opt/polystore/polystore-website
 npm ci
 
 VITE_API_BASE=https://faucet.<domain> \
@@ -412,13 +412,13 @@ VITE_FAUCET_AUTH_TOKEN=<token> \
 npm run build
 ```
 
-If `/opt/nilstore` is your long-running hub checkout and you built from that same checkout, the build is already in the served location.
+If `/opt/polystore` is your long-running hub checkout and you built from that same checkout, the build is already in the served location.
 
 If you built from a different checkout (for example a newer workspace under `~/dev/...`), publish the output into the hub-served path:
 
 ```bash
-rm -rf /opt/nilstore/polystore-website/dist
-cp -a /path/to/your/current/checkout/polystore-website/dist /opt/nilstore/polystore-website/dist
+rm -rf /opt/polystore/polystore-website/dist
+cp -a /path/to/your/current/checkout/polystore-website/dist /opt/polystore/polystore-website/dist
 ```
 
 Then verify the local static server is serving the new build:
@@ -465,7 +465,7 @@ curl -fsS http://127.0.0.1:8088/ >/dev/null
 
 ## Economics knobs (soft launch)
 
-Nilchain module params are stored in genesis under `app_state.polystorechain.params` and can be patched at init-time
+PolyStore Chain module params are stored in genesis under `app_state.polystorechain.params` and can be patched at init-time
 by `scripts/run_devnet_alpha_multi_sp.sh` via env vars.
 
 Recommended soft-launch defaults:
@@ -475,18 +475,18 @@ Recommended soft-launch defaults:
 
 Supported genesis overrides (all optional):
 - Static pricing:
-  - `NIL_DEAL_CREATION_FEE` (coin, e.g. `10stake`)
-  - `NIL_STORAGE_PRICE` (LegacyDec string, e.g. `0.00000000001`)
-  - `NIL_BASE_RETRIEVAL_FEE` (coin, e.g. `1stake`)
-  - `NIL_RETRIEVAL_PRICE_PER_BLOB` (coin, e.g. `1stake`)
+  - `POLYSTORE_DEAL_CREATION_FEE` (coin, e.g. `10stake`)
+  - `POLYSTORE_STORAGE_PRICE` (LegacyDec string, e.g. `0.00000000001`)
+  - `POLYSTORE_BASE_RETRIEVAL_FEE` (coin, e.g. `1stake`)
+  - `POLYSTORE_RETRIEVAL_PRICE_PER_BLOB` (coin, e.g. `1stake`)
 - Dynamic pricing (devnet experiment; disabled by default):
-  - `NIL_DYNAMIC_PRICING_ENABLED=1`
-  - Storage: `NIL_STORAGE_PRICE_MIN`, `NIL_STORAGE_PRICE_MAX`, `NIL_STORAGE_TARGET_UTILIZATION_BPS`
-  - Retrieval: `NIL_RETRIEVAL_PRICE_PER_BLOB_MIN`, `NIL_RETRIEVAL_PRICE_PER_BLOB_MAX`, `NIL_RETRIEVAL_TARGET_BLOBS_PER_EPOCH`
-  - Clamp: `NIL_DYNAMIC_PRICING_MAX_STEP_BPS` (0 = no clamp)
+  - `POLYSTORE_DYNAMIC_PRICING_ENABLED=1`
+  - Storage: `POLYSTORE_STORAGE_PRICE_MIN`, `POLYSTORE_STORAGE_PRICE_MAX`, `POLYSTORE_STORAGE_TARGET_UTILIZATION_BPS`
+  - Retrieval: `POLYSTORE_RETRIEVAL_PRICE_PER_BLOB_MIN`, `POLYSTORE_RETRIEVAL_PRICE_PER_BLOB_MAX`, `POLYSTORE_RETRIEVAL_TARGET_BLOBS_PER_EPOCH`
+  - Clamp: `POLYSTORE_DYNAMIC_PRICING_MAX_STEP_BPS` (0 = no clamp)
 
 Notes:
-- When `NIL_DYNAMIC_PRICING_ENABLED=1` and a `*_MIN` value is provided, the init script defaults the current
+- When `POLYSTORE_DYNAMIC_PRICING_ENABLED=1` and a `*_MIN` value is provided, the init script defaults the current
   price (`storage_price` / `retrieval_price_per_blob`) to the min unless explicitly set.
 - These are just genesis-time knobs; governance can update params later if desired.
 
@@ -503,14 +503,14 @@ PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 Example (enable bounded dynamic pricing at startup):
 
 ```bash
-NIL_DYNAMIC_PRICING_ENABLED=1 \
-NIL_DYNAMIC_PRICING_MAX_STEP_BPS=500 \
-NIL_STORAGE_PRICE_MIN=0.00000000001 \
-NIL_STORAGE_PRICE_MAX=0.00000000010 \
-NIL_STORAGE_TARGET_UTILIZATION_BPS=8000 \
-NIL_RETRIEVAL_PRICE_PER_BLOB_MIN=1stake \
-NIL_RETRIEVAL_PRICE_PER_BLOB_MAX=5stake \
-NIL_RETRIEVAL_TARGET_BLOBS_PER_EPOCH=1000 \
+POLYSTORE_DYNAMIC_PRICING_ENABLED=1 \
+POLYSTORE_DYNAMIC_PRICING_MAX_STEP_BPS=500 \
+POLYSTORE_STORAGE_PRICE_MIN=0.00000000001 \
+POLYSTORE_STORAGE_PRICE_MAX=0.00000000010 \
+POLYSTORE_STORAGE_TARGET_UTILIZATION_BPS=8000 \
+POLYSTORE_RETRIEVAL_PRICE_PER_BLOB_MIN=1stake \
+POLYSTORE_RETRIEVAL_PRICE_PER_BLOB_MAX=5stake \
+POLYSTORE_RETRIEVAL_TARGET_BLOBS_PER_EPOCH=1000 \
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
@@ -524,7 +524,7 @@ PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
 ```
 
-Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its chain home when the home is under `_artifacts/` (default) or when `NIL_REINIT_HOME=1` is set. Do not use it as a long-running “service manager” for the soft launch.
+Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its chain home when the home is under `_artifacts/` (default) or when `POLYSTORE_REINIT_HOME=1` is set. Do not use it as a long-running “service manager” for the soft launch.
 
 ## Hub: long-running (systemd templates)
 
@@ -536,19 +536,19 @@ Minimum units to run on the hub:
 - `ops/systemd/polystore-faucet.service` (optional but recommended for collaborators)
 
 Use the env templates under `ops/systemd/env/` and make sure:
-- All hub services share the same `NIL_HOME` (chain home directory).
-- `polystore-gateway-router` and all providers share the same `NIL_GATEWAY_SP_AUTH`.
+- All hub services share the same `POLYSTORE_HOME` (chain home directory).
+- `polystore-gateway-router` and all providers share the same `POLYSTORE_GATEWAY_SP_AUTH`.
 
 For repeatable `polystorechaind` binary rollouts on systemd hosts, use:
 - `scripts/redeploy_polystorechaind.sh`
-- `docs/NILCHAIND_REDEPLOY_RUNBOOK.md`
+- `docs/POLYSTORECHAIND_REDEPLOY_RUNBOOK.md`
 
 ## Provider onboarding
 
 Send each collaborator:
 - Hub endpoints (rpc/lcd/evm/faucet)
 - The chain ID(s)
-- The shared router↔provider auth token (`NIL_GATEWAY_SP_AUTH`)
+- The shared router↔provider auth token (`POLYSTORE_GATEWAY_SP_AUTH`)
 
 Then have them follow:
 
@@ -568,9 +568,9 @@ For trusted-devnet bring-up, you can run multiple logical providers on the hub h
 - Important protocol caveat: provider endpoints are immutable per provider address in the current devnet build.
   - If you accidentally register `/ip4/127.0.0.1/...` and need public endpoints later, rotate to new provider keys, register the public endpoints, and mark old providers as draining.
 - Keep each provider isolated with its own:
-  - `NIL_HOME` (separate keyring + state)
-  - `NIL_UPLOAD_DIR`
-  - `NIL_SESSION_DB_PATH`
+  - `POLYSTORE_HOME` (separate keyring + state)
+  - `POLYSTORE_UPLOAD_DIR`
+  - `POLYSTORE_SESSION_DB_PATH`
 - If faucet throttling slows provider funding, fund provider keys directly from the local `faucet` key via `polystorechaind tx bank send`.
 
 Provider health checks:
@@ -588,10 +588,10 @@ scripts/devnet_healthcheck.sh provider --provider https://sp3.<domain> --hub-lcd
 
 Collaborators must have funds for gas (and any protocol fees). For the current devnet profile:
 - EVM gas denom is `aatom` (see `polystorechain` params / genesis).
-- The faucet can send both `aatom` and `stake` (default `NIL_AMOUNT`).
+- The faucet can send both `aatom` and `stake` (default `POLYSTORE_AMOUNT`).
 
 Faucet access control (recommended for invite-only):
-- Deploy behind reverse-proxy auth, and/or set `NIL_FAUCET_AUTH_TOKEN` on the faucet service.
+- Deploy behind reverse-proxy auth, and/or set `POLYSTORE_FAUCET_AUTH_TOKEN` on the faucet service.
   - When set, requests MUST include `X-PolyStore-Faucet-Auth: <token>`.
 
 Faucet request (example):
@@ -638,7 +638,7 @@ curl -sf "http://127.0.0.1:8093/gateway/list-files/<manifest_root_hex>?deal_id=<
 
 ### Public CLI smoke (wallet-first / tx relay disabled)
 
-If `POST /gateway/create-deal-evm` returns `403`, that is expected in wallet-first mode (`NIL_ENABLE_TX_RELAY=0`).
+If `POST /gateway/create-deal-evm` returns `403`, that is expected in wallet-first mode (`POLYSTORE_ENABLE_TX_RELAY=0`).
 Use this flow instead:
 
 1) Generate EVM intents with `polystore-website/scripts/sign_intent.ts` (`create-deal`, then `update-content`).
@@ -687,21 +687,21 @@ Important:
 - Router can’t reach provider:
   - endpoint multiaddr not reachable from hub (firewall/NAT)
   - provider tunnel misconfigured (`cloudflared` down, wrong hostname, or wrong local service port)
-  - `NIL_GATEWAY_SP_AUTH` mismatch between router and provider
+  - `POLYSTORE_GATEWAY_SP_AUTH` mismatch between router and provider
 - Mode2 upload feels unexpectedly slow for small files:
   - ensure router + providers are on a build that supports sparse upload transport (`X-PolyStore-Full-Size`)
-  - sparse transport is enabled by default; verify it wasn't disabled via `NIL_MODE2_SPARSE_UPLOAD=0`
+  - sparse transport is enabled by default; verify it wasn't disabled via `POLYSTORE_MODE2_SPARSE_UPLOAD=0`
   - restart router + providers after updating binaries/config so the optimization applies end-to-end
 - Fetch fails with “missing X-PolyStore-Session-Id”:
-  - sessions are **required by default** (`NIL_REQUIRE_ONCHAIN_SESSION=1`)
+  - sessions are **required by default** (`POLYSTORE_REQUIRE_ONCHAIN_SESSION=1`)
 - systemd service exits with `203/EXEC`:
   - ensure unit templates use the shell wrapper in `ops/systemd/*.service` and run `systemctl daemon-reload`
 - nil services fail with `libpolystore_core.so: cannot open shared object file`:
-  - ensure `LD_LIBRARY_PATH=/opt/nilstore/polystore_core/target/release` is set in each `/etc/nilstore/*.env`
+  - ensure `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release` is set in each `/etc/polystore/*.env`
 - `polystorechaind` fails binding gRPC `localhost:9090`:
-  - set a free port in `/var/lib/nilstore/polystorechaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
+  - set a free port in `/var/lib/polystore/polystorechaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
 - Multiple providers on one host fail to start (port bind errors):
-  - either disable provider libp2p for the soft launch (`NIL_P2P_ENABLED=0`) or assign unique `NIL_P2P_LISTEN_ADDRS` per provider
+  - either disable provider libp2p for the soft launch (`POLYSTORE_P2P_ENABLED=0`) or assign unique `POLYSTORE_P2P_LISTEN_ADDRS` per provider
 - Provider logs are noisy with repeated `system liveness` proof failures (for example `no such file or directory` on old shard paths):
   - in the current gateway build, system liveness now auto-skips expired deals (`height >= end_block`) and applies per-challenge retry backoff for expected local-data misses
   - inspect counters via provider `/status`:
@@ -712,8 +712,8 @@ Important:
       - `mode2_reconstruct_fallback_provider_successes` rising means repair-aware fallback is actively serving chunks.
       - `mode2_reconstruct_not_enough_shards_failures` rising means RS quorum is not available for reconstruction.
   - if counters keep climbing for stale/old deals, run cleanup in dry-run first:
-    - `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317`
-    - apply mode (removes only expired/orphan dirs): `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/nilstore/providers --lcd http://127.0.0.1:1317 --apply`
+    - `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/polystore/providers --lcd http://127.0.0.1:1317`
+    - apply mode (removes only expired/orphan dirs): `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/polystore/providers --lcd http://127.0.0.1:1317 --apply`
 
 ## Go/No-Go checklist (before inviting collaborators)
 
@@ -729,7 +729,7 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 - Hub services are bound to localhost (recommended; only edge processes listen publicly: Caddy for Profile A, cloudflared for Profile B):
   - `ss -lntp | rg '(:26657|:1317|:8545|:8080|:8081)'` (replace `8080` if you chose a non-default router port)
 - Faucet is configured for invite-only (recommended):
-  - `NIL_FAUCET_AUTH_TOKEN` set and tested via curl.
+  - `POLYSTORE_FAUCET_AUTH_TOKEN` set and tested via curl.
 - Pricing params are sane (and dynamic pricing status is intentional):
   - `curl -sf https://lcd.<domain>/polystorechain/polystorechain/v1/params | jq '.params.dynamic_pricing_enabled,.params.storage_price,.params.retrieval_price_per_blob'`
 
@@ -741,7 +741,7 @@ This is the “are we ready to invite people?” checklist. If any item is faili
   - `curl -sf https://lcd.<domain>/polystorechain/polystorechain/v1/providers/<nil1...> | jq '.provider.endpoints'`
 - Active providers are registered with public `/dns4/.../tcp/443/https` endpoints (not localhost):
   - `curl -sf https://lcd.<domain>/polystorechain/polystorechain/v1/providers | jq -r '.providers[] | select((.draining // false) == false) | [.address, (.endpoints[0] // \"\")] | @tsv'`
-- Router↔provider auth secret matches (`NIL_GATEWAY_SP_AUTH`) and is stored out-of-band (treat like a password).
+- Router↔provider auth secret matches (`POLYSTORE_GATEWAY_SP_AUTH`) and is stored out-of-band (treat like a password).
 
 ### Website (collaborator UX)
 
@@ -761,5 +761,5 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 ### Rollback / safety (know before inviting)
 
 - How to pause/disable the faucet quickly (systemd stop + reverse-proxy disable).
-- How to rotate `NIL_GATEWAY_SP_AUTH` (requires restarting hub router + all providers).
-- How to snapshot/backup the chain home (`NIL_HOME`) and the hub’s gateway data dirs before changes.
+- How to rotate `POLYSTORE_GATEWAY_SP_AUTH` (requires restarting hub router + all providers).
+- How to snapshot/backup the chain home (`POLYSTORE_HOME`) and the hub’s gateway data dirs before changes.

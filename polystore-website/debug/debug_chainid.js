@@ -5,7 +5,7 @@ function hexToBytes(hex) {
 }
 
 const domain = {
-  name: 'NilStore',
+  name: 'PolyStore',
   version: '1',
   chainId: 1, // TRYING CHAIN ID 1
   verifyingContract: '0x0000000000000000000000000000000000000000',

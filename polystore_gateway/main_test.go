@@ -128,11 +128,11 @@ func testDealOwner(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("HexToECDSA failed: %v", err)
 	}
-	nilAddr, err := evmHexToNilAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
+	polystoreAddr, err := evmHexToPolystoreAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
 	if err != nil {
-		t.Fatalf("evmHexToNilAddress failed: %v", err)
+		t.Fatalf("evmHexToPolystoreAddress failed: %v", err)
 	}
-	return nilAddr
+	return polystoreAddr
 }
 
 func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, rangeStart uint64, rangeLen uint64, nonce uint64, expiresAt uint64) string {
@@ -797,7 +797,7 @@ func TestHelperProcess(t *testing.T) {
 	}
 	defer os.Exit(0)
 
-	if raw := strings.TrimSpace(os.Getenv("NIL_HELPER_SLEEP_MS")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("POLYSTORE_HELPER_SLEEP_MS")); raw != "" {
 		if ms, err := strconv.Atoi(raw); err == nil && ms > 0 {
 			time.Sleep(time.Duration(ms) * time.Millisecond)
 		}
@@ -880,7 +880,7 @@ func TestHelperProcess(t *testing.T) {
 			}
 		}
 
-		output := NilCliOutput{
+		output := PolyStoreCliOutput{
 			ManifestRootHex: deterministicManifestRootHex("user-root"),
 			ManifestBlobHex: "0xdeadbeef",
 			FileSize:        100,
@@ -913,7 +913,7 @@ func TestHelperProcess(t *testing.T) {
 			fmt.Fprintf(os.Stderr, "Missing --out for aggregate\n")
 			os.Exit(1)
 		}
-		res := NilCliAggregateOutput{
+		res := PolyStoreCliAggregateOutput{
 			ManifestRootHex: deterministicManifestRootHex("aggregate-root"),
 			ManifestBlobHex: "0xfeedface",
 		}
@@ -949,12 +949,12 @@ func handleSavePrefix(args []string) error {
 func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath {
+		if name == polystoreCliPath {
 			if hasArg(args, "shard") {
 				if err := handleSavePrefix(args); err != nil {
 					return nil, err
 				}
-				output := NilCliOutput{
+				output := PolyStoreCliOutput{
 					ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
 					ManifestBlobHex: "0xdeadbeef",
 					FileSize:        100,
@@ -972,7 +972,7 @@ func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 					}
 				}
 				if outPath != "" {
-					res := NilCliAggregateOutput{
+					res := PolyStoreCliAggregateOutput{
 						ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
 						ManifestBlobHex: "0xfeedface",
 					}
@@ -1021,12 +1021,12 @@ func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 func TestShardFile_TimeoutCancels(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
+		if name == polystoreCliPath && hasArg(args, "shard") {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-time.After(200 * time.Millisecond): // Simulate long running command
-				output := NilCliOutput{ManifestRootHex: deterministicManifestRootHex("timeout-shard")}
+				output := PolyStoreCliOutput{ManifestRootHex: deterministicManifestRootHex("timeout-shard")}
 				data, _ := json.Marshal(output)
 				return data, nil
 			}
@@ -1054,7 +1054,7 @@ func TestShardFile_TimeoutCancels(t *testing.T) {
 func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
+		if name == polystoreCliPath && hasArg(args, "shard") {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -1103,9 +1103,9 @@ func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath {
+		if name == polystoreCliPath {
 			if hasArg(args, "shard") {
-				output := NilCliOutput{
+				output := PolyStoreCliOutput{
 					ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 					ManifestBlobHex: "0xdeadbeef",
 					FileSize:        100,
@@ -1130,7 +1130,7 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 					}
 				}
 				if outPath != "" {
-					res := NilCliAggregateOutput{
+					res := PolyStoreCliAggregateOutput{
 						ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 						ManifestBlobHex: "0xfeedface",
 					}
@@ -1175,7 +1175,7 @@ func hasArg(args []string, target string) bool {
 func TestGatewayFetch_DealIDZero(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 	oldRequireSig := requireRetrievalReqSig
 	requireRetrievalReqSig = true
@@ -1262,7 +1262,7 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 
 func TestGatewayOpenSession_UnsignedDoesNotRequireNonce(t *testing.T) {
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 
 	oldRequireSig := requireRetrievalReqSig
@@ -1378,8 +1378,8 @@ func preparePlanRetrievalTestSlab(t *testing.T, dealID uint64, root ManifestRoot
 func TestGatewayPlanRetrievalSession_UsesMetadataProviderWithoutLocalProvider(t *testing.T) {
 	useTempUploadDir(t)
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "")
-	t.Setenv("NIL_PROVIDER_KEY", "missing-provider-key")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "missing-provider-key")
 
 	dealID := uint64(11)
 	owner := testDealOwner(t)
@@ -1442,7 +1442,7 @@ func TestGatewayPlanRetrievalSession_UsesMetadataProviderWithoutLocalProvider(t 
 func TestGatewayPlanRetrievalSession_PrefersMetadataProviderOverLocalEnv(t *testing.T) {
 	useTempUploadDir(t)
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localprovideroverride")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1localprovideroverride")
 
 	dealID := uint64(12)
 	owner := testDealOwner(t)
@@ -1515,7 +1515,7 @@ func setPlanResolverForTest(t *testing.T, resolver func(context.Context, uint64,
 func TestGatewayPlanRetrievalSession_ProviderResolutionStatusMapping(t *testing.T) {
 	useTempUploadDir(t)
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
 
 	dealID := uint64(13)
 	owner := testDealOwner(t)
