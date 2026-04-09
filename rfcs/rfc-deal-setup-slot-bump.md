@@ -62,6 +62,46 @@ The intent is:
 
 If a later protocol design introduces a better readiness handshake, assignment probation model, or unified repair/setup state machine, that later design should be allowed to replace or absorb this mechanism.
 
+### 2.1 Alpha implementation boundary
+
+For devnet alpha, this RFC proposes a deliberately small slice:
+
+- one new owner-authorized setup-time bump message,
+- one deterministic replacement rule,
+- minimal per-slot retry state,
+- a simple per-slot bump cap,
+- and browser/gateway retry orchestration around that chain hook.
+
+That is the whole point of the alpha design: make initial deal setup viable without pretending we have already solved the full provider-readiness problem.
+
+### 2.2 Known limitations of the alpha design
+
+This alpha design is intentionally incomplete.
+
+Known limitations:
+
+- it relies on the owner or client stack to observe setup failure and trigger the bump,
+- it does not prove on-chain that the provider was actually at fault,
+- it treats setup failure as a direct reassignment event rather than a richer readiness state transition,
+- it does not add global provider quality, conviction, or penalties,
+- it does not guarantee that the replacement provider is truly ready, only that it is the next deterministic candidate,
+- and it does not unify setup-time failures with the later repair lifecycle.
+
+These are acceptable tradeoffs for trusted-devnet viability, but they should not be confused with a finished protocol model.
+
+### 2.3 Possible final-state directions
+
+If this feature proves necessary, a later and more complete design may replace this alpha slice with something stronger, such as:
+
+- an explicit `PENDING` or probationary assignment state for newly assigned slots,
+- a provider readiness handshake or setup attestation,
+- richer endpoint capability validation before assignment,
+- batch or automatic replacement flows for multi-slot setup failure,
+- a unified state machine that handles both setup-time failure and post-activation repair,
+- or provider-side observability and policy consequences once the network has enough reliable evidence to justify them.
+
+This RFC does not choose among those end states. It only proposes the smallest useful bridge from today's brittle setup flow to a more robust future design.
+
 ---
 
 ## 3. Core principles
