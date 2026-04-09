@@ -24,7 +24,7 @@ export interface ProviderAdminStatusDetail {
   public_health_ok?: boolean
   sp_auth_present?: boolean
   upload_dir?: string
-  nil_home?: string
+  polystore_home?: string
   chain_id?: string
   lcd_base?: string
   node_addr?: string

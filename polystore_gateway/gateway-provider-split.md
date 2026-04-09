@@ -1,4 +1,4 @@
-# NilGateway & NilProvider Separation Specification
+# PolyStore Gateway & Provider-Daemon Separation Specification
 
 **Status:** Draft (Phase 1)
 **Target:** "Store Wars" Devnet (Retrieval Separation)
@@ -6,12 +6,12 @@
 ## 1. Overview
 
 This specification defines the architectural split of the legacy combined gateway/provider service into two distinct logical roles:
-1.  **`nil_provider` (Storage Provider):** A passive, "dumb" storage server that holds raw data (MDUs) and submits proofs to the chain upon receiving valid receipts. It holds the **Provider Key**.
+1.  **`provider-daemon` (Storage Provider):** A passive, "dumb" storage server that holds raw data (MDUs) and submits proofs to the chain upon receiving valid receipts. It holds the **Provider Key**.
 2.  **`polystore_gateway` (User Daemon):** An intelligent user agent (Thick Client helper) that performs cryptographic verification, packing, and serves the frontend. It does **not** hold user keys (for the main flow); it delegates signing to the Client (Browser/CLI).
 
 ## 2. Architecture & Roles
 
-### 2.1 `nil_provider` (The Storage Provider)
+### 2.1 `provider-daemon` (The Storage Provider)
 *   **Role:** Passive Server.
 *   **Key:** `POLYSTORE_PROVIDER_KEY` (e.g., `faucet` or a dedicated SP key).
 *   **Responsibility:**
@@ -26,8 +26,8 @@ This specification defines the architectural split of the legacy combined gatewa
 *   **Role:** Active Client Helper / "Thick Client" Daemon.
 *   **Key:** None (Delegates to Frontend/CLI). *Exception: E2E testing mode.*
 *   **Responsibility:**
-    *   **Upload (Packer):** Accept files -> Generate MDUs (PolyFS) -> Push to `nil_provider`.
-    *   **Download (Verifier):** Fetch MDUs from `nil_provider` -> Verify (Triple Proof) -> Stream to User -> **Proxy Receipt to Provider**.
+    *   **Upload (Packer):** Accept files -> Generate MDUs (PolyFS) -> Push to `provider-daemon`.
+    *   **Download (Verifier):** Fetch MDUs from `provider-daemon` -> Verify (Triple Proof) -> Stream to User -> **Proxy Receipt to Provider**.
 *   **State:**
     *   Stateless (mostly). May cache `trusted_setup` or temporary artifacts.
 
@@ -99,7 +99,7 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       PolyStore Chain
 
 ## 4. API Specification
 
-### 4.1 Provider API (`nil_provider`)
+### 4.1 Provider API (`provider-daemon`)
 
 *   **`POST /sp/receipt`**
     *   **Input:** JSON `RetrievalReceipt` (Signed).

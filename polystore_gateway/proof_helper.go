@@ -83,7 +83,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		signer = name
 	}
 
-	signOut, err := execNilchaind(
+	signOut, err := execPolystorechaind(
 		signCtx,
 		"tx", "polystorechain", "sign-retrieval-receipt",
 		dealIDStr,

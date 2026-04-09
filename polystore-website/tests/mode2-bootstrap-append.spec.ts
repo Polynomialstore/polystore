@@ -9,7 +9,7 @@ import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -120,7 +120,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const txHashFor = (n: number): Hex => (`0x${n.toString(16).padStart(64, '4')}` as Hex)
 
@@ -364,7 +364,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
 
     const deal = {
       id: dealId,
-      owner: nilAddress,
+      owner: polystoreAddress,
       cid: dealCid,
       size: '0',
       escrow_balance: '1000000',

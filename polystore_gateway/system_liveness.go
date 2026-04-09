@@ -200,7 +200,7 @@ func classifySystemLivenessError(err error) (systemLivenessFailureReason, time.D
 	case errors.Is(err, os.ErrNotExist),
 		strings.Contains(msg, "no such file or directory"),
 		strings.Contains(msg, "short read"),
-		strings.Contains(msg, "nil_compute_blob_proof failed with code: -3"),
+		strings.Contains(msg, "polystore_compute_blob_proof failed with code: -3"),
 		strings.Contains(msg, "invalid witness commitments length"),
 		strings.Contains(msg, "invalid mdu index"):
 		return systemLivenessFailureMissingLocalData, systemLivenessMissingDataBackoff, true

@@ -344,13 +344,13 @@ func loadSlabMeta(dealDir string) (*slabMeta, error) {
 	}, nil
 }
 
-func shardFileCached(ctx context.Context, path string, raw bool) (*NilCliOutput, error) {
+func shardFileCached(ctx context.Context, path string, raw bool) (*PolyStoreCliOutput, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	outPath := path + ".json"
 	if data, err := os.ReadFile(outPath); err == nil {
-		var parsed NilCliOutput
+		var parsed PolyStoreCliOutput
 		if err := json.Unmarshal(data, &parsed); err == nil && parsed.ManifestRootHex != "" && len(parsed.Mdus) > 0 {
 			return &parsed, nil
 		}

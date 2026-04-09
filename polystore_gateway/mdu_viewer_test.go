@@ -22,8 +22,8 @@ import (
 func TestGatewayManifestInfo_Basic(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
-			output := NilCliOutput{
+		if name == polystoreCliPath && hasArg(args, "shard") {
+			output := PolyStoreCliOutput{
 				ManifestRootHex: deterministicManifestRootHex("ingest-raw"), // unused by manifest-info but part of struct
 				ManifestBlobHex: "0x0102",
 				FileSize:        100,
@@ -128,8 +128,8 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 func TestGatewayMduKzg_Basic(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
-			output := NilCliOutput{
+		if name == polystoreCliPath && hasArg(args, "shard") {
+			output := PolyStoreCliOutput{
 				ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 				ManifestBlobHex: "0xdeadbeef",
 				FileSize:        100,

@@ -205,13 +205,13 @@ ensure_polystore_core() {
     fi
 
     for sym in \
-      nil_compute_mdu_root_from_witness_flat \
-      nil_expand_mdu_rs \
-      nil_reconstruct_mdu_rs \
-      nil_mdu0_builder_new_with_commitments \
-      nil_mdu0_builder_load_with_commitments \
-      nil_encode_payload_to_mdu \
-      nil_decode_payload_from_mdu; do
+      polystore_compute_mdu_root_from_witness_flat \
+      polystore_expand_mdu_rs \
+      polystore_reconstruct_mdu_rs \
+      polystore_mdu0_builder_new_with_commitments \
+      polystore_mdu0_builder_load_with_commitments \
+      polystore_encode_payload_to_mdu \
+      polystore_decode_payload_from_mdu; do
       if [ "$nm_supports_dash_d" = "1" ]; then
         if ! nm -D "$file" 2>/dev/null | grep -Eq "(^|[[:space:]]|_)${sym}([[:space:]]|$)"; then
           return 1

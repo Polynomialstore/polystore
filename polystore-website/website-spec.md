@@ -219,7 +219,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 ### 4.3 `useUpload` (`src/hooks/useUpload.ts`)
 *   **Purpose:** Handles thin-client file upload via the transport router (gateway or direct SP).
 *   **Logic:**
-    1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
+    1.  Converts EVM address to the current PolyStore Chain bech32 format if needed using `ethToPolystoreAddress`.
     2.  Constructs `FormData` with `file`, `owner`, and optional controls (`deal_id`, `max_user_mdus`, `file_path`).
     3.  Calls `transport.uploadFile(...)` which selects `gatewayBase` or `spBase` based on routing preference and availability.
 *   **Returns:** `{ manifestRoot, sizeBytes, fileSizeBytes, allocatedLength?, filename }`.
@@ -262,7 +262,7 @@ The central hub for deal management.
     *   `activeTab`: 'alloc' (Allocation), 'content' (Commitment), 'mdu' (Thick client).
     *   `deals`: List of user's deals (fetched from LCD).
     *   `providers`: Active SP list.
-    *   `nilAddress`: Derived Cosmos address from connected EVM wallet.
+    *   `polystoreAddress`: Derived PolyStore Chain address from the connected EVM wallet.
 *   **Key Interactions:**
     *   **Allocation:** Form -> `useCreateDeal` (Mode 1 or Mode 2 with RS selector).
     *   **Commitment (Content tab):** File Input -> `useUpload` -> `useUpdateDealContent`.
@@ -362,7 +362,7 @@ The central hub for deal management.
 ## 7. Utilities & Libraries
 
 ### 7.1 Address (`src/lib/address.ts`)
-*   `ethToNil(ethAddress: string)`: Converts 0x Ethereum addresses to `nil1...` Bech32 format.
+*   `ethToPolystoreAddress(ethAddress: string)`: Converts 0x Ethereum addresses to the current PolyStore Chain bech32 format (`nil1...` today).
 
 ### 7.2 Status (`src/lib/status.ts`)
 *   `fetchStatus(chainId)`: Aggregates health checks from LCD, EVM RPC, and Faucet.
@@ -384,7 +384,7 @@ The website depends on the following services (configured in `config.ts`):
 ### Key Endpoints
 *   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, witness_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
 *   `POST /sp/upload_shard`: Raw shard bytes with headers `X-PolyStore-Deal-ID`, `X-PolyStore-Mdu-Index`, `X-PolyStore-Slot`, `X-PolyStore-Manifest-Root` (Mode 2).
-*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2; internal provider↔provider only; requires `X‑Nil‑Gateway‑Auth`).
+*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2; internal provider↔provider only; requires `X‑PolyStore‑Gateway‑Auth`).
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
 *   `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`: Returns blob-range plan for retrieval sessions.
@@ -447,7 +447,7 @@ The website depends on the following services (configured in `config.ts`):
 *   **Actual (Gamma‑4):**
     1.  Client plans a retrieval session via `GET /gateway/plan-retrieval-session/...` (gateway or direct SP).
     2.  Client opens the session(s) on-chain (MetaMask `openRetrievalSession` or `openRetrievalSessions` for multi-provider).
-    3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑Nil‑Session‑Id` header.
+    3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑PolyStore‑Session‑Id` header.
     4.  Client confirms completion on-chain (`confirmRetrievalSession` or `confirmRetrievalSessions`).
     5.  Gateway forwards `POST /gateway/session-proof` to submit provider proofs.
 *   **Implication:** Browser holds the **Liveness Authority** (on‑chain session open/confirm). Gateway is a relay/compute helper, not a signer.

@@ -128,11 +128,11 @@ func testDealOwner(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("HexToECDSA failed: %v", err)
 	}
-	nilAddr, err := evmHexToNilAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
+	polystoreAddr, err := evmHexToPolystoreAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
 	if err != nil {
-		t.Fatalf("evmHexToNilAddress failed: %v", err)
+		t.Fatalf("evmHexToPolystoreAddress failed: %v", err)
 	}
-	return nilAddr
+	return polystoreAddr
 }
 
 func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, rangeStart uint64, rangeLen uint64, nonce uint64, expiresAt uint64) string {
@@ -880,7 +880,7 @@ func TestHelperProcess(t *testing.T) {
 			}
 		}
 
-		output := NilCliOutput{
+		output := PolyStoreCliOutput{
 			ManifestRootHex: deterministicManifestRootHex("user-root"),
 			ManifestBlobHex: "0xdeadbeef",
 			FileSize:        100,
@@ -913,7 +913,7 @@ func TestHelperProcess(t *testing.T) {
 			fmt.Fprintf(os.Stderr, "Missing --out for aggregate\n")
 			os.Exit(1)
 		}
-		res := NilCliAggregateOutput{
+		res := PolyStoreCliAggregateOutput{
 			ManifestRootHex: deterministicManifestRootHex("aggregate-root"),
 			ManifestBlobHex: "0xfeedface",
 		}
@@ -949,12 +949,12 @@ func handleSavePrefix(args []string) error {
 func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath {
+		if name == polystoreCliPath {
 			if hasArg(args, "shard") {
 				if err := handleSavePrefix(args); err != nil {
 					return nil, err
 				}
-				output := NilCliOutput{
+				output := PolyStoreCliOutput{
 					ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
 					ManifestBlobHex: "0xdeadbeef",
 					FileSize:        100,
@@ -972,7 +972,7 @@ func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 					}
 				}
 				if outPath != "" {
-					res := NilCliAggregateOutput{
+					res := PolyStoreCliAggregateOutput{
 						ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
 						ManifestBlobHex: "0xfeedface",
 					}
@@ -1021,12 +1021,12 @@ func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 func TestShardFile_TimeoutCancels(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
+		if name == polystoreCliPath && hasArg(args, "shard") {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-time.After(200 * time.Millisecond): // Simulate long running command
-				output := NilCliOutput{ManifestRootHex: deterministicManifestRootHex("timeout-shard")}
+				output := PolyStoreCliOutput{ManifestRootHex: deterministicManifestRootHex("timeout-shard")}
 				data, _ := json.Marshal(output)
 				return data, nil
 			}
@@ -1054,7 +1054,7 @@ func TestShardFile_TimeoutCancels(t *testing.T) {
 func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
+		if name == polystoreCliPath && hasArg(args, "shard") {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -1103,9 +1103,9 @@ func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath {
+		if name == polystoreCliPath {
 			if hasArg(args, "shard") {
-				output := NilCliOutput{
+				output := PolyStoreCliOutput{
 					ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 					ManifestBlobHex: "0xdeadbeef",
 					FileSize:        100,
@@ -1130,7 +1130,7 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 					}
 				}
 				if outPath != "" {
-					res := NilCliAggregateOutput{
+					res := PolyStoreCliAggregateOutput{
 						ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 						ManifestBlobHex: "0xfeedface",
 					}

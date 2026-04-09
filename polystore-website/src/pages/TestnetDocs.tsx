@@ -5,7 +5,7 @@ import { FileSharder } from "../components/FileSharder";
 import { FaucetWidget } from "../components/FaucetWidget";
 import { FaucetAuthTokenInput } from "../components/FaucetAuthTokenInput";
 import { appConfig } from "../config";
-import { ethToNil } from "../lib/address";
+import { ethToPolystoreAddress } from "../lib/address";
 import { lcdFetchDeals } from "../api/lcdClient";
 import type { LcdDeal as Deal } from "../domain/lcd";
 
@@ -17,9 +17,9 @@ export const TestnetDocs = () => {
 
   useEffect(() => {
     if (address) {
-      const cosmosAddress = ethToNil(address);
+      const polystoreAddress = ethToPolystoreAddress(address);
       lcdFetchDeals(appConfig.lcdBase).then((all) => {
-        const filtered = all.filter((d) => d.owner === cosmosAddress);
+        const filtered = all.filter((d) => d.owner === polystoreAddress);
         setDeals(filtered);
       });
     } else {

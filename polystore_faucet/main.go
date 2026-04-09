@@ -21,16 +21,16 @@ import (
 
 // Config (overridable via env)
 var (
-	chainID     = envDefault("POLYSTORE_CHAIN_ID", "test-1")
-	homeDir     = envDefault("POLYSTORE_HOME", "../.polystorechain")
-	nodeAddr    = envDefault("POLYSTORE_NODE", "tcp://127.0.0.1:26657")
-	listenAddr  = envDefault("POLYSTORE_LISTEN_ADDR", "127.0.0.1:8081")
-	amount      = envDefault("POLYSTORE_AMOUNT", "1000000000000000000aatom,1000000stake")
-	denom       = envDefault("POLYSTORE_DENOM", "stake")
-	gasPrices   = envDefault("POLYSTORE_GAS_PRICES", "0.001aatom")
-	cooldown    = time.Duration(envInt("POLYSTORE_COOLDOWN_SECONDS", 30)) * time.Second
+	chainID            = envDefault("POLYSTORE_CHAIN_ID", "test-1")
+	homeDir            = envDefault("POLYSTORE_HOME", "../.polystorechain")
+	nodeAddr           = envDefault("POLYSTORE_NODE", "tcp://127.0.0.1:26657")
+	listenAddr         = envDefault("POLYSTORE_LISTEN_ADDR", "127.0.0.1:8081")
+	amount             = envDefault("POLYSTORE_AMOUNT", "1000000000000000000aatom,1000000stake")
+	denom              = envDefault("POLYSTORE_DENOM", "stake")
+	gasPrices          = envDefault("POLYSTORE_GAS_PRICES", "0.001aatom")
+	cooldown           = time.Duration(envInt("POLYSTORE_COOLDOWN_SECONDS", 30)) * time.Second
 	polystorechaindBin = envDefault("POLYSTORECHAIND_BIN", "polystorechaind")
-	cmdTimeout   = time.Duration(envInt("POLYSTORE_CMD_TIMEOUT_SECONDS", 20)) * time.Second
+	cmdTimeout         = time.Duration(envInt("POLYSTORE_CMD_TIMEOUT_SECONDS", 20)) * time.Second
 
 	// Optional: when set, POST endpoints require X-PolyStore-Faucet-Auth header.
 	authToken = envDefault("POLYSTORE_FAUCET_AUTH_TOKEN", "")
@@ -57,11 +57,11 @@ func main() {
 	log.Fatal(http.ListenAndServe(listenAddr, r))
 }
 
-// deriveNilchaindDir attempts to find a working directory where polystorechaind
+// derivePolystorechaindDir attempts to find a working directory where polystorechaind
 // can locate its trusted setup file via the default relative path
 // "polystorechain/trusted_setup.txt". This keeps faucet CLI calls reliable even when
 // the faucet process runs from a subdirectory.
-func deriveNilchaindDir() string {
+func derivePolystorechaindDir() string {
 	if root := os.Getenv("POLYSTORE_ROOT_DIR"); root != "" {
 		return root
 	}
@@ -99,9 +99,9 @@ func deriveNilchaindDir() string {
 	return ""
 }
 
-func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
+func execPolystorechaind(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, polystorechaindBin, args...)
-	if dir := deriveNilchaindDir(); dir != "" {
+	if dir := derivePolystorechaindDir(); dir != "" {
 		cmd.Dir = dir
 	}
 	return cmd
@@ -141,7 +141,7 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Faucet effective amount for sending: %s", amount) // Debug log
 	ctx, cancel := context.WithTimeout(r.Context(), cmdTimeout)
 	defer cancel()
-	cmd := execNilchaind(ctx, "tx", "bank", "send",
+	cmd := execPolystorechaind(ctx, "tx", "bank", "send",
 		"faucet", req.Address, amount,
 		"--chain-id", chainID,
 		"--node", nodeAddr,

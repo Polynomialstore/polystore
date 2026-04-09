@@ -30,10 +30,10 @@ Context:
 - Primary homepage for this deployment: \`https://polynomialstore.com/#/first-file\`.
 - Primary local gateway for this onboarding path: \`http://localhost:8080\`.
 - Use \`docs/ALPHA_STORAGE_USER_QUICKSTART.md\` and \`docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md\`.
-- The best UX for users who want local gateway + CLI is: repo sync, install/open Nil Gateway GUI, complete \`scripts/testnet_burner_upload.sh\`, then MetaMask handoff, then browser continuity verification.
+- The best UX for users who want local gateway + CLI is: repo sync, install/open PolyStore Gateway GUI, complete \`scripts/testnet_burner_upload.sh\`, then MetaMask handoff, then browser continuity verification.
 - \`scripts/testnet_burner_upload.sh\` proves create/upload/commit and keystore export; retrieval should be verified after MetaMask import in the browser and/or gateway continuity steps.
 - Use the repo-tracked public testnet bootstrap defaults (\`.env.testnet.public\`) for hosted faucet and chain endpoints unless the user explicitly overrides them.
-- Nil Gateway GUI release packaging reference:
+- PolyStore Gateway GUI release packaging reference:
   - macOS releases are \`.dmg\` bundles for Apple Silicon and Intel.
   - Linux releases are \`.deb\` and \`.rpm\` packages.
 - Never print secrets or private keys in full; redact sensitive values.
@@ -62,17 +62,17 @@ Faucet note:
 
 Avoid these detours unless debugging is required:
 - do not set up or run a local faucet
-- do not prefer raw \`polystore_gateway\` daemon management over Nil Gateway GUI
+- do not prefer raw \`polystore_gateway\` daemon management over PolyStore Gateway GUI
 - do not ask the user to pick a flow mode up front; default to \`full-local\`
 - do not ask the user to supply the tiny bootstrap file; create a temporary local file yourself
-- do not reinstall or relaunch Nil Gateway GUI if \`http://localhost:8080/health\` is already healthy
+- do not reinstall or relaunch PolyStore Gateway GUI if \`http://localhost:8080/health\` is already healthy
 
 Canonical onboarding milestones (run in order unless the user asks to skip):
 1. Fast Bootstrap
    - repo is synced
    - required tools are present (\`bash\`, \`curl\`, \`jq\`, \`node\`, \`npm\`, \`python3\`, and \`polystorechaind\`; \`gh\` is optional)
    - hosted LCD + faucet reachable
-   - Nil Gateway GUI is installed or opened by the agent and the local gateway is healthy at \`http://localhost:8080\`
+   - PolyStore Gateway GUI is installed or opened by the agent and the local gateway is healthy at \`http://localhost:8080\`
    - create a temporary local file (\`10-100 KiB\`) yourself
    - run \`scripts/testnet_burner_upload.sh <file_path>\`; use \`[deal_id] [polyfs_path]\` only when resuming or overriding defaults
    - capture the generated EVM address, mapped \`nil1...\` address, exported keystore path, deal ID, manifest root, create tx hash, and commit tx hash
@@ -106,7 +106,7 @@ Your job:
    - verify hosted LCD + faucet reachable
    - verify required local tools are installed: \`bash\`, \`curl\`, \`jq\`, \`node\`, \`npm\`, \`python3\`, and \`polystorechaind\` (\`gh\` optional)
    - check \`http://localhost:8080/health\` first; if it is already healthy, reuse the existing local gateway
-   - otherwise install or open Nil Gateway GUI yourself; prefer the latest GitHub release artifact and only fall back to source-build/manual debugging if the release path is blocked
+   - otherwise install or open PolyStore Gateway GUI yourself; prefer the latest GitHub release artifact and only fall back to source-build/manual debugging if the release path is blocked
    - macOS setup path:
      - choose the latest release \`.dmg\` that matches the machine architecture: Apple Silicon for \`arm64\`, Intel for \`x86_64\`
      - mount the \`.dmg\`, copy \`polystore_gateway_gui.app\` into \`/Applications\` if needed, then launch it with \`open /Applications/polystore_gateway_gui.app\` or equivalent
@@ -118,7 +118,7 @@ Your job:
    - verify local gateway \`/health\`; use \`/status\` only if it exists or if debugging is needed
    - if \`POLYSTORE_BURNER_KEYSTORE_PASSWORD\` is unset, ask the user for the keystore import password before invoking \`scripts/testnet_burner_upload.sh\`
    - create a temporary tiny file locally and complete \`scripts/testnet_burner_upload.sh <file_path>\`
-   - capture wallet address, nil address, keystore path, deal ID, manifest root, file name, file size, create tx hash, and commit tx hash
+   - capture wallet address, PolyStore address (\`nil1...\` for now), keystore path, deal ID, manifest root, file name, file size, create tx hash, and commit tx hash
 4. Milestone 2, MetaMask Handoff:
    - guide keystore import
    - confirm MetaMask address exactly matches the bootstrap address before moving on
@@ -149,7 +149,7 @@ At the end, print:
    - \`website_url\`
    - \`chain_id\`
    - \`wallet_address\`
-   - \`nil_address\`
+   - \`polystore_address\`
    - \`gateway_base\`
    - \`gateway_health\`
    - \`keystore_path\`

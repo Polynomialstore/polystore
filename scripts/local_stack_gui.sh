@@ -62,7 +62,7 @@ start_gui() {
     fi
   fi
 
-  echo "Starting NilGateway GUI..."
+  echo "Starting PolyStore Gateway GUI..."
   pushd "$ROOT_DIR/polystore_gateway_gui" >/dev/null
   if [ ! -d node_modules ]; then
     npm install

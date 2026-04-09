@@ -202,7 +202,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
         *   Output: `ManifestRoot` (G1) and `ManifestBlob` data.
 *   **Step C: Chain Verification Logic**
     *   [x] **Task (Core):** Implement `verify_manifest_inclusion` in `polystore_core` (Need to handle Roots of Unity coordinate mapping).
-    *   [x] **Task (FFI):** Expose `nil_verify_chained_proof` (Hop 1 + 3) and `nil_compute_manifest_commitment`.
+    *   [x] **Task (FFI):** Expose `polystore_verify_chained_proof` (Hop 1 + 3) and `polystore_compute_manifest_commitment`.
     *   [x] **File:** `polystorechain/x/polystorechain/keeper/msg_server.go` (or dedicated verifier).
     *   [x] **Task:** Implement `VerifyChainedProof` algorithm using FFI:
         *   Hop 1 (KZG): Verify MDU Root is in Manifest.

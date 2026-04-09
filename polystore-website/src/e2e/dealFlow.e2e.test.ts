@@ -8,7 +8,7 @@ import {
   buildRetrievalRequestTypedData,
   buildUpdateContentTypedData,
 } from '../lib/eip712'
-import { ethToNil } from '../lib/address'
+import { ethToPolystoreAddress } from '../lib/address'
 import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { lcdFetchDeals } from '../api/lcdClient'
 import { hexToBytes } from '../lib/merkle'
@@ -51,7 +51,7 @@ test(
       (process.env.POLYSTORE_E2E_PRIVKEY ??
         '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1') as `0x${string}`,
     )
-    const ownerNil = ethToNil(account.address)
+    const ownerPolystoreAddress = ethToPolystoreAddress(account.address)
 
     // 1) Create Deal
     const dealIntent = {
@@ -85,7 +85,7 @@ test(
     const content = Buffer.from('hello polyfs\n', 'utf8')
     const form = new FormData()
     form.append('file', new Blob([content]), 'hello.txt')
-    form.append('owner', ownerNil)
+    form.append('owner', ownerPolystoreAddress)
     form.append('deal_id', dealId)
 
     const uploadRes = await fetch(`${gatewayBase}/gateway/upload?deal_id=${encodeURIComponent(dealId)}`, {
@@ -128,11 +128,11 @@ test(
     }
 
     // 4) Verify slab layout + file list via the same TS clients used by the UI.
-    const slab = await gatewayFetchSlabLayout(gatewayBase, manifestRoot, { dealId, owner: ownerNil })
+    const slab = await gatewayFetchSlabLayout(gatewayBase, manifestRoot, { dealId, owner: ownerPolystoreAddress })
     assert.ok(slab.total_mdus >= 1)
     assert.equal(slab.manifest_root, manifestRoot)
 
-    const files = await gatewayListFiles(gatewayBase, manifestRoot, { dealId, owner: ownerNil })
+    const files = await gatewayListFiles(gatewayBase, manifestRoot, { dealId, owner: ownerPolystoreAddress })
     assert.equal(files.some((f) => f.path === 'hello.txt'), true)
 
     // 5) Verify deal shows committed CID on LCD (best-effort; may take a moment).
@@ -183,7 +183,7 @@ test(
 
     const fetchUrl = `${retrievalBase}/sp/retrieval/fetch/${encodeURIComponent(
       manifestRoot,
-    )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(ownerNil)}&file_path=${encodeURIComponent(
+    )}?deal_id=${encodeURIComponent(dealId)}&owner=${encodeURIComponent(ownerPolystoreAddress)}&file_path=${encodeURIComponent(
       filePath,
     )}`
     const fetchRes = await fetch(fetchUrl, {
