@@ -103,7 +103,7 @@ The agent should execute (adapt as needed):
 - `rg -n "metamask|wallet" -S ui/ web/ apps/ .`
 - `rg -n "precompile|evm bridge" -S .`
 - `rg -n "zstd|gzip|compress" -S .`
-- `rg -n "X-Nil-Session-Id" -S .`
+- `rg -n "X-PolyStore-Session-Id" -S .`
 
 ---
 
@@ -124,7 +124,7 @@ The agent should execute (adapt as needed):
 
 **Phase 2 – Retrieval sessions mandatory (data-plane)**
 - Outputs:
-  - Provider + gateway reject all byte-serving requests without `X-Nil-Session-Id`.
+  - Provider + gateway reject all byte-serving requests without `X-PolyStore-Session-Id`.
   - Subset + blob-alignment rules implemented (batching preserved).
   - E2E tests for segmented downloads.
 
@@ -140,7 +140,7 @@ The agent should execute (adapt as needed):
   - Protocol-funded sessions integrated with audit budget module.
   - Repair path uses protocol sessions (restricted deals still repairable).
 
-**Phase 5 – Compression/content encoding (NilCEv1)**
+**Phase 5 – Compression/content encoding (PolyCEv1)**
 - Outputs:
   - Upload pipeline compresses pre-encryption (gateway/wasm).
   - Stored bytes are compressed ciphertext; pricing applies to stored size.
@@ -241,7 +241,7 @@ Unit tests:
 
 ### 6.1 Data-plane invariant
 Any response that includes Deal bytes MUST require:
-- `X-Nil-Session-Id: <session_id>` header
+- `X-PolyStore-Session-Id: <session_id>` header
 - Session must be OPEN and unexpired on-chain
 - Session must bind to deal_id, provider/slot assignment, manifest_root (if pinned)
 
@@ -360,21 +360,21 @@ Tests:
 
 ---
 
-## 9) Phase 5: Compression/content encoding (NilCEv1)
+## 9) Phase 5: Compression/content encoding (PolyCEv1)
 
 ### 9.1 Goal
 - Charge storage and bandwidth on **stored ciphertext bytes**, which are compressed when possible.
 - Prevent SPs from “getting lucky” storing compressible plaintext at uncompressed prices.
 
-### 9.2 NilCEv1 format
+### 9.2 PolyCEv1 format
 - A small header in plaintext before encryption:
-  - magic `NILC`
+  - magic `POLC`
   - version
   - encoding enum (NONE, ZSTD)
   - uncompressed length
   - optional checksum
 - Pipeline:
-  - compress → wrap (NilCEv1) → encrypt → chunk/commit
+  - compress → wrap (PolyCEv1) → encrypt → chunk/commit
   - retrieve → verify → decrypt → parse header → decompress → handoff
 
 ### 9.3 Implementation points

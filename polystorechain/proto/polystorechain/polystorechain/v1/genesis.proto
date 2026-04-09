@@ -1,0 +1,17 @@
+syntax = "proto3";
+package polystorechain.polystorechain.v1;
+
+import "amino/amino.proto";
+import "gogoproto/gogo.proto";
+import "polystorechain/polystorechain/v1/params.proto";
+
+option go_package = "polystorechain/x/polystorechain/types";
+
+// GenesisState defines the polystorechain module's genesis state.
+message GenesisState {
+  // params defines all the parameters of the module.
+  Params params = 1 [
+    (gogoproto.nullable) = false,
+    (amino.dont_omitempty) = true
+  ];
+}

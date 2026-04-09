@@ -4,7 +4,7 @@
 # Scenario:
 # 1) Start devnet alpha multi-SP stack.
 # 2) Create a Mode 2 deal.
-# 3) Upload + commit a file (NilFS).
+# 3) Upload + commit a file (PolyFS).
 # 4) Plan a retrieval session for the first blob and open it on-chain.
 # 5) Kill the assigned slot provider ("ghost").
 # 6) Fetch through the router: it should fall back to a deputy provider.
@@ -16,13 +16,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK_SCRIPT="$ROOT_DIR/scripts/run_devnet_alpha_multi_sp.sh"
 
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data_devnet_alpha}"
+CHAIN_HOME="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/polystorechain_data_devnet_alpha}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 RPC_STATUS="${RPC_STATUS:-http://127.0.0.1:26657/status}"
 LCD_BASE="${LCD_BASE:-http://127.0.0.1:1317}"
 GATEWAY_BASE="${GATEWAY_BASE:-http://127.0.0.1:8080}"
 
-NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/nilchain/nilchaind}"
+POLYSTORECHAIND_BIN="${POLYSTORECHAIND_BIN:-$ROOT_DIR/polystorechain/polystorechaind}"
 
 PROVIDER_COUNT="${PROVIDER_COUNT:-12}"
 
@@ -202,17 +202,17 @@ fi
 # Speed up the repair loop for E2E.
 export PROVIDER_COUNT
 export START_WEB="${START_WEB:-0}"
-export NIL_EPOCH_LEN_BLOCKS="${NIL_EPOCH_LEN_BLOCKS:-20}"
-export NIL_EVICT_AFTER_MISSED_EPOCHS="${NIL_EVICT_AFTER_MISSED_EPOCHS:-1}"
+export POLYSTORE_EPOCH_LEN_BLOCKS="${POLYSTORE_EPOCH_LEN_BLOCKS:-20}"
+export POLYSTORE_EVICT_AFTER_MISSED_EPOCHS="${POLYSTORE_EVICT_AFTER_MISSED_EPOCHS:-1}"
 
 echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
 "$STACK_SCRIPT" start
 
 wait_for_http "lcd" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
-wait_for_http "nilchain lcd" "$LCD_BASE/nilchain/nilchain/v1/params" "200" 60 1
+wait_for_http "polystorechain lcd" "$LCD_BASE/polystorechain/polystorechain/v1/params" "200" 60 1
 wait_for_http "gateway router" "$GATEWAY_BASE/health" "200" 60 1
 
-FAUCET_ADDR="$("$NILCHAIND_BIN" keys show faucet -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)"
+FAUCET_ADDR="$("$POLYSTORECHAIND_BIN" keys show faucet -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)"
 if [ -z "$FAUCET_ADDR" ]; then
   echo "ERROR: failed to resolve faucet address" >&2
   exit 1
@@ -222,7 +222,7 @@ echo "==> Using deal owner: $FAUCET_ADDR"
 SERVICE_HINT="General:rs=8+4"
 
 echo "==> Creating Mode 2 deal..."
-CREATE_RES_RAW="$("$NILCHAIND_BIN" tx nilchain create-deal 200 1000000 500000 \
+CREATE_RES_RAW="$("$POLYSTORECHAIND_BIN" tx polystorechain create-deal 200 1000000 500000 \
   --service-hint "$SERVICE_HINT" \
   --from faucet \
   --chain-id "$CHAIN_ID" \
@@ -242,7 +242,7 @@ if [ -z "$TXHASH" ]; then
   exit 1
 fi
 sleep 2
-CREATE_TX_RAW="$("$NILCHAIND_BIN" query tx "$TXHASH" --node tcp://127.0.0.1:26657 --output json --home "$CHAIN_HOME" 2>/dev/null || true)"
+CREATE_TX_RAW="$("$POLYSTORECHAIND_BIN" query tx "$TXHASH" --node tcp://127.0.0.1:26657 --output json --home "$CHAIN_HOME" 2>/dev/null || true)"
 CREATE_TX="$(echo "$CREATE_TX_RAW" | extract_last_json)"
 DEAL_ID="$(echo "$CREATE_TX" | parse_create_deal_id)"
 if [ -z "$DEAL_ID" ]; then
@@ -272,7 +272,7 @@ fi
 echo "    manifest_root=$MANIFEST_ROOT size_bytes=$SIZE_BYTES total_mdus=$TOTAL_MDUS witness_mdus=$WITNESS_MDUS file=$FILENAME"
 
 echo "==> Committing deal content on-chain..."
-"$NILCHAIND_BIN" tx nilchain update-deal-content \
+"$POLYSTORECHAIND_BIN" tx polystorechain update-deal-content \
   --deal-id "$DEAL_ID" \
   --cid "$MANIFEST_ROOT" \
   --size "$SIZE_BYTES" \
@@ -293,7 +293,7 @@ sleep 2
 
 echo "==> Waiting for deal manifest_root to be visible..."
 for _ in $(seq 1 30); do
-  DEAL_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID" || echo "{}")"
+  DEAL_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID" || echo "{}")"
   CHAIN_ROOT_HEX="$(echo "$DEAL_JSON" | python3 -c '
 import base64, json, sys
 d = json.load(sys.stdin)
@@ -341,7 +341,7 @@ fi
 echo "    planned slot provider=$PLAN_PROVIDER start_mdu=$PLAN_START_MDU start_blob=$PLAN_START_BLOB blob_count=$PLAN_BLOB_COUNT"
 
 echo "==> Resolving planned provider endpoint..."
-PROVIDER_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/providers/$PLAN_PROVIDER")"
+PROVIDER_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/providers/$PLAN_PROVIDER")"
 ENDPOINT="$(echo "$PROVIDER_JSON" | python3 -c 'import sys, json; d=json.load(sys.stdin); p=d.get("provider") or {}; eps=p.get("endpoints") or []; print(eps[0] if eps else "")' 2>/dev/null || true)"
 PORT="$(echo "$ENDPOINT" | extract_tcp_port)"
 if [ -z "$PORT" ]; then
@@ -363,7 +363,7 @@ PY
 )"
 
 echo "==> Opening on-chain retrieval session..."
-"$NILCHAIND_BIN" tx nilchain open-retrieval-session \
+"$POLYSTORECHAIND_BIN" tx polystorechain open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PLAN_PROVIDER" \
   --manifest-root "$MANIFEST_ROOT" \
@@ -387,7 +387,7 @@ echo "==> Opening on-chain retrieval session..."
 echo "==> Waiting for retrieval session to appear..."
 SESSION_HEX=""
 for _ in $(seq 1 30); do
-  SESSIONS_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/retrieval-sessions/by-owner/$FAUCET_ADDR" || echo "{}")"
+  SESSIONS_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/retrieval-sessions/by-owner/$FAUCET_ADDR" || echo "{}")"
   SESSION_HEX="$(echo "$SESSIONS_JSON" | DEAL_ID="$DEAL_ID" NONCE="$NONCE" python3 -c '
 import base64, json, os, sys
 deal_id = str(os.environ.get("DEAL_ID",""))
@@ -445,7 +445,7 @@ HDR_FILE="$(mktemp)"
 start_end="$((RAW_BLOB_PAYLOAD_BYTES - 1))"
 FETCH_EXIT=0
 HTTP_CODE="$(timeout 120s curl -sS -D "$HDR_FILE" -o "$OUT_FILE" \
-  -H "X-Nil-Session-Id: $SESSION_HEX" \
+  -H "X-PolyStore-Session-Id: $SESSION_HEX" \
   -H "Range: bytes=0-${start_end}" \
   "$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$FILENAME")" \
   -w '%{http_code}')" || FETCH_EXIT=$?
@@ -473,9 +473,9 @@ if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "206" ]; then
   exit 1
 fi
 
-DEPUTY_PROVIDER="$(grep -i '^X-Nil-Provider:' "$HDR_FILE" | tail -n 1 | awk '{print $2}' | tr -d '\r')"
+DEPUTY_PROVIDER="$(grep -i '^X-PolyStore-Provider:' "$HDR_FILE" | tail -n 1 | awk '{print $2}' | tr -d '\r')"
 if [ -z "$DEPUTY_PROVIDER" ]; then
-  echo "ERROR: missing X-Nil-Provider header" >&2
+  echo "ERROR: missing X-PolyStore-Provider header" >&2
   cat "$HDR_FILE" >&2 || true
   exit 1
 fi
@@ -507,7 +507,7 @@ if [ "$STATUS" != "success" ]; then
 fi
 
 echo "==> Waiting for epoch end to trigger deputy-miss repair..."
-EPOCH_LEN="$NIL_EPOCH_LEN_BLOCKS"
+EPOCH_LEN="$POLYSTORE_EPOCH_LEN_BLOCKS"
 CUR_H="$(rpc_height)"
 NEXT_EPOCH_END="$(( ( (CUR_H + EPOCH_LEN - 1) / EPOCH_LEN ) * EPOCH_LEN ))"
 if [ "$NEXT_EPOCH_END" -le "$CUR_H" ]; then
@@ -516,7 +516,7 @@ fi
 wait_for_height "$NEXT_EPOCH_END" 180 1 || { echo "ERROR: timed out waiting for epoch end" >&2; exit 1; }
 sleep 2
 
-DEAL_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")"
+DEAL_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID")"
 REPAIR_SLOT_JSON="$(echo "$DEAL_JSON" | PLANNED_PROVIDER="$PLAN_PROVIDER" python3 -c '
 import json, os, sys
 planned = (os.environ.get("PLANNED_PROVIDER","") or "").strip()

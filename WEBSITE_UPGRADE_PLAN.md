@@ -1,7 +1,7 @@
 # Website Upgrade Plan: The "Market-Driven" Architecture (v2)
 
 **Status:** Approved for Execution
-**Target:** Transform `nil-website` from a "Crypto-Verification" showcase into a "Cloud Performance" showcase, aligning with Core v2.6.
+**Target:** Transform `polystore-website` from a "Crypto-Verification" showcase into a "Cloud Performance" showcase, aligning with Core v2.6.
 
 ---
 

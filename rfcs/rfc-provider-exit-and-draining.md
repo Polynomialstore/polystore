@@ -5,7 +5,7 @@ Last updated: 2026-01-23
 
 ## 1. Problem statement
 
-NilStore should support:
+PolyStore should support:
 - Long-lived user deals (“store this for years”).
 - **Ephemeral provider participation** (providers can leave without punitive penalties when the network is healthy).
 

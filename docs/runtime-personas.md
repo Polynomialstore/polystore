@@ -28,7 +28,7 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
   - provider-side session/receipt/proof handling
 
 ### Other independent daemons
-- `nilchain` (chain/LCD/EVM), `nil_faucet`, and website are separate daemons.
+- `polystorechain` (chain/LCD/EVM), `polystore_faucet`, and website are separate daemons.
 - In local/dev environments they can run on one host, but ownership and lifecycle remain separate.
 
 ## Allowed call graph
@@ -70,7 +70,7 @@ From repo root:
 - `./scripts/ensure_stack.sh`
   - Full local stack bring-up (chain/faucet/providers/user-gateway/web) for devnet-style testing.
 
-From `nil_gateway_gui/`:
+From `polystore_gateway_gui/`:
 
 - `npm run desktop` (`desktop:user`)
   - GUI-managed `user-gateway` mode. Stops external user-gateway first, then launches desktop app.

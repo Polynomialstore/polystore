@@ -2,7 +2,7 @@
 
 Last updated: 2026-01-23
 
-Goal: provide a community-buildable reference that indexes **public deals** and hosts their metadata (NilFS) so many users can discover and pay to retrieve public datasets.
+Goal: provide a community-buildable reference that indexes **public deals** and hosts their metadata (PolyFS) so many users can discover and pay to retrieve public datasets.
 
 This is intentionally scoped so an independent contributor can implement it without privileged access.
 
@@ -18,9 +18,9 @@ This is intentionally scoped so an independent contributor can implement it with
 2) **Fetch metadata MDUs**
    - For each deal, pay to retrieve MDU #0 (and witness MDUs as required) via a sponsored session open:
      - `MsgOpenRetrievalSessionSponsored`
-   - Download bytes using `X-Nil-Session-Id`
+   - Download bytes using `X-PolyStore-Session-Id`
 
-3) **Parse NilFS file table**
+3) **Parse PolyFS file table**
    - Extract file list, paths, sizes, and any metadata.
    - Store in DB for fast browsing.
 
@@ -44,7 +44,7 @@ This is intentionally scoped so an independent contributor can implement it with
     - the explorer operator, OR
     - the end user via MetaMask)
   - fetches MDU #0
-  - parses NilFS
+  - parses PolyFS
   - writes DB rows
 
 - **API server**
