@@ -114,10 +114,10 @@ export const GovernanceDocs = () => {
           </p>
           <div className="bg-card p-6 rounded-none font-mono-data text-sm text-muted-foreground border border-border">
             <p className="text-muted-foreground"># View Emergency Council Members</p>
-            <p>$ nilchaind q group groups-by-admin [alice_addr]</p>
+            <p>$ polystorechaind q group groups-by-admin [alice_addr]</p>
             <br/>
             <p className="text-muted-foreground"># View Governance Parameters</p>
-            <p>$ nilchaind q gov params</p>
+            <p>$ polystorechaind q gov params</p>
           </div>
         </section>
       </div>

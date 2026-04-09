@@ -2,11 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { bootstrapAppendBaseFromMdus, bootstrapAppendBaseFromNetwork } from './bootstrapAppendBase'
-import type { NilfsFileEntry } from '../../domain/nilfs'
+import type { PolyfsFileEntry } from '../../domain/polyfs'
 
 test('bootstrapAppendBaseFromNetwork reconstructs user MDUs and MDU0 state from provider files', async () => {
   const rawMduCapacity = 8
-  const files: NilfsFileEntry[] = [
+  const files: PolyfsFileEntry[] = [
     { path: 'tail.bin', size_bytes: 4, start_offset: 6, flags: 7, cache_present: true },
     { path: 'alpha.txt', size_bytes: 5, start_offset: 0, flags: 3, cache_present: true },
   ]

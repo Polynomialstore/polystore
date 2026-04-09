@@ -27,7 +27,7 @@ function runProviderScriptTest(opts: {
 
   const txLog = join(stateDir, 'tx.log')
   const keyFlag = join(stateDir, 'provider-key.ready')
-  const nilchaindStub = join(binDir, 'nilchaind')
+  const polystorechaindStub = join(binDir, 'polystorechaind')
   const curlStub = join(binDir, 'curl')
 
   if ((opts.keyState ?? 'present') === 'present') {
@@ -35,11 +35,11 @@ function runProviderScriptTest(opts: {
   }
 
   writeExecutable(
-    nilchaindStub,
+    polystorechaindStub,
     `#!/usr/bin/env bash
 set -euo pipefail
 if [ "$#" -lt 1 ]; then
-  echo "nilchaind stub: missing command" >&2
+  echo "polystorechaind stub: missing command" >&2
   exit 1
 fi
 
@@ -51,31 +51,31 @@ case "$cmd" in
     shift
     case "$sub" in
       show)
-        if [ ! -f "\${NIL_TEST_KEY_FLAG:?}" ]; then
+        if [ ! -f "\${POLYSTORE_TEST_KEY_FLAG:?}" ]; then
           exit 1
         fi
-        printf '%s\\n' "\${NIL_TEST_PROVIDER_ADDR:-nil1providerstubaddr0000000000000000000000000}"
+        printf '%s\\n' "\${POLYSTORE_TEST_PROVIDER_ADDR:-nil1providerstubaddr0000000000000000000000000}"
         ;;
       add)
-        : >"\${NIL_TEST_KEY_FLAG:?}"
+        : >"\${POLYSTORE_TEST_KEY_FLAG:?}"
         echo "stub mnemonic words words words" >&2
         ;;
       *)
-        echo "nilchaind stub: unsupported keys subcommand: $sub" >&2
+        echo "polystorechaind stub: unsupported keys subcommand: $sub" >&2
         exit 1
         ;;
     esac
     ;;
   tx)
-    if [ "$#" -ge 2 ] && [ "$1" = "nilchain" ] && [ "$2" = "request-provider-link" ]; then
-      printf 'tx nilchain request-provider-link %s\\n' "$3" >>"\${NIL_TEST_TX_LOG:?}"
+    if [ "$#" -ge 2 ] && [ "$1" = "polystorechain" ] && [ "$2" = "request-provider-link" ]; then
+      printf 'tx polystorechain request-provider-link %s\\n' "$3" >>"\${POLYSTORE_TEST_TX_LOG:?}"
       exit 0
     fi
-    echo "nilchaind stub: unsupported tx invocation: $*" >&2
+    echo "polystorechaind stub: unsupported tx invocation: $*" >&2
     exit 1
     ;;
   *)
-    echo "nilchaind stub: unsupported command: $cmd" >&2
+    echo "polystorechaind stub: unsupported command: $cmd" >&2
     exit 1
     ;;
 esac
@@ -87,8 +87,8 @@ esac
     `#!/usr/bin/env bash
 set -euo pipefail
 
-scenario="\${NIL_TEST_CURL_SCENARIO:-missing-no-faucet}"
-state_dir="\${NIL_TEST_STATE_DIR:?}"
+scenario="\${POLYSTORE_TEST_CURL_SCENARIO:-missing-no-faucet}"
+state_dir="\${POLYSTORE_TEST_STATE_DIR:?}"
 funded_flag="$state_dir/funded"
 
 url=""
@@ -116,7 +116,7 @@ http_code="500"
 body='{"error":"unexpected-url"}'
 
 case "$url" in
-  */nilchain/nilchain/v1/provider-pairings/*)
+  */polystorechain/polystorechain/v1/provider-pairings/*)
     http_code="404"
     body='{"code":5,"message":"not found"}'
     ;;
@@ -159,18 +159,18 @@ printf '%s' "$body"
     PATH: `${binDir}:${process.env.PATH}`,
     PROVIDER_KEY: 'provider1',
     OPERATOR_ADDRESS: 'nil1operatorstub0000000000000000000000000000',
-    NILCHAIND_BIN: nilchaindStub,
-    NIL_TEST_PROVIDER_ADDR: 'nil1providerstub0000000000000000000000000',
-    NIL_TEST_KEY_FLAG: keyFlag,
-    NIL_TEST_TX_LOG: txLog,
-    NIL_TEST_CURL_SCENARIO: opts.scenario,
-    NIL_TEST_STATE_DIR: stateDir,
-    NIL_PROVIDER_AUTO_FAUCET: opts.autoFaucet,
-    NIL_FAUCET_URL: opts.faucetUrl ?? '',
-    NIL_FAUCET_AUTH_TOKEN: '',
+    POLYSTORECHAIND_BIN: polystorechaindStub,
+    POLYSTORE_TEST_PROVIDER_ADDR: 'nil1providerstub0000000000000000000000000',
+    POLYSTORE_TEST_KEY_FLAG: keyFlag,
+    POLYSTORE_TEST_TX_LOG: txLog,
+    POLYSTORE_TEST_CURL_SCENARIO: opts.scenario,
+    POLYSTORE_TEST_STATE_DIR: stateDir,
+    POLYSTORE_PROVIDER_AUTO_FAUCET: opts.autoFaucet,
+    POLYSTORE_FAUCET_URL: opts.faucetUrl ?? '',
+    POLYSTORE_FAUCET_AUTH_TOKEN: '',
     HUB_LCD: 'http://stub-lcd.local',
     HUB_NODE: 'http://stub-rpc.local',
-    CHAIN_ID: 'nilchain-stub',
+    CHAIN_ID: 'polystorechain-stub',
     POLYSTORE_TESTNET_ENV_FILE: '/dev/null',
   }
 
@@ -214,14 +214,14 @@ test('run_devnet_provider link auto-funds from faucet then submits provider-link
     command: 'link',
     scenario: 'missing-then-funded',
     autoFaucet: '1',
-    faucetUrl: 'https://faucet.nilstore.test/faucet',
+    faucetUrl: 'https://faucet.polystore.test/faucet',
   })
 
   assert.equal(result.status, 0)
   assert.match(result.combinedOutput, /Faucet funding request accepted/i)
   assert.match(result.combinedOutput, /Provider account funded/i)
   assert.match(result.combinedOutput, /Requesting provider link on-chain/i)
-  assert.match(result.txLogContent, /tx nilchain request-provider-link nil1operatorstub/)
+  assert.match(result.txLogContent, /tx polystorechain request-provider-link nil1operatorstub/)
 })
 
 test('run_devnet_provider pair creates a missing key, auto-funds it, and submits provider-link tx', () => {
@@ -229,7 +229,7 @@ test('run_devnet_provider pair creates a missing key, auto-funds it, and submits
     command: 'pair',
     scenario: 'missing-then-funded',
     autoFaucet: '1',
-    faucetUrl: 'https://faucet.nilstore.test/faucet',
+    faucetUrl: 'https://faucet.polystore.test/faucet',
     keyState: 'missing',
   })
 
@@ -239,5 +239,5 @@ test('run_devnet_provider pair creates a missing key, auto-funds it, and submits
   assert.match(result.combinedOutput, /Faucet funding request accepted/i)
   assert.match(result.combinedOutput, /Provider account funded/i)
   assert.match(result.combinedOutput, /Requesting provider link on-chain/i)
-  assert.match(result.txLogContent, /tx nilchain request-provider-link nil1operatorstub/)
+  assert.match(result.txLogContent, /tx polystorechain request-provider-link nil1operatorstub/)
 })

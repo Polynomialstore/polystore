@@ -7,19 +7,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..", "..");
 const binDir = join(rootDir, "polystore_gateway_gui", "src-tauri", "bin");
 const ext = process.platform === "win32" ? ".exe" : "";
-const nilCoreTarget =
+const polystoreCoreTarget =
   process.platform === "win32" ? "x86_64-pc-windows-gnu" : null;
-const nilCoreReleaseDir = nilCoreTarget
-  ? join(rootDir, "polystore_core", "target", nilCoreTarget, "release")
+const polystoreCoreReleaseDir = polystoreCoreTarget
+  ? join(rootDir, "polystore_core", "target", polystoreCoreTarget, "release")
   : join(rootDir, "polystore_core", "target", "release");
 
-let nilCoreArtifacts;
+let polystoreCoreArtifacts;
 if (process.platform === "win32") {
-  nilCoreArtifacts = ["polystore_core.dll", "libpolystore_core.dll"];
+  polystoreCoreArtifacts = ["polystore_core.dll", "libpolystore_core.dll"];
 } else if (process.platform === "darwin") {
-  nilCoreArtifacts = ["libpolystore_core.dylib"];
+  polystoreCoreArtifacts = ["libpolystore_core.dylib"];
 } else {
-  nilCoreArtifacts = ["libpolystore_core.so"];
+  polystoreCoreArtifacts = ["libpolystore_core.so"];
 }
 
 mkdirSync(binDir, { recursive: true });
@@ -32,37 +32,37 @@ function atomicCopy(src, dest) {
 
 console.log("==> Building polystore_core shared library");
 const cargoArgs = ["build", "--release"];
-if (nilCoreTarget) {
-  cargoArgs.push("--target", nilCoreTarget);
+if (polystoreCoreTarget) {
+  cargoArgs.push("--target", polystoreCoreTarget);
 }
 execFileSync("cargo", cargoArgs, {
   cwd: join(rootDir, "polystore_core"),
   stdio: "inherit",
 });
 
-const nilCorePath = nilCoreArtifacts
-  .map((name) => join(nilCoreReleaseDir, name))
+const polystoreCorePath = polystoreCoreArtifacts
+  .map((name) => join(polystoreCoreReleaseDir, name))
   .find((candidate) => existsSync(candidate));
 
-if (!nilCorePath) {
+if (!polystoreCorePath) {
   throw new Error(
-    `polystore_core shared library not found in ${nilCoreReleaseDir} (expected one of: ${nilCoreArtifacts.join(", ")})`,
+    `polystore_core shared library not found in ${polystoreCoreReleaseDir} (expected one of: ${polystoreCoreArtifacts.join(", ")})`,
   );
 }
 
-console.log(`==> Staging ${basename(nilCorePath)}`);
-atomicCopy(nilCorePath, join(binDir, basename(nilCorePath)));
+console.log(`==> Staging ${basename(polystoreCorePath)}`);
+atomicCopy(polystoreCorePath, join(binDir, basename(polystoreCorePath)));
 
 console.log("==> Building polystore_gateway sidecar");
-const nilGatewayOutput = join(binDir, `polystore_gateway${ext}`);
-const nilGatewayTempOutput = `${nilGatewayOutput}.tmp-${process.pid}-${Date.now()}`;
+const polystoreGatewayOutput = join(binDir, `polystore_gateway${ext}`);
+const polystoreGatewayTempOutput = `${polystoreGatewayOutput}.tmp-${process.pid}-${Date.now()}`;
 const goBuildArgs = ["build"];
 if (process.platform === "linux") {
   goBuildArgs.push("-ldflags", "-extldflags=-Wl,-rpath,$ORIGIN");
 } else if (process.platform === "darwin") {
   goBuildArgs.push("-ldflags", "-extldflags=-Wl,-rpath,@loader_path");
 }
-goBuildArgs.push("-o", nilGatewayTempOutput, ".");
+goBuildArgs.push("-o", polystoreGatewayTempOutput, ".");
 execFileSync(
   "go",
   goBuildArgs,
@@ -71,7 +71,7 @@ execFileSync(
     stdio: "inherit",
   },
 );
-renameSync(nilGatewayTempOutput, nilGatewayOutput);
+renameSync(polystoreGatewayTempOutput, polystoreGatewayOutput);
 
 console.log("==> Building polystore_cli sidecar");
 execFileSync("cargo", ["build", "--release"], {
@@ -85,7 +85,7 @@ atomicCopy(
 
 console.log("==> Copying trusted setup");
 copyFileSync(
-  join(rootDir, "nilchain", "trusted_setup.txt"),
+  join(rootDir, "polystorechain", "trusted_setup.txt"),
   join(binDir, "trusted_setup.txt"),
 );
 

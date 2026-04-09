@@ -5,7 +5,7 @@ set -e
 GATEWAY_URL="http://localhost:8080"
 LCD_URL="http://localhost:1317"
 CHAIN_ID="31337"
-NILCHAIND="nilchain/nilchaind"
+POLYSTORECHAIND="polystorechain/polystorechaind"
 TMP_DIR="_artifacts/e2e_tmp"
 mkdir -p $TMP_DIR
 
@@ -66,7 +66,7 @@ sleep 6
 # Find Deal ID from logs (or list deals)
 echo ">>> Querying Deal ID..."
 # Just list deals and pick the last one
-DEAL_LIST=$($NILCHAIND query nilchain list-deals --output json)
+DEAL_LIST=$($POLYSTORECHAIND query polystorechain list-deals --output json)
 DEAL_ID=$(echo $DEAL_LIST | jq -r '.deals[-1].id // 0')
 echo "✅ Deal ID: $DEAL_ID"
 
@@ -83,7 +83,7 @@ sleep 6
 
 # 5. Verify Chain State
 echo ">>> [5] Verifying Chain State..."
-DEAL_INFO=$($NILCHAIND query nilchain get-deal --id $DEAL_ID --output json)
+DEAL_INFO=$($POLYSTORECHAIND query polystorechain get-deal --id $DEAL_ID --output json)
 CHAIN_MANIFEST=$(echo $DEAL_INFO | jq -r '.deal.manifest_root')
 CHAIN_SIZE=$(echo $DEAL_INFO | jq -r '.deal.size')
 
@@ -134,7 +134,7 @@ echo "✅ Storage Verified (MDU0, Witness, Data present & sized)"
 echo ">>> [7] Verifying Retrieval & On-Chain Metrics..."
 
 # Get Initial Heat
-HEAT_INFO=$($NILCHAIND query nilchain get-deal-heat --deal-id $DEAL_ID --output json 2>/dev/null || echo "{}")
+HEAT_INFO=$($POLYSTORECHAIND query polystorechain get-deal-heat --deal-id $DEAL_ID --output json 2>/dev/null || echo "{}")
 INIT_BYTES=$(echo $HEAT_INFO | jq -r '.deal_heat_state.bytes_served_total // 0')
 echo "Initial Bytes Served: $INIT_BYTES"
 
@@ -152,7 +152,7 @@ fi
 
 # Verify Metrics (Wait for proof tx)
 sleep 10
-HEAT_INFO_FINAL=$($NILCHAIND query nilchain get-deal-heat --deal-id $DEAL_ID --output json)
+HEAT_INFO_FINAL=$($POLYSTORECHAIND query polystorechain get-deal-heat --deal-id $DEAL_ID --output json)
 echo "Final Heat Info: $HEAT_INFO_FINAL"
 FINAL_BYTES=$(echo $HEAT_INFO_FINAL | jq -r '.deal_heat_state.bytes_served_total // 0')
 echo "Final Bytes Served: $FINAL_BYTES"

@@ -130,7 +130,7 @@ async function fetchRetrievalSessionsByProvider(
   provider: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<Record<string, unknown>[]> {
-  const url = `${appConfig.lcdBase}/nilchain/nilchain/v1/retrieval-sessions/by-provider/${encodeURIComponent(
+  const url = `${appConfig.lcdBase}/polystorechain/polystorechain/v1/retrieval-sessions/by-provider/${encodeURIComponent(
     provider,
   )}?pagination.limit=1000`
   const res = await fetchFn(url)

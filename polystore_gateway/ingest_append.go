@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 // IngestAppendToDeal appends a new file into an existing deal slab.
@@ -48,7 +48,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		return nil, "", 0, fmt.Errorf("failed to parse existing MDU #0: %w", err)
 	}
 
-	// Determine current high-water mark for User Data (in raw NilFS bytes).
+	// Determine current high-water mark for User Data (in raw PolyFS bytes).
 	var maxEnd uint64
 	recordCount := b.GetRecordCount()
 	for i := uint32(0); i < recordCount; i++ {
@@ -76,7 +76,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 
 	// Append a new file record starting at next MDU boundary.
-	baseName := normalizeNilfsRecordBasename(recordPath, filePath)
+	baseName := normalizePolyfsRecordBasename(recordPath, filePath)
 	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, oldUserCount*RawMduCapacity, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, fmt.Errorf("AppendFileRecord failed: %w", err)

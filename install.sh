@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting NilStore Network Installation..."
+echo "🚀 Starting PolyStore Network Installation..."
 
 # 1. Check Dependencies
 echo "🔍 Checking dependencies..."
@@ -25,20 +25,20 @@ cd polystore_core
 cargo build --release
 cd ..
 
-# 3. Build nilchaind (L1)
-echo "🛠️  Building nilchaind (L1 Node)..."
+# 3. Build polystorechaind (L1)
+echo "🛠️  Building polystorechaind (L1 Node)..."
 # We need to ensure CGO can find the rust library
 export CGO_LDFLAGS="-L$(pwd)/polystore_core/target/release -lpolystore_core -ldl -lpthread -lm"
 # Use ignite if available, else standard go build
 if command -v ignite &> /dev/null; then
     # ignite chain build might be tricky with custom CGO flags if not configured in config.yml
     # So we fall back to go build for reliability in this script
-    cd nilchain
-    go build -o ../bin/nilchaind ./cmd/nilchaind
+    cd polystorechain
+    go build -o ../bin/polystorechaind ./cmd/polystorechaind
     cd ..
 else
-    cd nilchain
-    go build -o ../bin/nilchaind ./cmd/nilchaind
+    cd polystorechain
+    go build -o ../bin/polystorechaind ./cmd/polystorechaind
     cd ..
 fi
 
@@ -69,7 +69,7 @@ echo "Binaries are located in 'bin/':"
 ls -1 bin/
 echo ""
 echo "To start the L1 chain:"
-echo "  ./bin/nilchaind start"
+echo "  ./bin/polystorechaind start"
 echo ""
 echo "To start a P2P storage node:"
 echo "  ./bin/polystore_p2p --port 9000"

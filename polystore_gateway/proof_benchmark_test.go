@@ -6,15 +6,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 func buildProofBenchmarkFixture(t testing.TB) (manifestPath string, mduPath string) {
 	t.Helper()
 
 	// Locate trusted setup relative to polystore_gateway directory.
-	setupPath := "../nilchain/trusted_setup.txt"
+	setupPath := "../polystorechain/trusted_setup.txt"
 	if _, err := os.Stat(setupPath); os.IsNotExist(err) {
 		t.Skipf("trusted setup not found at %s", setupPath)
 	}
@@ -26,7 +26,7 @@ func buildProofBenchmarkFixture(t testing.TB) (manifestPath string, mduPath stri
 	tmpDir := t.TempDir()
 
 	// Create a minimal slab layout:
-	// - mdu_0.bin (valid NilFS header + one file record so userCount=1)
+	// - mdu_0.bin (valid PolyFS header + one file record so userCount=1)
 	// - mdu_1.bin (witness, zero-filled)
 	// - mdu_2.bin (user, zero-filled)
 	builder := crypto_ffi.NewMdu0Builder(1)

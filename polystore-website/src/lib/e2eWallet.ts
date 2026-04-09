@@ -24,7 +24,7 @@ export function installE2eWallet() {
   const chainIdHex = numberToHex(appConfig.chainId)
   const chain: Chain = {
     id: appConfig.chainId,
-    name: 'NilChain E2E',
+    name: 'PolyStore Chain E2E',
     nativeCurrency: { name: 'atom', symbol: 'atom', decimals: 18 },
     rpcUrls: { default: { http: [appConfig.evmRpc] } },
   }
@@ -45,13 +45,9 @@ export function installE2eWallet() {
 
   window.ethereum = {
     isMetaMask: true,
-    // isNilStoreE2E: true, // Not in interface, might error? It's fine if interface allows excess checks or we cast.
-    // The interface I added doesn't have isNilStoreE2E. But TS allows extra props on object literals usually? 
-    // No, strictly typed interface. I might need to extend it or cast `window.ethereum` assignment.
-    // Or add isNilStoreE2E to vite-env.d.ts?
-    // I'll add it to vite-env.d.ts.
+    // Expose a deterministic marker so Playwright can detect the injected E2E wallet.
     selectedAddress: account.address,
-    isNilStoreE2E: true,
+    isPolyStoreE2E: true,
 
     on,
     removeListener,
@@ -121,14 +117,13 @@ export function installE2eWallet() {
       }
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any // Cast to any to bypass exact shape check if needed, or better, match interface.
-  // I'll cast to any for assignment to allow extra props like isNilStoreE2E without modifying vite-env again.
+  } as any
 
   const announceProvider = () => {
     window.dispatchEvent(
       new CustomEvent('eip6963:announceProvider', {
         detail: {
-          info: { uuid: 'nilstore-e2e', name: 'NilStore E2E', icon: '', rdns: 'nilstore.e2e' },
+          info: { uuid: 'polystore-e2e', name: 'PolyStore E2E', icon: '', rdns: 'polystore.e2e' },
           provider: window.ethereum,
         },
       }),

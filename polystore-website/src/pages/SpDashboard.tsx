@@ -96,7 +96,7 @@ export function SpDashboard() {
   const { unpairProvider, loading: unpairingProvider } = useUnpairProvider()
   const session = useSessionStatus()
   const {
-    nilAddress,
+    polystoreAddress,
     walletAddressShort,
     isConnected,
     isWrongNetwork,
@@ -122,7 +122,7 @@ export function SpDashboard() {
   const [adminResponse, setAdminResponse] = useState<ProviderAdminResponse | null>(null)
 
   const load = useCallback(async () => {
-    if (!nilAddress) {
+    if (!polystoreAddress) {
       setPairings([])
       setProviders([])
       setError(null)
@@ -133,7 +133,7 @@ export function SpDashboard() {
     setError(null)
     try {
       const [nextPairings, nextProviders] = await Promise.all([
-        lcdFetchProvidersByOperator(appConfig.lcdBase, nilAddress),
+        lcdFetchProvidersByOperator(appConfig.lcdBase, polystoreAddress),
         lcdFetchProviders(appConfig.lcdBase),
       ])
       setPairings(nextPairings)
@@ -145,10 +145,10 @@ export function SpDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [nilAddress])
+  }, [polystoreAddress])
 
   useEffect(() => {
-    if (!nilAddress) {
+    if (!polystoreAddress) {
       setPairings([])
       setProviders([])
       return
@@ -159,7 +159,7 @@ export function SpDashboard() {
       void load()
     }, 10000)
     return () => window.clearInterval(timer)
-  }, [load, nilAddress])
+  }, [load, polystoreAddress])
 
   const records = useMemo(() => buildOperatorProviderRecords(pairings, providers), [pairings, providers])
   const selectedRecord = useMemo(
@@ -435,8 +435,8 @@ export function SpDashboard() {
             <div className="font-mono-data text-foreground">{isConnected ? walletAddressShort : 'Not connected'}</div>
           </div>
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Nil operator</div>
-            <div className="break-all font-mono-data text-foreground">{nilAddress || '—'}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">PolyStore operator</div>
+            <div className="break-all font-mono-data text-foreground">{polystoreAddress || '—'}</div>
           </div>
           <div className="space-y-1">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Paired providers</div>

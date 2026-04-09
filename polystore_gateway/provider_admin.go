@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 const (
@@ -73,16 +73,16 @@ func decodeProviderAdminRequest(r *http.Request) (*providerAdminRequest, error) 
 }
 
 func providerAdminNonceStorePath() string {
-	if path := strings.TrimSpace(os.Getenv("NIL_PROVIDER_ADMIN_NONCES_PATH")); path != "" {
+	if path := strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_ADMIN_NONCES_PATH")); path != "" {
 		return path
 	}
-	if home := strings.TrimSpace(os.Getenv("NIL_HOME")); home != "" {
+	if home := strings.TrimSpace(os.Getenv("POLYSTORE_HOME")); home != "" {
 		return filepath.Join(home, "provider_admin_nonces.json")
 	}
 	if upload := strings.TrimSpace(uploadDir); upload != "" {
 		return filepath.Join(upload, ".provider_admin_nonces.json")
 	}
-	return filepath.Join(os.TempDir(), "nilstore-provider-admin-nonces.json")
+	return filepath.Join(os.TempDir(), "polystore-provider-admin-nonces.json")
 }
 
 func loadProviderAdminNonceStore(path string) (*providerAdminNonceStore, error) {
@@ -190,7 +190,7 @@ func consumeProviderAdminNonce(operator string, nonce uint64, expiresAt uint64) 
 }
 
 func providerAdminStatusSnapshot(ctx context.Context) (*providerDaemonStatusDetail, []string) {
-	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
+	listenAddr := envDefault("POLYSTORE_LISTEN_ADDR", ":8080")
 	lcdReachable := pingURL(ctx, statusLCDNodeInfoURL())
 	return buildProviderDaemonStatus(ctx, listenAddr, lcdReachable)
 }
@@ -246,9 +246,9 @@ func verifyProviderAdminRequest(ctx context.Context, req *providerAdminRequest, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to recover operator signer: %w", err)
 	}
-	operatorAddr, err := evmHexToNilAddress(evmAddr.Hex())
+	operatorAddr, err := evmHexToPolystoreAddress(evmAddr.Hex())
 	if err != nil {
-		return nil, fmt.Errorf("failed to map operator signer to nil address: %w", err)
+		return nil, fmt.Errorf("failed to map operator signer to PolyStore address: %w", err)
 	}
 
 	pairing, pairingStatus, pairingErr := fetchProviderPairingFromLCD(ctx, localProviderAddr)
@@ -294,7 +294,7 @@ func renderProviderDoctor(detail *providerDaemonStatusDetail, issues []string) s
 	if detail.SpAuthPresent {
 		lines = append(lines, "OK: gateway shared auth is configured")
 	} else {
-		lines = append(lines, "FAIL: NIL_GATEWAY_SP_AUTH is missing")
+		lines = append(lines, "FAIL: POLYSTORE_GATEWAY_SP_AUTH is missing")
 	}
 
 	switch detail.PairingStatus {
@@ -357,9 +357,9 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 		return "", fmt.Errorf("endpoint is required")
 	}
 
-	providerKeyName := strings.TrimSpace(os.Getenv("NIL_PROVIDER_KEY"))
+	providerKeyName := strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_KEY"))
 	if providerKeyName == "" {
-		return "", fmt.Errorf("NIL_PROVIDER_KEY is required")
+		return "", fmt.Errorf("POLYSTORE_PROVIDER_KEY is required")
 	}
 
 	providerAddr := strings.TrimSpace(cachedProviderAddress(ctx))
@@ -375,7 +375,7 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 		return "", fmt.Errorf("provider registration state unavailable")
 	}
 
-	args := []string{"tx", "nilchain"}
+	args := []string{"tx", "polystorechain"}
 	switch registrationStatus {
 	case "registered":
 		args = append(args, "update-provider-endpoints", "--endpoint", endpoint)
@@ -383,8 +383,8 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 		args = append(
 			args,
 			"register-provider",
-			envDefault("NIL_PROVIDER_CAPABILITIES", "General"),
-			envDefault("NIL_PROVIDER_TOTAL_STORAGE", "1099511627776"),
+			envDefault("POLYSTORE_PROVIDER_CAPABILITIES", "General"),
+			envDefault("POLYSTORE_PROVIDER_TOTAL_STORAGE", "1099511627776"),
 			"--endpoint",
 			endpoint,
 		)
@@ -405,7 +405,7 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 		"--yes",
 	)
 
-	out, err := runCommand(ctx, nilchaindBin, args, "")
+	out, err := runCommand(ctx, polystorechaindBin, args, "")
 	output := strings.TrimSpace(string(out))
 	if err != nil {
 		if output == "" {

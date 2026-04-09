@@ -31,14 +31,14 @@ function readPublicTestnetEnv() {
 }
 
 function readFaucetAuthTokenFromEtc() {
-  const envPath = "/etc/nilstore/polystore-faucet.env";
+  const envPath = "/etc/polystore/polystore-faucet.env";
   try {
     const raw = fs.readFileSync(envPath, "utf8");
     for (const line of raw.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) continue;
-      if (!trimmed.startsWith("NIL_FAUCET_AUTH_TOKEN=")) continue;
-      const value = trimmed.slice("NIL_FAUCET_AUTH_TOKEN=".length).trim();
+      if (!trimmed.startsWith("POLYSTORE_FAUCET_AUTH_TOKEN=")) continue;
+      const value = trimmed.slice("POLYSTORE_FAUCET_AUTH_TOKEN=".length).trim();
       return value || "";
     }
   } catch {
@@ -88,7 +88,7 @@ if (!process.env.VITE_FAUCET_AUTH_TOKEN) {
   if (token) {
     process.env.VITE_FAUCET_AUTH_TOKEN = token;
     // Also export the non-Vite name for convenience in local scripts.
-    if (!process.env.NIL_FAUCET_AUTH_TOKEN) process.env.NIL_FAUCET_AUTH_TOKEN = token;
+    if (!process.env.POLYSTORE_FAUCET_AUTH_TOKEN) process.env.POLYSTORE_FAUCET_AUTH_TOKEN = token;
   }
 }
 

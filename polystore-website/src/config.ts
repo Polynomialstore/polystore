@@ -108,7 +108,7 @@ const P2P_ENABLED = (() => {
   return true
 })()
 const P2P_BOOTSTRAP = ENV.VITE_P2P_BOOTSTRAP || ''
-const P2P_PROTOCOL = ENV.VITE_P2P_PROTOCOL || '/nilstore/http/1.0.0'
+const P2P_PROTOCOL = ENV.VITE_P2P_PROTOCOL || '/polystore/http/1.0.0'
 const FAUCET_ENABLED = (() => {
   const raw = ENV.VITE_ENABLE_FAUCET
   if (typeof raw === 'string') {
@@ -121,8 +121,8 @@ const FAUCET_ENABLED = (() => {
 // Trusted devnet default (Feb 2026 soft launch).
 const COSMOS_CHAIN_ID = envString(ENV.VITE_COSMOS_CHAIN_ID) || '20260211'
 const BRIDGE_ADDRESS = envString(ENV.VITE_BRIDGE_ADDRESS) || '0x0000000000000000000000000000000000000000'
-const NILSTORE_PRECOMPILE =
-  envString(ENV.VITE_NILSTORE_PRECOMPILE) || '0x0000000000000000000000000000000000000900'
+const POLYSTORE_PRECOMPILE =
+  envString(ENV.VITE_POLYSTORE_PRECOMPILE) || '0x0000000000000000000000000000000000000900'
 const EVM_RPC = envString(ENV.VITE_EVM_RPC) || defaultBase('evm', 'http://localhost:8545')
 const WALLETCONNECT_PROJECT_ID = envString(ENV.VITE_WALLETCONNECT_PROJECT_ID) || '00000000000000000000000000000000'
 const DEFAULT_RS_K = parsePositiveInt(envString(ENV.VITE_DEFAULT_RS_K), 2)
@@ -139,11 +139,11 @@ export const appConfig = {
   gatewayDisabled: GATEWAY_DISABLED,
   p2pEnabled: P2P_ENABLED,
   p2pBootstrap: P2P_BOOTSTRAP.split(',').map((value: string) => value.trim()).filter(Boolean),
-  p2pProtocol: P2P_PROTOCOL.trim() || '/nilstore/http/1.0.0',
+  p2pProtocol: P2P_PROTOCOL.trim() || '/polystore/http/1.0.0',
   faucetEnabled: FAUCET_ENABLED,
   cosmosChainId: COSMOS_CHAIN_ID,
   bridgeAddress: BRIDGE_ADDRESS,
-  nilstorePrecompile: NILSTORE_PRECOMPILE.trim(),
+  polystorePrecompile: POLYSTORE_PRECOMPILE.trim(),
   explorerBase: EXPLORER_BASE.replace(/\/$/, ''),
   defaultRsK: DEFAULT_RS_K,
   defaultRsM: DEFAULT_RS_M,

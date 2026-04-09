@@ -1,4 +1,4 @@
-# NilGateway GUI (Tauri) — Build Specification (Codex-Executable)
+# PolyStore Gateway GUI (Tauri) — Build Specification (Codex-Executable)
 
 **Version:** 0.3.0  
 **Date:** 2026-01-16  
@@ -9,16 +9,16 @@ This document is written to be **unambiguous enough that a Codex agent can imple
 ## 0. Goals, Non‑Goals, and Definition of Done
 
 ### 0.1 Goals
-- Provide a **desktop GUI** for NilStore’s devnet workflows using **Tauri**.
+- Provide a **desktop GUI** for PolyStore’s devnet workflows using **Tauri**.
 - Ship a **self-contained app** that runs a local gateway sidecar and supports:
   - Deal creation (EVM intent + wallet signature)
-  - File ingest/upload into NilFS / Mode 2 slab
+  - File ingest/upload into PolyFS / Mode 2 slab
   - Commit content (EVM intent + wallet signature)
   - Browse deal state, list files, fetch/download, and view proof/receipt status
 - Keep UX **“no private key import”**: user ownership is via an external wallet signature flow; the app holds **only a relayer/provider key** for gas sponsorship / proof submission.
  
 ### 0.2 Non‑Goals (explicit)
-- Building a general-purpose “NilChain desktop wallet”.
+- Building a general-purpose “PolyStore Chain desktop wallet”.
 - Full replacement of the existing web app (`polystore-website`).
 - Production-grade key custody / HSM integration (devnet-grade custody is acceptable; mainnet hardening is a separate spec).
  
@@ -52,7 +52,7 @@ The GUI must treat `{cid}` as a **legacy alias** for the deal-level **`manifest_
 Canonical behavior for these endpoints is documented in `polystore_gateway/polystore-gateway-spec.md`.
  
 ### 1.2 Existing Cryptography / Mode 2
-Mode 2 ingest paths already use `nilchain/x/crypto_ffi` (Go ↔ Rust FFI). The GUI plan assumes **Mode 2 is the primary supported path**.
+Mode 2 ingest paths already use `polystorechain/x/crypto_ffi` (Go ↔ Rust FFI). The GUI plan assumes **Mode 2 is the primary supported path**.
  
 ## 2. Target Architecture (Monolithic Sidecar + GUI)
 
@@ -76,10 +76,10 @@ The GUI must run without requiring the user to install build tools or CLI binari
 **Supported implementation strategy (choose one and document it in `polystore_gateway_gui/README.md`):**
 1. **Bundle required binaries (recommended MVP):**
    - Bundle a `polystore_gateway` sidecar binary per platform.
-   - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `nilchaind` client binary if `polystore_gateway` still shells out).
-   - The host sets `NIL_TRUSTED_SETUP`, `NILCHAIND_BIN`, and other paths to bundle-resident locations.
+   - Bundle any runtime assets and binaries the sidecar needs (at minimum `trusted_setup.txt`; possibly a `polystorechaind` client binary if `polystore_gateway` still shells out).
+   - The host sets `POLYSTORE_TRUSTED_SETUP`, `POLYSTORECHAIND_BIN`, and other paths to bundle-resident locations.
 2. **Eliminate external exec dependencies (target hardening):**
-   - Remove `execNilchaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
+   - Remove `execPolystorechaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
    - Ensure Mode 2 ingest does not require `polystore_cli` subprocesses (prefer `crypto_ffi`, which already exists for RS + KZG primitives).
 
 The plan below assumes Strategy (1) first, then Strategy (2) as a follow-up hardening phase.
@@ -104,8 +104,8 @@ The implementation must choose **WalletConnect** as the default and treat the br
 ## 4. Signing Spec (Normative, No Guessing)
 
 ### 4.1 EIP-712 Domain
-The domain is defined in `nilchain/x/nilchain/types/eip712.go`:
-- `name`: `"NilStore"`
+The domain is defined in `polystorechain/x/polystorechain/types/eip712.go`:
+- `name`: `"PolyStore"`
 - `version`: `"1"`
 - `chainId`: **numeric** `Params.eip712_chain_id` (default devnet: `31337`)
 - `verifyingContract`: `"0x0000000000000000000000000000000000000000"`
@@ -139,9 +139,9 @@ Field order (must match `UpdateContentTypeHash` in `eip712.go`):
   "evm_signature": "0x..."
 }
 ```
-Where `intent` uses the on-chain JSON field names (see `nilchain/proto/nilchain/nilchain/v1/tx.proto` and validation in `polystore_gateway/main.go`).
+Where `intent` uses the on-chain JSON field names (see `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto` and validation in `polystore_gateway/main.go`).
  
-**Implementation rule:** Add golden tests that ensure typed-data encoding produces signatures accepted by chain tests (see `nilchain/x/nilchain/keeper/msg_server_evmbdg_test.go`).
+**Implementation rule:** Add golden tests that ensure typed-data encoding produces signatures accepted by chain tests (see `polystorechain/x/polystorechain/keeper/msg_server_evmbdg_test.go`).
  
 ## 5. UX Flows (What the App Must Do)
 
@@ -160,7 +160,7 @@ Where `intent` uses the on-chain JSON field names (see `nilchain/proto/nilchain/
  
 ### 5.3 Upload + Commit Content
 1. User selects a `deal_id`.
-2. User chooses a NilFS `file_path` and local file to upload.
+2. User chooses a PolyFS `file_path` and local file to upload.
 3. App calls `POST /gateway/upload` (multipart) with `deal_id`, `owner`, `file_path`.
 4. Sidecar responds with `cid` (= new manifest root), `size_bytes`, `total_mdus`, `witness_mdus`.
 5. App constructs `UpdateContent` intent and requests wallet signature.
@@ -225,9 +225,9 @@ The GUI implementation must include an integration test that starts the sidecar 
 
 ### 6.4 App Config and Sidecar Env Mapping
 The GUI must maintain a single config file (JSON) in the OS app data directory, e.g.:
-- macOS: `~/Library/Application Support/NilGateway GUI/config.json`
-- Linux: `~/.config/nilgateway-gui/config.json`
-- Windows: `%APPDATA%\\NilGateway GUI\\config.json`
+- macOS: `~/Library/Application Support/PolyStore Gateway GUI/config.json`
+- Linux: `~/.config/com.polynomialstore.gatewaygui/config.json`
+- Windows: `%APPDATA%\\PolyStore Gateway GUI\\config.json`
 
 Normative config keys (names may differ on disk, but the meaning must match):
 - `chain.chain_id` (default `test-1`)
@@ -239,14 +239,14 @@ Normative config keys (names may differ on disk, but the meaning must match):
 - `wallet.mode` (`walletconnect` | `bridge`)
 
 The host must map config to sidecar env vars consistently:
-- `NIL_UPLOAD_DIR` ← `storage.upload_dir`
-- `NIL_LCD_BASE` ← `chain.lcd_base`
-- `NIL_CHAIN_ID` ← `chain.chain_id`
-- `NIL_GAS_PRICES` ← `chain.gas_prices`
-- `NIL_NODE` ← `chain.node_rpc`
-- `NIL_PROVIDER_BASE` ← `gateway.provider_base`
-- `NIL_TRUSTED_SETUP` ← bundle-resident `trusted_setup.txt` path (Strategy 1)
-- `NILCHAIND_BIN` ← bundle-resident `nilchaind` path (Strategy 1, only if still used)
+- `POLYSTORE_UPLOAD_DIR` ← `storage.upload_dir`
+- `POLYSTORE_LCD_BASE` ← `chain.lcd_base`
+- `POLYSTORE_CHAIN_ID` ← `chain.chain_id`
+- `POLYSTORE_GAS_PRICES` ← `chain.gas_prices`
+- `POLYSTORE_NODE` ← `chain.node_rpc`
+- `POLYSTORE_PROVIDER_BASE` ← `gateway.provider_base`
+- `POLYSTORE_TRUSTED_SETUP` ← bundle-resident `trusted_setup.txt` path (Strategy 1)
+- `POLYSTORECHAIND_BIN` ← bundle-resident `polystorechaind` path (Strategy 1, only if still used)
  
 ## 7. Testing Plan (Thorough, CI-Friendly)
 
@@ -273,7 +273,7 @@ Minimum:
 - Headless UI E2E (Playwright) running against the **web UI** with a mocked host bridge (recommended for CI).
  
 Optional/nightly:
-- Full-stack E2E that starts `nilchaind` + `polystore_gateway` + the GUI and runs a real create-deal/upload/commit/list/fetch lifecycle (can reuse/adapt `polystore_gateway/test_lifecycle.sh`).
+- Full-stack E2E that starts `polystorechaind` + `polystore_gateway` + the GUI and runs a real create-deal/upload/commit/list/fetch lifecycle (can reuse/adapt `polystore_gateway/test_lifecycle.sh`).
  
 ## 8. CI / Build / Release
 
@@ -317,7 +317,7 @@ Each phase is small-commit friendly and includes a test gate.
 - **Test gate:** mocked-sidecar E2E test verifies correct payload.
  
 ### Phase 4 — Upload + Commit Content
-- [ ] File picker + NilFS path entry.
+- [ ] File picker + PolyFS path entry.
 - [ ] Upload progress UI driven by host events.
 - [ ] Commit intent builder uses upload response (`cid`, `size_bytes`, `total_mdus`, `witness_mdus`).
 - **Test gate:** integration tests for upload encoding and commit payload.
@@ -333,10 +333,10 @@ Each phase is small-commit friendly and includes a test gate.
 - [ ] Add nightly CI job for full stack if feasible.
 
 ### Phase 7 — Dependency-Free Sidecar (Hardening)
-- [ ] Remove `execNilchaind` usage from `polystore_gateway` (broadcast/query via libraries).
+- [ ] Remove `execPolystorechaind` usage from `polystore_gateway` (broadcast/query via libraries).
 - [ ] Ensure all ingest/commit paths used by the GUI do not shell out to `polystore_cli`.
 - [ ] Update GUI bundling to only include the `polystore_gateway` sidecar and required static assets.
-- **Test gate:** all previous tests still pass; add a “no external exec” unit test that fails if `NILCHAIND_BIN`/`NIL_CLI_BIN` is required.
+- **Test gate:** all previous tests still pass; add a “no external exec” unit test that fails if `POLYSTORECHAIND_BIN`/`POLYSTORE_CLI_BIN` is required.
  
 ## 10. Open Questions (Need Your Clarifications)
 
@@ -349,4 +349,4 @@ These are not blockers; defaults are stated. Please confirm/correct.
 5. **Sidecar port strategy**: Default ephemeral port with host discovery; OK to require an engineering change in `polystore_gateway`?
 6. **Target OS support**: Default macOS + Linux first; Windows supported in CI but may lag for local dev.
 7. **Proof/receipt UX**: Should downloads auto-submit receipts/proofs (devnet convenience) or only display “ready to sign” payloads?
-8. **Bundling approach**: Should we bundle a `nilchaind` client binary for MVP, or should Phase 7 (dependency-free) be required before shipping a GUI?
+8. **Bundling approach**: Should we bundle a `polystorechaind` client binary for MVP, or should Phase 7 (dependency-free) be required before shipping a GUI?

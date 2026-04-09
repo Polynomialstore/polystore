@@ -29,7 +29,7 @@ export const PerformanceReport = () => {
           </div>
           <h1 className="text-5xl font-bold mb-6 text-foreground">Network Performance Report</h1>
           <p className="text-xl text-muted-foreground leading-relaxed">
-            Stress-testing the NilChain consensus layer. Validating block times and throughput scaling under simulated load conditions.
+            Stress-testing the PolyStore Chain consensus layer. Validating block times and throughput scaling under simulated load conditions.
           </p>
           <div className="mt-4 text-xs font-mono text-muted-foreground">
             Last Run: {new Date(meta.timestamp).toLocaleString()} • Environment: {meta.environment}
@@ -143,7 +143,7 @@ export const PerformanceReport = () => {
             <h3 className="text-2xl font-bold text-foreground mb-6">Test Methodology</h3>
             <div className="space-y-6 text-muted-foreground">
                 <p>
-                    These benchmarks were conducted using a local `nilchain` devnet. We utilized a custom load generator script (`load_gen.sh`) to simulate varying network conditions.
+                    These benchmarks were conducted using a local `polystorechain` devnet. We utilized a custom load generator script (`load_gen.sh`) to simulate varying network conditions.
                 </p>
                 <ul className="space-y-4">
                     <li className="flex gap-3">

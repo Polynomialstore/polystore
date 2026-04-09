@@ -105,7 +105,7 @@ func resetEpochCacheLocked(base string) {
 }
 
 func fetchEpochLenBlocks(ctx context.Context, base string) (uint64, error) {
-	url := base + "/nilchain/nilchain/v1/params"
+	url := base + "/polystorechain/polystorechain/v1/params"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return 0, err

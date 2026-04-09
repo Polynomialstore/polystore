@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 type mode2DealState struct {
@@ -50,7 +50,7 @@ func newMode2LCDServer(t *testing.T, dealID uint64, state *mode2DealState) *http
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			owner, cid, hint, providers := state.getDeal()
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
@@ -61,8 +61,8 @@ func newMode2LCDServer(t *testing.T, dealID uint64, state *mode2DealState) *http
 					"providers":    providers,
 				},
 			})
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
-			providerAddr := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/")
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"):
+			providerAddr := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/")
 			baseURL := state.baseURLFor(providerAddr)
 			if strings.TrimSpace(baseURL) == "" {
 				http.NotFound(w, r)
@@ -184,20 +184,20 @@ func newProviderServer(t *testing.T) (*httptest.Server, *sync.Map) {
 				http.Error(w, "missing Expect header", http.StatusBadRequest)
 				return
 			}
-			manifest := strings.TrimSpace(r.Header.Get("X-Nil-Manifest-Root"))
-			mduIdx := strings.TrimSpace(r.Header.Get("X-Nil-Mdu-Index"))
-			slot := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
+			manifest := strings.TrimSpace(r.Header.Get("X-PolyStore-Manifest-Root"))
+			mduIdx := strings.TrimSpace(r.Header.Get("X-PolyStore-Mdu-Index"))
+			slot := strings.TrimSpace(r.Header.Get("X-PolyStore-Slot"))
 			body, _ := ioReadAllLimit(r, 12<<20)
-			if fullHeader := strings.TrimSpace(r.Header.Get("X-Nil-Full-Size")); fullHeader != "" {
+			if fullHeader := strings.TrimSpace(r.Header.Get("X-PolyStore-Full-Size")); fullHeader != "" {
 				fullSize, err := strconv.ParseInt(fullHeader, 10, 64)
 				if err != nil || fullSize <= 0 {
-					t.Errorf("invalid X-Nil-Full-Size header %q", fullHeader)
-					http.Error(w, "invalid X-Nil-Full-Size", http.StatusBadRequest)
+					t.Errorf("invalid X-PolyStore-Full-Size header %q", fullHeader)
+					http.Error(w, "invalid X-PolyStore-Full-Size", http.StatusBadRequest)
 					return
 				}
 				if int64(len(body)) > fullSize {
-					t.Errorf("body larger than X-Nil-Full-Size: body=%d full=%d", len(body), fullSize)
-					http.Error(w, "body larger than X-Nil-Full-Size", http.StatusBadRequest)
+					t.Errorf("body larger than X-PolyStore-Full-Size: body=%d full=%d", len(body), fullSize)
+					http.Error(w, "body larger than X-PolyStore-Full-Size", http.StatusBadRequest)
 					return
 				}
 				if int64(len(body)) < fullSize {
@@ -290,7 +290,7 @@ func TestGateway_Mode2_UploadThenFetch_WithMissingLocalShard(t *testing.T) {
 	t.Cleanup(func() { lcdBase = oldLCD })
 
 	// Gateway acts as the slot 0 provider for proof headers.
-	t.Setenv("NIL_PROVIDER_ADDRESS", providers[0])
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", providers[0])
 
 	// Upload via gateway (Mode 2 ingest), then "commit" by updating mock LCD cid.
 	body := &bytes.Buffer{}

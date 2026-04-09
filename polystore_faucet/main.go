@@ -21,19 +21,19 @@ import (
 
 // Config (overridable via env)
 var (
-	chainID     = envDefault("NIL_CHAIN_ID", "test-1")
-	homeDir     = envDefault("NIL_HOME", "../.nilchain")
-	nodeAddr    = envDefault("NIL_NODE", "tcp://127.0.0.1:26657")
-	listenAddr  = envDefault("NIL_LISTEN_ADDR", "127.0.0.1:8081")
-	amount      = envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
-	denom       = envDefault("NIL_DENOM", "stake")
-	gasPrices   = envDefault("NIL_GAS_PRICES", "0.001aatom")
-	cooldown    = time.Duration(envInt("NIL_COOLDOWN_SECONDS", 30)) * time.Second
-	nilchaindBin = envDefault("NILCHAIND_BIN", "nilchaind")
-	cmdTimeout   = time.Duration(envInt("NIL_CMD_TIMEOUT_SECONDS", 20)) * time.Second
+	chainID            = envDefault("POLYSTORE_CHAIN_ID", "test-1")
+	homeDir            = envDefault("POLYSTORE_HOME", "../.polystorechain")
+	nodeAddr           = envDefault("POLYSTORE_NODE", "tcp://127.0.0.1:26657")
+	listenAddr         = envDefault("POLYSTORE_LISTEN_ADDR", "127.0.0.1:8081")
+	amount             = envDefault("POLYSTORE_AMOUNT", "1000000000000000000aatom,1000000stake")
+	denom              = envDefault("POLYSTORE_DENOM", "stake")
+	gasPrices          = envDefault("POLYSTORE_GAS_PRICES", "0.001aatom")
+	cooldown           = time.Duration(envInt("POLYSTORE_COOLDOWN_SECONDS", 30)) * time.Second
+	polystorechaindBin = envDefault("POLYSTORECHAIND_BIN", "polystorechaind")
+	cmdTimeout         = time.Duration(envInt("POLYSTORE_CMD_TIMEOUT_SECONDS", 20)) * time.Second
 
-	// Optional: when set, POST endpoints require X-Nil-Faucet-Auth header.
-	authToken = envDefault("NIL_FAUCET_AUTH_TOKEN", "")
+	// Optional: when set, POST endpoints require X-PolyStore-Faucet-Auth header.
+	authToken = envDefault("POLYSTORE_FAUCET_AUTH_TOKEN", "")
 )
 
 var (
@@ -53,24 +53,24 @@ func main() {
 	// Enable CORS
 	r.Use(mux.CORSMethodMiddleware(r))
 
-	log.Printf("Starting NilChain Faucet on %s (chain-id=%s, home=%s)\n", listenAddr, chainID, homeDir)
+	log.Printf("Starting PolyStore Chain Faucet on %s (chain-id=%s, home=%s)\n", listenAddr, chainID, homeDir)
 	log.Fatal(http.ListenAndServe(listenAddr, r))
 }
 
-// deriveNilchaindDir attempts to find a working directory where nilchaind
+// derivePolystorechaindDir attempts to find a working directory where polystorechaind
 // can locate its trusted setup file via the default relative path
-// "nilchain/trusted_setup.txt". This keeps faucet CLI calls reliable even when
+// "polystorechain/trusted_setup.txt". This keeps faucet CLI calls reliable even when
 // the faucet process runs from a subdirectory.
-func deriveNilchaindDir() string {
-	if root := os.Getenv("NIL_ROOT_DIR"); root != "" {
+func derivePolystorechaindDir() string {
+	if root := os.Getenv("POLYSTORE_ROOT_DIR"); root != "" {
 		return root
 	}
 
-	// Walk upwards from homeDir (if absolute) to find nilchain/trusted_setup.txt.
+	// Walk upwards from homeDir (if absolute) to find polystorechain/trusted_setup.txt.
 	if homeDir != "" {
 		dir := homeDir
 		for i := 0; i < 6; i++ {
-			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "polystorechain", "trusted_setup.txt")); err == nil {
 				return dir
 			}
 			parent := filepath.Dir(dir)
@@ -85,7 +85,7 @@ func deriveNilchaindDir() string {
 	if wd, err := os.Getwd(); err == nil {
 		dir := wd
 		for i := 0; i < 6; i++ {
-			if _, err := os.Stat(filepath.Join(dir, "nilchain", "trusted_setup.txt")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "polystorechain", "trusted_setup.txt")); err == nil {
 				return dir
 			}
 			parent := filepath.Dir(dir)
@@ -99,9 +99,9 @@ func deriveNilchaindDir() string {
 	return ""
 }
 
-func execNilchaind(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, nilchaindBin, args...)
-	if dir := deriveNilchaindDir(); dir != "" {
+func execPolystorechaind(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, polystorechaindBin, args...)
+	if dir := derivePolystorechaindDir(); dir != "" {
 		cmd.Dir = dir
 	}
 	return cmd
@@ -137,11 +137,11 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Sending funds to %s", req.Address)
 
-	amount := envDefault("NIL_AMOUNT", "1000000000000000000aatom,1000000stake")
+	amount := envDefault("POLYSTORE_AMOUNT", "1000000000000000000aatom,1000000stake")
 	log.Printf("Faucet effective amount for sending: %s", amount) // Debug log
 	ctx, cancel := context.WithTimeout(r.Context(), cmdTimeout)
 	defer cancel()
-	cmd := execNilchaind(ctx, "tx", "bank", "send",
+	cmd := execPolystorechaind(ctx, "tx", "bank", "send",
 		"faucet", req.Address, amount,
 		"--chain-id", chainID,
 		"--node", nodeAddr,
@@ -177,14 +177,14 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Nil-Faucet-Auth")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-PolyStore-Faucet-Auth")
 }
 
 func authorizeRequest(w http.ResponseWriter, r *http.Request) bool {
 	if authToken == "" {
 		return true
 	}
-	given := strings.TrimSpace(r.Header.Get("X-Nil-Faucet-Auth"))
+	given := strings.TrimSpace(r.Header.Get("X-PolyStore-Faucet-Auth"))
 	if given == "" || subtle.ConstantTimeCompare([]byte(given), []byte(authToken)) != 1 {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return false

@@ -1,10 +1,10 @@
-- for fast high performance bulk cloud uploading reserving a server with a gpu is a requirement. as such we should be an easy to use package for the archtype of an enterprise user that has a lot of data somewhere - we'll come up with a list but let's say s3, glacier, ebs, another cloud service, etc. This user would use our framework to a) spin up an appropriate aws instance with options for spot or standard and b) upload and verify the uplado into the nilstore network. we should do something like have the script accept an account address (Account A), and a private key for Account B, fund the account B with the amount needed to execute the upload job and only that amount and execute the job such that it's administrated by (account A and account B) and when the job is done they can send their funds back to account B and remove permissons for account B from the deal. theoretically if easier EIP-7702 Authorization can be used or maybe easier to just exeucte the systme directly not sure
+- for fast high performance bulk cloud uploading reserving a server with a gpu is a requirement. as such we should be an easy to use package for the archtype of an enterprise user that has a lot of data somewhere - we'll come up with a list but let's say s3, glacier, ebs, another cloud service, etc. This user would use our framework to a) spin up an appropriate aws instance with options for spot or standard and b) upload and verify the uplado into the polystore network. we should do something like have the script accept an account address (Account A), and a private key for Account B, fund the account B with the amount needed to execute the upload job and only that amount and execute the job such that it's administrated by (account A and account B) and when the job is done they can send their funds back to account B and remove permissons for account B from the deal. theoretically if easier EIP-7702 Authorization can be used or maybe easier to just exeucte the systme directly not sure
 
 - have the above framework work well without s3 ie on a users colocation cluster
 
 - fast download scripts 
 
-- fast nilstore -> s3 scripts
+- fast polystore -> s3 scripts
 
 this is for a more at scale network but this should be a viable configuration:
 

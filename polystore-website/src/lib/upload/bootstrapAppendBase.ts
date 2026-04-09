@@ -1,5 +1,5 @@
-import type { NilfsFileEntry } from '../../domain/nilfs'
-import { parseNilfsFilesFromMdu0 } from '../nilfsLocal'
+import type { PolyfsFileEntry } from '../../domain/polyfs'
+import { parsePolyfsFilesFromMdu0 } from '../polyfsLocal'
 
 export interface BootstrappedAppendMdu {
   index: number
@@ -13,14 +13,14 @@ export interface BootstrappedAppendBaseResult {
   existingUserCount: number
   existingMaxEnd: number
   appendStartOffset: number
-  files: NilfsFileEntry[]
+  files: PolyfsFileEntry[]
 }
 
 export interface BootstrapAppendBaseInput {
   rawMduCapacity: number
   commitmentsPerMdu: number
-  listFiles: () => Promise<NilfsFileEntry[]>
-  fetchFileBytes: (file: NilfsFileEntry) => Promise<Uint8Array>
+  listFiles: () => Promise<PolyfsFileEntry[]>
+  fetchFileBytes: (file: PolyfsFileEntry) => Promise<Uint8Array>
   initMdu0Builder: (userCount: number, commitmentsPerMdu: number) => Promise<unknown>
   appendFileToMdu0: (filePath: string, sizeBytes: number, startOffset: number, flags: number) => Promise<unknown>
   getMdu0Bytes: () => Promise<Uint8Array>
@@ -134,7 +134,7 @@ export function bootstrapAppendBaseFromMdus(
     throw new Error('rawMduCapacity must be positive')
   }
 
-  const files = parseNilfsFilesFromMdu0(input.mdu0Bytes)
+  const files = parsePolyfsFilesFromMdu0(input.mdu0Bytes)
     .filter((file) => Number.isFinite(Number(file.start_offset)) && Number(file.start_offset) >= 0)
     .sort((a, b) => {
       const startDiff = Number(a.start_offset) - Number(b.start_offset)

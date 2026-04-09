@@ -15,14 +15,14 @@ import (
 
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 const providerAdminTestPrivKey = "4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1"
 
 func configureProviderAdminNonceStoreForTest(t *testing.T) {
 	t.Helper()
-	t.Setenv("NIL_PROVIDER_ADMIN_NONCES_PATH", filepath.Join(t.TempDir(), "provider_admin_nonces.json"))
+	t.Setenv("POLYSTORE_PROVIDER_ADMIN_NONCES_PATH", filepath.Join(t.TempDir(), "provider_admin_nonces.json"))
 }
 
 func providerAdminTestKey(t *testing.T) *ecdsa.PrivateKey {
@@ -34,12 +34,12 @@ func providerAdminTestKey(t *testing.T) *ecdsa.PrivateKey {
 	return key
 }
 
-func providerAdminOperatorNilAddress(t *testing.T) string {
+func providerAdminOperatorPolystoreAddress(t *testing.T) string {
 	t.Helper()
 	key := providerAdminTestKey(t)
-	addr, err := evmHexToNilAddress(gethCrypto.PubkeyToAddress(key.PublicKey).Hex())
+	addr, err := evmHexToPolystoreAddress(gethCrypto.PubkeyToAddress(key.PublicKey).Hex())
 	if err != nil {
-		t.Fatalf("evmHexToNilAddress: %v", err)
+		t.Fatalf("evmHexToPolystoreAddress: %v", err)
 	}
 	return addr
 }
@@ -76,16 +76,16 @@ func setupProviderAdminStatusEnv(t *testing.T, providerAddress string, localURL 
 	t.Helper()
 	resetProviderAddressCacheForTest(t)
 	configureProviderAdminNonceStoreForTest(t)
-	t.Setenv("NIL_RUNTIME_PERSONA", "provider-daemon")
-	t.Setenv("NIL_PROVIDER_KEY", "provider-admin")
-	t.Setenv("NIL_PROVIDER_ADDRESS", providerAddress)
-	t.Setenv("NIL_LISTEN_ADDR", localURL)
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "shared-secret")
+	t.Setenv("POLYSTORE_RUNTIME_PERSONA", "provider-daemon")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "provider-admin")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", providerAddress)
+	t.Setenv("POLYSTORE_LISTEN_ADDR", localURL)
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "shared-secret")
 	withProviderStatusGlobals(t, lcdURL, "", t.TempDir(), t.TempDir(), "20260211", "https://rpc.polynomialstore.com")
 }
 
 func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradminstatus"
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +111,7 @@ func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
 		switch r.URL.Path {
 		case "/cosmos/base/tendermint/v1beta1/node_info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_node_info": map[string]any{}})
-		case "/nilchain/nilchain/v1/providers/" + provider:
+		case "/polystorechain/polystorechain/v1/providers/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"address":   provider,
@@ -120,7 +120,7 @@ func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
 					"draining":  false,
 				},
 			})
-		case "/nilchain/nilchain/v1/provider-pairings/" + provider:
+		case "/polystorechain/polystorechain/v1/provider-pairings/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
 					"provider":      provider,
@@ -166,7 +166,7 @@ func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
 }
 
 func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradmindoctor"
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +183,7 @@ func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
 		switch r.URL.Path {
 		case "/cosmos/base/tendermint/v1beta1/node_info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_node_info": map[string]any{}})
-		case "/nilchain/nilchain/v1/providers/" + provider:
+		case "/polystorechain/polystorechain/v1/providers/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"address":   provider,
@@ -191,7 +191,7 @@ func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
 					"endpoints": []string{publicEndpoint},
 				},
 			})
-		case "/nilchain/nilchain/v1/provider-pairings/" + provider:
+		case "/polystorechain/polystorechain/v1/provider-pairings/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
 					"provider":      provider,
@@ -229,7 +229,7 @@ func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
 }
 
 func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradminrotate"
 	const endpoint = "/dns4/new.example.com/tcp/443/https"
 
@@ -246,7 +246,7 @@ func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
 		switch r.URL.Path {
 		case "/cosmos/base/tendermint/v1beta1/node_info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_node_info": map[string]any{}})
-		case "/nilchain/nilchain/v1/providers/" + provider:
+		case "/polystorechain/polystorechain/v1/providers/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"address":   provider,
@@ -254,7 +254,7 @@ func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
 					"endpoints": []string{endpoint},
 				},
 			})
-		case "/nilchain/nilchain/v1/provider-pairings/" + provider:
+		case "/polystorechain/polystorechain/v1/provider-pairings/" + provider:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
 					"provider":      provider,
@@ -287,8 +287,8 @@ func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: got=%d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.HasSuffix(gotName, "nilchaind") && gotName != "nilchaind" {
-		t.Fatalf("expected nilchaind command, got=%q", gotName)
+	if !strings.HasSuffix(gotName, "polystorechaind") && gotName != "polystorechaind" {
+		t.Fatalf("expected polystorechaind command, got=%q", gotName)
 	}
 	if !strings.Contains(strings.Join(gotArgs, " "), "update-provider-endpoints") {
 		t.Fatalf("expected update-provider-endpoints args, got=%v", gotArgs)

@@ -3,12 +3,12 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { encodeAbiParameters, encodeFunctionResult, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -21,7 +21,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const dealId = '1'
   const manifestRoot = '0xae5359579124255db62f04c55f1d1490655ed5479988a528bbca9f5a2245de9286452e5ffd8e76e05763c8241632c517'
@@ -32,7 +32,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
   const txConfirm = (`0x${'33'.repeat(32)}` as Hex)
   const computeResult = encodeFunctionResult({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'computeRetrievalSessionIds',
     result: [['nil1provider'], [sessionId]],
   })
@@ -43,7 +43,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
   let spProofCalls = 0
 
   // LCD deals + balances
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -51,7 +51,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
         deals: [
           {
             id: dealId,
-            owner: nilAddress,
+            owner: polystoreAddress,
             cid: manifestRoot,
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
@@ -63,14 +63,14 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         deal: {
           id: dealId,
-          owner: nilAddress,
+          owner: polystoreAddress,
           manifest_root: Buffer.from(manifestRoot.slice(2), 'hex').toString('base64'),
           size: String(24 * 1024 * 1024),
           escrow_balance: '1000000',
@@ -81,7 +81,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -169,7 +169,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
       headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         deal_id: Number(dealId),
-        owner: nilAddress,
+        owner: polystoreAddress,
         provider: 'nil1provider',
         manifest_root: manifestRoot,
         file_path: filePath,
@@ -188,9 +188,9 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
       status: 206,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
+        'Access-Control-Expose-Headers': 'X-PolyStore-Provider',
         'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1provider',
+        'X-PolyStore-Provider': 'nil1provider',
       },
       body: fileBytes,
     })
@@ -247,7 +247,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     }
     if (method === 'eth_getTransactionReceipt') {
       const hash = String(params?.[0] || '').toLowerCase()
-      const openedEvent = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
+      const openedEvent = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
       const openedTopic0 = getEventSelector(openedEvent)
       const dealIdTopic = toHex(BigInt(dealId), { size: 32 })
       const ownerTopic = padHex(account.address, { size: 32 })
@@ -298,7 +298,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     let sendCount = 0
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

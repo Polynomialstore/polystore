@@ -1,4 +1,4 @@
-import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 import type { P2pTarget } from '../lib/multiaddr'
 import type { GatewayPlanResponse } from './gatewayClient'
 import { p2pRequest, p2pRequestJson } from '../lib/p2pClient'
@@ -16,7 +16,7 @@ export async function p2pGatewayListFiles(
   manifestRoot: string,
   params: { dealId: string; owner: string },
   signal?: AbortSignal,
-): Promise<NilfsFileEntry[]> {
+): Promise<PolyfsFileEntry[]> {
   const path = `/gateway/list-files/${encodeURIComponent(manifestRoot)}?deal_id=${encodeURIComponent(
     params.dealId,
   )}&owner=${encodeURIComponent(params.owner)}`
@@ -27,7 +27,7 @@ export async function p2pGatewayListFiles(
   if (!isRecord(res.json)) return []
   const files = res.json['files']
   if (!Array.isArray(files)) return []
-  return files.filter((f): f is NilfsFileEntry => isRecord(f) && typeof f['path'] === 'string') as NilfsFileEntry[]
+  return files.filter((f): f is PolyfsFileEntry => isRecord(f) && typeof f['path'] === 'string') as PolyfsFileEntry[]
 }
 
 export async function p2pGatewayFetchSlabLayout(
@@ -147,7 +147,7 @@ export async function p2pGatewayFetchRange(
       path,
       headers: {
         range: `bytes=${params.rangeStart}-${params.rangeEnd}`,
-        'x-nil-session-id': params.sessionId,
+        'x-polystore-session-id': params.sessionId,
       },
     },
     signal,
@@ -158,9 +158,9 @@ export async function p2pGatewayFetchRange(
     throw new TransportError(text || `fetch failed (${res.status})`, classifyStatus(res.status), res.status)
   }
 
-  const provider = res.headers['x-nil-provider'] || ''
+  const provider = res.headers['x-polystore-provider'] || ''
   if (!provider) {
-    throw new TransportError('missing X-Nil-Provider', 'invalid_response')
+    throw new TransportError('missing X-PolyStore-Provider', 'invalid_response')
   }
   if (params.expectedProvider && provider !== params.expectedProvider) {
     throw new TransportError(

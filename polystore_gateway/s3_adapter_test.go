@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 func mockLCDDealsServer(t *testing.T, dealStates map[uint64]struct {
@@ -22,12 +22,12 @@ func mockLCDDealsServer(t *testing.T, dealStates map[uint64]struct {
 }) *httptest.Server {
 	t.Helper()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals") {
+		if !strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals") {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 
-		trimmed := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals")
+		trimmed := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals")
 		trimmed = strings.TrimPrefix(trimmed, "/")
 		if trimmed == "" {
 			// list deals
@@ -108,7 +108,7 @@ func TestS3_ListBuckets_UsesDealIDs(t *testing.T) {
 	}
 }
 
-func TestS3_ListObjects_ListsNilfsFileTable(t *testing.T) {
+func TestS3_ListObjects_ListsPolyfsFileTable(t *testing.T) {
 	useTempUploadDir(t)
 
 	root := mustTestManifestRoot(t, "s3-list")

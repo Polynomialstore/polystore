@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 func TestGatewayListFiles_Basic(t *testing.T) {

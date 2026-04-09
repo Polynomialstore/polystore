@@ -182,7 +182,7 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 	if resp.StatusCode == http.StatusForbidden {
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		body := strings.TrimSpace(string(bodyBytes))
-		if strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) != "" && strings.Contains(body, "session provider mismatch") {
+		if strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id")) != "" && strings.Contains(body, "session provider mismatch") {
 			return false, fmt.Errorf("session provider mismatch: %s", body)
 		}
 
@@ -346,8 +346,8 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if requireOnchainSession && isFetch {
-		if !gatewayDownloadMode && strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) == "" {
-			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
+		if !gatewayDownloadMode && strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id")) == "" {
+			writeJSONError(w, http.StatusBadRequest, "missing X-PolyStore-Session-Id", "")
 			return
 		}
 	}
@@ -456,8 +456,8 @@ func RouterGatewayMdu(w http.ResponseWriter, r *http.Request)      { RouterGatew
 func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
 func RouterGatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	if requireOnchainSession {
-		if strings.TrimSpace(r.Header.Get("X-Nil-Session-Id")) == "" {
-			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
+		if strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id")) == "" {
+			writeJSONError(w, http.StatusBadRequest, "missing X-PolyStore-Session-Id", "")
 			return
 		}
 	}
@@ -755,9 +755,9 @@ func RouterGatewaySubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Req
 }
 
 func isGatewayRouterMode() bool {
-	raw := strings.TrimSpace(os.Getenv("NIL_GATEWAY_ROUTER"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_GATEWAY_ROUTER"))
 	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("NIL_GATEWAY_ROUTER_MODE"))
+		raw = strings.TrimSpace(os.Getenv("POLYSTORE_GATEWAY_ROUTER_MODE"))
 	}
 	return raw == "1" || strings.EqualFold(raw, "true")
 }

@@ -11,12 +11,12 @@ const BLOB_SIZE_BYTES = 128 * 1024;
 const BLOBS_PER_MDU = MDU_SIZE_BYTES / BLOB_SIZE_BYTES; // 64
 const KZG_COMMITMENT_BYTES = 48;
 
-// NilFS (filesystem-on-slab) layout constants for MDU #0 (Super-Manifest).
-const NILFS_ROOT_TABLE_BLOBS = 16; // blobs 0..15
-const NILFS_FILE_TABLE_BLOBS = 48; // blobs 16..63
-const NILFS_ROOT_SIZE_BYTES = 32;
-const NILFS_FILE_TABLE_HEADER_BYTES = 128;
-const NILFS_FILE_RECORD_BYTES = 256;
+// PolyFS (filesystem-on-slab) layout constants for MDU #0 (Super-Manifest).
+const POLYFS_ROOT_TABLE_BLOBS = 16; // blobs 0..15
+const POLYFS_FILE_TABLE_BLOBS = 48; // blobs 16..63
+const POLYFS_ROOT_SIZE_BYTES = 32;
+const POLYFS_FILE_TABLE_HEADER_BYTES = 128;
+const POLYFS_FILE_RECORD_BYTES = 256;
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
@@ -56,7 +56,7 @@ function formatBigintRange(start: bigint, end: bigint): string {
   return `${start.toString()}..${end.toString()}`;
 }
 
-function computeNilfsRanges(args: {
+function computePolyfsRanges(args: {
   witnessMdus: number;
   startOffsetBytes: number;
   sizeBytes: number;
@@ -127,15 +127,15 @@ export const Technology = () => {
   const exampleUserMdus = computeUserMdus(exampleBytes);
   const exampleBlobCount = exampleUserMdus * BLOBS_PER_MDU;
 
-  const [nilfsWitnessMdus, setNilfsWitnessMdus] = useState<number>(2);
-  const nilfsMetaMdus = 1 + nilfsWitnessMdus;
-  const nilfsMaxUserMdus = 4096;
-  const nilfsCommitmentsPerUserMdu = BLOBS_PER_MDU;
-  const nilfsCommitmentsBytesPerUserMdu = nilfsCommitmentsPerUserMdu * KZG_COMMITMENT_BYTES;
-  const nilfsTotalCommitmentBytes = nilfsMaxUserMdus * nilfsCommitmentsBytesPerUserMdu;
-  const nilfsSuggestedWitnessMdus = Math.ceil(nilfsTotalCommitmentBytes / MDU_SIZE_BYTES);
+  const [polyfsWitnessMdus, setPolyfsWitnessMdus] = useState<number>(2);
+  const polyfsMetaMdus = 1 + polyfsWitnessMdus;
+  const polyfsMaxUserMdus = 4096;
+  const polyfsCommitmentsPerUserMdu = BLOBS_PER_MDU;
+  const polyfsCommitmentsBytesPerUserMdu = polyfsCommitmentsPerUserMdu * KZG_COMMITMENT_BYTES;
+  const polyfsTotalCommitmentBytes = polyfsMaxUserMdus * polyfsCommitmentsBytesPerUserMdu;
+  const polyfsSuggestedWitnessMdus = Math.ceil(polyfsTotalCommitmentBytes / MDU_SIZE_BYTES);
 
-  const nilfsExampleFiles = useMemo(() => {
+  const polyfsExampleFiles = useMemo(() => {
     const files = [
       { path: "docs/readme.md", startOffset: 0, sizeBytes: 24 * 1024 },
       { path: "img/logo.png", startOffset: 24 * 1024, sizeBytes: 640 * 1024 },
@@ -145,13 +145,13 @@ export const Technology = () => {
     ];
     return files.map((f) => ({
       ...f,
-      ranges: computeNilfsRanges({
-        witnessMdus: nilfsWitnessMdus,
+      ranges: computePolyfsRanges({
+        witnessMdus: polyfsWitnessMdus,
         startOffsetBytes: f.startOffset,
         sizeBytes: f.sizeBytes,
       }),
     }));
-  }, [nilfsWitnessMdus]);
+  }, [polyfsWitnessMdus]);
 
   return (
     <div className="pt-24 pb-12 px-4 max-w-5xl mx-auto space-y-12">
@@ -168,9 +168,9 @@ export const Technology = () => {
       </header>
 
       <section
-        id="nilfs-primer"
+        id="polyfs-primer"
         className="rounded-none border border-border bg-card shadow-sm overflow-hidden"
-        data-testid="technology-nilfs-primer"
+        data-testid="technology-polyfs-primer"
       >
         <div className="border-b border-border bg-muted/30 px-6 py-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -179,20 +179,20 @@ export const Technology = () => {
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Filesystem on Slab</div>
-              <h2 className="text-2xl font-bold text-foreground">NilFS: files built on MDUs</h2>
+              <h2 className="text-2xl font-bold text-foreground">PolyFS: files built on MDUs</h2>
             </div>
           </div>
           <div className="text-[11px] text-muted-foreground">
             Jump to:{" "}
-            <Link className="text-primary hover:underline" to="/technology?section=nilfs-layout">
+            <Link className="text-primary hover:underline" to="/technology?section=polyfs-layout">
               Indexing layout
             </Link>
             {" · "}
-            <Link className="text-primary hover:underline" to="/technology?section=nilfs-example">
+            <Link className="text-primary hover:underline" to="/technology?section=polyfs-example">
               Worked filesystem
             </Link>
             {" · "}
-            <Link className="text-primary hover:underline" to="/technology?section=nilfs-proof-path">
+            <Link className="text-primary hover:underline" to="/technology?section=polyfs-proof-path">
               Proof path
             </Link>
           </div>
@@ -203,7 +203,7 @@ export const Technology = () => {
             <div className="rounded-none border border-border bg-background/60 p-4">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Mental model</div>
               <div className="mt-2 text-sm text-muted-foreground">
-                A deal’s <span className="font-semibold text-foreground">slab</span> is an ordered list of MDUs. NilFS turns that slab into a
+                A deal’s <span className="font-semibold text-foreground">slab</span> is an ordered list of MDUs. PolyFS turns that slab into a
                 filesystem by storing:
               </div>
               <ul className="mt-3 list-disc list-inside space-y-1 text-[12px] text-muted-foreground">
@@ -227,11 +227,11 @@ export const Technology = () => {
                   <span className="border border-border bg-background px-3 py-1 font-mono-data text-foreground">MDU #0</span>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   <span className="border border-border bg-background px-3 py-1 font-mono-data text-foreground">
-                    witness MDUs (#1..#{nilfsWitnessMdus})
+                    witness MDUs (#1..#{polyfsWitnessMdus})
                   </span>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   <span className="border border-border bg-background px-3 py-1 font-mono-data text-foreground">
-                    user data MDUs (start at #{nilfsMetaMdus})
+                    user data MDUs (start at #{polyfsMetaMdus})
                   </span>
                 </div>
               </div>
@@ -241,7 +241,7 @@ export const Technology = () => {
             </div>
           </div>
 
-          <div id="nilfs-layout" className="space-y-4">
+          <div id="polyfs-layout" className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-foreground">Indexing layout (MDU #0)</h3>
               <Link className="text-sm text-primary hover:underline" to="/technology?section=mdu-primer">
@@ -257,16 +257,16 @@ export const Technology = () => {
                 <div className="mt-3 grid gap-2 text-[12px] text-muted-foreground">
                   <div className="flex items-center justify-between">
                     <span>Root table blobs</span>
-                    <span className="font-mono text-foreground">{NILFS_ROOT_TABLE_BLOBS}</span>
+                    <span className="font-mono text-foreground">{POLYFS_ROOT_TABLE_BLOBS}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Root size</span>
-                    <span className="font-mono text-foreground">{NILFS_ROOT_SIZE_BYTES}B</span>
+                    <span className="font-mono text-foreground">{POLYFS_ROOT_SIZE_BYTES}B</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Capacity (roots)</span>
                     <span className="font-mono text-foreground">
-                      {(NILFS_ROOT_TABLE_BLOBS * BLOB_SIZE_BYTES) / NILFS_ROOT_SIZE_BYTES}
+                      {(POLYFS_ROOT_TABLE_BLOBS * BLOB_SIZE_BYTES) / POLYFS_ROOT_SIZE_BYTES}
                     </span>
                   </div>
                 </div>
@@ -280,16 +280,16 @@ export const Technology = () => {
                 <div className="mt-3 grid gap-2 text-[12px] text-muted-foreground">
                   <div className="flex items-center justify-between">
                     <span>Header</span>
-                    <span className="font-mono text-foreground">{NILFS_FILE_TABLE_HEADER_BYTES}B</span>
+                    <span className="font-mono text-foreground">{POLYFS_FILE_TABLE_HEADER_BYTES}B</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Record size</span>
-                    <span className="font-mono text-foreground">{NILFS_FILE_RECORD_BYTES}B</span>
+                    <span className="font-mono text-foreground">{POLYFS_FILE_RECORD_BYTES}B</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Record capacity</span>
                     <span className="font-mono text-foreground">
-                      {Math.floor((NILFS_FILE_TABLE_BLOBS * BLOB_SIZE_BYTES - NILFS_FILE_TABLE_HEADER_BYTES) / NILFS_FILE_RECORD_BYTES)}
+                      {Math.floor((POLYFS_FILE_TABLE_BLOBS * BLOB_SIZE_BYTES - POLYFS_FILE_TABLE_HEADER_BYTES) / POLYFS_FILE_RECORD_BYTES)}
                     </span>
                   </div>
                 </div>
@@ -297,11 +297,11 @@ export const Technology = () => {
             </div>
           </div>
 
-          <div id="nilfs-example" className="space-y-4">
+          <div id="polyfs-example" className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-foreground">Worked filesystem (moderate dataset)</h3>
               <div className="text-[12px] text-muted-foreground">
-                Capacity hint: <span className="font-mono text-foreground">max_user_mdus = {nilfsMaxUserMdus}</span>
+                Capacity hint: <span className="font-mono text-foreground">max_user_mdus = {polyfsMaxUserMdus}</span>
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
@@ -311,12 +311,12 @@ export const Technology = () => {
                   Each user MDU needs {BLOBS_PER_MDU} KZG blob commitments.
                 </div>
                 <div className="mt-3 text-[12px] text-muted-foreground">
-                  {BLOBS_PER_MDU} × {KZG_COMMITMENT_BYTES}B = {nilfsCommitmentsBytesPerUserMdu}B per user MDU
+                  {BLOBS_PER_MDU} × {KZG_COMMITMENT_BYTES}B = {polyfsCommitmentsBytesPerUserMdu}B per user MDU
                 </div>
                 <div className="mt-2 text-[12px] text-muted-foreground">
-                  {nilfsMaxUserMdus} × {nilfsCommitmentsBytesPerUserMdu}B = {formatBytes(nilfsTotalCommitmentBytes)}
+                  {polyfsMaxUserMdus} × {polyfsCommitmentsBytesPerUserMdu}B = {formatBytes(polyfsTotalCommitmentBytes)}
                 </div>
-                <div className="mt-2 font-mono text-foreground">W = {nilfsSuggestedWitnessMdus}</div>
+                <div className="mt-2 font-mono text-foreground">W = {polyfsSuggestedWitnessMdus}</div>
               </div>
 
               <div className="rounded-none border border-border bg-background/60 p-4">
@@ -326,10 +326,10 @@ export const Technology = () => {
                 </div>
                 <div className="mt-4 flex items-center gap-3">
                   <button
-                    onClick={() => void handleCopy("nilfs_meta_mdus", String(nilfsMetaMdus))}
+                    onClick={() => void handleCopy("polyfs_meta_mdus", String(polyfsMetaMdus))}
                     className="inline-flex items-center gap-2 rounded-none border border-border bg-background/70 px-3 py-2 text-[12px] font-semibold text-foreground hover:bg-muted/40"
                   >
-                    {copiedKey === "nilfs_meta_mdus" ? (
+                    {copiedKey === "polyfs_meta_mdus" ? (
                       <>
                         <Check className="h-3.5 w-3.5 text-accent" />
                         Copied meta_mdus
@@ -342,7 +342,7 @@ export const Technology = () => {
                     )}
                   </button>
                   <div className="text-[11px] text-muted-foreground">
-                    meta_mdus = 1 + W = <span className="font-mono text-foreground">{nilfsMetaMdus}</span>
+                    meta_mdus = 1 + W = <span className="font-mono text-foreground">{polyfsMetaMdus}</span>
                   </div>
                 </div>
                 <div className="mt-3">
@@ -352,14 +352,14 @@ export const Technology = () => {
                   <input
                     type="range"
                     min={1}
-                    max={Math.max(1, nilfsSuggestedWitnessMdus * 2)}
-                    value={nilfsWitnessMdus}
-                    onChange={(e) => setNilfsWitnessMdus(clampInt(Number(e.target.value), 1, nilfsSuggestedWitnessMdus * 2))}
+                    max={Math.max(1, polyfsSuggestedWitnessMdus * 2)}
+                    value={polyfsWitnessMdus}
+                    onChange={(e) => setPolyfsWitnessMdus(clampInt(Number(e.target.value), 1, polyfsSuggestedWitnessMdus * 2))}
                     className="mt-2 w-full"
                   />
                   <div className="mt-1 text-[12px] text-muted-foreground">
-                    W={nilfsWitnessMdus} → meta_mdus = {nilfsMetaMdus}. User data slab MDUs begin at index{" "}
-                    <span className="font-mono text-foreground">#{nilfsMetaMdus}</span>.
+                    W={polyfsWitnessMdus} → meta_mdus = {polyfsMetaMdus}. User data slab MDUs begin at index{" "}
+                    <span className="font-mono text-foreground">#{polyfsMetaMdus}</span>.
                   </div>
                 </div>
               </div>
@@ -367,7 +367,7 @@ export const Technology = () => {
               <div className="rounded-none border border-border bg-secondary/20 p-4 text-[12px] text-muted-foreground">
                 <div className="font-semibold text-foreground">Indexing summary</div>
                 <ul className="mt-2 space-y-1 list-disc list-inside">
-                  <li>MDU #0 holds the NilFS super-manifest.</li>
+                  <li>MDU #0 holds the PolyFS super-manifest.</li>
                   <li>Witness MDUs cache blob commitments.</li>
                   <li>User data MDUs store file bytes.</li>
                   <li>global_blob = slab_mdu * 64 + blob_index.</li>
@@ -392,7 +392,7 @@ export const Technology = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {nilfsExampleFiles.map((f) => {
+                    {polyfsExampleFiles.map((f) => {
                       const r = f.ranges;
                       return (
                         <tr key={f.path} className="hover:bg-muted/30 transition-colors">
@@ -430,7 +430,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
             </div>
           </div>
 
-          <div id="nilfs-proof-path" className="space-y-4">
+          <div id="polyfs-proof-path" className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-foreground">Proof path (how bytes bind to the deal)</h3>
               <Link className="text-sm text-primary hover:underline" to="/technology?section=mdu-primer">
@@ -442,7 +442,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               <div className="rounded-none border border-border bg-background/60 p-4">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Step 1: resolve the file</div>
                 <ol className="mt-2 space-y-2 text-[12px] text-muted-foreground list-decimal list-inside">
-                  <li>Read NilFS file table in slab MDU #0.</li>
+                  <li>Read PolyFS file table in slab MDU #0.</li>
                   <li>
                     Find <span className="font-mono text-foreground">start_offset</span> +{" "}
                     <span className="font-mono text-foreground">length</span>.
@@ -500,7 +500,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                   ))}
                 </div>
                 <div className="mt-4 text-[12px] text-muted-foreground">
-                  NilFS makes the <span className="font-mono text-foreground">path → offset</span> mapping explicit; the chained proof makes the{" "}
+                  PolyFS makes the <span className="font-mono text-foreground">path → offset</span> mapping explicit; the chained proof makes the{" "}
                   <span className="font-mono text-foreground">bytes → deal</span> binding verifiable.
                 </div>
               </div>
@@ -552,8 +552,8 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               <ol className="mt-2 space-y-2 text-sm text-muted-foreground list-decimal list-inside">
                 <li>
                   Start with{" "}
-                  <Link className="text-primary hover:underline" to="/technology?section=nilfs-primer">
-                    NilFS
+                  <Link className="text-primary hover:underline" to="/technology?section=polyfs-primer">
+                    PolyFS
                   </Link>{" "}
                   (filesystem view).
                 </li>
@@ -566,7 +566,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                 </li>
                 <li>
                   Finish at{" "}
-                  <Link className="text-primary hover:underline" to="/technology?section=nilfs-proof-path">
+                  <Link className="text-primary hover:underline" to="/technology?section=polyfs-proof-path">
                     Proof Path
                   </Link>{" "}
                   (why the bytes are verifiable).
@@ -606,8 +606,8 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
               Artifact map
             </Link>
             {" · "}
-            <Link className="text-primary hover:underline" to="/technology?section=nilfs-primer">
-              NilFS primer
+            <Link className="text-primary hover:underline" to="/technology?section=polyfs-primer">
+              PolyFS primer
             </Link>
             {" · "}
             <Link className="text-primary hover:underline" to="/technology?section=worked-example">
@@ -699,7 +699,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
           <div className="rounded-none border border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
             <div className="font-semibold text-foreground">Slab order (what “MDU index” means)</div>
             <div className="mt-1">
-              A deal’s slab is ordered as: <span className="font-mono text-foreground">MDU #0</span> (NilFS Super-Manifest)
+              A deal’s slab is ordered as: <span className="font-mono text-foreground">MDU #0</span> (PolyFS Super-Manifest)
               + <span className="font-mono text-foreground">W</span> Witness MDUs + user data MDUs. So{" "}
               <span className="font-mono text-foreground">total_mdus = 1 + witness_mdus + user_mdus</span>.
             </div>

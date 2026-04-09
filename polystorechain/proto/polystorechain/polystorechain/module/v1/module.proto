@@ -1,0 +1,19 @@
+syntax = "proto3";
+package polystorechain.polystorechain.module.v1;
+
+import "cosmos/app/v1alpha1/module.proto";
+
+option go_package = "polystorechain/x/polystorechain/types";
+
+// Module is the config object for the module.
+message Module {
+  option (cosmos.app.v1alpha1.module) = {
+    go_import: "polystorechain/x/polystorechain"
+  };
+
+  // authority defines the custom module authority.
+  // If not set, defaults to the governance module.
+  string authority = 1;
+
+  
+}

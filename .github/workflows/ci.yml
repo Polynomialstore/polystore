@@ -5,29 +5,29 @@ on:
 
 jobs:
   # ------------------------------------------------------------------
-  # GO SERVICES (NilChain, Faucet, S3, Relayer)
+  # GO SERVICES (PolyStore Chain, Faucet, S3, Relayer)
   # ------------------------------------------------------------------
   go-test:
     name: Go Test (${{ matrix.service }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [nilchain, polystore_faucet, polystore_gateway, polystore_relayer]
+        service: [polystorechain, polystore_faucet, polystore_gateway, polystore_relayer]
     steps:
       - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25.x' # Match `go.mod` (nilchain/polystore_gateway/etc.)
+          go-version: '1.25.x' # Match `go.mod` (polystorechain/polystore_gateway/etc.)
           cache-dependency-path: ${{ matrix.service }}/go.sum
 
       - name: Set up Rust
-        if: matrix.service == 'polystore_gateway' || matrix.service == 'nilchain'
+        if: matrix.service == 'polystore_gateway' || matrix.service == 'polystorechain'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build polystore_core
-        if: matrix.service == 'polystore_gateway' || matrix.service == 'nilchain'
+        if: matrix.service == 'polystore_gateway' || matrix.service == 'polystorechain'
         run: |
           cd polystore_core
           cargo build --release
@@ -35,13 +35,13 @@ jobs:
       - name: Test ${{ matrix.service }}
         working-directory: ${{ matrix.service }}
         run: |
-          if [ "${{ matrix.service }}" == "nilchain" ]; then
-            echo "Reconstructing vendor for nilchain..."
+          if [ "${{ matrix.service }}" == "polystorechain" ]; then
+            echo "Reconstructing vendor for polystorechain..."
             go mod vendor
             git checkout vendor
           fi
           
-          # Add polystore_core release dir to LD_LIBRARY_PATH for polystore_gateway/nilchain
+          # Add polystore_core release dir to LD_LIBRARY_PATH for polystore_gateway/polystorechain
           # We use GITHUB_WORKSPACE because working-directory is set to the service dir
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
           
@@ -76,7 +76,7 @@ jobs:
         run: cargo test --verbose
 
   # ------------------------------------------------------------------
-  # FRONTEND (Nil Website)
+  # FRONTEND (PolyStore Website)
   # ------------------------------------------------------------------
   frontend-build:
     name: Website Build & Lint
@@ -230,7 +230,7 @@ jobs:
           if-no-files-found: ignore
 
   # ------------------------------------------------------------------
-  # TAURI GUI (NilGateway GUI)
+  # TAURI GUI (PolyStore Gateway GUI)
   # ------------------------------------------------------------------
   tauri-gui:
     name: Tauri GUI Build & Tests
@@ -347,7 +347,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          submodules: recursive # For nil_bridge, etc.
+          submodules: recursive # For polystore_bridge, etc.
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -661,5 +661,5 @@ jobs:
           version: nightly
 
       - name: Run Tests
-        working-directory: nil_bridge
+        working-directory: polystore_bridge
         run: forge test -vv

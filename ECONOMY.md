@@ -1,4 +1,4 @@
-# NilStore Economy & Tokenomics (Deal Expiry + Wallet-First + Sessions-First)
+# PolyStore Economy & Tokenomics (Deal Expiry + Wallet-First + Sessions-First)
 
 Last updated: 2026-02-05
 
@@ -14,7 +14,7 @@ It is intentionally **parameterized**: policy knobs are explicit and governance-
 
 ## 1. Role clarity: what pays for what?
 
-NilStore has two funding sources for storage providers (SPs):
+PolyStore has two funding sources for storage providers (SPs):
 
 1) **User-funded fees (escrow accounting, deterministic)**
    - Users deposit NIL into a deal’s escrow.
@@ -32,7 +32,7 @@ NilStore has two funding sources for storage providers (SPs):
 
 ## 2. What actually happens when users upload (charging semantics)
 
-NilStore’s upload flow is two-phase:
+PolyStore’s upload flow is two-phase:
 
 ### 2.1 Data-plane upload (no chain charge by itself)
 - The client uploads bytes to providers (often via `polystore_gateway`).
@@ -44,7 +44,7 @@ NilStore’s upload flow is two-phase:
   - `storage_price` (Dec per byte per block, on-chain),
   - `delta_size_bytes` (new_bytes - old_bytes),
   - `duration` (per the pricing RFC; see note below),
-  - and then transfers that amount from the deal owner to the `nilchain` module account, increasing `Deal.escrow_balance`.
+  - and then transfers that amount from the deal owner to the `polystorechain` module account, increasing `Deal.escrow_balance`.
 
 This means:
 - Users experience a deterministic “commit costs X NIL” event (similar to a “write transaction” in other chains).
@@ -58,7 +58,7 @@ This means:
 
 ### 2.3 Retrieval (where bandwidth is charged and liveness is proven)
 
-NilStore’s retrieval market is **session-based** and (for testnet/mainnet parity) sessions are **mandatory for all served bytes**:
+PolyStore’s retrieval market is **session-based** and (for testnet/mainnet parity) sessions are **mandatory for all served bytes**:
 
 1) **Open retrieval session (on-chain, user wallet tx)**  
    The user opens a session for a blob-aligned range and the chain:
@@ -66,7 +66,7 @@ NilStore’s retrieval market is **session-based** and (for testnet/mainnet pari
    - locks `variable_fee = retrieval_price_per_blob * blob_count` against the deal escrow.
 
 2) **Serve bytes (off-chain, provider/gateway)**  
-   Providers (and any gateway proxy path) MUST refuse to serve Deal bytes unless the request carries `X-Nil-Session-Id = session_id`.  
+   Providers (and any gateway proxy path) MUST refuse to serve Deal bytes unless the request carries `X-PolyStore-Session-Id = session_id`.
    Batching is allowed: one session can be downloaded via many range requests, or via larger MDU-sized chunks, as long as all served bytes remain within the session’s blob-range.
 
 3) **Complete settlement (on-chain)**  
@@ -80,7 +80,7 @@ Implications:
 
 ### 2.3.1 Dynamic pricing (devnet experiment; optional)
 
-NilStore’s devnet includes an **optional**, deterministic, **epoch-based** dynamic pricing controller.
+PolyStore’s devnet includes an **optional**, deterministic, **epoch-based** dynamic pricing controller.
 When enabled, the chain may update:
 
 - `storage_price` each epoch based on **storage utilization** (active slot bytes vs. active provider capacity)
@@ -106,7 +106,7 @@ Defaults are conservative: `dynamic_pricing_enabled=false` and targets set to `0
   - quota accounting and rewards exclude the deal.
 
 ### 3.2 Renewal / “ExtendDeal” (spot price at extension time)
-NilStore adds `MsgExtendDeal(deal_id, additional_duration_blocks)`.
+PolyStore adds `MsgExtendDeal(deal_id, additional_duration_blocks)`.
 
 At extension time, the chain charges:
 - `extension_cost = ceil(storage_price * current_size_bytes * additional_duration_blocks)`
@@ -165,7 +165,7 @@ The gateway is not a relayer in production mode.
 
 ## 2.4 Retrieval access control (restricted / allowlist / voucher / public)
 
-NilStore distinguishes **who may open a retrieval session** from **who pays**.
+PolyStore distinguishes **who may open a retrieval session** from **who pays**.
 
 ### 2.4.1 Deal retrieval policy (who may request retrieval)
 
@@ -184,13 +184,13 @@ Each deal has a `retrieval_policy` (conceptual field in `Deal`):
 
 Because the frozen accounting contract charges **owner-paid** session fees against `Deal.escrow_balance`, a naïve “public deal” would allow strangers to burn the owner’s long-term escrow.
 
-To prevent this, NilStore adds an **additive** requester-funded open path:
+To prevent this, PolyStore adds an **additive** requester-funded open path:
 
 - `MsgOpenRetrievalSession` remains **owner-only** and is “owner pays from deal escrow” (frozen semantics).
 - `MsgOpenRetrievalSessionSponsored` is the public/third-party path and works as:
 
   1) Chain computes `total = base_fee + retrieval_price_per_blob * blob_count` (same fee schedule and rounding).
-  2) Chain transfers `total` from the requester to the `nilchain` module account.
+  2) Chain transfers `total` from the requester to the `polystorechain` module account.
   3) Chain creates a retrieval session with `funding=REQUESTER` and `payer=requester`.
   4) On completion: burn `retrieval_burn_bps` of `variable_fee` and pay the provider the remainder.
   5) On expiry/cancel (non-completion): refund any refundable `variable_fee` to the **payer** (requester), not to deal escrow. Base fee remains burned.
@@ -214,7 +214,7 @@ Restricted deals MUST still allow protocol operations that keep the network heal
 - **audit / liveness checking** (when clients are inactive),
 - **repair / healing** (catch-up reconstruction, make-before-break replacement).
 
-NilStore therefore adds a protocol-funded session open path:
+PolyStore therefore adds a protocol-funded session open path:
 
 - `MsgOpenProtocolRetrievalSession` opens a retrieval session with `funding=PROTOCOL`.
 - Authorization is **deterministic**:
@@ -238,7 +238,7 @@ This makes protocol audit/repair possible even for owner-only deals without conf
 
 A public explorer can:
 1) Query chain state for deals with `retrieval_policy == Public`.
-2) For each public deal, open a paid session to fetch **metadata MDUs** (MDU #0 + witness) and parse NilFS.
+2) For each public deal, open a paid session to fetch **metadata MDUs** (MDU #0 + witness) and parse PolyFS.
 3) Host metadata (file lists, sizes, hashes, previews) and facilitate broad public retrieval demand.
 
 This creates:
@@ -249,7 +249,7 @@ This creates:
 
 ## 2.6 Compression and content-encoding (charging on compressed bytes)
 
-NilStore charges on stored bytes (ciphertext). Therefore:
+PolyStore charges on stored bytes (ciphertext). Therefore:
 
 - Clients SHOULD compress plaintext **before encryption** when beneficial.
 - Compression metadata should be recorded in-band (inside the file bytes) so the client can decompress after decrypt.

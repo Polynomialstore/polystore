@@ -1,7 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export class NilWasm {
+export class PolyStoreWasm {
   free(): void;
   [Symbol.dispose](): void;
   commit_mdu(mdu_bytes: Uint8Array): any;

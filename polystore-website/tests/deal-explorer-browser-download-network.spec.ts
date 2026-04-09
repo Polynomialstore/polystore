@@ -3,12 +3,12 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { encodeAbiParameters, encodeFunctionResult, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -21,7 +21,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const dealId = '1'
   const manifestRoot = `0x${'bb'.repeat(48)}`
@@ -34,7 +34,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
   const txOpen = (`0x${'22'.repeat(32)}` as Hex)
   const txConfirm = (`0x${'33'.repeat(32)}` as Hex)
   const computeResult = encodeFunctionResult({
-    abi: NILSTORE_PRECOMPILE_ABI,
+    abi: POLYSTORE_PRECOMPILE_ABI,
     functionName: 'computeRetrievalSessionIds',
     result: [['nil1provider'], [sessionId]],
   })
@@ -42,7 +42,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
   let fetchCalls = 0
   let listFilesCalls = 0
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -50,7 +50,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
         deals: [
           {
             id: dealId,
-            owner: nilAddress,
+            owner: polystoreAddress,
             cid: manifestRoot,
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
@@ -62,14 +62,14 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         deal: {
           id: dealId,
-          owner: nilAddress,
+          owner: polystoreAddress,
           manifest_root: Buffer.from(manifestRoot.slice(2), 'hex').toString('base64'),
           size: String(24 * 1024 * 1024),
           escrow_balance: '1000000',
@@ -88,7 +88,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -104,7 +104,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/proofs', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/proofs', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -219,7 +219,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
       headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         deal_id: Number(dealId),
-        owner: nilAddress,
+        owner: polystoreAddress,
         provider: 'nil1provider',
         manifest_root: manifestRoot,
         file_path: filePath,
@@ -238,7 +238,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
       headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
         deal_id: Number(dealId),
-        owner: nilAddress,
+        owner: polystoreAddress,
         provider: 'nil1provider',
         manifest_root: manifestRoot,
         file_path: filePath,
@@ -257,9 +257,9 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
       status: 206,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
+        'Access-Control-Expose-Headers': 'X-PolyStore-Provider',
         'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1provider',
+        'X-PolyStore-Provider': 'nil1provider',
       },
       body: fileBytes,
     })
@@ -270,9 +270,9 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
       status: 206,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'X-Nil-Provider',
+        'Access-Control-Expose-Headers': 'X-PolyStore-Provider',
         'Content-Type': 'application/octet-stream',
-        'X-Nil-Provider': 'nil1provider',
+        'X-PolyStore-Provider': 'nil1provider',
       },
       body: fileBytes,
     })
@@ -322,10 +322,10 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     if (method === 'eth_getTransactionReceipt') {
       const [hash] = params ?? []
 
-      const openedTopic0 = getEventSelector(getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
+      const openedTopic0 = getEventSelector(getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
       const dealIdTopic = padHex(toHex(BigInt(dealId)), { size: 32 })
       const ownerTopic = padHex(account.address as Hex, { size: 32 })
-      const event = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
+      const event = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
       const openedData = encodeAbiParameters(
         event.inputs.filter((i: any) => !i.indexed),
         ['nil1provider', sessionId],

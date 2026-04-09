@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import { encodeFunctionData, type Hex } from 'viem'
 import { appConfig } from '../config'
-import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../lib/polystorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { resolveActiveEvmAddress } from '../lib/walletAddress'
 import { classifyWalletError } from '../lib/walletErrors'
@@ -41,14 +41,14 @@ export function useUpdateDealRetrievalPolicy() {
       const voucherSigner = (input.voucherSigner || ZERO_ADDRESS) as Hex
 
       const data = encodeFunctionData({
-        abi: NILSTORE_PRECOMPILE_ABI,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealRetrievalPolicy',
         args: [BigInt(input.dealId), mode, allowlistRoot, voucherSigner],
       })
 
       const txHash = await walletClient.sendTransaction({
         account: evmAddress as Hex,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data,
         gas: 2_000_000n,
       })

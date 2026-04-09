@@ -1,7 +1,7 @@
 # RFC: Mode 2 On-Chain State (Slots, Generations, Repairs)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain protocol state (`nilchain/`)
+**Scope:** Chain protocol state (`polystorechain/`)
 **Depends on:** `spec.md` §6.2, §8.3–§8.4; `rfcs/rfc-blob-alignment-and-striping.md`
 **Motivation:** Appendix B #2 (Mode 2 encoding), #6 (write semantics beyond append-only; near-term constraints)
 
@@ -37,7 +37,7 @@ This RFC freezes a **concrete on-chain representation** for Mode 2 and a minimal
 
 ### 1.3 Slab accounting fields (naming freeze)
 For chain policy and bounds checks we freeze:
-- `size_bytes`: total logical bytes of file contents in NilFS (sum of non-tombstone file lengths)
+- `size_bytes`: total logical bytes of file contents in PolyFS (sum of non-tombstone file lengths)
 - `total_mdus`: total number of committed MDU roots in the Manifest commitment (includes metadata + witness + user MDUs)
 - `witness_mdus`: number of witness MDUs committed after MDU #0 (metadata region size)
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)
@@ -207,8 +207,8 @@ Add a one-time migration that:
 ## 7. Implementation Checklist (Sprint 3/4)
 
 1. Protobuf + codegen:
-   - `nilchain/proto/nilchain/nilchain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
-   - `nilchain/proto/nilchain/nilchain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
+   - `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
+   - `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
 2. Keeper logic:
    - Populate typed fields at `CreateDeal`.
    - Persist `total_mdus/witness_mdus/current_gen` at `UpdateDealContent*`.

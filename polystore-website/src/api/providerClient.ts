@@ -1,5 +1,5 @@
 import { fetchWithTimeout } from '../lib/http'
-import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 import type { GatewayPlanResponse, UploadResult } from './gatewayClient'
 
 type UnknownRecord = Record<string, unknown>
@@ -24,7 +24,7 @@ export interface ProviderAdminStatusDetail {
   public_health_ok?: boolean
   sp_auth_present?: boolean
   upload_dir?: string
-  nil_home?: string
+  polystore_home?: string
   chain_id?: string
   lcd_base?: string
   node_addr?: string
@@ -324,7 +324,7 @@ export async function providerListFiles(
   manifestRoot: string,
   params: { dealId: string; owner: string },
   fetchFn: typeof fetch = fetch,
-): Promise<NilfsFileEntry[]> {
+): Promise<PolyfsFileEntry[]> {
   const url = `${providerBase}/sp/retrieval/list-files/${encodeURIComponent(
     manifestRoot,
   )}?deal_id=${encodeURIComponent(params.dealId)}&owner=${encodeURIComponent(params.owner)}`
@@ -342,7 +342,7 @@ export async function providerListFiles(
 
   return files
     .filter((f): f is Record<string, unknown> => isRecord(f) && typeof f['path'] === 'string')
-    .map((f): NilfsFileEntry => ({
+    .map((f): PolyfsFileEntry => ({
       path: String(f['path']),
       size_bytes: asNumber(f['size_bytes']) ?? 0,
       logical_size_bytes: asNumber(f['logical_size_bytes']),
@@ -448,7 +448,7 @@ export async function providerFetchMduWithSession(
     {
       method: 'GET',
       headers: {
-        'X-Nil-Session-Id': params.sessionId,
+        'X-PolyStore-Session-Id': params.sessionId,
       },
     },
     60_000,
@@ -482,9 +482,9 @@ export async function providerFetchMduWindowWithSession(
     {
       method: 'GET',
       headers: {
-        'X-Nil-Session-Id': params.sessionId,
-        'X-Nil-Start-Blob-Index': String(Math.max(0, Number(params.startBlobIndex || 0))),
-        'X-Nil-Blob-Count': String(Math.max(0, Number(params.blobCount || 0))),
+        'X-PolyStore-Session-Id': params.sessionId,
+        'X-PolyStore-Start-Blob-Index': String(Math.max(0, Number(params.startBlobIndex || 0))),
+        'X-PolyStore-Blob-Count': String(Math.max(0, Number(params.blobCount || 0))),
       },
     },
     60_000,
@@ -567,7 +567,7 @@ export async function providerDownloadWithBundledSession(
       method: 'GET',
       headers: {
         Range: `bytes=${rangeStart}-${rangeEnd}`,
-        'X-Nil-Download-Session': downloadSession,
+        'X-PolyStore-Download-Session': downloadSession,
       },
     },
     60_000,

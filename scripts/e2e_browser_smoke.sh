@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Browser smoke test runner:
-# - Starts the local stack (nilchaind + gateway + faucet + web)
+# - Starts the local stack (polystorechaind + gateway + faucet + web)
 # - Runs Playwright smoke tests
 # - Always stops the stack on exit
 

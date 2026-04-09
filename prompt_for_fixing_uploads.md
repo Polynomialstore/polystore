@@ -68,7 +68,7 @@ Action options:
 
 Perf validation:
 ```bash
-time ./polystore_cli/target/release/polystore_cli --trusted-setup nilchain/trusted_setup.txt shard README.md --out /tmp/out.json
+time ./polystore_cli/target/release/polystore_cli --trusted-setup polystorechain/trusted_setup.txt shard README.md --out /tmp/out.json
 ```
 Target: seconds, not minutes.
 

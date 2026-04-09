@@ -1,5 +1,5 @@
 ```AGENTS.md (excerpt: git protocol)
-# NilStore Network Development Roadmap
+# PolyStore Network Development Roadmap
 
 ## Protocol for Agents
 **CRITICAL:** When pushing changes to the repository, you **MUST** push to both remotes to ensure synchronization.
@@ -13,7 +13,7 @@
 *   **Commit & Push Cadence:** Treat this file as the canonical TODO list. As you complete tasks, update the checklist, commit your work with a descriptive message, and push to both remotes (`origin` and `nil-store`) in small, verified increments.
 *   **Default Autonomy:** Unless the user explicitly says “don’t commit/push yet,” agents should **automatically** commit completed work (after relevant tests pass) and push to both remotes. Keep commits small and descriptive, and avoid batching unrelated changes.
 
-This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
+This document outlines a strategic "Go-to-Market" Engineering Roadmap for the PolyStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
 ## Phase 1: The "Localhost" Prototype (Months 1-3)
 **Goal:** Prove the math works on a single machine. Don't worry about the network yet.
@@ -30,45 +30,45 @@ Companion docs:
 - `MAINNET_GAP_TRACKER.md` (canonical gap tracking + DoDs + test gates)
 
 ## Stage 0 — Policy freeze → params + interfaces (unblocks engineering)
-- [ ] Extend `nilchain/proto/nilchain/nilchain/v1/params.proto` to encode B1/B2/B4/B5/B6 (with validation + genesis defaults).
+- [ ] Extend `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` to encode B1/B2/B4/B5/B6 (with validation + genesis defaults).
 - [ ] Encode audit budget sizing/caps (Option A): `audit_budget_bps`, `audit_budget_cap_bps`, and bounded carryover (≤2 epochs) for unused budget.
 - [ ] Document chosen defaults + rationale in `notes/mainnet_policy_resolution_jan2026.md` and reference from `MAINNET_GAP_TRACKER.md`.
 
 ## Stage 1 — Storage lock-in pricing + escrow accounting (A1)
-- [ ] Implement pay-at-ingest lock-in pricing on `UpdateDealContent*` per `rfcs/rfc-pricing-and-escrow-accounting.md` (`nilchain/`).
-- [ ] Implement deterministic spend window reset + deterministic elasticity debits (`nilchain/`).
+- [ ] Implement pay-at-ingest lock-in pricing on `UpdateDealContent*` per `rfcs/rfc-pricing-and-escrow-accounting.md` (`polystorechain/`).
+- [ ] Implement deterministic spend window reset + deterministic elasticity debits (`polystorechain/`).
 - [ ] Add econ e2e: create deal → upload/commit → verify escrow and module account flows (`scripts/`, `tests/`).
 
 ## Stage 2 — Retrieval session economics (A2)
-- [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`nilchain/`).
-- [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`nilchain/`).
+- [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`polystorechain/`).
+- [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`polystorechain/`).
 - [ ] Extend econ e2e: open → complete; open → cancel/expire; verify burns/payouts/refunds (`scripts/`, `tests/`).
 
 ## Stage 3 — Deterministic challenge derivation + quotas + synthetic fill (A3)
-- [ ] Implement deterministic challenge derivation + quota accounting (SPECIFIED in `rfcs/rfc-challenge-derivation-and-quotas.md`) (`nilchain/`).
-- [ ] Implement enforcement outcomes: invalid proof → hard fault; quota shortfall → HealthState decay (no slash by default) (`nilchain/`).
+- [ ] Implement deterministic challenge derivation + quota accounting (SPECIFIED in `rfcs/rfc-challenge-derivation-and-quotas.md`) (`polystorechain/`).
+- [ ] Implement enforcement outcomes: invalid proof → hard fault; quota shortfall → HealthState decay (no slash by default) (`polystorechain/`).
 - [ ] Add keeper unit tests for determinism + exclusions (REPAIRING slots excluded).
 - [ ] Add adversarial sim test gate for anti-grind properties (`scripts/`, `performance/`).
 
 ## Stage 4 — HealthState + eviction curve (A6)
-- [ ] Implement per-(deal, provider/slot) HealthState updates from hard/soft failures (`nilchain/`).
-- [ ] Implement eviction triggers (`evict_after_missed_epochs_hot/cold`) and hook into Mode 2 repair start (`nilchain/`).
+- [ ] Implement per-(deal, provider/slot) HealthState updates from hard/soft failures (`polystorechain/`).
+- [ ] Implement eviction triggers (`evict_after_missed_epochs_hot/cold`) and hook into Mode 2 repair start (`polystorechain/`).
 - [ ] Add queries/events for observability; add unit tests.
 
 ## Stage 5 — Mode 2 repair + make-before-break replacement (A5)
-- [ ] Implement make-before-break replacement per `rfcs/rfc-mode2-onchain-state.md` (`nilchain/`).
-- [ ] Implement deterministic candidate selection + churn controls (B4) (`nilchain/`).
-- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `polystore_gateway/`).
+- [ ] Implement make-before-break replacement per `rfcs/rfc-mode2-onchain-state.md` (`polystorechain/`).
+- [ ] Implement deterministic candidate selection + churn controls (B4) (`polystorechain/`).
+- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`polystorechain/`, `polystore_gateway/`).
 - [ ] Add multi-SP repair e2e: slot failure → candidate catch-up → promotion; reads succeed throughout (`scripts/`, `tests/`).
 
 ## Stage 6 — Evidence / fraud proofs pipeline (A4)
-- [ ] Implement evidence taxonomy + verification + replay protection (`nilchain/`).
-- [ ] Wire penalties (slash/jail/evict) to B1 params; integrate with repair start (`nilchain/`).
+- [ ] Implement evidence taxonomy + verification + replay protection (`polystorechain/`).
+- [ ] Wire penalties (slash/jail/evict) to B1 params; integrate with repair start (`polystorechain/`).
 - [ ] Add unit tests per evidence type + e2e demonstrating slash on proven bad data (`scripts/`, `tests/`).
 
 ## Stage 7 — Deputy market + proxy retrieval + audit debt (P0-P2P-001)
-- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `nilchain/`, `polystore_gateway/`).
-- [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`nilchain/`).
+- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `polystorechain/`, `polystore_gateway/`).
+- [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`polystorechain/`).
 - [ ] Add ghosting-provider e2e: still retrieve via deputy and record evidence (`scripts/`).
 
 ## B) Policy decisions to encode (proposal summary)
@@ -91,7 +91,7 @@ See `notes/mainnet_policy_resolution_jan2026.md` for full details.
 ```
 
 ```MAINNET_GAP_TRACKER.md
-# Mainnet Gap Tracker (NilStore)
+# Mainnet Gap Tracker (PolyStore)
 
 This document tracks **what is missing** between the current implementation in this repo and the **long‑term Mainnet plan** described by `spec.md` (canonical), `rfcs/`, and `notes/`.
 
@@ -107,7 +107,7 @@ This document tracks **what is missing** between the current implementation in t
 - Keep items **small enough to ship** (1–5 PRs each).
 - Every epic should have a **test gate** (unit/e2e/script) before it can be marked “Done”.
 - Prefer tracking **code ownership** by directory:
-  - Chain: `nilchain/`
+  - Chain: `polystorechain/`
   - Gateway/SP: `polystore_gateway/`
   - Core crypto/WASM: `polystore_core/`
   - CLI automation: `polystore_cli/`
@@ -159,11 +159,11 @@ This document tracks **what is missing** between the current implementation in t
 - **DoD:** CUDA (server) and/or WebGPU (client) path that materially raises sustained throughput; pipeline parallelism is default.
 - **Test gate:** reproducible perf benchmark suite (CI “doesn’t regress”) + local benchmark script with thresholds.
 
-### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
+### P0-CORE-001 — “One core” migration (PolyFS + crypto single source of truth)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
-- **Current state:** `polystore_gateway` contains NilFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
-- **DoD:** NilFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
+- **Current state:** `polystore_gateway` contains PolyFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
+- **DoD:** PolyFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
 - **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
 
 ### P0-ECON-001 — Mainnet escrow accounting + lock-in pricing (pay-at-ingest)
@@ -182,7 +182,7 @@ This document tracks **what is missing** between the current implementation in t
 
 ## Domain Backlog (P1/P2) — Organized By Subsystem
 
-### Chain / Protocol (`nilchain/`)
+### Chain / Protocol (`polystorechain/`)
 
 #### CHAIN-101 — Explicit Mode 2 encoding on-chain (K/M, slot mapping, overlays)
 - **Status:** PARTIAL (DEVNET)
@@ -209,7 +209,7 @@ This document tracks **what is missing** between the current implementation in t
 
 #### CHAIN-106 — EVM module production posture (simulation vs runtime)
 - **Status:** PARTIAL (DEVNET)
-- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `nilchain/app/app.go` simulation exclusions
+- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `polystorechain/app/app.go` simulation exclusions
 - **Notes:** EVM/FeeMarket are excluded from simulation to avoid signer panics; ensure production builds are safe and tested.
 
 ### Gateway / Provider (`polystore_gateway/`)
@@ -227,7 +227,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### GW-204 — S3 adapter polish + bidirectional sync scripts (nilstore ↔ S3)
+#### GW-204 — S3 adapter polish + bidirectional sync scripts (polystore ↔ S3)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
 
@@ -261,7 +261,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### CLI-502 — Fast download / mirror scripts (provider → local, nilstore → S3)
+#### CLI-502 — Fast download / mirror scripts (provider → local, polystore → S3)
 - **Status:** PARTIAL (DEVNET)
 - **Notes:** `notes/launch_todos.md`
 
@@ -306,11 +306,11 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
   - `spec.md` naming + Appendix B references aligned to the RFCs
 - **Exit criteria:** updated RFCs/spec deltas + a checklist of exact protobuf/state transitions to implement in the next sprints.
 
-### Sprint 1 — “One core” foundation (NilFS + commitments unified)
+### Sprint 1 — “One core” foundation (PolyFS + commitments unified)
 - **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
-- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `polystore_core`.
+- **Goal:** eliminate browser/gateway drift risk by centralizing PolyFS layout + commitment computation in `polystore_core`.
 - **Delivers:**
-  - Port NilFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
+  - Port PolyFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
   - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `polystore_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
@@ -383,7 +383,7 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Delivers:**
   - S3 adapter correctness + compatibility testing (aws-cli/rclone).
   - Third-party uploader pattern: scoped key funding + teardown + audit workflow.
-  - Fast download / mirroring scripts (nilstore ↔ S3) with documented performance expectations.
+  - Fast download / mirroring scripts (polystore ↔ S3) with documented performance expectations.
 - **Test gate:** integration tests + scripted “upload from S3 → verify on-chain → retrieve to S3” pipeline.
 
 ### Sprint 10 — Mainnet hardening + audits + launch readiness
@@ -438,7 +438,7 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
 - `sprint22-wallet-unlock-detection`: detect MetaMask authorization (`eth_accounts`) early so “Create deal” prompts unlock before submit.
 - `sprint23-gap-tracker-status`: record sprint22 execution status in the tracker (doc hygiene).
-- `sprint24-one-core-payload-ffi`: move NilFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.
+- `sprint24-one-core-payload-ffi`: move PolyFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.
 
 ```
 
@@ -488,7 +488,7 @@ These are the baseline parameter defaults to implement and calibrate.
 
 ## Implementation Note: Params That Exist Today vs Proposed Additions
 
-The current on-chain params are defined in `nilchain/proto/nilchain/nilchain/v1/params.proto` and already include (non-exhaustive):
+The current on-chain params are defined in `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` and already include (non-exhaustive):
 - `storage_price`, `base_retrieval_fee`, `retrieval_price_per_blob`, `retrieval_burn_bps`
 - `month_len_blocks`, `epoch_len_blocks`
 - `quota_bps_per_epoch_hot/cold`, `quota_min_blobs`, `quota_max_blobs`
@@ -597,7 +597,7 @@ Fallback (simpler, weaker): flat bond only (no assignment collateral).
 
 **Deterministic candidate selection:**
 - seed:
-  - `seed = SHA256("nilstore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
+  - `seed = SHA256("polystore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
 - rank provider registry by `SHA256(seed || provider_addr)` and choose first eligible.
 
 **Eligibility filter:**
@@ -761,7 +761,7 @@ These are “agree on targets” items rather than “can’t implement” items
 # RFC: Pricing & Escrow Accounting (Lock-in + Retrieval Fees + Elasticity Caps)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain economics (`nilchain/`) + gateway/UI intent fields
+**Scope:** Chain economics (`polystorechain/`) + gateway/UI intent fields
 **Motivation:** `spec.md` §6.1–§6.2, §7.2.1; Appendix B #5
 **Depends on:** `rfcs/rfc-data-granularity-and-economics.md`
 
@@ -785,13 +785,13 @@ This RFC intentionally does **not** introduce retrieval “credits” for Gamma�
 
 ### 1.2 Module accounts
 - `authtypes.FeeCollectorName`: receives `deal_creation_fee`.
-- `types.ModuleName` (`nilchain` module account): holds escrow and performs burns/transfers for retrieval settlement.
+- `types.ModuleName` (`polystorechain` module account): holds escrow and performs burns/transfers for retrieval settlement.
 
 ---
 
 ## 2. Parameters (Frozen)
 
-From `nilchain/nilchain/v1/params.proto`:
+From `polystorechain/polystorechain/v1/params.proto`:
 - `deal_creation_fee: Coin`
 - `min_duration_blocks: uint64`
 - `storage_price: Dec` (per byte per block)
@@ -958,7 +958,7 @@ elasticity_cost = base_stripe_cost * delta_replication
 # RFC: Challenge Derivation & Proof Quota Policy (Unified Liveness v1)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain protocol policy (`nilchain/`)
+**Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
 
@@ -966,7 +966,7 @@ elasticity_cost = base_stripe_cost * delta_replication
 
 ## 0. Executive Summary
 
-NilStore’s “Unified Liveness” requires the chain to deterministically answer:
+PolyStore’s “Unified Liveness” requires the chain to deterministically answer:
 1. **What** positions a provider must prove for a given epoch (synthetic challenges)
 2. **How many** proofs are required (quota)
 3. **How organic retrieval** reduces synthetic demand (credits)
@@ -983,7 +983,7 @@ This RFC freezes:
 ## 1. Definitions
 
 ### 1.1 Epoch
-NilStore defines a **liveness epoch** with fixed length:
+PolyStore defines a **liveness epoch** with fixed length:
 - `EPOCH_LEN_BLOCKS` (param; e.g. 100 blocks)
 - `epoch_id = floor(block_height / EPOCH_LEN_BLOCKS)`
 
@@ -1030,7 +1030,7 @@ Define the epoch seed as:
 
 ```
 epoch_start_height = epoch_id * EPOCH_LEN_BLOCKS
-R_e = SHA256("nilstore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
+R_e = SHA256("polystore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
 ```
 
 Rationale:
@@ -1063,7 +1063,7 @@ Let:
 For slot `s ∈ [0..N-1]` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 row        = U64BE(seed[8..16]) % rows
 
@@ -1086,7 +1086,7 @@ Let:
 For provider `P` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 blob_index  = U64BE(seed[8..16]) % 64
 mdu_index   = meta_mdus + mdu_ordinal
@@ -1149,7 +1149,7 @@ credits_blobs = min(credit_cap, unique_proved_blobs_in_epoch)
 ```
 
 Uniqueness is enforced by storing a per-epoch set keyed by:
-`credit_id = SHA256("nilstore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
+`credit_id = SHA256("polystore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
 
 ---
 
@@ -1208,7 +1208,7 @@ All keys are deterministic hashes to keep store keys bounded.
 # RFC: Mode 2 On-Chain State (Slots, Generations, Repairs)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain protocol state (`nilchain/`)
+**Scope:** Chain protocol state (`polystorechain/`)
 **Depends on:** `spec.md` §6.2, §8.3–§8.4; `rfcs/rfc-blob-alignment-and-striping.md`
 **Motivation:** Appendix B #2 (Mode 2 encoding), #6 (write semantics beyond append-only; near-term constraints)
 
@@ -1244,7 +1244,7 @@ This RFC freezes a **concrete on-chain representation** for Mode 2 and a minimal
 
 ### 1.3 Slab accounting fields (naming freeze)
 For chain policy and bounds checks we freeze:
-- `size_bytes`: total logical bytes of file contents in NilFS (sum of non-tombstone file lengths)
+- `size_bytes`: total logical bytes of file contents in PolyFS (sum of non-tombstone file lengths)
 - `total_mdus`: total number of committed MDU roots in the Manifest commitment (includes metadata + witness + user MDUs)
 - `witness_mdus`: number of witness MDUs committed after MDU #0 (metadata region size)
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)
@@ -1414,8 +1414,8 @@ Add a one-time migration that:
 ## 7. Implementation Checklist (Sprint 3/4)
 
 1. Protobuf + codegen:
-   - `nilchain/proto/nilchain/nilchain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
-   - `nilchain/proto/nilchain/nilchain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
+   - `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
+   - `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
 2. Keeper logic:
    - Populate typed fields at `CreateDeal`.
    - Persist `total_mdus/witness_mdus/current_gen` at `UpdateDealContent*`.
@@ -1429,19 +1429,19 @@ Add a one-time migration that:
 
 ```
 
-```nilchain/proto/nilchain/nilchain/v1/params.proto
+```polystorechain/proto/polystorechain/polystorechain/v1/params.proto
 syntax = "proto3";
-package nilchain.nilchain.v1;
+package polystorechain.polystorechain.v1;
 
 import "amino/amino.proto";
 import "gogoproto/gogo.proto";
 import "cosmos/base/v1beta1/coin.proto";
 
-option go_package = "nilchain/x/nilchain/types";
+option go_package = "polystorechain/x/polystorechain/types";
 
 // Params defines the parameters for the module.
 message Params {
-  option (amino.name) = "nilchain/x/nilchain/Params";
+  option (amino.name) = "polystorechain/x/polystorechain/Params";
   option (gogoproto.equal) = true;
 
   uint64 base_stripe_cost = 1; // NIL per epoch
@@ -1500,7 +1500,7 @@ message Params {
 #!/usr/bin/env bash
 # Devnet Alpha multi-provider stack runner.
 # Starts:
-# - nilchaind (CometBFT + LCD + JSON-RPC)
+# - polystorechaind (CometBFT + LCD + JSON-RPC)
 # - polystore_faucet
 # - N provider daemons (polystore_gateway, provider mode) on ports 8091+
 # - 1 gateway router (polystore_gateway, router mode) on :8080
@@ -1518,18 +1518,18 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp"
 PID_DIR="$LOG_DIR/pids"
 
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data_devnet_alpha}"
+CHAIN_HOME="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/polystorechain_data_devnet_alpha}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
-GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
-DENOM="${NIL_DENOM:-stake}"
+GAS_PRICE="${POLYSTORE_GAS_PRICES:-0.001aatom}"
+DENOM="${POLYSTORE_DENOM:-stake}"
 
-NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
-NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
-NIL_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
-TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
+POLYSTORECHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
+POLYSTORE_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
+POLYSTORE_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
+TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
 
 PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
@@ -1538,7 +1538,7 @@ PROVIDER_PORT_BASE="${PROVIDER_PORT_BASE:-8091}"
 START_WEB="${START_WEB:-1}"
 
 # Shared secret between the gateway router and all providers.
-NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
+POLYSTORE_GATEWAY_SP_AUTH="${POLYSTORE_GATEWAY_SP_AUTH:-}"
 
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 
@@ -1563,7 +1563,7 @@ ensure_polystore_core() {
 ```scripts/run_devnet_alpha_multi_sp.sh (param override excerpt)
 data["app_state"]["bank"] = bank
 
-# Enable NilStore EVM precompile for MetaMask tx UX.
+# Enable PolyStore EVM precompile for MetaMask tx UX.
 evm = data.get("app_state", {}).get("evm", {})
 params = evm.get("params", {})
 pre = params.get("active_static_precompiles", []) or []
@@ -1575,18 +1575,18 @@ params["active_static_precompiles"] = pre
 evm["params"] = params
 data["app_state"]["evm"] = evm
 
-# Optional devnet overrides for nilchain params (useful for fast CI/E2E loops).
-nilchain = data.get("app_state", {}).get("nilchain", {})
-params = nilchain.get("params", {}) if isinstance(nilchain, dict) else {}
+# Optional devnet overrides for polystorechain params (useful for fast CI/E2E loops).
+polystorechain = data.get("app_state", {}).get("polystorechain", {})
+params = polystorechain.get("params", {}) if isinstance(polystorechain, dict) else {}
 overrides = {
-    "month_len_blocks": os.getenv("NIL_MONTH_LEN_BLOCKS"),
-    "epoch_len_blocks": os.getenv("NIL_EPOCH_LEN_BLOCKS"),
-    "quota_bps_per_epoch_hot": os.getenv("NIL_QUOTA_BPS_PER_EPOCH_HOT"),
-    "quota_bps_per_epoch_cold": os.getenv("NIL_QUOTA_BPS_PER_EPOCH_COLD"),
-    "quota_min_blobs": os.getenv("NIL_QUOTA_MIN_BLOBS"),
-    "quota_max_blobs": os.getenv("NIL_QUOTA_MAX_BLOBS"),
-    "credit_cap_bps": os.getenv("NIL_CREDIT_CAP_BPS"),
-    "evict_after_missed_epochs": os.getenv("NIL_EVICT_AFTER_MISSED_EPOCHS"),
+    "month_len_blocks": os.getenv("POLYSTORE_MONTH_LEN_BLOCKS"),
+    "epoch_len_blocks": os.getenv("POLYSTORE_EPOCH_LEN_BLOCKS"),
+    "quota_bps_per_epoch_hot": os.getenv("POLYSTORE_QUOTA_BPS_PER_EPOCH_HOT"),
+    "quota_bps_per_epoch_cold": os.getenv("POLYSTORE_QUOTA_BPS_PER_EPOCH_COLD"),
+    "quota_min_blobs": os.getenv("POLYSTORE_QUOTA_MIN_BLOBS"),
+    "quota_max_blobs": os.getenv("POLYSTORE_QUOTA_MAX_BLOBS"),
+    "credit_cap_bps": os.getenv("POLYSTORE_CREDIT_CAP_BPS"),
+    "evict_after_missed_epochs": os.getenv("POLYSTORE_EVICT_AFTER_MISSED_EPOCHS"),
 }
 for key, raw in overrides.items():
     if raw is None:
@@ -1601,9 +1601,9 @@ for key, raw in overrides.items():
     if val < 0:
         continue
     params[key] = str(val)
-if isinstance(nilchain, dict):
-    nilchain["params"] = params
-    data["app_state"]["nilchain"] = nilchain
+if isinstance(polystorechain, dict):
+    polystorechain["params"] = params
+    data["app_state"]["polystorechain"] = polystorechain
 
 json.dump(data, open(path, "w"), indent=1)
 PY
@@ -1611,16 +1611,16 @@ PY
 
 gen_provider_key() {
   local name="$1"
-  "$NILCHAIND_BIN" keys add "$name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
-  "$NILCHAIND_BIN" keys show "$name" -a --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" keys add "$name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
+  "$POLYSTORECHAIND_BIN" keys show "$name" -a --home "$CHAIN_HOME" --keyring-backend test
 }
 
 init_chain() {
   rm -rf "$CHAIN_HOME"
   banner "Initializing chain at $CHAIN_HOME"
-  "$NILCHAIND_BIN" init devnet-alpha --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
+  "$POLYSTORECHAIND_BIN" init devnet-alpha --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
 
-  printf '%s\n' "$FAUCET_MNEMONIC" | "$NILCHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
+  printf '%s\n' "$FAUCET_MNEMONIC" | "$POLYSTORECHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
 
 
 ```
@@ -1665,8 +1665,8 @@ set -euo pipefail
 # Requires: run_devnet_alpha_multi_sp.sh stack to be running.
 
 GATEWAY_ROUTER="http://localhost:8080"
-NILCHAIND="nilchain/nilchaind"
-CHAIN_HOME="_artifacts/nilchain_data_devnet_alpha"
+POLYSTORECHAIND="polystorechain/polystorechaind"
+CHAIN_HOME="_artifacts/polystorechain_data_devnet_alpha"
 TMP_DIR="_artifacts/e2e_multi_sp_tmp"
 mkdir -p "$TMP_DIR"
 
@@ -1680,28 +1680,28 @@ dd if=/dev/urandom of="$TMP_DIR/payload.bin" bs=1024 count=1024 2>/dev/null # 1M
 
 # 2. Identify Test Accounts (Provider1 = Owner)
 banner "Resolving Accounts"
-OWNER_ADDR=$($NILCHAIND keys show provider1 -a --home "$CHAIN_HOME" --keyring-backend test)
+OWNER_ADDR=$($POLYSTORECHAIND keys show provider1 -a --home "$CHAIN_HOME" --keyring-backend test)
 echo "Owner (Provider1): $OWNER_ADDR"
 
 # 3. Create Deal
 banner "Creating Deal"
-CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint General --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+CREATE_OUT=$($POLYSTORECHAIND tx polystorechain create-deal 1000 1000000 1000000 --service-hint General --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
 TX_HASH=$(echo "$CREATE_OUT" | jq -r '.txhash')
 echo "Create Deal Tx: $TX_HASH"
 
 banner "Waiting for Deal on Chain..."
 sleep 6
-TX_QUERY=$($NILCHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
+TX_QUERY=$($POLYSTORECHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
 DEAL_ID=$(echo "$TX_QUERY" | jq -r '
   .events? // []
-  | map(select(.type == "nilchain.nilchain.v1.EventCreateDeal" or .type == "create_deal"))
+  | map(select(.type == "polystorechain.polystorechain.v1.EventCreateDeal" or .type == "create_deal"))
   | map(.attributes // [])
   | add
   | map(select(.key == "deal_id" or .key == "id"))
   | .[0].value // empty
 ')
 if [ -z "$DEAL_ID" ]; then
-  DEAL_LIST=$($NILCHAIND query nilchain list-deals --output json)
+  DEAL_LIST=$($POLYSTORECHAIND query polystorechain list-deals --output json)
   DEAL_ID=$(echo "$DEAL_LIST" | jq -r '.deals[-1].id')
 fi
 echo "Deal ID: $DEAL_ID"
@@ -1726,13 +1726,13 @@ echo "CID: $CID"
 
 # 5. Commit Content
 banner "Committing Content"
-COMMIT_OUT=$($NILCHAIND tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+COMMIT_OUT=$($POLYSTORECHAIND tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
 echo "Commit Tx: $(echo "$COMMIT_OUT" | jq -r '.txhash')"
 sleep 6
 
 # 6. Resolve Assigned Provider
 banner "Resolving Assigned Provider"
-DEAL_INFO=$($NILCHAIND query nilchain get-deal --id "$DEAL_ID" --output json)
+DEAL_INFO=$($POLYSTORECHAIND query polystorechain get-deal --id "$DEAL_ID" --output json)
 ASSIGNED_ADDR=$(echo "$DEAL_INFO" | jq -r '.deal.providers[0]')
 echo "Assigned Provider: $ASSIGNED_ADDR"
 
@@ -1743,7 +1743,7 @@ else
     echo "Confirmed: Assigned provider != Owner. Testing cross-account signing."
 fi
 
-PROVIDER_INFO=$($NILCHAIND query nilchain get-provider --address "$ASSIGNED_ADDR" --output json)
+PROVIDER_INFO=$($POLYSTORECHAIND query polystorechain get-provider --address "$ASSIGNED_ADDR" --output json)
 ENDPOINT=$(echo "$PROVIDER_INFO" | jq -r '.provider.endpoints[0]')
 # Extract port from /ip4/127.0.0.1/tcp/PORT/http
 PORT=$(echo "$ENDPOINT" | awk -F/ '{print $5}')
@@ -1782,7 +1782,7 @@ echo "✅ TEST PASSED: Retrieval proof submitted successfully."
 
 ```scripts/run_local_stack.sh (usage excerpt)
 #!/usr/bin/env bash
-# Spin up a local NilChain stack: chain (CometBFT+EVM), faucet, and web UI.
+# Spin up a local PolyStore Chain stack: chain (CometBFT+EVM), faucet, and web UI.
 # Usage:
 #   ./scripts/run_local_stack.sh start   # default
 #   ./scripts/run_local_stack.sh stop    # kill background processes started by this script
@@ -1791,48 +1791,48 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/localnet"
 PID_DIR="$LOG_DIR/pids"
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data}"
+CHAIN_HOME="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/polystorechain_data}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
-GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
-DENOM="${NIL_DENOM:-stake}"
-export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
+GAS_PRICE="${POLYSTORE_GAS_PRICES:-0.001aatom}"
+DENOM="${POLYSTORE_DENOM:-stake}"
+export POLYSTORE_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
-NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
+POLYSTORECHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
 GATEWAY_BIN="$LOG_DIR/polystore_gateway"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
 BRIDGE_STATUS="not deployed"
 # Default: attempt to deploy the bridge when the stack starts (set to 0 to skip).
-NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
-NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
-export NIL_EVM_DEV_PRIVKEY
+POLYSTORE_DEPLOY_BRIDGE="${POLYSTORE_DEPLOY_BRIDGE:-1}"
+POLYSTORE_EVM_DEV_PRIVKEY="${POLYSTORE_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
+export POLYSTORE_EVM_DEV_PRIVKEY
 # Shared auth between router and provider for /sp/session-proof forwarding.
-NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
+POLYSTORE_GATEWAY_SP_AUTH="${POLYSTORE_GATEWAY_SP_AUTH:-}"
 # Enable the EVM mempool by default so JSON-RPC / MetaMask works out of the box.
-NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
-export NIL_DISABLE_EVM_MEMPOOL
+POLYSTORE_DISABLE_EVM_MEMPOOL="${POLYSTORE_DISABLE_EVM_MEMPOOL:-0}"
+export POLYSTORE_DISABLE_EVM_MEMPOOL
 # Auto-fund the default demo EVM account by calling the faucet once on startup.
-NIL_AUTO_FAUCET_EVM="${NIL_AUTO_FAUCET_EVM:-1}"
-NIL_AUTO_FAUCET_EVM_ADDR="${NIL_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
+POLYSTORE_AUTO_FAUCET_EVM="${POLYSTORE_AUTO_FAUCET_EVM:-1}"
+POLYSTORE_AUTO_FAUCET_EVM_ADDR="${POLYSTORE_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
-if [ -z "$NIL_GATEWAY_SP_AUTH" ]; then
+if [ -z "$POLYSTORE_GATEWAY_SP_AUTH" ]; then
   if command -v openssl >/dev/null 2>&1; then
-    NIL_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
+    POLYSTORE_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
   else
-    NIL_GATEWAY_SP_AUTH="$(date +%s%N)"
+    POLYSTORE_GATEWAY_SP_AUTH="$(date +%s%N)"
   fi
 fi
-export NIL_GATEWAY_SP_AUTH
-echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
+export POLYSTORE_GATEWAY_SP_AUTH
+echo "$POLYSTORE_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
 
@@ -1846,7 +1846,7 @@ ensure_polystore_core() {
 
 ```scripts/e2e_lifecycle.sh (header excerpt)
 #!/usr/bin/env bash
-# End-to-end lifecycle test for NilStore:
+# End-to-end lifecycle test for PolyStore:
 # 1. Upload a file via Gateway -> get Manifest Root & Size.
 # 2. Create a Deal via Gateway (EVM signed) -> get Deal ID.
 # 3. Commit Content via Gateway (EVM signed) -> update Deal with Manifest Root.
@@ -1961,14 +1961,14 @@ print(nil_addr)
 PY
 )
 EVM_ADDRESS=$(echo "$ADDR_JSON" | sed -n '1p')
-NIL_ADDRESS=$(echo "$ADDR_JSON" | sed -n '2p')
+POLYSTORE_ADDRESS=$(echo "$ADDR_JSON" | sed -n '2p')
 echo "    EVM: $EVM_ADDRESS"
-echo "    NIL: $NIL_ADDRESS"
+echo "    NIL: $POLYSTORE_ADDRESS"
 
-fund_account "$NIL_ADDRESS" "$FAUCET_BASE"
+fund_account "$POLYSTORE_ADDRESS" "$FAUCET_BASE"
 sleep 5 # Give chain time to process funding transaction
-echo "==> Verifying balance for $NIL_ADDRESS..."
-BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$NIL_ADDRESS" || echo "{}")
+echo "==> Verifying balance for $POLYSTORE_ADDRESS..."
+BAL_JSON=$(timeout 10s curl -sS "$LCD_BASE/cosmos/bank/v1beta1/balances/$POLYSTORE_ADDRESS" || echo "{}")
 echo "$BAL_JSON" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
 
 # 2. Create Deal (EVM)

@@ -9,15 +9,15 @@ This repository now uses **PolyStore** as the canonical product and public-facin
 - Public testnet environment prefix: `POLYSTORE_TESTNET_*`
 - GitHub repo path: `https://github.com/Polynomialstore/polystore`
 
-`NILSTORE_TESTNET_*` is no longer supported in the public testnet scripts or website bootstrap flow. `POLYSTORE_TESTNET_*` is the only canonical public prefix.
+`POLYSTORE_TESTNET_*` is no longer supported in the public testnet scripts or website bootstrap flow. `POLYSTORE_TESTNET_*` is the only canonical public prefix.
 
 ## Frozen technical surfaces
 
 The following technical identifiers remain intentionally unchanged for now:
 
-- `nilchain`
-- `NilFS`
-- `X-Nil-*` protocol headers
+- `polystorechain`
+- `PolyFS`
+- `X-PolyStore-*` protocol headers
 - `nil_*`/`nil-*` module, package, service, and implementation-surface names such as `polystore_gateway`, `polystore_core`, and `polystore_cli`
 - existing generated or protocol-bound identifiers that still encode `nil`
 

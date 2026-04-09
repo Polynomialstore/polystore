@@ -5,13 +5,13 @@ set -euo pipefail
 # Uses a local chain harness and verifies the session is created.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CHAIN_DIR="$ROOT_DIR/nilchain"
+CHAIN_DIR="$ROOT_DIR/polystorechain"
 CORE_DIR="$ROOT_DIR/polystore_core"
-HOME_DIR="$ROOT_DIR/.nilchain_open_session"
-CHAIN_ID="nilchain"
+HOME_DIR="$ROOT_DIR/.polystorechain_open_session"
+CHAIN_ID="polystorechain"
 LOG_FILE="$ROOT_DIR/e2e_open_retrieval_session.log"
-TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
-BINARY="$ROOT_DIR/nilchaind"
+TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
+BINARY="$ROOT_DIR/polystorechaind"
 LCD_BASE="http://127.0.0.1:1317"
 RPC_STATUS="http://127.0.0.1:26657/status"
 
@@ -55,7 +55,7 @@ wait_for_lcd() {
   local delay="${2:-1}"
   local i
   for i in $(seq 1 "$attempts"); do
-    if timeout 10s curl -s --max-time 2 "$LCD_BASE/nilchain/nilchain/v1/params" >/dev/null 2>&1; then
+    if timeout 10s curl -s --max-time 2 "$LCD_BASE/polystorechain/polystorechain/v1/params" >/dev/null 2>&1; then
       return 0
     fi
     sleep "$delay"
@@ -101,14 +101,14 @@ popd >/dev/null
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$CORE_DIR/target/release"
 export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}:$CORE_DIR/target/release"
 
-banner "Building nilchaind"
+banner "Building polystorechaind"
 pushd "$CHAIN_DIR" >/dev/null
 export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
-go build -o "$BINARY" ./cmd/nilchaind
+go build -o "$BINARY" ./cmd/polystorechaind
 popd >/dev/null
 
 banner "Resetting chain"
-pkill -f nilchaind >/dev/null 2>&1 || true
+pkill -f polystorechaind >/dev/null 2>&1 || true
 rm -rf "$HOME_DIR"
 "$BINARY" init opensession --chain-id "$CHAIN_ID" --home "$HOME_DIR" >/dev/null 2>&1
 "$BINARY" config set client chain-id "$CHAIN_ID" --home "$HOME_DIR"
@@ -175,7 +175,7 @@ banner "Registering provider"
 for idx in "${!PROVIDER_NAMES[@]}"; do
   name="${PROVIDER_NAMES[$idx]}"
   port=$((8082 + idx))
-  run_yes "$BINARY" tx nilchain register-provider General 1000000000 \
+  run_yes "$BINARY" tx polystorechain register-provider General 1000000000 \
     --from "$name" \
     --endpoint "/ip4/127.0.0.1/tcp/${port}/http" \
     --chain-id "$CHAIN_ID" \
@@ -185,7 +185,7 @@ done
 sleep 2
 
 banner "Creating deal"
-CREATE_RES=$(run_yes "$BINARY" tx nilchain create-deal 50 1000000 5000 --service-hint "General" \
+CREATE_RES=$(run_yes "$BINARY" tx polystorechain create-deal 50 1000000 5000 --service-hint "General" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
 CREATE_TX=$(wait_for_tx "$CREATE_HASH" 30 1) || { echo "CreateDeal tx not found"; exit 1; }
@@ -203,7 +203,7 @@ PY
 SIZE_BYTES=131072
 
 banner "Updating deal content"
-run_yes "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" --total-mdus 3 --witness-mdus 1 \
+run_yes "$BINARY" tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" --total-mdus 3 --witness-mdus 1 \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 sleep 2
 
@@ -217,7 +217,7 @@ PY
 
 banner "Opening retrieval session (CLI)"
 # Slot-aware Mode 2: use the provider assigned to slot 0 for blob 0.
-DEAL_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")
+DEAL_JSON=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID")
 PROVIDER_ADDR=$(echo "$DEAL_JSON" | jq -r '.deal.mode2_slots[0].provider // .deal.providers[0] // empty')
 if [ -z "$PROVIDER_ADDR" ] || [ "$PROVIDER_ADDR" = "null" ]; then
   echo "Failed to resolve assigned provider for deal"
@@ -225,7 +225,7 @@ if [ -z "$PROVIDER_ADDR" ] || [ "$PROVIDER_ADDR" = "null" ]; then
   exit 1
 fi
 
-run_yes "$BINARY" tx nilchain open-retrieval-session \
+run_yes "$BINARY" tx polystorechain open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER_ADDR" \
   --manifest-root "$MANIFEST_ROOT" \
@@ -238,7 +238,7 @@ run_yes "$BINARY" tx nilchain open-retrieval-session \
 
 SESSION_ID=""
 for i in {1..30}; do
-  SESSION_JSON=$(timeout 10s curl -s "$LCD_BASE/nilchain/nilchain/v1/retrieval-sessions/by-owner/$ALICE_ADDR")
+  SESSION_JSON=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/retrieval-sessions/by-owner/$ALICE_ADDR")
   SESSION_ID=$(echo "$SESSION_JSON" | jq -r --arg deal "$DEAL_ID" '.sessions[]? | select((.deal_id | tostring) == $deal) | .session_id' | head -n 1)
   if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ]; then
     break

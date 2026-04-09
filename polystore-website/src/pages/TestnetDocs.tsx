@@ -5,7 +5,7 @@ import { FileSharder } from "../components/FileSharder";
 import { FaucetWidget } from "../components/FaucetWidget";
 import { FaucetAuthTokenInput } from "../components/FaucetAuthTokenInput";
 import { appConfig } from "../config";
-import { ethToNil } from "../lib/address";
+import { ethToPolystoreAddress } from "../lib/address";
 import { lcdFetchDeals } from "../api/lcdClient";
 import type { LcdDeal as Deal } from "../domain/lcd";
 
@@ -17,9 +17,9 @@ export const TestnetDocs = () => {
 
   useEffect(() => {
     if (address) {
-      const cosmosAddress = ethToNil(address);
+      const polystoreAddress = ethToPolystoreAddress(address);
       lcdFetchDeals(appConfig.lcdBase).then((all) => {
-        const filtered = all.filter((d) => d.owner === cosmosAddress);
+        const filtered = all.filter((d) => d.owner === polystoreAddress);
         setDeals(filtered);
       });
     } else {
@@ -61,19 +61,19 @@ export const TestnetDocs = () => {
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Clone Repository</p>
                 <p>$ git clone https://github.com/Polynomialstore/polystore.git</p>
-                <p>$ cd polystore/nilchain</p>
+                <p>$ cd polystore/polystorechain</p>
                 <br/>
                 <p className="text-accent"># Build & Install</p>
                 <p>$ make install</p>
                 <br/>
                 <p className="text-accent"># Initialize & Start</p>
-                <p>$ nilchaind init my-node --chain-id test-1</p>
-                <p>$ nilchaind genesis add-genesis-account $WALLET 100000000000stake,1000000000000000000000aatom --home ~/.nilchain --keyring-backend test</p>
-                <p>$ nilchaind genesis gentx $WALLET 50000000000stake --chain-id test-1 --keyring-backend test</p>
-                <p>$ nilchaind genesis collect-gentxs</p>
+                <p>$ polystorechaind init my-node --chain-id test-1</p>
+                <p>$ polystorechaind genesis add-genesis-account $WALLET 100000000000stake,1000000000000000000000aatom --home ~/.polystorechain --keyring-backend test</p>
+                <p>$ polystorechaind genesis gentx $WALLET 50000000000stake --chain-id test-1 --keyring-backend test</p>
+                <p>$ polystorechaind genesis collect-gentxs</p>
                 <p className="text-primary"># Enable EVM/JSON-RPC in app.toml</p>
-                <p>$ sed -i '' 's/enable = false/enable = true/' ~/.nilchain/config/app.toml</p>
-                <p>$ nilchaind start --minimum-gas-prices 0.001aatom</p>
+                <p>$ sed -i '' 's/enable = false/enable = true/' ~/.polystorechain/config/app.toml</p>
+                <p>$ polystorechaind start --minimum-gas-prices 0.001aatom</p>
               </div>
             </div>
             <div className="bg-card p-6 rounded-none border border-border hover:border-primary/50 transition-all">
@@ -96,7 +96,7 @@ export const TestnetDocs = () => {
               <p className="text-sm text-muted-foreground mb-2">To enable future bridge features, deploy the smart contracts to the local EVM.</p>
               <div className="mt-2 font-mono text-sm text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Requires Foundry (forge)</p>
-                <p>$ cd polystore/nil_bridge</p>
+                <p>$ cd polystore/polystore_bridge</p>
                 <p>$ forge script script/Deploy.s.sol --rpc-url {appConfig.evmRpc} --broadcast --private-key &lt;YOUR_PRIVATE_KEY&gt;</p>
               </div>
             </div>
@@ -137,7 +137,7 @@ export const TestnetDocs = () => {
           </div>
           <div className="bg-secondary/10 rounded-none p-4 border border-border/50 font-mono text-sm text-muted-foreground space-y-2">
             <p>$ # (optional) in polystore_faucet/</p>
-            <p>$ NIL_CHAIN_ID=test-1 NIL_HOME=$HOME/.nilchain NIL_DENOM=stake NIL_AMOUNT=1000000stake go run main.go</p>
+            <p>$ POLYSTORE_CHAIN_ID=test-1 POLYSTORE_HOME=$HOME/.polystorechain POLYSTORE_DENOM=stake POLYSTORE_AMOUNT=1000000stake go run main.go</p>
             <p># Open http://localhost:5173/#/dashboard and click "Submit Deal"</p>
           </div>
         </section>
@@ -148,7 +148,7 @@ export const TestnetDocs = () => {
             <Blocks className="w-6 h-6 text-primary" /> EVM Integration (MetaMask)
           </h2>
           <p className="text-muted-foreground">
-            NilChain is now fully EVM compatible. You can connect standard Ethereum tools directly to the network.
+            PolyStore Chain is now fully EVM compatible. You can connect standard Ethereum tools directly to the network.
           </p>
           
           <div className="glass-panel industrial-border p-6">
@@ -156,7 +156,7 @@ export const TestnetDocs = () => {
             <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                     <span className="text-muted-foreground block">Network Name</span>
-                    <span className="font-mono-data text-foreground">NilChain Local</span>
+                    <span className="font-mono-data text-foreground">PolyStore Chain Local</span>
                 </div>
                 <div>
                     <span className="text-muted-foreground block">RPC URL</span>
@@ -196,7 +196,7 @@ export const TestnetDocs = () => {
                     Alternatively, for CLI users:
                 </p>
                 <div className="bg-secondary/20 p-3 rounded-none font-mono text-xs">
-                    $ ./bin/nilchaind keys add my-wallet
+                    $ ./bin/polystorechaind keys add my-wallet
                 </div>
             </div>
             <div className="space-y-4">
@@ -283,7 +283,7 @@ export const TestnetDocs = () => {
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># Run provider-mode gateway on the SP machine</p>
                 <p>$ cd polystore_gateway</p>
-                <p>$ NIL_LISTEN_ADDR=:8082 NIL_GATEWAY_ROUTER=0 go run .</p>
+                <p>$ POLYSTORE_LISTEN_ADDR=:8082 POLYSTORE_GATEWAY_ROUTER=0 go run .</p>
               </div>
             </div>
 
@@ -295,7 +295,7 @@ export const TestnetDocs = () => {
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p>$ caddy reverse-proxy --from sp.example.com --to localhost:8082</p>
                 <p className="text-accent"># Print the multiaddr to register</p>
-                <p>$ NIL_PUBLIC_HTTP_HOST=sp.example.com NIL_PUBLIC_HTTP_SCHEME=https NIL_PUBLIC_HTTP_PORT=443 \\</p>
+                <p>$ POLYSTORE_PUBLIC_HTTP_HOST=sp.example.com POLYSTORE_PUBLIC_HTTP_SCHEME=https POLYSTORE_PUBLIC_HTTP_PORT=443 \\</p>
                 <p>&nbsp;&nbsp;go run . --print-endpoints</p>
               </div>
             </div>
@@ -308,12 +308,12 @@ export const TestnetDocs = () => {
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p className="text-accent"># One-time setup (Cloudflare account + DNS)</p>
                 <p>$ cloudflared tunnel login</p>
-                <p>$ cloudflared tunnel create nilstore-sp</p>
-                <p>$ cloudflared tunnel route dns nilstore-sp sp.example.com</p>
+                <p>$ cloudflared tunnel create polystore-sp</p>
+                <p>$ cloudflared tunnel route dns polystore-sp sp.example.com</p>
                 <p className="text-accent"># Run the tunnel (ingress to the local gateway)</p>
-                <p>$ cloudflared tunnel run nilstore-sp</p>
+                <p>$ cloudflared tunnel run polystore-sp</p>
                 <p className="text-accent"># Print the multiaddr to register</p>
-                <p>$ NIL_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints</p>
+                <p>$ POLYSTORE_CLOUDFLARE_TUNNEL_HOSTNAME=sp.example.com go run . --print-endpoints</p>
               </div>
             </div>
 
@@ -323,7 +323,7 @@ export const TestnetDocs = () => {
                 Copy the printed <code className="px-1 py-0.5 rounded-none bg-secondary/60">--endpoint</code> line(s) and register the provider:
               </p>
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
-                <p>$ nilchaind tx nilchain register-provider General 1099511627776 \\</p>
+                <p>$ polystorechaind tx polystorechain register-provider General 1099511627776 \\</p>
                 <p>&nbsp;&nbsp;--from &lt;your-key&gt; --chain-id {appConfig.cosmosChainId} --yes \\</p>
                 <p>&nbsp;&nbsp;--endpoint &quot;/dns4/sp.example.com/tcp/443/https&quot;</p>
               </div>

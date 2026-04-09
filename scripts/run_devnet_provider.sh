@@ -43,10 +43,10 @@ Examples:
 
 Notes:
   - pair/link/register submit on-chain tx and require provider aatom gas balance.
-  - By default, pair/link/register will auto-request faucet funds when NIL_PROVIDER_AUTO_FAUCET=1
-    and NIL_FAUCET_URL (or POLYSTORE_TESTNET_FAUCET_URL) is configured.
+  - By default, pair/link/register will auto-request faucet funds when POLYSTORE_PROVIDER_AUTO_FAUCET=1
+    and POLYSTORE_FAUCET_URL (or POLYSTORE_TESTNET_FAUCET_URL) is configured.
   - start/register/bootstrap will not auto-create provider keys; run init or pair first.
-  - EXPECTED_PROVIDER_ADDRESS (or NIL_EXPECTED_PROVIDER_ADDRESS) can enforce identity safety.
+  - EXPECTED_PROVIDER_ADDRESS (or POLYSTORE_EXPECTED_PROVIDER_ADDRESS) can enforce identity safety.
 USAGE
 }
 
@@ -63,36 +63,36 @@ if [ -z "$PROVIDER_KEY" ]; then
   exit 1
 fi
 
-OPERATOR_ADDRESS_RAW="${OPERATOR_ADDRESS:-${NIL_OPERATOR_ADDRESS:-}}"
+OPERATOR_ADDRESS_RAW="${OPERATOR_ADDRESS:-${POLYSTORE_OPERATOR_ADDRESS:-}}"
 NETWORK_PROFILE="${POLYSTORE_NETWORK_PROFILE:-polystore-public-testnet}"
-CHAIN_ID="${CHAIN_ID:-${NIL_CHAIN_ID:-${POLYSTORE_TESTNET_CHAIN_ID:-20260211}}}"
-LCD_BASE="${HUB_LCD:-${NIL_LCD_BASE:-${POLYSTORE_TESTNET_LCD_BASE:-https://lcd.polynomialstore.com}}}"
-NODE_ADDR="${HUB_NODE:-${NIL_NODE:-${POLYSTORE_TESTNET_NODE:-https://rpc.polynomialstore.com}}}"
-GAS_PRICES="${NIL_GAS_PRICES:-${POLYSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
-FAUCET_URL="${NIL_FAUCET_URL:-${POLYSTORE_TESTNET_FAUCET_URL:-}}"
-FAUCET_AUTH_TOKEN="${NIL_FAUCET_AUTH_TOKEN:-${POLYSTORE_TESTNET_FAUCET_AUTH_TOKEN:-}}"
-PROVIDER_AUTO_FAUCET="${NIL_PROVIDER_AUTO_FAUCET:-1}"
-PROVIDER_FUNDING_WAIT_SECS="${NIL_PROVIDER_FUNDING_WAIT_SECS:-45}"
-PROVIDER_FUNDING_POLL_SECS="${NIL_PROVIDER_FUNDING_POLL_SECS:-2}"
+CHAIN_ID="${CHAIN_ID:-${POLYSTORE_CHAIN_ID:-${POLYSTORE_TESTNET_CHAIN_ID:-20260211}}}"
+LCD_BASE="${HUB_LCD:-${POLYSTORE_LCD_BASE:-${POLYSTORE_TESTNET_LCD_BASE:-https://lcd.polynomialstore.com}}}"
+NODE_ADDR="${HUB_NODE:-${POLYSTORE_NODE:-${POLYSTORE_TESTNET_NODE:-https://rpc.polynomialstore.com}}}"
+GAS_PRICES="${POLYSTORE_GAS_PRICES:-${POLYSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
+FAUCET_URL="${POLYSTORE_FAUCET_URL:-${POLYSTORE_TESTNET_FAUCET_URL:-}}"
+FAUCET_AUTH_TOKEN="${POLYSTORE_FAUCET_AUTH_TOKEN:-${POLYSTORE_TESTNET_FAUCET_AUTH_TOKEN:-}}"
+PROVIDER_AUTO_FAUCET="${POLYSTORE_PROVIDER_AUTO_FAUCET:-1}"
+PROVIDER_FUNDING_WAIT_SECS="${POLYSTORE_PROVIDER_FUNDING_WAIT_SECS:-45}"
+PROVIDER_FUNDING_POLL_SECS="${POLYSTORE_PROVIDER_FUNDING_POLL_SECS:-2}"
 
-NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/nilchain/nilchaind}"
-NIL_CLI_BIN="${NIL_CLI_BIN:-$ROOT_DIR/polystore_cli/target/release/polystore_cli}"
-TRUSTED_SETUP="${NIL_TRUSTED_SETUP:-$ROOT_DIR/nilchain/trusted_setup.txt}"
+POLYSTORECHAIND_BIN="${POLYSTORECHAIND_BIN:-$ROOT_DIR/polystorechain/polystorechaind}"
+POLYSTORE_CLI_BIN="${POLYSTORE_CLI_BIN:-$ROOT_DIR/polystore_cli/target/release/polystore_cli}"
+TRUSTED_SETUP="${POLYSTORE_TRUSTED_SETUP:-$ROOT_DIR/polystorechain/trusted_setup.txt}"
 
-PROVIDER_LISTEN="${PROVIDER_LISTEN:-${NIL_LISTEN_ADDR:-:8091}}"
+PROVIDER_LISTEN="${PROVIDER_LISTEN:-${POLYSTORE_LISTEN_ADDR:-:8091}}"
 PROVIDER_CAPABILITIES="${PROVIDER_CAPABILITIES:-General}"
 PROVIDER_TOTAL_STORAGE="${PROVIDER_TOTAL_STORAGE:-1099511627776}" # 1 TiB default
 PROVIDER_ENDPOINTS_RAW="${PROVIDER_ENDPOINTS:-${PROVIDER_ENDPOINT:-}}"
 BOOTSTRAP_ALLOW_PARTIAL="${BOOTSTRAP_ALLOW_PARTIAL:-0}"
-EXPECTED_PROVIDER_ADDRESS_RAW="${EXPECTED_PROVIDER_ADDRESS:-${NIL_EXPECTED_PROVIDER_ADDRESS:-}}"
+EXPECTED_PROVIDER_ADDRESS_RAW="${EXPECTED_PROVIDER_ADDRESS:-${POLYSTORE_EXPECTED_PROVIDER_ADDRESS:-}}"
 
-HOME_DIR="${NIL_HOME:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/nilchain_home}"
-UPLOAD_DIR="${NIL_UPLOAD_DIR:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/uploads}"
+HOME_DIR="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/polystorechain_home}"
+UPLOAD_DIR="${POLYSTORE_UPLOAD_DIR:-$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY/uploads}"
 LOG_DIR="$ROOT_DIR/_artifacts/devnet_provider/$PROVIDER_KEY"
 PID_DIR="$LOG_DIR/pids"
 
 GO_BIN="${GO_BIN:-$(command -v go)}"
-NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-}"
+POLYSTORE_CORE_LIB_DIR="${POLYSTORE_CORE_LIB_DIR:-}"
 PROVIDER_KEY_CREATED=0
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -122,7 +122,7 @@ amount_is_positive() {
   return 0
 }
 
-eth_to_nil_bech32() {
+eth_to_polystore_bech32() {
   local eth_addr="$1"
   python3 - "$eth_addr" <<'PY'
 import sys
@@ -199,7 +199,7 @@ normalize_operator_address() {
     if ! have_cmd python3; then
       return 1
     fi
-    eth_to_nil_bech32 "$raw" 2>/dev/null
+    eth_to_polystore_bech32 "$raw" 2>/dev/null
     return $?
   fi
   return 1
@@ -296,8 +296,8 @@ provider_public_base_url() {
 find_polystore_core_lib_dir() {
   local candidate
   local candidates=(
-    "$NIL_CORE_LIB_DIR"
-    "$ROOT_DIR/nilchain/lib"
+    "$POLYSTORE_CORE_LIB_DIR"
+    "$ROOT_DIR/polystorechain/lib"
     "$ROOT_DIR/polystore_core/target/release"
     "$ROOT_DIR/polystore_gateway_gui/src-tauri/bin"
   )
@@ -341,19 +341,19 @@ ensure_polystore_core_runtime() {
   fi
 }
 
-ensure_nilchaind() {
-  if [ -x "$NILCHAIND_BIN" ]; then
+ensure_polystorechaind() {
+  if [ -x "$POLYSTORECHAIND_BIN" ]; then
     return 0
   fi
   ensure_polystore_core_runtime
   local build_goflags="${GOFLAGS:-}"
   build_goflags="${build_goflags} -mod=mod"
-  echo "==> Building nilchaind..."
-  (cd "$ROOT_DIR/nilchain" && GOFLAGS="$build_goflags" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/nilchaind)
+  echo "==> Building polystorechaind..."
+  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="$build_goflags" "$GO_BIN" build -o "$POLYSTORECHAIND_BIN" ./cmd/polystorechaind)
 }
 
 ensure_polystore_cli() {
-  if [ -x "$NIL_CLI_BIN" ]; then
+  if [ -x "$POLYSTORE_CLI_BIN" ]; then
     return 0
   fi
   echo "==> Building polystore_cli..."
@@ -361,7 +361,7 @@ ensure_polystore_cli() {
 }
 
 provider_addr() {
-  "$NILCHAIND_BIN" keys show "$PROVIDER_KEY" -a --home "$HOME_DIR" --keyring-backend test 2>/dev/null || true
+  "$POLYSTORECHAIND_BIN" keys show "$PROVIDER_KEY" -a --home "$HOME_DIR" --keyring-backend test 2>/dev/null || true
 }
 
 provider_key_exists() {
@@ -372,7 +372,7 @@ provider_key_exists() {
 
 require_existing_provider_key() {
   local action_label="${1:-this action}"
-  ensure_nilchaind
+  ensure_polystorechaind
   if provider_key_exists; then
     return 0
   fi
@@ -408,7 +408,7 @@ assert_expected_provider_address() {
   if [ "$actual" != "$expected" ]; then
     echo "ERROR: provider key '$PROVIDER_KEY' resolves to $actual, but EXPECTED_PROVIDER_ADDRESS is $expected." >&2
     echo "Refusing to continue to protect against wrong-provider bootstrap." >&2
-    echo "Fix by selecting the correct PROVIDER_KEY or NIL_HOME for the approved provider identity." >&2
+    echo "Fix by selecting the correct PROVIDER_KEY or POLYSTORE_HOME for the approved provider identity." >&2
     return 1
   fi
   return 0
@@ -446,7 +446,7 @@ provider_listen_port() {
 }
 
 p2p_listen_ports() {
-  local raw="${NIL_P2P_LISTEN_ADDRS:-/ip4/0.0.0.0/tcp/9100/ws}"
+  local raw="${POLYSTORE_P2P_LISTEN_ADDRS:-/ip4/0.0.0.0/tcp/9100/ws}"
   local entries=()
   local ports=()
   local seen=" "
@@ -544,7 +544,7 @@ provider_registered() {
     return 1
   fi
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/providers/$addr" 2>/dev/null || true)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/providers/$addr" 2>/dev/null || true)"
   [ "$code" = "200" ]
 }
 
@@ -554,7 +554,7 @@ provider_json() {
   if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
   fi
-  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/providers/$addr" 2>/dev/null
+  curl -fsS --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/providers/$addr" 2>/dev/null
 }
 
 provider_aatom_amount() {
@@ -614,7 +614,7 @@ request_provider_faucet_funds() {
     if [ -n "$FAUCET_AUTH_TOKEN" ]; then
       faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" \
         -H "Content-Type: application/json" \
-        -H "X-Nil-Faucet-Auth: $FAUCET_AUTH_TOKEN" \
+        -H "X-PolyStore-Faucet-Auth: $FAUCET_AUTH_TOKEN" \
         --data "$payload" 2>/dev/null || true)"
     else
       faucet_resp="$(curl -sS -w $'\n%{http_code}' -X POST "$FAUCET_URL" \
@@ -676,7 +676,7 @@ print_provider_funding_help() {
   if [ -n "$FAUCET_URL" ]; then
     if [ -n "$FAUCET_AUTH_TOKEN" ]; then
       echo "Faucet request:" >&2
-      echo "  curl -sS -X POST '$FAUCET_URL' -H 'Content-Type: application/json' -H 'X-Nil-Faucet-Auth: $FAUCET_AUTH_TOKEN' --data '{\"address\":\"$addr\"}'" >&2
+      echo "  curl -sS -X POST '$FAUCET_URL' -H 'Content-Type: application/json' -H 'X-PolyStore-Faucet-Auth: $FAUCET_AUTH_TOKEN' --data '{\"address\":\"$addr\"}'" >&2
     else
       echo "Faucet request:" >&2
       echo "  curl -sS -X POST '$FAUCET_URL' -H 'Content-Type: application/json' --data '{\"address\":\"$addr\"}'" >&2
@@ -685,7 +685,7 @@ print_provider_funding_help() {
   fi
 
   echo "Manual transfer from any funded key:" >&2
-  echo "  $NILCHAIND_BIN tx bank send <funded-key-or-address> $addr 1000000aatom --from <funded-key-or-address> --chain-id '$CHAIN_ID' --node '$NODE_ADDR' --home '$HOME_DIR' --keyring-backend test --gas auto --gas-adjustment 1.6 --gas-prices '$GAS_PRICES' --yes" >&2
+  echo "  $POLYSTORECHAIND_BIN tx bank send <funded-key-or-address> $addr 1000000aatom --from <funded-key-or-address> --chain-id '$CHAIN_ID' --node '$NODE_ADDR' --home '$HOME_DIR' --keyring-backend test --gas auto --gas-adjustment 1.6 --gas-prices '$GAS_PRICES' --yes" >&2
   if [ -n "$operator" ]; then
     echo >&2
     echo "Configured operator wallet for this run: $operator" >&2
@@ -726,7 +726,7 @@ provider_paired() {
     return 1
   fi
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/$addr" 2>/dev/null || true)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/provider-pairings/$addr" 2>/dev/null || true)"
   [ "$code" = "200" ]
 }
 
@@ -736,7 +736,7 @@ provider_pairing_json() {
   if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
   fi
-  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/$addr" 2>/dev/null
+  curl -fsS --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/provider-pairings/$addr" 2>/dev/null
 }
 
 pending_link_exists() {
@@ -746,7 +746,7 @@ pending_link_exists() {
     return 1
   fi
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$addr" 2>/dev/null || true)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/provider-pairings/pending/$addr" 2>/dev/null || true)"
   [ "$code" = "200" ]
 }
 
@@ -756,7 +756,7 @@ pending_link_json() {
   if [ -z "$addr" ] || [ -z "$LCD_BASE" ] || ! have_cmd curl; then
     return 1
   fi
-  curl -fsS --max-time 5 "$LCD_BASE/nilchain/nilchain/v1/provider-pairings/pending/$addr" 2>/dev/null
+  curl -fsS --max-time 5 "$LCD_BASE/polystorechain/polystorechain/v1/provider-pairings/pending/$addr" 2>/dev/null
 }
 
 json_string_field() {
@@ -930,8 +930,8 @@ print_config() {
   "nil_home": "$(json_escape "$HOME_DIR")",
   "nil_upload_dir": "$(json_escape "$UPLOAD_DIR")",
   "trusted_setup": "$(json_escape "$TRUSTED_SETUP")",
-  "nilchaind_bin": "$(json_escape "$NILCHAIND_BIN")",
-  "polystore_cli_bin": "$(json_escape "$NIL_CLI_BIN")",
+  "polystorechaind_bin": "$(json_escape "$POLYSTORECHAIND_BIN")",
+  "polystore_cli_bin": "$(json_escape "$POLYSTORE_CLI_BIN")",
   "go_bin": "$(json_escape "$GO_BIN")",
   "pid_file": "$(json_escape "$pid_file")",
   "pid": "$(json_escape "$pid")",
@@ -946,7 +946,7 @@ print_config() {
   "provider_registered": $(provider_registered && printf 'true' || printf 'false'),
   "provider_paired": $(provider_paired && printf 'true' || printf 'false'),
   "pending_link_open": $(pending_link_exists && printf 'true' || printf 'false'),
-  "sp_auth_present": $([ -n "${NIL_GATEWAY_SP_AUTH:-}" ] && printf 'true' || printf 'false')
+  "sp_auth_present": $([ -n "${POLYSTORE_GATEWAY_SP_AUTH:-}" ] && printf 'true' || printf 'false')
 }
 EOF
 }
@@ -973,16 +973,16 @@ doctor_provider() {
     failures=$((failures + 1))
   fi
 
-  if [ -x "$NILCHAIND_BIN" ] || [ -f "$NILCHAIND_BIN" ]; then
-    echo "OK: nilchaind binary present at $NILCHAIND_BIN"
+  if [ -x "$POLYSTORECHAIND_BIN" ] || [ -f "$POLYSTORECHAIND_BIN" ]; then
+    echo "OK: polystorechaind binary present at $POLYSTORECHAIND_BIN"
   else
-    echo "WARN: nilchaind binary missing at $NILCHAIND_BIN"
+    echo "WARN: polystorechaind binary missing at $POLYSTORECHAIND_BIN"
   fi
 
-  if [ -x "$NIL_CLI_BIN" ] || [ -f "$NIL_CLI_BIN" ]; then
-    echo "OK: polystore_cli binary present at $NIL_CLI_BIN"
+  if [ -x "$POLYSTORE_CLI_BIN" ] || [ -f "$POLYSTORE_CLI_BIN" ]; then
+    echo "OK: polystore_cli binary present at $POLYSTORE_CLI_BIN"
   else
-    echo "WARN: polystore_cli binary missing at $NIL_CLI_BIN"
+    echo "WARN: polystore_cli binary missing at $POLYSTORE_CLI_BIN"
   fi
 
   if [ -f "$TRUSTED_SETUP" ]; then
@@ -1106,11 +1106,11 @@ verify_provider() {
 }
 
 ensure_provider_key() {
-  ensure_nilchaind
+  ensure_polystorechaind
   mkdir -p "$HOME_DIR"
   if [ -z "$(provider_addr)" ]; then
     echo "==> Creating provider key: $PROVIDER_KEY"
-    "$NILCHAIND_BIN" keys add "$PROVIDER_KEY" --home "$HOME_DIR" --keyring-backend test >/dev/null
+    "$POLYSTORECHAIND_BIN" keys add "$PROVIDER_KEY" --home "$HOME_DIR" --keyring-backend test >/dev/null
     PROVIDER_KEY_CREATED=1
   else
     PROVIDER_KEY_CREATED=0
@@ -1202,7 +1202,7 @@ register_provider() {
 
   if provider_registered; then
     echo "==> Updating provider endpoints on-chain..."
-    "$NILCHAIND_BIN" tx nilchain update-provider-endpoints \
+    "$POLYSTORECHAIND_BIN" tx polystorechain update-provider-endpoints \
       "${endpoint_args[@]}" \
       --from "$PROVIDER_KEY" \
       --chain-id "$CHAIN_ID" \
@@ -1216,7 +1216,7 @@ register_provider() {
     echo "Updated:"
   else
     echo "==> Registering provider on-chain..."
-    "$NILCHAIND_BIN" tx nilchain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
+    "$POLYSTORECHAIND_BIN" tx polystorechain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
       "${endpoint_args[@]}" \
       --from "$PROVIDER_KEY" \
       --chain-id "$CHAIN_ID" \
@@ -1278,7 +1278,7 @@ request_provider_link() {
   ensure_provider_account_funded "$addr"
 
   echo "==> Requesting provider link on-chain..."
-  "$NILCHAIND_BIN" tx nilchain request-provider-link "$operator" \
+  "$POLYSTORECHAIND_BIN" tx polystorechain request-provider-link "$operator" \
     --from "$PROVIDER_KEY" \
     --chain-id "$CHAIN_ID" \
     --node "$NODE_ADDR" \
@@ -1346,11 +1346,11 @@ start_provider() {
   assert_expected_provider_address
 
   if [ ! -f "$TRUSTED_SETUP" ]; then
-    echo "ERROR: trusted setup not found at $TRUSTED_SETUP (set NIL_TRUSTED_SETUP)" >&2
+    echo "ERROR: trusted setup not found at $TRUSTED_SETUP (set POLYSTORE_TRUSTED_SETUP)" >&2
     exit 1
   fi
-  if [ -z "${NIL_GATEWAY_SP_AUTH:-}" ]; then
-    echo "ERROR: NIL_GATEWAY_SP_AUTH must be set to the hub's shared auth token" >&2
+  if [ -z "${POLYSTORE_GATEWAY_SP_AUTH:-}" ]; then
+    echo "ERROR: POLYSTORE_GATEWAY_SP_AUTH must be set to the hub's shared auth token" >&2
     exit 1
   fi
 
@@ -1369,21 +1369,21 @@ start_provider() {
   (
     cd "$ROOT_DIR/polystore_gateway"
     nohup env \
-      NIL_RUNTIME_PERSONA="provider-daemon" \
-      NIL_LISTEN_ADDR="$PROVIDER_LISTEN" \
-      NIL_PROVIDER_BASE="$local_url" \
-      NIL_CHAIN_ID="$CHAIN_ID" \
-      NIL_NODE="$NODE_ADDR" \
-      NIL_LCD_BASE="$LCD_BASE" \
-      NIL_HOME="$HOME_DIR" \
-      NIL_UPLOAD_DIR="$UPLOAD_DIR" \
-      NIL_CLI_BIN="$NIL_CLI_BIN" \
-      NIL_TRUSTED_SETUP="$TRUSTED_SETUP" \
-      NILCHAIND_BIN="$NILCHAIND_BIN" \
-      NIL_PROVIDER_KEY="$PROVIDER_KEY" \
-      NIL_PROVIDER_ENDPOINTS="$PROVIDER_ENDPOINTS_RAW" \
-      NIL_OPERATOR_ADDRESS="$(configured_operator_address || true)" \
-      NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
+      POLYSTORE_RUNTIME_PERSONA="provider-daemon" \
+      POLYSTORE_LISTEN_ADDR="$PROVIDER_LISTEN" \
+      POLYSTORE_PROVIDER_BASE="$local_url" \
+      POLYSTORE_CHAIN_ID="$CHAIN_ID" \
+      POLYSTORE_NODE="$NODE_ADDR" \
+      POLYSTORE_LCD_BASE="$LCD_BASE" \
+      POLYSTORE_HOME="$HOME_DIR" \
+      POLYSTORE_UPLOAD_DIR="$UPLOAD_DIR" \
+      POLYSTORE_CLI_BIN="$POLYSTORE_CLI_BIN" \
+      POLYSTORE_TRUSTED_SETUP="$TRUSTED_SETUP" \
+      POLYSTORECHAIND_BIN="$POLYSTORECHAIND_BIN" \
+      POLYSTORE_PROVIDER_KEY="$PROVIDER_KEY" \
+      POLYSTORE_PROVIDER_ENDPOINTS="$PROVIDER_ENDPOINTS_RAW" \
+      POLYSTORE_OPERATOR_ADDRESS="$(configured_operator_address || true)" \
+      POLYSTORE_GATEWAY_SP_AUTH="$POLYSTORE_GATEWAY_SP_AUTH" \
       "$GO_BIN" run . \
       >"$LOG_DIR/provider.log" 2>&1 &
     echo $! >"$pid_file"
@@ -1407,8 +1407,8 @@ bootstrap_provider() {
   if [ -z "$OPERATOR_ADDRESS_RAW" ]; then
     missing+=("OPERATOR_ADDRESS")
   fi
-  if [ -z "${NIL_GATEWAY_SP_AUTH:-}" ]; then
-    missing+=("NIL_GATEWAY_SP_AUTH")
+  if [ -z "${POLYSTORE_GATEWAY_SP_AUTH:-}" ]; then
+    missing+=("POLYSTORE_GATEWAY_SP_AUTH")
   fi
   if [ -z "$PROVIDER_ENDPOINTS_RAW" ]; then
     missing+=("PROVIDER_ENDPOINT")
@@ -1428,10 +1428,10 @@ bootstrap_provider() {
     echo "==> Skipping link request: OPERATOR_ADDRESS is not set."
   fi
 
-  if [ -n "${NIL_GATEWAY_SP_AUTH:-}" ]; then
+  if [ -n "${POLYSTORE_GATEWAY_SP_AUTH:-}" ]; then
     start_provider
   else
-    echo "==> Skipping start: NIL_GATEWAY_SP_AUTH is not set."
+    echo "==> Skipping start: POLYSTORE_GATEWAY_SP_AUTH is not set."
   fi
 
   if [ -n "$PROVIDER_ENDPOINTS_RAW" ]; then

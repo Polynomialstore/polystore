@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 var mode2ShardHTTPClient = &http.Client{
@@ -309,7 +309,7 @@ func fetchShardFromProvider(ctx context.Context, baseURL string, dealID uint64, 
 	}
 	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
 	if strings.TrimSpace(sessionID) != "" {
-		req.Header.Set("X-Nil-Session-Id", sessionID)
+		req.Header.Set("X-PolyStore-Session-Id", sessionID)
 	}
 	q := req.URL.Query()
 	q.Set("deal_id", strconv.FormatUint(dealID, 10))

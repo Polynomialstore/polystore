@@ -1,12 +1,12 @@
-# NilStore Economy & Tokenomics
+# PolyStore Economy & Tokenomics
 
 ## Overview
 
-The NilStore economy is designed to align incentives between Storage Providers (SPs), Data Owners (Users), and the Protocol itself using a single utility token: **$NIL** ($STOR). The model enforces physical infrastructure commitment while enabling elastic, user-funded scaling.
+The PolyStore economy is designed to align incentives between Storage Providers (SPs), Data Owners (Users), and the Protocol itself using a single utility token: **$NIL** ($STOR). The model enforces physical infrastructure commitment while enabling elastic, user-funded scaling.
 
 ## 1. The Performance Market (Proof-of-Useful-Data)
 
-Unlike "Space Race" models that reward random data filling, NilStore rewards **latency**.
+Unlike "Space Race" models that reward random data filling, PolyStore rewards **latency**.
 
 ### 1.1 Unified Liveness
 Storage proofs (`MsgProveLiveness`) serve two functions:
@@ -31,7 +31,7 @@ The base reward per proof follows a halving schedule to cap total supply.
 
 ## 2. Elasticity & Scaling
 
-NilStore allows data to scale automatically to meet demand without manual intervention.
+PolyStore allows data to scale automatically to meet demand without manual intervention.
 
 ### 2.1 Virtual Stripes
 A file is stored on a "Stripe" (12 providers). If these providers become saturated (high latency or load), they can signal saturation (`MsgSignalSaturation`).
@@ -55,7 +55,7 @@ Providers earn tokens via:
 
 ### 3.3 Sinks (Burning)
 *   **Slashing:** Example policy: missed proofs / non-response violations trigger a slash and potential jailing. Exact windows and amounts are protocol parameters.
-*   **Burner:** The `nilchain` module has burn permissions to remove slashed assets from circulation.
+*   **Burner:** The `polystorechain` module has burn permissions to remove slashed assets from circulation.
 
 ## 5. Protocol Parameters (Proposal Defaults)
 
@@ -131,6 +131,6 @@ See `notes/mainnet_policy_resolution_jan2026.md`.
 
 ## 4. S3 Adapter (Web2 Gateway)
 
-The `polystore_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
+The `polystore_gateway` adapter allows Web2 applications to write to PolyStore using standard S3 APIs.
 *   **PUT:** Shards file -> Computes KZG -> Creates Deal on Chain.
 *   **GET:** Retrieves shards -> Verifies KZG -> Reconstructs File.

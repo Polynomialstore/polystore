@@ -5,24 +5,24 @@ set -e
 # Current protocol slashes for missed proofs (EndBlock), not for invalid KZG openings.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CHAIN_DIR="$ROOT_DIR/nilchain"
+CHAIN_DIR="$ROOT_DIR/polystorechain"
 CORE_DIR="$ROOT_DIR/polystore_core"
-HOME_DIR="$ROOT_DIR/.nilchain_burn"
-CHAIN_ID="nilchain"
+HOME_DIR="$ROOT_DIR/.polystorechain_burn"
+CHAIN_ID="polystorechain"
 LOG_FILE="$ROOT_DIR/e2e_burn.log"
-TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
+TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
 
 echo "[E2E-BURN] Building..."
 pushd "$CHAIN_DIR" >/dev/null
 cp "$ROOT_DIR/demos/kzg/trusted_setup.txt" ./trusted_setup.txt
 export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
-go build -o "$ROOT_DIR/nilchaind" ./cmd/nilchaind
+go build -o "$ROOT_DIR/polystorechaind" ./cmd/polystorechaind
 popd >/dev/null
 
-BINARY="$ROOT_DIR/nilchaind"
+BINARY="$ROOT_DIR/polystorechaind"
 
 echo "[E2E-BURN] Resetting chain..."
-pkill -f nilchaind || true
+pkill -f polystorechaind || true
 rm -rf "$HOME_DIR"
 "$BINARY" init burnnode --chain-id "$CHAIN_ID" --home "$HOME_DIR" >/dev/null 2>&1
 "$BINARY" config set client chain-id "$CHAIN_ID" --home "$HOME_DIR"
@@ -95,12 +95,12 @@ done
 
 echo "[E2E-BURN] Registering providers..."
 for i in {1..12}; do
-  yes | "$BINARY" tx nilchain register-provider General 1000000000 --from "provider$i" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
+  yes | "$BINARY" tx polystorechain register-provider General 1000000000 --from "provider$i" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 done
 sleep 2
 
 echo "[E2E-BURN] Creating deal (capacity only)..."
-CREATE_RES=$(yes | "$BINARY" tx nilchain create-deal 50 1000000 5000 --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
+CREATE_RES=$(yes | "$BINARY" tx polystorechain create-deal 50 1000000 5000 --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
 sleep 4
 CREATE_TX=$("$BINARY" query tx "$CREATE_HASH" --home "$HOME_DIR" --node tcp://127.0.0.1:26657 --output json 2>/dev/null | tail -n 1)
