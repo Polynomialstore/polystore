@@ -8,31 +8,31 @@ set -e
 # This avoids legacy submit-proof flows which no longer exist.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CHAIN_DIR="$ROOT_DIR/nilchain"
-CORE_DIR="$ROOT_DIR/nil_core"
-HOME_DIR="$ROOT_DIR/.nilchain_test"
-CHAIN_ID="nilchain"
+CHAIN_DIR="$ROOT_DIR/polystorechain"
+CORE_DIR="$ROOT_DIR/polystore_core"
+HOME_DIR="$ROOT_DIR/.polystorechain_test"
+CHAIN_ID="polystorechain"
 LOG_FILE="$ROOT_DIR/e2e_chain.log"
-TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt"
+TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
 
 echo "[E2E] Starting End-to-End Test..."
 
-echo "[E2E] Building nil_core..."
+echo "[E2E] Building polystore_core..."
 pushd "$CORE_DIR" >/dev/null
 cargo build --release
 popd >/dev/null
 
-echo "[E2E] Building nilchaind..."
+echo "[E2E] Building polystorechaind..."
 pushd "$CHAIN_DIR" >/dev/null
 cp "$ROOT_DIR/demos/kzg/trusted_setup.txt" ./trusted_setup.txt
-export CGO_LDFLAGS="-L$CORE_DIR/target/release -lnil_core"
-go build -o "$ROOT_DIR/nilchaind" ./cmd/nilchaind
+export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
+go build -o "$ROOT_DIR/polystorechaind" ./cmd/polystorechaind
 popd >/dev/null
 
-BINARY="$ROOT_DIR/nilchaind"
+BINARY="$ROOT_DIR/polystorechaind"
 
 echo "[E2E] Resetting chain..."
-pkill -f nilchaind || true
+pkill -f polystorechaind || true
 rm -rf "$HOME_DIR"
 "$BINARY" init testnode --chain-id "$CHAIN_ID" --home "$HOME_DIR" >/dev/null 2>&1
 "$BINARY" config set client chain-id "$CHAIN_ID" --home "$HOME_DIR"
@@ -103,12 +103,12 @@ done
 
 echo "[E2E] Registering providers..."
 for i in {1..12}; do
-  yes | "$BINARY" tx nilchain register-provider General 1000000000 --from "provider$i" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
+  yes | "$BINARY" tx polystorechain register-provider General 1000000000 --from "provider$i" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 done
 sleep 2
 
 echo "[E2E] Creating deal (capacity)..."
-CREATE_RES=$(yes | "$BINARY" tx nilchain create-deal 50 1000000 5000 --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
+CREATE_RES=$(yes | "$BINARY" tx polystorechain create-deal 50 1000000 5000 --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
 sleep 4
 CREATE_TX=$("$BINARY" query tx "$CREATE_HASH" --home "$HOME_DIR" --node tcp://127.0.0.1:26657 --output json 2>/dev/null | tail -n 1)
@@ -123,7 +123,7 @@ echo "[E2E] Deal ID: $DEAL_ID"
 
 echo "[E2E] Committing dummy content..."
 DUMMY_MANIFEST_ROOT="0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-UPDATE_RES=$(yes | "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 1024 --total-mdus 3 --witness-mdus 1 --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
+UPDATE_RES=$(yes | "$BINARY" tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 1024 --total-mdus 3 --witness-mdus 1 --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 UPDATE_HASH=$(echo "$UPDATE_RES" | jq -r '.txhash')
 sleep 4
 UPDATE_TX=$("$BINARY" query tx "$UPDATE_HASH" --home "$HOME_DIR" --node tcp://127.0.0.1:26657 --output json 2>/dev/null | tail -n 1)

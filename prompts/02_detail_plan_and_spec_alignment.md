@@ -8,18 +8,18 @@ You are working in `nilcoin2`. Prompt 1 created/updated an “Immediate Goals”
    - Identify any risky parts (e.g., fetch path compatibility, EIP-712 breaking changes, browser wallet automation).
 2. Update specs/docs so they match the intended end state of the TODO plan:
    - Protocol/architecture: `spec.md`, `notes/triple-proof.md` (and any other referenced notes).
-   - Gateway/API: `nil_gateway/nil-gateway-spec.md` (or other gateway docs).
-   - Web: `nil-website/website-spec.md` and relevant pages/docs if the flow changes.
+   - Gateway/API: `polystore_gateway/polystore-gateway-spec.md` (or other gateway docs).
+   - Web: `polystore-website/website-spec.md` and relevant pages/docs if the flow changes.
 3. Ensure the specs are consistent about:
    - “No tiers / thin provisioning” semantics.
-   - NilFS as the source of truth (no CID/index dependence).
+   - PolyFS as the source of truth (no CID/index dependence).
    - Browser E2E expectations and how the wallet is handled in tests (real extension vs injected shim).
 4. Commit the spec/doc updates with a descriptive message.
 
 ## Constraints / Repo Protocol
 - Keep commits small and scoped to docs/spec alignment.
 - Avoid destructive git commands.
-- Stage only the files you intend to commit (avoid accidentally committing local deploy artifacts like `nil_bridge/broadcast/**` run logs).
+- Stage only the files you intend to commit (avoid accidentally committing local deploy artifacts like `polystore_bridge/broadcast/**` run logs).
 - If you push, push to **both** remotes: `origin` and `nil-store`.
 
 ## Iteration Logic

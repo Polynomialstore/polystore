@@ -1,0 +1,15 @@
+[Unit]
+Description=PolyStore provider gateway (polystore_gateway)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/polystore/polystore-gateway-provider.env
+WorkingDirectory=/opt/polystore
+ExecStart=/bin/bash -lc 'exec "$POLYSTORE_GATEWAY_BIN"'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -53,7 +53,7 @@ In `MsgProveLiveness` (user receipt path), enforce:
 
 To prevent client nonce drift across devices and resets, expose the last accepted nonce:
 
-- `GET /nilchain/nilchain/v1/owners/{owner}/receipt-nonce` → `{ last_nonce: uint64 }`
+- `GET /polystorechain/polystorechain/v1/owners/{owner}/receipt-nonce` → `{ last_nonce: uint64 }`
 
 Frontend rule:
 - Always fetch `last_nonce` before signing; sign with `nonce = last_nonce + 1`.
@@ -75,11 +75,11 @@ Frontend rule:
 - Add on-chain envelope/receipt consistency checks.
 - Implement v2 EIP-712 hashing for retrieval receipts (with v1 fallback during migration).
 - Add nonce query endpoint and wire frontend to it.
-- Add unit tests in `nilchain` for v2 digest + invariants; add frontend unit test vectors (where available).
+- Add unit tests in `polystorechain` for v2 digest + invariants; add frontend unit test vectors (where available).
 
 ## 7. Phase 3 TODO (Concrete Checklist)
 
-### 7.1 Chain (`nilchain`)
+### 7.1 Chain (`polystorechain`)
 1. Delete `SKIP_KZG_VERIFY` bypass; verification must always run.
 2. Enforce receipt/msg consistency:
    - `receipt.deal_id == msg.deal_id`
@@ -96,15 +96,15 @@ Frontend rule:
 - Unit test: nonce replay fails.
 - Unit test: v1 receipts (if enabled) still verify during migration.
 
-### 7.2 Gateway / Provider (`nil_gateway`)
-1. Ensure `/gateway/fetch` always returns a non-empty `X-Nil-Provider` when interactive receipts are enabled (or return a clear error).
+### 7.2 Gateway / Provider (`polystore_gateway`)
+1. Ensure `/gateway/fetch` always returns a non-empty `X-PolyStore-Provider` when interactive receipts are enabled (or return a clear error).
 2. Add `proof_hash` to the receipt intent headers (alongside `proof_details`).
 3. (Optional) Validate basic receipt shape at `/sp/receipt` and return actionable errors (chain remains authoritative).
 
 **Test gates (gateway):**
 - Integration test: fetch response contains required headers; provider is non-empty.
 
-### 7.3 Frontend (`nil-website`)
+### 7.3 Frontend (`polystore-website`)
 1. Update `RetrievalReceipt` typed-data to v2 fields (`expires_at`, `proof_hash`).
 2. Replace local nonce counter with chain-derived nonce via `GET /owners/{owner}/receipt-nonce`.
 3. Surface receipt submission success/failure in UI; retry queue (minimum: display error, do not silently ignore).
@@ -156,7 +156,7 @@ This phase removes the remaining “short-circuit” surfaces and improves the a
 
 ### 8.4 HTTP Range Support (User-Level Files)
 
-**Requirement:** `/gateway/fetch` must support `Range: bytes=start-end` for NilFS files.
+**Requirement:** `/gateway/fetch` must support `Range: bytes=start-end` for PolyFS files.
 
 **Constraints (devnet acceptable):**
 - Support single-range requests (no multipart ranges).

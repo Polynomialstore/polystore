@@ -3,7 +3,7 @@
 You are working in `nilcoin2`.
 
 ## Immediate Goals (High-Level)
-1. **Close NilFS “single source of truth”**: remove CID/index fallback fetch paths so the system derives state from the on-disk slab (`MDU #0` + Witness/User MDUs) and works after restart.
+1. **Close PolyFS “single source of truth”**: remove CID/index fallback fetch paths so the system derives state from the on-disk slab (`MDU #0` + Witness/User MDUs) and works after restart.
 2. **Finish “dynamic sizing / no capacity tiers” cleanup** end-to-end.
 3. **Add a real browser smoke E2E suite** (Playwright or Cypress) that runs against `./scripts/run_local_stack.sh start`.
 
@@ -21,7 +21,7 @@ You are working in `nilcoin2`.
 ## Constraints / Repo Protocol
 - Keep commits small and scoped.
 - Avoid destructive git commands (`git clean`, `git reset --hard`, etc.).
-- Stage only the files you intend to commit (avoid accidentally committing local deploy artifacts like `nil_bridge/broadcast/**` run logs).
+- Stage only the files you intend to commit (avoid accidentally committing local deploy artifacts like `polystore_bridge/broadcast/**` run logs).
 - If you push, push to **both** remotes: `origin` and `nil-store`.
 
 ## Iteration Logic

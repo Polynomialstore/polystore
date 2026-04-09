@@ -19,7 +19,7 @@ This preserves “user permanence” while allowing “provider ephemerality”.
 
 ## 2) What is locked in: service or token?
 
-NilStore pricing is denominated in NIL.
+PolyStore pricing is denominated in NIL.
 A user locks in a *service obligation* (store bytes for N blocks), priced in NIL at the time funds are deposited.
 
 There is no fiat peg or oracle. If NIL’s fiat price changes, the fiat-equivalent price of storage changes.

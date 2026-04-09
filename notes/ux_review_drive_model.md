@@ -10,7 +10,7 @@ The current UI treats storage as a transaction ("Create Deal"). We are pivoting 
 
 *   **The Metaphor:** A `Deal` is a **Secure Drive** (Volume).
 *   **The Behavior:** Users provision a Drive once, then live inside it (upload, organize, retrieve).
-*   **The Advantage:** Aligns with NilFS technical reality (a Deal is a filesystem slab) and user mental models (S3 Buckets, Hard Drives).
+*   **The Advantage:** Aligns with PolyFS technical reality (a Deal is a filesystem slab) and user mental models (S3 Buckets, Hard Drives).
 
 ---
 
@@ -50,7 +50,7 @@ The landing page becomes a collection view, not a transaction list.
 
 ## 4. The Drive View: "File Explorer"
 
-Clicking a card enters the **Drive View**. This acts as a standard file explorer for the NilFS volume inside that Deal.
+Clicking a card enters the **Drive View**. This acts as a standard file explorer for the PolyFS volume inside that Deal.
 
 ### 4.1 The Stage (Local vs. Remote)
 The UI must distinguish between files that are *committed* to the network and files that are *staged* locally.

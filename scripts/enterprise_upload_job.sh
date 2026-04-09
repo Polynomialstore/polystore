@@ -3,12 +3,12 @@ set -euo pipefail
 
 #
 # Enterprise upload job runner (devnet):
-# - Creates (optional) deal via /gateway/create-deal-evm or direct nilchaind tx
+# - Creates (optional) deal via /gateway/create-deal-evm or direct polystorechaind tx
 # - Uploads a file into a deal via /gateway/upload (Mode 2 fast path when gateway available)
-# - Commits manifest_root on-chain via /gateway/update-deal-content-evm or direct nilchaind tx
+# - Commits manifest_root on-chain via /gateway/update-deal-content-evm or direct polystorechaind tx
 #
 # Requires:
-# - node/tsx deps installed in `nil-website/` (for signing intents)
+# - node/tsx deps installed in `polystore-website/` (for signing intents)
 # - EVM_PRIVKEY set (delegated uploader key)
 # - local gateway available at GATEWAY_BASE for /gateway/upload
 #
@@ -19,10 +19,10 @@ source "$ROOT_DIR/scripts/load_testnet_public_env.sh"
 
 FILE_PATH="${1:-}"
 DEAL_ID="${2:-}"
-NILFS_PATH="${3:-}"
+POLYFS_PATH="${3:-}"
 
 if [[ -z "${FILE_PATH}" ]]; then
-  echo "usage: $0 <file_path> [deal_id] [nilfs_path]" >&2
+  echo "usage: $0 <file_path> [deal_id] [polyfs_path]" >&2
   exit 1
 fi
 
@@ -36,19 +36,19 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 GATEWAY_BASE="${GATEWAY_BASE:-http://localhost:8080}"
-LCD_BASE="${LCD_BASE:-${NILSTORE_TESTNET_LCD_BASE:-http://localhost:1317}}"
-NIL_NODE="${NIL_NODE:-${NILSTORE_TESTNET_NODE:-tcp://127.0.0.1:26657}}"
-EVM_CHAIN_ID="${EVM_CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-31337}}"
-CHAIN_ID="${CHAIN_ID:-${NILSTORE_TESTNET_CHAIN_ID:-31337}}"
+LCD_BASE="${LCD_BASE:-${POLYSTORE_TESTNET_LCD_BASE:-http://localhost:1317}}"
+POLYSTORE_NODE="${POLYSTORE_NODE:-${POLYSTORE_TESTNET_NODE:-tcp://127.0.0.1:26657}}"
+EVM_CHAIN_ID="${EVM_CHAIN_ID:-${POLYSTORE_TESTNET_CHAIN_ID:-31337}}"
+CHAIN_ID="${CHAIN_ID:-${POLYSTORE_TESTNET_CHAIN_ID:-31337}}"
 SERVICE_HINT="${SERVICE_HINT:-General}"
 UPLOAD_STATUS_TIMEOUT_SECS="${UPLOAD_STATUS_TIMEOUT_SECS:-300}"
 UPLOAD_STATUS_POLL_INTERVAL_SECS="${UPLOAD_STATUS_POLL_INTERVAL_SECS:-2}"
-TX_SUBMIT_MODE="${NIL_TX_SUBMIT_MODE:-gateway}"
-NILCHAIND_BIN="${NILCHAIND_BIN:-nilchaind}"
-NIL_GAS_PRICES="${NIL_GAS_PRICES:-${NILSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
-NIL_TX_SENDER_KEY="${NIL_TX_SENDER_KEY:-${NILSTORE_TESTNET_TX_SENDER_KEY:-faucet}}"
-NIL_TX_SENDER_HOME="${NIL_TX_SENDER_HOME:-$ROOT_DIR/_artifacts/testnet_tx_sender_home}"
-NIL_TX_SENDER_MNEMONIC="${NIL_TX_SENDER_MNEMONIC:-${NILSTORE_TESTNET_TX_SENDER_MNEMONIC:-}}"
+TX_SUBMIT_MODE="${POLYSTORE_TX_SUBMIT_MODE:-gateway}"
+POLYSTORECHAIND_BIN="${POLYSTORECHAIND_BIN:-polystorechaind}"
+POLYSTORE_GAS_PRICES="${POLYSTORE_GAS_PRICES:-${POLYSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
+POLYSTORE_TX_SENDER_KEY="${POLYSTORE_TX_SENDER_KEY:-${POLYSTORE_TESTNET_TX_SENDER_KEY:-faucet}}"
+POLYSTORE_TX_SENDER_HOME="${POLYSTORE_TX_SENDER_HOME:-$ROOT_DIR/_artifacts/testnet_tx_sender_home}"
+POLYSTORE_TX_SENDER_MNEMONIC="${POLYSTORE_TX_SENDER_MNEMONIC:-${POLYSTORE_TESTNET_TX_SENDER_MNEMONIC:-}}"
 CREATE_NONCE="${CREATE_NONCE:-1}"
 UPDATE_NONCE="${UPDATE_NONCE:-}"
 EVM_NONCE_RETRY_ATTEMPTS="${EVM_NONCE_RETRY_ATTEMPTS:-8}"
@@ -86,22 +86,22 @@ is_account_sequence_error() {
 }
 
 ensure_tx_sender_key() {
-  require_bin "$NILCHAIND_BIN"
+  require_bin "$POLYSTORECHAIND_BIN"
 
-  if "$NILCHAIND_BIN" keys show "$NIL_TX_SENDER_KEY" --keyring-backend test --home "$NIL_TX_SENDER_HOME" >/dev/null 2>&1; then
+  if "$POLYSTORECHAIND_BIN" keys show "$POLYSTORE_TX_SENDER_KEY" --keyring-backend test --home "$POLYSTORE_TX_SENDER_HOME" >/dev/null 2>&1; then
     return
   fi
 
-  if [[ -z "$NIL_TX_SENDER_MNEMONIC" ]]; then
-    echo "error: NIL_TX_SENDER_MNEMONIC is required for direct tx submission" >&2
+  if [[ -z "$POLYSTORE_TX_SENDER_MNEMONIC" ]]; then
+    echo "error: POLYSTORE_TX_SENDER_MNEMONIC is required for direct tx submission" >&2
     exit 1
   fi
 
-  mkdir -p "$NIL_TX_SENDER_HOME"
-  printf '%s\n' "$NIL_TX_SENDER_MNEMONIC" | "$NILCHAIND_BIN" keys add "$NIL_TX_SENDER_KEY" \
+  mkdir -p "$POLYSTORE_TX_SENDER_HOME"
+  printf '%s\n' "$POLYSTORE_TX_SENDER_MNEMONIC" | "$POLYSTORECHAIND_BIN" keys add "$POLYSTORE_TX_SENDER_KEY" \
     --recover \
     --keyring-backend test \
-    --home "$NIL_TX_SENDER_HOME" >/dev/null
+    --home "$POLYSTORE_TX_SENDER_HOME" >/dev/null
 }
 
 poll_tx_body() {
@@ -139,18 +139,18 @@ direct_create_deal() {
         .intent.duration_blocks // .intent.duration_seconds // 0
       )
     ')"
-    payload_file="$(mktemp "${TMPDIR:-/tmp}/nilstore-create-deal-XXXXXX")"
+    payload_file="$(mktemp "${TMPDIR:-/tmp}/polystore-create-deal-XXXXXX")"
     printf '%s\n' "$payload_json" >"$payload_file"
 
     cmd_status=0
-    create_out="$("$NILCHAIND_BIN" tx nilchain create-deal-from-evm "$payload_file" \
-      --node "$NIL_NODE" \
+    create_out="$("$POLYSTORECHAIND_BIN" tx polystorechain create-deal-from-evm "$payload_file" \
+      --node "$POLYSTORE_NODE" \
       --chain-id "$CHAIN_ID" \
-      --from "$NIL_TX_SENDER_KEY" \
+      --from "$POLYSTORE_TX_SENDER_KEY" \
       --yes \
       --keyring-backend test \
-      --home "$NIL_TX_SENDER_HOME" \
-      --gas-prices "$NIL_GAS_PRICES" \
+      --home "$POLYSTORE_TX_SENDER_HOME" \
+      --gas-prices "$POLYSTORE_GAS_PRICES" \
       --broadcast-mode sync \
       --output json 2>&1)" || cmd_status=$?
 
@@ -212,7 +212,7 @@ direct_create_deal() {
         .tx_response.logs[]?.events[]?,
         .tx_response.events[]?
       ]
-      | map(select(.type == "nilchain.nilchain.EventCreateDeal" or .type == "create_deal"))
+      | map(select(.type == "polystorechain.polystorechain.EventCreateDeal" or .type == "create_deal"))
       | map(.attributes[]?)
       | flatten
       | map(select(.key == "id" or .key == "deal_id"))
@@ -220,8 +220,8 @@ direct_create_deal() {
     ' 2>/dev/null || true)"
 
     if [[ -z "$deal_id" ]]; then
-      list_out="$("$NILCHAIND_BIN" query nilchain list-deals \
-        --node "$NIL_NODE" \
+      list_out="$("$POLYSTORECHAIND_BIN" query polystorechain list-deals \
+        --node "$POLYSTORE_NODE" \
         --output json 2>/dev/null || true)"
       max_id="$(printf '%s' "$list_out" | jq -r '[.deals[]?.id | tonumber] | max // empty' 2>/dev/null || true)"
       deal_id="$max_id"
@@ -253,7 +253,7 @@ direct_update_deal_content() {
 
   for attempt in $(seq 1 "$EVM_NONCE_RETRY_ATTEMPTS"); do
     update_json="$(
-      cd "$ROOT_DIR/nil-website"
+      cd "$ROOT_DIR/polystore-website"
       EVM_PRIVKEY="$EVM_PRIVKEY" \
       EVM_CHAIN_ID="$EVM_CHAIN_ID" \
       CHAIN_ID="$CHAIN_ID" \
@@ -263,21 +263,21 @@ direct_update_deal_content() {
       SIZE_BYTES="$SIZE_BYTES" \
       TOTAL_MDUS="$TOTAL_MDUS" \
       WITNESS_MDUS="$WITNESS_MDUS" \
-      "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
+      "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" update-content
     )"
 
-    update_file="$(mktemp "${TMPDIR:-/tmp}/nilstore-update-content-XXXXXX")"
+    update_file="$(mktemp "${TMPDIR:-/tmp}/polystore-update-content-XXXXXX")"
     printf '%s\n' "$update_json" >"$update_file"
 
     cmd_status=0
-    update_out="$("$NILCHAIND_BIN" tx nilchain update-deal-content-from-evm "$update_file" \
-      --node "$NIL_NODE" \
+    update_out="$("$POLYSTORECHAIND_BIN" tx polystorechain update-deal-content-from-evm "$update_file" \
+      --node "$POLYSTORE_NODE" \
       --chain-id "$CHAIN_ID" \
-      --from "$NIL_TX_SENDER_KEY" \
+      --from "$POLYSTORE_TX_SENDER_KEY" \
       --yes \
       --keyring-backend test \
-      --home "$NIL_TX_SENDER_HOME" \
-      --gas-prices "$NIL_GAS_PRICES" \
+      --home "$POLYSTORE_TX_SENDER_HOME" \
+      --gas-prices "$POLYSTORE_GAS_PRICES" \
       --broadcast-mode sync \
       --output json 2>&1)" || cmd_status=$?
 
@@ -347,15 +347,15 @@ direct_update_deal_content() {
 FILE_NAME="$(basename "${FILE_PATH}")"
 FILE_SIZE_BYTES="$(wc -c <"${FILE_PATH}" | tr -d '[:space:]')"
 
-if [[ -z "${NILFS_PATH}" ]]; then
-  NILFS_PATH="${FILE_NAME}"
+if [[ -z "${POLYFS_PATH}" ]]; then
+  POLYFS_PATH="${FILE_NAME}"
 fi
 
 sign_intent() {
   local mode="$1"
   local nonce="${2:-}"
   (
-    cd "$ROOT_DIR/nil-website"
+    cd "$ROOT_DIR/polystore-website"
     # Ensure dependencies are present (CI/dev stacks do this already).
     if [[ ! -d node_modules ]]; then
       npm install >/dev/null
@@ -365,7 +365,7 @@ sign_intent() {
     CHAIN_ID="$CHAIN_ID" \
     NONCE="$nonce" \
     SERVICE_HINT="$SERVICE_HINT" \
-    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" "$mode"
+    "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" "$mode"
   )
 }
 
@@ -376,7 +376,7 @@ case "$TX_SUBMIT_MODE" in
   gateway|direct)
     ;;
   *)
-    echo "error: unsupported NIL_TX_SUBMIT_MODE=$TX_SUBMIT_MODE (expected gateway or direct)" >&2
+    echo "error: unsupported POLYSTORE_TX_SUBMIT_MODE=$TX_SUBMIT_MODE (expected gateway or direct)" >&2
     exit 1
     ;;
 esac
@@ -420,7 +420,7 @@ PY
 echo ">> Uploading file via gateway (upload_id=${UPLOAD_ID})..."
 UPLOAD_RESP="$(curl -sS -X POST "${GATEWAY_BASE}/gateway/upload?deal_id=${DEAL_ID}&upload_id=${UPLOAD_ID}" \
   -F "deal_id=${DEAL_ID}" \
-  -F "file_path=${NILFS_PATH}" \
+  -F "file_path=${POLYFS_PATH}" \
   -F "upload_id=${UPLOAD_ID}" \
   -F "file_size_bytes=${FILE_SIZE_BYTES}" \
   -F "file=@${FILE_PATH}")"
@@ -507,7 +507,7 @@ if [[ "$TX_SUBMIT_MODE" == "direct" ]]; then
   direct_update_deal_content
 else
   UPDATE_JSON="$(
-    cd "$ROOT_DIR/nil-website"
+    cd "$ROOT_DIR/polystore-website"
     EVM_PRIVKEY="$EVM_PRIVKEY" \
     EVM_CHAIN_ID="$EVM_CHAIN_ID" \
     CHAIN_ID="$CHAIN_ID" \
@@ -517,7 +517,7 @@ else
     SIZE_BYTES="$SIZE_BYTES" \
     TOTAL_MDUS="$TOTAL_MDUS" \
     WITNESS_MDUS="$WITNESS_MDUS" \
-    "$ROOT_DIR/nil-website/node_modules/.bin/tsx" "$ROOT_DIR/nil-website/scripts/sign_intent.ts" update-content
+    "$ROOT_DIR/polystore-website/node_modules/.bin/tsx" "$ROOT_DIR/polystore-website/scripts/sign_intent.ts" update-content
   )"
 
   UPDATE_RESP="$(curl -sS -X POST "${GATEWAY_BASE}/gateway/update-deal-content-evm" \
@@ -544,4 +544,4 @@ if [[ -n "$CREATE_TX_HASH" ]]; then
 fi
 echo "deal_id=${DEAL_ID}"
 echo "manifest_root=${MANIFEST_ROOT}"
-echo "nilfs_path=${NILFS_PATH}"
+echo "polyfs_path=${POLYFS_PATH}"

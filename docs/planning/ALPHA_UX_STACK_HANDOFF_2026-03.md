@@ -70,16 +70,16 @@ Review and merge in this order only:
 ## Files Added Or Reworked
 
 Primary website surfaces:
-- `nil-website/src/pages/Home.tsx`
-- `nil-website/src/pages/AlphaStorage.tsx`
-- `nil-website/src/pages/AlphaProvider.tsx`
-- `nil-website/src/pages/AlphaStatus.tsx`
-- `nil-website/src/pages/SpOnboarding.tsx`
+- `polystore-website/src/pages/Home.tsx`
+- `polystore-website/src/pages/AlphaStorage.tsx`
+- `polystore-website/src/pages/AlphaProvider.tsx`
+- `polystore-website/src/pages/AlphaStatus.tsx`
+- `polystore-website/src/pages/SpOnboarding.tsx`
 
 Shared website components:
-- `nil-website/src/components/marketing/AlphaHero.tsx`
-- `nil-website/src/components/marketing/TrackCard.tsx`
-- `nil-website/src/components/marketing/PromptPanel.tsx`
+- `polystore-website/src/components/marketing/AlphaHero.tsx`
+- `polystore-website/src/components/marketing/TrackCard.tsx`
+- `polystore-website/src/components/marketing/PromptPanel.tsx`
 
 Provider/operator docs:
 - `docs/ALPHA_PROVIDER_QUICKSTART.md`
@@ -93,7 +93,7 @@ Storage-user docs:
 
 Collaborator packets:
 - `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`
-- `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md`
+- `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_POLYNOMIALSTORE_COM.md`
 
 Provider automation:
 - `scripts/run_devnet_provider.sh`
@@ -101,8 +101,8 @@ Provider automation:
 ## Verification Gates Used
 
 UI PRs:
-- `cd nil-website && npm run lint`
-- `cd nil-website && npm run build`
+- `cd polystore-website && npm run lint`
+- `cd polystore-website && npm run build`
 
 Provider script PR:
 - `bash -n scripts/run_devnet_provider.sh`

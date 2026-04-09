@@ -21,28 +21,28 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build WASM for website
-        run: cd nil_core && wasm-pack build --release --target web --out-dir ../nil-website/public/wasm --out-name nil_core
+        run: cd polystore_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name polystore_core
 
-      - name: Build nil_cli (native)
-        run: cd nil_cli && cargo build --release
+      - name: Build polystore_cli (native)
+        run: cd polystore_cli && cargo build --release
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nil-website/package-lock.json
+          cache-dependency-path: polystore-website/package-lock.json
 
       - name: Install Dependencies
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npm ci
 
       - name: Install Playwright Browsers
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
       - name: Start Dev Server
-        working-directory: nil-website
+        working-directory: polystore-website
         run: |
           npx vite --host 0.0.0.0 --port 5173 &
           npx wait-on http://localhost:5173 --timeout 60000
@@ -50,7 +50,7 @@ jobs:
           VITE_ENABLE_FAUCET: "1"
 
       - name: Run Playwright Tests
-        working-directory: nil-website
+        working-directory: polystore-website
         run: npx playwright test tests/smoke.spec.ts
         env:
           # WEB_SERVER_COMMAND is NOT set, so playwright will NOT start the server again

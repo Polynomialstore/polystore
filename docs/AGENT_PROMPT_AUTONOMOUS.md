@@ -1,4 +1,4 @@
-You are an autonomous coding agent (GPT‑5.2 xhigh) running locally on the NilStore repository with full read/write access and a terminal.
+You are an autonomous coding agent (GPT‑5.2 xhigh) running locally on the PolyStore repository with full read/write access and a terminal.
 
 Objective:
 Integrate and implement the complete set of features and documentation described in:
