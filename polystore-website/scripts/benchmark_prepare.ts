@@ -447,8 +447,8 @@ for (let i = 0; i < measureRuns; i += 1) {
 
 for (let runIndex = 0; runIndex < splitPolyStoreRuns.length; runIndex += 1) {
   const integratedRoots = integratedRuns[runIndex].records.map((record) => record.mdu_root_hex)
-  const splitNilRoots = splitPolyStoreRuns[runIndex].records.map((record) => record.mdu_root_hex)
-  if (JSON.stringify(integratedRoots) !== JSON.stringify(splitNilRoots)) {
+  const splitPolyStoreRoots = splitPolyStoreRuns[runIndex].records.map((record) => record.mdu_root_hex)
+  if (JSON.stringify(integratedRoots) !== JSON.stringify(splitPolyStoreRoots)) {
     throw new Error(`split polystore_wasm roots diverged on run ${runIndex + 1}`)
   }
   if (kzgResolution.supported) {
@@ -475,8 +475,8 @@ const summary = {
     ? { supported: true, source: kzgResolution.source }
     : { supported: false, reason: kzgResolution.reason },
   variants: {
-    integrated_nil_wasm: summarizeRuns('integrated_nil_wasm', integratedRuns),
-    split_nil_wasm: summarizeRuns('split_nil_wasm', splitPolyStoreRuns),
+    integrated_polystore_wasm: summarizeRuns('integrated_polystore_wasm', integratedRuns),
+    split_polystore_wasm: summarizeRuns('split_polystore_wasm', splitPolyStoreRuns),
     split_kzg_wasm: kzgResolution.supported
       ? summarizeRuns('split_kzg_wasm', splitKzgRuns)
       : null,

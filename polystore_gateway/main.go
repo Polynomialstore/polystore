@@ -4663,7 +4663,7 @@ func shardFile(ctx context.Context, path string, raw bool, savePrefix string) (*
 	// Use execPolystoreCli which now returns ([]byte, error)
 	outBytes, err := execPolystoreCli(ctx, args...)
 	if err != nil {
-		return nil, fmt.Errorf("nil-cli shard failed: %w", err)
+		return nil, fmt.Errorf("polystore_cli shard failed: %w", err)
 	}
 
 	// polystore_cli with --out writes to file, but might print logs to stdout.
