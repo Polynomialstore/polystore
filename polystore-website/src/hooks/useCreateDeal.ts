@@ -16,15 +16,19 @@ export interface CreateDealInput {
   serviceHint?: string
 }
 
+export type CreateDealPhase = 'idle' | 'awaiting_wallet' | 'confirming'
+
 export function useCreateDeal() {
   const { address: connectedAddress } = useAccount()
   const { data: walletClient } = useWalletClient()
   const [loading, setLoading] = useState(false)
   const [lastTx, setLastTx] = useState<string | null>(null)
+  const [phase, setPhase] = useState<CreateDealPhase>('idle')
 
   async function submitDeal(input: CreateDealInput) {
     setLoading(true)
     setLastTx(null)
+    setPhase('awaiting_wallet')
     try {
       if (!walletClient) throw new Error('Wallet not connected')
       const evmAddress = resolveActiveEvmAddress({ connectedAddress, creator: input.creator })
@@ -51,6 +55,7 @@ export function useCreateDeal() {
         gas: 5_000_000n,
       })
       setLastTx(txHash)
+      setPhase('confirming')
 
       const receipt = await waitForTransactionReceipt(txHash)
       const logs = receipt.logs || []
@@ -78,8 +83,9 @@ export function useCreateDeal() {
       throw error
     } finally {
       setLoading(false)
+      setPhase('idle')
     }
   }
 
-  return { submitDeal, loading, lastTx }
+  return { submitDeal, loading, lastTx, phase }
 }

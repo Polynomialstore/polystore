@@ -18,6 +18,7 @@ import { toHexFromBase64OrHex } from '../domain/hex'
 import { multiaddrToHttpUrl } from '../lib/multiaddr'
 import { useSessionStatus } from '../hooks/useSessionStatus'
 import { cn } from '../lib/utils'
+import { InlineNotice, type InlineNoticeTone } from './InlineNotice'
 
 interface Provider {
   address: string
@@ -53,6 +54,12 @@ type RecentFileEntry = {
   error?: string
 }
 
+type CreateDealFeedback = {
+  tone: Exclude<InlineNoticeTone, 'pending'>
+  title: string
+  message: string
+}
+
 const RECENT_FILES_KEY = 'polystore_recent_files_v1'
 const MAX_RECENT_FILES = 3
 const DASHBOARD_DIAGNOSTICS_KEY = 'polystore_dashboard_show_diagnostics_v1'
@@ -80,7 +87,7 @@ const DURATION_PRESET_BY_SECONDS = Object.fromEntries(
 
 export function Dashboard() {
   const { openConnectModal } = useConnectModal()
-  const { submitDeal, loading: dealLoading } = useCreateDeal()
+  const { submitDeal, loading: dealLoading, lastTx: createDealTx, phase: createDealPhase } = useCreateDeal()
   const { submitUpdate, loading: updateLoading, lastTx: updateTx } = useUpdateDealContent()
   const { upload, loading: uploadLoading } = useUpload()
   const { switchNetwork } = useNetwork()
@@ -106,6 +113,7 @@ export function Dashboard() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showSystemStatus, setShowSystemStatus] = useState(false)
   const [showCreateDeal, setShowCreateDeal] = useState(false)
+  const [createDealFeedback, setCreateDealFeedback] = useState<CreateDealFeedback | null>(null)
   const [dealFilter, setDealFilter] = useState('')
   const [compressUploads, setCompressUploads] = useState(true)
   const providerCount = providers.length
@@ -265,7 +273,41 @@ export function Dashboard() {
     const walletError = classifyWalletError(error, fallback)
     setStatusTone('error')
     setStatusMsg(walletError.message)
+    return walletError.message
   }, [])
+
+  const openCreateDealDrawer = useCallback(() => {
+    setCreateDealFeedback(null)
+    setShowCreateDeal(true)
+  }, [])
+
+  const closeCreateDealDrawer = useCallback(() => {
+    if (dealLoading) return
+    setShowCreateDeal(false)
+    setCreateDealFeedback(null)
+  }, [dealLoading])
+
+  const reportCreateDealFeedback = useCallback((feedback: CreateDealFeedback) => {
+    setCreateDealFeedback(feedback)
+  }, [])
+
+  const pendingCreateDealFeedback = useMemo(() => {
+    if (!dealLoading) return null
+    if (createDealPhase === 'confirming') {
+      return {
+        tone: 'pending' as const,
+        title: 'Waiting for chain confirmation',
+        message: createDealTx
+          ? `Transaction ${createDealTx.slice(0, 10)}... submitted. Keep this panel open until the receipt returns.`
+          : 'Transaction submitted. Keep this panel open until the receipt returns.',
+      }
+    }
+    return {
+      tone: 'pending' as const,
+      title: 'Confirm in MetaMask',
+      message: 'Approve or reject the create-deal request in MetaMask.',
+    }
+  }, [createDealPhase, createDealTx, dealLoading])
 
   const requestWalletReconnect = useCallback(async () => {
     try {
@@ -284,10 +326,15 @@ export function Dashboard() {
       }
       setStatusTone('neutral')
       setStatusMsg('Wallet access request sent. Approve in your wallet, then retry.')
+      reportCreateDealFeedback({
+        tone: 'info',
+        title: 'Approve wallet access',
+        message: 'Wallet access request sent. Approve in MetaMask, then retry creating the deal.',
+      })
     } catch (error) {
       handleWalletError(error, 'Wallet reconnection failed')
     }
-  }, [handleWalletError, openConnectModal])
+  }, [handleWalletError, openConnectModal, reportCreateDealFeedback])
 
   useEffect(() => {
     if (!accountPermissionMismatch) return
@@ -949,6 +996,11 @@ export function Dashboard() {
       if (createDealProviderError) {
         setStatusTone('error')
         setStatusMsg(createDealProviderError)
+        reportCreateDealFeedback({
+          tone: 'error',
+          title: 'Create deal failed',
+          message: createDealProviderError,
+        })
         setTargetDealId(previousTargetDealId)
         return
       }
@@ -960,12 +1012,22 @@ export function Dashboard() {
         if (!Number.isFinite(k) || !Number.isFinite(m) || k <= 0 || m <= 0) {
           setStatusTone('error')
           setStatusMsg('Custom Mode 2 profile requires numeric K and M values.')
+          reportCreateDealFeedback({
+            tone: 'error',
+            title: 'Create deal failed',
+            message: 'Custom Mode 2 profile requires numeric K and M values.',
+          })
           setTargetDealId(previousTargetDealId)
           return
         }
         if (64 % k !== 0) {
           setStatusTone('error')
           setStatusMsg('Custom Mode 2 profile requires K to divide 64.')
+          reportCreateDealFeedback({
+            tone: 'error',
+            title: 'Create deal failed',
+            message: 'Custom Mode 2 profile requires K to divide 64.',
+          })
           setTargetDealId(previousTargetDealId)
           return
         }
@@ -973,12 +1035,23 @@ export function Dashboard() {
         if (providerCount === 0) {
           setStatusTone('error')
           setStatusMsg('Provider list not loaded yet. Retry in a few seconds.')
+          reportCreateDealFeedback({
+            tone: 'error',
+            title: 'Create deal failed',
+            message: 'Provider list not loaded yet. Retry in a few seconds.',
+          })
           setTargetDealId(previousTargetDealId)
           return
         }
         if (slots > providerCount) {
+          const message = `Custom Mode 2 profile requires ${slots} providers (K+M), but only ${providerCount} are available.`
           setStatusTone('error')
-          setStatusMsg(`Custom Mode 2 profile requires ${slots} providers (K+M), but only ${providerCount} are available.`)
+          setStatusMsg(message)
+          reportCreateDealFeedback({
+            tone: 'error',
+            title: 'Create deal failed',
+            message,
+          })
           setTargetDealId(previousTargetDealId)
           return
         }
@@ -987,6 +1060,11 @@ export function Dashboard() {
       if (autoMode2ProviderError) {
         setStatusTone('error')
         setStatusMsg(autoMode2ProviderError)
+        reportCreateDealFeedback({
+          tone: 'error',
+          title: 'Create deal failed',
+          message: autoMode2ProviderError,
+        })
         setTargetDealId(previousTargetDealId)
         return
       }
@@ -998,9 +1076,13 @@ export function Dashboard() {
         maxMonthlySpend,
         serviceHint,
       })
+      reportCreateDealFeedback({
+        tone: 'success',
+        title: 'Deal created',
+        message: `Deal #${res.deal_id} created successfully. Transaction ${res.tx_hash.slice(0, 10)}... confirmed.`,
+      })
       setStatusTone('success')
       setStatusMsg(`Capacity Allocated. Deal ID: ${res.deal_id}. Now verify via content tab.`)
-      setShowCreateDeal(false)
       if (polystoreAddress) {
         await refreshDealsAfterCreate(polystoreAddress, String(res.deal_id))
         await fetchBalances(polystoreAddress)
@@ -1010,22 +1092,31 @@ export function Dashboard() {
       }
     } catch (e) {
       setTargetDealId(previousTargetDealId)
-      handleWalletError(e, 'Deal allocation failed. Check gateway logs.')
+      reportCreateDealFeedback({
+        tone: 'error',
+        title: 'Create deal failed',
+        message: handleWalletError(e, 'Deal allocation failed. Check gateway logs.'),
+      })
     }
   }
 
   const handleCreateDealClick = async () => {
     if (!hasFunds) {
+      const message = appConfig.faucetEnabled
+        ? 'You must request testnet NIL from the faucet before creating a storage deal.'
+        : 'Your wallet needs funds before creating a storage deal.'
       setStatusTone('error')
-      setStatusMsg(
-        appConfig.faucetEnabled
-          ? 'You must request testnet NIL from the faucet before creating a storage deal.'
-          : 'Your wallet needs funds before creating a storage deal.',
-      )
+      setStatusMsg(message)
+      reportCreateDealFeedback({
+        tone: 'error',
+        title: 'Create deal failed',
+        message,
+      })
       return
     }
 
     try {
+      setCreateDealFeedback(null)
       if (accountPermissionMismatch) {
         await requestWalletReconnect()
         return
@@ -1041,15 +1132,22 @@ export function Dashboard() {
           const fallback = genesisMismatch
             ? `Network identity mismatch for chain ${appConfig.chainId}. Re-add PolyStore Devnet in MetaMask using RPC ${appConfig.evmRpc}.`
             : `Wrong network. Switch wallet to chain ${appConfig.chainId} and retry.`
-          handleWalletError(error, fallback)
+          reportCreateDealFeedback({
+            tone: 'error',
+            title: 'Create deal failed',
+            message: handleWalletError(error, fallback),
+          })
         }
         return
       }
       if (!address || !address.startsWith('0x')) throw new Error('Connect wallet to create a deal.')
-      setShowCreateDeal(false)
       await handleCreateDeal(address)
     } catch (e) {
-      handleWalletError(e, 'Failed to connect wallet')
+      reportCreateDealFeedback({
+        tone: 'error',
+        title: 'Create deal failed',
+        message: handleWalletError(e, 'Failed to connect wallet'),
+      })
     }
   }
 
@@ -1466,14 +1564,25 @@ export function Dashboard() {
         <button
           type="button"
           data-testid="create-deal-close"
-          onClick={() => setShowCreateDeal(false)}
-          className="nil-inset inline-flex items-center justify-center px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-foreground"
+          onClick={closeCreateDealDrawer}
+          disabled={dealLoading}
+          className="nil-inset inline-flex items-center justify-center px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           Close
         </button>
       </div>
 
       <div className="space-y-4 px-6 py-5">
+        {pendingCreateDealFeedback ? (
+          <InlineNotice tone={pendingCreateDealFeedback.tone} title={pendingCreateDealFeedback.title} testId="create-deal-feedback">
+            {pendingCreateDealFeedback.message}
+          </InlineNotice>
+        ) : createDealFeedback ? (
+          <InlineNotice tone={createDealFeedback.tone} title={createDealFeedback.title} testId="create-deal-feedback">
+            {createDealFeedback.message}
+          </InlineNotice>
+        ) : null}
+
         <div className="flex items-center justify-between gap-3">
           <div className="text-[11px] font-mono-data text-muted-foreground">
             Mode 2 is default for trusted devnet uploads.
@@ -1635,10 +1744,18 @@ export function Dashboard() {
               <>
                 <button
                   type="button"
-                  onClick={() => setShowCreateDeal(!showCreateDeal)}
+                  onClick={() => {
+                    if (showCreateDeal) {
+                      closeCreateDealDrawer()
+                    } else {
+                      openCreateDealDrawer()
+                    }
+                  }}
+                  disabled={dealLoading}
                   className={cn(
                     'inline-flex items-center justify-center border border-primary px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data transition-colors',
                     showCreateDeal ? 'bg-primary/10 text-primary' : 'bg-transparent text-primary hover:bg-primary/5',
+                    dealLoading && 'cursor-not-allowed opacity-50',
                   )}
                 >
                   + New Deal
@@ -1809,7 +1926,7 @@ export function Dashboard() {
           <div
             data-testid="create-deal-overlay"
             className="absolute inset-0 bg-background/70 backdrop-blur-[1px]"
-            onClick={() => setShowCreateDeal(false)}
+            onClick={closeCreateDealDrawer}
           />
           <aside data-testid="create-deal-drawer" className="absolute right-0 top-0 h-full w-full max-w-xl border-l border-border/40 shadow-2xl">
             {createDealDrawer}

@@ -1,3 +1,5 @@
+import { appConfig } from '../config'
+
 type ErrorLike = {
   code?: unknown
   message?: unknown
@@ -80,6 +82,10 @@ export function classifyWalletError(error: unknown, fallback = 'Wallet request f
   const staleAccount =
     lower.includes('connected wallet changed') ||
     lower.includes('wallet not connected')
+  const rpcBackoff =
+    lower.includes('rpc endpoint returned too many errors') ||
+    (lower.includes('requested resource not available') &&
+      lower.includes('consider using a different rpc endpoint'))
 
   const reconnectSuggested = codeRejected || codeUnauthorized || textRejected || textUnauthorized || staleAccount
   const userRejected = codeRejected || textRejected
@@ -93,6 +99,15 @@ export function classifyWalletError(error: unknown, fallback = 'Wallet request f
     }
   }
 
+  if (rpcBackoff) {
+    return {
+      message:
+        `MetaMask could not reach the configured PolyStore RPC reliably. Retry in a few seconds. If it keeps happening, open MetaMask > Networks > PolyStore Devnet and confirm the RPC URL is ${appConfig.evmRpc}.`,
+      reconnectSuggested: false,
+      userRejected: false,
+    }
+  }
+
   const bestMessage = messages.find(Boolean) || fallback
   return {
     message: bestMessage,
@@ -100,4 +115,3 @@ export function classifyWalletError(error: unknown, fallback = 'Wallet request f
     userRejected: false,
   }
 }
-

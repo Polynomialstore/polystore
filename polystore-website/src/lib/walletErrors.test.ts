@@ -23,3 +23,13 @@ test('classifyWalletError falls back to original message for non-wallet failures
   assert.match(out.message, /expired/)
 })
 
+test('classifyWalletError normalizes MetaMask RPC backoff failures', () => {
+  const out = classifyWalletError({
+    code: -32002,
+    message: 'RPC endpoint returned too many errors, retrying in 0.3 minutes. Consider using a different RPC endpoint.',
+  })
+  assert.equal(out.reconnectSuggested, false)
+  assert.equal(out.userRejected, false)
+  assert.match(out.message, /MetaMask could not reach the configured PolyStore RPC reliably/i)
+  assert.match(out.message, /RPC URL/i)
+})
