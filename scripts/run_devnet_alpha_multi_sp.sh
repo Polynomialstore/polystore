@@ -42,6 +42,7 @@ POLYSTORE_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
 POLYSTORE_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
 TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
+POLYSTORE_CORE_LIB_DIR="${POLYSTORE_CORE_LIB_DIR:-$ROOT_DIR/polystore_core/target/release}"
 
 PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
 PROVIDER_PORT_BASE="${PROVIDER_PORT_BASE:-8091}"
@@ -55,10 +56,39 @@ START_WEB="${START_WEB:-1}"
 POLYSTORE_GATEWAY_SP_AUTH="${POLYSTORE_GATEWAY_SP_AUTH:-}"
 
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
+# Default browser E2E wallet from polystore-website/src/lib/e2eWallet.ts.
+POLYSTORE_E2E_WALLET_ADDR="${POLYSTORE_E2E_WALLET_ADDR:-nil1ser7fv30x7e7xr7n62tlr7m7z07ldqj4thdezk}"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
+if [ -d "$POLYSTORE_CORE_LIB_DIR" ]; then
+  export LD_LIBRARY_PATH="$POLYSTORE_CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
 banner() { printf '\n=== %s ===\n' "$*"; }
+
+CHAIN_MODULE_CLI_NAME="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-}"
+
+detect_chain_module_cli_name() {
+  if [ -n "$CHAIN_MODULE_CLI_NAME" ]; then
+    printf '%s\n' "$CHAIN_MODULE_CLI_NAME"
+    return 0
+  fi
+
+  local candidate
+  for candidate in polystorechain nilchain; do
+    local help_out=""
+    help_out="$("$POLYSTORECHAIND_BIN" tx "$candidate" --help 2>/dev/null || true)"
+    if printf '%s' "$help_out" | grep -Eq "tx ${candidate}( |$)|${candidate} transactions subcommands"; then
+      CHAIN_MODULE_CLI_NAME="$candidate"
+      printf '%s\n' "$CHAIN_MODULE_CLI_NAME"
+      return 0
+    fi
+  done
+
+  echo "ERROR: failed to detect polystore module CLI namespace" >&2
+  return 1
+}
 
 chain_home_is_under_artifacts() {
   if ! command -v python3 >/dev/null 2>&1; then
@@ -512,6 +542,13 @@ init_chain() {
     "$POLYSTORECHAIND_BIN" genesis add-genesis-account "$addr" "1000000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   done
 
+  # Pre-fund the deterministic browser E2E wallet so live Playwright flows do
+  # not depend on the faucet process coming up cleanly.
+  "$POLYSTORECHAIND_BIN" genesis add-genesis-account "$POLYSTORE_E2E_WALLET_ADDR" \
+    "1000000000$DENOM,1000000000000000000aatom" \
+    --home "$CHAIN_HOME" \
+    --keyring-backend test
+
   # Fund faucet + create validator
   "$POLYSTORECHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   "$POLYSTORECHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
@@ -632,7 +669,9 @@ start_faucet() {
 register_provider() {
   local key="$1"
   local endpoint="$2"
-  "$POLYSTORECHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
+  local module_cli
+  module_cli="$(detect_chain_module_cli_name)"
+  "$POLYSTORECHAIND_BIN" tx "$module_cli" register-provider General 1099511627776 \
     --endpoint "$endpoint" \
     --from "$key" \
     --chain-id "$CHAIN_ID" \

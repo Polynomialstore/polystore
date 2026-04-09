@@ -143,7 +143,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const dealIdTopic = toHex(1n, { size: 32 })
   const ownerTopic = padHex(account.address, { size: 32 })
 
-  await page.route('**://localhost:8545', async (route) => {
+  await page.route(/^http:\/\/(?:localhost|127\.0\.0\.1):8545\/?$/, async (route) => {
     const payload = JSON.parse(route.request().postData() || '{}') as any
     const method = payload?.method
     const params = payload?.params || []

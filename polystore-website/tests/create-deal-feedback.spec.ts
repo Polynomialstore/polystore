@@ -3,7 +3,6 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import type { Hex } from 'viem'
 
-import { appConfig } from '../src/config'
 import { ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
@@ -117,12 +116,12 @@ async function installWallet(
 
 test('create deal drawer stays open and shows actionable RPC errors', async ({ page }) => {
   const account = privateKeyToAccount(generatePrivateKey())
-  const chainId = appConfig.chainId
+  const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
 
   await installBaseMocks(page)
 
-  await page.route('**://localhost:8545', async (route) => {
+  await page.route(/^http:\/\/(?:localhost|127\.0\.0\.1):8545\/?$/, async (route) => {
     const payload = JSON.parse(route.request().postData() || '{}') as any
     const method = payload?.method
 

@@ -503,7 +503,7 @@ test('repro bug: download from commit content widget', async ({
       .poll(async () => {
         const staged = ((await page.getByTestId('staged-manifest-root').first().textContent().catch(() => '')) || '').trim()
         return /^0x[0-9a-f]{96}$/i.test(staged)
-      }, { timeout: 180_000 })
+      }, { timeout: 20_000 })
       .toBe(true)
     stagedReady = true
   } catch {

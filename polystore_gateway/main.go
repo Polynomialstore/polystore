@@ -361,6 +361,8 @@ var txHashRe = regexp.MustCompile(`txhash:\s*([A-Fa-f0-9]+)`)
 var polystoreAddressRe = regexp.MustCompile(`\bnil1[0-9a-z]{20,}\b`)
 
 var lcdHTTPClient = &http.Client{Timeout: 5 * time.Second}
+var chainModuleCLINameOnce sync.Once
+var chainModuleCLINameValue string
 
 // extractJSONBody attempts to locate the first JSON object in a mixed CLI output.
 func extractJSONBody(b []byte) []byte {
@@ -671,8 +673,52 @@ func applyDesktopSidecarDefaults() {
 
 // execPolystorechaind runs a polystorechaind command and returns its combined output.
 func execPolystorechaind(ctx context.Context, args ...string) ([]byte, error) {
+	args = normalizeChainModuleArgs(args)
 	args = maybeWithNodeArg(args)
 	return runCommand(ctx, polystorechaindBin, args, derivePolystorechaindDir())
+}
+
+func chainModuleCLIName() string {
+	chainModuleCLINameOnce.Do(func() {
+		if override := strings.TrimSpace(os.Getenv("POLYSTORE_CHAIN_MODULE_CLI_NAME")); override != "" {
+			chainModuleCLINameValue = override
+			return
+		}
+		if mockCombinedOutput != nil {
+			chainModuleCLINameValue = "polystorechain"
+			return
+		}
+
+		candidates := []string{"polystorechain", "nilchain"}
+		for _, candidate := range candidates {
+			detectCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			out, err := runCommand(detectCtx, polystorechaindBin, []string{"tx", candidate, "--help"}, derivePolystorechaindDir())
+			cancel()
+			if err == nil && (strings.Contains(string(out), "tx "+candidate+" ") || strings.Contains(string(out), candidate+" transactions subcommands")) {
+				chainModuleCLINameValue = candidate
+				return
+			}
+		}
+
+		chainModuleCLINameValue = "polystorechain"
+	})
+	return chainModuleCLINameValue
+}
+
+func normalizeChainModuleArgs(args []string) []string {
+	if len(args) < 3 {
+		return args
+	}
+	if args[0] != "tx" && args[0] != "query" {
+		return args
+	}
+	if args[1] != "polystorechain" {
+		return args
+	}
+
+	normalized := append([]string(nil), args...)
+	normalized[1] = chainModuleCLIName()
+	return normalized
 }
 
 func maybeWithNodeArg(args []string) []string {

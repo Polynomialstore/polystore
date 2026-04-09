@@ -405,7 +405,7 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 		"--yes",
 	)
 
-	out, err := runCommand(ctx, polystorechaindBin, args, "")
+	out, err := execPolystorechaind(ctx, args...)
 	output := strings.TrimSpace(string(out))
 	if err != nil {
 		if output == "" {

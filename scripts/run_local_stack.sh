@@ -49,6 +49,8 @@ export POLYSTORE_DISABLE_EVM_MEMPOOL
 POLYSTORE_AUTO_FAUCET_EVM="${POLYSTORE_AUTO_FAUCET_EVM:-0}"
 POLYSTORE_ENABLE_TX_RELAY="${POLYSTORE_ENABLE_TX_RELAY:-0}"
 POLYSTORE_AUTO_FAUCET_EVM_ADDR="${POLYSTORE_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
+# Default browser E2E wallet from polystore-website/src/lib/e2eWallet.ts.
+POLYSTORE_E2E_WALLET_ADDR="${POLYSTORE_E2E_WALLET_ADDR:-nil1ser7fv30x7e7xr7n62tlr7m7z07ldqj4thdezk}"
 # Start the faucet service (minimal faucet enabled by default).
 # The faucet runs, but auto-funding and the tx-relay remain off so the stack stays wallet-first.
 POLYSTORE_START_FAUCET="${POLYSTORE_START_FAUCET:-1}"
@@ -78,6 +80,29 @@ export POLYSTORE_GATEWAY_SP_AUTH
 echo "$POLYSTORE_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
+
+CHAIN_MODULE_CLI_NAME="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-}"
+
+detect_chain_module_cli_name() {
+  if [ -n "$CHAIN_MODULE_CLI_NAME" ]; then
+    printf '%s\n' "$CHAIN_MODULE_CLI_NAME"
+    return 0
+  fi
+
+  local candidate
+  for candidate in polystorechain nilchain; do
+    local help_out=""
+    help_out="$("$POLYSTORECHAIND_BIN" tx "$candidate" --help 2>/dev/null || true)"
+    if printf '%s' "$help_out" | grep -Eq "tx ${candidate}( |$)|${candidate} transactions subcommands"; then
+      CHAIN_MODULE_CLI_NAME="$candidate"
+      printf '%s\n' "$CHAIN_MODULE_CLI_NAME"
+      return 0
+    fi
+  done
+
+  echo "ERROR: failed to detect polystore module CLI namespace" >&2
+  return 1
+}
 
 listener_pids_for_port() {
   local port="$1"
@@ -536,7 +561,9 @@ register_demo_provider() {
       done
     fi
 
-    "$POLYSTORECHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
+    local module_cli
+    module_cli="$(detect_chain_module_cli_name)"
+    "$POLYSTORECHAIND_BIN" tx "$module_cli" register-provider General 1099511627776 \
       --from faucet \
       "${endpoint_args[@]}" \
       --chain-id "$CHAIN_ID" \
@@ -599,7 +626,7 @@ register_demo_provider() {
             done
           fi
 
-          "$POLYSTORECHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
+          "$POLYSTORECHAIND_BIN" tx "$module_cli" register-provider General 1099511627776 \
             --from "$key_name" \
             "${endpoint_args_child[@]}" \
             --chain-id "$CHAIN_ID" \
@@ -614,7 +641,7 @@ register_demo_provider() {
 
     # Check if we have enough providers for Mode 2 placement.
     local count
-    count=$("$POLYSTORECHAIND_BIN" query polystorechain list-providers --node "$RPC_ADDR" --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
+    count=$("$POLYSTORECHAIND_BIN" query "$module_cli" list-providers --node "$RPC_ADDR" --home "$CHAIN_HOME" --output json 2>/dev/null | grep -c '"address"' || true)
     if [ "$count" -ge "$provider_count" ]; then
       echo "Demo providers registered successfully ($count provider(s))."
       return 0
@@ -663,6 +690,8 @@ init_chain() {
   "$POLYSTORECHAIND_BIN" genesis add-genesis-account nil1fhfv33zftq2xdhelv2cq0gjrnrwctr6ag75ey4 "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   # Pre-fund additional EVM demo account (0xf7931ff7fc55d19ef4a8139fa7e4b3f06e03f2e2).
   "$POLYSTORECHAIND_BIN" genesis add-genesis-account nil177f3lalu2hgeaa9gzw060e9n7phq8uhzpfks5m "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  # Pre-fund the deterministic browser E2E wallet used by Playwright.
+  "$POLYSTORECHAIND_BIN" genesis add-genesis-account "$POLYSTORE_E2E_WALLET_ADDR" "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
 
   # Also pre-fund EVM signer accounts used by gateway/e2e/bridge deployment.
   # This avoids relying on the faucet, which uses polystorechaind CLI txs that can hang on some setups.
