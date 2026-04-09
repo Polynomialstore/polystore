@@ -15,12 +15,12 @@ The default provider flow now targets the canonical public NilStore testnet from
 Only set `HUB_NODE`, `HUB_LCD`, or `CHAIN_ID` when you are intentionally joining a non-public hub.
 
 The web-first operator flow is:
-1. Open `https://nilstore.org/#/sp-onboarding` on the website.
+1. Open `https://polynomialstore.com/#/sp-onboarding` on the website.
 2. Connect the operator wallet and copy the operator address (`nil1...`).
 3. Prepare the provider host checkout on the machine that will run the provider-daemon.
 4. Pair provider identity: run one `pair` command on the provider host, let it create the key if needed, fund it and rerun if auto-funding is unavailable, then approve it from the website wallet step.
 5. Configure public access: set the provider endpoint and paste `NIL_GATEWAY_SP_AUTH` from the hub operator.
-6. Run bootstrap from the website command rail, then finish verification from `https://nilstore.org/#/sp-dashboard`.
+6. Run bootstrap from the website command rail, then finish verification from `https://polynomialstore.com/#/sp-dashboard`.
 
 ## Provider machine prerequisites
 
@@ -83,7 +83,7 @@ export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
 If the key is new and the command prints a provider `nil1...` address that still needs gas, fund that address with `aatom` and rerun the same `pair` command.
 
-Approve the pending provider link in `https://nilstore.org/#/sp-onboarding`, then continue with:
+Approve the pending provider link in `https://polynomialstore.com/#/sp-onboarding`, then continue with:
 
 ```bash
 export PROVIDER_KEY="provider1"

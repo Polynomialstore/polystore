@@ -320,10 +320,10 @@ test('provider onboarding docs reflect update-aware endpoints and the web-first 
   const nilstorePacket = readRepoFile('docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md')
 
   assert.match(quickstart, /Treat `NIL_GATEWAY_SP_AUTH` as a secret/)
-  assert.match(quickstart, /https:\/\/nilstore\.org\/#\/sp-onboarding/)
+  assert.match(quickstart, /https:\/\/polynomialstore\.com\/#\/sp-onboarding/)
   assert.match(remote, /BOOTSTRAP_ALLOW_PARTIAL=1/)
-  assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-onboarding/)
-  assert.match(remote, /https:\/\/nilstore\.org\/#\/sp-dashboard/)
+  assert.match(remote, /https:\/\/polynomialstore\.com\/#\/sp-onboarding/)
+  assert.match(remote, /https:\/\/polynomialstore\.com\/#\/sp-dashboard/)
   assert.match(remote, /run_devnet_provider\.sh pair/)
   assert.match(remote, /run_devnet_provider\.sh link/)
   assert.match(endpoints, /update-provider-endpoints/)
