@@ -6,16 +6,16 @@ import fs from 'fs';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { bech32 } from 'bech32';
 
-const NIL_CLI_PATH = path.resolve('..', 'nil_cli/target/release/nil_cli');
+const POLYSTORE_CLI_PATH = path.resolve('..', 'polystore_cli/target/release/polystore_cli');
 const TEST_FILE_SIZE = 1024 * 1024; // 1MB
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex');
   const words = bech32.toWords(data);
   return bech32.encode('nil', words);
 }
 
-test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testInfo) => {
+test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
 
   // 1. Generate Test File
@@ -24,25 +24,25 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testI
   const fileBytes = Buffer.alloc(TEST_FILE_SIZE, 'a'); // 'a' content
   fs.writeFileSync(testFilePath, fileBytes);
 
-  // 2. Run nil_cli to get reference Manifest Root
-  console.log('Running nil_cli shard...');
+  // 2. Run polystore_cli to get reference Manifest Root
+  console.log('Running polystore_cli shard...');
   let referenceRoot = '';
   let referenceMduRoot = '';
   try {
-    // Check if nil_cli exists
-    if (!fs.existsSync(NIL_CLI_PATH)) {
-        console.warn(`nil_cli not found at ${NIL_CLI_PATH}. Skipping parity check logic that requires CLI.`);
+    // Check if polystore_cli exists
+    if (!fs.existsSync(POLYSTORE_CLI_PATH)) {
+        console.warn(`polystore_cli not found at ${POLYSTORE_CLI_PATH}. Skipping parity check logic that requires CLI.`);
         // Fail the test if CLI is missing, as requested
-        test.fail(true, "nil_cli binary missing");
+        test.fail(true, "polystore_cli binary missing");
         return;
     }
 
-    const trustedSetupPath = path.resolve('..', 'nilchain/trusted_setup.txt');
+    const trustedSetupPath = path.resolve('..', 'polystorechain/trusted_setup.txt');
     console.log('Trusted Setup Path:', trustedSetupPath);
     console.log('File Path:', path.resolve(testFilePath));
     
     // Run CLI
-    execSync(`${NIL_CLI_PATH} shard ${path.resolve(testFilePath)} --out ${path.resolve(outJsonPath)}`, {
+    execSync(`${POLYSTORE_CLI_PATH} shard ${path.resolve(testFilePath)} --out ${path.resolve(outJsonPath)}`, {
         encoding: 'utf-8',
         env: { ...process.env, CKZG_TRUSTED_SETUP: trustedSetupPath }
     });
@@ -52,13 +52,13 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testI
     referenceRoot = json.manifest_root_hex || json.manifest_root;
     referenceMduRoot = json?.mdus?.[0]?.root_hex || '';
   } catch (e) {
-    console.error('Failed to run nil_cli:', e);
+    console.error('Failed to run polystore_cli:', e);
     throw e;
   }
   
-  console.log('Reference Root (nil_cli):', referenceRoot);
+  console.log('Reference Root (polystore_cli):', referenceRoot);
   expect(referenceRoot).toMatch(/^0x[0-9a-f]{96}$/);
-  console.log('Reference User MDU Root (nil_cli):', referenceMduRoot);
+  console.log('Reference User MDU Root (polystore_cli):', referenceMduRoot);
   expect(referenceMduRoot).toMatch(/^0x[0-9a-f]{64}$/);
 
   // 3. Setup Browser Env
@@ -66,17 +66,17 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testI
   const randomPk = generatePrivateKey();
   const account = privateKeyToAccount(randomPk);
   const chainIdHex = '0x7A69'; // 31337
-  const nilAddress = ethToNil(account.address);
+  const polystoreAddress = ethToPolystoreAddress(account.address);
 
   // Mock LCD Deals to allow selection
-  await page.route('**/nilchain/nilchain/v1/deals**', async route => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async route => {
       await route.fulfill({
           status: 200,
           body: JSON.stringify({
               deals: [
                   {
                       id: '1',
-                      owner: nilAddress,
+                      owner: polystoreAddress,
                       cid: '',
                       size: '0',
                       escrow_balance: '1000000',
@@ -110,7 +110,7 @@ test('WASM Parity: Client-side sharding matches nil_cli', async ({ page }, testI
     if (w.ethereum) return;
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

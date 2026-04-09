@@ -15,7 +15,7 @@ export const Leaderboard: React.FC = () => {
 
   useEffect(() => {
     const controller = new AbortController()
-    const url = `${appConfig.lcdBase}/nilchain/nilchain/v1/providers`
+    const url = `${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`
 
     fetch(url, { signal: controller.signal })
       .then((res) => res.json())

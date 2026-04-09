@@ -34,39 +34,39 @@ It maps the runbook phases to real directories, files, and existing test gates i
 ### Chain (Cosmos SDK app)
 
 - Protos:
-  - `nilchain/proto/nilchain/nilchain/v1/types.proto` (Deal + types)
-  - `nilchain/proto/nilchain/nilchain/v1/tx.proto` (Msgs)
-  - `nilchain/proto/nilchain/nilchain/v1/params.proto` (Params)
+  - `polystorechain/proto/polystorechain/polystorechain/v1/types.proto` (Deal + types)
+  - `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto` (Msgs)
+  - `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` (Params)
 - Msg handlers:
-  - `nilchain/x/nilchain/keeper/msg_server.go`
+  - `polystorechain/x/polystorechain/keeper/msg_server.go`
     - `CreateDeal` / `CreateDealFromEvm`
     - `UpdateDealContent` / `UpdateDealContentFromEvm`
     - `OpenRetrievalSession` / `ConfirmRetrievalSession` / `CancelRetrievalSession`
     - `ProveLiveness` (unified liveness, includes Mode 2 repairing slot rules)
 - Quotas / unified liveness:
-  - `nilchain/x/nilchain/keeper/unified_liveness.go`
-  - `nilchain/x/nilchain/keeper/slashing.go` (quota miss -> repair triggers, evidence summaries)
+  - `polystorechain/x/polystorechain/keeper/unified_liveness.go`
+  - `polystorechain/x/polystorechain/keeper/slashing.go` (quota miss -> repair triggers, evidence summaries)
 - EVM bridge helpers:
-  - `nilchain/x/nilchain/types/evm_bridge.go`
+  - `polystorechain/x/polystorechain/types/evm_bridge.go`
 
 ### Gateway + Provider data-plane
 
-In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` (no separate `nil-provider/` dir).
+In this repo, provider byte-serving endpoints are implemented in `polystore_gateway/` (no separate `nil-provider/` dir).
 
 - HTTP router + handlers:
-  - `nil_gateway/main.go`
-    - `GatewayFetch` (user-facing download path; **requires** `X-Nil-Session-Id` by default via `NIL_REQUIRE_ONCHAIN_SESSION=1`)
+  - `polystore_gateway/main.go`
+    - `GatewayFetch` (user-facing download path; **requires** `X-PolyStore-Session-Id` by default via `POLYSTORE_REQUIRE_ONCHAIN_SESSION=1`)
     - `SpFetchShard` (provider shard fetch; validates on-chain session + Mode2 slot/range constraints when sessions are required)
-    - dev-only tx relay flows (`NIL_ENABLE_TX_RELAY=0` by default; CI lifecycle scripts enable it explicitly)
-  - `nil_gateway/router_proxy.go` (gateway proxy/router for provider requests)
-  - `nil_gateway/p2p_server.go` (P2P requests; forwards `X-Nil-Session-Id` when present)
+    - dev-only tx relay flows (`POLYSTORE_ENABLE_TX_RELAY=0` by default; CI lifecycle scripts enable it explicitly)
+  - `polystore_gateway/router_proxy.go` (gateway proxy/router for provider requests)
+  - `polystore_gateway/p2p_server.go` (P2P requests; forwards `X-PolyStore-Session-Id` when present)
 
 ### Web UI
 
 - Main UX:
   - `polystore-website/src/components/Dashboard.tsx` (create deal, faucet UX, upload/commit, retrieval flows)
   - `polystore-website/src/hooks/useFaucet.ts` (browser-triggered faucet calls; should be dev-only in wallet-first mode)
-  - `polystore-website/src/hooks/useTransportRouter.ts` (adds `X-Nil-Session-Id` when downloading)
+  - `polystore-website/src/hooks/useTransportRouter.ts` (adds `X-PolyStore-Session-Id` when downloading)
   - `polystore-website/src/lib/e2eWallet.ts` (Playwright: injects an in-page “wallet” when `VITE_E2E=1`)
 - Web contract doc:
   - `polystore-website/website-spec.md`
@@ -80,7 +80,7 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
   - `./scripts/run_devnet_alpha_multi_sp.sh stop`
 - Single-node stack:
   - `./scripts/run_local_stack.sh`
-  - Safety note: `run_local_stack.sh start` always re-initializes the chain home. Default home is `_artifacts/nilchain_data`. If you set `NIL_HOME` outside `_artifacts/`, wiping requires `NIL_REINIT_HOME=1`.
+  - Safety note: `run_local_stack.sh start` always re-initializes the chain home. Default home is `_artifacts/polystorechain_data`. If you set `POLYSTORE_HOME` outside `_artifacts/`, wiping requires `POLYSTORE_REINIT_HOME=1`.
 
 ### E2E scripts
 
@@ -101,14 +101,14 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
 ### Unit tests
 
 - Chain:
-  - `go test ./nilchain/...`
+  - `go test ./polystorechain/...`
 - Gateway:
-  - `go test ./nil_gateway/...`
+  - `go test ./polystore_gateway/...`
 - Rust crates:
-  - `cd nil_core && cargo test`
-  - `cd nil_cli && cargo test`
-  - `cd nil_p2p && cargo test`
-  - `cd nil_mock_l1 && cargo test`
+  - `cd polystore_core && cargo test`
+  - `cd polystore_cli && cargo test`
+  - `cd polystore_p2p && cargo test`
+  - `cd polystore_mock_l1 && cargo test`
 - Website:
   - `npm -C polystore-website run test:unit`
   - `npm -C polystore-website run build`
@@ -118,22 +118,22 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
   - `npm -C polystore_gateway_gui run build`
   - `cd polystore_gateway_gui/src-tauri && cargo test`
 - Foundry contracts:
-  - `cd nil_bridge && forge test -vv`
+  - `cd polystore_bridge && forge test -vv`
 
 ## CI truth (GitHub Actions)
 
 The authoritative source of “what CI runs” is `.github/workflows/ci.yml`.
 
 At a high level, CI exercises:
-- Go unit tests: `nilchain`, `nil_faucet`, `nil_gateway`, `nil_relayer`
-- Rust unit tests: `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
+- Go unit tests: `polystorechain`, `polystore_faucet`, `polystore_gateway`, `polystore_relayer`
+- Rust unit tests: `polystore_core`, `polystore_cli`, `polystore_p2p`, `polystore_mock_l1`
 - Frontend: build + unit tests + lint (`polystore-website`)
 - Tauri GUI: build + unit tests + clippy (`polystore_gateway_gui`)
-- Native/WASM parity: `nil_core` wasm-pack build + `tools/parity/compare_parity.ts`
+- Native/WASM parity: `polystore_core` wasm-pack build + `tools/parity/compare_parity.ts`
 - Local-stack E2E: lifecycle (with and without a local gateway), retrieval fees, and retrieval sessions (Mode1 + Mode2)
 - Browser E2E (Playwright): gateway-absent, libp2p-relay, Mode2 stripe (12 SPs)
 - Multi-SP regression: `scripts/ci_e2e_gateway_retrieval_multi_sp.sh`
-- Solidity: `forge test` under `nil_bridge`
+- Solidity: `forge test` under `polystore_bridge`
 
 ## Phase mapping (repo-specific)
 
@@ -151,7 +151,7 @@ Primary artifacts:
 ### Phase 1 — Deal expiry + renewal (ExtendDeal) (DONE)
 
 CI signals:
-- Unit tests: `cd nilchain && go test ./...` (see extend tests under `nilchain/x/nilchain/keeper/*extend*`)
+- Unit tests: `cd polystorechain && go test ./...` (see extend tests under `polystorechain/x/polystorechain/keeper/*extend*`)
 - E2E: `scripts/e2e_lifecycle.sh`
 
 ### Phase 2 — Mandatory retrieval sessions for all served bytes (DONE)
@@ -163,21 +163,21 @@ CI signals:
 ### Phase 3 — Retrieval policies + sponsored/public sessions (DONE)
 
 CI signals:
-- Unit tests: allowlist + vouchers under `nilchain/x/nilchain/keeper/*sponsored*`
+- Unit tests: allowlist + vouchers under `polystorechain/x/polystorechain/keeper/*sponsored*`
 - E2E: covered by lifecycle + retrieval-session scripts
 
 ### Phase 4 — Protocol retrieval hooks (audit/repair) + audit budget (DONE)
 
 CI signals:
-- Unit tests: protocol sessions + audit budget under `nilchain/x/nilchain/keeper/*protocol*` and `*audit*`
+- Unit tests: protocol sessions + audit budget under `polystorechain/x/polystorechain/keeper/*protocol*` and `*audit*`
 
-### Phase 5 — Compression-aware content pipeline (NilCE v1) (PARTIAL)
+### Phase 5 — Compression-aware content pipeline (PolyCE v1) (PARTIAL)
 
 CI signals:
-- Unit tests only: `go test ./nil_gateway/...` (NilCE helpers)
+- Unit tests only: `go test ./polystore_gateway/...` (PolyCE helpers)
 
 Not proven:
-- NilCE-enabled end-to-end upload/fetch semantics are not required by CI E2E (and are opt-in via `NIL_NILCE=1`).
+- PolyCE-enabled end-to-end upload/fetch semantics are not required by CI E2E (and are opt-in via `POLYSTORE_POLYCE=1`).
 
 ### Phase 6 — Wallet-first UX (DONE)
 

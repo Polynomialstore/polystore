@@ -1,4 +1,4 @@
-# Mainnet Gap Tracker (NilStore)
+# Mainnet Gap Tracker (PolyStore)
 
 This document tracks **what is missing** between the current implementation in this repo and the **long‑term Mainnet plan** described by `spec.md` (canonical), `rfcs/`, and `notes/`.
 
@@ -14,11 +14,11 @@ This document tracks **what is missing** between the current implementation in t
 - Keep items **small enough to ship** (1–5 PRs each).
 - Every epic should have a **test gate** (unit/e2e/script) before it can be marked “Done”.
 - Prefer tracking **code ownership** by directory:
-  - Chain: `nilchain/`
-  - Gateway/SP: `nil_gateway/`
-  - Core crypto/WASM: `nil_core/`
-  - CLI automation: `nil_cli/`
-  - P2P: `nil_p2p/`
+  - Chain: `polystorechain/`
+  - Gateway/SP: `polystore_gateway/`
+  - Core crypto/WASM: `polystore_core/`
+  - CLI automation: `polystore_cli/`
+  - P2P: `polystore_p2p/`
   - Web UX: `polystore-website/`
 
 ## Status Legend
@@ -55,7 +55,7 @@ This document tracks **what is missing** between the current implementation in t
 ### P0-P2P-001 — Deputy system + proxy retrieval market + audit debt
 - **Status:** PARTIAL (stub only)
 - **Spec:** `spec.md` §7.7–§7.8; `rfcs/rfc-retrieval-validation.md`; Appendix B (7)
-- **Current state:** `nil_p2p` has an `AskForProxy` message stub, but no end-to-end deputy selection, relay, compensation, or evidence.
+- **Current state:** `polystore_p2p` has an `AskForProxy` message stub, but no end-to-end deputy selection, relay, compensation, or evidence.
 - **DoD:** proxy retrieval works when an SP “ghosts”; failure evidence is produced and aggregated; audit debt tasks are assignable/trackable; griefing mitigations.
 - **Test gate:** e2e “ghosting provider” scenario that still retrieves via deputy and records evidence.
 
@@ -66,11 +66,11 @@ This document tracks **what is missing** between the current implementation in t
 - **DoD:** CUDA (server) and/or WebGPU (client) path that materially raises sustained throughput; pipeline parallelism is default.
 - **Test gate:** reproducible perf benchmark suite (CI “doesn’t regress”) + local benchmark script with thresholds.
 
-### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
+### P0-CORE-001 — “One core” migration (PolyFS + crypto single source of truth)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
-- **Current state:** `nil_gateway` contains NilFS/layout logic in Go, while the browser uses `nil_core` WASM for crypto; risk of drift.
-- **DoD:** NilFS builder/layout + commitment logic live in `nil_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
+- **Current state:** `polystore_gateway` contains PolyFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
+- **DoD:** PolyFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
 - **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
 
 ### P0-ECON-001 — Mainnet escrow accounting + lock-in pricing (pay-at-ingest)
@@ -89,7 +89,7 @@ This document tracks **what is missing** between the current implementation in t
 
 ## Domain Backlog (P1/P2) — Organized By Subsystem
 
-### Chain / Protocol (`nilchain/`)
+### Chain / Protocol (`polystorechain/`)
 
 #### CHAIN-101 — Explicit Mode 2 encoding on-chain (K/M, slot mapping, overlays)
 - **Status:** PARTIAL (DEVNET)
@@ -116,10 +116,10 @@ This document tracks **what is missing** between the current implementation in t
 
 #### CHAIN-106 — EVM module production posture (simulation vs runtime)
 - **Status:** PARTIAL (DEVNET)
-- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `nilchain/app/app.go` simulation exclusions
+- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `polystorechain/app/app.go` simulation exclusions
 - **Notes:** EVM/FeeMarket are excluded from simulation to avoid signer panics; ensure production builds are safe and tested.
 
-### Gateway / Provider (`nil_gateway/`)
+### Gateway / Provider (`polystore_gateway/`)
 
 #### GW-201 — Strict session enforcement on data-plane fetches
 - **Status:** PARTIAL (DEVNET)
@@ -134,7 +134,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### GW-204 — S3 adapter polish + bidirectional sync scripts (nilstore ↔ S3)
+#### GW-204 — S3 adapter polish + bidirectional sync scripts (polystore ↔ S3)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
 
@@ -152,7 +152,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Source:** `polystore-website/AGENTS.md` §8
 
-### Core crypto / WASM (`nil_core/`)
+### Core crypto / WASM (`polystore_core/`)
 
 #### CORE-401 — WebGPU KZG commitments/proofs (client-side velocity)
 - **Status:** MISSING
@@ -162,17 +162,17 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** PARTIAL (DEVNET)
 - **DoD:** stable outputs for commitments across Mac/Linux and browser/gateway; fuzzers for edge-cases.
 
-### CLI / Automation (`nil_cli/`, `scripts/`)
+### CLI / Automation (`polystore_cli/`, `scripts/`)
 
 #### CLI-501 — Enterprise upload job runner (delegated key, scoped funding, teardown)
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### CLI-502 — Fast download / mirror scripts (provider → local, nilstore → S3)
+#### CLI-502 — Fast download / mirror scripts (provider → local, polystore → S3)
 - **Status:** PARTIAL (DEVNET)
 - **Notes:** `notes/launch_todos.md`
 
-### P2P (`nil_p2p/`)
+### P2P (`polystore_p2p/`)
 
 #### P2P-601 — Production transport + discovery (beyond stubs)
 - **Status:** PARTIAL (DEVNET)
@@ -213,12 +213,12 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
   - `spec.md` naming + Appendix B references aligned to the RFCs
 - **Exit criteria:** updated RFCs/spec deltas + a checklist of exact protobuf/state transitions to implement in the next sprints.
 
-### Sprint 1 — “One core” foundation (NilFS + commitments unified)
+### Sprint 1 — “One core” foundation (PolyFS + commitments unified)
 - **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
-- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `nil_core`.
+- **Goal:** eliminate browser/gateway drift risk by centralizing PolyFS layout + commitment computation in `polystore_core`.
 - **Delivers:**
-  - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `nil_core` (Rust) with a stable API surface.
-  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
+  - Port PolyFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
+  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `polystore_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
 
@@ -290,7 +290,7 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Delivers:**
   - S3 adapter correctness + compatibility testing (aws-cli/rclone).
   - Third-party uploader pattern: scoped key funding + teardown + audit workflow.
-  - Fast download / mirroring scripts (nilstore ↔ S3) with documented performance expectations.
+  - Fast download / mirroring scripts (polystore ↔ S3) with documented performance expectations.
 - **Test gate:** integration tests + scripted “upload from S3 → verify on-chain → retrieve to S3” pipeline.
 
 ### Sprint 10 — Mainnet hardening + audits + launch readiness
@@ -345,4 +345,4 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
 - `sprint22-wallet-unlock-detection`: detect MetaMask authorization (`eth_accounts`) early so “Create deal” prompts unlock before submit.
 - `sprint23-gap-tracker-status`: record sprint22 execution status in the tracker (doc hygiene).
-- `sprint24-one-core-payload-ffi`: move NilFS payload encode/decode into `nil_core` FFI to reduce cross-runtime drift.
+- `sprint24-one-core-payload-ffi`: move PolyFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.

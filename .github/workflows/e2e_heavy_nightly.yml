@@ -41,15 +41,15 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Cache Cargo (nil_core/nil_cli)
+      - name: Cache Cargo (polystore_core/polystore_cli)
         uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            nil_core/target
-            nil_cli/target
-          key: ${{ runner.os }}-cargo-e2e-mode2-heavy-${{ hashFiles('nil_core/Cargo.lock', 'nil_cli/Cargo.lock') }}
+            polystore_core/target
+            polystore_cli/target
+          key: ${{ runner.os }}-cargo-e2e-mode2-heavy-${{ hashFiles('polystore_core/Cargo.lock', 'polystore_cli/Cargo.lock') }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -89,7 +89,7 @@ jobs:
           PLAYWRIGHT_SKIP_INSTALL: '1'
           PROVIDER_COUNT: '12'
         run: |
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
           scripts/e2e_mode2_stripe_multi_sp.sh
 
       - name: Upload Mode2 heavy artifacts
@@ -127,15 +127,15 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Cache Cargo (nil_core/nil_cli)
+      - name: Cache Cargo (polystore_core/polystore_cli)
         uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            nil_core/target
-            nil_cli/target
-          key: ${{ runner.os }}-cargo-e2e-libp2p-relay-${{ hashFiles('nil_core/Cargo.lock', 'nil_cli/Cargo.lock') }}
+            polystore_core/target
+            polystore_cli/target
+          key: ${{ runner.os }}-cargo-e2e-libp2p-relay-${{ hashFiles('polystore_core/Cargo.lock', 'polystore_cli/Cargo.lock') }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -170,12 +170,12 @@ jobs:
         working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
-      - name: Build nil_core (native)
-        run: cd nil_core && cargo build --release
+      - name: Build polystore_core (native)
+        run: cd polystore_core && cargo build --release
 
       - name: Run Playwright (LibP2P Relay)
         run: |
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/nil_core/target/release
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
           scripts/e2e_browser_libp2p_relay.sh
 
       - name: Upload LibP2P relay artifacts

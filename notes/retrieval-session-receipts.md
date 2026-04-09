@@ -78,7 +78,7 @@ We extend the on-chain receipt semantics so the chain can store and reason about
 - Per-chunk: `(file_path, range_start, range_len)` is bound via `leaf_hash`.
 - Session-level: `(file_path, total_bytes, chunk_count)` is bound via the signed session receipt.
 
-The chain still cannot independently map ranges → `(mdu_index, blob_index)` without NilFS metadata, but it can:
+The chain still cannot independently map ranges → `(mdu_index, blob_index)` without PolyFS metadata, but it can:
 - validate `range_len == bytes_served` for accounting,
 - prevent receipt inflation by requiring chunk membership in the signed `chunk_leaf_root`,
 - expose exact byte-range evidence for audits and dashboards.

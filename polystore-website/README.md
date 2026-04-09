@@ -1,6 +1,6 @@
-# NilStore Website & Explorer
+# PolyStore Website & Explorer
 
-The official frontend for the NilStore Network. This application serves as the marketing landing page, documentation hub, and interactive block explorer for the Incentivized Testnet ("Store Wars").
+The official frontend for the PolyStore Network. This application serves as the marketing landing page, documentation hub, and interactive block explorer for the Incentivized Testnet ("Store Wars").
 
 ## Features
 
@@ -21,13 +21,13 @@ The official frontend for the NilStore Network. This application serves as the m
 
 ## SDK: Batch Retrieval Precompile
 
-NilStore exposes an EVM precompile at `0x0000000000000000000000000000000000000900`. For downloads that span multiple providers, use the batch methods (avoid log parsing and reduce MetaMask prompts):
+PolyStore exposes an EVM precompile at `0x0000000000000000000000000000000000000900`. For downloads that span multiple providers, use the batch methods (avoid log parsing and reduce MetaMask prompts):
 
 - `computeRetrievalSessionIds(sessions[])` (`eth_call`) → `(providers[], sessionIds[])`
 - `openRetrievalSessions(sessions[])` (`eth_sendTransaction`)
 - `confirmRetrievalSessions(sessionIds[])` (`eth_sendTransaction`)
 
-TypeScript ABI + helper encoders/decoders live at `src/lib/nilstorePrecompile.ts`.
+TypeScript ABI + helper encoders/decoders live at `src/lib/polystorePrecompile.ts`.
 
 ## Development
 
@@ -41,8 +41,8 @@ npm install
 npm run dev
 ```
 The site will launch at `http://localhost:5173`.
-When `public/wasm/nil_core.js` and `public/wasm/nil_core_bg.wasm` are already present, `npm run dev`
-reuses that bundle for fast startup. Force a fresh WASM rebuild with `NIL_FORCE_WASM_BUILD=1 npm run dev`.
+When `public/wasm/polystore_core.js` and `public/wasm/polystore_core_bg.wasm` are already present, `npm run dev`
+reuses that bundle for fast startup. Force a fresh WASM rebuild with `POLYSTORE_FORCE_WASM_BUILD=1 npm run dev`.
 
 ### Build for Production
 ```bash

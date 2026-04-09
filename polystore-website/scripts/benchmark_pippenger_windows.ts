@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-import init, { NilWasm } from '../public/wasm/nil_core.js'
+import init, { PolyStoreWasm } from '../public/wasm/polystore_core.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -49,13 +49,13 @@ function makeDeterministicPayload(length: number): Uint8Array {
   return bytes
 }
 
-const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
+const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
 const wasmBuffer = await fs.readFile(wasmPath)
 await init({ module_or_path: wasmBuffer })
 
 const trustedSetupPath = path.resolve(websiteRoot, 'public', 'trusted_setup.txt')
 const trustedSetup = new Uint8Array(await fs.readFile(trustedSetupPath))
-const wasm = new NilWasm(trustedSetup)
+const wasm = new PolyStoreWasm(trustedSetup)
 
 const payload = makeDeterministicPayload(fileBytes)
 const expandedRaw = wasm.expand_payload_rs_flat_uncommitted(payload, rsK, rsM) as unknown

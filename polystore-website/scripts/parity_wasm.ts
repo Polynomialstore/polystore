@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import init, { NilWasm } from '../public/wasm/nil_core.js'
+import init, { PolyStoreWasm } from '../public/wasm/polystore_core.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -57,15 +57,15 @@ function deriveRoots(base: Uint8Array, indices: number[]): Uint8Array[] {
   return out
 }
 
-const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
+const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
 const wasmBuffer = await fs.readFile(wasmPath)
 await init({ module_or_path: wasmBuffer })
 
-const trustedSetupPath = path.resolve(repoRoot, 'nilchain', 'trusted_setup.txt')
+const trustedSetupPath = path.resolve(repoRoot, 'polystorechain', 'trusted_setup.txt')
 const trustedSetup = await fs.readFile(trustedSetupPath)
-const wasm = new NilWasm(trustedSetup)
+const wasm = new PolyStoreWasm(trustedSetup)
 
-const fixturesDir = path.resolve(repoRoot, 'nil_core', 'fixtures', 'parity')
+const fixturesDir = path.resolve(repoRoot, 'polystore_core', 'fixtures', 'parity')
 const mduBytes = new Uint8Array(await fs.readFile(path.join(fixturesDir, 'mdu_8m.bin')))
 const blobBytes = new Uint8Array(await fs.readFile(path.join(fixturesDir, 'blob_128k.bin')))
 

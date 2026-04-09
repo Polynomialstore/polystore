@@ -4,19 +4,19 @@ set -e
 # End-to-End Elasticity Test
 # Usage: ./e2e_elasticity.sh
 
-BINARY="./nilchaind"
-CHAIN_ID="nilchain"
-HOME_DIR="./.nilchain_elasticity"
+BINARY="./polystorechaind"
+CHAIN_ID="polystorechain"
+HOME_DIR="./.polystorechain_elasticity"
 MDU_FILE="./test_elasticity.dat"
-TRUSTED_SETUP="$(pwd)/nilchain/trusted_setup.txt"
+TRUSTED_SETUP="$(pwd)/polystorechain/trusted_setup.txt"
 
 # Ensure binaries are built
 echo ">>> Building binaries..."
-cd nilchain && go build -o ../nilchaind ./cmd/nilchaind && cd ..
+cd polystorechain && go build -o ../polystorechaind ./cmd/polystorechaind && cd ..
 
 # Clean start
 echo ">>> Resetting chain..."
-pkill -f nilchaind || true
+pkill -f polystorechaind || true
 rm -rf $HOME_DIR
 $BINARY init mynode --chain-id $CHAIN_ID --home $HOME_DIR > /dev/null 2>&1
 $BINARY config set client chain-id $CHAIN_ID --home $HOME_DIR
@@ -46,7 +46,7 @@ $BINARY genesis gentx user 100000000stake --chain-id $CHAIN_ID --home $HOME_DIR 
 $BINARY genesis collect-gentxs --home $HOME_DIR > /dev/null 2>&1
 
 # Inject aatom denom metadata required by the EVM module (local genesis helpers
-# in older scripts may omit this, causing nilchaind to panic on start).
+# in older scripts may omit this, causing polystorechaind to panic on start).
 python3 - "$HOME_DIR/config/genesis.json" <<'PY' || true
 import json, sys
 path = sys.argv[1]
@@ -100,7 +100,7 @@ done
 echo ">>> Registering 24 Providers..."
 for i in {1..24}
 do
-   yes | $BINARY tx nilchain register-provider General 1000000000 --from "provider$i" --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync > /dev/null
+   yes | $BINARY tx polystorechain register-provider General 1000000000 --from "provider$i" --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync > /dev/null
 done
 echo ">>> Waiting for provider registrations to commit..."
 sleep 2
@@ -109,7 +109,7 @@ sleep 2
 # 12 replicas * 10 NIL = 120 NIL per epoch
 # MaxSpend = 300 NIL (Allows 2 stripes, denies 3)
 echo ">>> Creating Deal (MaxSpend=300)..."
-CREATE_RESP=$(yes | $BINARY tx nilchain create-deal 100 1000 300 \
+CREATE_RESP=$(yes | $BINARY tx polystorechain create-deal 100 1000 300 \
   --service-hint General \
   --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync)
 CREATE_TX_HASH=$(echo "$CREATE_RESP" | awk '/txhash:/ {print $2}' | tail -n 1)
@@ -135,7 +135,7 @@ echo ">>> Signaling Saturation (Provider 1)..."
 # Actually, CreateDeal assigns *first* available? No, `AssignProviders` is deterministic based on hash.
 # Let's find an assigned provider.
 GRPC_FLAGS="--grpc-addr localhost:9090 --grpc-insecure"
-DEAL_INFO=$($BINARY q nilchain get-deal --id 0 --home $HOME_DIR -o json $GRPC_FLAGS)
+DEAL_INFO=$($BINARY q polystorechain get-deal --id 0 --home $HOME_DIR -o json $GRPC_FLAGS)
 ASSIGNED_ADDR=$(echo $DEAL_INFO | jq -r '.deal.providers[0]')
 echo "Assigned Provider: $ASSIGNED_ADDR"
 
@@ -155,13 +155,13 @@ if [ -z "$ASSIGNED_KEY" ]; then
     ASSIGNED_KEY="provider1"
 fi
 
-yes | $BINARY tx nilchain signal-saturation 0 --from $ASSIGNED_KEY --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+yes | $BINARY tx polystorechain signal-saturation 0 --from $ASSIGNED_KEY --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 
 echo ">>> Waiting for block..."
 sleep 2
 
 # Check Deal Replication
-DEAL_INFO_AFTER=$($BINARY q nilchain get-deal --id 0 --home $HOME_DIR -o json $GRPC_FLAGS)
+DEAL_INFO_AFTER=$($BINARY q polystorechain get-deal --id 0 --home $HOME_DIR -o json $GRPC_FLAGS)
 REP=$(echo $DEAL_INFO_AFTER | jq -r '.deal.current_replication')
 echo "Current Replication: $REP"
 
@@ -174,12 +174,12 @@ fi
 # Signal Saturation Again (Stripe 2 -> 3)
 # Cost would be 36 * 10 = 360. MaxSpend is 300. Should FAIL.
 echo ">>> Signaling Saturation Again (Budget Limit Test)..."
-yes | $BINARY tx nilchain signal-saturation 0 --from $ASSIGNED_KEY --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+yes | $BINARY tx polystorechain signal-saturation 0 --from $ASSIGNED_KEY --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 
 echo ">>> Waiting for block..."
 sleep 2
 
-DEAL_INFO_FINAL=$($BINARY q nilchain get-deal --id 0 --home $HOME_DIR -o json $GRPC_FLAGS)
+DEAL_INFO_FINAL=$($BINARY q polystorechain get-deal --id 0 --home $HOME_DIR -o json $GRPC_FLAGS)
 REP_FINAL=$(echo $DEAL_INFO_FINAL | jq -r '.deal.current_replication')
 echo "Final Replication: $REP_FINAL"
 

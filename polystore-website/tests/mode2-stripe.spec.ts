@@ -32,7 +32,7 @@ async function waitForGatewayConnected(page: Page): Promise<void> {
 }
 
 async function ensureWalletFunded(page: Page, timeout: number): Promise<void> {
-  const stakeBalance = page.getByTestId('cosmos-stake-balance')
+  const stakeBalance = page.getByTestId('polystore-stake-balance')
   const current = ((await stakeBalance.textContent().catch(() => '')) || '').trim()
   if (current && !/^(?:—|0 stake)$/.test(current)) return
 
@@ -407,10 +407,10 @@ function resolveRouterUploadDir(): string {
 async function ensureWalletConnected(page: Page): Promise<void> {
   const walletAddressSelector = '[data-testid="wallet-address"], [data-testid="wallet-address-full"]'
   const walletAddress = page.locator(walletAddressSelector).first()
-  const cosmosIdentity = page.getByTestId('cosmos-identity')
+  const polystoreIdentity = page.getByTestId('polystore-identity')
   const connectBtn = page.getByTestId('connect-wallet').first()
 
-  await page.waitForSelector(`${walletAddressSelector}, [data-testid="cosmos-identity"], [data-testid="connect-wallet"]`, {
+  await page.waitForSelector(`${walletAddressSelector}, [data-testid="polystore-identity"], [data-testid="connect-wallet"]`, {
     timeout: 60_000,
     state: 'attached',
   })
@@ -419,8 +419,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const walletVisible = await walletAddress.first().isVisible().catch(() => false)
     if (walletVisible) return true
 
-    if (await cosmosIdentity.isVisible().catch(() => false)) {
-      const raw = (await cosmosIdentity.textContent().catch(() => ''))?.trim()
+    if (await polystoreIdentity.isVisible().catch(() => false)) {
+      const raw = (await polystoreIdentity.textContent().catch(() => ''))?.trim()
       if (raw && raw !== '—' && !/^(?:—|—)$/.test(raw) && !/^not\s+connected$/i.test(raw)) {
         return true
       }
@@ -627,7 +627,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       if (!isFetchPath) return
       if (viaGateway) fetchGatewayRequests += 1
       const headers = req.headers()
-      const hasAuth = Boolean(headers.authorization || headers['x-nil-auth'] || headers['x-nil-signature'] || headers['x-nil-voucher'])
+      const hasAuth = Boolean(headers.authorization || headers['x-polystore-auth'] || headers['x-polystore-signature'] || headers['x-polystore-voucher'])
       const range = String(headers.range || '').trim()
       if (!hasAuth && !/^bytes=\d+-\d*$/.test(range)) {
         unsignedMissingRangeRequests.push(`${req.method()} ${url} range=${range || '<none>'}`)
@@ -732,8 +732,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     blockGateway = true
     await page.evaluate(() => {
-      window.localStorage.setItem('nil_local_gateway_connected', '0')
-      window.localStorage.setItem('nil_transport_preference', 'auto')
+      window.localStorage.setItem('polystore_local_gateway_connected', '0')
+      window.localStorage.setItem('polystore_transport_preference', 'auto')
     })
     await clearBrowserCache()
     const fallbackGatewayFetchReqBefore = fetchGatewayRequests
@@ -799,7 +799,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       const url = req.url()
       if (!url.includes('/gateway/fetch/') && !url.includes('/sp/retrieval/fetch/')) return
       const headers = req.headers()
-      const hasAuth = Boolean(headers.authorization || headers['x-nil-auth'] || headers['x-nil-signature'] || headers['x-nil-voucher'])
+      const hasAuth = Boolean(headers.authorization || headers['x-polystore-auth'] || headers['x-polystore-signature'] || headers['x-polystore-voucher'])
       const range = String(headers.range || '').trim()
       if (!hasAuth && !/^bytes=\d+-\d*$/.test(range)) {
         unsignedMissingRangeRequests.push(`${req.method()} ${url} range=${range || '<none>'}`)
@@ -810,18 +810,18 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await page.route('**/sp/upload_mdu', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       mduUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-        mduIndex: headers['x-nil-mdu-index'] || '',
+        mduIndex: headers['x-polystore-mdu-index'] || '',
       })
       await route.fulfill({ status: 200, body: 'ok' })
     })
     await page.route('**/sp/upload_manifest', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       manifestUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
@@ -831,12 +831,12 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await page.route('**/sp/upload_shard', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       shardUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-        mduIndex: headers['x-nil-mdu-index'] || '',
-        slot: headers['x-nil-slot'] || '',
+        mduIndex: headers['x-polystore-mdu-index'] || '',
+        slot: headers['x-polystore-slot'] || '',
       })
       await route.fulfill({ status: 200, body: 'ok' })
     })

@@ -4,20 +4,20 @@ set -e
 # End-to-End Slashing Test
 # Usage: ./e2e_slashing.sh
 
-BINARY="./nilchaind"
-CHAIN_ID="nilchain"
-HOME_DIR="./.nilchain_slashing"
+BINARY="./polystorechaind"
+CHAIN_ID="polystorechain"
+HOME_DIR="./.polystorechain_slashing"
 MDU_FILE="./test_mdu_slashing.dat"
 BAD_MDU_FILE="./test_mdu_bad.dat"
-TRUSTED_SETUP="$(pwd)/nilchain/trusted_setup.txt"
+TRUSTED_SETUP="$(pwd)/polystorechain/trusted_setup.txt"
 
 # Ensure binaries are built
 echo ">>> Building binaries..."
-cd nilchain && go build -o ../nilchaind ./cmd/nilchaind && cd ..
+cd polystorechain && go build -o ../polystorechaind ./cmd/polystorechaind && cd ..
 
 # Clean start
 echo ">>> Resetting chain..."
-pkill -f nilchaind || true
+pkill -f polystorechaind || true
 rm -rf $HOME_DIR
 $BINARY init mynode --chain-id $CHAIN_ID --home $HOME_DIR > /dev/null 2>&1
 $BINARY config set client chain-id $CHAIN_ID --home $HOME_DIR
@@ -103,7 +103,7 @@ done
 echo ">>> Registering Providers..."
 for i in {1..12}
 do
-   yes | $BINARY tx nilchain register-provider General 1000000000 --from "provider$i" --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync > /dev/null
+   yes | $BINARY tx polystorechain register-provider General 1000000000 --from "provider$i" --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync > /dev/null
 done
 
 # Create Deal
@@ -113,7 +113,7 @@ dd if=/dev/zero of=$MDU_FILE bs=1M count=8 2>/dev/null
 dd if=/dev/urandom of=$BAD_MDU_FILE bs=1M count=8 2>/dev/null
 
 echo ">>> Creating Deal (Capacity)..."
-CREATE_RES=$(yes | $BINARY tx nilchain create-deal 50 1000000 5000 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --output json)
+CREATE_RES=$(yes | $BINARY tx polystorechain create-deal 50 1000000 5000 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
 echo ">>> Waiting for CreateDeal (Tx: $CREATE_HASH)..."
 sleep 4
@@ -129,7 +129,7 @@ echo ">>> Deal created with ID $DEAL_ID"
 echo ">>> Updating Content with dummy manifest root..."
 DUMMY_MANIFEST_ROOT="0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 set +e
-yes | $BINARY tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 8388608 --total-mdus 3 --witness-mdus 1 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync >/dev/null
+yes | $BINARY tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 8388608 --total-mdus 3 --witness-mdus 1 --from user --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync >/dev/null
 set -e
 sleep 2
 
@@ -148,7 +148,7 @@ echo "Balance before invalid proof: $BAL_BEFORE"
 
 # Allow failure locally (client-side check)
 set +e
-yes | $BINARY tx nilchain prove-liveness-local "$DEAL_ID" $BAD_MDU_FILE $TRUSTED_SETUP --from provider1 --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
+yes | $BINARY tx polystorechain prove-liveness-local "$DEAL_ID" $BAD_MDU_FILE $TRUSTED_SETUP --from provider1 --chain-id $CHAIN_ID --yes --home $HOME_DIR --keyring-backend test --broadcast-mode sync
 RET=$?
 set -e
 

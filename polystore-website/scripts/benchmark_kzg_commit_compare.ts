@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-import init, { NilWasm } from '../public/wasm/nil_core.js'
+import init, { PolyStoreWasm } from '../public/wasm/polystore_core.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -56,14 +56,14 @@ function stats(values: number[]) {
   }
 }
 
-async function loadNilWasm() {
-  const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'nil_core_bg.wasm')
+async function loadPolyStoreWasm() {
+  const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
   const wasmBuffer = await fs.readFile(wasmPath)
   const initStart = performance.now()
   await init({ module_or_path: wasmBuffer })
   const trustedSetupPath = path.resolve(websiteRoot, 'public', 'trusted_setup.txt')
   const trustedSetup = new Uint8Array(await fs.readFile(trustedSetupPath))
-  const instance = new NilWasm(trustedSetup)
+  const instance = new PolyStoreWasm(trustedSetup)
   return {
     instance,
     initMs: performance.now() - initStart,
@@ -159,7 +159,7 @@ for (let i = 0; i < batchBlobCount; i += 1) {
 }
 const blobHexes = Array.from({ length: batchBlobCount }, (_, i) => bytesToHex(blobsFlat.subarray(i * BLOB_SIZE, (i + 1) * BLOB_SIZE)))
 
-const nil = await loadNilWasm()
+const nil = await loadPolyStoreWasm()
 const kzgWasm = await loadKzgWasm()
 const microEthSigner = await loadMicroEthSigner()
 const libKzg = await loadLibKzg()
@@ -173,12 +173,12 @@ const result = {
     batch_blobs: batchBlobCount,
   },
   init: {
-    nil_wasm_ms: nil.initMs,
+    polystore_wasm_ms: nil.initMs,
     kzg_wasm_ms: kzgWasm.initMs,
     micro_eth_signer_fast_setup_ms: microEthSigner.initMs,
   },
   notes: {
-    nil_wasm: 'NilStore BLS12-381 wasm path over a canonical 128 KiB blob.',
+    polystore_wasm: 'PolyStore BLS12-381 wasm path over a canonical 128 KiB blob.',
     kzg_wasm: 'c-kzg-4844 compiled to wasm; same canonical 128 KiB blob workload.',
     micro_eth_signer: 'Pure JS KZG from micro-eth-signer using fast-kzg setup, matching the upstream benchmark style.',
     libkzg:
@@ -186,7 +186,7 @@ const result = {
       'Unavailable locally. The upstream repo targets BN254 coefficient-form commitments and is not directly comparable to EIP-4844 blob commitment APIs.',
   },
   single_blob_commitment: {
-    nil_wasm: benchSingle('nil_wasm', () => {
+    polystore_wasm: benchSingle('polystore_wasm', () => {
       nil.instance.commit_blobs(blob)
     }),
     kzg_wasm: benchSingle('kzg_wasm', () => {
@@ -197,7 +197,7 @@ const result = {
     }),
   },
   batch_commitment: {
-    nil_wasm: benchBatch('nil_wasm', () => {
+    polystore_wasm: benchBatch('polystore_wasm', () => {
       nil.instance.commit_blobs(blobsFlat)
     }),
     kzg_wasm: benchBatch('kzg_wasm', () => {

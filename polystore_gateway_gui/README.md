@@ -7,7 +7,7 @@
 - Releases: `https://github.com/Polynomialstore/polystore/releases/latest`
 - CI release workflow: `.github/workflows/tauri_release.yml`
 - Release tags use semver and trigger desktop builds automatically:
-  - `nil-gateway-gui-vMAJOR.MINOR.PATCH` (example: `nil-gateway-gui-v0.2.0`)
+  - `polystore-gateway-gui-vMAJOR.MINOR.PATCH` (example: `polystore-gateway-gui-v0.2.0`)
 
 ## User Quick Start
 
@@ -50,13 +50,13 @@ npm run tauri build
 ```
 
 `npm run tauri build` runs `scripts/build_sidecars.mjs`, which builds/stages:
-- `nil_gateway`
-- `nil_cli`
-- `nil_core` shared library (`.so`/`.dylib`/`.dll`)
+- `polystore_gateway`
+- `polystore_cli`
+- `polystore_core` shared library (`.so`/`.dylib`/`.dll`)
 - `trusted_setup.txt`
 
 On Linux and macOS, the sidecar build stamps a runtime library search path
-(`$ORIGIN` / `@loader_path`) into `nil_gateway` so it can find `libnil_core`
+(`$ORIGIN` / `@loader_path`) into `polystore_gateway` so it can find `libpolystore_core`
 next to the binary without manual `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`.
 
 ## Local Development Commands
@@ -84,4 +84,4 @@ From repo root (`polystore/`):
 - The website local Gateway model expects gateway access through localhost.
 - Storage provider public endpoints (`sp1/sp2/sp3...`) remain separate and are discovered from on-chain provider records.
 - Linux GUI default sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` when not explicitly provided.
-- Local sidecar default sets `NIL_P2P_ENABLED=0` and `NIL_DISABLE_SYSTEM_LIVENESS=1` (with local import enabled).
+- Local sidecar default sets `POLYSTORE_P2P_ENABLED=0` and `POLYSTORE_DISABLE_SYSTEM_LIVENESS=1` (with local import enabled).

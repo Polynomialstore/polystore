@@ -8,10 +8,10 @@ const gitignorePath = path.resolve(__dirname, '..', 'public', 'wasm', '.gitignor
 
 const contents = `*
 !.gitignore
-!nil_core.d.ts
-!nil_core.js
-!nil_core_bg.wasm
-!nil_core_bg.wasm.d.ts
+!polystore_core.d.ts
+!polystore_core.js
+!polystore_core_bg.wasm
+!polystore_core_bg.wasm.d.ts
 !package.json
 `
 

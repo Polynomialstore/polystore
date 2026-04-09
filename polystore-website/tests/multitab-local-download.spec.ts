@@ -6,7 +6,7 @@ import { type Hex } from 'viem'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -81,7 +81,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   const txCommit = (`0x${'44'.repeat(32)}` as Hex)
 
   const dealId = '1'
@@ -96,7 +96,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   // Intercept SP Upload and capture manifest root.
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
-    const manifestRoot = headers['x-nil-manifest-root']
+    const manifestRoot = headers['x-polystore-manifest-root']
     if (typeof manifestRoot === 'string' && manifestRoot.startsWith('0x')) {
       committedRoot = manifestRoot
     }
@@ -170,7 +170,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   })
 
   // Mock LCD deals (page 1: empty container).
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -178,7 +178,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
         deals: [
           {
             id: dealId,
-            owner: nilAddress,
+            owner: polystoreAddress,
             cid: '',
             size: '0',
             escrow_balance: '1000000',
@@ -191,14 +191,14 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         deal: {
           id: dealId,
-          owner: nilAddress,
+          owner: polystoreAddress,
           manifest_root: committedRoot ? Buffer.from(committedRoot.slice(2), 'hex').toString('base64') : '',
           size: committedRoot ? String(24 * 1024 * 1024) : '0',
           escrow_balance: '1000000',
@@ -210,7 +210,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -248,7 +248,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     if (w.ethereum) return
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},
@@ -341,7 +341,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   })
 
   // LCD deals: now shows CID on-chain.
-  await page2.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page2.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -349,7 +349,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
         deals: [
           {
             id: dealId,
-            owner: nilAddress,
+            owner: polystoreAddress,
             cid: committedRoot,
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
@@ -362,14 +362,14 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
-  await page2.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page2.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         deal: {
           id: dealId,
-          owner: nilAddress,
+          owner: polystoreAddress,
           manifest_root: committedRoot ? Buffer.from(committedRoot.slice(2), 'hex').toString('base64') : '',
           size: String(24 * 1024 * 1024),
           escrow_balance: '1000000',
@@ -381,7 +381,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     })
   })
 
-  await page2.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page2.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -438,7 +438,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     if (w.ethereum) return
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

@@ -3,20 +3,20 @@
 // A small worker used as a compute pool to parallelize blob commitment generation
 // across multiple single-threaded WASM instances (no SharedArrayBuffer required).
 
-import init, { NilWasm } from '../lib/nilCoreRuntime.js'
+import init, { PolyStoreWasm } from '../lib/polystoreCoreRuntime.js'
 
 let wasmInitialized = false
 let wasmInitPromise: Promise<void> | null = null
 let wasmInitError: unknown = null
 
-let nilWasmInstance: NilWasm | null = null
+let polyStoreWasmInstance: PolyStoreWasm | null = null
 
 function initializeWasm(): Promise<void> {
   if (wasmInitialized) return Promise.resolve()
   if (wasmInitError) return Promise.reject(wasmInitError)
   if (wasmInitPromise) return wasmInitPromise
 
-  const wasmUrl = new URL('/wasm/nil_core_bg.wasm', self.location.origin)
+  const wasmUrl = new URL('/wasm/polystore_core_bg.wasm', self.location.origin)
   wasmInitPromise = (async () => {
     await init({ module_or_path: wasmUrl })
     wasmInitialized = true
@@ -42,18 +42,18 @@ self.onmessage = async (event) => {
     await initializeWasm()
 
     switch (type) {
-      case 'initNilWasm': {
+      case 'initPolyStoreWasm': {
         const { trustedSetupBytes } = payload as { trustedSetupBytes: Uint8Array }
         if (!trustedSetupBytes) throw new Error('Trusted setup bytes required')
-        nilWasmInstance = new NilWasm(trustedSetupBytes)
+        polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes)
         ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: 'ok' })
         return
       }
       case 'commitBlobs': {
-        if (!nilWasmInstance) throw new Error('NilWasm not initialized')
+        if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized')
         const { data } = payload as { data: Uint8Array }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
-        const commitments = nilWasmInstance.commit_blobs(data)
+        const commitments = polyStoreWasmInstance.commit_blobs(data)
         ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: commitments }, [commitments.buffer])
         return
       }

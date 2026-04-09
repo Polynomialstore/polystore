@@ -79,8 +79,8 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_FAUCET_AUTH_TOKEN` | *(empty)* | Optional build-time faucet auth token. When set, the website sends this token automatically on faucet requests. |
 | `VITE_DEFAULT_RS_K` | `2` | Default RS K used by web deal creation when not explicitly overridden. |
 | `VITE_DEFAULT_RS_M` | `1` | Default RS M used by web deal creation when not explicitly overridden. |
-| `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional NilBridge contract address for bridge status UI. |
-| `VITE_NILSTORE_PRECOMPILE` | `0x0000...0900` | NilStore precompile address (create/update/retrieval sessions). |
+| `VITE_BRIDGE_ADDRESS` | `0x0000...0000` | Optional PolyStoreBridge contract address for bridge status UI. |
+| `VITE_POLYSTORE_PRECOMPILE` | `0x0000...0900` | PolyStore precompile address (create/update/retrieval sessions). |
 | `VITE_E2E` | `0` | Enable injected E2E wallet shim when `1`. |
 | `VITE_E2E_PK` | *(dev key)* | Private key for E2E wallet shim (local/CI only). |
 
@@ -88,7 +88,7 @@ The application uses Vite for building and handling environment variables. Confi
 *   **Vite (`vite.config.ts`):** Standard React plugin setup.
 *   **TypeScript (`tsconfig.json`):** Strict mode enabled, Target ES2020.
 *   **Tailwind (`tailwind.config.js`):** Configured for CSS variable-based theming (HSL values) with `darkMode: 'class'`.
-*   **WASM (`nil_core`):** `npm run dev` first runs `wasm:ensure`, which reuses `public/wasm/` when `nil_core.js` and `nil_core_bg.wasm` are already present and only falls back to `wasm-pack build` when the bundle is missing or `NIL_FORCE_WASM_BUILD=1` is set. `npm run build:full` still performs a fresh `wasm-pack build`. Fresh WASM builds require `wasm-pack` + a Rust toolchain on the machine/CI runner.
+*   **WASM (`polystore_core`):** `npm run dev` first runs `wasm:ensure`, which reuses `public/wasm/` when `polystore_core.js` and `polystore_core_bg.wasm` are already present and only falls back to `wasm-pack build` when the bundle is missing or `POLYSTORE_FORCE_WASM_BUILD=1` is set. `npm run build:full` still performs a fresh `wasm-pack build`. Fresh WASM builds require `wasm-pack` + a Rust toolchain on the machine/CI runner.
 
 ### 1.3 Key Dependencies
 *   **Web3:** `wagmi`, `viem`
@@ -170,7 +170,7 @@ interface StatusSummary {
 
 ### 3.1 Web3Provider (`src/context/Web3Provider.tsx`)
 *   **Purpose:** Configures `wagmi` for wallet connection and blockchain interaction.
-*   **Chains:** `NilChain Local` (Custom, ID defined in `VITE_CHAIN_ID`), `Mainnet`, `Sepolia`.
+*   **Chains:** `PolyStore Chain Local` (Custom, ID defined in `VITE_CHAIN_ID`), `Mainnet`, `Sepolia`.
 *   **Transport:** HTTP (configured via `appConfig.evmRpc`).
 *   **Client:** Integrates `@tanstack/react-query`'s `QueryClient` for caching blockchain reads.
 *   **Exports:** Wraps app in `WagmiProvider` and `QueryClientProvider`.
@@ -181,7 +181,7 @@ interface StatusSummary {
 *   **Purpose:** Streams a global feed of ZK proofs (both real chain data and simulated visuals).
 *   **State:** `proofs: Proof[]`, `loading: boolean`.
 *   **Logic:**
-    *   **Initialization:** Fetches initial proofs from `${LCD_BASE}/nilchain/nilchain/v1/proofs`.
+    *   **Initialization:** Fetches initial proofs from `${LCD_BASE}/polystorechain/polystorechain/v1/proofs`.
     *   **Deduplication:** Merges new proofs preventing duplicates by `id`.
     *   **Simulation:** `addSimulatedProof(proof)` prepends locally generated proofs with `source: 'simulated'`.
 *   **Exports:** `useProofs()` hook.
@@ -207,24 +207,24 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 ### 4.1 `useCreateDeal` (`src/hooks/useCreateDeal.ts`)
 *   **Purpose:** Orchestrates Deal creation (thin-provisioned container; no capacity tiers).
 *   **Input:** `CreateDealInput` (duration, escrow, maxSpend, replication).
-*   **Flow:** MetaMask `eth_sendTransaction` to the NilStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`); `service_hint` encodes replica count and (for Mode 2) `rs=K+M`.
+*   **Flow:** MetaMask `eth_sendTransaction` to the PolyStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`); `service_hint` encodes replica count and (for Mode 2) `rs=K+M`.
 *   **Output:** `deal_id` parsed from the `DealCreated` event.
 
 ### 4.2 `useUpdateDealContent` (`src/hooks/useUpdateDealContent.ts`)
 *   **Purpose:** Commits a file Manifest to an existing Deal.
 *   **Input:** `UpdateDealContentInput` (dealId, manifestRoot, sizeBytes).
-*   **Flow:** MetaMask `eth_sendTransaction` to the NilStore precompile (`updateDealContent(dealId, manifestRoot, sizeBytes)`).
+*   **Flow:** MetaMask `eth_sendTransaction` to the PolyStore precompile (`updateDealContent(dealId, manifestRoot, sizeBytes)`).
     *   **Compatibility:** Some codepaths may still label this field as `cid`, but it is always the *deal-level* `manifest_root` (not a file identifier).
 
 ### 4.3 `useUpload` (`src/hooks/useUpload.ts`)
 *   **Purpose:** Handles thin-client file upload via the transport router (gateway or direct SP).
 *   **Logic:**
-    1.  Converts EVM address to Cosmos (Bech32) format if needed using `ethToNil`.
+    1.  Converts EVM address to the current PolyStore Chain bech32 format if needed using `ethToPolystoreAddress`.
     2.  Constructs `FormData` with `file`, `owner`, and optional controls (`deal_id`, `max_user_mdus`, `file_path`).
     3.  Calls `transport.uploadFile(...)` which selects `gatewayBase` or `spBase` based on routing preference and availability.
 *   **Returns:** `{ manifestRoot, sizeBytes, fileSizeBytes, allocatedLength?, filename }`.
     *   **Compatibility:** Responses may include legacy aliases `cid == manifest_root` and `allocated_length == total_mdus` (count).
-    *   **NilFS invariant:** `filePath` is the authoritative identifier for later fetch/prove and MUST be unique within a deal (re-upload is overwrite).
+    *   **PolyFS invariant:** `filePath` is the authoritative identifier for later fetch/prove and MUST be unique within a deal (re-upload is overwrite).
 
 ### 4.4 `useTransportRouter` (`src/hooks/useTransportRouter.ts`)
 *   **Purpose:** Centralizes routing between local gateway and direct SP endpoints.
@@ -236,7 +236,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 *   **Flow:**
     1.  Plan blob-range via `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...` (gateway or direct SP).
     2.  Open session on-chain via MetaMask (`openRetrievalSession` precompile).
-    3.  Fetch bytes with `X-Nil-Session-Id` header via `/gateway/fetch/{manifest_root}` (gateway or direct SP).
+    3.  Fetch bytes with `X-PolyStore-Session-Id` header via `/gateway/fetch/{manifest_root}` (gateway or direct SP).
     4.  Confirm completion on-chain (`confirmRetrievalSession`).
     5.  Submit proof relay via `POST /gateway/session-proof` (gateway forwards to provider).
 *   **Mode 2:** When the deal is striped, the fetch path is slot-aware (blob ranges must stay within a slot); gateways may reconstruct missing MDUs from `/sp/shard`.
@@ -262,7 +262,7 @@ The central hub for deal management.
     *   `activeTab`: 'alloc' (Allocation), 'content' (Commitment), 'mdu' (Thick client).
     *   `deals`: List of user's deals (fetched from LCD).
     *   `providers`: Active SP list.
-    *   `nilAddress`: Derived Cosmos address from connected EVM wallet.
+    *   `polystoreAddress`: Derived PolyStore Chain address from the connected EVM wallet.
 *   **Key Interactions:**
     *   **Allocation:** Form -> `useCreateDeal` (Mode 1 or Mode 2 with RS selector).
     *   **Commitment (Content tab):** File Input -> `useUpload` -> `useUpdateDealContent`.
@@ -286,14 +286,14 @@ The central hub for deal management.
     *   **MDU Inspector:** For a selected MDU, fetches and displays the 64 blob commitments and the derived MDU root.
 *   **APIs (gateway or direct SP base):**
     *   **Slab layout:** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` (summary + segment ranges).
-    *   **NilFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
-    *   **Fetch file (NilFS path):**
+    *   **PolyFS file list:** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` (authoritative; parsed from `mdu_0.bin`).
+    *   **Fetch file (PolyFS path):**
         *   Plan range: `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`.
-        *   Data plane: `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` with `X-Nil-Session-Id` header (session opened on-chain via MetaMask).
-        *   Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch), `404` (not found/tombstone), `409` (stale `manifest_root` or inconsistent NilFS state).
+        *   Data plane: `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...` with `X-PolyStore-Session-Id` header (session opened on-chain via MetaMask).
+        *   Errors are JSON `{ error, hint }`: `400` (missing/unsafe), `403` (owner mismatch), `404` (not found/tombstone), `409` (stale `manifest_root` or inconsistent PolyFS state).
     *   **Manifest details:** `GET /gateway/manifest-info/{manifest_root}?deal_id=...&owner=...` (manifest blob + ordered MDU roots).
     *   **MDU KZG details:** `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}?deal_id=...&owner=...` (64 blob commitments + MDU root).
-    *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as NilFS-only flows harden).
+    *   **Legacy manifest (debug, deprecated):** `GET /gateway/manifest/{cid}` (legacy per-upload artifacts; `cid` is an alias for `manifest_root`; expected to be removed as PolyFS-only flows harden).
 
 ### 5.4 Deal Liveness Heatmap (`src/components/DealLivenessHeatmap.tsx`)
 *   **Props:** `proofs: ProofRow[]`.
@@ -320,7 +320,7 @@ The central hub for deal management.
 ### 5.7 Utility Components
 *   **`ModeToggle.tsx`:** Sun/Moon icon toggle using `useTheme`.
 *   **`FaucetWidget.tsx`:** Standalone button triggering `useFaucet`.
-*   **`FileSharder.tsx`:** Thick-client sharder. Uses `nil_core` WASM to expand MDUs, generate commitments, and (for Mode 2) produce RS shards. Uploads via the transport router and supports direct-to-SP flows.
+*   **`FileSharder.tsx`:** Thick-client sharder. Uses `polystore_core` WASM to expand MDUs, generate commitments, and (for Mode 2) produce RS shards. Uploads via the transport router and supports direct-to-SP flows.
 
 ---
 
@@ -362,7 +362,7 @@ The central hub for deal management.
 ## 7. Utilities & Libraries
 
 ### 7.1 Address (`src/lib/address.ts`)
-*   `ethToNil(ethAddress: string)`: Converts 0x Ethereum addresses to `nil1...` Bech32 format.
+*   `ethToPolystoreAddress(ethAddress: string)`: Converts 0x Ethereum addresses to the current PolyStore Chain bech32 format (`nil1...` today).
 
 ### 7.2 Status (`src/lib/status.ts`)
 *   `fetchStatus(chainId)`: Aggregates health checks from LCD, EVM RPC, and Faucet.
@@ -383,19 +383,19 @@ The website depends on the following services (configured in `config.ts`):
 
 ### Key Endpoints
 *   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, witness_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
-*   `POST /sp/upload_shard`: Raw shard bytes with headers `X-Nil-Deal-ID`, `X-Nil-Mdu-Index`, `X-Nil-Slot`, `X-Nil-Manifest-Root` (Mode 2).
-*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2; internal provider↔provider only; requires `X‑Nil‑Gateway‑Auth`).
+*   `POST /sp/upload_shard`: Raw shard bytes with headers `X-PolyStore-Deal-ID`, `X-PolyStore-Mdu-Index`, `X-PolyStore-Slot`, `X-PolyStore-Manifest-Root` (Mode 2).
+*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2; internal provider↔provider only; requires `X‑PolyStore‑Gateway‑Auth`).
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
 *   `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`: Returns blob-range plan for retrieval sessions.
-*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes with `X-Nil-Session-Id` header (encode `file_path` with `encodeURIComponent`; errors are JSON `{error,hint}`).
+*   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes with `X-PolyStore-Session-Id` header (encode `file_path` with `encodeURIComponent`; errors are JSON `{error,hint}`).
 *   `POST /gateway/session-proof`: `{session_id}` -> `{session_id}` (gateway forwards provider proof submission).
 *   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (legacy devnet helper; deprecated).
 *   `GET /gateway/status`: Local gateway status/capabilities (optional).
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
 *   `GET /gateway/mdu-kzg/{manifest_root}/{mdu_index}`: Returns blob commitments + MDU root (debug/inspection).
-*   `GET /nilchain/nilchain/v1/deals`: Returns list of all deals (client-side filtering by owner).
-*   `GET /nilchain/nilchain/v1/providers`: Returns list of active SPs.
+*   `GET /polystorechain/polystorechain/v1/deals`: Returns list of all deals (client-side filtering by owner).
+*   `GET /polystorechain/polystorechain/v1/providers`: Returns list of active SPs.
 
 ---
 
@@ -439,7 +439,7 @@ The website depends on the following services (configured in `config.ts`):
 ### 8.1 Data Ingestion (Upload)
 *   **Spec:** Client locally packs files into 8 MiB MDUs, computes KZG commitments (Triple Proof root), and uploads encrypted shards to SPs.
 *   **Actual (two paths):**
-    1. **Gateway ingest (Content tab):** Client uploads raw `FormData` to `/gateway/upload` (gateway or SP base). The server performs sharding, KZG commitments, and NilFS packing, returning `manifest_root` and `size_bytes`.
+    1. **Gateway ingest (Content tab):** Client uploads raw `FormData` to `/gateway/upload` (gateway or SP base). The server performs sharding, KZG commitments, and PolyFS packing, returning `manifest_root` and `size_bytes`.
     2. **Thick client ingest (MDU tab):** Client uses WASM to shard locally, uploads metadata MDUs to all slots (`/sp/upload_mdu`) and user shards via `/sp/upload_shard` (Mode 2), then commits the `manifest_root` on-chain.
 
 ### 8.2 Data Retrieval (Download)
@@ -447,7 +447,7 @@ The website depends on the following services (configured in `config.ts`):
 *   **Actual (Gamma‑4):**
     1.  Client plans a retrieval session via `GET /gateway/plan-retrieval-session/...` (gateway or direct SP).
     2.  Client opens the session(s) on-chain (MetaMask `openRetrievalSession` or `openRetrievalSessions` for multi-provider).
-    3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑Nil‑Session‑Id` header.
+    3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑PolyStore‑Session‑Id` header.
     4.  Client confirms completion on-chain (`confirmRetrievalSession` or `confirmRetrievalSessions`).
     5.  Gateway forwards `POST /gateway/session-proof` to submit provider proofs.
 *   **Implication:** Browser holds the **Liveness Authority** (on‑chain session open/confirm). Gateway is a relay/compute helper, not a signer.
@@ -461,13 +461,13 @@ Use the batch methods when a download spans multiple providers:
 Example (viem-style):
 ```ts
 	const openRequests = [{ dealId, provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, nonce, expiresAt }]
-	const data = encodeFunctionData({ abi: NILSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessionIds', args: [openRequests] })
+	const data = encodeFunctionData({ abi: POLYSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessionIds', args: [openRequests] })
 	const result = await ethereum.request({ method: 'eth_call', params: [{ from, to: precompile, data }, 'latest'] })
-	const [providers, sessionIds] = decodeFunctionResult({ abi: NILSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessionIds', data: result })
+	const [providers, sessionIds] = decodeFunctionResult({ abi: POLYSTORE_PRECOMPILE_ABI, functionName: 'computeRetrievalSessionIds', data: result })
 ```
 
 ### 8.3 Visualizations vs. Logic
-*   **`FileSharder.tsx`:** Uses `nil_core` WASM to generate real MDU roots, manifest commitments, and Mode 2 shards; outputs are valid for on-chain commit.
+*   **`FileSharder.tsx`:** Uses `polystore_core` WASM to generate real MDU roots, manifest commitments, and Mode 2 shards; outputs are valid for on-chain commit.
 *   **Real Data Flow:** The actual data flow for a deal is:
     1.  `useCreateDeal` -> Creates a thin-provisioned Deal on-chain.
     2.  **Gateway path:** `useUpload` streams raw file to Gateway -> Gateway returns `manifest_root`.
@@ -484,10 +484,10 @@ This sprint prioritizes a clean separation between:
 - **Visualization (React):** rendering panels using the centralized observables.
 
 ### 9.1 Primary Observables (Authoritative Sources)
-*   **Deal (LCD):** `GET /nilchain/nilchain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
-*   **Heat (LCD):** `GET /nilchain/nilchain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
+*   **Deal (LCD):** `GET /polystorechain/polystorechain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
+*   **Heat (LCD):** `GET /polystorechain/polystorechain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
 *   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
-*   **NilFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
+*   **PolyFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
 *   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,witness_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.
 
 ### 9.2 Tests

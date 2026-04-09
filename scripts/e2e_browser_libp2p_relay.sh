@@ -97,7 +97,7 @@ PROVIDER_KEYS=("faucet" "provider1" "provider2")
 EXTRA_MAP=""
 for key in "${PROVIDER_KEYS[@]}"; do
   identity_path="$SP_IDENTITY_DIR/${key}.key"
-  peer_id=$(cd "$ROOT_DIR/nil_gateway" && go run ./cmd/p2p-relay --gen-identity "$identity_path" --print-peer-id)
+  peer_id=$(cd "$ROOT_DIR/polystore_gateway" && go run ./cmd/p2p-relay --gen-identity "$identity_path" --print-peer-id)
   if [ -z "$peer_id" ]; then
     echo "ERROR: failed to generate peer id for $key" >&2
     exit 1
@@ -111,7 +111,7 @@ done
 
 banner "Starting local relay"
 : >"$RELAY_LOG"
-(cd "$ROOT_DIR/nil_gateway" && nohup go run ./cmd/p2p-relay --listen "/ip4/127.0.0.1/tcp/9101/ws" --gen-identity "$RELAY_IDENTITY" >"$RELAY_LOG" 2>&1 & echo $! >"$RELAY_PID_FILE")
+(cd "$ROOT_DIR/polystore_gateway" && nohup go run ./cmd/p2p-relay --listen "/ip4/127.0.0.1/tcp/9101/ws" --gen-identity "$RELAY_IDENTITY" >"$RELAY_LOG" 2>&1 & echo $! >"$RELAY_PID_FILE")
 
 RELAY_PEER_ID="$(wait_for_relay_peer_id "$RELAY_LOG")"
 if [ -z "$RELAY_PEER_ID" ]; then
@@ -120,16 +120,16 @@ if [ -z "$RELAY_PEER_ID" ]; then
 fi
 
 RELAY_BASE="/ip4/127.0.0.1/tcp/9101/ws/p2p/$RELAY_PEER_ID"
-NIL_PROVIDER_ENDPOINTS_EXTRA_MAP=""
+POLYSTORE_PROVIDER_ENDPOINTS_EXTRA_MAP=""
 IFS=',' read -r -a map_entries <<<"$EXTRA_MAP"
 for entry in "${map_entries[@]}"; do
   key="${entry%%=*}"
   peer="${entry#*=}"
   dial="$RELAY_BASE/p2p-circuit/p2p/$peer"
-  if [ -n "$NIL_PROVIDER_ENDPOINTS_EXTRA_MAP" ]; then
-    NIL_PROVIDER_ENDPOINTS_EXTRA_MAP+=","
+  if [ -n "$POLYSTORE_PROVIDER_ENDPOINTS_EXTRA_MAP" ]; then
+    POLYSTORE_PROVIDER_ENDPOINTS_EXTRA_MAP+=","
   fi
-  NIL_PROVIDER_ENDPOINTS_EXTRA_MAP+="${key}=${dial}"
+  POLYSTORE_PROVIDER_ENDPOINTS_EXTRA_MAP+="${key}=${dial}"
 done
 
 export VITE_E2E=1
@@ -137,23 +137,23 @@ export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export E2E_LOCAL_STACK=1
-export NIL_LOCAL_PROVIDER_COUNT=3
-export NIL_ENABLE_TX_RELAY=0
+export POLYSTORE_LOCAL_PROVIDER_COUNT=3
+export POLYSTORE_ENABLE_TX_RELAY=0
 
 # Ensure the browser libp2p client is enabled and uses the same protocol id.
 export VITE_P2P_ENABLED=1
-export VITE_P2P_PROTOCOL="/nilstore/fetch/1.0.0"
+export VITE_P2P_PROTOCOL="/polystore/fetch/1.0.0"
 
 # Force provider relay path: provider reserves on relay, and chain endpoints include only the relay dial addr.
-export NIL_P2P_ENABLED_SP=1
-export NIL_P2P_LISTEN_PORT_BASE_SP="${NIL_P2P_LISTEN_PORT_BASE_SP:-9102}"
-export NIL_P2P_IDENTITY_DIR_SP="$SP_IDENTITY_DIR"
-export NIL_P2P_RELAY_ADDRS_SP="$RELAY_BASE"
-export NIL_PROVIDER_ENDPOINTS_EXTRA_MAP
-unset NIL_PROVIDER_ENDPOINTS_EXTRA
+export POLYSTORE_P2P_ENABLED_SP=1
+export POLYSTORE_P2P_LISTEN_PORT_BASE_SP="${POLYSTORE_P2P_LISTEN_PORT_BASE_SP:-9102}"
+export POLYSTORE_P2P_IDENTITY_DIR_SP="$SP_IDENTITY_DIR"
+export POLYSTORE_P2P_RELAY_ADDRS_SP="$RELAY_BASE"
+export POLYSTORE_PROVIDER_ENDPOINTS_EXTRA_MAP
+unset POLYSTORE_PROVIDER_ENDPOINTS_EXTRA
 
 # Avoid starting p2p on the user gateway to ensure the test hits provider endpoints.
-export NIL_P2P_ENABLED=0
+export POLYSTORE_P2P_ENABLED=0
 
 banner "Starting local stack (relay forced)..."
 "$STACK_SCRIPT" start
@@ -165,7 +165,7 @@ wait_for_http "gateway health" "http://localhost:8080/health"
 banner "Asserting tx relay is disabled"
 tx_relay_code="$(timeout 10s curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/gateway/create-deal-evm 2>/dev/null || true)"
 if [ "$tx_relay_code" != "403" ]; then
-  echo "ERROR: expected /gateway/create-deal-evm to be forbidden (403) with NIL_ENABLE_TX_RELAY=0; got HTTP $tx_relay_code" >&2
+  echo "ERROR: expected /gateway/create-deal-evm to be forbidden (403) with POLYSTORE_ENABLE_TX_RELAY=0; got HTTP $tx_relay_code" >&2
   exit 1
 fi
 

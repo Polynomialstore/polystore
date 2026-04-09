@@ -200,7 +200,7 @@ export function StatusBar({ noBorder }: { noBorder?: boolean }) {
           faucetEnabled: appConfig.faucetEnabled,
           gatewayDisabled: appConfig.gatewayDisabled,
           p2pEnabled: appConfig.p2pEnabled,
-          nilstorePrecompile: appConfig.nilstorePrecompile,
+          polystorePrecompile: appConfig.polystorePrecompile,
         },
         wallet: {
           connected: isConnected,

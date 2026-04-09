@@ -2,7 +2,7 @@
 
 Last updated: 2026-01-23
 
-This document is intentionally **implementation-oriented** for `polystore-website/` and `nil_gateway/` and aligns with:
+This document is intentionally **implementation-oriented** for `polystore-website/` and `polystore_gateway/` and aligns with:
 
 - `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers_PROTOCOL_HOOKS.md`
 - `rfcs/rfc-mandatory-retrieval-sessions-and-batching_ACCESS_CONTROL_PROTOCOL_HOOKS.md`
@@ -55,7 +55,7 @@ Before asking the user to sign an “Open session” tx:
 
 ### 2.2 Owner retrieval flow
 - Call `MsgOpenRetrievalSession` (owner-paid).
-- Then download using `X-Nil-Session-Id`.
+- Then download using `X-PolyStore-Session-Id`.
 
 ### 2.3 Non-owner flow (Public / Allowlist / Voucher)
 - Call `MsgOpenRetrievalSessionSponsored` so the requester pays.
@@ -95,7 +95,7 @@ Show:
   - retrieve ciphertext,
   - verify proofs,
   - decrypt,
-  - parse NilCE header,
+  - parse PolyCE header,
   - decompress if needed.
 
 Advanced option (optional):

@@ -21,10 +21,10 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build WASM for website
-        run: cd nil_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name nil_core
+        run: cd polystore_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name polystore_core
 
-      - name: Build nil_cli (native)
-        run: cd nil_cli && cargo build --release
+      - name: Build polystore_cli (native)
+        run: cd polystore_cli && cargo build --release
 
       - name: Set up Node.js
         uses: actions/setup-node@v6

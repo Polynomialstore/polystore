@@ -1,15 +1,15 @@
-# RFC: Content-Encoding (Compression) for NilFS Files (Draft)
+# RFC: Content-Encoding (Compression) for PolyFS Files (Draft)
 
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23  
-**Scope:** Client/WASM (`nil_core`), Gateway ingest (`nil_gateway`), download UX, and provider storage format (bytes only)  
+**Scope:** Client/WASM (`polystore_core`), Gateway ingest (`polystore_gateway`), download UX, and provider storage format (bytes only)
 **Hard constraints respected:** does not modify escrow settlement; no oracles; deterministic on-chain.
 
 ---
 
 ## 1. Motivation
 
-NilStore charges for storage and retrieval as a function of stored bytes (ciphertext) and blob counts. If clients upload highly-compressible plaintext **without** compressing before encryption, they pay more than necessary and (depending on SP storage stacks) may inadvertently enable storage “data reduction arbitrage”.
+PolyStore charges for storage and retrieval as a function of stored bytes (ciphertext) and blob counts. If clients upload highly-compressible plaintext **without** compressing before encryption, they pay more than necessary and (depending on SP storage stacks) may inadvertently enable storage “data reduction arbitrage”.
 
 We want:
 - a **default-on** compression pipeline for compressible inputs,
@@ -26,7 +26,7 @@ Key constraint: **encryption destroys compressibility**. Therefore compression M
 1) Strongly encourage compressible data to be compressed **before being shared with SPs**.
 2) Store compression metadata in-band in a way that:
    - works for both gateway and browser/WASM ingestion,
-   - remains compatible with NilFS,
+   - remains compatible with PolyFS,
    - does not require new on-chain state.
 3) Ensure the user receives the original bytes on download (decompress after decrypt).
 4) Ensure economics charge on **stored bytes** (compressed+encrypted), not on uncompressed logical bytes.
@@ -61,15 +61,15 @@ For each file payload (plaintext):
 
 ## 4. Encoding header format (v1)
 
-To avoid NilFS schema churn, we store encoding metadata **inside the file bytes** as a fixed header, then encrypt the entire wrapped content.
+To avoid PolyFS schema churn, we store encoding metadata **inside the file bytes** as a fixed header, then encrypt the entire wrapped content.
 
 ### 4.1 Byte layout
 
 All fields are little-endian.
 
 ```
-struct NilCEv1 {
-  magic[4]            = 0x4E 0x49 0x4C 0x43   // "NILC"
+struct PolyCEv1 {
+  magic[4]            = 0x4E 0x49 0x4C 0x43   // "POLC"
   version_u8          = 1
   encoding_u8         // ContentEncoding enum (see below)
   flags_u16           // reserved, must be 0
@@ -136,7 +136,7 @@ Therefore:
 ## 8. Compatibility notes
 
 - This header is inside the encrypted payload; SPs remain oblivious.
-- NilFS path semantics are unchanged.
+- PolyFS path semantics are unchanged.
 - Partial-range reads remain valid; clients that download a subrange MUST ensure they include the header region to interpret encoding.  
   (UI should avoid “start from middle” downloads unless it also fetches the header blob(s).)
 
@@ -148,4 +148,3 @@ Therefore:
 2) Upload a non-compressible file → encoding NONE; download identical.
 3) Corrupt header → download path fails with a clear error.
 4) Zip-bomb defense: malformed compressed payload triggers safe abort.
-

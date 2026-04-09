@@ -8,15 +8,15 @@ import { createHash } from 'crypto'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-type NilWasmLike = {
+type PolyStoreWasmLike = {
   expand_mdu_rs: (encodedUserMdu: Uint8Array, k: number, m: number) => unknown
   expand_payload_rs_flat: (payloadBytes: Uint8Array, k: number, m: number) => unknown
   compute_mdu_root: (witnessFlat: Uint8Array) => unknown
 }
 
-async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; NilWasm: new (trustedSetupBytes: Uint8Array) => NilWasmLike; wasmPath: string }> {
-  const jsPath = path.resolve(__dirname, '../../public/wasm/nil_core.js')
-  const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm')
+async function loadPolyStoreCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; PolyStoreWasm: new (trustedSetupBytes: Uint8Array) => PolyStoreWasmLike; wasmPath: string }> {
+  const jsPath = path.resolve(__dirname, '../../public/wasm/polystore_core.js')
+  const wasmPath = path.resolve(__dirname, '../../public/wasm/polystore_core_bg.wasm')
   try {
     await fs.access(jsPath)
     await fs.access(wasmPath)
@@ -25,9 +25,9 @@ async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Prom
   }
   const mod = (await import(pathToFileURL(jsPath).href)) as {
     default: (args: unknown) => Promise<unknown>
-    NilWasm: new (trustedSetupBytes: Uint8Array) => NilWasmLike
+    PolyStoreWasm: new (trustedSetupBytes: Uint8Array) => PolyStoreWasmLike
   }
-  return { init: mod.default, NilWasm: mod.NilWasm, wasmPath }
+  return { init: mod.default, PolyStoreWasm: mod.PolyStoreWasm, wasmPath }
 }
 
 function sha256Hex0x(bytes: Uint8Array): string {
@@ -67,7 +67,7 @@ function encodePayloadToMdu(rawData: Uint8Array): Uint8Array {
 }
 
 test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
-  const wasm = await loadNilCoreWasm()
+  const wasm = await loadPolyStoreCoreWasm()
   if (!wasm) {
     t.skip('WASM artifacts not present (polystore-website/public/wasm).')
     return
@@ -99,13 +99,13 @@ test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
 
   const trustedSetupPath = path.resolve(__dirname, '../../public/trusted_setup.txt')
   const trustedSetupBytes = new Uint8Array(await fs.readFile(trustedSetupPath))
-  const nilWasm = new wasm.NilWasm(trustedSetupBytes)
+  const polyStoreWasm = new wasm.PolyStoreWasm(trustedSetupBytes)
 
   const payload = hexToBytes(fx.payload_hex)
   assert.strictEqual(sha256Hex0x(payload), fx.payload_sha256)
 
   const encodedUser = encodePayloadToMdu(payload)
-  const expandedRaw = nilWasm.expand_mdu_rs(encodedUser, fx.k, fx.m) as unknown
+  const expandedRaw = polyStoreWasm.expand_mdu_rs(encodedUser, fx.k, fx.m) as unknown
   const expanded = typeof expandedRaw === 'string' ? JSON.parse(expandedRaw) : expandedRaw
   const witnessRaw = (expanded as { witness?: unknown[] }).witness ?? []
   const shardsRaw = (expanded as { shards?: unknown[] }).shards ?? []
@@ -124,7 +124,7 @@ test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
   }
   assert.strictEqual(sha256Hex0x(witnessFlat), fx.extra['witness_flat_sha256'])
 
-  const userRootRaw = nilWasm.compute_mdu_root(witnessFlat) as unknown
+  const userRootRaw = polyStoreWasm.compute_mdu_root(witnessFlat) as unknown
   const userRoot = userRootRaw instanceof Uint8Array ? userRootRaw : new Uint8Array(userRootRaw as ArrayBufferLike)
   assert.strictEqual(bytesToHex0x(userRoot), fx.roots['user_mdu_root'])
 
@@ -135,7 +135,7 @@ test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
     assert.strictEqual(sha256Hex0x(shardsList[slot]), fx.artifact_sha256[name])
   }
 
-  const payloadExpandedRaw = nilWasm.expand_payload_rs_flat(payload, fx.k, fx.m) as unknown
+  const payloadExpandedRaw = polyStoreWasm.expand_payload_rs_flat(payload, fx.k, fx.m) as unknown
   const payloadExpanded = typeof payloadExpandedRaw === 'string' ? JSON.parse(payloadExpandedRaw) : payloadExpandedRaw
   const payloadWitnessRaw = (payloadExpanded as { witness_flat?: unknown }).witness_flat
   const payloadShardsRaw = (payloadExpanded as { shards_flat?: unknown }).shards_flat

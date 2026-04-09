@@ -5,7 +5,7 @@ use serde_json::json;
 async fn bridge_sign_flow_returns_signature() {
     let manager = BridgeManager::new();
     let payload = json!({
-        "domain": { "name": "NilStore" },
+        "domain": { "name": "PolyStore" },
         "message": { "creator": "0x0000000000000000000000000000000000000000" },
         "primaryType": "CreateDeal",
         "types": { "CreateDeal": [] }

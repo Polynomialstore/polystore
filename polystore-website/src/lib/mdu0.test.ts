@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { sanitizeNilfsRecordPath } from './nilfsPath'
+import { sanitizePolyfsRecordPath } from './polyfsPath'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,9 +15,9 @@ type WasmMdu0BuilderLike = {
     bytes: () => Uint8Array
 }
 
-async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike; wasmPath: string }> {
-    const jsPath = path.resolve(__dirname, '../../public/wasm/nil_core.js')
-    const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm')
+async function loadPolyStoreCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike; wasmPath: string }> {
+    const jsPath = path.resolve(__dirname, '../../public/wasm/polystore_core.js')
+    const wasmPath = path.resolve(__dirname, '../../public/wasm/polystore_core_bg.wasm')
     try {
         await fs.access(jsPath)
         await fs.access(wasmPath)
@@ -33,7 +33,7 @@ async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Prom
 }
 
 test('Mdu0Builder WASM', async (t) => {
-    const wasm = await loadNilCoreWasm()
+    const wasm = await loadPolyStoreCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
         return
@@ -85,7 +85,7 @@ test('Mdu0Builder WASM', async (t) => {
 });
 
 test('Mdu0Builder WASM rejects paths > 232 bytes', async (t) => {
-    const wasm = await loadNilCoreWasm()
+    const wasm = await loadPolyStoreCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
         return
@@ -100,8 +100,8 @@ test('Mdu0Builder WASM rejects paths > 232 bytes', async (t) => {
     }, /path too long/i);
 });
 
-test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async (t) => {
-    const wasm = await loadNilCoreWasm()
+test('sanitizePolyfsRecordPath produces a path acceptable to Mdu0Builder', async (t) => {
+    const wasm = await loadPolyStoreCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
         return
@@ -110,14 +110,14 @@ test('sanitizeNilfsRecordPath produces a path acceptable to Mdu0Builder', async 
     await wasm.init({ module_or_path: wasmBuffer });
 
     const mdu = new wasm.WasmMdu0Builder(10n);
-    const sanitized = sanitizeNilfsRecordPath('a/b/' + 'x'.repeat(400) + '.txt');
+    const sanitized = sanitizePolyfsRecordPath('a/b/' + 'x'.repeat(400) + '.txt');
     assert.doesNotThrow(() => {
         mdu.append_file(sanitized, 1n, 0n);
     });
 });
 
-test('sanitizeNilfsRecordPath produces a multibyte path acceptable to Mdu0Builder', async (t) => {
-    const wasm = await loadNilCoreWasm()
+test('sanitizePolyfsRecordPath produces a multibyte path acceptable to Mdu0Builder', async (t) => {
+    const wasm = await loadPolyStoreCoreWasm()
     if (!wasm) {
         t.skip('WASM artifacts not present (polystore-website/public/wasm).')
         return
@@ -126,7 +126,7 @@ test('sanitizeNilfsRecordPath produces a multibyte path acceptable to Mdu0Builde
     await wasm.init({ module_or_path: wasmBuffer });
 
     const mdu = new wasm.WasmMdu0Builder(10n);
-    const sanitized = sanitizeNilfsRecordPath('Desktop/' + '📸'.repeat(20) + '.png');
+    const sanitized = sanitizePolyfsRecordPath('Desktop/' + '📸'.repeat(20) + '.png');
     assert.doesNotThrow(() => {
         mdu.append_file(sanitized, 1n, 0n);
     });

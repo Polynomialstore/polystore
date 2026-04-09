@@ -95,7 +95,7 @@ function stepStatusLabel(
 
 function walletNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.hasOperatorAddress) {
-    return 'Connect the operator wallet so this page can capture the Nil address used for provider approval.'
+    return 'Connect the operator wallet so this page can capture the PolyStore address used for provider approval.'
   }
   if (!input.walletReady) {
     return 'Switch the browser wallet to PolyStore testnet before moving on.'
@@ -121,7 +121,7 @@ function pairingNextAction(input: ProviderOnboardingFlowInput): string {
     return 'Set the provider key name that the provider host commands should use.'
   }
   if (!input.hasOperatorAddress) {
-    return 'Finish Step 1 so this page has the operator wallet Nil address for pairing.'
+    return 'Finish Step 1 so this page has the operator wallet PolyStore address for pairing.'
   }
   if (input.pairingLinked && !input.pairingConfirmed) {
     return 'Approve the pending provider link from the browser wallet in this step.'

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { encodeAbiParameters, encodeFunctionResult, getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const routePath = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
@@ -14,7 +14,7 @@ const FILE_TABLE_HEADER_SIZE = 128
 const FILE_RECORD_SIZE = 256
 const FILE_RECORD_PATH_BYTES = FILE_RECORD_SIZE - 24
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -41,7 +41,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const dealId = '1'
   const filePath = 'provider-base.txt'
@@ -62,7 +62,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
   const removedFreeEndpointUrls: string[] = []
   let computeSessionCallCount = 0
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -70,7 +70,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
         deals: [
           {
             id: dealId,
-            owner: nilAddress,
+            owner: polystoreAddress,
             cid: staleManifestRoot,
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
@@ -82,14 +82,14 @@ test('Deal Explorer: missing local index requires provider sync before file view
     })
   })
 
-  await page.route(`**/nilchain/nilchain/v1/deals/${dealId}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/deals/${dealId}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         deal: {
           id: dealId,
-          owner: nilAddress,
+          owner: polystoreAddress,
           manifest_root: manifestRootBase64,
           size: String(24 * 1024 * 1024),
           escrow_balance: '1000000',
@@ -100,7 +100,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -192,14 +192,14 @@ test('Deal Explorer: missing local index requires provider sync before file view
     const index = Number(parts[parts.length - 1] || -1)
     const startBlobIndex = url.searchParams.get('start_blob_index')
     const blobCount = url.searchParams.get('blob_count')
-    const sessionId = route.request().headers()['x-nil-session-id']
+    const sessionId = route.request().headers()['x-polystore-session-id']
     if (!sessionId) {
       sessionlessMduRequests += 1
       await route.fulfill({
         status: 400,
         contentType: 'application/json',
         headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'missing X-Nil-Session-Id' }),
+        body: JSON.stringify({ error: 'missing X-PolyStore-Session-Id' }),
       })
       return
     }
@@ -221,7 +221,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/octet-stream',
-          'X-Nil-Mdu-Index': '0',
+          'X-PolyStore-Mdu-Index': '0',
         },
         body: mdu0Bytes,
       })
@@ -234,7 +234,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/octet-stream',
-          'X-Nil-Mdu-Index': '1',
+          'X-PolyStore-Mdu-Index': '1',
         },
         body: witnessMduBytes,
       })
@@ -311,7 +311,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
     if (method === 'eth_call') {
       computeSessionCallCount += 1
       const computeResult = encodeFunctionResult({
-        abi: NILSTORE_PRECOMPILE_ABI,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'computeRetrievalSessionIds',
         result: [['nil1provider'], [sessionIds[Math.min(computeSessionCallCount - 1, sessionIds.length - 1)]]],
       })
@@ -325,10 +325,10 @@ test('Deal Explorer: missing local index requires provider sync before file view
     if (method === 'eth_getTransactionReceipt') {
       const [hash] = payload?.params ?? []
 
-      const openedTopic0 = getEventSelector(getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
+      const openedTopic0 = getEventSelector(getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }))
       const dealIdTopic = padHex(toHex(BigInt(dealId)), { size: 32 })
       const ownerTopic = padHex(account.address as Hex, { size: 32 })
-      const event = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
+      const event = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'RetrievalSessionOpened' }) as any
       const openedData = encodeAbiParameters(
         event.inputs.filter((i: any) => !i.indexed),
             ['nil1provider', sessionIds[0]],
@@ -393,7 +393,7 @@ test('Deal Explorer: missing local index requires provider sync before file view
           case 'eth_call':
             computeCount += 1
             return encodeFunctionResult({
-              abi: NILSTORE_PRECOMPILE_ABI,
+              abi: POLYSTORE_PRECOMPILE_ABI,
               functionName: 'computeRetrievalSessionIds',
               result: [['nil1provider'], [sessionIds[Math.min(computeCount - 1, sessionIds.length - 1)]]],
             })

@@ -1,4 +1,4 @@
-declare module '/wasm/nil_core.js' {
+declare module '/wasm/polystore_core.js' {
   const init: (
     input?:
       | RequestInfo
@@ -11,7 +11,7 @@ declare module '/wasm/nil_core.js' {
   ) => Promise<unknown>
   export default init
 
-  export class NilWasm {
+  export class PolyStoreWasm {
     constructor(trusted_setup_bytes: Uint8Array)
     expand_file(data: Uint8Array): unknown
     expand_mdu_rs(data: Uint8Array, k: number, m: number): unknown
@@ -42,7 +42,7 @@ declare module '/wasm/nil_core.js' {
   }
 }
 
-declare module '../../public/wasm/nil_core.js' {
+declare module '../../public/wasm/polystore_core.js' {
   const init: (
     input?:
       | RequestInfo
@@ -55,7 +55,7 @@ declare module '../../public/wasm/nil_core.js' {
   ) => Promise<unknown>
   export default init
 
-  export class NilWasm {
+  export class PolyStoreWasm {
     constructor(trusted_setup_bytes: Uint8Array)
     expand_file(data: Uint8Array): unknown
     expand_mdu_rs(data: Uint8Array, k: number, m: number): unknown

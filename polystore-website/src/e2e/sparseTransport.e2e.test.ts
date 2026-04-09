@@ -5,8 +5,8 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { buildCreateDealTypedData } from '../lib/eip712'
 import { postSparseArtifact } from '../lib/upload/sparseTransport'
 
-const DEFAULT_EIP712_CHAIN_ID = Number(process.env.NIL_EIP712_CHAIN_ID ?? 20260211)
-const COSMOS_CHAIN_ID = process.env.NIL_COSMOS_CHAIN_ID ?? '31337'
+const DEFAULT_EIP712_CHAIN_ID = Number(process.env.POLYSTORE_EIP712_CHAIN_ID ?? 20260211)
+const COSMOS_CHAIN_ID = process.env.POLYSTORE_COSMOS_CHAIN_ID ?? '31337'
 const MDU_SIZE = 8 * 1024 * 1024
 const MANIFEST_SIZE = 128 * 1024
 const VALID_MANIFEST_ROOT =
@@ -21,7 +21,7 @@ function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T
 
 async function resolveEip712ChainId(lcdBase: string): Promise<number> {
   try {
-    const res = await fetch(`${lcdBase}/nilchain/nilchain/v1/params`)
+    const res = await fetch(`${lcdBase}/polystorechain/polystorechain/v1/params`)
     if (!res.ok) return DEFAULT_EIP712_CHAIN_ID
     const json = (await res.json().catch(() => null)) as { params?: { eip712_chain_id?: string | number } } | null
     const raw = json?.params?.eip712_chain_id
@@ -33,10 +33,10 @@ async function resolveEip712ChainId(lcdBase: string): Promise<number> {
 }
 
 async function createDeal(gatewayBase: string): Promise<string> {
-  const lcdBase = process.env.NIL_LCD_BASE ?? 'http://localhost:1317'
+  const lcdBase = process.env.POLYSTORE_LCD_BASE ?? 'http://localhost:1317'
   const eip712ChainId = await resolveEip712ChainId(lcdBase)
   const account = privateKeyToAccount(
-    (process.env.NIL_E2E_PRIVKEY ??
+    (process.env.POLYSTORE_E2E_PRIVKEY ??
       '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1') as `0x${string}`,
   )
 
@@ -72,18 +72,18 @@ async function createDeal(gatewayBase: string): Promise<string> {
 
 test(
   'e2e: sparse provider endpoints accept truncated manifest, mdu, and shard bodies',
-  { skip: process.env.NIL_E2E !== '1' },
+  { skip: process.env.POLYSTORE_E2E !== '1' },
   async () => {
-    const gatewayBase = process.env.NIL_GATEWAY_BASE ?? 'http://localhost:8080'
-    const providerBase = process.env.NIL_PROVIDER_BASE ?? 'http://127.0.0.1:8082'
+    const gatewayBase = process.env.POLYSTORE_GATEWAY_BASE ?? 'http://localhost:8080'
+    const providerBase = process.env.POLYSTORE_PROVIDER_BASE ?? 'http://127.0.0.1:8082'
     const dealId = await createDeal(gatewayBase)
     const manifestRoot = VALID_MANIFEST_ROOT
 
     const manifestRes = await postSparseArtifact({
       url: `${providerBase}/sp/upload_manifest`,
       headers: {
-        'X-Nil-Deal-ID': dealId,
-        'X-Nil-Manifest-Root': manifestRoot,
+        'X-PolyStore-Deal-ID': dealId,
+        'X-PolyStore-Manifest-Root': manifestRoot,
       },
       artifact: {
         kind: 'manifest',
@@ -96,9 +96,9 @@ test(
     const mduRes = await postSparseArtifact({
       url: `${providerBase}/sp/upload_mdu`,
       headers: {
-        'X-Nil-Deal-ID': dealId,
-        'X-Nil-Manifest-Root': manifestRoot,
-        'X-Nil-Mdu-Index': '0',
+        'X-PolyStore-Deal-ID': dealId,
+        'X-PolyStore-Manifest-Root': manifestRoot,
+        'X-PolyStore-Mdu-Index': '0',
       },
       artifact: {
         kind: 'mdu',
@@ -112,10 +112,10 @@ test(
     const shardRes = await postSparseArtifact({
       url: `${providerBase}/sp/upload_shard`,
       headers: {
-        'X-Nil-Deal-ID': dealId,
-        'X-Nil-Manifest-Root': manifestRoot,
-        'X-Nil-Mdu-Index': '1',
-        'X-Nil-Slot': '2',
+        'X-PolyStore-Deal-ID': dealId,
+        'X-PolyStore-Manifest-Root': manifestRoot,
+        'X-PolyStore-Mdu-Index': '1',
+        'X-PolyStore-Slot': '2',
       },
       artifact: {
         kind: 'shard',

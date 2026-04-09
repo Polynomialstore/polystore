@@ -1,5 +1,5 @@
 ```MAINNET_GAP_TRACKER.md
-# Mainnet Gap Tracker (NilStore)
+# Mainnet Gap Tracker (PolyStore)
 
 This document tracks **what is missing** between the current implementation in this repo and the **long‑term Mainnet plan** described by `spec.md` (canonical), `rfcs/`, and `notes/`.
 
@@ -14,11 +14,11 @@ This document tracks **what is missing** between the current implementation in t
 - Keep items **small enough to ship** (1–5 PRs each).
 - Every epic should have a **test gate** (unit/e2e/script) before it can be marked “Done”.
 - Prefer tracking **code ownership** by directory:
-  - Chain: `nilchain/`
-  - Gateway/SP: `nil_gateway/`
-  - Core crypto/WASM: `nil_core/`
-  - CLI automation: `nil_cli/`
-  - P2P: `nil_p2p/`
+  - Chain: `polystorechain/`
+  - Gateway/SP: `polystore_gateway/`
+  - Core crypto/WASM: `polystore_core/`
+  - CLI automation: `polystore_cli/`
+  - P2P: `polystore_p2p/`
   - Web UX: `polystore-website/`
 
 ## Status Legend
@@ -55,7 +55,7 @@ This document tracks **what is missing** between the current implementation in t
 ### P0-P2P-001 — Deputy system + proxy retrieval market + audit debt
 - **Status:** PARTIAL (stub only)
 - **Spec:** `spec.md` §7.7–§7.8; `rfcs/rfc-retrieval-validation.md`; Appendix B (7)
-- **Current state:** `nil_p2p` has an `AskForProxy` message stub, but no end-to-end deputy selection, relay, compensation, or evidence.
+- **Current state:** `polystore_p2p` has an `AskForProxy` message stub, but no end-to-end deputy selection, relay, compensation, or evidence.
 - **DoD:** proxy retrieval works when an SP “ghosts”; failure evidence is produced and aggregated; audit debt tasks are assignable/trackable; griefing mitigations.
 - **Test gate:** e2e “ghosting provider” scenario that still retrieves via deputy and records evidence.
 
@@ -66,11 +66,11 @@ This document tracks **what is missing** between the current implementation in t
 - **DoD:** CUDA (server) and/or WebGPU (client) path that materially raises sustained throughput; pipeline parallelism is default.
 - **Test gate:** reproducible perf benchmark suite (CI “doesn’t regress”) + local benchmark script with thresholds.
 
-### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
+### P0-CORE-001 — “One core” migration (PolyFS + crypto single source of truth)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
-- **Current state:** `nil_gateway` contains NilFS/layout logic in Go, while the browser uses `nil_core` WASM for crypto; risk of drift.
-- **DoD:** NilFS builder/layout + commitment logic live in `nil_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
+- **Current state:** `polystore_gateway` contains PolyFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
+- **DoD:** PolyFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
 - **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
 
 ### P0-ECON-001 — Mainnet escrow accounting + lock-in pricing (pay-at-ingest)
@@ -89,7 +89,7 @@ This document tracks **what is missing** between the current implementation in t
 
 ## Domain Backlog (P1/P2) — Organized By Subsystem
 
-### Chain / Protocol (`nilchain/`)
+### Chain / Protocol (`polystorechain/`)
 
 #### CHAIN-101 — Explicit Mode 2 encoding on-chain (K/M, slot mapping, overlays)
 - **Status:** PARTIAL (DEVNET)
@@ -116,10 +116,10 @@ This document tracks **what is missing** between the current implementation in t
 
 #### CHAIN-106 — EVM module production posture (simulation vs runtime)
 - **Status:** PARTIAL (DEVNET)
-- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `nilchain/app/app.go` simulation exclusions
+- **Spec/Notes:** `AGENTS.md` Phase 5 notes; `polystorechain/app/app.go` simulation exclusions
 - **Notes:** EVM/FeeMarket are excluded from simulation to avoid signer panics; ensure production builds are safe and tested.
 
-### Gateway / Provider (`nil_gateway/`)
+### Gateway / Provider (`polystore_gateway/`)
 
 #### GW-201 — Strict session enforcement on data-plane fetches
 - **Status:** PARTIAL (DEVNET)
@@ -134,7 +134,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### GW-204 — S3 adapter polish + bidirectional sync scripts (nilstore ↔ S3)
+#### GW-204 — S3 adapter polish + bidirectional sync scripts (polystore ↔ S3)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
 
@@ -152,7 +152,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Source:** `polystore-website/AGENTS.md` §8
 
-### Core crypto / WASM (`nil_core/`)
+### Core crypto / WASM (`polystore_core/`)
 
 #### CORE-401 — WebGPU KZG commitments/proofs (client-side velocity)
 - **Status:** MISSING
@@ -162,17 +162,17 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** PARTIAL (DEVNET)
 - **DoD:** stable outputs for commitments across Mac/Linux and browser/gateway; fuzzers for edge-cases.
 
-### CLI / Automation (`nil_cli/`, `scripts/`)
+### CLI / Automation (`polystore_cli/`, `scripts/`)
 
 #### CLI-501 — Enterprise upload job runner (delegated key, scoped funding, teardown)
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### CLI-502 — Fast download / mirror scripts (provider → local, nilstore → S3)
+#### CLI-502 — Fast download / mirror scripts (provider → local, polystore → S3)
 - **Status:** PARTIAL (DEVNET)
 - **Notes:** `notes/launch_todos.md`
 
-### P2P (`nil_p2p/`)
+### P2P (`polystore_p2p/`)
 
 #### P2P-601 — Production transport + discovery (beyond stubs)
 - **Status:** PARTIAL (DEVNET)
@@ -213,12 +213,12 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
   - `spec.md` naming + Appendix B references aligned to the RFCs
 - **Exit criteria:** updated RFCs/spec deltas + a checklist of exact protobuf/state transitions to implement in the next sprints.
 
-### Sprint 1 — “One core” foundation (NilFS + commitments unified)
+### Sprint 1 — “One core” foundation (PolyFS + commitments unified)
 - **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
-- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `nil_core`.
+- **Goal:** eliminate browser/gateway drift risk by centralizing PolyFS layout + commitment computation in `polystore_core`.
 - **Delivers:**
-  - Port NilFS layout/builder primitives from `nil_gateway/pkg/*` into `nil_core` (Rust) with a stable API surface.
-  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `nil_gateway` point to the same implementation.
+  - Port PolyFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
+  - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `polystore_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
 
@@ -290,7 +290,7 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Delivers:**
   - S3 adapter correctness + compatibility testing (aws-cli/rclone).
   - Third-party uploader pattern: scoped key funding + teardown + audit workflow.
-  - Fast download / mirroring scripts (nilstore ↔ S3) with documented performance expectations.
+  - Fast download / mirroring scripts (polystore ↔ S3) with documented performance expectations.
 - **Test gate:** integration tests + scripted “upload from S3 → verify on-chain → retrieve to S3” pipeline.
 
 ### Sprint 10 — Mainnet hardening + audits + launch readiness
@@ -345,7 +345,7 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
 - `sprint22-wallet-unlock-detection`: detect MetaMask authorization (`eth_accounts`) early so “Create deal” prompts unlock before submit.
 - `sprint23-gap-tracker-status`: record sprint22 execution status in the tracker (doc hygiene).
-- `sprint24-one-core-payload-ffi`: move NilFS payload encode/decode into `nil_core` FFI to reduce cross-runtime drift.
+- `sprint24-one-core-payload-ffi`: move PolyFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.
 
 ```
 
@@ -357,45 +357,45 @@ Companion docs:
 - `MAINNET_GAP_TRACKER.md` (canonical gap tracking + DoDs + test gates)
 
 ## Stage 0 — Policy freeze → params + interfaces (unblocks engineering)
-- [ ] Extend `nilchain/proto/nilchain/nilchain/v1/params.proto` to encode B1/B2/B4/B5/B6 (with validation + genesis defaults).
+- [ ] Extend `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` to encode B1/B2/B4/B5/B6 (with validation + genesis defaults).
 - [ ] Encode audit budget sizing/caps (Option A): `audit_budget_bps`, `audit_budget_cap_bps`, and bounded carryover (≤2 epochs) for unused budget.
 - [ ] Document chosen defaults + rationale in `notes/mainnet_policy_resolution_jan2026.md` and reference from `MAINNET_GAP_TRACKER.md`.
 
 ## Stage 1 — Storage lock-in pricing + escrow accounting (A1)
-- [ ] Implement pay-at-ingest lock-in pricing on `UpdateDealContent*` per `rfcs/rfc-pricing-and-escrow-accounting.md` (`nilchain/`).
-- [ ] Implement deterministic spend window reset + deterministic elasticity debits (`nilchain/`).
+- [ ] Implement pay-at-ingest lock-in pricing on `UpdateDealContent*` per `rfcs/rfc-pricing-and-escrow-accounting.md` (`polystorechain/`).
+- [ ] Implement deterministic spend window reset + deterministic elasticity debits (`polystorechain/`).
 - [ ] Add econ e2e: create deal → upload/commit → verify escrow and module account flows (`scripts/`, `tests/`).
 
 ## Stage 2 — Retrieval session economics (A2)
-- [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`nilchain/`).
-- [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`nilchain/`).
+- [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`polystorechain/`).
+- [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`polystorechain/`).
 - [ ] Extend econ e2e: open → complete; open → cancel/expire; verify burns/payouts/refunds (`scripts/`, `tests/`).
 
 ## Stage 3 — Deterministic challenge derivation + quotas + synthetic fill (A3)
-- [ ] Implement deterministic challenge derivation + quota accounting (SPECIFIED in `rfcs/rfc-challenge-derivation-and-quotas.md`) (`nilchain/`).
-- [ ] Implement enforcement outcomes: invalid proof → hard fault; quota shortfall → HealthState decay (no slash by default) (`nilchain/`).
+- [ ] Implement deterministic challenge derivation + quota accounting (SPECIFIED in `rfcs/rfc-challenge-derivation-and-quotas.md`) (`polystorechain/`).
+- [ ] Implement enforcement outcomes: invalid proof → hard fault; quota shortfall → HealthState decay (no slash by default) (`polystorechain/`).
 - [ ] Add keeper unit tests for determinism + exclusions (REPAIRING slots excluded).
 - [ ] Add adversarial sim test gate for anti-grind properties (`scripts/`, `performance/`).
 
 ## Stage 4 — HealthState + eviction curve (A6)
-- [ ] Implement per-(deal, provider/slot) HealthState updates from hard/soft failures (`nilchain/`).
-- [ ] Implement eviction triggers (`evict_after_missed_epochs_hot/cold`) and hook into Mode 2 repair start (`nilchain/`).
+- [ ] Implement per-(deal, provider/slot) HealthState updates from hard/soft failures (`polystorechain/`).
+- [ ] Implement eviction triggers (`evict_after_missed_epochs_hot/cold`) and hook into Mode 2 repair start (`polystorechain/`).
 - [ ] Add queries/events for observability; add unit tests.
 
 ## Stage 5 — Mode 2 repair + make-before-break replacement (A5)
-- [ ] Implement make-before-break replacement per `rfcs/rfc-mode2-onchain-state.md` (`nilchain/`).
-- [ ] Implement deterministic candidate selection + churn controls (B4) (`nilchain/`).
-- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`nilchain/`, `nil_gateway/`).
+- [ ] Implement make-before-break replacement per `rfcs/rfc-mode2-onchain-state.md` (`polystorechain/`).
+- [ ] Implement deterministic candidate selection + churn controls (B4) (`polystorechain/`).
+- [ ] Ensure reads avoid `REPAIRING` slots; synthetic challenges ignore `REPAIRING`; repairing slots do not earn rewards (`polystorechain/`, `polystore_gateway/`).
 - [ ] Add multi-SP repair e2e: slot failure → candidate catch-up → promotion; reads succeed throughout (`scripts/`, `tests/`).
 
 ## Stage 6 — Evidence / fraud proofs pipeline (A4)
-- [ ] Implement evidence taxonomy + verification + replay protection (`nilchain/`).
-- [ ] Wire penalties (slash/jail/evict) to B1 params; integrate with repair start (`nilchain/`).
+- [ ] Implement evidence taxonomy + verification + replay protection (`polystorechain/`).
+- [ ] Wire penalties (slash/jail/evict) to B1 params; integrate with repair start (`polystorechain/`).
 - [ ] Add unit tests per evidence type + e2e demonstrating slash on proven bad data (`scripts/`, `tests/`).
 
 ## Stage 7 — Deputy market + proxy retrieval + audit debt (P0-P2P-001)
-- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`nil_p2p/`, `nilchain/`, `nil_gateway/`).
-- [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`nilchain/`).
+- [ ] Implement deputy/proxy retrieval end-to-end: selection, routing, and settlement (B5) (`polystore_p2p/`, `polystorechain/`, `polystore_gateway/`).
+- [ ] Implement proof-of-failure aggregation with threshold/window (B1) and anti-griefing (B5) (`polystorechain/`).
 - [ ] Add ghosting-provider e2e: still retrieve via deputy and record evidence (`scripts/`).
 
 ## B) Policy decisions to encode (proposal summary)
@@ -463,7 +463,7 @@ These are the baseline parameter defaults to implement and calibrate.
 
 ## Implementation Note: Params That Exist Today vs Proposed Additions
 
-The current on-chain params are defined in `nilchain/proto/nilchain/nilchain/v1/params.proto` and already include (non-exhaustive):
+The current on-chain params are defined in `polystorechain/proto/polystorechain/polystorechain/v1/params.proto` and already include (non-exhaustive):
 - `storage_price`, `base_retrieval_fee`, `retrieval_price_per_blob`, `retrieval_burn_bps`
 - `month_len_blocks`, `epoch_len_blocks`
 - `quota_bps_per_epoch_hot/cold`, `quota_min_blobs`, `quota_max_blobs`
@@ -572,7 +572,7 @@ Fallback (simpler, weaker): flat bond only (no assignment collateral).
 
 **Deterministic candidate selection:**
 - seed:
-  - `seed = SHA256("nilstore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
+  - `seed = SHA256("polystore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
 - rank provider registry by `SHA256(seed || provider_addr)` and choose first eligible.
 
 **Eligibility filter:**
@@ -733,15 +733,15 @@ These are “agree on targets” items rather than “can’t implement” items
 ```
 
 ```ECONOMY.md
-# NilStore Economy & Tokenomics
+# PolyStore Economy & Tokenomics
 
 ## Overview
 
-The NilStore economy is designed to align incentives between Storage Providers (SPs), Data Owners (Users), and the Protocol itself using a single utility token: **$NIL** ($STOR). The model enforces physical infrastructure commitment while enabling elastic, user-funded scaling.
+The PolyStore economy is designed to align incentives between Storage Providers (SPs), Data Owners (Users), and the Protocol itself using a single utility token: **$NIL** ($STOR). The model enforces physical infrastructure commitment while enabling elastic, user-funded scaling.
 
 ## 1. The Performance Market (Proof-of-Useful-Data)
 
-Unlike "Space Race" models that reward random data filling, NilStore rewards **latency**.
+Unlike "Space Race" models that reward random data filling, PolyStore rewards **latency**.
 
 ### 1.1 Unified Liveness
 Storage proofs (`MsgProveLiveness`) serve two functions:
@@ -766,7 +766,7 @@ The base reward per proof follows a halving schedule to cap total supply.
 
 ## 2. Elasticity & Scaling
 
-NilStore allows data to scale automatically to meet demand without manual intervention.
+PolyStore allows data to scale automatically to meet demand without manual intervention.
 
 ### 2.1 Virtual Stripes
 A file is stored on a "Stripe" (12 providers). If these providers become saturated (high latency or load), they can signal saturation (`MsgSignalSaturation`).
@@ -790,7 +790,7 @@ Providers earn tokens via:
 
 ### 3.3 Sinks (Burning)
 *   **Slashing:** Example policy: missed proofs / non-response violations trigger a slash and potential jailing. Exact windows and amounts are protocol parameters.
-*   **Burner:** The `nilchain` module has burn permissions to remove slashed assets from circulation.
+*   **Burner:** The `polystorechain` module has burn permissions to remove slashed assets from circulation.
 
 ## 5. Protocol Parameters (Proposal Defaults)
 
@@ -866,18 +866,18 @@ See `notes/mainnet_policy_resolution_jan2026.md`.
 
 ## 4. S3 Adapter (Web2 Gateway)
 
-The `nil_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
+The `polystore_gateway` adapter allows Web2 applications to write to PolyStore using standard S3 APIs.
 *   **PUT:** Shards file -> Computes KZG -> Creates Deal on Chain.
 *   **GET:** Retrieves shards -> Verifies KZG -> Reconstructs File.
 
 ```
 
 ```retrievability-memo.md
-# NilStore Retrievability Memo – Problem Statement
+# PolyStore Retrievability Memo – Problem Statement
 
 ## 1. Purpose
 
-Define the precise retrievability guarantee NilStore aims to provide and the conditions under which Storage Providers (SPs) must be punished when they fail to uphold it. This memo is intentionally **problem‑only**: no protocol design, only what must be true of the system’s behavior.
+Define the precise retrievability guarantee PolyStore aims to provide and the conditions under which Storage Providers (SPs) must be punished when they fail to uphold it. This memo is intentionally **problem‑only**: no protocol design, only what must be true of the system’s behavior.
 
 ---
 
@@ -1071,7 +1071,7 @@ We only require that:
 
 ## 11. Restated Goal
 
-NilStore’s retrieval subsystem must be designed so that, for every SP and every Deal they accept:
+PolyStore’s retrieval subsystem must be designed so that, for every SP and every Deal they accept:
 
 1. There is a well‑defined notion of a **valid retrieval challenge** and response;
 2. The system continuously or periodically exercises those challenges with sufficient coverage;
@@ -1087,7 +1087,7 @@ All other design choices (who issues challenges, how we hide audits, SP audit de
 # RFC: Pricing & Escrow Accounting (Lock-in + Retrieval Fees + Elasticity Caps)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain economics (`nilchain/`) + gateway/UI intent fields
+**Scope:** Chain economics (`polystorechain/`) + gateway/UI intent fields
 **Motivation:** `spec.md` §6.1–§6.2, §7.2.1; Appendix B #5
 **Depends on:** `rfcs/rfc-data-granularity-and-economics.md`
 
@@ -1111,13 +1111,13 @@ This RFC intentionally does **not** introduce retrieval “credits” for Gamma�
 
 ### 1.2 Module accounts
 - `authtypes.FeeCollectorName`: receives `deal_creation_fee`.
-- `types.ModuleName` (`nilchain` module account): holds escrow and performs burns/transfers for retrieval settlement.
+- `types.ModuleName` (`polystorechain` module account): holds escrow and performs burns/transfers for retrieval settlement.
 
 ---
 
 ## 2. Parameters (Frozen)
 
-From `nilchain/nilchain/v1/params.proto`:
+From `polystorechain/polystorechain/v1/params.proto`:
 - `deal_creation_fee: Coin`
 - `min_duration_blocks: uint64`
 - `storage_price: Dec` (per byte per block)
@@ -1284,7 +1284,7 @@ elasticity_cost = base_stripe_cost * delta_replication
 # RFC: Challenge Derivation & Proof Quota Policy (Unified Liveness v1)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain protocol policy (`nilchain/`)
+**Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
 
@@ -1292,7 +1292,7 @@ elasticity_cost = base_stripe_cost * delta_replication
 
 ## 0. Executive Summary
 
-NilStore’s “Unified Liveness” requires the chain to deterministically answer:
+PolyStore’s “Unified Liveness” requires the chain to deterministically answer:
 1. **What** positions a provider must prove for a given epoch (synthetic challenges)
 2. **How many** proofs are required (quota)
 3. **How organic retrieval** reduces synthetic demand (credits)
@@ -1309,7 +1309,7 @@ This RFC freezes:
 ## 1. Definitions
 
 ### 1.1 Epoch
-NilStore defines a **liveness epoch** with fixed length:
+PolyStore defines a **liveness epoch** with fixed length:
 - `EPOCH_LEN_BLOCKS` (param; e.g. 100 blocks)
 - `epoch_id = floor(block_height / EPOCH_LEN_BLOCKS)`
 
@@ -1356,7 +1356,7 @@ Define the epoch seed as:
 
 ```
 epoch_start_height = epoch_id * EPOCH_LEN_BLOCKS
-R_e = SHA256("nilstore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
+R_e = SHA256("polystore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
 ```
 
 Rationale:
@@ -1389,7 +1389,7 @@ Let:
 For slot `s ∈ [0..N-1]` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 row        = U64BE(seed[8..16]) % rows
 
@@ -1412,7 +1412,7 @@ Let:
 For provider `P` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 blob_index  = U64BE(seed[8..16]) % 64
 mdu_index   = meta_mdus + mdu_ordinal
@@ -1475,7 +1475,7 @@ credits_blobs = min(credit_cap, unique_proved_blobs_in_epoch)
 ```
 
 Uniqueness is enforced by storing a per-epoch set keyed by:
-`credit_id = SHA256("nilstore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
+`credit_id = SHA256("polystore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
 
 ---
 
@@ -1534,7 +1534,7 @@ All keys are deterministic hashes to keep store keys bounded.
 # RFC: Mode 2 On-Chain State (Slots, Generations, Repairs)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain protocol state (`nilchain/`)
+**Scope:** Chain protocol state (`polystorechain/`)
 **Depends on:** `spec.md` §6.2, §8.3–§8.4; `rfcs/rfc-blob-alignment-and-striping.md`
 **Motivation:** Appendix B #2 (Mode 2 encoding), #6 (write semantics beyond append-only; near-term constraints)
 
@@ -1570,13 +1570,13 @@ This RFC freezes a **concrete on-chain representation** for Mode 2 and a minimal
 
 ### 1.3 Slab accounting fields (naming freeze)
 For chain policy and bounds checks we freeze:
-- `size_bytes`: total logical bytes of file contents in NilFS (sum of non-tombstone file lengths)
+- `size_bytes`: total logical bytes of file contents in PolyFS (sum of non-tombstone file lengths)
 - `total_mdus`: total number of committed MDU roots in the Manifest commitment (includes metadata + witness + user MDUs)
 - `witness_mdus`: number of witness MDUs committed after MDU #0 (metadata region size)
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)
 
 Notes:
-- This RFC intentionally avoids `allocated_length` in protocol state. Gateway/UI MAY keep `allocated_length` as a legacy alias for `total_mdus` (count), per `nil_gateway/nil-gateway-spec.md`.
+- This RFC intentionally avoids `allocated_length` in protocol state. Gateway/UI MAY keep `allocated_length` as a legacy alias for `total_mdus` (count), per `polystore_gateway/polystore-gateway-spec.md`.
 
 ---
 
@@ -1740,8 +1740,8 @@ Add a one-time migration that:
 ## 7. Implementation Checklist (Sprint 3/4)
 
 1. Protobuf + codegen:
-   - `nilchain/proto/nilchain/nilchain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
-   - `nilchain/proto/nilchain/nilchain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
+   - `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
+   - `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
 2. Keeper logic:
    - Populate typed fields at `CreateDeal`.
    - Persist `total_mdus/witness_mdus/current_gen` at `UpdateDealContent*`.
@@ -1859,7 +1859,7 @@ This RFC moves the protocol from a "Legal System" (Disputes) to a "Logistics Sys
 **Scope:** Retrieval Market, Game Theory
 **Related:** `whitepaper.md`, `rfcs/rfc-blob-alignment-and-striping.md`
 
-This document analyzes the security model of the NilStore Retrieval Market, specifically focusing on the "Fair Exchange" problem between Storage Providers (SPs) and Data Users.
+This document analyzes the security model of the PolyStore Retrieval Market, specifically focusing on the "Fair Exchange" problem between Storage Providers (SPs) and Data Users.
 
 ---
 
@@ -1962,7 +1962,7 @@ To prevent grinding, the protocol enforces strict friction:
 # RFC: Heat & Dynamic Placement for Mode 1
 
 **Status:** Draft / Non‑normative
-**Target:** NilStore Mode 1 (FullReplica)
+**Target:** PolyStore Mode 1 (FullReplica)
 **Scope:** Research / experimental design, _not_ part of the core retrievability spec yet
 
 ---
