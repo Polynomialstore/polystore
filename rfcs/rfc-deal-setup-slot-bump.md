@@ -513,6 +513,131 @@ The checklist below is intentionally scoped for the trusted devnet. It should be
 
 If the gateway orchestrates setup uploads, it SHOULD expose structured slot failure reasons so the browser can trigger the correct bump transaction instead of falling back to generic upload failure handling.
 
+### 11.4 Suggested PR rollout for devnet alpha
+
+The safest implementation path is three small PRs, each test-gated on its own.
+
+#### PR A: Chain message + state + deterministic selector
+
+Goal:
+
+- make setup bump exist as a native chain capability before touching wallet or UI wiring.
+
+Primary files:
+
+- `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`
+- `polystorechain/proto/polystorechain/polystorechain/v1/params.proto`
+- `polystorechain/x/polystorechain/keeper/msg_server.go`
+- `polystorechain/x/polystorechain/keeper/keeper.go`
+- `polystorechain/x/polystorechain/types/keys.go`
+- `polystorechain/x/polystorechain/keeper/msg_server_test.go`
+- new focused keeper tests next to existing `msg_server_*` coverage
+
+Scope:
+
+- add `MsgBumpDealSetupSlot`
+- add `max_setup_bumps_per_slot`
+- add per-slot setup bump nonce / tried-provider state
+- implement setup-phase validation
+- implement deterministic replacement selection
+- mirror slot replacement into `providers[]`
+- emit explicit events for bump success
+
+Test gate:
+
+- `cd polystorechain && go test ./x/polystorechain/...`
+
+Exit criteria:
+
+- a Cosmos-message path can bump a setup-phase slot deterministically,
+- stale/non-owner/post-commit requests fail cleanly,
+- and the chain state after bump is queryable and internally consistent.
+
+#### PR B: EVM/precompile bridge wiring
+
+Goal:
+
+- make setup bump available through the same wallet-first path used by `createDeal` and `updateDealContent`.
+
+Primary files:
+
+- `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`
+- `polystorechain/x/polystorechain/types/eip712.go`
+- `polystorechain/x/polystorechain/keeper/msg_server.go`
+- `polystorechain/x/polystorechain/keeper/msg_server_evmbdg_test.go`
+- `polystore-website/src/lib/polystorePrecompile.ts`
+- `polystore-website/src/lib/eip712.ts`
+- any precompile ABI fixture or generated binding that currently exposes `createDeal` / `updateDealContent`
+
+Scope:
+
+- add `EvmBumpDealSetupSlotIntent`
+- add `MsgBumpDealSetupSlotFromEvm`
+- implement EIP-712 hashing + nonce semantics
+- expose precompile method and event surface for setup bump
+- add website-side typed-data / ABI support only as far as needed to call the new method
+
+Test gate:
+
+- `cd polystorechain && go test ./x/polystorechain/...`
+- `npm -C polystore-website run test:unit`
+
+Exit criteria:
+
+- a wallet-signed setup bump can be submitted through the precompile path,
+- signatures/nonces/replay rules mirror the existing EVM bridge posture,
+- and the website has the client-side ABI/types needed to call it.
+
+#### PR C: Website upload recovery + retry UX
+
+Goal:
+
+- turn slot-specific setup failure into an actionable bump-and-retry flow instead of a dead-end upload error.
+
+Primary files:
+
+- `polystore-website/src/lib/upload/engine.ts`
+- `polystore-website/src/hooks/useDirectUpload.ts`
+- `polystore-website/src/hooks/useCreateDeal.ts`
+- `polystore-website/src/hooks/useDirectCommit.ts`
+- `polystore-website/src/components/Dashboard.tsx`
+- any deal-detail or upload-state components that surface Mode 2 progress
+- Playwright coverage under `polystore-website/tests/`
+
+Scope:
+
+- surface slot-specific upload errors from the engine
+- map failing shard/metadata upload back to `(deal_id, slot, provider)`
+- call the new setup bump wallet flow
+- refresh deal state / provider discovery after bump
+- retry only the failed slot
+- show explicit UI states for:
+  - setup failure detected
+  - replacement requested
+  - replacement assigned
+  - slot retry in progress
+  - unrecoverable exhaustion after bump cap
+
+Test gate:
+
+- `npm -C polystore-website run test:unit`
+- `npm -C polystore-website run build`
+- targeted Playwright coverage for failed-slot bump-and-retry
+
+Exit criteria:
+
+- on a synthetic `upload_shard` or `upload_manifest` slot failure, the user can recover without manually recreating the deal,
+- the flow remains wallet-first,
+- and success/error states are visible in the upload UI.
+
+Recommended sequencing:
+
+1. merge PR A first
+2. merge PR B second
+3. merge PR C only after the chain and EVM surfaces are stable
+
+This sequencing keeps the devnet usable at each step and avoids building UI assumptions ahead of protocol support.
+
 ---
 
 ## 12. Test gates

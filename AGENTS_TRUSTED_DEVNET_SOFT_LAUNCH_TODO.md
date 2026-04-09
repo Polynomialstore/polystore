@@ -629,3 +629,53 @@ Checklist:
 - [ ] Improve FileSharder MDU labeling (meta/witness/user) + add an “MDU primer”.
 - [ ] Add retrieval trace details (blob/MDU ranges, receipt counts) after downloads.
 - [ ] Add basic slab/MDU visibility to `polystore_gateway_gui`.
+
+---
+
+### PR41 — Chain: Mode2 setup slot bump (alpha) (PENDING)
+
+- Branch: `codex/mode2-setup-slot-bump-chain`
+- Goal: Add the minimal on-chain escape hatch for initial Mode2 setup failures so a deal owner can bump one bad slot before the first content commit.
+- Spec/audit doc: `rfcs/rfc-deal-setup-slot-bump.md`
+- Test gate:
+  - `cd polystorechain && go test ./x/polystorechain/...`
+
+Checklist:
+- [ ] Add `MsgBumpDealSetupSlot` and `max_setup_bumps_per_slot`.
+- [ ] Add per-slot setup bump nonce / tried-provider state.
+- [ ] Implement deterministic replacement selection for setup-phase deals only.
+- [ ] Mirror slot replacement into legacy `providers[]` and emit bump events.
+
+---
+
+### PR42 — EVM bridge: setup slot bump intent + precompile wiring (alpha) (PENDING)
+
+- Branch: `codex/mode2-setup-slot-bump-evm`
+- Goal: Expose the setup bump path through the same wallet-first MetaMask/precompile flow used by create-deal and update-content.
+- Spec/audit doc: `rfcs/rfc-deal-setup-slot-bump.md`
+- Test gate:
+  - `cd polystorechain && go test ./x/polystorechain/...`
+  - `npm -C polystore-website run test:unit`
+
+Checklist:
+- [ ] Add `EvmBumpDealSetupSlotIntent` and bridge message wiring.
+- [ ] Implement EIP-712 hashing / nonce handling for setup bump.
+- [ ] Expose the new precompile method/event surface and website ABI/types.
+- [ ] Add chain + website tests for signing/replay/client encoding.
+
+---
+
+### PR43 — Website: failed-slot bump-and-retry flow (alpha) (PENDING)
+
+- Branch: `codex/mode2-setup-slot-bump-ui`
+- Goal: Recover from per-slot setup failures in the upload flow without forcing the user to recreate the deal manually.
+- Spec/audit doc: `rfcs/rfc-deal-setup-slot-bump.md`
+- Test gate:
+  - `npm -C polystore-website run test:unit`
+  - `npm -C polystore-website run build`
+
+Checklist:
+- [ ] Surface slot-specific upload failures from the Mode2 upload engine.
+- [ ] Call the setup bump wallet flow for the failing slot and refresh deal state.
+- [ ] Retry only the failed slot after reassignment.
+- [ ] Show explicit UI states for setup failure, replacement request, reassignment, retry, and exhaustion.
