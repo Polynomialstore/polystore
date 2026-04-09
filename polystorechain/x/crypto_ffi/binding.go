@@ -7,10 +7,10 @@ package crypto_ffi
 #include <stdlib.h> // For C.free
 
 	// FFI declarations for Rust functions
-	int nil_init(const char* path);
-	int nil_compute_mdu_merkle_root(const unsigned char* mdu_bytes, size_t mdu_bytes_len, unsigned char* out_mdu_merkle_root);
-	int nil_compute_mdu_root_from_witness_flat(const unsigned char* witness_flat, size_t witness_flat_len, unsigned char* out_mdu_merkle_root);
-	int nil_expand_mdu_rs(
+	int polystore_init(const char* path);
+	int polystore_compute_mdu_merkle_root(const unsigned char* mdu_bytes, size_t mdu_bytes_len, unsigned char* out_mdu_merkle_root);
+	int polystore_compute_mdu_root_from_witness_flat(const unsigned char* witness_flat, size_t witness_flat_len, unsigned char* out_mdu_merkle_root);
+	int polystore_expand_mdu_rs(
 	    const unsigned char* mdu_bytes,
 	    size_t mdu_bytes_len,
 	    unsigned long long data_shards,
@@ -20,7 +20,7 @@ package crypto_ffi
 	    unsigned char* out_shards_flat,
 	    size_t out_shards_flat_len
 	);
-int nil_expand_payload_rs(
+int polystore_expand_payload_rs(
 	    const unsigned char* payload_bytes,
 	    size_t payload_bytes_len,
 	    unsigned long long data_shards,
@@ -30,20 +30,20 @@ int nil_expand_payload_rs(
 	    unsigned char* out_shards_flat,
 	    size_t out_shards_flat_len
 	);
-	int nil_encode_payload_to_mdu(
+	int polystore_encode_payload_to_mdu(
 	    const unsigned char* payload_bytes,
 	    size_t payload_bytes_len,
 	    unsigned char* out_mdu_bytes,
 	    size_t out_mdu_bytes_len
 	);
-	int nil_decode_payload_from_mdu(
+	int polystore_decode_payload_from_mdu(
 	    const unsigned char* mdu_bytes,
 	    size_t mdu_bytes_len,
 	    unsigned long long raw_len,
 	    unsigned char* out_payload,
 	    size_t out_payload_len
 	);
-	int nil_reconstruct_mdu_rs(
+	int polystore_reconstruct_mdu_rs(
 	    const unsigned char* shards_flat,
 	    size_t shards_flat_len,
 	    const unsigned char* present,
@@ -53,7 +53,7 @@ int nil_expand_payload_rs(
 	    unsigned char* out_mdu_bytes,
 	    size_t out_mdu_bytes_len
 	);
-	int nil_verify_mdu_proof(
+	int polystore_verify_mdu_proof(
 	    const unsigned char* mdu_merkle_root,
 	    const unsigned char* challenged_kzg_commitment,
 	    const unsigned char* merkle_path_bytes,
@@ -64,7 +64,7 @@ int nil_expand_payload_rs(
     const unsigned char* y_value,
     const unsigned char* kzg_opening_proof
 );
-int nil_compute_mdu_proof_test(
+int polystore_compute_mdu_proof_test(
     const unsigned char* mdu_bytes,
     size_t mdu_bytes_len,
     unsigned int chunk_index,
@@ -75,26 +75,26 @@ int nil_compute_mdu_proof_test(
     unsigned char* out_y,
     unsigned char* out_kzg_proof
 );
-int nil_compute_manifest_commitment(
+int polystore_compute_manifest_commitment(
     const unsigned char* hashes_ptr,
     size_t num_hashes,
     unsigned char* out_commitment,
     unsigned char* out_manifest_blob
 );
-int nil_compute_manifest_proof(
+int polystore_compute_manifest_proof(
     const unsigned char* manifest_blob,
     unsigned long long mdu_index,
     unsigned char* out_proof,
     unsigned char* out_y
 );
-int nil_compute_blob_proof(
+int polystore_compute_blob_proof(
     const unsigned char* blob_bytes,
     size_t blob_bytes_len,
     const unsigned char* z_bytes,
     unsigned char* out_proof,
     unsigned char* out_y
 );
-int nil_verify_chained_proof(
+int polystore_verify_chained_proof(
     const unsigned char* manifest_commitment,
     unsigned long long mdu_index,
     const unsigned char* manifest_proof,
@@ -110,18 +110,18 @@ int nil_verify_chained_proof(
 );
 
 	typedef void* Mdu0BuilderPtr;
-	Mdu0BuilderPtr nil_mdu0_builder_new(unsigned long long max_user_mdus);
-	Mdu0BuilderPtr nil_mdu0_builder_new_with_commitments(unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
-	void nil_mdu0_builder_free(Mdu0BuilderPtr ptr);
-	Mdu0BuilderPtr nil_mdu0_builder_load(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus);
-	Mdu0BuilderPtr nil_mdu0_builder_load_with_commitments(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
-	int nil_mdu0_builder_bytes(Mdu0BuilderPtr ptr, unsigned char* out_ptr, size_t out_len);
-	int nil_mdu0_append_file(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset);
-	int nil_mdu0_append_file_with_flags(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset, unsigned char flags);
-	int nil_mdu0_set_root(Mdu0BuilderPtr ptr, unsigned long long index, const unsigned char* root_ptr);
-	int nil_mdu0_get_root(Mdu0BuilderPtr ptr, unsigned long long index, unsigned char* root_ptr);
-unsigned long long nil_mdu0_get_witness_count(Mdu0BuilderPtr ptr);
-unsigned int nil_mdu0_get_record_count(Mdu0BuilderPtr ptr);
+	Mdu0BuilderPtr polystore_mdu0_builder_new(unsigned long long max_user_mdus);
+	Mdu0BuilderPtr polystore_mdu0_builder_new_with_commitments(unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
+	void polystore_mdu0_builder_free(Mdu0BuilderPtr ptr);
+	Mdu0BuilderPtr polystore_mdu0_builder_load(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus);
+	Mdu0BuilderPtr polystore_mdu0_builder_load_with_commitments(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
+	int polystore_mdu0_builder_bytes(Mdu0BuilderPtr ptr, unsigned char* out_ptr, size_t out_len);
+	int polystore_mdu0_append_file(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset);
+	int polystore_mdu0_append_file_with_flags(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset, unsigned char flags);
+	int polystore_mdu0_set_root(Mdu0BuilderPtr ptr, unsigned long long index, const unsigned char* root_ptr);
+	int polystore_mdu0_get_root(Mdu0BuilderPtr ptr, unsigned long long index, unsigned char* root_ptr);
+unsigned long long polystore_mdu0_get_witness_count(Mdu0BuilderPtr ptr);
+unsigned int polystore_mdu0_get_record_count(Mdu0BuilderPtr ptr);
 
 typedef struct {
     unsigned long long start_offset;
@@ -130,7 +130,7 @@ typedef struct {
     unsigned char path[232];
 } FileRecordV1;
 
-int nil_mdu0_get_record(Mdu0BuilderPtr ptr, unsigned int index, FileRecordV1* out_rec);
+int polystore_mdu0_get_record(Mdu0BuilderPtr ptr, unsigned int index, FileRecordV1* out_rec);
 */
 import "C"
 import (
@@ -182,12 +182,12 @@ type Mdu0Builder struct {
 }
 
 func NewMdu0Builder(maxUserMdus uint64) *Mdu0Builder {
-	ptr := C.nil_mdu0_builder_new(C.ulonglong(maxUserMdus))
+	ptr := C.polystore_mdu0_builder_new(C.ulonglong(maxUserMdus))
 	return &Mdu0Builder{ptr: ptr}
 }
 
 func NewMdu0BuilderWithCommitments(maxUserMdus uint64, commitmentsPerMdu uint64) *Mdu0Builder {
-	ptr := C.nil_mdu0_builder_new_with_commitments(C.ulonglong(maxUserMdus), C.ulonglong(commitmentsPerMdu))
+	ptr := C.polystore_mdu0_builder_new_with_commitments(C.ulonglong(maxUserMdus), C.ulonglong(commitmentsPerMdu))
 	return &Mdu0Builder{ptr: ptr}
 }
 
@@ -195,7 +195,7 @@ func LoadMdu0Builder(data []byte, maxUserMdus uint64) (*Mdu0Builder, error) {
 	if len(data) != types.MDU_SIZE {
 		return nil, errors.New("invalid size")
 	}
-	ptr := C.nil_mdu0_builder_load((*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data)), C.ulonglong(maxUserMdus))
+	ptr := C.polystore_mdu0_builder_load((*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data)), C.ulonglong(maxUserMdus))
 	if ptr == nil {
 		return nil, errors.New("failed to load builder")
 	}
@@ -206,7 +206,7 @@ func LoadMdu0BuilderWithCommitments(data []byte, maxUserMdus uint64, commitments
 	if len(data) != types.MDU_SIZE {
 		return nil, errors.New("invalid size")
 	}
-	ptr := C.nil_mdu0_builder_load_with_commitments(
+	ptr := C.polystore_mdu0_builder_load_with_commitments(
 		(*C.uchar)(unsafe.Pointer(&data[0])),
 		C.size_t(len(data)),
 		C.ulonglong(maxUserMdus),
@@ -220,14 +220,14 @@ func LoadMdu0BuilderWithCommitments(data []byte, maxUserMdus uint64, commitments
 
 func (b *Mdu0Builder) Free() {
 	if b.ptr != nil {
-		C.nil_mdu0_builder_free(b.ptr)
+		C.polystore_mdu0_builder_free(b.ptr)
 		b.ptr = nil
 	}
 }
 
 func (b *Mdu0Builder) Bytes() ([]byte, error) {
 	out := make([]byte, types.MDU_SIZE)
-	res := C.nil_mdu0_builder_bytes(b.ptr, (*C.uchar)(unsafe.Pointer(&out[0])), C.size_t(len(out)))
+	res := C.polystore_mdu0_builder_bytes(b.ptr, (*C.uchar)(unsafe.Pointer(&out[0])), C.size_t(len(out)))
 	if res != 0 {
 		return nil, errors.New("failed to get bytes")
 	}
@@ -241,7 +241,7 @@ func (b *Mdu0Builder) AppendFile(path string, size uint64, startOffset uint64) e
 func (b *Mdu0Builder) AppendFileWithFlags(path string, size uint64, startOffset uint64, flags uint8) error {
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
-	res := C.nil_mdu0_append_file_with_flags(b.ptr, cPath, C.ulonglong(size), C.ulonglong(startOffset), C.uchar(flags))
+	res := C.polystore_mdu0_append_file_with_flags(b.ptr, cPath, C.ulonglong(size), C.ulonglong(startOffset), C.uchar(flags))
 	if res != 0 {
 		return fmt.Errorf("append failed: %d", res)
 	}
@@ -252,7 +252,7 @@ func (b *Mdu0Builder) SetRoot(index uint64, root []byte) error {
 	if len(root) != 32 {
 		return errors.New("invalid root length")
 	}
-	res := C.nil_mdu0_set_root(b.ptr, C.ulonglong(index), (*C.uchar)(unsafe.Pointer(&root[0])))
+	res := C.polystore_mdu0_set_root(b.ptr, C.ulonglong(index), (*C.uchar)(unsafe.Pointer(&root[0])))
 	if res != 0 {
 		return fmt.Errorf("set root failed: %d", res)
 	}
@@ -261,7 +261,7 @@ func (b *Mdu0Builder) SetRoot(index uint64, root []byte) error {
 
 func (b *Mdu0Builder) GetRoot(index uint64) ([]byte, error) {
 	out := make([]byte, 32)
-	res := C.nil_mdu0_get_root(b.ptr, C.ulonglong(index), (*C.uchar)(unsafe.Pointer(&out[0])))
+	res := C.polystore_mdu0_get_root(b.ptr, C.ulonglong(index), (*C.uchar)(unsafe.Pointer(&out[0])))
 	if res != 0 {
 		return nil, fmt.Errorf("get root failed: %d", res)
 	}
@@ -269,16 +269,16 @@ func (b *Mdu0Builder) GetRoot(index uint64) ([]byte, error) {
 }
 
 func (b *Mdu0Builder) GetWitnessCount() uint64 {
-	return uint64(C.nil_mdu0_get_witness_count(b.ptr))
+	return uint64(C.polystore_mdu0_get_witness_count(b.ptr))
 }
 
 func (b *Mdu0Builder) GetRecordCount() uint32 {
-	return uint32(C.nil_mdu0_get_record_count(b.ptr))
+	return uint32(C.polystore_mdu0_get_record_count(b.ptr))
 }
 
 func (b *Mdu0Builder) GetRecord(index uint32) (FileRecordV1, error) {
 	var rec FileRecordV1
-	res := C.nil_mdu0_get_record(b.ptr, C.uint(index), (*C.FileRecordV1)(unsafe.Pointer(&rec)))
+	res := C.polystore_mdu0_get_record(b.ptr, C.uint(index), (*C.FileRecordV1)(unsafe.Pointer(&rec)))
 	if res != 0 {
 		return FileRecordV1{}, fmt.Errorf("failed to get record: %d", res)
 	}
@@ -290,7 +290,7 @@ func Init(path string) error {
 	fmt.Fprintf(os.Stderr, "Initializing KZG with path: %s\n", path)
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
-	res := C.nil_init(cPath)
+	res := C.polystore_init(cPath)
 	if res == 0 {
 		return nil
 	}
@@ -309,9 +309,9 @@ func ComputeMduMerkleRoot(mdu_bytes []byte) ([]byte, error) {
 	cMduBytes := (*C.uchar)(unsafe.Pointer(&mdu_bytes[0]))
 	cOutRoot := (*C.uchar)(unsafe.Pointer(&outRoot[0]))
 
-	res := C.nil_compute_mdu_merkle_root(cMduBytes, C.size_t(len(mdu_bytes)), cOutRoot)
+	res := C.polystore_compute_mdu_merkle_root(cMduBytes, C.size_t(len(mdu_bytes)), cOutRoot)
 	if res != 0 {
-		return nil, fmt.Errorf("nil_compute_mdu_merkle_root failed with code: %d", res)
+		return nil, fmt.Errorf("polystore_compute_mdu_merkle_root failed with code: %d", res)
 	}
 
 	return outRoot, nil
@@ -326,9 +326,9 @@ func ComputeMduRootFromWitnessFlat(witness_flat []byte) ([]byte, error) {
 	outRoot := make([]byte, 32)
 	cWitness := (*C.uchar)(unsafe.Pointer(&witness_flat[0]))
 	cOutRoot := (*C.uchar)(unsafe.Pointer(&outRoot[0]))
-	res := C.nil_compute_mdu_root_from_witness_flat(cWitness, C.size_t(len(witness_flat)), cOutRoot)
+	res := C.polystore_compute_mdu_root_from_witness_flat(cWitness, C.size_t(len(witness_flat)), cOutRoot)
 	if res != 0 {
-		return nil, fmt.Errorf("nil_compute_mdu_root_from_witness_flat failed with code: %d", res)
+		return nil, fmt.Errorf("polystore_compute_mdu_root_from_witness_flat failed with code: %d", res)
 	}
 	return outRoot, nil
 }
@@ -360,7 +360,7 @@ func ExpandMduRs(mdu_bytes []byte, k uint64, m uint64) (witness_flat []byte, sha
 	cMdu := (*C.uchar)(unsafe.Pointer(&mdu_bytes[0]))
 	cWitness := (*C.uchar)(unsafe.Pointer(&witness_flat[0]))
 	cShards := (*C.uchar)(unsafe.Pointer(&shardsFlat[0]))
-	res := C.nil_expand_mdu_rs(
+	res := C.polystore_expand_mdu_rs(
 		cMdu,
 		C.size_t(len(mdu_bytes)),
 		C.ulonglong(k),
@@ -371,7 +371,7 @@ func ExpandMduRs(mdu_bytes []byte, k uint64, m uint64) (witness_flat []byte, sha
 		C.size_t(len(shardsFlat)),
 	)
 	if res != 0 {
-		return nil, nil, fmt.Errorf("nil_expand_mdu_rs failed with code: %d", res)
+		return nil, nil, fmt.Errorf("polystore_expand_mdu_rs failed with code: %d", res)
 	}
 
 	shards = make([][]byte, 0, n)
@@ -386,7 +386,7 @@ func ExpandMduRs(mdu_bytes []byte, k uint64, m uint64) (witness_flat []byte, sha
 
 // ExpandPayloadRs expands a raw payload (up to RawMduCapacity / 8,126,464 bytes) into RS shards and witness commitments.
 //
-// This matches the NilFS field-aligned MDU encoding used by the gateway/browser (31-byte chunks right-aligned in 32-byte scalars).
+// This matches the PolyFS field-aligned MDU encoding used by the gateway/browser (31-byte chunks right-aligned in 32-byte scalars).
 //
 // Returns:
 // - witness_flat: slot-major commitments (48 bytes each), length = (k+m)*(64/k)*48
@@ -413,7 +413,7 @@ func ExpandPayloadRs(payload []byte, k uint64, m uint64) (witness_flat []byte, s
 	}
 	cWitness := (*C.uchar)(unsafe.Pointer(&witness_flat[0]))
 	cShards := (*C.uchar)(unsafe.Pointer(&shardsFlat[0]))
-	res := C.nil_expand_payload_rs(
+	res := C.polystore_expand_payload_rs(
 		cPayload,
 		C.size_t(len(payload)),
 		C.ulonglong(k),
@@ -424,7 +424,7 @@ func ExpandPayloadRs(payload []byte, k uint64, m uint64) (witness_flat []byte, s
 		C.size_t(len(shardsFlat)),
 	)
 	if res != 0 {
-		return nil, nil, fmt.Errorf("nil_expand_payload_rs failed with code: %d", res)
+		return nil, nil, fmt.Errorf("polystore_expand_payload_rs failed with code: %d", res)
 	}
 
 	shards = make([][]byte, 0, n)
@@ -436,7 +436,7 @@ func ExpandPayloadRs(payload []byte, k uint64, m uint64) (witness_flat []byte, s
 	return witness_flat, shards, nil
 }
 
-// EncodePayloadToMdu encodes a raw NilFS payload (<= 8,126,464 bytes) into a full 8 MiB MDU buffer
+// EncodePayloadToMdu encodes a raw PolyFS payload (<= 8,126,464 bytes) into a full 8 MiB MDU buffer
 // using the field-aligned layout (31-byte chunks right-aligned in 32-byte scalars).
 func EncodePayloadToMdu(payload []byte) ([]byte, error) {
 	if len(payload) > 0 && len(payload) > MDU_PAYLOAD_BYTES {
@@ -448,19 +448,19 @@ func EncodePayloadToMdu(payload []byte) ([]byte, error) {
 	if len(payload) > 0 {
 		cPayload = (*C.uchar)(unsafe.Pointer(&payload[0]))
 	}
-	res := C.nil_encode_payload_to_mdu(
+	res := C.polystore_encode_payload_to_mdu(
 		cPayload,
 		C.size_t(len(payload)),
 		(*C.uchar)(unsafe.Pointer(&out[0])),
 		C.size_t(len(out)),
 	)
 	if res != 0 {
-		return nil, fmt.Errorf("nil_encode_payload_to_mdu failed with code: %d", res)
+		return nil, fmt.Errorf("polystore_encode_payload_to_mdu failed with code: %d", res)
 	}
 	return out, nil
 }
 
-// DecodePayloadFromMdu decodes a raw NilFS payload of the given length from an encoded 8 MiB MDU buffer.
+// DecodePayloadFromMdu decodes a raw PolyFS payload of the given length from an encoded 8 MiB MDU buffer.
 func DecodePayloadFromMdu(mduBytes []byte, rawLen uint64) ([]byte, error) {
 	if len(mduBytes) != types.MDU_SIZE {
 		return nil, fmt.Errorf("invalid mdu_bytes length: expected %d, got %d", types.MDU_SIZE, len(mduBytes))
@@ -473,7 +473,7 @@ func DecodePayloadFromMdu(mduBytes []byte, rawLen uint64) ([]byte, error) {
 	}
 
 	out := make([]byte, rawLen)
-	res := C.nil_decode_payload_from_mdu(
+	res := C.polystore_decode_payload_from_mdu(
 		(*C.uchar)(unsafe.Pointer(&mduBytes[0])),
 		C.size_t(len(mduBytes)),
 		C.ulonglong(rawLen),
@@ -481,7 +481,7 @@ func DecodePayloadFromMdu(mduBytes []byte, rawLen uint64) ([]byte, error) {
 		C.size_t(len(out)),
 	)
 	if res != 0 {
-		return nil, fmt.Errorf("nil_decode_payload_from_mdu failed with code: %d", res)
+		return nil, fmt.Errorf("polystore_decode_payload_from_mdu failed with code: %d", res)
 	}
 	return out, nil
 }
@@ -514,7 +514,7 @@ func ReconstructMduRs(shards [][]byte, present []bool, k uint64, m uint64) ([]by
 		}
 	}
 	out := make([]byte, types.MDU_SIZE)
-	res := C.nil_reconstruct_mdu_rs(
+	res := C.polystore_reconstruct_mdu_rs(
 		(*C.uchar)(unsafe.Pointer(&shardsFlat[0])),
 		C.size_t(len(shardsFlat)),
 		(*C.uchar)(unsafe.Pointer(&presentBytes[0])),
@@ -525,7 +525,7 @@ func ReconstructMduRs(shards [][]byte, present []bool, k uint64, m uint64) ([]by
 		C.size_t(len(out)),
 	)
 	if res != 0 {
-		return nil, fmt.Errorf("nil_reconstruct_mdu_rs failed with code: %d", res)
+		return nil, fmt.Errorf("polystore_reconstruct_mdu_rs failed with code: %d", res)
 	}
 	return out, nil
 }
@@ -543,7 +543,7 @@ func ComputeManifestProof(manifest_blob []byte, mdu_index uint64) (proof []byte,
 	cProof := (*C.uchar)(unsafe.Pointer(&proof[0]))
 	cY := (*C.uchar)(unsafe.Pointer(&y[0]))
 
-	res := C.nil_compute_manifest_proof(
+	res := C.polystore_compute_manifest_proof(
 		cManifestBlob,
 		C.ulonglong(mdu_index),
 		cProof,
@@ -551,7 +551,7 @@ func ComputeManifestProof(manifest_blob []byte, mdu_index uint64) (proof []byte,
 	)
 
 	if res != 0 {
-		return nil, nil, fmt.Errorf("nil_compute_manifest_proof failed with code: %d", res)
+		return nil, nil, fmt.Errorf("polystore_compute_manifest_proof failed with code: %d", res)
 	}
 
 	return proof, y, nil
@@ -578,14 +578,14 @@ func ComputeManifestCommitment(mdu_roots [][]byte) (commitment []byte, manifest_
 	cCommitment := (*C.uchar)(unsafe.Pointer(&commitment[0]))
 	cManifestBlob := (*C.uchar)(unsafe.Pointer(&manifest_blob[0]))
 
-	res := C.nil_compute_manifest_commitment(
+	res := C.polystore_compute_manifest_commitment(
 		cRoots,
 		C.size_t(len(mdu_roots)),
 		cCommitment,
 		cManifestBlob,
 	)
 	if res != 0 {
-		return nil, nil, fmt.Errorf("nil_compute_manifest_commitment failed with code: %d", res)
+		return nil, nil, fmt.Errorf("polystore_compute_manifest_commitment failed with code: %d", res)
 	}
 	return commitment, manifest_blob, nil
 }
@@ -607,7 +607,7 @@ func ComputeBlobProof(blob_bytes []byte, z_bytes []byte) (proof []byte, y []byte
 	cProof := (*C.uchar)(unsafe.Pointer(&proof[0]))
 	cY := (*C.uchar)(unsafe.Pointer(&y[0]))
 
-	res := C.nil_compute_blob_proof(
+	res := C.polystore_compute_blob_proof(
 		cBlob,
 		C.size_t(len(blob_bytes)),
 		cZ,
@@ -615,7 +615,7 @@ func ComputeBlobProof(blob_bytes []byte, z_bytes []byte) (proof []byte, y []byte
 		cY,
 	)
 	if res != 0 {
-		return nil, nil, fmt.Errorf("nil_compute_blob_proof failed with code: %d", res)
+		return nil, nil, fmt.Errorf("polystore_compute_blob_proof failed with code: %d", res)
 	}
 	return proof, y, nil
 }
@@ -645,7 +645,7 @@ func VerifyMduProof(
 	cYValue := (*C.uchar)(unsafe.Pointer(&y_value[0]))
 	cKzgOpeningProof := (*C.uchar)(unsafe.Pointer(&kzg_opening_proof[0]))
 
-	res := C.nil_verify_mdu_proof(
+	res := C.polystore_verify_mdu_proof(
 		cMduMerkleRoot,
 		cChallengedKzgCommitment,
 		cMerklePathBytes,
@@ -662,7 +662,7 @@ func VerifyMduProof(
 	} else if res == 0 {
 		return false, nil
 	} else {
-		return false, fmt.Errorf("nil_verify_mdu_proof failed with code: %d", res)
+		return false, fmt.Errorf("polystore_verify_mdu_proof failed with code: %d", res)
 	}
 }
 
@@ -698,7 +698,7 @@ func VerifyChainedProof(
 	cBlobY := (*C.uchar)(unsafe.Pointer(&blob_y[0]))
 	cBlobProof := (*C.uchar)(unsafe.Pointer(&blob_proof[0]))
 
-	res := C.nil_verify_chained_proof(
+	res := C.polystore_verify_chained_proof(
 		cManifestCommitment,
 		C.ulonglong(mdu_index),
 		cManifestProof,
@@ -718,7 +718,7 @@ func VerifyChainedProof(
 	} else if res == 0 {
 		return false, nil
 	} else {
-		return false, fmt.Errorf("nil_verify_chained_proof failed with code: %d", res)
+		return false, fmt.Errorf("polystore_verify_chained_proof failed with code: %d", res)
 	}
 }
 
@@ -751,7 +751,7 @@ func ComputeMduProofTest(mdu_bytes []byte, chunk_index uint32) (
 	cY := (*C.uchar)(unsafe.Pointer(&y[0]))
 	cKzgProof := (*C.uchar)(unsafe.Pointer(&kzg_proof[0]))
 
-	res := C.nil_compute_mdu_proof_test(
+	res := C.polystore_compute_mdu_proof_test(
 		cMduBytes,
 		C.size_t(len(mdu_bytes)),
 		C.uint(chunk_index),
@@ -764,7 +764,7 @@ func ComputeMduProofTest(mdu_bytes []byte, chunk_index uint32) (
 	)
 
 	if res != 0 {
-		return nil, nil, nil, nil, nil, fmt.Errorf("nil_compute_mdu_proof_test failed with code: %d", res)
+		return nil, nil, nil, nil, nil, fmt.Errorf("polystore_compute_mdu_proof_test failed with code: %d", res)
 	}
 
 	merkle_proof = merkle_proof_buf[:merkle_proof_len]

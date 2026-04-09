@@ -97,7 +97,7 @@ Frontend rule:
 - Unit test: v1 receipts (if enabled) still verify during migration.
 
 ### 7.2 Gateway / Provider (`polystore_gateway`)
-1. Ensure `/gateway/fetch` always returns a non-empty `X-Nil-Provider` when interactive receipts are enabled (or return a clear error).
+1. Ensure `/gateway/fetch` always returns a non-empty `X-PolyStore-Provider` when interactive receipts are enabled (or return a clear error).
 2. Add `proof_hash` to the receipt intent headers (alongside `proof_details`).
 3. (Optional) Validate basic receipt shape at `/sp/receipt` and return actionable errors (chain remains authoritative).
 
@@ -156,7 +156,7 @@ This phase removes the remaining “short-circuit” surfaces and improves the a
 
 ### 8.4 HTTP Range Support (User-Level Files)
 
-**Requirement:** `/gateway/fetch` must support `Range: bytes=start-end` for NilFS files.
+**Requirement:** `/gateway/fetch` must support `Range: bytes=start-end` for PolyFS files.
 
 **Constraints (devnet acceptable):**
 - Support single-range requests (no multipart ranges).

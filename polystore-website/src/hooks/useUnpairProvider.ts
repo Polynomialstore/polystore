@@ -4,7 +4,7 @@ import type { Hex } from 'viem'
 
 import { appConfig } from '../config'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
-import { encodeUnpairProviderData } from '../lib/nilstorePrecompile'
+import { encodeUnpairProviderData } from '../lib/polystorePrecompile'
 import { resolveActiveEvmAddress } from '../lib/walletAddress'
 import { classifyWalletError } from '../lib/walletErrors'
 
@@ -33,7 +33,7 @@ export function useUnpairProvider() {
       const evmAddress = resolveActiveEvmAddress({ connectedAddress, creator: input.creator })
       const txHash = await walletClient.sendTransaction({
         account: evmAddress as Hex,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data: encodeUnpairProviderData(provider),
         gas: 2_000_000n,
       })

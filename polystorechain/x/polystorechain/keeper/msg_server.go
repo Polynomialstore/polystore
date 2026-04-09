@@ -604,7 +604,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 
 	// Decode any overrides embedded in the service hint.
 	// Format used by the web gateway:
-	//   "<Hint>[:owner=<nilAddress>][:rs=K+M]"
+	//   "<Hint>[:owner=<nil1... PolyStore address>][:rs=K+M]"
 	// Note: Mode 1 (replicas-only) hints are deprecated; omit rs= to auto-select a balanced Mode 2 profile.
 	rawHint := strings.TrimSpace(msg.ServiceHint)
 	parsedHint, err := types.ParseServiceHint(rawHint)
@@ -824,7 +824,7 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus must exceed metadata mdus (got total_mdus=%d witness_mdus=%d)", msg.TotalMdus, msg.WitnessMdus)
 	}
 
-	// Append-only invariants (NilFS on slab).
+	// Append-only invariants (PolyFS on slab).
 	if deal.TotalMdus != 0 && msg.TotalMdus < deal.TotalMdus {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus cannot decrease (old=%d new=%d)", deal.TotalMdus, msg.TotalMdus)
 	}

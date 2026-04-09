@@ -1,7 +1,7 @@
 # RFC: Heat & Dynamic Placement for Mode 1
 
 **Status:** Draft / Non‑normative
-**Target:** NilStore Mode 1 (FullReplica)
+**Target:** PolyStore Mode 1 (FullReplica)
 **Scope:** Research / experimental design, _not_ part of the core retrievability spec yet
 
 ---

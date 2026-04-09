@@ -42,7 +42,7 @@ export function AlphaHero({ badge, logo, title, description, actions, points, cl
               {logo}
             </div>
             <div className="text-[2.25rem] font-extrabold tracking-tight sm:text-6xl md:text-7xl leading-none">
-              <span className="text-foreground">Nil</span>
+              <span className="text-foreground">Poly</span>
               <span className="text-primary">Store</span>
             </div>
           </div>

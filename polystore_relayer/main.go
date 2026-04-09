@@ -39,7 +39,7 @@ const (
 )
 
 func main() {
-    log.Println("Starting NilStore Relayer...")
+    log.Println("Starting PolyStore Relayer...")
 
     // 1. Connect to L2 (Ethereum/Anvil)
     client, err := ethclient.Dial(L2_RPC_URL)

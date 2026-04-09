@@ -8,9 +8,9 @@ import (
 	"unicode/utf8"
 )
 
-const nilfsRecordPathMaxBytes = 232
+const polyfsRecordPathMaxBytes = 232
 
-func validateNilfsFilePath(raw string) (string, error) {
+func validatePolyfsFilePath(raw string) (string, error) {
 	filePath := strings.TrimSpace(raw)
 	if filePath == "" {
 		return "", fmt.Errorf("file_path is required")
@@ -62,7 +62,7 @@ func truncateUTF8ByBytes(value string, maxBytes int) string {
 	return builder.String()
 }
 
-func normalizeNilfsRecordBasename(recordPath, fallbackPath string) string {
+func normalizePolyfsRecordBasename(recordPath, fallbackPath string) string {
 	baseName := strings.TrimSpace(recordPath)
 	if baseName == "" {
 		baseName = filepath.Base(strings.TrimSpace(fallbackPath))
@@ -83,7 +83,7 @@ func normalizeNilfsRecordBasename(recordPath, fallbackPath string) string {
 		baseName = "file"
 	}
 
-	baseName = truncateUTF8ByBytes(baseName, nilfsRecordPathMaxBytes)
+	baseName = truncateUTF8ByBytes(baseName, polyfsRecordPathMaxBytes)
 	baseName = strings.TrimSpace(baseName)
 	if baseName == "" {
 		baseName = "file"

@@ -1,5 +1,5 @@
 ```MAINNET_GAP_TRACKER.md
-# Mainnet Gap Tracker (NilStore)
+# Mainnet Gap Tracker (PolyStore)
 
 This document tracks **what is missing** between the current implementation in this repo and the **long‑term Mainnet plan** described by `spec.md` (canonical), `rfcs/`, and `notes/`.
 
@@ -66,11 +66,11 @@ This document tracks **what is missing** between the current implementation in t
 - **DoD:** CUDA (server) and/or WebGPU (client) path that materially raises sustained throughput; pipeline parallelism is default.
 - **Test gate:** reproducible perf benchmark suite (CI “doesn’t regress”) + local benchmark script with thresholds.
 
-### P0-CORE-001 — “One core” migration (NilFS + crypto single source of truth)
+### P0-CORE-001 — “One core” migration (PolyFS + crypto single source of truth)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** `notes/roadmap_milestones_strategic.md` (Milestone 1)
-- **Current state:** `polystore_gateway` contains NilFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
-- **DoD:** NilFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
+- **Current state:** `polystore_gateway` contains PolyFS/layout logic in Go, while the browser uses `polystore_core` WASM for crypto; risk of drift.
+- **DoD:** PolyFS builder/layout + commitment logic live in `polystore_core` with WASM + CGO bindings; browser + gateway agree on commitments deterministically.
 - **Test gate:** parity tests that compare browser vs gateway roots/commitments for the same file set.
 
 ### P0-ECON-001 — Mainnet escrow accounting + lock-in pricing (pay-at-ingest)
@@ -134,7 +134,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### GW-204 — S3 adapter polish + bidirectional sync scripts (nilstore ↔ S3)
+#### GW-204 — S3 adapter polish + bidirectional sync scripts (polystore ↔ S3)
 - **Status:** PARTIAL (DEVNET)
 - **Spec/Notes:** roadmap milestone 5, `notes/launch_todos.md`
 
@@ -168,7 +168,7 @@ This document tracks **what is missing** between the current implementation in t
 - **Status:** MISSING
 - **Notes:** `notes/launch_todos.md`
 
-#### CLI-502 — Fast download / mirror scripts (provider → local, nilstore → S3)
+#### CLI-502 — Fast download / mirror scripts (provider → local, polystore → S3)
 - **Status:** PARTIAL (DEVNET)
 - **Notes:** `notes/launch_todos.md`
 
@@ -213,11 +213,11 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
   - `spec.md` naming + Appendix B references aligned to the RFCs
 - **Exit criteria:** updated RFCs/spec deltas + a checklist of exact protobuf/state transitions to implement in the next sprints.
 
-### Sprint 1 — “One core” foundation (NilFS + commitments unified)
+### Sprint 1 — “One core” foundation (PolyFS + commitments unified)
 - **Targets:** **P0-CORE-001**, **CORE-402** (partial), plus the “Divergences” naming decision groundwork.
-- **Goal:** eliminate browser/gateway drift risk by centralizing NilFS layout + commitment computation in `polystore_core`.
+- **Goal:** eliminate browser/gateway drift risk by centralizing PolyFS layout + commitment computation in `polystore_core`.
 - **Delivers:**
-  - Port NilFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
+  - Port PolyFS layout/builder primitives from `polystore_gateway/pkg/*` into `polystore_core` (Rust) with a stable API surface.
   - WASM bindings used by `polystore-website` AND CGO/FFI bindings used by `polystore_gateway` point to the same implementation.
   - Parity tests: same file set → identical manifest root + per-MDU roots across browser(WASM) and gateway(native).
 - **Test gate:** new parity test suite + existing `./scripts/e2e_browser_smoke.sh`.
@@ -290,7 +290,7 @@ Assumption: **2-week engineering sprints**, with a strict “test gate” on eve
 - **Delivers:**
   - S3 adapter correctness + compatibility testing (aws-cli/rclone).
   - Third-party uploader pattern: scoped key funding + teardown + audit workflow.
-  - Fast download / mirroring scripts (nilstore ↔ S3) with documented performance expectations.
+  - Fast download / mirroring scripts (polystore ↔ S3) with documented performance expectations.
 - **Test gate:** integration tests + scripted “upload from S3 → verify on-chain → retrieve to S3” pipeline.
 
 ### Sprint 10 — Mainnet hardening + audits + launch readiness
@@ -345,7 +345,7 @@ As of `main` (Jan 2026), the repo has executed and merged the following sprint b
 - `sprint21-dashboard-cleanup`: restore CI/E2E compatibility by removing redundant dashboard controls and keeping a single transport preference selector.
 - `sprint22-wallet-unlock-detection`: detect MetaMask authorization (`eth_accounts`) early so “Create deal” prompts unlock before submit.
 - `sprint23-gap-tracker-status`: record sprint22 execution status in the tracker (doc hygiene).
-- `sprint24-one-core-payload-ffi`: move NilFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.
+- `sprint24-one-core-payload-ffi`: move PolyFS payload encode/decode into `polystore_core` FFI to reduce cross-runtime drift.
 
 ```
 
@@ -572,7 +572,7 @@ Fallback (simpler, weaker): flat bond only (no assignment collateral).
 
 **Deterministic candidate selection:**
 - seed:
-  - `seed = SHA256("nilstore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
+  - `seed = SHA256("polystore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
 - rank provider registry by `SHA256(seed || provider_addr)` and choose first eligible.
 
 **Eligibility filter:**
@@ -733,15 +733,15 @@ These are “agree on targets” items rather than “can’t implement” items
 ```
 
 ```ECONOMY.md
-# NilStore Economy & Tokenomics
+# PolyStore Economy & Tokenomics
 
 ## Overview
 
-The NilStore economy is designed to align incentives between Storage Providers (SPs), Data Owners (Users), and the Protocol itself using a single utility token: **$NIL** ($STOR). The model enforces physical infrastructure commitment while enabling elastic, user-funded scaling.
+The PolyStore economy is designed to align incentives between Storage Providers (SPs), Data Owners (Users), and the Protocol itself using a single utility token: **$NIL** ($STOR). The model enforces physical infrastructure commitment while enabling elastic, user-funded scaling.
 
 ## 1. The Performance Market (Proof-of-Useful-Data)
 
-Unlike "Space Race" models that reward random data filling, NilStore rewards **latency**.
+Unlike "Space Race" models that reward random data filling, PolyStore rewards **latency**.
 
 ### 1.1 Unified Liveness
 Storage proofs (`MsgProveLiveness`) serve two functions:
@@ -766,7 +766,7 @@ The base reward per proof follows a halving schedule to cap total supply.
 
 ## 2. Elasticity & Scaling
 
-NilStore allows data to scale automatically to meet demand without manual intervention.
+PolyStore allows data to scale automatically to meet demand without manual intervention.
 
 ### 2.1 Virtual Stripes
 A file is stored on a "Stripe" (12 providers). If these providers become saturated (high latency or load), they can signal saturation (`MsgSignalSaturation`).
@@ -866,18 +866,18 @@ See `notes/mainnet_policy_resolution_jan2026.md`.
 
 ## 4. S3 Adapter (Web2 Gateway)
 
-The `polystore_gateway` adapter allows Web2 applications to write to NilStore using standard S3 APIs.
+The `polystore_gateway` adapter allows Web2 applications to write to PolyStore using standard S3 APIs.
 *   **PUT:** Shards file -> Computes KZG -> Creates Deal on Chain.
 *   **GET:** Retrieves shards -> Verifies KZG -> Reconstructs File.
 
 ```
 
 ```retrievability-memo.md
-# NilStore Retrievability Memo – Problem Statement
+# PolyStore Retrievability Memo – Problem Statement
 
 ## 1. Purpose
 
-Define the precise retrievability guarantee NilStore aims to provide and the conditions under which Storage Providers (SPs) must be punished when they fail to uphold it. This memo is intentionally **problem‑only**: no protocol design, only what must be true of the system’s behavior.
+Define the precise retrievability guarantee PolyStore aims to provide and the conditions under which Storage Providers (SPs) must be punished when they fail to uphold it. This memo is intentionally **problem‑only**: no protocol design, only what must be true of the system’s behavior.
 
 ---
 
@@ -1071,7 +1071,7 @@ We only require that:
 
 ## 11. Restated Goal
 
-NilStore’s retrieval subsystem must be designed so that, for every SP and every Deal they accept:
+PolyStore’s retrieval subsystem must be designed so that, for every SP and every Deal they accept:
 
 1. There is a well‑defined notion of a **valid retrieval challenge** and response;
 2. The system continuously or periodically exercises those challenges with sufficient coverage;
@@ -1292,7 +1292,7 @@ elasticity_cost = base_stripe_cost * delta_replication
 
 ## 0. Executive Summary
 
-NilStore’s “Unified Liveness” requires the chain to deterministically answer:
+PolyStore’s “Unified Liveness” requires the chain to deterministically answer:
 1. **What** positions a provider must prove for a given epoch (synthetic challenges)
 2. **How many** proofs are required (quota)
 3. **How organic retrieval** reduces synthetic demand (credits)
@@ -1309,7 +1309,7 @@ This RFC freezes:
 ## 1. Definitions
 
 ### 1.1 Epoch
-NilStore defines a **liveness epoch** with fixed length:
+PolyStore defines a **liveness epoch** with fixed length:
 - `EPOCH_LEN_BLOCKS` (param; e.g. 100 blocks)
 - `epoch_id = floor(block_height / EPOCH_LEN_BLOCKS)`
 
@@ -1356,7 +1356,7 @@ Define the epoch seed as:
 
 ```
 epoch_start_height = epoch_id * EPOCH_LEN_BLOCKS
-R_e = SHA256("nilstore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
+R_e = SHA256("polystore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
 ```
 
 Rationale:
@@ -1389,7 +1389,7 @@ Let:
 For slot `s ∈ [0..N-1]` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 row        = U64BE(seed[8..16]) % rows
 
@@ -1412,7 +1412,7 @@ Let:
 For provider `P` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 blob_index  = U64BE(seed[8..16]) % 64
 mdu_index   = meta_mdus + mdu_ordinal
@@ -1475,7 +1475,7 @@ credits_blobs = min(credit_cap, unique_proved_blobs_in_epoch)
 ```
 
 Uniqueness is enforced by storing a per-epoch set keyed by:
-`credit_id = SHA256("nilstore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
+`credit_id = SHA256("polystore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
 
 ---
 
@@ -1570,7 +1570,7 @@ This RFC freezes a **concrete on-chain representation** for Mode 2 and a minimal
 
 ### 1.3 Slab accounting fields (naming freeze)
 For chain policy and bounds checks we freeze:
-- `size_bytes`: total logical bytes of file contents in NilFS (sum of non-tombstone file lengths)
+- `size_bytes`: total logical bytes of file contents in PolyFS (sum of non-tombstone file lengths)
 - `total_mdus`: total number of committed MDU roots in the Manifest commitment (includes metadata + witness + user MDUs)
 - `witness_mdus`: number of witness MDUs committed after MDU #0 (metadata region size)
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)
@@ -1859,7 +1859,7 @@ This RFC moves the protocol from a "Legal System" (Disputes) to a "Logistics Sys
 **Scope:** Retrieval Market, Game Theory
 **Related:** `whitepaper.md`, `rfcs/rfc-blob-alignment-and-striping.md`
 
-This document analyzes the security model of the NilStore Retrieval Market, specifically focusing on the "Fair Exchange" problem between Storage Providers (SPs) and Data Users.
+This document analyzes the security model of the PolyStore Retrieval Market, specifically focusing on the "Fair Exchange" problem between Storage Providers (SPs) and Data Users.
 
 ---
 
@@ -1962,7 +1962,7 @@ To prevent grinding, the protocol enforces strict friction:
 # RFC: Heat & Dynamic Placement for Mode 1
 
 **Status:** Draft / Non‑normative
-**Target:** NilStore Mode 1 (FullReplica)
+**Target:** PolyStore Mode 1 (FullReplica)
 **Scope:** Research / experimental design, _not_ part of the core retrievability spec yet
 
 ---

@@ -1,4 +1,4 @@
-import type { NilfsFileEntry } from '../domain/nilfs'
+import type { PolyfsFileEntry } from '../domain/polyfs'
 
 export const MDU_SIZE_BYTES = 8 * 1024 * 1024
 export const BLOB_SIZE_BYTES = 128 * 1024
@@ -19,7 +19,7 @@ function parseNullTerminatedUtf8(bytes: Uint8Array): string {
   return new TextDecoder().decode(slice)
 }
 
-export function parseNilfsFilesFromMdu0(mdu0: Uint8Array): NilfsFileEntry[] {
+export function parsePolyfsFilesFromMdu0(mdu0: Uint8Array): PolyfsFileEntry[] {
   if (mdu0.length !== MDU_SIZE_BYTES) return []
 
   const view = new DataView(mdu0.buffer, mdu0.byteOffset, mdu0.byteLength)
@@ -32,7 +32,7 @@ export function parseNilfsFilesFromMdu0(mdu0: Uint8Array): NilfsFileEntry[] {
   const recordCount = view.getUint32(magicOffset + 8, true)
   const recordsOffset = magicOffset + FILE_TABLE_HEADER_SIZE
 
-  const files: NilfsFileEntry[] = []
+  const files: PolyfsFileEntry[] = []
   for (let i = 0; i < recordCount; i++) {
     const off = recordsOffset + i * FILE_RECORD_SIZE
     if (off + FILE_RECORD_SIZE > mdu0.length) break
@@ -57,7 +57,7 @@ export function parseNilfsFilesFromMdu0(mdu0: Uint8Array): NilfsFileEntry[] {
   return files
 }
 
-export function parseNilfsRootTableFromMdu0(mdu0: Uint8Array): Uint8Array[] {
+export function parsePolyfsRootTableFromMdu0(mdu0: Uint8Array): Uint8Array[] {
   if (mdu0.length !== MDU_SIZE_BYTES) return []
 
   const roots: Uint8Array[] = []

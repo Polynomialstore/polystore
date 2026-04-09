@@ -5,7 +5,7 @@ type ErrorLike = {
   cause?: unknown
 }
 
-export interface NilfsCommitErrorInfo {
+export interface PolyfsCommitErrorInfo {
   message: string
   staleBase: boolean
 }
@@ -41,7 +41,7 @@ function collectErrorStrings(error: unknown): string[] {
   return Array.from(out)
 }
 
-export function classifyNilfsCommitError(error: unknown, fallback = 'Commit failed'): NilfsCommitErrorInfo {
+export function classifyPolyfsCommitError(error: unknown, fallback = 'Commit failed'): PolyfsCommitErrorInfo {
   const messages = collectErrorStrings(error)
   const bestMessage = messages.find(Boolean) || fallback
   const joined = messages.join(' | ').toLowerCase()
@@ -54,7 +54,7 @@ export function classifyNilfsCommitError(error: unknown, fallback = 'Commit fail
     return {
       staleBase: true,
       message:
-        'Your local NilFS base is stale. Refresh the deal state and retry so the browser can rebase on the current committed manifest root.',
+        'Your local PolyFS base is stale. Refresh the deal state and retry so the browser can rebase on the current committed manifest root.',
     }
   }
 

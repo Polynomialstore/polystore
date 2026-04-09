@@ -23,7 +23,7 @@ test.describe('libp2p fetch (relay)', () => {
     })
 
     await page.addInitScript(() => {
-      window.localStorage.setItem('nil_transport_preference', 'prefer_p2p')
+      window.localStorage.setItem('polystore_transport_preference', 'prefer_p2p')
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })
@@ -34,8 +34,8 @@ test.describe('libp2p fetch (relay)', () => {
         await page.waitForSelector('body', { state: 'attached' })
         const hasConnect = await page.getByTestId('connect-wallet').count().catch(() => 0)
         const hasAddress = await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').count()
-        const hasCosmosIdentity = await page.getByTestId('cosmos-identity').count().catch(() => 0)
-        if (hasConnect > 0 || hasAddress > 0 || hasCosmosIdentity > 0) return
+        const hasPolystoreIdentity = await page.getByTestId('polystore-identity').count().catch(() => 0)
+        if (hasConnect > 0 || hasAddress > 0 || hasPolystoreIdentity > 0) return
         await page.waitForTimeout(1000)
         await page.reload({ waitUntil: 'networkidle' })
       }
@@ -44,13 +44,13 @@ test.describe('libp2p fetch (relay)', () => {
 
     await waitForWalletControls()
     const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-    const cosmosIdentity = page.getByTestId('cosmos-identity')
+    const polystoreIdentity = page.getByTestId('polystore-identity')
     const connected =
       (await walletAddress.isVisible().catch(() => false)) ||
-      (await cosmosIdentity.isVisible().catch(() => false))
+      (await polystoreIdentity.isVisible().catch(() => false))
     if (!connected) {
       await page.getByTestId('connect-wallet').first().click()
-      await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]')).toBeVisible({
+      await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="polystore-identity"]')).toBeVisible({
         timeout: 60_000,
       })
     }
@@ -68,7 +68,7 @@ test.describe('libp2p fetch (relay)', () => {
     await transportSelect.selectOption('prefer_p2p')
 
     await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+    await expect(page.getByTestId('polystore-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
     const placementSelect = page.getByTestId('alloc-placement-profile')
     if (!(await placementSelect.isVisible().catch(() => false))) {

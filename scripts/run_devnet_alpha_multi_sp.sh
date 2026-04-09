@@ -15,14 +15,14 @@
 #   PROVIDER_COUNT=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 #
 # Networking:
-#   By default, LCD + EVM JSON-RPC bind to localhost. Set NIL_BIND_ALL=1 to bind to 0.0.0.0 (LAN debugging).
+#   By default, LCD + EVM JSON-RPC bind to localhost. Set POLYSTORE_BIND_ALL=1 to bind to 0.0.0.0 (LAN debugging).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp"
 PID_DIR="$LOG_DIR/pids"
 
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/polystorechain_data_devnet_alpha}"
+CHAIN_HOME="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/polystorechain_data_devnet_alpha}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
@@ -32,14 +32,14 @@ EVM_WS_PORT="${EVM_WS_PORT:-8546}"
 LCD_PORT="${LCD_PORT:-1317}"
 FAUCET_PORT="${FAUCET_PORT:-8081}"
 WEB_PORT="${WEB_PORT:-5173}"
-GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
-DENOM="${NIL_DENOM:-stake}"
-NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
-NIL_REINIT_HOME="${NIL_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
+GAS_PRICE="${POLYSTORE_GAS_PRICES:-0.001aatom}"
+DENOM="${POLYSTORE_DENOM:-stake}"
+POLYSTORE_BIND_ALL="${POLYSTORE_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
+POLYSTORE_REINIT_HOME="${POLYSTORE_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
 
-NILCHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
-NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
-NIL_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
+POLYSTORECHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
+POLYSTORE_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
+POLYSTORE_GATEWAY_BIN="$ROOT_DIR/polystore_gateway/polystore_gateway"
 TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
 GO_BIN="${GO_BIN:-$(command -v go)}"
 
@@ -52,7 +52,7 @@ P2P_PORT_BASE="${P2P_PORT_BASE:-9200}"
 START_WEB="${START_WEB:-1}"
 
 # Shared secret between the gateway router and all providers.
-NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
+POLYSTORE_GATEWAY_SP_AUTH="${POLYSTORE_GATEWAY_SP_AUTH:-}"
 
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
 
@@ -132,19 +132,19 @@ PY
     return 0
   fi
 
-  if [ "$NIL_REINIT_HOME" != "1" ]; then
+  if [ "$POLYSTORE_REINIT_HOME" != "1" ]; then
     cat >&2 <<EOF
 Refusing to delete existing CHAIN_HOME outside the repo _artifacts/ tree:
   CHAIN_HOME=$CHAIN_HOME
   (resolved: $chain_home_real)
 
 If you really intend to re-initialize this home, re-run with:
-  NIL_REINIT_HOME=1
+  POLYSTORE_REINIT_HOME=1
 EOF
     exit 1
   fi
 
-  banner "Wiping non-_artifacts chain home (NIL_REINIT_HOME=1): $CHAIN_HOME"
+  banner "Wiping non-_artifacts chain home (POLYSTORE_REINIT_HOME=1): $CHAIN_HOME"
   rm -rf "$CHAIN_HOME"
 }
 
@@ -179,13 +179,13 @@ ensure_polystore_core() {
     fi
 
     for sym in \
-      nil_compute_mdu_root_from_witness_flat \
-      nil_expand_mdu_rs \
-      nil_reconstruct_mdu_rs \
-      nil_mdu0_builder_new_with_commitments \
-      nil_mdu0_builder_load_with_commitments \
-      nil_encode_payload_to_mdu \
-      nil_decode_payload_from_mdu; do
+      polystore_compute_mdu_root_from_witness_flat \
+      polystore_expand_mdu_rs \
+      polystore_reconstruct_mdu_rs \
+      polystore_mdu0_builder_new_with_commitments \
+      polystore_mdu0_builder_load_with_commitments \
+      polystore_encode_payload_to_mdu \
+      polystore_decode_payload_from_mdu; do
       if [ "$nm_supports_dash_d" = "1" ]; then
         if ! nm -D "$file" 2>/dev/null | awk '{print $3}' | sed 's/@.*$//' | grep -Fxq "$sym"; then
           return 1
@@ -308,7 +308,7 @@ PY
 
 ensure_polystorechaind() {
   banner "Building polystorechaind (via $GO_BIN)"
-  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NILCHAIND_BIN" ./cmd/polystorechaind)
+  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$POLYSTORECHAIND_BIN" ./cmd/polystorechaind)
   (cd "$ROOT_DIR/polystorechain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" install ./cmd/polystorechaind)
 }
 
@@ -319,7 +319,7 @@ ensure_polystore_cli() {
 
 ensure_polystore_gateway() {
   banner "Building polystore_gateway (via $GO_BIN)"
-  (cd "$ROOT_DIR/polystore_gateway" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$NIL_GATEWAY_BIN" .)
+  (cd "$ROOT_DIR/polystore_gateway" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$POLYSTORE_GATEWAY_BIN" .)
 }
 
 ensure_metadata() {
@@ -361,7 +361,7 @@ bank["denom_metadata"] = md
 bank["supply"] = supply
 data["app_state"]["bank"] = bank
 
-# Enable NilStore EVM precompile for MetaMask tx UX.
+# Enable PolyStore EVM precompile for MetaMask tx UX.
 evm = data.get("app_state", {}).get("evm", {})
 params = evm.get("params", {})
 pre = params.get("active_static_precompiles", []) or []
@@ -376,7 +376,7 @@ data["app_state"]["evm"] = evm
 # Optional devnet overrides for polystorechain params (useful for fast CI/E2E loops).
 polystorechain = data.get("app_state", {}).get("polystorechain", {})
 params = polystorechain.get("params", {}) if isinstance(polystorechain, dict) else {}
-default_denom = (os.getenv("NIL_DENOM") or "stake").strip() or "stake"
+default_denom = (os.getenv("POLYSTORE_DENOM") or "stake").strip() or "stake"
 
 def set_uint_param(key, env_key):
     raw = os.getenv(env_key)
@@ -452,31 +452,31 @@ def set_bool_param(key, env_key):
 
 # Existing uint64 overrides.
 set_uint_param("eip712_chain_id", "EVM_CHAIN_ID")
-set_uint_param("month_len_blocks", "NIL_MONTH_LEN_BLOCKS")
-set_uint_param("epoch_len_blocks", "NIL_EPOCH_LEN_BLOCKS")
-set_uint_param("quota_bps_per_epoch_hot", "NIL_QUOTA_BPS_PER_EPOCH_HOT")
-set_uint_param("quota_bps_per_epoch_cold", "NIL_QUOTA_BPS_PER_EPOCH_COLD")
-set_uint_param("quota_min_blobs", "NIL_QUOTA_MIN_BLOBS")
-set_uint_param("quota_max_blobs", "NIL_QUOTA_MAX_BLOBS")
-set_uint_param("credit_cap_bps", "NIL_CREDIT_CAP_BPS")
-set_uint_param("evict_after_missed_epochs", "NIL_EVICT_AFTER_MISSED_EPOCHS")
+set_uint_param("month_len_blocks", "POLYSTORE_MONTH_LEN_BLOCKS")
+set_uint_param("epoch_len_blocks", "POLYSTORE_EPOCH_LEN_BLOCKS")
+set_uint_param("quota_bps_per_epoch_hot", "POLYSTORE_QUOTA_BPS_PER_EPOCH_HOT")
+set_uint_param("quota_bps_per_epoch_cold", "POLYSTORE_QUOTA_BPS_PER_EPOCH_COLD")
+set_uint_param("quota_min_blobs", "POLYSTORE_QUOTA_MIN_BLOBS")
+set_uint_param("quota_max_blobs", "POLYSTORE_QUOTA_MAX_BLOBS")
+set_uint_param("credit_cap_bps", "POLYSTORE_CREDIT_CAP_BPS")
+set_uint_param("evict_after_missed_epochs", "POLYSTORE_EVICT_AFTER_MISSED_EPOCHS")
 
 # Pricing knobs (optional, but useful for trusted devnet economics).
-storage_price_set = set_dec_param("storage_price", "NIL_STORAGE_PRICE")
-storage_price_min_set = set_dec_param("storage_price_min", "NIL_STORAGE_PRICE_MIN")
-storage_price_max_set = set_dec_param("storage_price_max", "NIL_STORAGE_PRICE_MAX")
-set_uint_param("storage_target_utilization_bps", "NIL_STORAGE_TARGET_UTILIZATION_BPS")
+storage_price_set = set_dec_param("storage_price", "POLYSTORE_STORAGE_PRICE")
+storage_price_min_set = set_dec_param("storage_price_min", "POLYSTORE_STORAGE_PRICE_MIN")
+storage_price_max_set = set_dec_param("storage_price_max", "POLYSTORE_STORAGE_PRICE_MAX")
+set_uint_param("storage_target_utilization_bps", "POLYSTORE_STORAGE_TARGET_UTILIZATION_BPS")
 
-base_retrieval_fee_set = set_coin_param("base_retrieval_fee", "NIL_BASE_RETRIEVAL_FEE")
-retrieval_price_set = set_coin_param("retrieval_price_per_blob", "NIL_RETRIEVAL_PRICE_PER_BLOB")
-retrieval_price_min_set = set_coin_param("retrieval_price_per_blob_min", "NIL_RETRIEVAL_PRICE_PER_BLOB_MIN")
-retrieval_price_max_set = set_coin_param("retrieval_price_per_blob_max", "NIL_RETRIEVAL_PRICE_PER_BLOB_MAX")
-set_uint_param("retrieval_target_blobs_per_epoch", "NIL_RETRIEVAL_TARGET_BLOBS_PER_EPOCH")
+base_retrieval_fee_set = set_coin_param("base_retrieval_fee", "POLYSTORE_BASE_RETRIEVAL_FEE")
+retrieval_price_set = set_coin_param("retrieval_price_per_blob", "POLYSTORE_RETRIEVAL_PRICE_PER_BLOB")
+retrieval_price_min_set = set_coin_param("retrieval_price_per_blob_min", "POLYSTORE_RETRIEVAL_PRICE_PER_BLOB_MIN")
+retrieval_price_max_set = set_coin_param("retrieval_price_per_blob_max", "POLYSTORE_RETRIEVAL_PRICE_PER_BLOB_MAX")
+set_uint_param("retrieval_target_blobs_per_epoch", "POLYSTORE_RETRIEVAL_TARGET_BLOBS_PER_EPOCH")
 
-deal_creation_fee_set = set_coin_param("deal_creation_fee", "NIL_DEAL_CREATION_FEE")
+deal_creation_fee_set = set_coin_param("deal_creation_fee", "POLYSTORE_DEAL_CREATION_FEE")
 
-dynamic_enabled = set_bool_param("dynamic_pricing_enabled", "NIL_DYNAMIC_PRICING_ENABLED")
-set_uint_param("dynamic_pricing_max_step_bps", "NIL_DYNAMIC_PRICING_MAX_STEP_BPS")
+dynamic_enabled = set_bool_param("dynamic_pricing_enabled", "POLYSTORE_DYNAMIC_PRICING_ENABLED")
+set_uint_param("dynamic_pricing_max_step_bps", "POLYSTORE_DYNAMIC_PRICING_MAX_STEP_BPS")
 
 # If dynamic pricing is enabled and a min is provided, default the current price
 # to the min so genesis doesn't start at 0 (storage) or out of range (retrieval).
@@ -495,34 +495,34 @@ PY
 
 gen_provider_key() {
   local name="$1"
-  "$NILCHAIND_BIN" keys add "$name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
-  "$NILCHAIND_BIN" keys show "$name" -a --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" keys add "$name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
+  "$POLYSTORECHAIND_BIN" keys show "$name" -a --home "$CHAIN_HOME" --keyring-backend test
 }
 
 init_chain() {
   wipe_chain_home_if_safe
   banner "Initializing chain at $CHAIN_HOME"
-  "$NILCHAIND_BIN" init devnet-alpha --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
+  "$POLYSTORECHAIND_BIN" init devnet-alpha --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
 
-  printf '%s\n' "$FAUCET_MNEMONIC" | "$NILCHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
+  printf '%s\n' "$FAUCET_MNEMONIC" | "$POLYSTORECHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
 
   # Create provider keys and pre-fund them in genesis so they can register.
   for i in $(seq 1 "$PROVIDER_COUNT"); do
     addr="$(gen_provider_key "provider$i")"
-    "$NILCHAIND_BIN" genesis add-genesis-account "$addr" "1000000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+    "$POLYSTORECHAIND_BIN" genesis add-genesis-account "$addr" "1000000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   done
 
   # Fund faucet + create validator
-  "$NILCHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
-  "$NILCHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
-  "$NILCHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
+  "$POLYSTORECHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
 
   ensure_metadata
 
   APP_TOML="$CHAIN_HOME/config/app.toml"
   perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
   perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
-  if [ "$NIL_BIND_ALL" = "1" ]; then
+  if [ "$POLYSTORE_BIND_ALL" = "1" ]; then
     perl -pi -e "s|^address *= *\"127\\\\.0\\\\.0\\\\.1:[0-9]+\"|address = \"0.0.0.0:$EVM_RPC_PORT\"|" "$APP_TOML"
     perl -pi -e "s|^ws-address *= *\"127\\\\.0\\\\.0\\\\.1:[0-9]+\"|ws-address = \"0.0.0.0:$EVM_WS_PORT\"|" "$APP_TOML"
     perl -pi -e "s|^address *= *\"tcp://(?:localhost|127\\\\.0\\\\.0\\\\.1):[0-9]+\"|address = \"tcp://0.0.0.0:$LCD_PORT\"|" "$APP_TOML"
@@ -539,7 +539,7 @@ init_chain() {
 import os, sys, pathlib
 path = pathlib.Path(sys.argv[1])
 txt = path.read_text()
-bind_all = os.environ.get("NIL_BIND_ALL", "0") == "1"
+bind_all = os.environ.get("POLYSTORE_BIND_ALL", "0") == "1"
 evm_rpc_port = os.environ.get("EVM_RPC_PORT", "8545")
 evm_ws_port = os.environ.get("EVM_WS_PORT", "8546")
 lcd_port = os.environ.get("LCD_PORT", "1317")
@@ -571,9 +571,9 @@ PY
 start_chain() {
   banner "Starting polystorechaind"
   local grpc_flags=()
-  if [ "${NIL_GRPC_ENABLE:-0}" = "1" ]; then
+  if [ "${POLYSTORE_GRPC_ENABLE:-0}" = "1" ]; then
     grpc_flags+=(--grpc.enable=true)
-    if [ "${NIL_GRPC_WEB_ENABLE:-1}" = "1" ]; then
+    if [ "${POLYSTORE_GRPC_WEB_ENABLE:-1}" = "1" ]; then
       grpc_flags+=(--grpc-web.enable=true)
     else
       grpc_flags+=(--grpc-web.enable=false)
@@ -585,11 +585,11 @@ start_chain() {
   fi
   local json_rpc_addr="127.0.0.1:${EVM_RPC_PORT}"
   local json_rpc_ws_addr="127.0.0.1:${EVM_WS_PORT}"
-  if [ "$NIL_BIND_ALL" = "1" ]; then
+  if [ "$POLYSTORE_BIND_ALL" = "1" ]; then
     json_rpc_addr="0.0.0.0:${EVM_RPC_PORT}"
     json_rpc_ws_addr="0.0.0.0:${EVM_WS_PORT}"
   fi
-  nohup "$NILCHAIND_BIN" start \
+  nohup "$POLYSTORECHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
     --p2p.laddr "$P2P_ADDR" \
@@ -615,7 +615,7 @@ start_faucet() {
   banner "Starting faucet service"
   (
     cd "$ROOT_DIR/polystore_faucet"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_DENOM="$DENOM" NIL_AMOUNT="1000000000000000000aatom,100000000stake" NIL_GAS_PRICES="$GAS_PRICE" NIL_LISTEN_ADDR="127.0.0.1:${FAUCET_PORT}" \
+    nohup env POLYSTORE_CHAIN_ID="$CHAIN_ID" POLYSTORE_HOME="$CHAIN_HOME" POLYSTORE_NODE="$RPC_ADDR" POLYSTORE_DENOM="$DENOM" POLYSTORE_AMOUNT="1000000000000000000aatom,100000000stake" POLYSTORE_GAS_PRICES="$GAS_PRICE" POLYSTORE_LISTEN_ADDR="127.0.0.1:${FAUCET_PORT}" \
       "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
     echo $! >"$PID_DIR/faucet.pid"
@@ -632,7 +632,7 @@ start_faucet() {
 register_provider() {
   local key="$1"
   local endpoint="$2"
-  "$NILCHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
+  "$POLYSTORECHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
     --endpoint "$endpoint" \
     --from "$key" \
     --chain-id "$CHAIN_ID" \
@@ -650,7 +650,7 @@ register_provider_retry() {
   local endpoint="$2"
   local attempts=20
   local addr
-  addr="$("$NILCHAIND_BIN" keys show "$key" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)"
+  addr="$("$POLYSTORECHAIND_BIN" keys show "$key" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)"
   if [ -z "$addr" ]; then
     echo "ERROR: failed to resolve $key address" >&2
     return 1
@@ -678,21 +678,21 @@ start_provider() {
   (
     cd "$ROOT_DIR/polystore_gateway"
     nohup env \
-      NIL_RUNTIME_PERSONA="provider-daemon" \
-      NIL_LISTEN_ADDR=":$port" \
-      NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-1}" \
-      NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
-      NIL_CHAIN_ID="$CHAIN_ID" \
-      NIL_HOME="$CHAIN_HOME" \
-      NIL_NODE="$RPC_ADDR" \
-      NIL_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
-      NIL_UPLOAD_DIR="$dir" \
-      NIL_CLI_BIN="$NIL_CLI_BIN" \
-      NIL_TRUSTED_SETUP="$TRUSTED_SETUP" \
-      NILCHAIND_BIN="$NILCHAIND_BIN" \
-      NIL_PROVIDER_KEY="$key" \
-      NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      "$NIL_GATEWAY_BIN" \
+      POLYSTORE_RUNTIME_PERSONA="provider-daemon" \
+      POLYSTORE_LISTEN_ADDR=":$port" \
+      POLYSTORE_P2P_ENABLED="${POLYSTORE_P2P_ENABLED:-1}" \
+      POLYSTORE_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
+      POLYSTORE_CHAIN_ID="$CHAIN_ID" \
+      POLYSTORE_HOME="$CHAIN_HOME" \
+      POLYSTORE_NODE="$RPC_ADDR" \
+      POLYSTORE_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
+      POLYSTORE_UPLOAD_DIR="$dir" \
+      POLYSTORE_CLI_BIN="$POLYSTORE_CLI_BIN" \
+      POLYSTORE_TRUSTED_SETUP="$TRUSTED_SETUP" \
+      POLYSTORECHAIND_BIN="$POLYSTORECHAIND_BIN" \
+      POLYSTORE_PROVIDER_KEY="$key" \
+      POLYSTORE_GATEWAY_SP_AUTH="$POLYSTORE_GATEWAY_SP_AUTH" \
+      "$POLYSTORE_GATEWAY_BIN" \
       >"$LOG_DIR/$key.log" 2>&1 &
     echo $! >"$PID_DIR/$key.pid"
   )
@@ -705,18 +705,18 @@ start_router() {
   (
     cd "$ROOT_DIR/polystore_gateway"
     nohup env \
-      NIL_RUNTIME_PERSONA="user-gateway" \
-      NIL_GATEWAY_ROUTER="1" \
-      NIL_P2P_ENABLED="${NIL_P2P_ENABLED:-1}" \
-      NIL_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
-      NIL_CHAIN_ID="$CHAIN_ID" \
-      NIL_HOME="$CHAIN_HOME" \
-      NIL_NODE="$RPC_ADDR" \
-      NIL_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
-      NIL_UPLOAD_DIR="$LOG_DIR/router_tmp" \
-      NILCHAIND_BIN="$NILCHAIND_BIN" \
-      NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      "$NIL_GATEWAY_BIN" \
+      POLYSTORE_RUNTIME_PERSONA="user-gateway" \
+      POLYSTORE_GATEWAY_ROUTER="1" \
+      POLYSTORE_P2P_ENABLED="${POLYSTORE_P2P_ENABLED:-1}" \
+      POLYSTORE_P2P_LISTEN_ADDRS="/ip4/127.0.0.1/tcp/$p2p_port/ws" \
+      POLYSTORE_CHAIN_ID="$CHAIN_ID" \
+      POLYSTORE_HOME="$CHAIN_HOME" \
+      POLYSTORE_NODE="$RPC_ADDR" \
+      POLYSTORE_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
+      POLYSTORE_UPLOAD_DIR="$LOG_DIR/router_tmp" \
+      POLYSTORECHAIND_BIN="$POLYSTORECHAIND_BIN" \
+      POLYSTORE_GATEWAY_SP_AUTH="$POLYSTORE_GATEWAY_SP_AUTH" \
+      "$POLYSTORE_GATEWAY_BIN" \
       >"$LOG_DIR/router.log" 2>&1 &
     echo $! >"$PID_DIR/router.pid"
   )
@@ -736,7 +736,7 @@ start_web() {
     VITE_GATEWAY_BASE="${VITE_GATEWAY_BASE:-http://localhost:8080}" \
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
-    VITE_NILSTORE_PRECOMPILE="${VITE_NILSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
+    VITE_POLYSTORE_PRECOMPILE="${VITE_POLYSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
     nohup npm run dev -- --host 0.0.0.0 --port "$WEB_PORT" >"$LOG_DIR/website.log" 2>&1 &
     echo $! >"$PID_DIR/website.pid"
   )
@@ -782,11 +782,11 @@ start_all() {
   stop_all
   rm -rf "$LOG_DIR/providers" "$LOG_DIR/router_tmp"
 
-  if [ -z "$NIL_GATEWAY_SP_AUTH" ]; then
+  if [ -z "$POLYSTORE_GATEWAY_SP_AUTH" ]; then
     if command -v openssl >/dev/null 2>&1; then
-      NIL_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
+      POLYSTORE_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
     else
-      NIL_GATEWAY_SP_AUTH="$(date +%s%N)"
+      POLYSTORE_GATEWAY_SP_AUTH="$(date +%s%N)"
     fi
   fi
 
@@ -828,7 +828,7 @@ start_all() {
   fi
 
   banner "Devnet Alpha multi-SP stack ready"
-  echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
+  echo "$POLYSTORE_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
   cat <<EOF
 RPC:         http://localhost:${RPC_ADDR##*:}
 REST/LCD:    http://localhost:${LCD_PORT}
@@ -838,7 +838,7 @@ Gateway:     http://localhost:8080/gateway/upload
 Web UI:      http://localhost:${WEB_PORT}/#/dashboard
 Providers:   $PROVIDER_COUNT (ports starting at $PROVIDER_PORT_BASE)
 Home:        $CHAIN_HOME
-SP Auth:     $NIL_GATEWAY_SP_AUTH  (also saved in $LOG_DIR/sp_auth.txt)
+SP Auth:     $POLYSTORE_GATEWAY_SP_AUTH  (also saved in $LOG_DIR/sp_auth.txt)
 EOF
 }
 

@@ -5,7 +5,7 @@ on:
 
 jobs:
   # ------------------------------------------------------------------
-  # GO SERVICES (NilChain, Faucet, S3, Relayer)
+  # GO SERVICES (PolyStore Chain, Faucet, S3, Relayer)
   # ------------------------------------------------------------------
   go-test:
     name: Go Test (${{ matrix.service }})
@@ -76,7 +76,7 @@ jobs:
         run: cargo test --verbose
 
   # ------------------------------------------------------------------
-  # FRONTEND (Nil Website)
+  # FRONTEND (PolyStore Website)
   # ------------------------------------------------------------------
   frontend-build:
     name: Website Build & Lint
@@ -230,7 +230,7 @@ jobs:
           if-no-files-found: ignore
 
   # ------------------------------------------------------------------
-  # TAURI GUI (NilGateway GUI)
+  # TAURI GUI (PolyStore Gateway GUI)
   # ------------------------------------------------------------------
   tauri-gui:
     name: Tauri GUI Build & Tests

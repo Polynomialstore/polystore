@@ -142,7 +142,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 	}
 
 	// 7. Append File Record
-	baseName := normalizeNilfsRecordBasename(recordPath, filePath)
+	baseName := normalizePolyfsRecordBasename(recordPath, filePath)
 	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, 0, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, err

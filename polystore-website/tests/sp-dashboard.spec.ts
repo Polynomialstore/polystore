@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -13,7 +13,7 @@ test('provider dashboard uses provider-daemon status and can unpair a provider',
   const account = privateKeyToAccount(generatePrivateKey())
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   const providerAddress = 'nil1providerdashboard000000000000000000000000'
   const publicBase = 'https://sp-dashboard.example.com'
   const txHash = '0x0000000000000000000000000000000000000000000000000000000000000abc'
@@ -30,7 +30,7 @@ test('provider dashboard uses provider-daemon status and can unpair a provider',
     if (w.ethereum) return
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},
@@ -128,7 +128,7 @@ test('provider dashboard uses provider-daemon status and can unpair a provider',
     })
   })
 
-  await page.route(`**/polystorechain/polystorechain/v1/provider-pairings/by-operator/${nilAddress}`, async (route) => {
+  await page.route(`**/polystorechain/polystorechain/v1/provider-pairings/by-operator/${polystoreAddress}`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -138,7 +138,7 @@ test('provider dashboard uses provider-daemon status and can unpair a provider',
           : [
               {
                 provider: providerAddress,
-                operator: nilAddress,
+                operator: polystoreAddress,
                 paired_height: '91',
               },
             ],
@@ -173,7 +173,7 @@ test('provider dashboard uses provider-daemon status and can unpair a provider',
           address: providerAddress,
           key_name: 'provider-main',
           pairing_status: 'paired',
-          paired_operator: nilAddress,
+          paired_operator: polystoreAddress,
           registration_status: 'registered',
           public_base: publicBase,
           public_health_ok: true,

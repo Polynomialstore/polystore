@@ -60,7 +60,7 @@ The following updates are required to align the website with the final Architect
     *   **The Problem:** "Ghosting" SPs and "He Said, She Said" disputes.
     *   **The Solution:** The **Deputy** (Mystery Shopper) routing around damage.
     *   **Mechanism:** Ephemeral Keys + Audit Debt.
-- [ ] **`src/pages/NilFS.tsx`** (Optional/Advanced):
+- [ ] **`src/pages/PolyFS.tsx`** (Optional/Advanced):
     *   Explain the **Filesystem on Slab** concept.
     *   Visual: Mapping `Hash("video.mp4")` -> `Offset 500`.
 

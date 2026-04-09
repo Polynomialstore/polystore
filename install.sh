@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting NilStore Network Installation..."
+echo "🚀 Starting PolyStore Network Installation..."
 
 # 1. Check Dependencies
 echo "🔍 Checking dependencies..."

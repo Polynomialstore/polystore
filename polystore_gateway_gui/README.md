@@ -84,4 +84,4 @@ From repo root (`polystore/`):
 - The website local Gateway model expects gateway access through localhost.
 - Storage provider public endpoints (`sp1/sp2/sp3...`) remain separate and are discovered from on-chain provider records.
 - Linux GUI default sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` when not explicitly provided.
-- Local sidecar default sets `NIL_P2P_ENABLED=0` and `NIL_DISABLE_SYSTEM_LIVENESS=1` (with local import enabled).
+- Local sidecar default sets `POLYSTORE_P2P_ENABLED=0` and `POLYSTORE_DISABLE_SYSTEM_LIVENESS=1` (with local import enabled).

@@ -16,12 +16,12 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-// GatewayDebugRawFetch serves file bytes directly from an on-disk NilFS slab without
+// GatewayDebugRawFetch serves file bytes directly from an on-disk PolyFS slab without
 // requiring retrieval-session / receipt flows. This is intended for devnet debugging.
 //
 // Query params:
 // - deal_id, owner: optional but recommended; when provided they are validated against chain state.
-// - file_path: required NilFS path.
+// - file_path: required PolyFS path.
 // - range_start, range_len: optional byte range within the file; len=0 means "to EOF".
 func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
@@ -55,14 +55,14 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 		stripe         stripeParams
 	)
 	if requireOnchainSession {
-		rawSession := strings.TrimSpace(r.Header.Get("X-Nil-Session-Id"))
+		rawSession := strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id"))
 		if rawSession == "" {
-			writeJSONError(w, http.StatusBadRequest, "missing X-Nil-Session-Id", "")
+			writeJSONError(w, http.StatusBadRequest, "missing X-PolyStore-Session-Id", "")
 			return
 		}
 		sessionID, _, nerr := parseSessionIDHex(rawSession)
 		if nerr != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Session-Id", nerr.Error())
+			writeJSONError(w, http.StatusBadRequest, "invalid X-PolyStore-Session-Id", nerr.Error())
 			return
 		}
 		sess, serr := fetchRetrievalSession(sessionID)
@@ -131,7 +131,7 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	filePath, err := validateNilfsFilePath(q.Get("file_path"))
+	filePath, err := validatePolyfsFilePath(q.Get("file_path"))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid file_path", "")
 		return
@@ -187,7 +187,7 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content, mduIdx, _, absOffset, servedLen, _, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
+	content, mduIdx, _, absOffset, servedLen, _, err := resolvePolyfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "file not found in deal", "")
@@ -255,8 +255,8 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	// Provide a small, parseable hint for debug tooling (not used by the main UI yet).
-	w.Header().Set("X-Nil-Debug-Range-Start", strconv.FormatUint(rangeStart, 10))
-	w.Header().Set("X-Nil-Debug-Range-Len", strconv.FormatUint(servedLen, 10))
+	w.Header().Set("X-PolyStore-Debug-Range-Start", strconv.FormatUint(rangeStart, 10))
+	w.Header().Set("X-PolyStore-Debug-Range-Len", strconv.FormatUint(servedLen, 10))
 
 	_, _ = io.Copy(w, content)
 	if flusher, ok := w.(http.Flusher); ok {

@@ -43,9 +43,9 @@ test('providerFetchMduWindowWithSession sends retrieval window in query and head
   assert.equal(url.searchParams.get('owner'), 'nil1owner')
   assert.equal(url.searchParams.get('start_blob_index'), '32')
   assert.equal(url.searchParams.get('blob_count'), '32')
-  assert.equal(seen.headers?.['x-nil-session-id'], '0xdeadbeef')
-  assert.equal(seen.headers?.['x-nil-start-blob-index'], '32')
-  assert.equal(seen.headers?.['x-nil-blob-count'], '32')
+  assert.equal(seen.headers?.['x-polystore-session-id'], '0xdeadbeef')
+  assert.equal(seen.headers?.['x-polystore-start-blob-index'], '32')
+  assert.equal(seen.headers?.['x-polystore-blob-count'], '32')
 })
 
 test('providerAdminRefreshStatus posts the signed envelope to the provider-daemon', async () => {

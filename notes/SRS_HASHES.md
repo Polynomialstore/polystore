@@ -1,4 +1,4 @@
-# NilStore SRS and setup digests (provisional)
+# PolyStore SRS and setup digests (provisional)
 
 This file pins the current SRS/trusted setup digests used by demos and reference implementations. Implementations MUST verify the SRS bytes against these hashes before use.
 

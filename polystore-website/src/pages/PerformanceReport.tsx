@@ -29,7 +29,7 @@ export const PerformanceReport = () => {
           </div>
           <h1 className="text-5xl font-bold mb-6 text-foreground">Network Performance Report</h1>
           <p className="text-xl text-muted-foreground leading-relaxed">
-            Stress-testing the NilChain consensus layer. Validating block times and throughput scaling under simulated load conditions.
+            Stress-testing the PolyStore Chain consensus layer. Validating block times and throughput scaling under simulated load conditions.
           </p>
           <div className="mt-4 text-xs font-mono text-muted-foreground">
             Last Run: {new Date(meta.timestamp).toLocaleString()} • Environment: {meta.environment}

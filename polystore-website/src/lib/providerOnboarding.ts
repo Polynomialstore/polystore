@@ -46,9 +46,9 @@ export interface ProviderRunbookReadiness {
 const DEFAULT_PROVIDER_KEY = 'provider1'
 const DEFAULT_DOMAIN_PORT = 443
 const DEFAULT_IPV4_PORT = 8091
-export const DEVNET_SHARED_GATEWAY_AUTH_TOKEN = 'nilstore-devnet-shared-gateway-auth'
+export const DEVNET_SHARED_GATEWAY_AUTH_TOKEN = 'polystore-devnet-shared-gateway-auth'
 const AUTH_PLACEHOLDER = '<shared-provider-auth-token>'
-const DEFAULT_TUNNEL_NAME = 'nilstore-sp'
+const DEFAULT_TUNNEL_NAME = 'polystore-sp'
 const DEFAULT_TUNNEL_LOCAL_SERVICE_URL = 'http://127.0.0.1:8091'
 
 function trimNonEmpty(input: unknown): string {
@@ -69,7 +69,7 @@ function suggestTunnelNameFromHost(hostname: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
   if (!slug) return DEFAULT_TUNNEL_NAME
-  const suggested = `nilstore-${slug}`
+  const suggested = `polystore-${slug}`
   return suggested.length <= 63 ? suggested : suggested.slice(0, 63).replace(/-+$/g, '')
 }
 
@@ -243,14 +243,14 @@ export function buildProviderBootstrapCommand(draft: ProviderBootstrapDraft): st
     '# This command starts (or restarts) the provider-daemon, then registers endpoints and runs health checks.',
     '# This command requires OPERATOR_ADDRESS and PROVIDER_ENDPOINT.',
     ...(usingDefaultAuth
-      ? ['# Using devnet default NIL_GATEWAY_SP_AUTH. Override it if your hub uses a custom secret.']
+      ? ['# Using devnet default POLYSTORE_GATEWAY_SP_AUTH. Override it if your hub uses a custom secret.']
       : []),
     ...(!websiteReady ? ['BOOTSTRAP_ALLOW_PARTIAL=1 \\'] : []),
     ...(operatorAddress ? [`OPERATOR_ADDRESS=${shellQuote(operatorAddress)} \\`] : []),
     `PROVIDER_KEY=${shellQuote(providerKey)} \\`,
     ...(expectedProviderAddress ? [`EXPECTED_PROVIDER_ADDRESS=${shellQuote(expectedProviderAddress)} \\`] : []),
     `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)} \\`,
-    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken || AUTH_PLACEHOLDER)} \\`,
+    `POLYSTORE_GATEWAY_SP_AUTH=${shellQuote(authToken || AUTH_PLACEHOLDER)} \\`,
     './scripts/run_devnet_provider.sh bootstrap',
   ]
 
@@ -287,7 +287,7 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
     `CF_TUNNEL_NAME=${shellQuote(tunnelName)} \\`,
     `CF_TUNNEL_HOSTNAME=${shellQuote(hostname)} \\`,
     `CF_TUNNEL_SERVICE_URL=${shellQuote(localServiceUrl)} \\`,
-    "bash <<'NILSTORE_CF_TUNNEL'",
+    "bash <<'POLYSTORE_CF_TUNNEL'",
     'set -euo pipefail',
     '',
     'if ! command -v cloudflared >/dev/null 2>&1; then',
@@ -322,7 +322,7 @@ export function buildCloudflareTunnelBootstrapCommand(draft: ProviderTunnelBoots
     '',
     'echo "Tunnel config written to $HOME/.cloudflared/config.yml"',
     'cloudflared --config "$HOME/.cloudflared/config.yml" tunnel run "$CF_TUNNEL_NAME"',
-    'NILSTORE_CF_TUNNEL',
+    'POLYSTORE_CF_TUNNEL',
   ].join('\n')
 }
 
@@ -383,7 +383,7 @@ function providerOperatorContextLines(input: {
   if (!providerKey && !operatorAddress && !providerEndpoint && !publicBase) {
     return [
       '- Ask for or use these operator-supplied values when available:',
-      '  - `NIL_GATEWAY_SP_AUTH`',
+      '  - `POLYSTORE_GATEWAY_SP_AUTH`',
       '  - `OPERATOR_ADDRESS` as nil1... or 0x... for provider-link request',
       '  - provider key name such as `provider1`',
       '  - public hostname such as `sp.<domain>` or a full provider multiaddr',
@@ -397,7 +397,7 @@ function providerOperatorContextLines(input: {
   if (publicBase) {
     lines.push(`  - public health base \`${publicBase}\``)
   }
-  lines.push('  - `NIL_GATEWAY_SP_AUTH` supplied by the operator')
+  lines.push('  - `POLYSTORE_GATEWAY_SP_AUTH` supplied by the operator')
   return lines
 }
 
@@ -437,13 +437,13 @@ ${providerContext}
 - Endpoint guidance:
   - direct public IP: \`/ip4/<ip>/tcp/8091/http\` and verify \`http://<ip>:8091/health\`
   - Cloudflare Tunnel / HTTPS hostname: \`/dns4/<host>/tcp/443/https\` and verify \`https://<host>/health\`
-- Treat \`NIL_GATEWAY_SP_AUTH\` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
-- Never print secrets/private keys in full; redact sensitive values (especially \`NIL_GATEWAY_SP_AUTH\`).
+- Treat \`POLYSTORE_GATEWAY_SP_AUTH\` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
+- Never print secrets/private keys in full; redact sensitive values (especially \`POLYSTORE_GATEWAY_SP_AUTH\`).
 
 Operating mode:
 - This is a guided provider-host run, not a loose advisory chat.
 - Proceed autonomously through repo sync, toolchain checks, provider key setup, provider-link request, funding preflight, bootstrap, and verification.
-- Pause only when the operator must supply \`NIL_GATEWAY_SP_AUTH\`, \`OPERATOR_ADDRESS\`, DNS/Tunnel configuration, or approve an OS/service-manager action.
+- Pause only when the operator must supply \`POLYSTORE_GATEWAY_SP_AUTH\`, \`OPERATOR_ADDRESS\`, DNS/Tunnel configuration, or approve an OS/service-manager action.
 - Reuse an existing healthy provider key and registration when possible; do not rotate identity unless the operator explicitly asks.
 
 Before running any on-chain step, confirm:
@@ -459,7 +459,7 @@ Your job:
 4. For a new provider key, use this order:
    - run \`OPERATOR_ADDRESS=<operator-address> PROVIDER_KEY=<key> ./scripts/run_devnet_provider.sh pair\`
    - if the key is new and auto-funding is unavailable, fund the printed provider address with gas and rerun the same \`pair\` command
-5. The website-managed flow requires \`OPERATOR_ADDRESS\`, a real \`PROVIDER_ENDPOINT\`, and \`NIL_GATEWAY_SP_AUTH\`.
+5. The website-managed flow requires \`OPERATOR_ADDRESS\`, a real \`PROVIDER_ENDPOINT\`, and \`POLYSTORE_GATEWAY_SP_AUTH\`.
    - \`./scripts/run_devnet_provider.sh bootstrap\` now fails fast unless all three are present
    - let \`./scripts/run_devnet_provider.sh bootstrap\` request link and continue the full happy path, or
    - run \`./scripts/run_devnet_provider.sh link\` when you want link request as a separate repair step after key setup

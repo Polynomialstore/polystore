@@ -1,4 +1,4 @@
-export const FAUCET_AUTH_TOKEN_STORAGE_KEY = 'nilstore.faucetAuthToken'
+export const FAUCET_AUTH_TOKEN_STORAGE_KEY = 'polystore.faucetAuthToken'
 
 function buildFaucetAuthToken(): string {
   try {

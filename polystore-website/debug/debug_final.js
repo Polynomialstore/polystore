@@ -15,7 +15,7 @@ const message = {
 }
 
 const chainId = 31337n
-const name = 'NilStore'
+const name = 'PolyStore'
 const version = '1'
 const verifyingContract = '0x0000000000000000000000000000000000000000'
 

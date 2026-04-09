@@ -70,7 +70,7 @@ var (
 )
 
 func allowPlanProviderFallback() bool {
-	raw := strings.ToLower(strings.TrimSpace(os.Getenv("NIL_ALLOW_PLAN_PROVIDER_FALLBACK")))
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("POLYSTORE_ALLOW_PLAN_PROVIDER_FALLBACK")))
 	return raw == "1" || raw == "true" || raw == "yes" || raw == "on"
 }
 
@@ -81,7 +81,7 @@ type retrievalProviderResolution struct {
 }
 
 func providerHTTPBaseOverrides() map[string]string {
-	raw := strings.TrimSpace(os.Getenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES"))
 	if raw == "" {
 		return nil
 	}
@@ -258,13 +258,13 @@ func resolveProviderForRetrievalPlan(ctx context.Context, dealID uint64, stripe 
 		if !allowPlanProviderFallback() {
 			if metadataErr != nil {
 				return retrievalProviderResolution{}, fmt.Errorf(
-					"%w: metadata lookup failed: %v; set NIL_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
+					"%w: metadata lookup failed: %v; set POLYSTORE_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
 					ErrProviderResolutionMetadataUnavailable,
 					metadataErr,
 				)
 			}
 			return retrievalProviderResolution{}, fmt.Errorf(
-				"%w: local provider fallback disabled; set NIL_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
+				"%w: local provider fallback disabled; set POLYSTORE_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
 				ErrProviderResolutionMetadataUnavailable,
 			)
 		}

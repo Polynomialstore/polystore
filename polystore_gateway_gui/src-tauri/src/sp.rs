@@ -429,7 +429,7 @@ pub async fn register_provider(
             .unwrap_or_else(|| "1099511627776".to_string()),
     );
     envs.insert(
-        "NIL_GAS_PRICES",
+        "POLYSTORE_GAS_PRICES",
         req.gas_prices.unwrap_or_else(|| "0.001aatom".to_string()),
     );
 
@@ -445,7 +445,7 @@ pub async fn start_provider_local(
     envs.insert("HUB_LCD", req.hub_lcd);
     envs.insert("HUB_NODE", req.hub_node);
     envs.insert("PROVIDER_LISTEN", req.provider_listen);
-    envs.insert("NIL_GATEWAY_SP_AUTH", req.shared_auth);
+    envs.insert("POLYSTORE_GATEWAY_SP_AUTH", req.shared_auth);
 
     run_provider_script("start", &envs)
 }
@@ -643,7 +643,8 @@ pub async fn health_snapshot(req: SpHealthSnapshotRequest) -> Result<SpHealthSna
             code: "auth_mismatch".to_string(),
             severity: "critical".to_string(),
             message: "shared auth token is missing".to_string(),
-            recommended_action: "Set NIL_GATEWAY_SP_AUTH to the hub-provided token.".to_string(),
+            recommended_action: "Set POLYSTORE_GATEWAY_SP_AUTH to the hub-provided token."
+                .to_string(),
         });
         checks.push(SpCheckResult {
             name: "shared_auth_present".to_string(),
@@ -684,7 +685,7 @@ pub async fn health_snapshot(req: SpHealthSnapshotRequest) -> Result<SpHealthSna
 
 pub fn generate_remote_bundle(req: SpRemoteBundleRequest) -> SpRemoteBundleResponse {
     let env_block = format!(
-        "export CHAIN_ID=\"{}\"\nexport HUB_LCD=\"{}\"\nexport HUB_NODE=\"{}\"\nexport PROVIDER_KEY=\"{}\"\nexport PROVIDER_ENDPOINT=\"{}\"\nexport PROVIDER_LISTEN=\"{}\"\nexport NIL_GATEWAY_SP_AUTH=\"{}\"",
+        "export CHAIN_ID=\"{}\"\nexport HUB_LCD=\"{}\"\nexport HUB_NODE=\"{}\"\nexport PROVIDER_KEY=\"{}\"\nexport PROVIDER_ENDPOINT=\"{}\"\nexport PROVIDER_LISTEN=\"{}\"\nexport POLYSTORE_GATEWAY_SP_AUTH=\"{}\"",
         req.chain_id,
         req.hub_lcd,
         req.hub_node,
@@ -697,20 +698,20 @@ pub fn generate_remote_bundle(req: SpRemoteBundleRequest) -> SpRemoteBundleRespo
     let init_command =
         "PROVIDER_KEY=$PROVIDER_KEY ./scripts/run_devnet_provider.sh init".to_string();
     let register_command = "PROVIDER_KEY=$PROVIDER_KEY PROVIDER_ENDPOINT=$PROVIDER_ENDPOINT CHAIN_ID=$CHAIN_ID HUB_LCD=$HUB_LCD HUB_NODE=$HUB_NODE ./scripts/run_devnet_provider.sh register".to_string();
-    let start_command = "PROVIDER_KEY=$PROVIDER_KEY CHAIN_ID=$CHAIN_ID HUB_LCD=$HUB_LCD HUB_NODE=$HUB_NODE PROVIDER_LISTEN=$PROVIDER_LISTEN NIL_GATEWAY_SP_AUTH=$NIL_GATEWAY_SP_AUTH ./scripts/run_devnet_provider.sh start".to_string();
+    let start_command = "PROVIDER_KEY=$PROVIDER_KEY CHAIN_ID=$CHAIN_ID HUB_LCD=$HUB_LCD HUB_NODE=$HUB_NODE PROVIDER_LISTEN=$PROVIDER_LISTEN POLYSTORE_GATEWAY_SP_AUTH=$POLYSTORE_GATEWAY_SP_AUTH ./scripts/run_devnet_provider.sh start".to_string();
     let stop_command =
         "PROVIDER_KEY=$PROVIDER_KEY ./scripts/run_devnet_provider.sh stop".to_string();
     let healthcheck_command = "scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1${PROVIDER_LISTEN} --hub-lcd $HUB_LCD".to_string();
 
     let systemd_unit = r#"[Unit]
-Description=NilStore Provider Gateway
+Description=PolyStore Provider Gateway
 After=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=%h/dev/nil-store/nil-store
-EnvironmentFile=%h/.config/nilstore-provider.env
-ExecStart=/usr/bin/env bash -lc 'PROVIDER_KEY=${PROVIDER_KEY} CHAIN_ID=${CHAIN_ID} HUB_LCD=${HUB_LCD} HUB_NODE=${HUB_NODE} PROVIDER_LISTEN=${PROVIDER_LISTEN} NIL_GATEWAY_SP_AUTH=${NIL_GATEWAY_SP_AUTH} ./scripts/run_devnet_provider.sh start'
+EnvironmentFile=%h/.config/polystore-provider.env
+ExecStart=/usr/bin/env bash -lc 'PROVIDER_KEY=${PROVIDER_KEY} CHAIN_ID=${CHAIN_ID} HUB_LCD=${HUB_LCD} HUB_NODE=${HUB_NODE} PROVIDER_LISTEN=${PROVIDER_LISTEN} POLYSTORE_GATEWAY_SP_AUTH=${POLYSTORE_GATEWAY_SP_AUTH} ./scripts/run_devnet_provider.sh start'
 ExecStop=/usr/bin/env bash -lc 'PROVIDER_KEY=${PROVIDER_KEY} ./scripts/run_devnet_provider.sh stop'
 Restart=always
 RestartSec=2

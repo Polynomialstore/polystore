@@ -6,10 +6,10 @@ import fs from 'fs';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { bech32 } from 'bech32';
 
-const NIL_CLI_PATH = path.resolve('..', 'polystore_cli/target/release/polystore_cli');
+const POLYSTORE_CLI_PATH = path.resolve('..', 'polystore_cli/target/release/polystore_cli');
 const TEST_FILE_SIZE = 1024 * 1024; // 1MB
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex');
   const words = bech32.toWords(data);
   return bech32.encode('nil', words);
@@ -30,8 +30,8 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
   let referenceMduRoot = '';
   try {
     // Check if polystore_cli exists
-    if (!fs.existsSync(NIL_CLI_PATH)) {
-        console.warn(`polystore_cli not found at ${NIL_CLI_PATH}. Skipping parity check logic that requires CLI.`);
+    if (!fs.existsSync(POLYSTORE_CLI_PATH)) {
+        console.warn(`polystore_cli not found at ${POLYSTORE_CLI_PATH}. Skipping parity check logic that requires CLI.`);
         // Fail the test if CLI is missing, as requested
         test.fail(true, "polystore_cli binary missing");
         return;
@@ -42,7 +42,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
     console.log('File Path:', path.resolve(testFilePath));
     
     // Run CLI
-    execSync(`${NIL_CLI_PATH} shard ${path.resolve(testFilePath)} --out ${path.resolve(outJsonPath)}`, {
+    execSync(`${POLYSTORE_CLI_PATH} shard ${path.resolve(testFilePath)} --out ${path.resolve(outJsonPath)}`, {
         encoding: 'utf-8',
         env: { ...process.env, CKZG_TRUSTED_SETUP: trustedSetupPath }
     });
@@ -66,7 +66,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
   const randomPk = generatePrivateKey();
   const account = privateKeyToAccount(randomPk);
   const chainIdHex = '0x7A69'; // 31337
-  const nilAddress = ethToNil(account.address);
+  const polystoreAddress = ethToPolystoreAddress(account.address);
 
   // Mock LCD Deals to allow selection
   await page.route('**/polystorechain/polystorechain/v1/deals**', async route => {
@@ -76,7 +76,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
               deals: [
                   {
                       id: '1',
-                      owner: nilAddress,
+                      owner: polystoreAddress,
                       cid: '',
                       size: '0',
                       escrow_balance: '1000000',
@@ -110,7 +110,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
     if (w.ethereum) return;
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

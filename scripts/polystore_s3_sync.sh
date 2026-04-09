@@ -2,14 +2,14 @@
 set -euo pipefail
 
 #
-# Fast mirror helper using aws-cli against NilGateway's path-style S3 surface.
+# Fast mirror helper using aws-cli against PolyStore Gateway's path-style S3 surface.
 #
 # Examples:
 #   # Upload a directory into deal #0 (bucket deal-0)
-#   ./scripts/nilstore_s3_sync.sh upload 0 ./mydir
+#   ./scripts/polystore_s3_sync.sh upload 0 ./mydir
 #
 #   # Download entire deal #0 to ./out
-#   ./scripts/nilstore_s3_sync.sh download 0 ./out
+#   ./scripts/polystore_s3_sync.sh download 0 ./out
 #
 
 MODE="${1:-}"
@@ -21,7 +21,7 @@ if [[ -z "${MODE}" || -z "${DEAL_ID}" || -z "${PATH_ARG}" ]]; then
   exit 1
 fi
 
-ENDPOINT_URL="${NILSTORE_S3_ENDPOINT:-http://localhost:8080}"
+ENDPOINT_URL="${POLYSTORE_S3_ENDPOINT:-http://localhost:8080}"
 BUCKET="deal-${DEAL_ID}"
 
 if ! command -v aws >/dev/null 2>&1; then
@@ -29,7 +29,7 @@ if ! command -v aws >/dev/null 2>&1; then
   exit 1
 fi
 
-# aws-cli typically signs requests; NilGateway ignores auth headers for devnet.
+# aws-cli typically signs requests; PolyStore Gateway ignores auth headers for devnet.
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
@@ -51,4 +51,3 @@ fi
 
 echo "error: unknown mode: ${MODE}" >&2
 exit 1
-

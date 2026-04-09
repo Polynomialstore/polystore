@@ -22,11 +22,11 @@ func (p runtimePersona) String() string {
 }
 
 func hasProviderIdentityConfigured() bool {
-	return strings.TrimSpace(os.Getenv("NIL_PROVIDER_KEY")) != "" || strings.TrimSpace(os.Getenv("NIL_PROVIDER_ADDRESS")) != ""
+	return strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_KEY")) != "" || strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_ADDRESS")) != ""
 }
 
 func resolveRuntimePersona(routerMode bool) runtimePersona {
-	raw := strings.ToLower(strings.TrimSpace(os.Getenv("NIL_RUNTIME_PERSONA")))
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("POLYSTORE_RUNTIME_PERSONA")))
 	switch raw {
 	case "user-gateway", "user_gateway", "gateway", "router":
 		return runtimePersonaUserGateway
@@ -34,7 +34,7 @@ func resolveRuntimePersona(routerMode bool) runtimePersona {
 		return runtimePersonaProviderDaemon
 	}
 
-	// Compatibility inference for environments that haven't set NIL_RUNTIME_PERSONA yet.
+	// Compatibility inference for environments that haven't set POLYSTORE_RUNTIME_PERSONA yet.
 	if routerMode {
 		return runtimePersonaUserGateway
 	}
@@ -64,18 +64,18 @@ func validateRuntimePersona(persona runtimePersona, routerMode bool, listenAddr 
 	switch persona {
 	case runtimePersonaUserGateway:
 		if hasProviderIdentityConfigured() {
-			return fmt.Errorf("user-gateway persona does not allow provider identity env; unset NIL_PROVIDER_KEY/NIL_PROVIDER_ADDRESS")
+			return fmt.Errorf("user-gateway persona does not allow provider identity env; unset POLYSTORE_PROVIDER_KEY/POLYSTORE_PROVIDER_ADDRESS")
 		}
 		return nil
 	case runtimePersonaProviderDaemon:
 		if routerMode {
-			return fmt.Errorf("provider-daemon persona cannot run in router mode (NIL_GATEWAY_ROUTER=1)")
+			return fmt.Errorf("provider-daemon persona cannot run in router mode (POLYSTORE_GATEWAY_ROUTER=1)")
 		}
 		if !hasProviderIdentityConfigured() {
-			return fmt.Errorf("provider-daemon persona requires NIL_PROVIDER_KEY or NIL_PROVIDER_ADDRESS")
+			return fmt.Errorf("provider-daemon persona requires POLYSTORE_PROVIDER_KEY or POLYSTORE_PROVIDER_ADDRESS")
 		}
-		if listenPortFromAddr(listenAddr) == "8080" && envDefault("NIL_ALLOW_PROVIDER_ON_USER_PORT", "0") != "1" {
-			return fmt.Errorf("provider-daemon persona cannot listen on :8080 (reserved for trusted user-gateway). set NIL_LISTEN_ADDR to a provider port (e.g. :8082) or set NIL_ALLOW_PROVIDER_ON_USER_PORT=1 only for legacy compatibility")
+		if listenPortFromAddr(listenAddr) == "8080" && envDefault("POLYSTORE_ALLOW_PROVIDER_ON_USER_PORT", "0") != "1" {
+			return fmt.Errorf("provider-daemon persona cannot listen on :8080 (reserved for trusted user-gateway). set POLYSTORE_LISTEN_ADDR to a provider port (e.g. :8082) or set POLYSTORE_ALLOW_PROVIDER_ON_USER_PORT=1 only for legacy compatibility")
 		}
 		return nil
 	default:

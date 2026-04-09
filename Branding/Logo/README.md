@@ -1,6 +1,6 @@
-# NilStore Logo Search & Rationale
+# PolyStore Logo Search & Rationale
 
-This document outlines the iterative process and final prompt used to generate the current NilStore logo. The goal was to visually encapsulate the core technical and philosophical tenets of the NilStore network: **"Structured Infinity"**.
+This document outlines the iterative process and final prompt used to generate the current PolyStore logo. The goal was to visually encapsulate the core technical and philosophical tenets of the PolyStore network: **"Structured Infinity"**.
 
 ## Initial Concepts & Iterations:
 
@@ -25,7 +25,7 @@ The final prompt aimed for a "Symplectic Fusion," where the continuous Mobius ma
 ### Final Logo Generation Prompt:
 
 ```
-Create a sophisticated, abstract logo for 'NilStore' titled 'Symplectic Fusion'.
+Create a sophisticated, abstract logo for 'PolyStore' titled 'Symplectic Fusion'.
 
 **The Tesseract (Hypercube):**
 *   **Structure:** A stylized 2D projection of a 4D Tesseract (cube within a cube).

@@ -1,4 +1,4 @@
-package nilstore
+package polystore
 
 import (
 	"context"

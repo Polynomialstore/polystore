@@ -25,22 +25,22 @@ test.describe('gateway flow', () => {
       }
     }
 
-    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]', {
+    await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="polystore-identity"]', {
       timeout: 60_000,
       state: 'attached',
     })
     const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-    const cosmosIdentity = page.getByTestId('cosmos-identity')
-    if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
+    const polystoreIdentity = page.getByTestId('polystore-identity')
+    if (!(await walletAddress.isVisible().catch(() => false)) && !(await polystoreIdentity.isVisible().catch(() => false))) {
       const connectBtn = page.getByTestId('connect-wallet').first()
       if (await connectBtn.isVisible().catch(() => false)) {
         await connectBtn.click()
       }
-      await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
+      await expect(page.locator('[data-testid="wallet-address"], [data-testid="polystore-identity"]')).toBeVisible({ timeout: 60_000 })
     }
 
     await page.getByTestId('faucet-request').click()
-    await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
+    await expect(page.getByTestId('polystore-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
     await ensureCreateDealDrawerOpen(page)
     await page.getByTestId('workspace-advanced-toggle').click()

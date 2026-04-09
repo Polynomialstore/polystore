@@ -3,7 +3,7 @@ import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
 import { type Hex } from 'viem'
 
 import { appConfig } from '../config'
-import { ethToNil } from '../lib/address'
+import { ethToPolystoreAddress } from '../lib/address'
 import { normalizeDealId } from '../lib/dealId'
 import { buildRetrievalRequestTypedData } from '../lib/eip712'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
@@ -13,9 +13,9 @@ import {
   encodeConfirmRetrievalSessionsData,
   encodeOpenRetrievalSessionsData,
   encodeOpenRetrievalSessionsSponsoredData,
-} from '../lib/nilstorePrecompile'
-import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
-import { decodeNilceV1 } from '../lib/nilce'
+} from '../lib/polystorePrecompile'
+import { planPolyfsFileRangeChunks } from '../lib/rangeChunker'
+import { decodePolyceV1 } from '../lib/polyce'
 import { classifyWalletError } from '../lib/walletErrors'
 import {
   resolveProviderEndpoint,
@@ -50,7 +50,7 @@ export interface FetchInput {
   fileSizeBytes?: number
   mduSizeBytes?: number
   blobSizeBytes?: number
-  decodeNilce?: boolean
+  decodePolyce?: boolean
   sponsoredAuth?: SponsoredRetrievalAuth
   routePreference?: RoutePreference
 }
@@ -124,7 +124,7 @@ export type SponsoredRetrievalAuth =
 
 const FETCH_STALL_HINT_MS = 20_000
 
-const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
+const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
 
 function readLocalGatewayConnectedHint(): boolean {
   if (typeof window === 'undefined') return false
@@ -237,8 +237,8 @@ export function useFetch() {
         if (wantRangeStart >= wantFileSize) throw new Error('rangeStart beyond EOF')
         effectiveRangeLen = wantFileSize - wantRangeStart
       }
-      const shouldDecodeNilce =
-        input.decodeNilce !== false &&
+      const shouldDecodePolyce =
+        input.decodePolyce !== false &&
         wantRangeStart === 0 && wantFileSize > 0 && effectiveRangeLen === wantFileSize
 
       const hasMeta =
@@ -249,7 +249,7 @@ export function useFetch() {
 
       const chunks =
         hasMeta
-          ? planNilfsFileRangeChunks({
+          ? planPolyfsFileRangeChunks({
               fileStartOffset: input.fileStartOffset!,
               fileSizeBytes: input.fileSizeBytes!,
               rangeStart: wantRangeStart,
@@ -492,7 +492,7 @@ export function useFetch() {
       const computeData = encodeComputeRetrievalSessionIdsData(openRequests)
       const computeCall = await publicClient.call({
         account: signerAddress,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data: computeData,
       })
       const computeResult = computeCall.data as Hex
@@ -514,8 +514,8 @@ export function useFetch() {
         }
       }
 
-      const callerNil = ethToNil(signerAddress)
-      const isDealOwner = callerNil && callerNil === owner
+      const callerPolystoreAddress = ethToPolystoreAddress(signerAddress)
+      const isDealOwner = callerPolystoreAddress && callerPolystoreAddress === owner
       const sponsoredAuth = input.sponsoredAuth ?? { type: 'none' }
       const authType =
         sponsoredAuth.type === 'allowlist' ? 1 : sponsoredAuth.type === 'voucher' ? 2 : 0
@@ -567,7 +567,7 @@ export function useFetch() {
         const sponsoredTxData = encodeOpenRetrievalSessionsSponsoredData(buildSponsoredOpenRequests(requests))
         const openTxHash = await walletClient.sendTransaction({
           account: signerAddress,
-          to: appConfig.nilstorePrecompile as Hex,
+          to: appConfig.polystorePrecompile as Hex,
           data: isDealOwner ? openTxData : sponsoredTxData,
           gas: 7_000_000n,
         })
@@ -598,7 +598,7 @@ export function useFetch() {
         const computeData = encodeComputeRetrievalSessionIdsData([request])
         const computeCall = await publicClient.call({
           account: signerAddress,
-          to: appConfig.nilstorePrecompile as Hex,
+          to: appConfig.polystorePrecompile as Hex,
           data: computeData,
         })
         const computeResult = computeCall.data as Hex
@@ -876,7 +876,7 @@ export function useFetch() {
         const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
         const confirmTxHash = await walletClient.sendTransaction({
           account: signerAddress,
-          to: appConfig.nilstorePrecompile as Hex,
+          to: appConfig.polystorePrecompile as Hex,
           data: confirmTxData,
           gas: 3_000_000n,
         })
@@ -921,14 +921,14 @@ export function useFetch() {
       }
 
       let payload = concatUint8Arrays(parts)
-      if (shouldDecodeNilce) {
+      if (shouldDecodePolyce) {
         try {
-          const decoded = await decodeNilceV1(payload)
+          const decoded = await decodePolyceV1(payload)
           if (decoded.wrapped) {
             payload = decoded.payload
           }
         } catch (err) {
-          console.warn('NilCE decode failed, returning raw bytes', err)
+          console.warn('PolyCE decode failed, returning raw bytes', err)
         }
       }
       const blob = new Blob([payload] as BlobPart[], { type: 'application/octet-stream' })

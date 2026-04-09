@@ -37,7 +37,7 @@ wait_for_http() {
   return 1
 }
 
-export NIL_DISABLE_GATEWAY=1
+export POLYSTORE_DISABLE_GATEWAY=1
 export VITE_E2E=1
 export VITE_DISABLE_GATEWAY=1
 export E2E_LOCAL_STACK=1

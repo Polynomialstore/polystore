@@ -4,7 +4,7 @@ import { bech32 } from 'bech32'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -15,7 +15,7 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
 
   const dealId = '1'
   const ethAddress = '0x' + '11'.repeat(20)
-  const nilAddress = ethToNil(ethAddress)
+  const polystoreAddress = ethToPolystoreAddress(ethAddress)
   const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
   const manifestRoot = `0x${'cc'.repeat(48)}`
@@ -30,7 +30,7 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
         deals: [
           {
             id: dealId,
-            owner: nilAddress,
+            owner: polystoreAddress,
             cid: manifestRoot,
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
@@ -160,7 +160,7 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
-  // Seed OPFS with a minimal NilFS MDU0 + 1 witness + 1 user MDU.
+  // Seed OPFS with a minimal PolyFS MDU0 + 1 witness + 1 user MDU.
   await page.evaluate(async ({ dealId, manifestRoot, filePath, fileSize }) => {
     const MDU_SIZE_BYTES = 8 * 1024 * 1024
     const BLOB_SIZE_BYTES = 128 * 1024

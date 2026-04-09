@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-NilStore has successfully demonstrated the core cryptographic primitives (Triple Proof, NilFS) and the interaction model (Gateway, Retrieval Sessions) in a "Mode 1" (Full Replica) environment. The critical path to Mainnet requires solving three major challenges:
+PolyStore has successfully demonstrated the core cryptographic primitives (Triple Proof, PolyFS) and the interaction model (Gateway, Retrieval Sessions) in a "Mode 1" (Full Replica) environment. The critical path to Mainnet requires solving three major challenges:
 1.  **Trustlessness:** Removing the Gateway as a custodian of user keys (Devnet Gamma).
 2.  **Throughput:** Overcoming the CPU-bound KZG generation bottleneck to match S3 upload speeds.
 3.  **Efficiency:** Transitioning from Mode 1 (12x overhead) to Mode 2 (1.5x overhead via Erasure Coding).
@@ -25,7 +25,7 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 *   **Bindings:**
     *   **Browser:** Calls `polystore_core` via WASM.
     *   **Go Gateway:** Calls `polystore_core` via CGO (FFI).
-*   **Result:** A single source of truth for the NilFS format, preventing bugs where the browser and gateway produce different roots for the same file.
+*   **Result:** A single source of truth for the PolyFS format, preventing bugs where the browser and gateway produce different roots for the same file.
 
 *   **Consulting Analysis:** Currently, the Gateway signs transactions on behalf of users. This masks gas costs and creates a central point of failure. We must shift to a model where the Browser is the primary "User Agent" (Thick Client), capable of operating independently via WASM, while optionally delegating heavy compute to a local Gateway. Simultaneously, we must deploy the real economic logic so users pay for what they use.
 *   **Key Deliverables:**

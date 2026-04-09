@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestNilceZstd_RoundTrip(t *testing.T) {
+func TestPolyceZstd_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "hello.txt")
 	plain := []byte("hello hello hello hello hello hello hello hello\n")
@@ -15,11 +15,11 @@ func TestNilceZstd_RoundTrip(t *testing.T) {
 		t.Fatalf("write src: %v", err)
 	}
 
-	res, err := maybeWrapNilceZstd(context.Background(), src, 100, 32) // low threshold for test
+	res, err := maybeWrapPolyceZstd(context.Background(), src, 100, 32) // low threshold for test
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
 	}
-	if res.Encoding != nilceEncodingZstd {
+	if res.Encoding != polyceEncodingZstd {
 		t.Fatalf("expected zstd encoding, got %d", res.Encoding)
 	}
 	t.Cleanup(func() { _ = os.Remove(res.Path) })
@@ -28,14 +28,14 @@ func TestNilceZstd_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read wrapped: %v", err)
 	}
-	out, hdr, ok, err := decodeNilceV1Bytes(wrapped)
+	out, hdr, ok, err := decodePolyceV1Bytes(wrapped)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if !ok {
 		t.Fatalf("expected ok header")
 	}
-	if hdr.Encoding != nilceEncodingZstd {
+	if hdr.Encoding != polyceEncodingZstd {
 		t.Fatalf("expected zstd hdr")
 	}
 	if hdr.UncompressedLen != uint64(len(plain)) {
@@ -46,7 +46,7 @@ func TestNilceZstd_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestNilceZstd_SkipsIncompressible(t *testing.T) {
+func TestPolyceZstd_SkipsIncompressible(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "random.bin")
 	// Small incompressible-ish payload.
@@ -60,14 +60,14 @@ func TestNilceZstd_SkipsIncompressible(t *testing.T) {
 		t.Fatalf("write src: %v", err)
 	}
 
-	res, err := maybeWrapNilceZstd(context.Background(), src, 500, 1024)
+	res, err := maybeWrapPolyceZstd(context.Background(), src, 500, 1024)
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
 	}
 	if res.Path != src {
 		t.Fatalf("expected no wrapping for incompressible input")
 	}
-	if res.Encoding != nilceEncodingNone {
+	if res.Encoding != polyceEncodingNone {
 		t.Fatalf("expected NONE encoding")
 	}
 }

@@ -139,7 +139,7 @@ check_polystorechain_params() {
   local url="$lcd_base/polystorechain/polystorechain/v1/params"
   local body
   if ! body="$(http_get "$url")"; then
-    fail "Nilchain params ($url) unreachable"
+    fail "PolyStore Chain params ($url) unreachable"
     return
   fi
 
@@ -149,12 +149,12 @@ check_polystorechain_params() {
     storage="$(jq -r '.params.storage_price // empty' <<<"$body" 2>/dev/null || true)"
     retrieval="$(jq -r '.params.retrieval_price_per_blob // empty' <<<"$body" 2>/dev/null || true)"
     if [[ -n "$storage" && -n "$retrieval" ]]; then
-      ok "Nilchain params dynamic_pricing_enabled=$dyn storage_price=$storage retrieval_price_per_blob=$retrieval"
+      ok "PolyStore Chain params dynamic_pricing_enabled=$dyn storage_price=$storage retrieval_price_per_blob=$retrieval"
     else
-      ok "Nilchain params (jq parse partial; raw JSON fetched)"
+      ok "PolyStore Chain params (jq parse partial; raw JSON fetched)"
     fi
   else
-    ok "Nilchain params (jq not installed; JSON parse skipped)"
+    ok "PolyStore Chain params (jq not installed; JSON parse skipped)"
   fi
 }
 
@@ -262,7 +262,7 @@ PROVIDER="$(trim_trailing_slash "$PROVIDER")"
 HUB_LCD="$(trim_trailing_slash "$HUB_LCD")"
 PROVIDER_PUBLIC="$(trim_trailing_slash "$PROVIDER_PUBLIC")"
 
-echo "==> NilStore devnet healthcheck (mode=$MODE, timeout=${HC_TIMEOUT}s)"
+echo "==> PolyStore devnet healthcheck (mode=$MODE, timeout=${HC_TIMEOUT}s)"
 if ! have_cmd jq; then
   echo "    (note) jq not found; some JSON parsing will be skipped"
 fi
