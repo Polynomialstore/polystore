@@ -25,9 +25,6 @@ function inferPublicDomain(runtimeHost: string): string {
   if (runtimeHost === 'polynomialstore.com' || runtimeHost.endsWith('.polynomialstore.com')) return 'polynomialstore.com'
   // Cloudflare preview hosts should resolve to production public service subdomains.
   if (runtimeHost.endsWith('.workers.dev') || runtimeHost.endsWith('.pages.dev')) return 'polynomialstore.com'
-  if (runtimeHost.startsWith('web.') && runtimeHost.split('.').length >= 3) {
-    return runtimeHost.slice(4)
-  }
   return ''
 }
 
@@ -96,7 +93,7 @@ const GATEWAY_BASE = localOnlyGatewayBase(
 )
 const EXPLORER_BASE =
   envString(ENV.VITE_EXPLORER_BASE) ||
-  (RUNTIME_ORIGIN || defaultBase('web', 'http://localhost:5173'))
+  (RUNTIME_ORIGIN || (PUBLIC_DOMAIN ? `https://${PUBLIC_DOMAIN}` : 'http://localhost:5173'))
 const SP_BASE = envString(ENV.VITE_SP_BASE) || 'http://localhost:8082'
 const GATEWAY_DISABLED = ENV.VITE_DISABLE_GATEWAY === '1'
 const P2P_ENABLED = (() => {

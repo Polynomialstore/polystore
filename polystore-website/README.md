@@ -52,6 +52,14 @@ Output is generated in the `dist/` directory.
 
 ## Deployment
 
-This project is configured for **Netlify** via `netlify.toml`.
-*   **Build Command:** `npm run build`
-*   **Publish Directory:** `dist`
+This project is configured for a Cloudflare static-assets Worker via `wrangler.jsonc`.
+
+- Worker name: `polystore`
+- Git repository: `Polynomialstore/polystore`
+- Project root: `polystore-website`
+- Production branch: `main`
+- Build command: `npm ci && npm run ci:build`
+- Asset output directory: `dist`
+- Canonical custom domain: `polynomialstore.com`
+
+The frontend runtime treats `polynomialstore.com` as the canonical public domain and uses that apex to infer `faucet/lcd/evm` service subdomains for production deployments.
