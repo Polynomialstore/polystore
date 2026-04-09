@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Browser smoke test runner:
-# - Starts the local stack (nilchaind + gateway + faucet + web)
+# - Starts the local stack (polystorechaind + gateway + faucet + web)
 # - Runs Playwright smoke tests
 # - Always stops the stack on exit
 
@@ -54,4 +54,4 @@ wait_for_http "web" "http://localhost:${WEB_PORT}/"
 wait_for_http "gateway" "${GATEWAY_BASE}/health"
 
 echo "==> Running Playwright..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- "${E2E_BROWSER_SMOKE_SPECS[@]}")
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- "${E2E_BROWSER_SMOKE_SPECS[@]}")

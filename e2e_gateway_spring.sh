@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-NILCHAIND_BIN="./nilchain/nilchaind"
+POLYSTORECHAIND_BIN="./polystorechain/polystorechaind"
 
 # Setup
 echo "=== E2E Spring Roadmap: Gateway Flow ==="
@@ -10,11 +10,11 @@ export CHAIN_ID="${CHAIN_ID:-test-1}"
 sleep 10 # Wait for startup
 
 # Use faucet address as the logical owner for this legacy Mode 1 flow.
-OWNER_ADDR=$(timeout 10s $NILCHAIND_BIN keys show faucet -a --home _artifacts/nilchain_data --keyring-backend test | tail -n 1)
+OWNER_ADDR=$(timeout 10s $POLYSTORECHAIND_BIN keys show faucet -a --home _artifacts/polystorechain_data --keyring-backend test | tail -n 1)
 echo "Owner: $OWNER_ADDR"
 
 # Create test file
-echo "Hello NilStore Spring" > test_spring.txt
+echo "Hello PolyStore Spring" > test_spring.txt
 
 # 1. Upload
 echo "=== 1. Uploading File ==="
@@ -41,17 +41,17 @@ TX_HASH=$(echo $DEAL_RESP | jq -r '.tx_hash')
 sleep 6
 
 echo "Checking TX status..."
-$NILCHAIND_BIN q tx $TX_HASH -o json
+$POLYSTORECHAIND_BIN q tx $TX_HASH -o json
 
 # Get Deal ID from Chain (query list-deals and pick last)
-DEALS_JSON=$($NILCHAIND_BIN query nilchain list-deals -o json)
+DEALS_JSON=$($POLYSTORECHAIND_BIN query polystorechain list-deals -o json)
 echo "Deals JSON: $DEALS_JSON"
 DEAL_ID=$(echo $DEALS_JSON | jq -r '.deals[-1].id // 0')
 echo "Deal ID: $DEAL_ID"
 
 # 3. Committing Content
 echo "=== 3. Committing Content ==="
-$NILCHAIND_BIN tx nilchain update-deal-content --help
+$POLYSTORECHAIND_BIN tx polystorechain update-deal-content --help
 COMMIT_RESP=$(timeout 10s curl -s -X POST http://localhost:8080/gateway/update-deal-content \
   -H "Content-Type: application/json" \
   -d "{\"deal_id\":$DEAL_ID, \"cid\":\"$MANIFEST_ROOT\", \"size_bytes\":$SIZE, \"total_mdus\":3, \"witness_mdus\":1}")
@@ -67,7 +67,7 @@ sleep 6
 
 # 4. Verify
 echo "=== 4. Verifying State ==="
-FINAL_DEAL=$($NILCHAIND_BIN query nilchain get-deal --id $DEAL_ID -o json)
+FINAL_DEAL=$($POLYSTORECHAIND_BIN query polystorechain get-deal --id $DEAL_ID -o json)
 FINAL_SIZE=$(echo $FINAL_DEAL | jq -r '.deal.size')
 
 FINAL_MANIFEST_HEX=$(python3 - <<PY

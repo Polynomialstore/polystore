@@ -1,0 +1,16 @@
+[Unit]
+Description=PolyStore devnet chain daemon (polystorechaind)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/polystore/polystorechaind.env
+WorkingDirectory=/opt/polystore
+ExecStart=/bin/bash -lc 'exec "$POLYSTORECHAIND_BIN" start --home "$POLYSTORE_HOME" --rpc.laddr "$POLYSTORE_RPC_LADDR" --minimum-gas-prices "$POLYSTORE_GAS_PRICES" --api.enable'
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

@@ -1,4 +1,4 @@
-# NilStore Testnet Readiness Report
+# PolyStore Testnet Readiness Report
 
 Date: 2026-02-05
 
@@ -14,7 +14,7 @@ Start the full local stack (chain + faucet + gateways + optional web UI):
 
 Notes:
 - `run_local_stack.sh start` **always re-initializes** the chain home.
-- Default home is `_artifacts/nilchain_data`. If you set `NIL_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `NIL_REINIT_HOME=1`.
+- Default home is `_artifacts/polystorechain_data`. If you set `POLYSTORE_HOME` outside `_artifacts/`, the script will refuse to wipe it unless you set `POLYSTORE_REINIT_HOME=1`.
 
 Stop everything started by the script:
 
@@ -27,7 +27,7 @@ Stop everything started by the script:
 Run the same local stack but without the dev faucet, auto-funding, or tx relay:
 
 ```bash
-NIL_START_FAUCET=0 NIL_AUTO_FAUCET_EVM=0 NIL_ENABLE_TX_RELAY=0 ./scripts/run_local_stack.sh start
+POLYSTORE_START_FAUCET=0 POLYSTORE_AUTO_FAUCET_EVM=0 POLYSTORE_ENABLE_TX_RELAY=0 ./scripts/run_local_stack.sh start
 ```
 
 Notes:
@@ -66,20 +66,20 @@ When you are ready to invite **trusted collaborators** (WAN, multi-host), use th
 All items below are expected to be verifiable via the unit tests and/or the e2e scripts.
 
 - Deal expiry + extend:
-  - Unit tests: `nilchain/x/nilchain/keeper/msg_server_extend_deal_test.go`
+  - Unit tests: `polystorechain/x/polystorechain/keeper/msg_server_extend_deal_test.go`
 - Mandatory retrieval sessions:
-  - Chain session enforcement + range checks: `nilchain/x/nilchain/keeper/msg_server_retrieval_sessions_test.go`
+  - Chain session enforcement + range checks: `polystorechain/x/polystorechain/keeper/msg_server_retrieval_sessions_test.go`
   - Gateway-required header enforcement: exercised by `scripts/e2e_open_retrieval_session_cli.sh` and `scripts/e2e_lifecycle.sh`
 - Retrieval access control modes (restricted / allowlist / voucher / public):
-  - Unit tests: `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go`
+  - Unit tests: `polystorechain/x/polystorechain/keeper/msg_server_sponsored_sessions_test.go`
 - Voucher one-time use / replay prevention:
-  - Unit test: `nilchain/x/nilchain/keeper/msg_server_sponsored_sessions_test.go:TestSponsoredOpen_Voucher_ReplayRejected`
+  - Unit test: `polystorechain/x/polystorechain/keeper/msg_server_sponsored_sessions_test.go:TestSponsoredOpen_Voucher_ReplayRejected`
 - Protocol audit/repair retrieval sessions (protocol budget funded):
-  - Audit budget + task derivation tests: `nilchain/x/nilchain/keeper/epoch_audit_test.go`
-  - Protocol session open/consume tests: `nilchain/x/nilchain/keeper/msg_server_protocol_sessions_test.go`
+  - Audit budget + task derivation tests: `polystorechain/x/polystorechain/keeper/epoch_audit_test.go`
+  - Protocol session open/consume tests: `polystorechain/x/polystorechain/keeper/msg_server_protocol_sessions_test.go`
 - Compression round-trip:
-  - NilCE v1 is **opt-in** (`NIL_NILCE=0` by default). The encode/decode helpers are unit-tested in `nil_gateway/nilce_test.go`.
-  - CI does not currently require NilCE-enabled end-to-end coverage.
+  - PolyCE v1 is **opt-in** (`POLYSTORE_POLYCE=0` by default). The encode/decode helpers are unit-tested in `polystore_gateway/polyce_test.go`.
+  - CI does not currently require PolyCE-enabled end-to-end coverage.
 - Wallet-first chain writes (MetaMask/EVM signed intents; no relayer required):
   - Covered by Playwright E2E flows (in-page E2E wallet when `VITE_E2E=1`), not by `scripts/e2e_lifecycle.sh`.
 
@@ -94,19 +94,19 @@ Provider draining is implemented as:
   - `Params.max_repairing_bytes_ratio_bps` (optional global cap)
 
 Unit tests:
-- `nilchain/x/nilchain/keeper/draining_test.go`
+- `polystorechain/x/polystorechain/keeper/draining_test.go`
 
 ## How to run unit tests
 
 ```bash
-cd nilchain
+cd polystorechain
 go test ./...
 ```
 
 ## What remains / known gaps
 
 - Mode1 does not yet have explicit make-before-break churn state (drain/rotation schedulers are Mode2-only).
-- Mode2 Stripe Playwright E2E asserts **byte-for-byte equality** between uploaded and downloaded payloads (`nil-website/tests/mode2-stripe.spec.ts`).
+- Mode2 Stripe Playwright E2E asserts **byte-for-byte equality** between uploaded and downloaded payloads (`polystore-website/tests/mode2-stripe.spec.ts`).
 
 ## CI does NOT prove (read before inviting collaborators)
 

@@ -1,0 +1,15 @@
+{
+  "name": "polystore_core",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "polystore_core_bg.wasm",
+    "polystore_core.js",
+    "polystore_core.d.ts"
+  ],
+  "main": "polystore_core.js",
+  "types": "polystore_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

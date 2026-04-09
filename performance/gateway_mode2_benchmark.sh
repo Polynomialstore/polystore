@@ -10,14 +10,14 @@ Options:
   --iterations N             Number of runs per size (default: 1)
   --gateway URL              Gateway URL (default: http://localhost:8080)
   --chain-id ID              Chain ID for chain query (default: test-1)
-  --chain-home PATH          nilchaind home used by CLI queries (default: ../_artifacts/nilchain_data)
+  --chain-home PATH          polystorechaind home used by CLI queries (default: ../_artifacts/polystorechain_data)
   --chain-node URL           Chain RPC node (default: tcp://127.0.0.1:26657)
   --creator ADDRESS          Optional deal creator for /gateway/create-deal
   --service-hint HINT        Mode 2 service hint, e.g. "General:rs=8+4" (default)
   --iterations-out PATH      Output directory for artifacts (default: .artifacts/gateway_mode2_benchmark)
   --output-prefix PREFIX     Output file name prefix (default: mode2-bench)
   --upload-timeout-seconds N Timeout for each upload call in seconds (default: 1800)
-  --chain-binary PATH        Path to nilchaind binary (default: nilchaind)
+  --chain-binary PATH        Path to polystorechaind binary (default: polystorechaind)
   --poll-status              Poll /gateway/upload-status for each upload
   --help                     Show this help
 
@@ -33,14 +33,14 @@ Environment:
   GATEWAY_MODE2_BENCH_SERVICE_HINT
   GATEWAY_MODE2_BENCH_CHAIN_WAIT_SECONDS
   GATEWAY_MODE2_BENCH_STATUS_POLL_SECONDS
-  NILCHAIN_BIN
-  NILCHAIND_BIN
-  NIL_GATEWAY_URL
+  POLYSTORECHAIN_BIN
+  POLYSTORECHAIND_BIN
+  POLYSTORE_GATEWAY_URL
   GATEWAY_URL
   CHAIN_ID
   CHAIN_HOME
-  NILCHAIN_HOME
-  NILCHAIN_NODE
+  POLYSTORECHAIN_HOME
+  POLYSTORECHAIN_NODE
 EOF
 }
 
@@ -65,11 +65,11 @@ RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 sizes_csv="${GATEWAY_MODE2_BENCH_SIZES:-64,128,256}"
 iterations="${GATEWAY_MODE2_BENCH_ITERATIONS:-1}"
-gateway_url="${NIL_GATEWAY_URL:-${GATEWAY_URL:-http://localhost:8080}}"
+gateway_url="${POLYSTORE_GATEWAY_URL:-${GATEWAY_URL:-http://localhost:8080}}"
 chain_id="${CHAIN_ID:-test-1}"
-chain_home="${NILCHAIN_HOME:-${CHAIN_HOME:-../_artifacts/nilchain_data}}"
-chain_node="${NILCHAIN_NODE:-tcp://127.0.0.1:26657}"
-chain_bin="${NILCHAIND_BIN:-${NILCHAIN_BIN:-nilchaind}}"
+chain_home="${POLYSTORECHAIN_HOME:-${CHAIN_HOME:-../_artifacts/polystorechain_data}}"
+chain_node="${POLYSTORECHAIN_NODE:-tcp://127.0.0.1:26657}"
+chain_bin="${POLYSTORECHAIND_BIN:-${POLYSTORECHAIN_BIN:-polystorechaind}}"
 service_hint="${GATEWAY_MODE2_BENCH_SERVICE_HINT:-General:rs=8+4}"
 chain_duration="${GATEWAY_MODE2_BENCH_DURATION:-1000}"
 chain_escrow="${GATEWAY_MODE2_BENCH_ESCROW:-1000000}"
@@ -250,7 +250,7 @@ create_mode2_deal() {
 
 list_last_deal_id() {
   local out
-  if ! out="$("$chain_bin" --home "$chain_home" query nilchain list-deals --chain-id "$chain_id" --node "$chain_node" --output json 2>/dev/null)"; then
+  if ! out="$("$chain_bin" --home "$chain_home" query polystorechain list-deals --chain-id "$chain_id" --node "$chain_node" --output json 2>/dev/null)"; then
     return 1
   fi
   jq -r '.deals[-1].id // .deals[-1].deal_id // empty' <<<"$out"

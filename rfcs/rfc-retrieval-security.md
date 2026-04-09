@@ -4,7 +4,7 @@
 **Scope:** Retrieval Market, Game Theory
 **Related:** `whitepaper.md`, `rfcs/rfc-blob-alignment-and-striping.md`
 
-This document analyzes the security model of the NilStore Retrieval Market, specifically focusing on the "Fair Exchange" problem between Storage Providers (SPs) and Data Users.
+This document analyzes the security model of the PolyStore Retrieval Market, specifically focusing on the "Fair Exchange" problem between Storage Providers (SPs) and Data Users.
 
 ---
 

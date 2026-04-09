@@ -3,7 +3,7 @@
 **Status:** Draft (pre‑alpha)  
 **Last updated:** 2026-01-23
 
-**Scope:** Chain (`nilchain/`), Gateway (`nil_gateway/`), Providers, UI (`nil-website/`)
+**Scope:** Chain (`polystorechain/`), Gateway (`polystore_gateway/`), Providers, UI (`polystore-website/`)
 
 **Hard constraints respected**
 - Does **not** modify the frozen escrow/retrieval settlement contract in `rfcs/rfc-pricing-and-escrow-accounting.md`.
@@ -14,7 +14,7 @@
 
 ## 1. Problem statement
 
-NilStore’s docs already reference that “deals can expire” and providers should garbage-collect expired data, but the protocol lacks:
+PolyStore’s docs already reference that “deals can expire” and providers should garbage-collect expired data, but the protocol lacks:
 
 1) **Enforcement**: chain-side checks that prohibit mutations / sessions / proofs after deal expiry.  
 2) **Renewal**: a deterministic `ExtendDeal` path that charges **spot storage_price at extension time** for the next period.  
@@ -86,7 +86,7 @@ Compute:
 - `extension_cost = ceil(P * size * additional_duration_blocks)`
 
 Accounting:
-- transfer `extension_cost` from `deal.owner` to the `nilchain` module account
+- transfer `extension_cost` from `deal.owner` to the `polystorechain` module account
 - increase `deal.escrow_balance += extension_cost`
 
 Rounding:
@@ -150,10 +150,10 @@ For each `(deal_id, slot)` assigned:
 2) If `cancelled == true`, schedule deletion immediately.
 3) Else if `h > deal.end_block + deal_extension_grace_blocks`, schedule deletion.
 4) Delete local deal shards + metadata (MDU #0, witness MDUs, user MDUs, caches).
-5) Emit a local log line and metrics counter (`nilstore_gc_deletes_total`).
+5) Emit a local log line and metrics counter (`polystore_gc_deletes_total`).
 
 Providers MUST enforce **retrieval-session gating** on the data plane:
-- providers MUST refuse to serve Deal bytes unless the request is bound to an on-chain `OPEN` retrieval session (`X-Nil-Session-Id`),
+- providers MUST refuse to serve Deal bytes unless the request is bound to an on-chain `OPEN` retrieval session (`X-PolyStore-Session-Id`),
 - requests MUST be blob-aligned and a subset of the session’s declared blob-range,
 - this applies even while the deal is ACTIVE (not only after expiry).
 

@@ -4,7 +4,7 @@ import time
 import os
 
 # Configuration
-SIMULATION_FILE = "nil-website/src/data/adversarial_simulation.json"
+SIMULATION_FILE = "polystore-website/src/data/adversarial_simulation.json"
 ITERATIONS = 100
 
 def main():
