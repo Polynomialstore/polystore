@@ -19,10 +19,10 @@ You must use the repo context and the existing tasks/code structure. Do **not** 
 - `scripts/e2e_lifecycle.sh` (econ lifecycle baseline)
 
 If you need to reference code locations, prefer these likely areas (verify in repo):
-- Chain params/proto: `nilchain/proto/nilchain/nilchain/v1/params.proto`
-- Chain keeper logic: `nilchain/x/nilchain/keeper/`
-- Gateway/router: `nil_gateway/`
-- P2P deputy stubs: `nil_p2p/`
+- Chain params/proto: `polystorechain/proto/polystorechain/polystorechain/v1/params.proto`
+- Chain keeper logic: `polystorechain/x/polystorechain/keeper/`
+- Gateway/router: `polystore_gateway/`
+- P2P deputy stubs: `polystore_p2p/`
 
 ## Output (single file)
 

@@ -8,14 +8,14 @@
 
 ## 1. Why we need this
 
-NilStore has two fundamental goals that are in tension:
+PolyStore has two fundamental goals that are in tension:
 
 1) Users must be able to reliably retrieve bytes (“service works”).  
 2) The protocol must be able to **attribute failures** without trusting off-chain claims (“service is accountable”).
 
 Classic “he said / she said” disputes (user claims provider is offline; provider claims user is lying) are a trap unless the protocol has a logistics system that can **route around disputes** and generate verifiable evidence.
 
-NilStore’s approach is:
+PolyStore’s approach is:
 
 - **Mandatory retrieval sessions** for all served bytes (no session, no bytes).  
 - A **deputy/proxy market** for the user “sad path” (user can’t retrieve directly).  
@@ -53,7 +53,7 @@ This is intentional. It enables routing and batching without changing accounting
 
 **Happy path**
 1) The user opens a session (or a sponsored session for public deals).
-2) The user (or their gateway) downloads bytes from an assigned provider using `X-Nil-Session-Id`.
+2) The user (or their gateway) downloads bytes from an assigned provider using `X-PolyStore-Session-Id`.
 
 **Sad path**
 1) The user opens a session as usual, but direct retrieval fails (timeouts/connection errors/invalid responses).

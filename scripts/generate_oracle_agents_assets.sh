@@ -48,7 +48,7 @@ append_full "rfcs/rfc-challenge-derivation-and-quotas.md" "rfcs/rfc-challenge-de
 append_full "rfcs/rfc-mode2-onchain-state.md" "rfcs/rfc-mode2-onchain-state.md"
 
 # Chain params definition (full).
-append_full "nilchain/proto/nilchain/nilchain/v1/params.proto" "nilchain/proto/nilchain/nilchain/v1/params.proto"
+append_full "polystorechain/proto/polystorechain/polystorechain/v1/params.proto" "polystorechain/proto/polystorechain/polystorechain/v1/params.proto"
 
 # Devnet + CI gates (excerpts/full).
 append_excerpt "scripts/run_devnet_alpha_multi_sp.sh (usage excerpt)" "scripts/run_devnet_alpha_multi_sp.sh" 1 60

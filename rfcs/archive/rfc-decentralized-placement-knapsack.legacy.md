@@ -8,7 +8,7 @@
 
 ## 1. Motivation & Problem Statement
 
-NilStore must balance two conflicting requirements:
+PolyStore must balance two conflicting requirements:
 1.  **Anti-Cherry-Picking:** Storage Providers (SPs) must not choose their own data to prevent "generating" favorable data for attacks or ignoring cold data.
 2.  **Performance Optimization:** The network must place "Hot" data on high-performance (Edge/SSD) nodes and "Cold" data on efficient (Archive/HDD) nodes, while respecting geographic diversity and bandwidth constraints.
 
@@ -37,7 +37,7 @@ The system state is a bipartite graph of **Deals** ($D$) and **Providers** ($P$)
 
 ### 2.2 Roles
 1.  **Solver Committees:** Off-chain actors (randomly selected Validators or specialized nodes) that compute optimal placements.
-2.  **Verifiers:** The L1 Chain (NilChain) checks validity proofs (Constraints).
+2.  **Verifiers:** The L1 Chain (PolyStore Chain) checks validity proofs (Constraints).
 3.  **Challengers:** Any actor can submit a fraud proof against an invalid proposal.
 
 ---
@@ -68,7 +68,7 @@ message PlacementProposal {
   bytes signature = 5;
 }
 ```
-*Note: The full diff data is published to a DA layer (or NilStore itself) and availability is guaranteed by the committee.*
+*Note: The full diff data is published to a DA layer (or PolyStore itself) and availability is guaranteed by the committee.*
 
 ### 3.3 Phase 3: Challenge Game
 For a window of $W$ blocks, anyone can challenge:
@@ -148,6 +148,6 @@ This RFC consumes the metrics from `rfc-heat-and-dynamic-placement.md`:
 
 ## 8. Open Questions
 
-1.  **DA for Diff Data:** Where exactly is the large "Diff" payload stored during the challenge window? (Likely a specialized NilStore topic or temporary blob transaction).
+1.  **DA for Diff Data:** Where exactly is the large "Diff" payload stored during the challenge window? (Likely a specialized PolyStore topic or temporary blob transaction).
 2.  **Solver Complexity:** Can we standardize a WASM-based solver so valid scores can be proven on-chain (or via ZK)?
 3.  **Emergency Override:** How does the system handle "Panic Mode" (e.g., massive region failure) bypassing the slow epoch cycle?

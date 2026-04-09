@@ -43,12 +43,12 @@ export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export E2E_LOCAL_STACK=1
 export VITE_P2P_ENABLED=1
-export VITE_P2P_PROTOCOL="/nilstore/fetch/1.0.0"
-export NIL_P2P_ENABLED=1
-export NIL_P2P_LISTEN_ADDRS="${NIL_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}"
+export VITE_P2P_PROTOCOL="/polystore/fetch/1.0.0"
+export POLYSTORE_P2P_ENABLED=1
+export POLYSTORE_P2P_LISTEN_ADDRS="${POLYSTORE_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}"
 
 # Avoid starting p2p on the SP gateway to prevent port conflicts.
-export NIL_P2P_ENABLED_SP=0
+export POLYSTORE_P2P_ENABLED_SP=0
 
 echo "==> Starting local stack (libp2p enabled)..."
 "$STACK_SCRIPT" start
@@ -58,4 +58,4 @@ wait_for_http "gateway" "http://localhost:8080/status"
 wait_for_http "gateway health" "http://localhost:8080/health"
 
 echo "==> Running Playwright (libp2p)..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/libp2p-fetch.spec.ts)
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/libp2p-fetch.spec.ts)

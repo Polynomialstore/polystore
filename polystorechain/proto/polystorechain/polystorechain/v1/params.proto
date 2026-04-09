@@ -1,0 +1,136 @@
+syntax = "proto3";
+package polystorechain.polystorechain.v1;
+
+import "amino/amino.proto";
+import "gogoproto/gogo.proto";
+import "cosmos/base/v1beta1/coin.proto";
+
+option go_package = "polystorechain/x/polystorechain/types";
+
+// Params defines the parameters for the module.
+message Params {
+  option (amino.name) = "polystorechain/x/polystorechain/Params";
+  option (gogoproto.equal) = true;
+
+  uint64 base_stripe_cost = 1; // NIL per epoch
+  uint64 halving_interval = 2; // Blocks
+  uint64 eip712_chain_id = 3; // Numeric EIP-712 domain chainId (default 31337 for localhost devnet)
+
+  string storage_price = 4 [
+    (gogoproto.customtype) = "cosmossdk.io/math.LegacyDec",
+    (gogoproto.nullable) = false
+  ]; // Price per byte per block in base denom (devnet: stake)
+
+  cosmos.base.v1beta1.Coin deal_creation_fee = 5 [
+    (gogoproto.nullable) = false
+  ];
+
+  uint64 min_duration_blocks = 6;
+
+  cosmos.base.v1beta1.Coin base_retrieval_fee = 7 [
+    (gogoproto.nullable) = false
+  ]; // Fixed fee charged on retrieval session open (burned).
+
+  cosmos.base.v1beta1.Coin retrieval_price_per_blob = 8 [
+    (gogoproto.nullable) = false
+  ]; // Variable retrieval price per 128KiB blob (locked on session open).
+
+  uint64 retrieval_burn_bps = 9; // Burn cut in basis points (e.g., 500 = 5%).
+
+  // Length of the elasticity spend window ("month") in blocks.
+  // When the chain height exceeds spend_window_start_height + month_len_blocks,
+  // the window resets and spend_window_spent returns to 0.
+  uint64 month_len_blocks = 10;
+
+  // --- Unified Liveness / Quotas (Mode 1 + Mode 2) ---
+  // Length of a liveness epoch in blocks. Used for deterministic challenge derivation.
+  uint64 epoch_len_blocks = 11;
+
+  // Proof quota per epoch, in basis points of slot-responsible bytes.
+  // See `rfcs/rfc-challenge-derivation-and-quotas.md`.
+  uint64 quota_bps_per_epoch_hot = 12;
+  uint64 quota_bps_per_epoch_cold = 13;
+
+  // Minimum/maximum number of blobs required per epoch per assignment.
+  uint64 quota_min_blobs = 14;
+  uint64 quota_max_blobs = 15;
+
+  // Cap on how much of the quota can be satisfied via organic retrieval credits.
+  uint64 credit_cap_bps = 16;
+
+  // Evict (trigger repair) after this many consecutive missed epochs.
+  uint64 evict_after_missed_epochs = 17;
+
+  // Renewal grace window: allow extending an expired deal until
+  // `current_height <= end_block + deal_extension_grace_blocks`.
+  //
+  // See `rfcs/rfc-deal-expiry-and-extension.md`.
+  uint64 deal_extension_grace_blocks = 18;
+
+  // Maximum TTL for sponsored retrieval vouchers, in blocks.
+  // 0 disables the TTL bound (not recommended).
+  //
+  // See `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`.
+  uint64 voucher_max_ttl_blocks = 19;
+
+  // --- Protocol audit budget (minted, deterministic; see RFCs) ---
+  // audit_budget_mint = min(
+  //   ceil(audit_budget_bps / 10_000 * epoch_slot_rent),
+  //   ceil(audit_budget_cap_bps / 10_000 * epoch_slot_rent),
+  // )
+  uint64 audit_budget_bps = 20;
+  uint64 audit_budget_cap_bps = 21;
+  // Maximum number of epochs worth of unused budget that may carry forward.
+  // 0 means "no carryover" (cap to 1 epoch).
+  uint64 audit_budget_carryover_epochs = 22;
+
+  // --- Base reward pool emission schedule (see `rfcs/rfc-base-reward-pool-and-emissions.md`) ---
+  uint64 emission_start_height = 23;
+  uint64 base_reward_halving_interval_blocks = 24;
+  uint64 base_reward_bps_start = 25;
+  uint64 base_reward_bps_tail = 26;
+
+  // --- Provider draining / controlled churn (see `rfcs/rfc-provider-exit-and-draining.md`) ---
+  // Maximum bytes per epoch that may be moved into REPAIRING due to voluntary drain.
+  // 0 disables the drain scheduler.
+  uint64 max_drain_bytes_per_epoch = 27;
+  // Global cap on REPAIRING bytes as a share of ACTIVE bytes (basis points).
+  // 0 disables this cap.
+  uint64 max_repairing_bytes_ratio_bps = 28;
+  // Optional "chaos monkey" rotation budget (bytes per epoch).
+  // 0 disables routine rotation.
+  uint64 rotation_bytes_per_epoch = 29;
+
+  // --- Dynamic pricing experiments (devnet-only; disabled by default) ---
+  // When enabled, the chain may update storage/retrieval price parameters
+  // deterministically at epoch boundaries based on on-chain signals.
+  bool dynamic_pricing_enabled = 30;
+
+  // Storage pricing bounds used by the dynamic controller.
+  string storage_price_min = 31 [
+    (gogoproto.customtype) = "cosmossdk.io/math.LegacyDec",
+    (gogoproto.nullable) = false
+  ];
+  string storage_price_max = 32 [
+    (gogoproto.customtype) = "cosmossdk.io/math.LegacyDec",
+    (gogoproto.nullable) = false
+  ];
+  // Utilization target (basis points) at which storage_price reaches storage_price_max.
+  // 0 disables dynamic storage pricing.
+  uint64 storage_target_utilization_bps = 33;
+
+  // Retrieval pricing bounds used by the dynamic controller.
+  cosmos.base.v1beta1.Coin retrieval_price_per_blob_min = 34 [
+    (gogoproto.nullable) = false
+  ];
+  cosmos.base.v1beta1.Coin retrieval_price_per_blob_max = 35 [
+    (gogoproto.nullable) = false
+  ];
+  // Demand target (blobs per epoch) at which retrieval_price_per_blob reaches retrieval_price_per_blob_max.
+  // 0 disables dynamic retrieval pricing.
+  uint64 retrieval_target_blobs_per_epoch = 36;
+
+  // Max per-epoch step (basis points) for dynamic price updates.
+  // 0 disables the step clamp (directly set to target).
+  uint64 dynamic_pricing_max_step_bps = 37;
+}

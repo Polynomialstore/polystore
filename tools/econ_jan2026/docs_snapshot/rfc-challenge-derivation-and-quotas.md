@@ -1,7 +1,7 @@
 # RFC: Challenge Derivation & Proof Quota Policy (Unified Liveness v1)
 
 **Status:** Sprint‑0 Frozen (Ready for implementation)
-**Scope:** Chain protocol policy (`nilchain/`)
+**Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
 
@@ -9,7 +9,7 @@
 
 ## 0. Executive Summary
 
-NilStore’s “Unified Liveness” requires the chain to deterministically answer:
+PolyStore’s “Unified Liveness” requires the chain to deterministically answer:
 1. **What** positions a provider must prove for a given epoch (synthetic challenges)
 2. **How many** proofs are required (quota)
 3. **How organic retrieval** reduces synthetic demand (credits)
@@ -26,7 +26,7 @@ This RFC freezes:
 ## 1. Definitions
 
 ### 1.1 Epoch
-NilStore defines a **liveness epoch** with fixed length:
+PolyStore defines a **liveness epoch** with fixed length:
 - `EPOCH_LEN_BLOCKS` (param; e.g. 100 blocks)
 - `epoch_id = floor(block_height / EPOCH_LEN_BLOCKS)`
 
@@ -73,7 +73,7 @@ Define the epoch seed as:
 
 ```
 epoch_start_height = epoch_id * EPOCH_LEN_BLOCKS
-R_e = SHA256("nilstore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
+R_e = SHA256("polystore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
 ```
 
 Rationale:
@@ -106,7 +106,7 @@ Let:
 For slot `s ∈ [0..N-1]` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 row        = U64BE(seed[8..16]) % rows
 
@@ -129,7 +129,7 @@ Let:
 For provider `P` and challenge ordinal `i`:
 
 ```
-seed = SHA256("nilstore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
+seed = SHA256("polystore/chal/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || ADDR20(provider) || U64BE(i))
 mdu_ordinal = U64BE(seed[0..8]) % user_mdus
 blob_index  = U64BE(seed[8..16]) % 64
 mdu_index   = meta_mdus + mdu_ordinal
@@ -192,7 +192,7 @@ credits_blobs = min(credit_cap, unique_proved_blobs_in_epoch)
 ```
 
 Uniqueness is enforced by storing a per-epoch set keyed by:
-`credit_id = SHA256("nilstore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
+`credit_id = SHA256("polystore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
 
 ---
 
