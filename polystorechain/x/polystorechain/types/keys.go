@@ -3,11 +3,14 @@ package types
 import "cosmossdk.io/collections"
 
 const (
-	// ModuleName defines the module name
-	ModuleName = "polystorechain"
-	// ProtocolBudgetModuleName is a dedicated module account used to fund
-	// protocol retrieval sessions (audit/repair).
-	ProtocolBudgetModuleName = "polystorechain_protocol_budget"
+	// ModuleName keeps the legacy internal module/store name so the renamed
+	// binary can open the existing devnet state without a store migration.
+	// External gRPC/LCD APIs are still exposed under the polystorechain proto
+	// namespace; this is only the internal Cosmos module identifier.
+	ModuleName = "nilchain"
+	// ProtocolBudgetModuleName keeps the legacy module-account name for state
+	// compatibility with the existing devnet.
+	ProtocolBudgetModuleName = "nilchain_protocol_budget"
 
 	// StoreKey defines the primary module store key
 	StoreKey = ModuleName
@@ -18,8 +21,9 @@ const (
 	GovModuleName = "gov"
 )
 
-// ParamsKey is the prefix to retrieve all Params
-var ParamsKey = collections.NewPrefix("p_polystorechain")
+// ParamsKey keeps the legacy params prefix for compatibility with the
+// pre-rename on-disk state.
+var ParamsKey = collections.NewPrefix("p_nilchain")
 
 var (
 	ProofCountKey = collections.NewPrefix("ProofCount/value/")
