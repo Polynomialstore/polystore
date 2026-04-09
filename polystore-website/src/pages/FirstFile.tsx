@@ -36,7 +36,7 @@ export function FirstFile() {
   const {
     address,
     isConnected,
-    nilAddress,
+    polystoreAddress,
     hasFunds,
     balanceLabel,
     isWrongNetwork,
@@ -70,9 +70,9 @@ export function FirstFile() {
   }, [address])
 
   useEffect(() => {
-    if (!nilAddress) return
+    if (!polystoreAddress) return
     let canceled = false
-    const owner = nilAddress
+    const owner = polystoreAddress
 
     void lcdFetchDeals(appConfig.lcdBase)
       .then((all) => {
@@ -93,7 +93,7 @@ export function FirstFile() {
     return () => {
       canceled = true
     }
-  }, [dealId, nilAddress])
+  }, [dealId, polystoreAddress])
 
   const step2Ready = isConnected && !isWrongNetwork
   const funded = hasFunds || faucetTxStatus === 'confirmed'

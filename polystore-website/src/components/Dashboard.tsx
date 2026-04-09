@@ -88,7 +88,7 @@ export function Dashboard() {
   const {
     address,
     isConnected,
-    nilAddress,
+    polystoreAddress,
     hasFunds,
     isWrongNetwork,
     walletChainId,
@@ -223,8 +223,8 @@ export function Dashboard() {
   }, [refreshWalletNetwork, switchNetwork])
 
   const handleRefreshSummary = async () => {
-    if (!nilAddress) return
-    await Promise.allSettled([fetchDeals(nilAddress), fetchBalances(nilAddress), fetchProviders()])
+    if (!polystoreAddress) return
+    await Promise.allSettled([fetchDeals(polystoreAddress), fetchBalances(polystoreAddress), fetchProviders()])
   }
 
 
@@ -320,7 +320,7 @@ export function Dashboard() {
   const [, setRetrievalParamsError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!nilAddress) {
+    if (!polystoreAddress) {
       setRetrievalSessions([])
       setRetrievalSessionsError(null)
       setRetrievalSessionsLoading(false)
@@ -334,7 +334,7 @@ export function Dashboard() {
       setRetrievalSessionsLoading(true)
       try {
         const url = `${appConfig.lcdBase}/polystorechain/polystorechain/v1/retrieval-sessions/by-owner/${encodeURIComponent(
-          nilAddress,
+          polystoreAddress,
         )}?pagination.limit=1000`
         const res = await fetch(url)
         if (!res.ok) {
@@ -388,7 +388,7 @@ export function Dashboard() {
         document.removeEventListener('visibilitychange', handleVisibility)
       }
     }
-  }, [nilAddress])
+  }, [polystoreAddress])
 
   useEffect(() => {
     let cancelled = false
@@ -447,8 +447,8 @@ export function Dashboard() {
   }, [])
 
   const ownedDeals = useMemo(
-    () => (nilAddress ? deals.filter((deal) => deal.owner === nilAddress) : deals),
-    [deals, nilAddress],
+    () => (polystoreAddress ? deals.filter((deal) => deal.owner === polystoreAddress) : deals),
+    [deals, polystoreAddress],
   )
   const targetDeal = useMemo(() => {
     if (!targetDealId) return null
@@ -515,12 +515,12 @@ export function Dashboard() {
 
   useEffect(() => {
     if (targetDealId) return
-    if (!nilAddress) return
+    if (!polystoreAddress) return
     if (ownedDeals.length === 0) return
     const newestDeal = ownedDeals[ownedDeals.length - 1]
     if (!newestDeal?.id) return
     setTargetDealId(String(newestDeal.id))
-  }, [nilAddress, ownedDeals, targetDealId])
+  }, [polystoreAddress, ownedDeals, targetDealId])
 
   const mode2Config = useMemo(() => {
     if (placementProfile !== 'custom') return { slots: null as number | null, error: null as string | null }
@@ -600,10 +600,10 @@ export function Dashboard() {
   }, [targetDealId])
 
   useEffect(() => {
-    if (address && nilAddress) {
+    if (address && polystoreAddress) {
       optimisticCidOverridesRef.current = {}
-      fetchDeals(nilAddress)
-      fetchBalances(nilAddress)
+      fetchDeals(polystoreAddress)
+      fetchBalances(polystoreAddress)
       fetchProviders()
     } else {
       optimisticCidOverridesRef.current = {}
@@ -611,7 +611,7 @@ export function Dashboard() {
       setAllDeals([])
       setProviders([])
     }
-  }, [address, nilAddress])
+  }, [address, polystoreAddress])
 
   async function fetchDeals(owner?: string): Promise<Deal[]> {
     setLoading(true)
@@ -1001,9 +1001,9 @@ export function Dashboard() {
       setStatusTone('success')
       setStatusMsg(`Capacity Allocated. Deal ID: ${res.deal_id}. Now verify via content tab.`)
       setShowCreateDeal(false)
-      if (nilAddress) {
-        await refreshDealsAfterCreate(nilAddress, String(res.deal_id))
-        await fetchBalances(nilAddress)
+      if (polystoreAddress) {
+        await refreshDealsAfterCreate(polystoreAddress, String(res.deal_id))
+        await fetchBalances(polystoreAddress)
         // Auto-switch to content tab and pre-fill deal ID
         setTargetDealId(String(res.deal_id))
         setActiveTab('mdu')
@@ -1123,7 +1123,7 @@ export function Dashboard() {
         setAllDeals((prev) =>
           prev.map((d) => (String(d.id) === String(targetDealId) ? { ...d, cid: manifestHex } : d)),
         )
-        if (nilAddress) await refreshDealsAfterContentCommit(nilAddress, targetDealId, manifestHex)
+        if (polystoreAddress) await refreshDealsAfterContentCommit(polystoreAddress, targetDealId, manifestHex)
         recordUpload('success')
         return true
     } catch (e) {
@@ -1183,8 +1183,8 @@ export function Dashboard() {
       prev.map((d) => (String(d.id) === String(dealId) ? { ...d, cid: manifestHex } : d)),
     )
 
-    if (nilAddress) {
-      refreshDealsAfterContentCommit(nilAddress, dealId, manifestHex)
+    if (polystoreAddress) {
+      refreshDealsAfterContentCommit(polystoreAddress, dealId, manifestHex)
     }
     if (fileMeta?.filePath) {
       upsertRecentFile({
@@ -1232,12 +1232,12 @@ export function Dashboard() {
     if (faucetTxStatus === 'confirmed' && faucetTx) {
       setStatusTone('success')
       setStatusMsg(`Faucet tx ${faucetTx} confirmed.`)
-      if (nilAddress) fetchBalances(nilAddress)
+      if (polystoreAddress) fetchBalances(polystoreAddress)
     } else if (faucetTxStatus === 'failed' && faucetTx) {
       setStatusTone('error')
       setStatusMsg(`Faucet tx ${faucetTx} failed.`)
     }
-  }, [faucetTxStatus, faucetTx, nilAddress])
+  }, [faucetTxStatus, faucetTx, polystoreAddress])
 
   if (!isConnected)
     return (
@@ -1725,7 +1725,7 @@ export function Dashboard() {
             ) : targetDeal ? (
               <DealDetail
                 deal={targetDeal}
-                nilAddress={nilAddress}
+                polystoreAddress={polystoreAddress}
                 onFileActivity={recordRecentActivity}
                 topPanel={dealExplorerTopPanel}
                 uploadWorkflowActive={selectedDealUploadActive}

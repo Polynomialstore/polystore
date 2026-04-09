@@ -9,7 +9,7 @@ import { bech32 } from 'bech32';
 const POLYSTORE_CLI_PATH = path.resolve('..', 'polystore_cli/target/release/polystore_cli');
 const TEST_FILE_SIZE = 1024 * 1024; // 1MB
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex');
   const words = bech32.toWords(data);
   return bech32.encode('nil', words);
@@ -66,7 +66,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
   const randomPk = generatePrivateKey();
   const account = privateKeyToAccount(randomPk);
   const chainIdHex = '0x7A69'; // 31337
-  const nilAddress = ethToNil(account.address);
+  const polystoreAddress = ethToPolystoreAddress(account.address);
 
   // Mock LCD Deals to allow selection
   await page.route('**/polystorechain/polystorechain/v1/deals**', async route => {
@@ -76,7 +76,7 @@ test('WASM Parity: Client-side sharding matches polystore_cli', async ({ page },
               deals: [
                   {
                       id: '1',
-                      owner: nilAddress,
+                      owner: polystoreAddress,
                       cid: '',
                       size: '0',
                       escrow_balance: '1000000',
