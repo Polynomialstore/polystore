@@ -70,7 +70,7 @@ var (
 )
 
 func allowPlanProviderFallback() bool {
-	raw := strings.ToLower(strings.TrimSpace(os.Getenv("NIL_ALLOW_PLAN_PROVIDER_FALLBACK")))
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("POLYSTORE_ALLOW_PLAN_PROVIDER_FALLBACK")))
 	return raw == "1" || raw == "true" || raw == "yes" || raw == "on"
 }
 
@@ -81,7 +81,7 @@ type retrievalProviderResolution struct {
 }
 
 func providerHTTPBaseOverrides() map[string]string {
-	raw := strings.TrimSpace(os.Getenv("NIL_PROVIDER_HTTP_BASE_OVERRIDES"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES"))
 	if raw == "" {
 		return nil
 	}
@@ -258,13 +258,13 @@ func resolveProviderForRetrievalPlan(ctx context.Context, dealID uint64, stripe 
 		if !allowPlanProviderFallback() {
 			if metadataErr != nil {
 				return retrievalProviderResolution{}, fmt.Errorf(
-					"%w: metadata lookup failed: %v; set NIL_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
+					"%w: metadata lookup failed: %v; set POLYSTORE_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
 					ErrProviderResolutionMetadataUnavailable,
 					metadataErr,
 				)
 			}
 			return retrievalProviderResolution{}, fmt.Errorf(
-				"%w: local provider fallback disabled; set NIL_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
+				"%w: local provider fallback disabled; set POLYSTORE_ALLOW_PLAN_PROVIDER_FALLBACK=1 to force fallback",
 				ErrProviderResolutionMetadataUnavailable,
 			)
 		}
@@ -365,7 +365,7 @@ func resolveProviderForRetrievalPlan(ctx context.Context, dealID uint64, stripe 
 }
 
 func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", lcdBase, dealID)
 	var lastBody string
 	for attempt := 1; attempt <= 10; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -474,7 +474,7 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 }
 
 func fetchDealMode2SlotsFromLCD(ctx context.Context, dealID uint64) ([]mode2SlotAssignment, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", lcdBase, dealID)
 	var lastBody string
 	for attempt := 1; attempt <= 10; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -607,7 +607,7 @@ func fetchDealServiceHintFromLCD(ctx context.Context, dealID uint64) (string, er
 		}
 	}
 
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", lcdBase, dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", lcdBase, dealID)
 	var lastBody string
 	for attempt := 1; attempt <= 10; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -652,7 +652,7 @@ func fetchDealServiceHintFromLCD(ctx context.Context, dealID uint64) (string, er
 }
 
 func fetchProviderEndpointsFromLCD(ctx context.Context, providerAddr string) ([]string, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/providers/%s", lcdBase, providerAddr)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/providers/%s", lcdBase, providerAddr)
 	var lastBody string
 	for attempt := 1; attempt <= 10; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

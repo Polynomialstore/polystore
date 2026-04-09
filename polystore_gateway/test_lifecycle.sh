@@ -36,4 +36,4 @@ FETCH_URL="$GATEWAY_URL/gateway/fetch/$CID?deal_id=1&owner=nil1owner&file_path=t
 # curl -s "$FETCH_URL" > fetched.txt
 # diff test_file.txt fetched.txt
 
-echo "✅ Lifecycle Script Prepared (Requires running nilchaind)"
+echo "✅ Lifecycle Script Prepared (Requires running polystorechaind)"

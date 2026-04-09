@@ -17,8 +17,8 @@ import (
 	"github.com/multiformats/go-multiaddr"
 
 	"golang.org/x/crypto/blake2s"
-	"nilchain/x/crypto_ffi"
-	niltypes "nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	niltypes "polystorechain/x/polystorechain/types"
 )
 
 func buildTestSlab(t *testing.T, filePath string, fileContent []byte) ManifestRoot {
@@ -92,7 +92,7 @@ func pickTestAddr(t *testing.T, addrs []multiaddr.Multiaddr) multiaddr.Multiaddr
 func TestP2PFetch_EndToEnd(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 
 	oldReqSig := requireRetrievalReqSig
 	requireRetrievalReqSig = false
@@ -173,7 +173,7 @@ func TestP2PFetch_EndToEnd(t *testing.T) {
 	if !bytes.Equal(body, fileContent) {
 		t.Fatalf("response body mismatch: got %q", string(body))
 	}
-	if resp.Headers["X-Nil-Proof-Hash"] == "" {
+	if resp.Headers["x-polystore-proof-hash"] == "" {
 		t.Fatalf("expected proof hash header")
 	}
 }

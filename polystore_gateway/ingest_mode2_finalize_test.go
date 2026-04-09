@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 func TestMode2FinalizeStagingDir_MergesIntoExistingDir(t *testing.T) {

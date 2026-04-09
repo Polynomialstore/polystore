@@ -23,7 +23,7 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 ## What Collaborators Need From Hub Operator
 
 - Faucet auth token (shared pre-alpha devnet bootstrap token; may already be embedded in the website build)
-- Router/provider shared secret `NIL_GATEWAY_SP_AUTH` (SP operators only)
+- Router/provider shared secret `POLYSTORE_GATEWAY_SP_AUTH` (SP operators only)
 
 ## Website Tester Quickstart
 
@@ -34,14 +34,14 @@ Provider public endpoints (Mode 2 `2+1` baseline):
 - Currency: `ATOM`
 3) Fund test address:
 - Use website faucet flow (this deployment may include a preconfigured faucet token), or
-- POST to `https://faucet.polynomialstore.com/faucet` with header `X-Nil-Faucet-Auth: <token>`.
+- POST to `https://faucet.polynomialstore.com/faucet` with header `X-PolyStore-Faucet-Auth: <token>`.
 4) Run the flow:
 - create the deal on `/#/first-file`
 - continue to `/#/dashboard`
 - upload → commit → retrieve
 
 Fast full-local repo onboarding:
-- Start Nil Gateway GUI on `http://localhost:8080`.
+- Start PolyStore Gateway GUI on `http://localhost:8080`.
 - Verify `curl -sf http://localhost:8080/health`.
 - Use the repo-tracked public bootstrap defaults in `.env.testnet.public` unless you need explicit overrides.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file.
@@ -49,12 +49,12 @@ Fast full-local repo onboarding:
 - Continue browser verification on `https://polynomialstore.com/#/dashboard` with that same wallet and local gateway after the first-file allocation step.
 
 Local gateway app (recommended for localhost gateway-assisted flows):
-- Start Nil Gateway GUI (or local `polystore_gateway`) on `http://localhost:8080`.
+- Start PolyStore Gateway GUI (or local `polystore_gateway`) on `http://localhost:8080`.
 - Download builds: `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Notes:
 - The website flow remains wallet-first. If `POST /gateway/create-deal-evm` returns `403`, that is expected (tx relay disabled).
-- The repo helper `scripts/testnet_burner_upload.sh` uses the local gateway for upload and direct `nilchaind` submission for create/update, so it does not require a separately managed local faucet or gateway tx-relay setup.
+- The repo helper `scripts/testnet_burner_upload.sh` uses the local gateway for upload and direct `polystorechaind` submission for create/update, so it does not require a separately managed local faucet or gateway tx-relay setup.
 - The website flow uses direct EVM transactions (MetaMask / precompile), then uses direct provider transport and optional localhost local-gateway mode.
 
 ## SP Operator Quickstart
@@ -78,7 +78,7 @@ If the key is new and gas funding is still missing, fund the printed provider ad
 ```bash
 export PROVIDER_KEY="provider1"
 export PROVIDER_ENDPOINT="/dns4/sp1.polynomialstore.com/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
-export NIL_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
+export POLYSTORE_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"         # from website wallet step
 
 ./scripts/run_devnet_provider.sh bootstrap
@@ -89,7 +89,7 @@ Website-first operator flow:
 - connect the operator wallet
 - prepare the provider host checkout
 - pair provider identity (run one `pair` command, fund and rerun if needed, approve from wallet)
-- configure public access (endpoint + `NIL_GATEWAY_SP_AUTH`)
+- configure public access (endpoint + `POLYSTORE_GATEWAY_SP_AUTH`)
 - run bootstrap and finish verification from the website
 
 Use `scripts/run_devnet_provider.sh` for `pair`, `bootstrap`, `print-config`, `doctor`, and `verify`.
@@ -122,5 +122,5 @@ When reporting failures, include:
 - action (`create`, `upload`, `commit`, `retrieve`)
 - deal id (if present)
 - timestamp (UTC)
-- for retrieval issues: response header `X-Nil-Provider`
+- for retrieval issues: response header `X-PolyStore-Provider`
 - if using curl: relevant request/response headers (especially session headers)

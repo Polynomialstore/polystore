@@ -52,13 +52,13 @@ func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"providers": []string{providerAddr},
 				},
 			})
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"endpoints": []string{maddr},
@@ -142,13 +142,13 @@ func TestRouterGatewayFetch_SignedModeMissingRangeAllowedAtProxy(t *testing.T) {
 	maddr := mustHTTPMultiaddr(t, providerSrv.URL)
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"providers": []string{providerAddr},
 				},
 			})
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"endpoints": []string{maddr},
@@ -204,13 +204,13 @@ func TestRouterGatewayUploadStatus_DeduplicatesCORSHeaders(t *testing.T) {
 	maddr := mustHTTPMultiaddr(t, providerSrv.URL)
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"providers": []string{providerAddr},
 				},
 			})
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"endpoints": []string{maddr},
@@ -272,14 +272,14 @@ func TestRouterGatewayFetch_FailsOverWhenPrimaryUnavailable(t *testing.T) {
 
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"providers": []string{primaryAddr, deputyAddr},
 				},
 			})
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):
-			provider := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/")
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"):
+			provider := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/")
 			endpoint := deputyMaddr
 			if provider == primaryAddr {
 				endpoint = primaryMaddr
@@ -340,7 +340,7 @@ func TestRouterGatewayReceipt_ForwardsToProviderByReceiptProvider(t *testing.T) 
 
 	maddr := mustHTTPMultiaddr(t, providerSrv.URL)
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/") {
+		if strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/") {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"provider": map[string]any{
 					"endpoints": []string{maddr},

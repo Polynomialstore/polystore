@@ -24,14 +24,14 @@ const provisionalGenerationRetentionTTL = 24 * time.Hour
 const defaultProvisionalGenerationRetentionTTL = 24 * time.Hour
 
 func configuredProvisionalGenerationRetentionTTL() time.Duration {
-	raw := strings.TrimSpace(envDefault("NIL_PROVISIONAL_GENERATION_RETENTION_TTL", defaultProvisionalGenerationRetentionTTL.String()))
+	raw := strings.TrimSpace(envDefault("POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL", defaultProvisionalGenerationRetentionTTL.String()))
 	if raw == "" {
 		return defaultProvisionalGenerationRetentionTTL
 	}
 	ttl, err := time.ParseDuration(raw)
 	if err != nil {
 		log.Printf(
-			"Gateway cache recovery: invalid NIL_PROVISIONAL_GENERATION_RETENTION_TTL=%q; falling back to %s",
+			"Gateway cache recovery: invalid POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL=%q; falling back to %s",
 			raw,
 			defaultProvisionalGenerationRetentionTTL,
 		)
@@ -39,7 +39,7 @@ func configuredProvisionalGenerationRetentionTTL() time.Duration {
 	}
 	if ttl < 0 {
 		log.Printf(
-			"Gateway cache recovery: negative NIL_PROVISIONAL_GENERATION_RETENTION_TTL=%q; falling back to %s",
+			"Gateway cache recovery: negative POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL=%q; falling back to %s",
 			raw,
 			defaultProvisionalGenerationRetentionTTL,
 		)

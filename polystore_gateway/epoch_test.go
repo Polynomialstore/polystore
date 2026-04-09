@@ -19,7 +19,7 @@ func TestCurrentEpochID_UsesLCDHeightAndParams(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/nilchain/nilchain/v1/params"):
+		case strings.HasSuffix(r.URL.Path, "/polystorechain/polystorechain/v1/params"):
 			_, _ = w.Write([]byte(`{"params":{"epoch_len_blocks":"100"}}`))
 		case strings.HasSuffix(r.URL.Path, "/cosmos/base/tendermint/v1beta1/blocks/latest"):
 			_, _ = w.Write([]byte(`{"block":{"header":{"height":"` + itoa(height.Load()) + `"}}}`))

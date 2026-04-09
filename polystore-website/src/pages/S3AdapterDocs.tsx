@@ -7,7 +7,7 @@ export const S3AdapterDocs = () => {
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4 text-foreground">S3 Adapter & Web2 Gateway</h1>
         <p className="text-xl text-muted-foreground">
-          PolyStore provides a native Go-based adapter (`polystore_gateway`) that translates standard S3 `PUT` and `GET` requests into sharded, verifiable storage transactions on the NilChain.
+          PolyStore provides a native Go-based adapter (`polystore_gateway`) that translates standard S3 `PUT` and `GET` requests into sharded, verifiable storage transactions on the PolyStore Chain.
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
           The gateway is optional for browser-native clients (WASM + OPFS), but it remains the easiest path for Web2/S3 compatibility and large-volume ingestion.
@@ -55,7 +55,7 @@ export const S3AdapterDocs = () => {
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Deal-backed S3 (path-style)</h3>
               <p className="text-sm text-muted-foreground mb-2">
-                For standard tools, NilGateway exposes a minimal S3-compatible surface where buckets map 1:1 to deals:
+                For standard tools, PolyStore Gateway exposes a minimal S3-compatible surface where buckets map 1:1 to deals:
                 <span className="font-mono"> deal-{'{id}'}</span>.
               </p>
               <div className="bg-background/50 p-4 rounded-none font-mono text-sm text-foreground overflow-x-auto border border-border space-y-2">
@@ -70,7 +70,7 @@ export const S3AdapterDocs = () => {
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
                 Devnet note: S3 uploads can auto-commit through the gateway relay when
-                <span className="font-mono"> NIL_ENABLE_TX_RELAY=1</span> (and optional faucet funding) are enabled.
+                <span className="font-mono"> POLYSTORE_ENABLE_TX_RELAY=1</span> (and optional faucet funding) are enabled.
                 In mainnet-parity mode, the gateway does not sign transactions; users must commit with a wallet.
               </p>
             </div>

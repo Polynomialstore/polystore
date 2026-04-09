@@ -9,7 +9,7 @@ import { mplex } from '@libp2p/mplex'
 import { multiaddr } from '@multiformats/multiaddr'
 import { Uint8ArrayList } from 'uint8arraylist'
 
-const P2P_PROTOCOL = '/nilstore/fetch/1.0.0'
+const P2P_PROTOCOL = '/polystore/fetch/1.0.0'
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 export interface Libp2pFetchRequest {

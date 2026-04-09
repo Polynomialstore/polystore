@@ -21,14 +21,14 @@ import (
 
 	"golang.org/x/crypto/blake2s"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 var (
-	epochSeedTagBytes     = []byte("nilstore/epoch/v1")
-	challengeSeedTagBytes = []byte("nilstore/chal/v1")
-	kzgZSeedTagBytes      = []byte("nilstore/kzgz/v1")
+	epochSeedTagBytes     = []byte("polystore/epoch/v1")
+	challengeSeedTagBytes = []byte("polystore/chal/v1")
+	kzgZSeedTagBytes      = []byte("polystore/kzgz/v1")
 )
 
 type systemLivenessParams struct {
@@ -103,10 +103,10 @@ const (
 var systemProverState systemLivenessState
 
 func shouldRunSystemLiveness() bool {
-	if envDefault("NIL_DISABLE_SYSTEM_LIVENESS", "0") == "1" {
+	if envDefault("POLYSTORE_DISABLE_SYSTEM_LIVENESS", "0") == "1" {
 		return false
 	}
-	return envDefault("NIL_SYSTEM_LIVENESS", "1") == "1"
+	return envDefault("POLYSTORE_SYSTEM_LIVENESS", "1") == "1"
 }
 
 func (s *systemLivenessState) ensureEpoch(epochID uint64, now time.Time) {
@@ -200,7 +200,7 @@ func classifySystemLivenessError(err error) (systemLivenessFailureReason, time.D
 	case errors.Is(err, os.ErrNotExist),
 		strings.Contains(msg, "no such file or directory"),
 		strings.Contains(msg, "short read"),
-		strings.Contains(msg, "nil_compute_blob_proof failed with code: -3"),
+		strings.Contains(msg, "polystore_compute_blob_proof failed with code: -3"),
 		strings.Contains(msg, "invalid witness commitments length"),
 		strings.Contains(msg, "invalid mdu index"):
 		return systemLivenessFailureMissingLocalData, systemLivenessMissingDataBackoff, true
@@ -279,7 +279,7 @@ func startSystemLivenessProver() {
 		return
 	}
 
-	interval := time.Duration(envInt("NIL_SYSTEM_LIVENESS_INTERVAL_SECONDS", 10)) * time.Second
+	interval := time.Duration(envInt("POLYSTORE_SYSTEM_LIVENESS_INTERVAL_SECONDS", 10)) * time.Second
 	if interval < 3*time.Second {
 		interval = 3 * time.Second
 	}
@@ -459,11 +459,11 @@ dealLoop:
 				txCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 				_, err = submitTxAndWait(
 					txCtx,
-					"tx", "nilchain", "prove-liveness-system",
+					"tx", "polystorechain", "prove-liveness-system",
 					strconv.FormatUint(deal.dealID, 10),
 					strconv.FormatUint(epochID, 10),
 					tmpPath,
-					"--from", envDefault("NIL_PROVIDER_KEY", "faucet"),
+					"--from", envDefault("POLYSTORE_PROVIDER_KEY", "faucet"),
 					"--chain-id", chainID,
 					"--home", homeDir,
 					"--keyring-backend", "test",
@@ -527,7 +527,7 @@ func cachedSystemLivenessParams(ctx context.Context) (*systemLivenessParams, err
 }
 
 func fetchSystemLivenessParams(ctx context.Context, base string) (systemLivenessParams, error) {
-	url := base + "/nilchain/nilchain/v1/params"
+	url := base + "/polystorechain/polystorechain/v1/params"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return systemLivenessParams{}, err
@@ -650,7 +650,7 @@ type dealStateForSystemLiveness struct {
 }
 
 func fetchDealStateForSystemLiveness(ctx context.Context, dealID uint64) (*dealStateForSystemLiveness, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals/%d", strings.TrimRight(lcdBase, "/"), dealID)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals/%d", strings.TrimRight(lcdBase, "/"), dealID)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := lcdHTTPClient.Do(req)
 	if err != nil {
@@ -915,7 +915,7 @@ func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID 
 	commitmentSpan := leafCount * commitmentBytes
 	startOffset := userOrdinal * commitmentSpan
 
-	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
+	witnessReader, err := newPolyfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
 	if err != nil {
 		return nil, err
 	}

@@ -15,7 +15,7 @@ export const Leaderboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
+    fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`)
       .then(res => res.json())
       .then(data => {
         setProviders(data.providers || []);
@@ -41,7 +41,7 @@ export const Leaderboard = () => {
       </div>
 
       {loading ? (
-        <div className="text-center text-muted-foreground animate-pulse">Syncing with nilchain LCD...</div>
+        <div className="text-center text-muted-foreground animate-pulse">Syncing with polystorechain LCD...</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {ranked.length === 0 ? (

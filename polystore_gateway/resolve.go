@@ -9,17 +9,17 @@ import (
 	"strconv"
 	"strings"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 const (
-	nilfsScalarBytes        = 32
-	nilfsScalarPayloadBytes = 31
-	nilfsScalarsPerMdu      = types.MDU_SIZE / nilfsScalarBytes
+	polyfsScalarBytes        = 32
+	polyfsScalarPayloadBytes = 31
+	polyfsScalarsPerMdu      = types.MDU_SIZE / polyfsScalarBytes
 )
 
-type nilfsDecodedReader struct {
+type polyfsDecodedReader struct {
 	dealDir         string
 	slabStartIdx    uint64
 	fileStartOffset uint64
@@ -28,15 +28,15 @@ type nilfsDecodedReader struct {
 	currentUserMdu  uint64
 	currentScalar   uint64
 	file            *os.File
-	scalarBuf       [nilfsScalarBytes]byte
+	scalarBuf       [polyfsScalarBytes]byte
 	payloadOffset   int
 	payloadBuf      []byte
 	payloadBufIndex int
 }
 
-func newNilfsDecodedReader(dealDir string, slabStartIdx uint64, fileStartOffset uint64, fileLen uint64, startOffset uint64, length uint64) (*nilfsDecodedReader, error) {
+func newPolyfsDecodedReader(dealDir string, slabStartIdx uint64, fileStartOffset uint64, fileLen uint64, startOffset uint64, length uint64) (*polyfsDecodedReader, error) {
 	if length == 0 {
-		return &nilfsDecodedReader{
+		return &polyfsDecodedReader{
 			dealDir:         dealDir,
 			slabStartIdx:    slabStartIdx,
 			fileStartOffset: fileStartOffset,
@@ -48,13 +48,13 @@ func newNilfsDecodedReader(dealDir string, slabStartIdx uint64, fileStartOffset 
 
 	userMduIdx := startOffset / RawMduCapacity
 	offsetInMdu := startOffset % RawMduCapacity
-	scalarIdx := offsetInMdu / nilfsScalarPayloadBytes
-	payloadOffset := int(offsetInMdu % nilfsScalarPayloadBytes)
-	if scalarIdx >= uint64(nilfsScalarsPerMdu) {
+	scalarIdx := offsetInMdu / polyfsScalarPayloadBytes
+	payloadOffset := int(offsetInMdu % polyfsScalarPayloadBytes)
+	if scalarIdx >= uint64(polyfsScalarsPerMdu) {
 		return nil, fmt.Errorf("start_offset out of bounds for MDU: %d", startOffset)
 	}
 
-	r := &nilfsDecodedReader{
+	r := &polyfsDecodedReader{
 		dealDir:         dealDir,
 		slabStartIdx:    slabStartIdx,
 		fileStartOffset: fileStartOffset,
@@ -72,7 +72,7 @@ func newNilfsDecodedReader(dealDir string, slabStartIdx uint64, fileStartOffset 
 	return r, nil
 }
 
-func (r *nilfsDecodedReader) openCurrent() error {
+func (r *polyfsDecodedReader) openCurrent() error {
 	if r.file != nil {
 		_ = r.file.Close()
 		r.file = nil
@@ -85,7 +85,7 @@ func (r *nilfsDecodedReader) openCurrent() error {
 	}
 	r.file = f
 
-	if _, err := r.file.Seek(int64(r.currentScalar*nilfsScalarBytes), io.SeekStart); err != nil {
+	if _, err := r.file.Seek(int64(r.currentScalar*polyfsScalarBytes), io.SeekStart); err != nil {
 		_ = r.file.Close()
 		r.file = nil
 		return err
@@ -95,7 +95,7 @@ func (r *nilfsDecodedReader) openCurrent() error {
 	return nil
 }
 
-func (r *nilfsDecodedReader) Read(p []byte) (int, error) {
+func (r *polyfsDecodedReader) Read(p []byte) (int, error) {
 	if r.remaining == 0 {
 		return 0, io.EOF
 	}
@@ -124,7 +124,7 @@ func (r *nilfsDecodedReader) Read(p []byte) (int, error) {
 			return written, io.ErrClosedPipe
 		}
 
-		if r.currentScalar >= uint64(nilfsScalarsPerMdu) {
+		if r.currentScalar >= uint64(polyfsScalarsPerMdu) {
 			r.currentUserMdu++
 			r.currentScalar = 0
 			r.payloadOffset = 0
@@ -146,21 +146,21 @@ func (r *nilfsDecodedReader) Read(p []byte) (int, error) {
 		// Determine the logical payload slice for this scalar.
 		// Most scalars represent 31 bytes at [1:32]. The final chunk of a
 		// file (when fileLen%31 != 0) is right-aligned within the scalar.
-		chunkLen := int(nilfsScalarPayloadBytes)
+		chunkLen := int(polyfsScalarPayloadBytes)
 		base := 1
 		if r.fileLen > 0 {
-			finalChunkIdx := (r.fileLen - 1) / nilfsScalarPayloadBytes
-			scalarAbsStart := r.currentUserMdu*RawMduCapacity + r.currentScalar*nilfsScalarPayloadBytes
+			finalChunkIdx := (r.fileLen - 1) / polyfsScalarPayloadBytes
+			scalarAbsStart := r.currentUserMdu*RawMduCapacity + r.currentScalar*polyfsScalarPayloadBytes
 			if scalarAbsStart >= r.fileStartOffset {
-				chunkIdx := (scalarAbsStart - r.fileStartOffset) / nilfsScalarPayloadBytes
+				chunkIdx := (scalarAbsStart - r.fileStartOffset) / polyfsScalarPayloadBytes
 				if chunkIdx == finalChunkIdx {
-					rem := int(r.fileLen % nilfsScalarPayloadBytes)
+					rem := int(r.fileLen % polyfsScalarPayloadBytes)
 					if rem == 0 {
-						rem = int(nilfsScalarPayloadBytes)
+						rem = int(polyfsScalarPayloadBytes)
 					}
 					chunkLen = rem
-					if chunkLen < int(nilfsScalarPayloadBytes) {
-						base = nilfsScalarBytes - chunkLen
+					if chunkLen < int(polyfsScalarPayloadBytes) {
+						base = polyfsScalarBytes - chunkLen
 					}
 				}
 			}
@@ -180,7 +180,7 @@ func (r *nilfsDecodedReader) Read(p []byte) (int, error) {
 	return written, nil
 }
 
-func (r *nilfsDecodedReader) Close() error {
+func (r *polyfsDecodedReader) Close() error {
 	r.remaining = 0
 	r.payloadBuf = nil
 	r.payloadBufIndex = 0
@@ -258,7 +258,7 @@ func ResolveFileByPath(dealDir string, filePath string) (io.ReadCloser, uint64, 
 
 	slabStartIdx := 1 + witnessCount
 
-	reader, err := newNilfsDecodedReader(dealDir, slabStartIdx, startOffset, length, startOffset, length)
+	reader, err := newPolyfsDecodedReader(dealDir, slabStartIdx, startOffset, length, startOffset, length)
 	if err != nil {
 		return nil, 0, err
 	}

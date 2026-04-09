@@ -8,8 +8,8 @@ set -euo pipefail
 # Requires: run_devnet_alpha_multi_sp.sh stack to be running.
 
 GATEWAY_ROUTER="http://localhost:8080"
-NILCHAIND="nilchain/nilchaind"
-CHAIN_HOME="_artifacts/nilchain_data_devnet_alpha"
+POLYSTORECHAIND="polystorechain/polystorechaind"
+CHAIN_HOME="_artifacts/polystorechain_data_devnet_alpha"
 TMP_DIR="_artifacts/e2e_multi_sp_tmp"
 mkdir -p "$TMP_DIR"
 
@@ -20,12 +20,12 @@ trap cleanup EXIT
 current_epoch() {
   local epoch_len height
 
-  epoch_len=$($NILCHAIND query nilchain params --home "$CHAIN_HOME" --output json | jq -r '.params.epoch_len_blocks // "0"')
+  epoch_len=$($POLYSTORECHAIND query polystorechain params --home "$CHAIN_HOME" --output json | jq -r '.params.epoch_len_blocks // "0"')
   if [ -z "$epoch_len" ] || [ "$epoch_len" = "null" ]; then
     epoch_len="0"
   fi
 
-  # Prefer CometBFT RPC directly (faster than nilchaind status).
+  # Prefer CometBFT RPC directly (faster than polystorechaind status).
   height=$(curl -s "http://127.0.0.1:26657/status" | jq -r '.result.sync_info.latest_block_height // "1"')
   if [ -z "$height" ] || [ "$height" = "null" ]; then
     height="1"
@@ -46,7 +46,7 @@ dd if=/dev/urandom of="$TMP_DIR/payload.bin" bs=1024 count=1024 2>/dev/null # 1M
 
 # 2. Identify Test Accounts (Provider1 = Owner)
 banner "Resolving Accounts"
-OWNER_ADDR=$($NILCHAIND keys show provider1 -a --home "$CHAIN_HOME" --keyring-backend test)
+OWNER_ADDR=$($POLYSTORECHAIND keys show provider1 -a --home "$CHAIN_HOME" --keyring-backend test)
 echo "Owner (Provider1): $OWNER_ADDR"
 
 # 3. Create Deal
@@ -54,23 +54,23 @@ banner "Creating Deal"
 # Use a 3-slot Mode 2 stripe for the multi-SP devnet (K=2,M=1).
 # The gateway /gateway/prove-retrieval endpoint reconstructs the full MDU from per-slot shards on the router
 # and submits the proof "as" the assigned provider.
-CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+CREATE_OUT=$($POLYSTORECHAIND tx polystorechain create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
 TX_HASH=$(echo "$CREATE_OUT" | jq -r '.txhash')
 echo "Create Deal Tx: $TX_HASH"
 
 banner "Waiting for Deal on Chain..."
 sleep 6
-TX_QUERY=$($NILCHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
+TX_QUERY=$($POLYSTORECHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
 DEAL_ID=$(echo "$TX_QUERY" | jq -r '
   .events? // []
-  | map(select(.type == "nilchain.nilchain.v1.EventCreateDeal" or .type == "create_deal"))
+  | map(select(.type == "polystorechain.polystorechain.v1.EventCreateDeal" or .type == "create_deal"))
   | map(.attributes // [])
   | add
   | map(select(.key == "deal_id" or .key == "id"))
   | .[0].value // empty
 ')
 if [ -z "$DEAL_ID" ]; then
-  DEAL_LIST=$($NILCHAIND query nilchain list-deals --output json)
+  DEAL_LIST=$($POLYSTORECHAIND query polystorechain list-deals --output json)
   DEAL_ID=$(echo "$DEAL_LIST" | jq -r '.deals[-1].id')
 fi
 echo "Deal ID: $DEAL_ID"
@@ -95,13 +95,13 @@ echo "CID: $CID"
 
 # 5. Commit Content
 banner "Committing Content"
-COMMIT_OUT=$($NILCHAIND tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+COMMIT_OUT=$($POLYSTORECHAIND tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
 echo "Commit Tx: $(echo "$COMMIT_OUT" | jq -r '.txhash')"
 sleep 6
 
 # 6. Resolve Assigned Provider
 banner "Resolving Assigned Provider"
-DEAL_INFO=$($NILCHAIND query nilchain get-deal --id "$DEAL_ID" --output json)
+DEAL_INFO=$($POLYSTORECHAIND query polystorechain get-deal --id "$DEAL_ID" --output json)
 ASSIGNED_ADDR=$(echo "$DEAL_INFO" | jq -r --arg owner "$OWNER_ADDR" '.deal.providers[] | select(. != $owner) | . ' | head -n1)
 if [ -z "$ASSIGNED_ADDR" ] || [ "$ASSIGNED_ADDR" == "null" ]; then
   ASSIGNED_ADDR=$(echo "$DEAL_INFO" | jq -r '.deal.providers[0]')
@@ -115,7 +115,7 @@ else
     echo "Confirmed: Assigned provider != Owner. Testing cross-account signing."
 fi
 
-PROVIDER_INFO=$($NILCHAIND query nilchain get-provider --address "$ASSIGNED_ADDR" --output json)
+PROVIDER_INFO=$($POLYSTORECHAIND query polystorechain get-provider --address "$ASSIGNED_ADDR" --output json)
 ENDPOINT=$(echo "$PROVIDER_INFO" | jq -r '.provider.endpoints[0]')
 # Extract port from /ip4/127.0.0.1/tcp/PORT/http
 PORT=$(echo "$ENDPOINT" | awk -F/ '{print $5}')

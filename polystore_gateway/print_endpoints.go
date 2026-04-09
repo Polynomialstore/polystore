@@ -86,38 +86,38 @@ func computeProviderEndpoints(includeP2P bool) providerEndpointsOutput {
 
 func computeHTTPProviderEndpoint() (multiaddrStr, endpointType, notes string) {
 	// Highest precedence: explicit endpoint already formatted as multiaddr.
-	if raw := strings.TrimSpace(envDefault("NIL_PUBLIC_HTTP_MULTIADDR", "")); raw != "" {
+	if raw := strings.TrimSpace(envDefault("POLYSTORE_PUBLIC_HTTP_MULTIADDR", "")); raw != "" {
 		if validateMultiaddr(raw) == nil {
 			return raw, "direct", "HTTP(S) gateway endpoint"
 		}
-		return "", "direct", "invalid NIL_PUBLIC_HTTP_MULTIADDR (must be a multiaddr like /dns4/.../tcp/443/https)"
+		return "", "direct", "invalid POLYSTORE_PUBLIC_HTTP_MULTIADDR (must be a multiaddr like /dns4/.../tcp/443/https)"
 	}
 
 	// Cloudflare Tunnel convention: when set, we assume the public endpoint is https://<hostname>.
-	if hostname := strings.TrimSpace(envDefault("NIL_CLOUDFLARE_TUNNEL_HOSTNAME", "")); hostname != "" {
+	if hostname := strings.TrimSpace(envDefault("POLYSTORE_CLOUDFLARE_TUNNEL_HOSTNAME", "")); hostname != "" {
 		raw := fmt.Sprintf("/dns4/%s/tcp/443/https", hostname)
 		if validateMultiaddr(raw) == nil {
 			return raw, "cloudflare-tunnel", "Cloudflare Tunnel public HTTPS endpoint"
 		}
-		return "", "cloudflare-tunnel", "invalid NIL_CLOUDFLARE_TUNNEL_HOSTNAME"
+		return "", "cloudflare-tunnel", "invalid POLYSTORE_CLOUDFLARE_TUNNEL_HOSTNAME"
 	}
 
 	// Direct endpoint: derive from public host/port if provided, otherwise fall back to listen port.
-	host := strings.TrimSpace(envDefault("NIL_PUBLIC_HTTP_HOST", envDefault("NIL_PUBLIC_HOST", "")))
+	host := strings.TrimSpace(envDefault("POLYSTORE_PUBLIC_HTTP_HOST", envDefault("POLYSTORE_PUBLIC_HOST", "")))
 	if host == "" {
 		host = "127.0.0.1"
 	}
 
-	port := envInt("NIL_PUBLIC_HTTP_PORT", 0)
+	port := envInt("POLYSTORE_PUBLIC_HTTP_PORT", 0)
 	if port == 0 {
-		if p, ok := parsePort(envDefault("NIL_LISTEN_ADDR", ":8080")); ok {
+		if p, ok := parsePort(envDefault("POLYSTORE_LISTEN_ADDR", ":8080")); ok {
 			port = p
 		} else {
 			port = 8080
 		}
 	}
 
-	scheme := strings.TrimSpace(envDefault("NIL_PUBLIC_HTTP_SCHEME", ""))
+	scheme := strings.TrimSpace(envDefault("POLYSTORE_PUBLIC_HTTP_SCHEME", ""))
 	if scheme == "" {
 		if port == 443 {
 			scheme = "https"
@@ -133,14 +133,14 @@ func computeHTTPProviderEndpoint() (multiaddrStr, endpointType, notes string) {
 	maHost := formatHostMultiaddr(host)
 	raw := fmt.Sprintf("%s/tcp/%d/%s", maHost, port, proto)
 	if validateMultiaddr(raw) != nil {
-		return "", "direct", "unable to build multiaddr (set NIL_PUBLIC_HTTP_MULTIADDR explicitly)"
+		return "", "direct", "unable to build multiaddr (set POLYSTORE_PUBLIC_HTTP_MULTIADDR explicitly)"
 	}
 	return raw, "direct", "Direct HTTP(S) gateway endpoint"
 }
 
 func computeP2PProviderEndpoints() []providerEndpoint {
 	// P2P is optional; only print if enabled and we can compute a stable peer id.
-	if envDefault("NIL_P2P_ENABLED", "1") != "1" {
+	if envDefault("POLYSTORE_P2P_ENABLED", "1") != "1" {
 		return nil
 	}
 
@@ -148,13 +148,13 @@ func computeP2PProviderEndpoints() []providerEndpoint {
 	if err != nil {
 		return []providerEndpoint{{
 			Type:  "libp2p",
-			Notes: "p2p identity error (check NIL_P2P_IDENTITY_PATH / NIL_P2P_IDENTITY_B64)",
+			Notes: "p2p identity error (check POLYSTORE_P2P_IDENTITY_PATH / POLYSTORE_P2P_IDENTITY_B64)",
 		}}
 	}
 	if priv == nil {
 		return []providerEndpoint{{
 			Type:  "libp2p",
-			Notes: "set NIL_P2P_IDENTITY_PATH (stable peer id) to print libp2p endpoints",
+			Notes: "set POLYSTORE_P2P_IDENTITY_PATH (stable peer id) to print libp2p endpoints",
 		}}
 	}
 	pid, err := peer.IDFromPrivateKey(priv)
@@ -169,7 +169,7 @@ func computeP2PProviderEndpoints() []providerEndpoint {
 
 	// If relays are configured, clients can dial via /p2p-circuit. This is reliable behind NAT,
 	// but relay nodes become part of the data path.
-	for _, relayBase := range parseCommaList(envDefault("NIL_P2P_RELAY_ADDRS", "")) {
+	for _, relayBase := range parseCommaList(envDefault("POLYSTORE_P2P_RELAY_ADDRS", "")) {
 		relayBase = strings.TrimSpace(relayBase)
 		if relayBase == "" {
 			continue
@@ -186,9 +186,9 @@ func computeP2PProviderEndpoints() []providerEndpoint {
 
 	// If no relays are configured, fall back to announce/listen addrs (may not be reachable behind NAT).
 	if len(out) == 0 {
-		announce := parseCommaList(envDefault("NIL_P2P_ANNOUNCE_ADDRS", ""))
+		announce := parseCommaList(envDefault("POLYSTORE_P2P_ANNOUNCE_ADDRS", ""))
 		if len(announce) == 0 {
-			announce = parseCommaList(envDefault("NIL_P2P_LISTEN_ADDRS", ""))
+			announce = parseCommaList(envDefault("POLYSTORE_P2P_LISTEN_ADDRS", ""))
 		}
 		for _, raw := range announce {
 			raw = strings.TrimSpace(raw)

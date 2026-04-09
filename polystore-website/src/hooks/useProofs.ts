@@ -71,7 +71,7 @@ export function useProofs(options: UseProofsConfig = {}) {
         // This endpoint is paginated; without an explicit limit most LCDs default
         // to a small page size which hides additional retrieval proofs (e.g. when
         // a full-file download is chunked into many blob-sized receipts).
-        const url = `${appConfig.lcdBase}/nilchain/nilchain/v1/proofs?pagination.limit=1000&pagination.reverse=true`
+        const url = `${appConfig.lcdBase}/polystorechain/polystorechain/v1/proofs?pagination.limit=1000&pagination.reverse=true`
         const res = await fetch(url)
         if (!res.ok) return
         const json = await res.json()

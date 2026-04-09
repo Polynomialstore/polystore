@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	spUploadBundleKindShard    = "shard"
 	spUploadBundleKindManifest = "manifest"
 	spUploadBundleV2Magic      = "NLB2"
-	spUploadBundleV2MediaType  = "application/x.nilstore-bundle-v2"
+	spUploadBundleV2MediaType  = "application/x.polystore-bundle-v2"
 )
 
 type spUploadBundleRequest struct {
@@ -322,9 +322,9 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	validatePrevStarted := time.Now()
-	if err := validateNilfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, strings.TrimSpace(req.PreviousManifestRoot)); err != nil {
+	if err := validatePolyfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, strings.TrimSpace(req.PreviousManifestRoot)); err != nil {
 		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		statusCode = classifyNilfsUploadPreviousManifestRootError(err)
+		statusCode = classifyPolyfsUploadPreviousManifestRootError(err)
 		switch statusCode {
 		case http.StatusBadRequest:
 			outcome = "validate_previous_root_failed"

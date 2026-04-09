@@ -10,7 +10,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 var (

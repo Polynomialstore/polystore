@@ -2,7 +2,7 @@
 import { createPublicClient, createWalletClient, decodeEventLog, http, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 
-import { NILSTORE_PRECOMPILE_ABI, encodeOpenRetrievalSessionsData, type RetrievalSessionInput } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI, encodeOpenRetrievalSessionsData, type RetrievalSessionInput } from '../src/lib/polystorePrecompile'
 
 function requiredEnv(name: string): string {
   const v = process.env[name]
@@ -11,13 +11,13 @@ function requiredEnv(name: string): string {
 }
 
 async function main() {
-  const privKey = (process.env.EVM_PRIVKEY || process.env.NIL_EVM_DEV_PRIVKEY) as Hex | undefined
+  const privKey = (process.env.EVM_PRIVKEY || process.env.POLYSTORE_EVM_DEV_PRIVKEY) as Hex | undefined
   if (!privKey) throw new Error('EVM_PRIVKEY env var required')
 
   const rpcUrl = process.env.EVM_RPC || process.env.VITE_EVM_RPC || 'http://localhost:8545'
   const chainId = Number(process.env.EVM_CHAIN_ID || 31337)
-  const precompile = (process.env.NILSTORE_PRECOMPILE ||
-    process.env.VITE_NILSTORE_PRECOMPILE ||
+  const precompile = (process.env.POLYSTORE_PRECOMPILE ||
+    process.env.VITE_POLYSTORE_PRECOMPILE ||
     '0x0000000000000000000000000000000000000900') as Hex
 
   const account = privateKeyToAccount(privKey)
@@ -25,7 +25,7 @@ async function main() {
   const client = createPublicClient({
     chain: {
       id: chainId,
-      name: 'nilstore-e2e',
+      name: 'polystore-e2e',
       nativeCurrency: { name: 'ATOM', symbol: 'ATOM', decimals: 18 },
       rpcUrls: { default: { http: [rpcUrl] } },
     },
@@ -67,7 +67,7 @@ async function main() {
     if (String(log.address).toLowerCase() !== String(precompile).toLowerCase()) continue
     try {
       const decoded = decodeEventLog({
-        abi: NILSTORE_PRECOMPILE_ABI,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         data: log.data,
         topics: log.topics,
       })

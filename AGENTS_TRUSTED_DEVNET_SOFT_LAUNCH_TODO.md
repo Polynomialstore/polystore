@@ -2,7 +2,7 @@
 
 Last updated: 2026-02-24
 
-This file is a **repo-tracked, PR-by-PR TODO list** for getting NilStore to a
+This file is a **repo-tracked, PR-by-PR TODO list** for getting PolyStore to a
 **trusted-collaborator devnet soft launch** (hub VPS + remote SPs).
 
 Conventions:
@@ -35,7 +35,7 @@ Checklist:
 - [x] Update `docs/GAP_REPORT_REPO_ANCHORED.md` to match repo reality + CI coverage.
 - [x] Fix doc index and onboarding docs (`DOCS.md`, `HAPPY_PATH.md`, `docs/TESTNET_READINESS_REPORT.md`).
 - [x] Update repo-anchored agent runbook (`docs/AGENTS_RUNBOOK_REPO_ANCHORED.md`).
-- [x] Replace Ignite boilerplate chain readme (`nilchain/readme.md`).
+- [x] Replace Ignite boilerplate chain readme (`polystorechain/readme.md`).
 - [x] Fix `install.sh` CLI binary name (`polystore_cli` vs `nil-cli`).
 
 ---
@@ -46,7 +46,7 @@ Checklist:
 - Goal: Close the most dangerous “spec says enforced, code doesn’t” gaps.
 - PR: https://github.com/Nil-Store/nil-store/pull/58
 - Test gate:
-  - `cd nilchain && go test ./...`
+  - `cd polystorechain && go test ./...`
 
 Checklist:
 - [x] Enforce `MAX_DEAL_BYTES` cap in `MsgUpdateDealContent*` (spec + RFC requirement).
@@ -65,7 +65,7 @@ Checklist:
   - (optional) `scripts/e2e_browser_smoke_no_gateway.sh`
 
 Checklist:
-- [x] Add/extend an E2E script that runs with `NIL_ENABLE_TX_RELAY=0` and still completes create/commit/open-session/fetch.
+- [x] Add/extend an E2E script that runs with `POLYSTORE_ENABLE_TX_RELAY=0` and still completes create/commit/open-session/fetch.
 - [x] Document the exact env var profile in `HAPPY_PATH.md` + `docs/TESTNET_READINESS_REPORT.md`.
 
 ---
@@ -91,7 +91,7 @@ Checklist:
 - Goal: Turn allowlist logic from “implemented” into “proven”.
 - PR: https://github.com/Nil-Store/nil-store/pull/61
 - Test gate:
-  - `cd nilchain && go test ./...`
+  - `cd polystorechain && go test ./...`
 
 Checklist:
 - [x] Add unit tests for `OpenRetrievalSessionSponsored` allowlist proof verification (valid + invalid paths).
@@ -137,7 +137,7 @@ Checklist:
 - Goal: Add a testable first version of dynamic pricing without destabilizing the devnet.
 - PR: https://github.com/Nil-Store/nil-store/pull/64
 - Test gate:
-  - `cd nilchain && go test ./...`
+  - `cd polystorechain && go test ./...`
   - `./e2e_retrieval_fees.sh`
 
 Checklist:
@@ -175,7 +175,7 @@ Checklist:
   - `cd polystore_faucet && go test ./...`
 
 Checklist:
-- [x] Add optional auth token (`NIL_FAUCET_AUTH_TOKEN`) required via `X-Nil-Faucet-Auth`.
+- [x] Add optional auth token (`POLYSTORE_FAUCET_AUTH_TOKEN`) required via `X-PolyStore-Faucet-Auth`.
 - [x] Improve rate limiting IP parsing (use forwarded headers / host-only).
 - [x] Remove stale `/create-deal` endpoint from `polystore_faucet`.
 - [x] Update trusted devnet docs + systemd env template with the auth knob.
@@ -193,7 +193,7 @@ Checklist:
 
 Checklist:
 - [x] Add localStorage-backed faucet auth token helper.
-- [x] Send `X-Nil-Faucet-Auth` header from `useFaucet` when token is set.
+- [x] Send `X-PolyStore-Faucet-Auth` header from `useFaucet` when token is set.
 - [x] Add UI input (Dashboard + First File wizard + Testnet Docs) for collaborators to paste/save/clear the token.
 - [x] Update trusted devnet docs with the UI token flow.
 
@@ -238,8 +238,8 @@ Checklist:
   - `bash -n scripts/e2e_mode2_stripe_multi_sp.sh`
 
 Checklist:
-- [x] Disable the background system liveness prover during this E2E run (`NIL_DISABLE_SYSTEM_LIVENESS=1` default).
-- [x] Cap Mode2 upload parallelism (`NIL_MODE2_UPLOAD_PARALLELISM=16` default).
+- [x] Disable the background system liveness prover during this E2E run (`POLYSTORE_DISABLE_SYSTEM_LIVENESS=1` default).
+- [x] Cap Mode2 upload parallelism (`POLYSTORE_MODE2_UPLOAD_PARALLELISM=16` default).
 - [x] Keep both knobs overrideable for local stress runs.
 
 ---
@@ -316,7 +316,7 @@ Checklist:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
 Checklist:
-- [x] Update `ops/systemd/env/nilchaind.env` to default CometBFT RPC to localhost.
+- [x] Update `ops/systemd/env/polystorechaind.env` to default CometBFT RPC to localhost.
 - [x] Update `ops/systemd/env/polystore-gateway-router.env` to default router listen addr to localhost.
 - [x] Add a brief note in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` that these are safe defaults for the HTTPS subdomain profile.
 
@@ -331,8 +331,8 @@ Checklist:
   - `cd polystore_faucet && go test ./...`
 
 Checklist:
-- [x] Add `NIL_LISTEN_ADDR` support to `polystore_faucet` (default `127.0.0.1:8081`).
-- [x] Update `ops/systemd/env/polystore-faucet.env` to set `NIL_LISTEN_ADDR=127.0.0.1:8081`.
+- [x] Add `POLYSTORE_LISTEN_ADDR` support to `polystore_faucet` (default `127.0.0.1:8081`).
+- [x] Update `ops/systemd/env/polystore-faucet.env` to set `POLYSTORE_LISTEN_ADDR=127.0.0.1:8081`.
 - [x] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` to remove the “firewall-only” faucet bind note.
 
 ---
@@ -347,9 +347,9 @@ Checklist:
   - `bash -n scripts/run_local_stack.sh`
 
 Checklist:
-- [x] Add `NIL_BIND_ALL=1` knob (default `0`) to opt into `0.0.0.0` binds for LCD/EVM JSON-RPC.
-- [x] Update `scripts/run_devnet_alpha_multi_sp.sh` init-time config patching to respect `NIL_BIND_ALL`.
-- [x] Update `scripts/run_local_stack.sh` init-time config patching (perl + python fallback) to respect `NIL_BIND_ALL`.
+- [x] Add `POLYSTORE_BIND_ALL=1` knob (default `0`) to opt into `0.0.0.0` binds for LCD/EVM JSON-RPC.
+- [x] Update `scripts/run_devnet_alpha_multi_sp.sh` init-time config patching to respect `POLYSTORE_BIND_ALL`.
+- [x] Update `scripts/run_local_stack.sh` init-time config patching (perl + python fallback) to respect `POLYSTORE_BIND_ALL`.
 - [x] Document the knob in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` (LAN / non-proxy debugging use only).
 
 ---
@@ -357,13 +357,13 @@ Checklist:
 ### PR22 — Bootstrap script: guard against accidental `rm -rf` of persistent home (MERGED)
 
 - Branch: `codex/hub-bootstrap-rmrf-guard`
-- Goal: Reduce hub footguns by making `run_devnet_alpha_multi_sp.sh start` refuse to delete a non-artifacts `NIL_HOME` unless explicitly opted-in.
+- Goal: Reduce hub footguns by making `run_devnet_alpha_multi_sp.sh start` refuse to delete a non-artifacts `POLYSTORE_HOME` unless explicitly opted-in.
 - PR: https://github.com/Nil-Store/nil-store/pull/82
 - Test gate:
   - `bash -n scripts/run_devnet_alpha_multi_sp.sh`
 
 Checklist:
-- [x] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
+- [x] Add `POLYSTORE_REINIT_HOME=1` (or similar) opt-in before deleting an existing `POLYSTORE_HOME` outside the repo `_artifacts/` tree.
 - [x] Update `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md` bootstrap command to include the new opt-in when using a persistent hub home.
 
 ---
@@ -371,18 +371,18 @@ Checklist:
 ### PR23 — Local stack bootstrap: guard against accidental `rm -rf` of persistent home (MERGED)
 
 - Branch: `codex/local-stack-rmrf-guard`
-- Goal: Mirror the hub bootstrap safety rails in `run_local_stack.sh` so `NIL_HOME` can’t be accidentally wiped without an explicit opt-in.
+- Goal: Mirror the hub bootstrap safety rails in `run_local_stack.sh` so `POLYSTORE_HOME` can’t be accidentally wiped without an explicit opt-in.
 - PR: https://github.com/Nil-Store/nil-store/pull/84
 - Test gate:
   - `bash -n scripts/run_local_stack.sh`
 
 Checklist:
-- [x] Add `NIL_REINIT_HOME=1` (or similar) opt-in before deleting an existing `NIL_HOME` outside the repo `_artifacts/` tree.
-- [x] Update any local-stack docs that recommend `NIL_HOME=...` to mention the opt-in for re-init runs.
+- [x] Add `POLYSTORE_REINIT_HOME=1` (or similar) opt-in before deleting an existing `POLYSTORE_HOME` outside the repo `_artifacts/` tree.
+- [x] Update any local-stack docs that recommend `POLYSTORE_HOME=...` to mention the opt-in for re-init runs.
 
 ---
 
-### PR24 — Local stack docs: safe reset + `NIL_REINIT_HOME` note (MERGED)
+### PR24 — Local stack docs: safe reset + `POLYSTORE_REINIT_HOME` note (MERGED)
 
 - Branch: `codex/local-stack-reset-docs`
 - Goal: Make local dev runs safer and less confusing by documenting when the stack can wipe state, and how to intentionally reset.
@@ -391,8 +391,8 @@ Checklist:
   - `bash -n scripts/run_local_stack.sh`
 
 Checklist:
-- [x] Add a short “Reset state” note to `HAPPY_PATH.md` (default `_artifacts` is safe; persistent `NIL_HOME` requires `NIL_REINIT_HOME=1`).
-- [x] Update `docs/TESTNET_READINESS_REPORT.md` to mention `NIL_REINIT_HOME` and bump the report date.
+- [x] Add a short “Reset state” note to `HAPPY_PATH.md` (default `_artifacts` is safe; persistent `POLYSTORE_HOME` requires `POLYSTORE_REINIT_HOME=1`).
+- [x] Update `docs/TESTNET_READINESS_REPORT.md` to mention `POLYSTORE_REINIT_HOME` and bump the report date.
 - [x] Update `docs/manual-devnet-runbook.md` prerequisites to mention safe reset behavior (and how to opt into wiping a persistent home).
 
 ---
@@ -487,7 +487,7 @@ Checklist:
 - PR: https://github.com/Nil-Store/nil-store/pull/93
 - Test gate:
   - `bash -n e2e_retrieval_fees.sh`
-  - `NIL_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh`
+  - `POLYSTORE_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh`
 
 Checklist:
 - [x] Add an opt-in dynamic pricing mode to `e2e_retrieval_fees.sh` that asserts `retrieval_price_per_blob` updates at the next epoch.
@@ -516,7 +516,7 @@ Checklist:
 - PR: https://github.com/Nil-Store/nil-store/pull/95
 - Test gate:
   - `bash -n e2e_retrieval_fees.sh`
-  - `NIL_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh`
+  - `POLYSTORE_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh`
 
 Checklist:
 - [x] Extend `e2e_retrieval_fees.sh` dynamic mode to patch storage dynamic pricing params in genesis.
@@ -542,7 +542,7 @@ Checklist:
 ### PR35 — CI: align Go toolchain with `go.mod` (1.25.x) (MERGED)
 
 - Branch: `codex/ci-go-1-25x`
-- Goal: Reduce CI/toolchain drift by using Go `1.25.x` (matches `nilchain/go.mod`, `polystore_gateway/go.mod`, etc.) instead of relying on toolchain auto-download from an older Go.
+- Goal: Reduce CI/toolchain drift by using Go `1.25.x` (matches `polystorechain/go.mod`, `polystore_gateway/go.mod`, etc.) instead of relying on toolchain auto-download from an older Go.
 - PR: https://github.com/Nil-Store/nil-store/pull/97
 - Test gate:
   - `ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/ci.yml\"); YAML.load_file(\".github/workflows/tauri_release.yml\")'`

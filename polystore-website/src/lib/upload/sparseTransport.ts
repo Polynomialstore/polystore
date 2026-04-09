@@ -25,7 +25,7 @@ export async function postSparseArtifact(request: SparseUploadRequest): Promise<
   const post = async (bodyBytes: Uint8Array, fullSizeHeader?: number): Promise<Response> => {
     const headers: Record<string, string> =
       fullSizeHeader != null && bodyBytes.byteLength < fullSizeHeader
-        ? { ...requestHeaders, 'X-Nil-Full-Size': String(fullSizeHeader) }
+        ? { ...requestHeaders, 'X-PolyStore-Full-Size': String(fullSizeHeader) }
         : requestHeaders
 
     return fetchImpl(request.url, {

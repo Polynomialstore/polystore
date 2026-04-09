@@ -10,7 +10,7 @@ interface TargetUrlSet {
   bundle?: string
 }
 
-const BUNDLE_V2_CONTENT_TYPE = 'application/x.nilstore-bundle-v2'
+const BUNDLE_V2_CONTENT_TYPE = 'application/x.polystore-bundle-v2'
 const bundleHeaderEncoder = new TextEncoder()
 
 const targetUrlCache = new WeakMap<UploadTarget, TargetUrlSet>()
@@ -91,19 +91,19 @@ function buildHeaders(
   artifact: SparseArtifactInput,
 ): Record<string, string> {
   const headers: Record<string, string> = {
-    'X-Nil-Deal-ID': dealId,
-    'X-Nil-Manifest-Root': manifestRoot,
+    'X-PolyStore-Deal-ID': dealId,
+    'X-PolyStore-Manifest-Root': manifestRoot,
     'Content-Type': 'application/octet-stream',
   }
   const normalizedPreviousManifestRoot = String(previousManifestRoot || '').trim()
   if (normalizedPreviousManifestRoot !== '') {
-    headers['X-Nil-Previous-Manifest-Root'] = normalizedPreviousManifestRoot
+    headers['X-PolyStore-Previous-Manifest-Root'] = normalizedPreviousManifestRoot
   }
   if (artifact.kind === 'mdu' || artifact.kind === 'shard') {
-    headers['X-Nil-Mdu-Index'] = String(artifact.index)
+    headers['X-PolyStore-Mdu-Index'] = String(artifact.index)
   }
   if (artifact.kind === 'shard') {
-    headers['X-Nil-Slot'] = String(artifact.slot)
+    headers['X-PolyStore-Slot'] = String(artifact.slot)
   }
   return headers
 }

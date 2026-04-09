@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-const nilUploadPreviousManifestRootHeader = "X-Nil-Previous-Manifest-Root"
+const polystoreUploadPreviousManifestRootHeader = "X-PolyStore-Previous-Manifest-Root"
 
 var errInvalidUploadPreviousManifestRoot = errors.New("invalid upload previous manifest root")
 
@@ -27,27 +27,27 @@ func (e *staleUploadPreviousManifestRootError) Error() string {
 	return fmt.Sprintf("stale previous_manifest_root: expected %s", e.expected)
 }
 
-type nilfsUploadRootPreflightCacheKey struct {
+type polyfsUploadRootPreflightCacheKey struct {
 	dealID               uint64
 	previousManifestRoot string
 }
 
-type nilfsUploadRootPreflightCacheEntry struct {
+type polyfsUploadRootPreflightCacheEntry struct {
 	expiresAt time.Time
 }
 
 var (
-	nilfsUploadRootPreflightCache    sync.Map
-	nilfsUploadRootPreflightCacheTTL = time.Duration(envInt("NIL_UPLOAD_ROOT_PREFLIGHT_CACHE_TTL_MS", 15000)) * time.Millisecond
-	nilfsUploadRootPreflightGroup    singleflight.Group
+	polyfsUploadRootPreflightCache    sync.Map
+	polyfsUploadRootPreflightCacheTTL = time.Duration(envInt("POLYSTORE_UPLOAD_ROOT_PREFLIGHT_CACHE_TTL_MS", 15000)) * time.Millisecond
+	polyfsUploadRootPreflightGroup    singleflight.Group
 )
 
-func resetNilfsUploadRootPreflightCacheForTest() {
-	nilfsUploadRootPreflightCache = sync.Map{}
-	nilfsUploadRootPreflightGroup = singleflight.Group{}
+func resetPolyfsUploadRootPreflightCacheForTest() {
+	polyfsUploadRootPreflightCache = sync.Map{}
+	polyfsUploadRootPreflightGroup = singleflight.Group{}
 }
 
-func validateNilfsUploadPreviousManifestRoot(
+func validatePolyfsUploadPreviousManifestRoot(
 	ctx context.Context,
 	dealID uint64,
 	manifestRoot string,
@@ -56,36 +56,36 @@ func validateNilfsUploadPreviousManifestRoot(
 	_ = manifestRoot
 	previousManifestRoot, err := parseManifestRootOrEmpty(rawPreviousManifestRoot)
 	if err != nil {
-		return fmt.Errorf("%w: %s: %v", errInvalidUploadPreviousManifestRoot, nilUploadPreviousManifestRootHeader, err)
+		return fmt.Errorf("%w: %s: %v", errInvalidUploadPreviousManifestRoot, polystoreUploadPreviousManifestRootHeader, err)
 	}
-	key := nilfsUploadRootPreflightCacheKey{
+	key := polyfsUploadRootPreflightCacheKey{
 		dealID:               dealID,
 		previousManifestRoot: previousManifestRoot,
 	}
-	if nilfsUploadRootPreflightCacheTTL > 0 {
+	if polyfsUploadRootPreflightCacheTTL > 0 {
 		now := time.Now()
-		if cachedAny, ok := nilfsUploadRootPreflightCache.Load(key); ok {
-			if cached, ok := cachedAny.(nilfsUploadRootPreflightCacheEntry); ok && now.Before(cached.expiresAt) {
+		if cachedAny, ok := polyfsUploadRootPreflightCache.Load(key); ok {
+			if cached, ok := cachedAny.(polyfsUploadRootPreflightCacheEntry); ok && now.Before(cached.expiresAt) {
 				return nil
 			}
 		}
 	}
 
 	resultKey := fmt.Sprintf("%d|%s", key.dealID, key.previousManifestRoot)
-	ch := nilfsUploadRootPreflightGroup.DoChan(resultKey, func() (any, error) {
+	ch := polyfsUploadRootPreflightGroup.DoChan(resultKey, func() (any, error) {
 		meta, err := fetchDealMetaFresh(dealID)
 		if err != nil {
 			return nil, err
 		}
 		expectedPrevious := normalizeManifestRootOrEmpty(meta.ManifestRoot)
 		if expectedPrevious != previousManifestRoot {
-			recordNilfsCASPreflightConflict(nilfsCASPreflightConflictUpload)
+			recordPolyfsCASPreflightConflict(polyfsCASPreflightConflictUpload)
 			return nil, &staleUploadPreviousManifestRootError{expected: expectedPrevious}
 		}
 
-		if nilfsUploadRootPreflightCacheTTL > 0 {
-			nilfsUploadRootPreflightCache.Store(key, nilfsUploadRootPreflightCacheEntry{
-				expiresAt: time.Now().Add(nilfsUploadRootPreflightCacheTTL),
+		if polyfsUploadRootPreflightCacheTTL > 0 {
+			polyfsUploadRootPreflightCache.Store(key, polyfsUploadRootPreflightCacheEntry{
+				expiresAt: time.Now().Add(polyfsUploadRootPreflightCacheTTL),
 			})
 		}
 		return nil, nil
@@ -103,10 +103,10 @@ func uploadPreviousManifestRootHeader(r *http.Request) string {
 	if r == nil {
 		return ""
 	}
-	return strings.TrimSpace(r.Header.Get(nilUploadPreviousManifestRootHeader))
+	return strings.TrimSpace(r.Header.Get(polystoreUploadPreviousManifestRootHeader))
 }
 
-func classifyNilfsUploadPreviousManifestRootError(err error) int {
+func classifyPolyfsUploadPreviousManifestRootError(err error) int {
 	switch {
 	case err == nil:
 		return http.StatusOK

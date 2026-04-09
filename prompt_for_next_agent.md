@@ -7,7 +7,7 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 - **Devnet Gamma-2 (Thick Client):** **COMPLETE**.
 - **Devnet Gamma-3 (Direct Transport & EVM Integration):** **COMPLETE & VERIFIED**.
   - **Direct Upload:** Frontend shards files locally (WASM) and uploads MDUs directly to the Storage Provider (SP) on port 8082.
-  - **Direct Commit:** Frontend calls the NilStore EVM Precompile (`updateDealContent`) directly via MetaMask/Wagmi.
+  - **Direct Commit:** Frontend calls the PolyStore EVM Precompile (`updateDealContent`) directly via MetaMask/Wagmi.
   - **Verification:** `tests/direct-upload.spec.ts` passes, confirming the "Expand -> Upload -> Commit" flow and fixing the 0-byte upload regression.
   - **Fixes:** `FileSharder.tsx` buffer detachment bug fixed. `direct-upload.spec.ts` hardened with `eth_sendTransaction` payload validation.
 - **Devnet Gamma-4 (Economic Upgrade):** **COMPLETE**.
@@ -62,9 +62,9 @@ This file is the short brief for the next agent. The canonical, longer TODO list
 ## 5. Key Files
 
 - **Roadmap:** `AGENTS.md` (Canonical).
-- **Chain Params:** `nilchain/x/nilchain/types/params.go`.
-- **Msg Server:** `nilchain/x/nilchain/keeper/msg_server.go`.
-- **Retrieval Session types:** `nilchain/proto/nilchain/nilchain/v1/types.proto`.
+- **Chain Params:** `polystorechain/x/polystorechain/types/params.go`.
+- **Msg Server:** `polystorechain/x/polystorechain/keeper/msg_server.go`.
+- **Retrieval Session types:** `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`.
 - **E2E scripts:** `e2e_retrieval_fees.sh`, `e2e_open_retrieval_session_cli.sh`.
 
 ## 6. How to Run

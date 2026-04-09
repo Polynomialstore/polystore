@@ -56,7 +56,7 @@ test('provider onboarding flow keeps the wallet step active until the wallet is 
   })
 
   assert.equal(disconnected.currentStepId, 'wallet')
-  assert.match(disconnected.nextActionMessage, /capture the Nil address used for provider approval/i)
+  assert.match(disconnected.nextActionMessage, /capture the PolyStore address used for provider approval/i)
   assert.equal(disconnected.steps[0]?.statusLabel, 'Do now')
 
   const unfunded = buildProviderOnboardingFlow({

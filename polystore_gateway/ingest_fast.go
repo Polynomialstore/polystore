@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 // IngestNewDealFast creates a simplified Deal Slab for testing.
@@ -48,7 +48,7 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 	}
 
 	// 4. Append File Record
-	baseName := normalizeNilfsRecordBasename(recordPath, filePath)
+	baseName := normalizePolyfsRecordBasename(recordPath, filePath)
 	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, 0, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, err

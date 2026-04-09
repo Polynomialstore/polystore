@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 func TestSlabMetadataReadWriteRoundTrip(t *testing.T) {

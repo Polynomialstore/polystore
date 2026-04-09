@@ -2,7 +2,7 @@ module polystore_gateway
 
 go 1.25.5
 
-replace nilchain => ../nilchain
+replace polystorechain => ../polystorechain
 
 replace github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.52.0
 
@@ -17,7 +17,7 @@ require (
 	go.etcd.io/bbolt v1.4.0-alpha.1
 	golang.org/x/crypto v0.45.0
 	golang.org/x/sync v0.18.0
-	nilchain v0.0.0-00010101000000-000000000000
+	polystorechain v0.0.0-00010101000000-000000000000
 )
 
 require (

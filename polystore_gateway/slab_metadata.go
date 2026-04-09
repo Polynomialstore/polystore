@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"nilchain/x/crypto_ffi"
+	"polystorechain/x/crypto_ffi"
 )
 
 const (

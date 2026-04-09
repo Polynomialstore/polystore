@@ -1,7 +1,7 @@
 import { hashTypedData, recoverAddress } from 'viem'
 
 const domain = {
-  name: 'NilStore',
+  name: 'PolyStore',
   version: '1',
   chainId: 31337,
   verifyingContract: '0x0000000000000000000000000000000000000000',

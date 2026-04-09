@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { createPublicClient, http } from 'viem'
 import { appConfig } from '../config'
-import { nilChain } from '../lib/web3Config'
-import { nilBridgeAbi } from '../abi/nilBridge'
+import { polyStoreChain } from '../lib/web3Config'
+import { polystoreBridgeAbi } from '../abi/polystoreBridge'
 
 export function BridgeStatus() {
   const bridgeAddress = appConfig.bridgeAddress
@@ -17,7 +17,7 @@ export function BridgeStatus() {
     }
 
     const client = createPublicClient({
-      chain: nilChain,
+      chain: polyStoreChain,
       transport: http(appConfig.evmRpc),
     })
 
@@ -29,12 +29,12 @@ export function BridgeStatus() {
         const [height, root] = await Promise.all([
           client.readContract({
             address: bridgeAddress as `0x${string}`,
-            abi: nilBridgeAbi,
+            abi: polystoreBridgeAbi,
             functionName: 'latestBlockHeight',
           }) as Promise<bigint>,
           client.readContract({
             address: bridgeAddress as `0x${string}`,
-            abi: nilBridgeAbi,
+            abi: polystoreBridgeAbi,
             functionName: 'latestStateRoot',
           }) as Promise<`0x${string}`>,
         ])

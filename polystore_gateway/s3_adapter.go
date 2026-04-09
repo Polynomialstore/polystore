@@ -113,7 +113,7 @@ func s3DealIDToBucket(id uint64) string {
 }
 
 func fetchDealIDsFromLCD(ctx context.Context) ([]uint64, error) {
-	url := fmt.Sprintf("%s/nilchain/nilchain/v1/deals?pagination.limit=1000", lcdBase)
+	url := fmt.Sprintf("%s/polystorechain/polystorechain/v1/deals?pagination.limit=1000", lcdBase)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := lcdHTTPClient.Do(req)
 	if err != nil {
@@ -187,8 +187,8 @@ func S3ListBuckets(w http.ResponseWriter, r *http.Request) {
 	_ = xml.NewEncoder(w).Encode(&s3ListBucketsResult{
 		XMLNS: s3XMLNS,
 		Owner: s3Owner{
-			ID:          "nilstore",
-			DisplayName: "nilstore",
+			ID:          "polystore",
+			DisplayName: "polystore",
 		},
 		Buckets: s3Buckets{Buckets: buckets},
 	})
@@ -326,7 +326,7 @@ func S3GetObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := vars["key"]
-	filePath, err := validateNilfsFilePath(key)
+	filePath, err := validatePolyfsFilePath(key)
 	if err != nil {
 		writeS3Error(w, http.StatusBadRequest, "InvalidArgument", err.Error())
 		return
@@ -376,7 +376,7 @@ func S3GetObject(w http.ResponseWriter, r *http.Request) {
 		isRange = true
 	}
 
-	reader, _, _, _, segmentLen, fileLen, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
+	reader, _, _, _, segmentLen, fileLen, err := resolvePolyfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeS3Error(w, http.StatusNotFound, "NoSuchKey", "object not found")
@@ -412,7 +412,7 @@ func S3GetObject(w http.ResponseWriter, r *http.Request) {
 
 func S3PutObject(w http.ResponseWriter, r *http.Request) {
 	if !txRelayEnabled {
-		writeS3Error(w, http.StatusForbidden, "AccessDenied", "tx relay disabled (set NIL_ENABLE_TX_RELAY=1 for dev)")
+		writeS3Error(w, http.StatusForbidden, "AccessDenied", "tx relay disabled (set POLYSTORE_ENABLE_TX_RELAY=1 for dev)")
 		return
 	}
 	vars := mux.Vars(r)
@@ -423,7 +423,7 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := vars["key"]
-	filePath, err := validateNilfsFilePath(key)
+	filePath, err := validatePolyfsFilePath(key)
 	if err != nil {
 		writeS3Error(w, http.StatusBadRequest, "InvalidArgument", err.Error())
 		return
@@ -514,7 +514,7 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 	sizeStr := strconv.FormatUint(res.sizeBytes, 10)
 	_, txErr := runTxWithRetry(
 		ingestCtx,
-		"tx", "nilchain", "update-deal-content",
+		"tx", "polystorechain", "update-deal-content",
 		"--deal-id", dealIDStr,
 		"--cid", res.manifestRoot.Canonical,
 		"--size", sizeStr,
@@ -532,13 +532,13 @@ func S3PutObject(w http.ResponseWriter, r *http.Request) {
 
 	etag := hex.EncodeToString(hasher.Sum(nil))
 	w.Header().Set("ETag", fmt.Sprintf("\"%s\"", etag))
-	w.Header().Set("X-Nil-Deal-ID", dealIDStr)
-	w.Header().Set("X-Nil-Manifest-Root", res.manifestRoot.Canonical)
+	w.Header().Set("X-PolyStore-Deal-ID", dealIDStr)
+	w.Header().Set("X-PolyStore-Manifest-Root", res.manifestRoot.Canonical)
 	w.WriteHeader(http.StatusOK)
 }
 
 func S3DeleteObject(w http.ResponseWriter, r *http.Request) {
-	// NilFS delete/tombstone support is not wired into this adapter yet.
+	// PolyFS delete/tombstone support is not wired into this adapter yet.
 	// Return a clear S3-style error instead of silently corrupting state.
 	writeS3Error(w, http.StatusNotImplemented, "NotImplemented", "DELETE is not supported yet")
 }

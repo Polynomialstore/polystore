@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 func TestOnChainSessionProofs_NormalizesSessionIDKey(t *testing.T) {

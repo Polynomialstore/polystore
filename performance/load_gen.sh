@@ -28,11 +28,11 @@ else
     exit 1
 fi
 
-BINARY="$(pwd)/../nilchaind"
-CHAIN_ID="nilchain"
-HOME_DIR="$(pwd)/.nilchain_perf"
+BINARY="$(pwd)/../polystorechaind"
+CHAIN_ID="polystorechain"
+HOME_DIR="$(pwd)/.polystorechain_perf"
 MDU_FILE="./perf_mdu.dat"
-TRUSTED_SETUP="../nilchain/trusted_setup.txt"
+TRUSTED_SETUP="../polystorechain/trusted_setup.txt"
 KEYRING="--keyring-backend test"
 
 echo ">>> Starting Performance Test: $SCALE Scale"
@@ -41,10 +41,10 @@ echo ">>> Configuration: $NUM_PROVIDERS Providers, $NUM_DEALS Deals, Mode: $BROA
 # Ensure binaries are built
 echo ">>> Building binaries..."
 (
-    cd ../nilchain # Change to the nilchain module directory
+    cd ../polystorechain # Change to the polystorechain module directory
     echo "Cleaning Go build cache..."
     go clean -cache -modcache
-    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o "../nilchaind" ./cmd/nilchaind # Build to project root
+    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o "../polystorechaind" ./cmd/polystorechaind # Build to project root
 )
 echo "Binary info for $BINARY:"
 file "$BINARY"
@@ -54,7 +54,7 @@ ls -l "$BINARY"
 
 echo ">>> Resetting Chain..."
 
-pkill -f nilchaind || true
+pkill -f polystorechaind || true
 
 rm -rf "$HOME_DIR" # Ensure clean slate before any init commands
 
@@ -105,7 +105,7 @@ sed -i.bak 's/minimum-gas-prices = ""/minimum-gas-prices = "0token"/' "$HOME_DIR
 
 # 5. Start Chain
 echo ">>> Starting Chain (output to console with debug logs)..."
-# Change to project root before starting nilchaind
+# Change to project root before starting polystorechaind
 pushd ../ > /dev/null
 "$BINARY" start --home "$HOME_DIR" --log_level debug --trace &
 PID=$!
@@ -127,7 +127,7 @@ for i in {1..60}; do
 done
 
 if [ "$CHAIN_STARTED" -eq 0 ]; then
-    echo "ERROR: Chain did not start within 60 seconds. See above for any nilchaind errors."
+    echo "ERROR: Chain did not start within 60 seconds. See above for any polystorechaind errors."
     kill "$PID" || true # Kill for debugging purposes if it didn't start properly
     rm -rf "$HOME_DIR" # Re-enable cleanup
     rm "$MDU_FILE"
@@ -144,7 +144,7 @@ echo ">>> Debug: Querying provider1 account..."
 "$BINARY" query auth account $("$BINARY" keys show provider1 -a --home "$HOME_DIR" $KEYRING) --home "$HOME_DIR" --node tcp://127.0.0.1:26657
 
 for i in $(seq 1 "$NUM_PROVIDERS"); do
-    yes | "$BINARY" tx nilchain register-provider General 1000000000 --from "provider$i" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
+    yes | "$BINARY" tx polystorechain register-provider General 1000000000 --from "provider$i" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
 done
 # If async, wait a bit for inclusion
 if [ "$BROADCAST_MODE" == "async" ]; then sleep 5; fi
@@ -156,7 +156,7 @@ dd if=/dev/zero of="$MDU_FILE" bs=1M count=8 2>/dev/null
 
 DEAL_START_TIME=$(date +%s)
 for i in $(seq 1 "$NUM_DEALS"); do
-    yes | "$BINARY" tx nilchain create-deal "QmPerf$i" 8388608 100 1000 100 --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
+    yes | "$BINARY" tx polystorechain create-deal "QmPerf$i" 8388608 100 1000 100 --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
     # Sequential to handle nonce correctly for single user
 done
 DEAL_END_TIME=$(date +%s)
@@ -168,7 +168,7 @@ for i in $(seq 1 "$NUM_DEALS"); do
     P_IDX=$(( (i % NUM_PROVIDERS) + 1 ))
     DEAL_ID=$((i - 1))
     
-    yes | "$BINARY" tx nilchain prove-liveness-local "$DEAL_ID" "$MDU_FILE" "$TRUSTED_SETUP" --from "provider$P_IDX" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
+    yes | "$BINARY" tx polystorechain prove-liveness-local "$DEAL_ID" "$MDU_FILE" "$TRUSTED_SETUP" --from "provider$P_IDX" --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" $KEYRING --broadcast-mode "$BROADCAST_MODE" --node tcp://127.0.0.1:26657
 done
 PROOF_END_TIME=$(date +%s)
 

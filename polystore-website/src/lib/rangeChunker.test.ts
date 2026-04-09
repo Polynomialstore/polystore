@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { planNilfsFileRangeChunks, rawMduCapacityFromMduSize, rawOffsetToEncodedBlobIndex } from './rangeChunker'
+import { planPolyfsFileRangeChunks, rawMduCapacityFromMduSize, rawOffsetToEncodedBlobIndex } from './rangeChunker'
 
-test('planNilfsFileRangeChunks splits across blob/MDU boundaries', () => {
+test('planPolyfsFileRangeChunks splits across blob/MDU boundaries', () => {
   const mduSizeBytes = 8 * 1024 * 1024
   const blobSizeBytes = 128 * 1024
   const rawCap = rawMduCapacityFromMduSize(mduSizeBytes)
@@ -13,7 +13,7 @@ test('planNilfsFileRangeChunks splits across blob/MDU boundaries', () => {
   const rangeStart = 0
   const rangeLen = 400_000
 
-  const chunks = planNilfsFileRangeChunks({
+  const chunks = planPolyfsFileRangeChunks({
     fileStartOffset,
     fileSizeBytes,
     rangeStart,

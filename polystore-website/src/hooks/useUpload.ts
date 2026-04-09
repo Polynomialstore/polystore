@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ethToNil } from '../lib/address'
+import { ethToPolystoreAddress } from '../lib/address'
 import { useTransportRouter } from './useTransportRouter'
 
 export interface UploadResult {
@@ -32,7 +32,7 @@ export function useUpload() {
 
     setLoading(true)
     try {
-      const owner = address.startsWith('0x') ? ethToNil(address) : address
+      const owner = address.startsWith('0x') ? ethToPolystoreAddress(address) : address
       const result = await transport.uploadFile({
         file,
         owner,

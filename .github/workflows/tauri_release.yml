@@ -82,7 +82,7 @@ jobs:
         with:
           projectPath: polystore_gateway_gui
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
-          releaseName: NilGateway GUI ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: PolyStore Gateway GUI ${{ github.event.inputs.tag || github.ref_name }}
           releaseBody: "Automated release build."
           releaseDraft: false
           prerelease: false

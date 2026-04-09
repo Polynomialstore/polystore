@@ -12,7 +12,7 @@ func resetGatewayAuthStateForTest() {
 }
 
 func TestGatewayToProviderAuthToken_DefaultDeterministic(t *testing.T) {
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "")
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "")
 	resetGatewayAuthStateForTest()
 
 	got := gatewayToProviderAuthToken()
@@ -27,7 +27,7 @@ func TestGatewayToProviderAuthToken_DefaultDeterministic(t *testing.T) {
 }
 
 func TestGatewayToProviderAuthToken_EnvOverride(t *testing.T) {
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "  custom-shared-token  ")
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "  custom-shared-token  ")
 	resetGatewayAuthStateForTest()
 
 	got := gatewayToProviderAuthToken()
@@ -37,7 +37,7 @@ func TestGatewayToProviderAuthToken_EnvOverride(t *testing.T) {
 }
 
 func TestIsGatewayAuthorized_DefaultToken(t *testing.T) {
-	t.Setenv("NIL_GATEWAY_SP_AUTH", "")
+	t.Setenv("POLYSTORE_GATEWAY_SP_AUTH", "")
 	resetGatewayAuthStateForTest()
 
 	req := httptest.NewRequest("GET", "/sp/shard", nil)

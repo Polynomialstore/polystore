@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let blob_path = fixtures_dir.join("blob_128k.bin");
     let setup_path = manifest_dir
         .join("..")
-        .join("nilchain")
+        .join("polystorechain")
         .join("trusted_setup.txt");
 
     let mdu_bytes = fs::read(mdu_path)?;

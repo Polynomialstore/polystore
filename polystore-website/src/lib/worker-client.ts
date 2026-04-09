@@ -111,7 +111,7 @@ function initializeExpansionPool(trustedSetupBytes: Uint8Array): Promise<void> {
           reject,
         })
         expansionPendingByWorker.get(w)?.add(id)
-        w.postMessage({ id, type: 'initNilWasm', payload: { trustedSetupBytes: setupCopy } }, [setupCopy.buffer])
+        w.postMessage({ id, type: 'initPolyStoreWasm', payload: { trustedSetupBytes: setupCopy } }, [setupCopy.buffer])
       })
     })
 
@@ -265,9 +265,9 @@ type ExpandStripeOptions = {
 
 export const workerClient = {
   // Initialize the WASM module inside the worker, including KzgContext
-  async initNilWasm(trustedSetupBytes: Uint8Array): Promise<string> {
+  async initPolyStoreWasm(trustedSetupBytes: Uint8Array): Promise<string> {
     const setupCopy = trustedSetupBytes.slice()
-    const result = await sendMessageToWorker('initNilWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer]) as string
+    const result = await sendMessageToWorker('initPolyStoreWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer]) as string
     await initializeExpansionPool(setupCopy)
     return result
   },
@@ -342,7 +342,7 @@ export const workerClient = {
     return sendMessageToWorker('getMdu0WitnessCount', {}) as Promise<number>;
   },
 
-  // Shard a file (or part of it) using NilWasm
+  // Shard a file (or part of it) using PolyStoreWasm
   // This will likely need to handle streaming of data in the future for large files.
   async shardFile(data: Uint8Array): Promise<ExpandedMdu> {
     return sendMessageToWorker('shardFile', { data }, [data.buffer]) as Promise<ExpandedMdu>;

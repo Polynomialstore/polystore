@@ -106,7 +106,7 @@ export async function fetchStatus(expectedChainId: number, options: FetchStatusO
   }
 
   try {
-    const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
+    const res = await fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`)
     if (res.ok) {
       const json = await res.json()
       const providers = Array.isArray(json?.providers) ? json.providers : []

@@ -6,10 +6,10 @@ If you want the full guide, see `DEVNET_MULTI_PROVIDER.md`.
 
 ## What you need from the hub operator
 
-- Shared `user-gateway` to `provider-daemon` auth token: `NIL_GATEWAY_SP_AUTH=...`
+- Shared `user-gateway` to `provider-daemon` auth token: `POLYSTORE_GATEWAY_SP_AUTH=...`
 - Operator wallet address from website onboarding: `OPERATOR_ADDRESS=nil1...` (or `0x...`)
 
-Treat `NIL_GATEWAY_SP_AUTH` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
+Treat `POLYSTORE_GATEWAY_SP_AUTH` as a secret. Paste it only on the provider host or into a trusted local agent session. Do not post it in chat, issues, or screenshots.
 
 The default provider flow now targets the canonical public PolyStore testnet from `.env.testnet.public`.
 Only set `HUB_NODE`, `HUB_LCD`, or `CHAIN_ID` when you are intentionally joining a non-public hub.
@@ -19,7 +19,7 @@ The web-first operator flow is:
 2. Connect the operator wallet and copy the operator address (`nil1...`).
 3. Prepare the provider host checkout on the machine that will run the provider-daemon.
 4. Pair provider identity: run one `pair` command on the provider host, let it create the key if needed, fund it and rerun if auto-funding is unavailable, then approve it from the website wallet step.
-5. Configure public access: set the provider endpoint and paste `NIL_GATEWAY_SP_AUTH` from the hub operator.
+5. Configure public access: set the provider endpoint and paste `POLYSTORE_GATEWAY_SP_AUTH` from the hub operator.
 6. Run bootstrap from the website command rail, then finish verification from `https://polynomialstore.com/#/sp-dashboard`.
 
 ## Provider machine prerequisites
@@ -88,7 +88,7 @@ Approve the pending provider link in `https://polynomialstore.com/#/sp-onboardin
 ```bash
 export PROVIDER_KEY="provider1"
 export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https" # or your /ip4/... endpoint
-export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
+export POLYSTORE_GATEWAY_SP_AUTH="<shared-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
 ./scripts/run_devnet_provider.sh bootstrap
@@ -103,7 +103,7 @@ export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 - updates provider endpoints if it is already registered
 - runs a doctor pass at the end
 
-Website-managed `bootstrap` now fails fast unless `OPERATOR_ADDRESS`, `NIL_GATEWAY_SP_AUTH`, and `PROVIDER_ENDPOINT` are all present.
+Website-managed `bootstrap` now fails fast unless `OPERATOR_ADDRESS`, `POLYSTORE_GATEWAY_SP_AUTH`, and `PROVIDER_ENDPOINT` are all present.
 
 If you intentionally want a partial manual bootstrap, use the staged commands below (`pair`, `register`, `start`) or opt in explicitly with:
 
@@ -141,7 +141,7 @@ Start only the provider-daemon:
 
 ```bash
 export PROVIDER_KEY="provider1"
-export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
+export POLYSTORE_GATEWAY_SP_AUTH="<shared-from-hub>"
 export PROVIDER_LISTEN=":8091"
 
 ./scripts/run_devnet_provider.sh start
@@ -188,7 +188,7 @@ Agent-oriented diagnostics:
 From the hub (or anywhere with LCD access):
 
 ```bash
-curl -sf "${HUB_LCD:-https://lcd.polynomialstore.com}/nilchain/nilchain/v1/providers" | jq '.providers | length'
+curl -sf "${HUB_LCD:-https://lcd.polynomialstore.com}/polystorechain/polystorechain/v1/providers" | jq '.providers | length'
 ```
 
 ## Common failures
@@ -199,4 +199,4 @@ curl -sf "${HUB_LCD:-https://lcd.polynomialstore.com}/nilchain/nilchain/v1/provi
   - `OPERATOR_ADDRESS` was wrong, or the operator wallet has not approved the pending provider link
 - Router can’t reach provider:
   - firewall/NAT; ensure your `PROVIDER_ENDPOINT` is reachable **from the hub**
-  - confirm `NIL_GATEWAY_SP_AUTH` matches the hub `user-gateway`
+  - confirm `POLYSTORE_GATEWAY_SP_AUTH` matches the hub `user-gateway`

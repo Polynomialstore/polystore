@@ -23,8 +23,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 type mode2IngestResult struct {
@@ -155,7 +155,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		}
 	}
 
-	fileRecordPath = normalizeNilfsRecordBasename(fileRecordPath, filePath)
+	fileRecordPath = normalizePolyfsRecordBasename(fileRecordPath, filePath)
 
 	commitmentsPerMdu := stripe.leafCount
 	builder := crypto_ffi.NewMdu0BuilderWithCommitments(userMdus, commitmentsPerMdu)
@@ -455,7 +455,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 }
 
 func mode2EncodeParallelism() int {
-	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_ENCODE_PARALLELISM"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_MODE2_ENCODE_PARALLELISM"))
 	if raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 			return parsed
@@ -468,7 +468,7 @@ func mode2EncodeParallelism() int {
 }
 
 func mode2UploadParallelism(slotCount uint64) int {
-	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_UPLOAD_PARALLELISM"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_MODE2_UPLOAD_PARALLELISM"))
 	if raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 			return parsed
@@ -499,7 +499,7 @@ func mode2UploadParallelism(slotCount uint64) int {
 }
 
 func mode2ExpectContinueTimeout() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_EXPECT_CONTINUE_MS"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_MODE2_EXPECT_CONTINUE_MS"))
 	if raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil {
 			if parsed <= 0 {
@@ -514,7 +514,7 @@ func mode2ExpectContinueTimeout() time.Duration {
 }
 
 func mode2BundleUploadsEnabled() bool {
-	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_BUNDLE_UPLOAD"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_MODE2_BUNDLE_UPLOAD"))
 	if raw == "" {
 		return true
 	}
@@ -527,7 +527,7 @@ func mode2BundleUploadsEnabled() bool {
 }
 
 func mode2BundleUploadTimeout() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_BUNDLE_UPLOAD_TIMEOUT_SECONDS"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_MODE2_BUNDLE_UPLOAD_TIMEOUT_SECONDS"))
 	if raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 			return time.Duration(parsed) * time.Second
@@ -576,7 +576,7 @@ func mode2UploadTargetMetricKey(rawURL string) string {
 }
 
 func mode2SparseUploadEnabled() bool {
-	raw := strings.TrimSpace(os.Getenv("NIL_MODE2_SPARSE_UPLOAD"))
+	raw := strings.TrimSpace(os.Getenv("POLYSTORE_MODE2_SPARSE_UPLOAD"))
 	if raw == "" {
 		return true
 	}
@@ -870,7 +870,7 @@ func mode2BuildArtifactsAppend(
 	}
 	totalUserMdus := oldUserMdus + newUserMdus
 
-	fileRecordPath = normalizeNilfsRecordBasename(fileRecordPath, filePath)
+	fileRecordPath = normalizePolyfsRecordBasename(fileRecordPath, filePath)
 
 	// Stage artifacts under uploads/deals/<dealID>/.staging-<ts>/, then atomically rename to the manifest-root key.
 	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
@@ -1561,22 +1561,22 @@ func mode2UploadArtifactsToProviders(
 				req.Header.Set("Expect", "100-continue")
 			}
 			if sparseUploads && currentSendSize > 0 && currentSendSize < fullSize {
-				req.Header.Set("X-Nil-Full-Size", strconv.FormatInt(fullSize, 10))
+				req.Header.Set("X-PolyStore-Full-Size", strconv.FormatInt(fullSize, 10))
 			}
 			if task.dealID != "" {
-				req.Header.Set("X-Nil-Deal-ID", task.dealID)
+				req.Header.Set("X-PolyStore-Deal-ID", task.dealID)
 			}
 			if task.mduIndex != "" {
-				req.Header.Set("X-Nil-Mdu-Index", task.mduIndex)
+				req.Header.Set("X-PolyStore-Mdu-Index", task.mduIndex)
 			}
 			if task.slot != "" {
-				req.Header.Set("X-Nil-Slot", task.slot)
+				req.Header.Set("X-PolyStore-Slot", task.slot)
 			}
 			if task.manifestRoot != "" {
-				req.Header.Set("X-Nil-Manifest-Root", task.manifestRoot)
+				req.Header.Set("X-PolyStore-Manifest-Root", task.manifestRoot)
 			}
 			if strings.TrimSpace(task.previousManifestRoot) != "" {
-				req.Header.Set(nilUploadPreviousManifestRootHeader, strings.TrimSpace(task.previousManifestRoot))
+				req.Header.Set(polystoreUploadPreviousManifestRootHeader, strings.TrimSpace(task.previousManifestRoot))
 			}
 
 			resp, err := client.Do(req)

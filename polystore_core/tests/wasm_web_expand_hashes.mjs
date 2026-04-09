@@ -1,4 +1,4 @@
-// Computes SHA-256 digests of NilWasm.expand_file outputs for a fixed 8MiB fixture.
+// Computes SHA-256 digests of PolyStoreWasm.expand_file outputs for a fixed 8MiB fixture.
 // Uses the *web-target* wasm-pack bundle that polystore-website serves from `public/wasm`.
 //
 // Intended to be invoked from Rust tests (see expand_parity_test.rs).
@@ -57,7 +57,7 @@ async function main() {
   const wasmModule = await import(pathToFileURL(wasmJsPath).toString());
   await wasmModule.default({ module_or_path: wasmBytes });
 
-  const wasm = new wasmModule.NilWasm(trustedSetup);
+  const wasm = new wasmModule.PolyStoreWasm(trustedSetup);
   const expanded = wasm.expand_file(fixtureData());
 
   const witnessHex = sha256Hex(expanded.witness);

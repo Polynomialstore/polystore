@@ -17,14 +17,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2s"
 
-	"nilchain/x/crypto_ffi"
-	niltypes "nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	niltypes "polystorechain/x/polystorechain/types"
 )
 
 func TestGatewayFetch_AllowsBundledDownloadSession_WhenOnchainSessionsRequired(t *testing.T) {
 	requireOnchainSessionForTest(t, true)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 	dealMetaCache = sync.Map{}
 
@@ -55,7 +55,7 @@ func TestGatewayFetch_AllowsBundledDownloadSession_WhenOnchainSessionsRequired(t
 	const dealID = uint64(1)
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"id":        "1",
@@ -106,7 +106,7 @@ func TestGatewayFetch_AllowsBundledDownloadSession_WhenOnchainSessionsRequired(t
 func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 	requireOnchainSessionForTest(t, true)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 	dealMetaCache = sync.Map{}
 
@@ -178,7 +178,7 @@ func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 					},
 				})
 				return
-			case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+			case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"deal": map[string]any{
 						"id":        "1",
@@ -188,8 +188,8 @@ func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 					},
 				})
 				return
-			case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/"):
-				sid := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/")
+			case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/retrieval-sessions/"):
+				sid := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/retrieval-sessions/")
 				if sid != sessionB64 {
 					http.NotFound(w, r)
 					return
@@ -245,7 +245,7 @@ func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 
 	req2 := httptest.NewRequest(http.MethodGet, u, nil)
 	req2.Header.Set("Range", fmt.Sprintf("bytes=0-%d", len(fileContent)-1))
-	req2.Header.Set("X-Nil-Session-Id", sessionHex)
+	req2.Header.Set("X-PolyStore-Session-Id", sessionHex)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusForbidden {
@@ -260,7 +260,7 @@ func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 
 	req3 := httptest.NewRequest(http.MethodGet, u, nil)
 	req3.Header.Set("Range", fmt.Sprintf("bytes=0-%d", len(fileContent)-1))
-	req3.Header.Set("X-Nil-Session-Id", sessionHex)
+	req3.Header.Set("X-PolyStore-Session-Id", sessionHex)
 	w3 := httptest.NewRecorder()
 	r.ServeHTTP(w3, req3)
 	if w3.Code != http.StatusPartialContent {
@@ -340,7 +340,7 @@ func TestGatewayDebugRawFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 				},
 			})
 			return
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"id":           "1",
@@ -351,8 +351,8 @@ func TestGatewayDebugRawFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 				},
 			})
 			return
-		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/"):
-			sid := strings.TrimPrefix(r.URL.Path, "/nilchain/nilchain/v1/retrieval-sessions/")
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/retrieval-sessions/"):
+			sid := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/retrieval-sessions/")
 			if sid != sessionB64 {
 				http.NotFound(w, r)
 				return
@@ -402,7 +402,7 @@ func TestGatewayDebugRawFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 	}
 
 	req2 := httptest.NewRequest(http.MethodGet, "/gateway/debug/raw-fetch/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
-	req2.Header.Set("X-Nil-Session-Id", sessionHex)
+	req2.Header.Set("X-PolyStore-Session-Id", sessionHex)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {

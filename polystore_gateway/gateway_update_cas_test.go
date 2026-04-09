@@ -11,7 +11,7 @@ import (
 )
 
 func TestGatewayUpdateDealContent_RejectsStalePreviousManifestRoot(t *testing.T) {
-	resetNilfsCASStatusCountersForTest()
+	resetPolyfsCASStatusCountersForTest()
 	oldRelay := txRelayEnabled
 	txRelayEnabled = true
 	t.Cleanup(func() { txRelayEnabled = oldRelay })
@@ -54,13 +54,13 @@ func TestGatewayUpdateDealContent_RejectsStalePreviousManifestRoot(t *testing.T)
 	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
 		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
 	}
-	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_legacy"]; got != "1" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_legacy=1, got %q", got)
+	if got := polyfsCASStatusSnapshotForStatus()["polyfs_cas_preflight_conflicts_legacy"]; got != "1" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_legacy=1, got %q", got)
 	}
 }
 
 func TestGatewayUpdateDealContentFromEvm_RejectsStalePreviousManifestRoot(t *testing.T) {
-	resetNilfsCASStatusCountersForTest()
+	resetPolyfsCASStatusCountersForTest()
 	oldRelay := txRelayEnabled
 	txRelayEnabled = true
 	t.Cleanup(func() { txRelayEnabled = oldRelay })
@@ -108,8 +108,8 @@ func TestGatewayUpdateDealContentFromEvm_RejectsStalePreviousManifestRoot(t *tes
 	if !strings.Contains(w.Body.String(), "stale previous_manifest_root") {
 		t.Fatalf("expected stale previous_manifest_root error, got %q", w.Body.String())
 	}
-	if got := nilfsCASStatusSnapshotForStatus()["nilfs_cas_preflight_conflicts_evm"]; got != "1" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_evm=1, got %q", got)
+	if got := polyfsCASStatusSnapshotForStatus()["polyfs_cas_preflight_conflicts_evm"]; got != "1" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_evm=1, got %q", got)
 	}
 }
 
@@ -287,7 +287,7 @@ func TestGatewayUpdateDealContentFromEvm_ForwardsPreviousManifestRootInPayload(t
 
 	var payloadPreviousRoot any
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if len(args) >= 4 && args[0] == "tx" && args[1] == "nilchain" && args[2] == "update-deal-content-from-evm" {
+		if len(args) >= 4 && args[0] == "tx" && args[1] == "polystorechain" && args[2] == "update-deal-content-from-evm" {
 			payloadBytes, err := os.ReadFile(args[3])
 			if err != nil {
 				t.Fatalf("read payload: %v", err)
@@ -334,7 +334,7 @@ func TestGatewayUpdateDealContentFromEvm_ForwardsPreviousManifestRootInPayload(t
 }
 
 func TestGatewayUpdateDealContentFromEvm_CompareAndSwapRace(t *testing.T) {
-	resetNilfsCASStatusCountersForTest()
+	resetPolyfsCASStatusCountersForTest()
 	oldRelay := txRelayEnabled
 	txRelayEnabled = true
 	t.Cleanup(func() { txRelayEnabled = oldRelay })
@@ -437,12 +437,12 @@ func TestGatewayUpdateDealContentFromEvm_CompareAndSwapRace(t *testing.T) {
 	}
 }
 
-func TestGatewayStatusIncludesNilfsCASConflictSnapshot(t *testing.T) {
-	resetNilfsCASStatusCountersForTest()
-	recordNilfsCASPreflightConflict(nilfsCASPreflightConflictLegacy)
-	recordNilfsCASPreflightConflict(nilfsCASPreflightConflictEvm)
-	recordNilfsCASPreflightConflict(nilfsCASPreflightConflictEvm)
-	recordNilfsCASPreflightConflict(nilfsCASPreflightConflictUpload)
+func TestGatewayStatusIncludesPolyfsCASConflictSnapshot(t *testing.T) {
+	resetPolyfsCASStatusCountersForTest()
+	recordPolyfsCASPreflightConflict(polyfsCASPreflightConflictLegacy)
+	recordPolyfsCASPreflightConflict(polyfsCASPreflightConflictEvm)
+	recordPolyfsCASPreflightConflict(polyfsCASPreflightConflictEvm)
+	recordPolyfsCASPreflightConflict(polyfsCASPreflightConflictUpload)
 
 	oldLCDBase := lcdBase
 	oldProviderBase := providerBase
@@ -465,16 +465,16 @@ func TestGatewayStatusIncludesNilfsCASConflictSnapshot(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&status); err != nil {
 		t.Fatalf("decode status response: %v", err)
 	}
-	if status.Extra["nilfs_cas_preflight_conflicts_total"] != "4" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_total=4, got=%q", status.Extra["nilfs_cas_preflight_conflicts_total"])
+	if status.Extra["polyfs_cas_preflight_conflicts_total"] != "4" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_total=4, got=%q", status.Extra["polyfs_cas_preflight_conflicts_total"])
 	}
-	if status.Extra["nilfs_cas_preflight_conflicts_legacy"] != "1" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_legacy=1, got=%q", status.Extra["nilfs_cas_preflight_conflicts_legacy"])
+	if status.Extra["polyfs_cas_preflight_conflicts_legacy"] != "1" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_legacy=1, got=%q", status.Extra["polyfs_cas_preflight_conflicts_legacy"])
 	}
-	if status.Extra["nilfs_cas_preflight_conflicts_evm"] != "2" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_evm=2, got=%q", status.Extra["nilfs_cas_preflight_conflicts_evm"])
+	if status.Extra["polyfs_cas_preflight_conflicts_evm"] != "2" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_evm=2, got=%q", status.Extra["polyfs_cas_preflight_conflicts_evm"])
 	}
-	if status.Extra["nilfs_cas_preflight_conflicts_upload"] != "1" {
-		t.Fatalf("expected nilfs_cas_preflight_conflicts_upload=1, got=%q", status.Extra["nilfs_cas_preflight_conflicts_upload"])
+	if status.Extra["polyfs_cas_preflight_conflicts_upload"] != "1" {
+		t.Fatalf("expected polyfs_cas_preflight_conflicts_upload=1, got=%q", status.Extra["polyfs_cas_preflight_conflicts_upload"])
 	}
 }

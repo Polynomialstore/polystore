@@ -14,8 +14,8 @@ import (
 	"strings"
 	"sync"
 
-	"nilchain/x/crypto_ffi"
-	"nilchain/x/nilchain/types"
+	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 
 	"golang.org/x/crypto/blake2s"
 )
@@ -36,7 +36,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		manifestPath = abs
 	}
 	if strings.TrimSpace(providerKeyName) == "" {
-		providerKeyName = envDefault("NIL_PROVIDER_KEY", "faucet")
+		providerKeyName = envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
 	}
 	providerAddr, err := resolveKeyAddress(ctx, providerKeyName)
 	if err != nil {
@@ -75,7 +75,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	if signer == "" {
 		signer = providerKeyName
 	} else {
-		// e2e passes a bech32 address; nilchaind expects a local key name for --from.
+		// e2e passes a bech32 address; polystorechaind expects a local key name for --from.
 		name, err := resolveKeyNameForAddress(ctx, signer)
 		if err != nil {
 			return "", fmt.Errorf("resolveKeyNameForAddress failed: %w", err)
@@ -83,9 +83,9 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		signer = name
 	}
 
-	signOut, err := execNilchaind(
+	signOut, err := execPolystorechaind(
 		signCtx,
-		"tx", "nilchain", "sign-retrieval-receipt",
+		"tx", "polystorechain", "sign-retrieval-receipt",
 		dealIDStr,
 		providerAddr,
 		epochStr,
@@ -131,7 +131,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	// 5. Submit Proof
 	submitOut, err := runTxWithRetry(
 		ctx,
-		"tx", "nilchain", "submit-retrieval-proof",
+		"tx", "polystorechain", "submit-retrieval-proof",
 		tmpPath,
 		"--from", providerKeyName,
 		"--chain-id", chainID,
@@ -171,7 +171,7 @@ type cachedProof struct {
 var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
 
 // generateProofHeaderJSON generates the JSON payload expected by the browser header
-// `X-Nil-Proof-JSON`. The payload is a small wrapper object:
+// `X-PolyStore-Proof-JSON`. The payload is a small wrapper object:
 //
 //	{ "proof_details": <ChainedProof> }
 //
@@ -246,7 +246,7 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	commitmentSpan := leafCount * commitmentBytes
 	startOffset := userOrdinal * commitmentSpan
 
-	witnessReader, err := newNilfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
+	witnessReader, err := newPolyfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to open witness reader: %w", err)
 	}
