@@ -26,7 +26,7 @@ test('fetchStatus keeps last known gateway state when optional probe is skipped'
         })
       }
 
-      if (url === `${appConfig.lcdBase}/nilchain/nilchain/v1/providers`) {
+      if (url === `${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`) {
         return jsonResponse(200, { providers: [] })
       }
 
@@ -78,7 +78,7 @@ test('fetchStatus skips gateway probe when configured gateway base is untrusted'
         })
       }
 
-      if (url === `${appConfig.lcdBase}/nilchain/nilchain/v1/providers`) {
+      if (url === `${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`) {
         return jsonResponse(200, { providers: [] })
       }
 
@@ -117,7 +117,7 @@ test('fetchStatus treats provider-daemon status on 8080 as non-gateway', async (
         })
       }
 
-      if (url === `${appConfig.lcdBase}/nilchain/nilchain/v1/providers`) {
+      if (url === `${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`) {
         return jsonResponse(200, { providers: [] })
       }
 

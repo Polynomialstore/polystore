@@ -18,7 +18,7 @@ function jsonResponse(status: number, body: unknown): Response {
   })
 }
 
-test('operatorAddressFromWalletAddress converts wallet address into nil bech32', () => {
+test('operatorAddressFromWalletAddress converts wallet address into the current PolyStore bech32 format', () => {
   assert.equal(
     operatorAddressFromWalletAddress('0x0000000000000000000000000000000000000001'),
     'nil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp3x4xu4',
@@ -45,7 +45,7 @@ test('fetchProviderPairing loads a provider pairing from LCD', async () => {
     fetchFn: fetchFn as any,
   })
 
-  assert.deepEqual(seen, ['http://lcd.test/nilchain/nilchain/v1/provider-pairings/nil1provider'])
+  assert.deepEqual(seen, ['http://lcd.test/polystorechain/polystorechain/v1/provider-pairings/nil1provider'])
   assert.deepEqual(pairing, {
     provider: 'nil1provider',
     operator: 'nil1operator',
@@ -80,7 +80,7 @@ test('fetchProvidersByWallet resolves the operator address and lists paired prov
   })
 
   assert.deepEqual(seen, [
-    'http://lcd.test/nilchain/nilchain/v1/provider-pairings/by-operator/nil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp3x4xu4',
+    'http://lcd.test/polystorechain/polystorechain/v1/provider-pairings/by-operator/nil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp3x4xu4',
   ])
   assert.equal(pairings.length, 2)
   assert.equal(pairings[1]?.paired_height, '11')

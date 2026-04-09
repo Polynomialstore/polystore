@@ -134,12 +134,12 @@ check_lcd_node_info() {
   check_http_200 "LCD node_info" "$lcd_base/cosmos/base/tendermint/v1beta1/node_info"
 }
 
-check_nilchain_params() {
+check_polystorechain_params() {
   local lcd_base="$1"
-  local url="$lcd_base/nilchain/nilchain/v1/params"
+  local url="$lcd_base/polystorechain/polystorechain/v1/params"
   local body
   if ! body="$(http_get "$url")"; then
-    fail "Nilchain params ($url) unreachable"
+    fail "PolyStore Chain params ($url) unreachable"
     return
   fi
 
@@ -149,12 +149,12 @@ check_nilchain_params() {
     storage="$(jq -r '.params.storage_price // empty' <<<"$body" 2>/dev/null || true)"
     retrieval="$(jq -r '.params.retrieval_price_per_blob // empty' <<<"$body" 2>/dev/null || true)"
     if [[ -n "$storage" && -n "$retrieval" ]]; then
-      ok "Nilchain params dynamic_pricing_enabled=$dyn storage_price=$storage retrieval_price_per_blob=$retrieval"
+      ok "PolyStore Chain params dynamic_pricing_enabled=$dyn storage_price=$storage retrieval_price_per_blob=$retrieval"
     else
-      ok "Nilchain params (jq parse partial; raw JSON fetched)"
+      ok "PolyStore Chain params (jq parse partial; raw JSON fetched)"
     fi
   else
-    ok "Nilchain params (jq not installed; JSON parse skipped)"
+    ok "PolyStore Chain params (jq not installed; JSON parse skipped)"
   fi
 }
 
@@ -199,7 +199,7 @@ check_provider_health() {
 check_provider_onchain_visibility() {
   local hub_lcd="$1"
   local provider_addr="$2"
-  check_http_200 "Provider on-chain record" "$hub_lcd/nilchain/nilchain/v1/providers/$provider_addr"
+  check_http_200 "Provider on-chain record" "$hub_lcd/polystorechain/polystorechain/v1/providers/$provider_addr"
 }
 
 MODE="hub"
@@ -262,7 +262,7 @@ PROVIDER="$(trim_trailing_slash "$PROVIDER")"
 HUB_LCD="$(trim_trailing_slash "$HUB_LCD")"
 PROVIDER_PUBLIC="$(trim_trailing_slash "$PROVIDER_PUBLIC")"
 
-echo "==> NilStore devnet healthcheck (mode=$MODE, timeout=${HC_TIMEOUT}s)"
+echo "==> PolyStore devnet healthcheck (mode=$MODE, timeout=${HC_TIMEOUT}s)"
 if ! have_cmd jq; then
   echo "    (note) jq not found; some JSON parsing will be skipped"
 fi
@@ -270,7 +270,7 @@ fi
 if [[ "$MODE" == "hub" ]]; then
   check_rpc_status "$RPC"
   check_lcd_node_info "$LCD"
-  check_nilchain_params "$LCD"
+  check_polystorechain_params "$LCD"
   check_evm_chain_id "$EVM"
   check_gateway_health "$GATEWAY"
   if [[ "$CHECK_FAUCET" == "1" ]]; then

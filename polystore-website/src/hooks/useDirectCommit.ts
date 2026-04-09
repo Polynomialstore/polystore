@@ -1,9 +1,9 @@
 import { useCallback } from 'react'
 import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import type { Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../lib/polystorePrecompile'
 import { appConfig } from '../config'
-import { classifyNilfsCommitError } from '../lib/nilfsCommitError'
+import { classifyPolyfsCommitError } from '../lib/polyfsCommitError'
 
 interface DirectCommitOptions {
   dealId: string; // The deal ID (string representation of uint64)
@@ -46,8 +46,8 @@ export function useDirectCommit() {
 
     try {
       const txHash = await writeContractAsync({
-        address: appConfig.nilstorePrecompile as Hex,
-        abi: NILSTORE_PRECOMPILE_ABI,
+        address: appConfig.polystorePrecompile as Hex,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealContent',
         args: [
           BigInt(dealId),
@@ -60,7 +60,7 @@ export function useDirectCommit() {
       })
       options.onSuccess?.(String(txHash))
     } catch (e) {
-      const classified = classifyNilfsCommitError(e)
+      const classified = classifyPolyfsCommitError(e)
       const error = new Error(classified.message)
       options.onError?.(error)
       throw error
@@ -70,7 +70,7 @@ export function useDirectCommit() {
   const normalizedError = (() => {
     const raw = writeError || receiptError
     if (!raw) return null
-    const classified = classifyNilfsCommitError(raw)
+    const classified = classifyPolyfsCommitError(raw)
     return new Error(classified.message)
   })()
 

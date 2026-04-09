@@ -5,7 +5,7 @@ import { bech32 } from 'bech32'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -15,7 +15,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
   const account = privateKeyToAccount(generatePrivateKey())
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   const dealId = '32'
   let gatewayProbeAttempts = 0
   let detailAttempts = 0
@@ -68,7 +68,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     const url = route.request().url()
 
     if (url.includes('/heat')) {
@@ -81,7 +81,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
 
     const deal = {
       id: dealId,
-      owner: nilAddress,
+      owner: polystoreAddress,
       cid: '',
       size: '0',
       escrow_balance: '1000000',
@@ -97,7 +97,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
       // ignore
     }
 
-    if (/\/nilchain\/nilchain\/v1\/deals\/32$/.test(pathname)) {
+    if (/\/polystorechain\/polystorechain\/v1\/deals\/32$/.test(pathname)) {
       detailAttempts += 1
       if (detailAttempts < 4) {
         return route.fulfill({
@@ -120,7 +120,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers**', async (route) => {
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -148,7 +148,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
 
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

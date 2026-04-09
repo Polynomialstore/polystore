@@ -2,13 +2,13 @@
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -24,15 +24,15 @@ test('repro bug: download from commit content widget', async ({
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   const txCreate = (`0x${'11'.repeat(32)}` as Hex)
   const txUpdate = (`0x${'22'.repeat(32)}` as Hex)
   const txProve = (`0x${'33'.repeat(32)}` as Hex)
   
-  console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
+  console.log(`Using random E2E wallet: ${account.address} -> ${polystoreAddress}`)
 
   // Mock EVM RPC receipts for the precompile-based flow.
-  const dealCreatedEvent = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'DealCreated' }) as any
+  const dealCreatedEvent = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'DealCreated' }) as any
   const dealCreatedTopic0 = getEventSelector(dealCreatedEvent)
   const dealIdTopic = toHex(0n, { size: 32 })
   const ownerTopic = padHex(account.address, { size: 32 })
@@ -123,7 +123,7 @@ test('repro bug: download from commit content widget', async ({
 
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
 
       on: () => {},
@@ -235,7 +235,7 @@ test('repro bug: download from commit content widget', async ({
   })
 
   // Intercept deals response to force ID="0"
-  await page.route('**/nilchain/nilchain/v1/deals*', async route => {
+  await page.route('**/polystorechain/polystorechain/v1/deals*', async route => {
     await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -245,7 +245,7 @@ test('repro bug: download from commit content widget', async ({
                     id: '0',
                     cid: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
                     size: '1024',
-                    owner: nilAddress,
+                    owner: polystoreAddress,
                     escrow: '1000',
                     end_block: '99999999',
                     start_block: '1',
@@ -260,7 +260,7 @@ test('repro bug: download from commit content widget', async ({
     });
   });
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -302,7 +302,7 @@ test('repro bug: download from commit content widget', async ({
   });
 
   // Mock receipt nonce (unsigned proof tx path uses chain nonce state).
-  await page.route('**/nilchain/nilchain/v1/deals/*/receipt-nonce*', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals/*/receipt-nonce*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -322,7 +322,7 @@ test('repro bug: download from commit content widget', async ({
           'access-control-allow-methods': 'GET, OPTIONS',
           'access-control-allow-headers': 'Range, Content-Type',
           'access-control-expose-headers':
-            'X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Range-Start, X-Nil-Range-Len, Content-Range, Accept-Ranges',
+            'X-PolyStore-Provider, X-PolyStore-Proof-JSON, X-PolyStore-Range-Start, X-PolyStore-Range-Len, Content-Range, Accept-Ranges',
         },
         body: '',
       })
@@ -346,11 +346,11 @@ test('repro bug: download from commit content widget', async ({
       headers: {
         'access-control-allow-origin': '*',
         'access-control-expose-headers':
-          'X-Nil-Provider, X-Nil-Proof-JSON, X-Nil-Range-Start, X-Nil-Range-Len, Content-Range, Accept-Ranges',
-        'x-nil-provider': 'nil1mockprovideraddress0000000000000000000000',
-        'x-nil-proof-json': proofJsonB64,
-        'x-nil-range-start': '0',
-        'x-nil-range-len': String(body.length),
+          'X-PolyStore-Provider, X-PolyStore-Proof-JSON, X-PolyStore-Range-Start, X-PolyStore-Range-Len, Content-Range, Accept-Ranges',
+        'x-polystore-provider': 'nil1mockprovideraddress0000000000000000000000',
+        'x-polystore-proof-json': proofJsonB64,
+        'x-polystore-range-start': '0',
+        'x-polystore-range-len': String(body.length),
         'accept-ranges': 'bytes',
         'content-range': `bytes 0-${body.length - 1}/${body.length}`,
         'content-length': String(body.length),
@@ -426,7 +426,7 @@ test('repro bug: download from commit content widget', async ({
 
   console.log('Requesting faucet...')
   await page.getByTestId('faucet-request').click()
-  await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
+  await expect(page.getByTestId('polystore-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
   console.log('Faucet received.')
 
   console.log('Creating deal...')

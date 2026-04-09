@@ -3,8 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-import init, { NilWasm, WasmMdu0Builder } from '../public/wasm/polystore_core.js'
-import { sanitizeNilfsRecordPath } from '../src/lib/nilfsPath'
+import init, { PolyStoreWasm, WasmMdu0Builder } from '../public/wasm/polystore_core.js'
+import { sanitizePolyfsRecordPath } from '../src/lib/polyfsPath'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -179,7 +179,7 @@ const wasmInitStart = performance.now()
 await init({ module_or_path: wasmBuffer })
 const trustedSetupPath = path.resolve(websiteRoot, 'public', 'trusted_setup.txt')
 const trustedSetup = new Uint8Array(await fs.readFile(trustedSetupPath))
-const wasm = new NilWasm(trustedSetup)
+const wasm = new PolyStoreWasm(trustedSetup)
 wasm.set_wasm_msm_basis_mode(basisMode)
 const wasmInitMs = performance.now() - wasmInitStart
 
@@ -305,7 +305,7 @@ function runPrepareStagesIteration(): PrepareRun {
   for (let i = 0; i < userRoots.length; i += 1) {
     builder.set_root(BigInt(totalWitnessMdus + i), userRoots[i])
   }
-  const filePath = sanitizeNilfsRecordPath(fileName)
+  const filePath = sanitizePolyfsRecordPath(fileName)
   if (typeof (builder as unknown as { append_file_with_flags?: unknown }).append_file_with_flags === 'function') {
     (builder as unknown as {
       append_file_with_flags: (path: string, size: bigint, startOffset: bigint, flags: number) => void
@@ -374,7 +374,7 @@ const summary = {
   warmup_runs: warmupRuns,
   measure_runs: measureRuns,
   init: {
-    nil_wasm_ms: wasmInitMs,
+    polystore_wasm_ms: wasmInitMs,
   },
   stages: {
     total_ms: readStats(runs.map((run) => run.total_ms)),

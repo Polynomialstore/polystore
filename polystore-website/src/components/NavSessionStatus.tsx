@@ -55,8 +55,8 @@ export function NavSessionStatus({
       <ConnectWallet compact={compact} responsive={responsive} />
       {session.isConnected ? (
         <div className="sr-only" aria-hidden="true">
-          <span data-testid="cosmos-identity">{session.nilAddress}</span>
-          <span data-testid="cosmos-stake-balance">{stakeBalanceLabel}</span>
+          <span data-testid="polystore-identity">{session.polystoreAddress}</span>
+          <span data-testid="polystore-stake-balance">{stakeBalanceLabel}</span>
         </div>
       ) : null}
 

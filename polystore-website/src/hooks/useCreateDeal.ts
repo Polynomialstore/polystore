@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import { appConfig } from '../config'
 import { decodeEventLog, encodeFunctionData, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../lib/polystorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { buildServiceHint } from '../lib/serviceHint'
 import { resolveActiveEvmAddress } from '../lib/walletAddress'
@@ -34,7 +34,7 @@ export function useCreateDeal() {
 
       const durationSeconds = Math.max(1, Number(input.durationSeconds) || 0)
       const data = encodeFunctionData({
-        abi: NILSTORE_PRECOMPILE_ABI,
+        abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'createDeal',
         args: [
           BigInt(durationSeconds),
@@ -46,7 +46,7 @@ export function useCreateDeal() {
 
       const txHash = await walletClient.sendTransaction({
         account: evmAddress as Hex,
-        to: appConfig.nilstorePrecompile as Hex,
+        to: appConfig.polystorePrecompile as Hex,
         data,
         gas: 5_000_000n,
       })
@@ -55,10 +55,10 @@ export function useCreateDeal() {
       const receipt = await waitForTransactionReceipt(txHash)
       const logs = receipt.logs || []
       for (const log of logs) {
-        if (String(log.address || '').toLowerCase() !== appConfig.nilstorePrecompile.toLowerCase()) continue
+        if (String(log.address || '').toLowerCase() !== appConfig.polystorePrecompile.toLowerCase()) continue
         try {
           const decoded = decodeEventLog({
-            abi: NILSTORE_PRECOMPILE_ABI,
+            abi: POLYSTORE_PRECOMPILE_ABI,
             eventName: 'DealCreated',
             topics: log.topics as [signature: `0x${string}`, ...args: `0x${string}`[]],
             data: log.data,

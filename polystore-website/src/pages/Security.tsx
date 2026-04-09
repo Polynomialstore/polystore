@@ -106,12 +106,12 @@ export const Security = () => {
       </section>
 
       <section className="bg-card border border-border rounded-none p-6 shadow-sm mb-12">
-        <h2 className="text-2xl font-bold text-foreground mb-6">NilFS: Filesystem on Slab</h2>
+        <h2 className="text-2xl font-bold text-foreground mb-6">PolyFS: Filesystem on Slab</h2>
         <div className="grid md:grid-cols-2 gap-6 text-sm text-muted-foreground">
           <div className="space-y-2">
             <div className="font-semibold text-foreground">MDU #0 Super-Manifest</div>
             <p>
-              NilFS stores a file table and a root table inside MDU #0. File records map paths to logical offsets, and
+              PolyFS stores a file table and a root table inside MDU #0. File records map paths to logical offsets, and
               root entries map those offsets to user data MDUs.
             </p>
           </div>

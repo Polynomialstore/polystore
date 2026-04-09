@@ -3,13 +3,13 @@ import { test, expect } from '@playwright/test'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bech32 } from 'bech32'
 import { getAbiItem, getEventSelector, padHex, toHex, type Hex } from 'viem'
-import { NILSTORE_PRECOMPILE_ABI } from '../src/lib/nilstorePrecompile'
+import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -22,7 +22,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const txHash = (`0x${'11'.repeat(32)}` as Hex)
   const dealId = '1'
@@ -30,7 +30,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const filePath = 'e2e.txt'
   const fileBytes = Buffer.alloc(1024 * 1024, 'A')
 
-  console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
+  console.log(`Using random E2E wallet: ${account.address} -> ${polystoreAddress}`)
 
   // Mock LCD balances + deals + providers (CI runs Vite only; no chain/gateway).
   await page.route('**/cosmos/bank/v1beta1/balances/*', async (route) => {
@@ -44,7 +44,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -52,7 +52,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
         deals: [
           {
             id: dealId,
-            owner: nilAddress,
+            owner: polystoreAddress,
             cid: manifestRoot,
             size: String(fileBytes.length),
             escrow_balance: '1000000',
@@ -64,7 +64,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -138,7 +138,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   })
 
   // Mock EVM RPC receipts for createDeal/updateDealContent (waitForTransactionReceipt).
-  const dealCreatedEvent = getAbiItem({ abi: NILSTORE_PRECOMPILE_ABI, name: 'DealCreated' }) as any
+  const dealCreatedEvent = getAbiItem({ abi: POLYSTORE_PRECOMPILE_ABI, name: 'DealCreated' }) as any
   const dealCreatedTopic0 = getEventSelector(dealCreatedEvent)
   const dealIdTopic = toHex(1n, { size: 32 })
   const ownerTopic = padHex(account.address, { size: 32 })
@@ -195,7 +195,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
       w.ethereum = {
         isMetaMask: true,
-        isNilStoreE2E: true,
+        isPolyStoreE2E: true,
         selectedAddress: address,
         on: () => {},
         removeListener: () => {},
@@ -244,10 +244,10 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
   }
 
-  await expect(page.getByTestId('cosmos-identity')).toContainText('nil1')
+  await expect(page.getByTestId('polystore-identity')).toContainText('nil1')
 
   await page.getByTestId('faucet-request').click()
-  await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
+  await expect(page.getByTestId('polystore-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
 
   await ensureCreateDealDrawerOpen(page)
   const placementSelect = page.getByTestId('alloc-placement-profile')

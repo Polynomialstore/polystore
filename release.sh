@@ -26,14 +26,14 @@ echo ">>> Building polystore_core..."
     # For now, we assume the binaries are static enough.
 )
 
-# 3. Build nilchaind (Go)
-echo ">>> Building nilchaind..."
+# 3. Build polystorechaind (Go)
+echo ">>> Building polystorechaind..."
 (
-    cd nilchain
+    cd polystorechain
     make proto-gen
     # Link against release lib
     export CGO_LDFLAGS="-L$(pwd)/../polystore_core/target/release -lpolystore_core"
-    go build -ldflags "-X main.Version=$VERSION" -o ../dist/bin/nilchaind ./cmd/nilchaind
+    go build -ldflags "-X main.Version=$VERSION" -o ../dist/bin/polystorechaind ./cmd/polystorechaind
 )
 
 # 4. Build polystore_cli (Rust)
@@ -44,32 +44,32 @@ echo ">>> Building polystore_cli..."
     cp target/release/polystore_cli ../dist/bin/
 )
 
-# 5. Build nil_gateway (Go)
-echo ">>> Building nil_gateway..."
+# 5. Build polystore_gateway (Go)
+echo ">>> Building polystore_gateway..."
 (
-    cd nil_gateway
-    go build -o ../dist/bin/nil_gateway .
+    cd polystore_gateway
+    go build -o ../dist/bin/polystore_gateway .
 )
 
 # 6. Build Faucet
-echo ">>> Building nil_faucet..."
+echo ">>> Building polystore_faucet..."
 (
-    cd nil_faucet
-    go build -o ../dist/bin/nil_faucet .
+    cd polystore_faucet
+    go build -o ../dist/bin/polystore_faucet .
 )
 
 # 7. Package Configuration
 echo ">>> Packaging Configs..."
 mkdir -p dist/config
-cp nilchain/trusted_setup.txt dist/config/
+cp polystorechain/trusted_setup.txt dist/config/
 cp -r performance/ dist/performance/
 
 # 8. Create Tarball
 echo ">>> Creating Tarball..."
 (
     cd dist
-    tar -czvf nilstore-$VERSION-$(uname -s)-$(uname -m).tar.gz bin config performance
+    tar -czvf polystore-$VERSION-$(uname -s)-$(uname -m).tar.gz bin config performance
 )
 
-echo ">>> Release Ready: dist/nilstore-$VERSION-$(uname -s)-$(uname -m).tar.gz"
+echo ">>> Release Ready: dist/polystore-$VERSION-$(uname -s)-$(uname -m).tar.gz"
 ls -lh dist/*.tar.gz

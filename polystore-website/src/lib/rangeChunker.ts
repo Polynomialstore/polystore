@@ -1,5 +1,5 @@
-const NILFS_SCALAR_BYTES = 32
-const NILFS_SCALAR_PAYLOAD_BYTES = 31
+const POLYFS_SCALAR_BYTES = 32
+const POLYFS_SCALAR_PAYLOAD_BYTES = 31
 
 export interface FileRangeChunk {
   rangeStart: number
@@ -8,12 +8,12 @@ export interface FileRangeChunk {
 
 export function rawMduCapacityFromMduSize(mduSizeBytes: number): number {
   if (!Number.isFinite(mduSizeBytes) || mduSizeBytes <= 0) return 0
-  const scalars = Math.floor(mduSizeBytes / NILFS_SCALAR_BYTES)
-  return scalars * NILFS_SCALAR_PAYLOAD_BYTES
+  const scalars = Math.floor(mduSizeBytes / POLYFS_SCALAR_BYTES)
+  return scalars * POLYFS_SCALAR_PAYLOAD_BYTES
 }
 
 function encodedPosFromRawOffset(rawOffsetInMdu: number): number {
-  const scalarIdx = Math.floor(rawOffsetInMdu / NILFS_SCALAR_PAYLOAD_BYTES)
+  const scalarIdx = Math.floor(rawOffsetInMdu / POLYFS_SCALAR_PAYLOAD_BYTES)
   return rawOffsetInMdu + scalarIdx + 1
 }
 
@@ -41,7 +41,7 @@ function nextBlobBoundaryRawOffsetInMdu(rawOffsetInMdu: number, rawMduCapacity: 
   return hi
 }
 
-export function planNilfsFileRangeChunks(opts: {
+export function planPolyfsFileRangeChunks(opts: {
   fileStartOffset: number
   fileSizeBytes: number
   rangeStart: number

@@ -36,7 +36,7 @@ This is a practical checklist that turns the current drafts into code + test gat
    - Keep faucet as dev/test tooling only (off by default in UI).
 
 6) **Mandatory retrieval sessions (data-plane enforcement)**
-   - Confirm: all served bytes require an on-chain retrieval session (`X-Nil-Session-Id` mandatory).
+   - Confirm: all served bytes require an on-chain retrieval session (`X-PolyStore-Session-Id` mandatory).
    - Confirm batching posture: segmented/range downloads within one session are supported; keep door open to future batching optimizations.
 
 7) **Escrow end-of-life semantics**
@@ -59,7 +59,7 @@ This is a practical checklist that turns the current drafts into code + test gat
    - Confirm codec set for v1 (recommend: NONE + ZSTD).
    - Confirm header stability and zip-bomb safety limits.
 
-## B. Code implementation items (nilchain module)
+## B. Code implementation items (polystorechain module)
 
 ### B1) Deal expiry + renewal (CHAIN-104)
 
@@ -144,9 +144,9 @@ Test gates:
 
 ### B6) Compression / content-encoding (CORE-403 + GW-205)
 
-- Implement NilCEv1 header and codecs (NONE + ZSTD) in:
+- Implement PolyCEv1 header and codecs (NONE + ZSTD) in:
   - `polystore_core` (WASM client)
-  - `nil_gateway` ingest path
+  - `polystore_gateway` ingest path
 - Ensure download returns original bytes (decompress after decrypt).
 - Add UI quoting:
   - show estimated stored bytes and cost delta

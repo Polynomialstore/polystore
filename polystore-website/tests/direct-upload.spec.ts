@@ -6,7 +6,7 @@ import { type Hex } from 'viem'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -20,11 +20,11 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 31337)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
   // We need distinct transaction hashes for commit content
   const txCommit = (`0x${'44'.repeat(32)}` as Hex)
 
-  console.log(`Using random E2E wallet: ${account.address} -> ${nilAddress}`)
+  console.log(`Using random E2E wallet: ${account.address} -> ${polystoreAddress}`)
 
   let manifestUploadCalls = 0
   let dealCid = ''
@@ -33,10 +33,10 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   // Intercept SP Upload
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
-    const dealId = headers['x-nil-deal-id']
-    const manifestRoot = headers['x-nil-manifest-root']
-    const mduIndex = headers['x-nil-mdu-index']
-    const fullSizeHeader = headers['x-nil-full-size']
+    const dealId = headers['x-polystore-deal-id']
+    const manifestRoot = headers['x-polystore-manifest-root']
+    const mduIndex = headers['x-polystore-mdu-index']
+    const fullSizeHeader = headers['x-polystore-full-size']
     const body = route.request().postDataBuffer()
 
     if (!dealId || !manifestRoot || !mduIndex) {
@@ -54,7 +54,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     manifestUploadCalls += 1
     const headers = route.request().headers()
     const body = route.request().postDataBuffer()
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     if (fullSizeHeader && body && body.length < Number(fullSizeHeader)) {
       sparseUploadObserved = true
     }
@@ -64,7 +64,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   await page.route('**/sp/upload_shard', async (route) => {
     const headers = route.request().headers()
     const body = route.request().postDataBuffer()
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     if (fullSizeHeader && body && body.length < Number(fullSizeHeader)) {
       sparseUploadObserved = true
     }
@@ -145,7 +145,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   })
 
   // Mock LCD Deals / Providers
-  await page.route('**/nilchain/nilchain/v1/deals**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     const url = route.request().url()
 
     if (url.includes('/heat')) {
@@ -157,7 +157,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
     const deal = {
       id: '1',
-      owner: nilAddress,
+      owner: polystoreAddress,
       cid: dealCid,
       size: '0',
       escrow_balance: '1000000',
@@ -172,7 +172,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
       // ignore
     }
 
-    if (/\/nilchain\/nilchain\/v1\/deals\/[0-9]+$/.test(pathname)) {
+    if (/\/polystorechain\/polystorechain\/v1\/deals\/[0-9]+$/.test(pathname)) {
       return route.fulfill({
         status: 200,
         body: JSON.stringify({ deal }),
@@ -185,7 +185,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     })
   })
 
-  await page.route('**/nilchain/nilchain/v1/providers**', async (route) => {
+  await page.route('**/polystorechain/polystorechain/v1/providers**', async (route) => {
     return route.fulfill({
       status: 200,
       body: JSON.stringify({
@@ -207,7 +207,7 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
           isMetaMask: true,
 
-          isNilStoreE2E: true,
+          isPolyStoreE2E: true,
 
           selectedAddress: address,
 
@@ -360,19 +360,19 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
 
   await page.reload({ waitUntil: 'networkidle' })
 
-  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="cosmos-identity"]', {
+  await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"], [data-testid="wallet-address-full"], [data-testid="polystore-identity"]', {
     timeout: 60_000,
     state: 'attached',
   })
 
   const walletAddress = page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()
-  const cosmosIdentity = page.getByTestId('cosmos-identity')
-  if (!(await walletAddress.isVisible().catch(() => false)) && !(await cosmosIdentity.isVisible().catch(() => false))) {
+  const polystoreIdentity = page.getByTestId('polystore-identity')
+  if (!(await walletAddress.isVisible().catch(() => false)) && !(await polystoreIdentity.isVisible().catch(() => false))) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
-    await expect(page.locator('[data-testid="wallet-address"], [data-testid="cosmos-identity"]')).toBeVisible({ timeout: 60_000 })
+    await expect(page.locator('[data-testid="wallet-address"], [data-testid="polystore-identity"]')).toBeVisible({ timeout: 60_000 })
   }
 
-  // Regression: after commit, Deal Explorer should show the NilFS file list (from local OPFS fallback).
+  // Regression: after commit, Deal Explorer should show the PolyFS file list (from local OPFS fallback).
   await expect(page.getByTestId('deal-row-1')).toBeVisible({ timeout: 60_000 })
   await page.getByTestId('deal-row-1').click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })

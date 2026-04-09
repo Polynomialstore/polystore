@@ -1,7 +1,7 @@
-# NilStore Network Performance Simulation Plan
+# PolyStore Network Performance Simulation Plan
 
 ## Objective
-To benchmark the `nilchain` implementation under varying loads to assess stability, transaction throughput (TPS), and resource consumption. This ensures the Phase 3 implementation is robust enough for Phase 4 (Testnet).
+To benchmark the `polystorechain` implementation under varying loads to assess stability, transaction throughput (TPS), and resource consumption. This ensures the Phase 3 implementation is robust enough for Phase 4 (Testnet).
 
 ## Scope
 Simulations will be run locally. "Scale" refers to the volume of state (Providers, Deals) and transactions, not physical distributed nodes.
@@ -39,7 +39,7 @@ Simulations will be run locally. "Scale" refers to the volume of state (Provider
 4.  **Success Rate:** % of Txs included in blocks vs submitted.
 
 ## Methodology
-*   **Tooling:** A simplified Bash/Go load generator (`load_gen.sh`) utilizing the `nilchaind` CLI with `async` broadcasting for throughput.
+*   **Tooling:** A simplified Bash/Go load generator (`load_gen.sh`) utilizing the `polystorechaind` CLI with `async` broadcasting for throughput.
 *   **Environment:** Local dev machine.
 *   **Verification:** Log parsing to confirm state updates.
 

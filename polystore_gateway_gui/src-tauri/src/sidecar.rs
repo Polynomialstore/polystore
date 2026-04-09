@@ -144,29 +144,29 @@ impl SidecarManager {
             ));
         }
 
-        let binary = resolve_binary_path(&app, config.binary_path.clone(), "nil_gateway")?;
+        let binary = resolve_binary_path(&app, config.binary_path.clone(), "polystore_gateway")?;
         let args = config.args.unwrap_or_default();
 
         let mut cmd = Command::new(&binary);
         cmd.args(args)
-            .env("NIL_LISTEN_ADDR", &listen_addr)
-            .env("NIL_RUNTIME_PERSONA", "user-gateway")
-            .env("NIL_ALLOW_PROVIDER_ON_USER_PORT", "0")
+            .env("POLYSTORE_LISTEN_ADDR", &listen_addr)
+            .env("POLYSTORE_RUNTIME_PERSONA", "user-gateway")
+            .env("POLYSTORE_ALLOW_PROVIDER_ON_USER_PORT", "0")
             // Local desktop Gateway default: keep libp2p disabled unless explicitly enabled.
             // This avoids startup collisions on hosts already running router/provider daemons.
-            .env("NIL_P2P_ENABLED", "0")
+            .env("POLYSTORE_P2P_ENABLED", "0")
             // Desktop local-cache UX: allow sessionless chunked /gateway/fetch downloads.
             // Browser "auto source" uses this for cached files to avoid on-chain retrieval tx popups.
-            .env("NIL_REQUIRE_ONCHAIN_SESSION", "0")
+            .env("POLYSTORE_REQUIRE_ONCHAIN_SESSION", "0")
             // Local desktop mode should import directly from user-selected files by default.
-            .env("NIL_LOCAL_IMPORT_ENABLED", "1")
-            .env("NIL_LOCAL_IMPORT_ALLOW_ABS", "1")
+            .env("POLYSTORE_LOCAL_IMPORT_ENABLED", "1")
+            .env("POLYSTORE_LOCAL_IMPORT_ALLOW_ABS", "1")
             // Local desktop Gateway should not run synthetic system-liveness ticks unless
             // explicitly requested. Those ticks need provider key material and create noisy logs.
-            .env("NIL_DISABLE_SYSTEM_LIVENESS", "1")
+            .env("POLYSTORE_DISABLE_SYSTEM_LIVENESS", "1")
             // Defensive: ensure leaked shell env cannot make this process behave like provider-daemon.
-            .env_remove("NIL_PROVIDER_KEY")
-            .env_remove("NIL_PROVIDER_ADDRESS")
+            .env_remove("POLYSTORE_PROVIDER_KEY")
+            .env_remove("POLYSTORE_PROVIDER_ADDRESS")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -185,14 +185,14 @@ impl SidecarManager {
                 .join("bin")
                 .join(binary_filename("polystore_cli"));
             if is_resource_ready(&polystore_cli_path) {
-                cmd.env("NIL_CLI_BIN", &polystore_cli_path);
+                cmd.env("POLYSTORE_CLI_BIN", &polystore_cli_path);
             }
             for trusted_setup_path in [
                 resource_dir.join("bin").join("trusted_setup.txt"),
                 resource_dir.join("trusted_setup.txt"),
             ] {
                 if is_resource_ready(&trusted_setup_path) {
-                    cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
+                    cmd.env("POLYSTORE_TRUSTED_SETUP", &trusted_setup_path);
                     break;
                 }
             }
@@ -326,7 +326,7 @@ fn parse_listening_addr(line: &str) -> Option<String> {
         }
     }
 
-    let marker = "Starting NilStore Gateway/S3 Adapter on ";
+    let marker = "Starting PolyStore Gateway/S3 Adapter on ";
     if let Some(pos) = line.find(marker) {
         let addr = line[pos + marker.len()..].trim();
         if !addr.is_empty() {
@@ -410,7 +410,7 @@ fn resolve_binary_path(
     if let Ok(current_exe) = env::current_exe() {
         if let Some(exe_dir) = current_exe.parent() {
             // Debian/Ubuntu install layout:
-            //   /usr/bin/polystore_gateway_gui -> /usr/lib/polystore_gateway_gui/bin/nil_gateway
+            //   /usr/bin/polystore_gateway_gui -> /usr/lib/polystore_gateway_gui/bin/polystore_gateway
             resource_roots.push(exe_dir.join("..").join("lib").join("polystore_gateway_gui"));
         }
     }
@@ -484,8 +484,8 @@ fn configure_sidecar_storage_env(app: &AppHandle, cmd: &mut Command) {
 
     // Keep process cwd in a known writable location for any relative fallback paths.
     cmd.current_dir(&paths.gateway_dir);
-    cmd.env("NIL_UPLOAD_DIR", &paths.uploads_dir);
-    cmd.env("NIL_SESSION_DB_PATH", &paths.session_db_path);
+    cmd.env("POLYSTORE_UPLOAD_DIR", &paths.uploads_dir);
+    cmd.env("POLYSTORE_SESSION_DB_PATH", &paths.session_db_path);
 }
 
 fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
@@ -500,7 +500,7 @@ fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
 
     let polystore_cli_path = bin_dir.join(binary_filename("polystore_cli"));
     if is_resource_ready(&polystore_cli_path) {
-        cmd.env("NIL_CLI_BIN", &polystore_cli_path);
+        cmd.env("POLYSTORE_CLI_BIN", &polystore_cli_path);
     }
 
     for trusted_setup_path in {
@@ -511,7 +511,7 @@ fn configure_sidecar_from_binary_layout(cmd: &mut Command, binary: &str) {
         candidates
     } {
         if is_resource_ready(&trusted_setup_path) {
-            cmd.env("NIL_TRUSTED_SETUP", &trusted_setup_path);
+            cmd.env("POLYSTORE_TRUSTED_SETUP", &trusted_setup_path);
             break;
         }
     }
@@ -524,7 +524,7 @@ fn resolve_gateway_storage_paths(app: &AppHandle) -> Option<GatewayStoragePaths>
         .path()
         .app_data_dir()
         .ok()
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".nilstore")))?;
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".polystore")))?;
 
     let gateway_dir = base_dir.join("gateway");
     let uploads_dir = gateway_dir.join("uploads");

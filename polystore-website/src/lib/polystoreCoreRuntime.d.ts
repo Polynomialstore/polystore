@@ -11,7 +11,7 @@ declare const init: (
 
 export default init
 
-export class NilWasm {
+export class PolyStoreWasm {
   constructor(trusted_setup_bytes: Uint8Array)
   expand_file(data: Uint8Array): unknown
   expand_mdu_rs(data: Uint8Array, k: number, m: number): unknown

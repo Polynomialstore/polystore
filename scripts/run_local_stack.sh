@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Spin up a local NilChain stack: chain (CometBFT+EVM), faucet, and web UI.
+# Spin up a local PolyStore Chain stack: chain (CometBFT+EVM), faucet, and web UI.
 # Usage:
 #   ./scripts/run_local_stack.sh start   # default
 #   ./scripts/run_local_stack.sh stop    # kill background processes started by this script
 #
 # Networking:
-#   By default, LCD + EVM JSON-RPC bind to localhost. Set NIL_BIND_ALL=1 to bind to 0.0.0.0 (LAN debugging).
+#   By default, LCD + EVM JSON-RPC bind to localhost. Set POLYSTORE_BIND_ALL=1 to bind to 0.0.0.0 (LAN debugging).
 # Safety:
-#   If NIL_HOME points outside _artifacts and already exists, the script refuses to wipe it unless NIL_REINIT_HOME=1.
+#   If POLYSTORE_HOME points outside _artifacts and already exists, the script refuses to wipe it unless POLYSTORE_REINIT_HOME=1.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/_artifacts/localnet"
 PID_DIR="$LOG_DIR/pids"
-CHAIN_HOME="${NIL_HOME:-$ROOT_DIR/_artifacts/nilchain_data}"
+CHAIN_HOME="${POLYSTORE_HOME:-$ROOT_DIR/_artifacts/polystorechain_data}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 EVM_RPC_PORT="${EVM_RPC_PORT:-8545}"
@@ -22,60 +22,60 @@ LCD_PORT="${LCD_PORT:-1317}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26657}"
 P2P_ADDR="${P2P_ADDR:-tcp://0.0.0.0:26656}"
 FAUCET_PORT="${FAUCET_PORT:-8081}"
-GAS_PRICE="${NIL_GAS_PRICES:-0.001aatom}"
-DENOM="${NIL_DENOM:-stake}"
-NIL_BIND_ALL="${NIL_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
-NIL_REINIT_HOME="${NIL_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
-export NIL_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
+GAS_PRICE="${POLYSTORE_GAS_PRICES:-0.001aatom}"
+DENOM="${POLYSTORE_DENOM:-stake}"
+POLYSTORE_BIND_ALL="${POLYSTORE_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
+POLYSTORE_REINIT_HOME="${POLYSTORE_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
+export POLYSTORE_AMOUNT="1000000000000000000aatom,100000000stake" # 1 aatom, 100 stake
 FAUCET_MNEMONIC="${FAUCET_MNEMONIC:-course what neglect valley visual ride common cricket bachelor rigid vessel mask actor pumpkin edit follow sorry used divorce odor ask exclude crew hole}"
-NILCHAIND_BIN="$ROOT_DIR/nilchain/nilchaind"
+POLYSTORECHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
 GO_BIN="${GO_BIN:-/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go}"
-GATEWAY_BIN="$LOG_DIR/nil_gateway"
-NIL_CORE_LIB_DIR="${NIL_CORE_LIB_DIR:-$ROOT_DIR/polystore_core/target/release}"
-NIL_CORE_LIB_SO="$NIL_CORE_LIB_DIR/libpolystore_core.so"
+GATEWAY_BIN="$LOG_DIR/polystore_gateway"
+POLYSTORE_CORE_LIB_DIR="${POLYSTORE_CORE_LIB_DIR:-$ROOT_DIR/polystore_core/target/release}"
+POLYSTORE_CORE_LIB_SO="$POLYSTORE_CORE_LIB_DIR/libpolystore_core.so"
 BRIDGE_ADDR_FILE="$ROOT_DIR/_artifacts/bridge_address.txt"
 BRIDGE_ADDRESS=""
 BRIDGE_STATUS="not deployed"
 # Default: attempt to deploy the bridge when the stack starts (set to 0 to skip).
-NIL_DEPLOY_BRIDGE="${NIL_DEPLOY_BRIDGE:-1}"
-NIL_EVM_DEV_PRIVKEY="${NIL_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
-export NIL_EVM_DEV_PRIVKEY
+POLYSTORE_DEPLOY_BRIDGE="${POLYSTORE_DEPLOY_BRIDGE:-1}"
+POLYSTORE_EVM_DEV_PRIVKEY="${POLYSTORE_EVM_DEV_PRIVKEY:-0xa6694e2fb21957d26c442f80f14954fd84f491a79a7e5f1133495403c0244c1d}"
+export POLYSTORE_EVM_DEV_PRIVKEY
 # Shared auth between user-gateway and provider-daemon for /sp/session-proof forwarding.
-NIL_GATEWAY_SP_AUTH="${NIL_GATEWAY_SP_AUTH:-}"
+POLYSTORE_GATEWAY_SP_AUTH="${POLYSTORE_GATEWAY_SP_AUTH:-}"
 # Enable the EVM mempool by default so JSON-RPC / MetaMask works out of the box.
-NIL_DISABLE_EVM_MEMPOOL="${NIL_DISABLE_EVM_MEMPOOL:-0}"
-export NIL_DISABLE_EVM_MEMPOOL
+POLYSTORE_DISABLE_EVM_MEMPOOL="${POLYSTORE_DISABLE_EVM_MEMPOOL:-0}"
+export POLYSTORE_DISABLE_EVM_MEMPOOL
 # Auto-fund the default demo EVM account by calling the faucet once on startup.
-NIL_AUTO_FAUCET_EVM="${NIL_AUTO_FAUCET_EVM:-0}"
-NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-0}"
-NIL_AUTO_FAUCET_EVM_ADDR="${NIL_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
+POLYSTORE_AUTO_FAUCET_EVM="${POLYSTORE_AUTO_FAUCET_EVM:-0}"
+POLYSTORE_ENABLE_TX_RELAY="${POLYSTORE_ENABLE_TX_RELAY:-0}"
+POLYSTORE_AUTO_FAUCET_EVM_ADDR="${POLYSTORE_AUTO_FAUCET_EVM_ADDR:-0xf7931ff7FC55d19EF4A8139fa7E4b3F06e03F2e2}"
 # Start the faucet service (minimal faucet enabled by default).
 # The faucet runs, but auto-funding and the tx-relay remain off so the stack stays wallet-first.
-NIL_START_FAUCET="${NIL_START_FAUCET:-1}"
+POLYSTORE_START_FAUCET="${POLYSTORE_START_FAUCET:-1}"
 # Start the web UI (optional). Set to 0 for headless stacks / CI.
-NIL_START_WEB="${NIL_START_WEB:-1}"
+POLYSTORE_START_WEB="${POLYSTORE_START_WEB:-1}"
 # User gateway mode (0=standalone local-cache user-gateway, 1=proxy/router compatibility mode).
 # Standalone is the default for local developer UX so auto-download can use local gateway MDU cache.
-NIL_USER_GATEWAY_PROXY_MODE="${NIL_USER_GATEWAY_PROXY_MODE:-${NIL_GATEWAY_ROUTER:-0}}"
+POLYSTORE_USER_GATEWAY_PROXY_MODE="${POLYSTORE_USER_GATEWAY_PROXY_MODE:-${POLYSTORE_GATEWAY_ROUTER:-0}}"
 if [ ! -x "$GO_BIN" ]; then
   GO_BIN="$(command -v go)"
 fi
 
-if [ -d "$NIL_CORE_LIB_DIR" ]; then
-  export LD_LIBRARY_PATH="$NIL_CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+if [ -d "$POLYSTORE_CORE_LIB_DIR" ]; then
+  export LD_LIBRARY_PATH="$POLYSTORE_CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
-if [ -z "$NIL_GATEWAY_SP_AUTH" ]; then
+if [ -z "$POLYSTORE_GATEWAY_SP_AUTH" ]; then
   if command -v openssl >/dev/null 2>&1; then
-    NIL_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
+    POLYSTORE_GATEWAY_SP_AUTH="$(openssl rand -hex 32)"
   else
-    NIL_GATEWAY_SP_AUTH="$(date +%s%N)"
+    POLYSTORE_GATEWAY_SP_AUTH="$(date +%s%N)"
   fi
 fi
-export NIL_GATEWAY_SP_AUTH
-echo "$NIL_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
+export POLYSTORE_GATEWAY_SP_AUTH
+echo "$POLYSTORE_GATEWAY_SP_AUTH" >"$LOG_DIR/sp_auth.txt"
 
 banner() { printf '\n=== %s ===\n' "$*"; }
 
@@ -159,19 +159,19 @@ PY
     return 0
   fi
 
-  if [ "$NIL_REINIT_HOME" != "1" ]; then
+  if [ "$POLYSTORE_REINIT_HOME" != "1" ]; then
     cat >&2 <<EOF
 Refusing to delete existing CHAIN_HOME outside the repo _artifacts/ tree:
   CHAIN_HOME=$CHAIN_HOME
   (resolved: $chain_home_real)
 
 If you really intend to re-initialize this home, re-run with:
-  NIL_REINIT_HOME=1
+  POLYSTORE_REINIT_HOME=1
 EOF
     exit 1
   fi
 
-  banner "Wiping non-_artifacts chain home (NIL_REINIT_HOME=1): $CHAIN_HOME"
+  banner "Wiping non-_artifacts chain home (POLYSTORE_REINIT_HOME=1): $CHAIN_HOME"
   rm -rf "$CHAIN_HOME"
 }
 
@@ -205,13 +205,13 @@ ensure_polystore_core() {
     fi
 
     for sym in \
-      nil_compute_mdu_root_from_witness_flat \
-      nil_expand_mdu_rs \
-      nil_reconstruct_mdu_rs \
-      nil_mdu0_builder_new_with_commitments \
-      nil_mdu0_builder_load_with_commitments \
-      nil_encode_payload_to_mdu \
-      nil_decode_payload_from_mdu; do
+      polystore_compute_mdu_root_from_witness_flat \
+      polystore_expand_mdu_rs \
+      polystore_reconstruct_mdu_rs \
+      polystore_mdu0_builder_new_with_commitments \
+      polystore_mdu0_builder_load_with_commitments \
+      polystore_encode_payload_to_mdu \
+      polystore_decode_payload_from_mdu; do
       if [ "$nm_supports_dash_d" = "1" ]; then
         if ! nm -D "$file" 2>/dev/null | grep -Eq "(^|[[:space:]]|_)${sym}([[:space:]]|$)"; then
           return 1
@@ -252,7 +252,7 @@ ensure_polystore_core() {
   fi
 }
 
-eth_to_nil_bech32() {
+eth_to_polystore_bech32() {
   local eth_addr="$1"
   python3 - "$eth_addr" <<'PY'
 import sys
@@ -317,7 +317,7 @@ PY
 }
 
 auto_faucet_request() {
-  if [ "${NIL_AUTO_FAUCET_EVM}" != "1" ]; then
+  if [ "${POLYSTORE_AUTO_FAUCET_EVM}" != "1" ]; then
     return 0
   fi
 
@@ -330,15 +330,15 @@ auto_faucet_request() {
     return 0
   fi
 
-  local target_nil
-  if [[ "$NIL_AUTO_FAUCET_EVM_ADDR" == 0x* || "$NIL_AUTO_FAUCET_EVM_ADDR" == 0X* ]]; then
-    target_nil="$(eth_to_nil_bech32 "$NIL_AUTO_FAUCET_EVM_ADDR" 2>/dev/null || true)"
+  local target_polystore
+  if [[ "$POLYSTORE_AUTO_FAUCET_EVM_ADDR" == 0x* || "$POLYSTORE_AUTO_FAUCET_EVM_ADDR" == 0X* ]]; then
+    target_polystore="$(eth_to_polystore_bech32 "$POLYSTORE_AUTO_FAUCET_EVM_ADDR" 2>/dev/null || true)"
   else
-    target_nil="$NIL_AUTO_FAUCET_EVM_ADDR"
+    target_polystore="$POLYSTORE_AUTO_FAUCET_EVM_ADDR"
   fi
 
-  if [ -z "$target_nil" ]; then
-    echo "Skipping auto faucet request: failed to convert $NIL_AUTO_FAUCET_EVM_ADDR"
+  if [ -z "$target_polystore" ]; then
+    echo "Skipping auto faucet request: failed to convert $POLYSTORE_AUTO_FAUCET_EVM_ADDR"
     return 0
   fi
 
@@ -353,10 +353,10 @@ auto_faucet_request() {
     sleep 0.5
   done
 
-  echo "Auto faucet: requesting funds for $NIL_AUTO_FAUCET_EVM_ADDR -> $target_nil"
+  echo "Auto faucet: requesting funds for $POLYSTORE_AUTO_FAUCET_EVM_ADDR -> $target_polystore"
   timeout 20s curl -sS -X POST "http://127.0.0.1:${FAUCET_PORT}/faucet" \
     -H "Content-Type: application/json" \
-    --data "$(printf '{"address":"%s"}' "$target_nil")" \
+    --data "$(printf '{"address":"%s"}' "$target_polystore")" \
     >/dev/null 2>&1 || true
 }
 
@@ -364,7 +364,7 @@ wait_for_ports_clear() {
   local rpc_port="${RPC_ADDR##*:}"
   local p2p_port="${P2P_ADDR##*:}"
   local ports=("$rpc_port" "$p2p_port" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 "$FAUCET_PORT" 5173)
-  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  local provider_count="${POLYSTORE_LOCAL_PROVIDER_COUNT:-3}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi
@@ -404,14 +404,14 @@ wait_for_local_gateway_health() {
   exit 1
 }
 
-ensure_nilchaind() {
+ensure_polystorechaind() {
   ensure_polystore_core_shared
-  banner "Building and installing nilchaind (via $GO_BIN)"
+  banner "Building and installing polystorechaind (via $GO_BIN)"
   
   # Reconstruct vendor directory to handle partial vendoring strategy
   (
-    cd "$ROOT_DIR/nilchain"
-    echo "Reconstructing vendor for nilchain..."
+    cd "$ROOT_DIR/polystorechain"
+    echo "Reconstructing vendor for polystorechain..."
     "$GO_BIN" mod vendor
     # Restore tracked vendor files (if any) to preserve patches/partial vendoring
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -419,9 +419,9 @@ ensure_nilchaind() {
     fi
   )
 
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" build -o "$ROOT_DIR/nilchain/nilchaind" ./cmd/nilchaind)
+  (cd "$ROOT_DIR/polystorechain" && "$GO_BIN" build -o "$ROOT_DIR/polystorechain/polystorechaind" ./cmd/polystorechaind)
   # Also install to GOPATH/bin to ensure it's in PATH for arbitrary shell calls
-  (cd "$ROOT_DIR/nilchain" && "$GO_BIN" install ./cmd/nilchaind)
+  (cd "$ROOT_DIR/polystorechain" && "$GO_BIN" install ./cmd/polystorechaind)
 }
 
 ensure_polystore_cli() {
@@ -429,21 +429,21 @@ ensure_polystore_cli() {
   (cd "$ROOT_DIR/polystore_cli" && cargo build --release)
 }
 
-ensure_nil_gateway() {
+ensure_polystore_gateway() {
   ensure_polystore_core_shared
   # Rebuild when sources changed; the stack script reuses a single binary path
   # under _artifacts/, so a simple "exists" check can lead to stale behavior.
   if [ -x "$GATEWAY_BIN" ]; then
-    if ! find "$ROOT_DIR/nil_gateway" -name '*.go' -newer "$GATEWAY_BIN" -print -quit | grep -q .; then
+    if ! find "$ROOT_DIR/polystore_gateway" -name '*.go' -newer "$GATEWAY_BIN" -print -quit | grep -q .; then
       return 0
     fi
   fi
-  banner "Building nil_gateway (via $GO_BIN)"
-  (cd "$ROOT_DIR/nil_gateway" && "$GO_BIN" build -o "$GATEWAY_BIN" .)
+  banner "Building polystore_gateway (via $GO_BIN)"
+  (cd "$ROOT_DIR/polystore_gateway" && "$GO_BIN" build -o "$GATEWAY_BIN" .)
 }
 
 ensure_polystore_core_shared() {
-  if [ -f "$NIL_CORE_LIB_SO" ]; then
+  if [ -f "$POLYSTORE_CORE_LIB_SO" ]; then
     return 0
   fi
   banner "Building polystore_core shared library (release)"
@@ -451,32 +451,32 @@ ensure_polystore_core_shared() {
     cd "$ROOT_DIR/polystore_core"
     cargo build --release
   )
-  if [ ! -f "$NIL_CORE_LIB_SO" ]; then
-    echo "ERROR: polystore_core shared library missing after build: $NIL_CORE_LIB_SO" >&2
+  if [ ! -f "$POLYSTORE_CORE_LIB_SO" ]; then
+    echo "ERROR: polystore_core shared library missing after build: $POLYSTORE_CORE_LIB_SO" >&2
     exit 1
   fi
-  export LD_LIBRARY_PATH="$NIL_CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export LD_LIBRARY_PATH="$POLYSTORE_CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 }
 
 register_demo_provider() {
   # Local stacks (and CI) default to 3 providers so Mode 2 auto-placement can
   # select a repair-capable profile (minMode2Slots=3).
   banner "Registering demo storage providers"
-  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  local provider_count="${POLYSTORE_LOCAL_PROVIDER_COUNT:-3}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi
   # Use the faucet key as a General-capability provider with a large capacity,
   # plus (provider_count-1) additional providers.
   # We retry a few times to avoid races with node startup.
-  local extra_endpoints_raw="${NIL_PROVIDER_ENDPOINTS_EXTRA:-}"
-  local extra_endpoints_map_raw="${NIL_PROVIDER_ENDPOINTS_EXTRA_MAP:-}"
+  local extra_endpoints_raw="${POLYSTORE_PROVIDER_ENDPOINTS_EXTRA:-}"
+  local extra_endpoints_map_raw="${POLYSTORE_PROVIDER_ENDPOINTS_EXTRA_MAP:-}"
   local -a extra_endpoints=()
   if [ -n "$extra_endpoints_raw" ]; then
     IFS=',' read -r -a extra_endpoints <<<"$extra_endpoints_raw"
   fi
 
-  # Avoid racing nilchaind startup: wait for RPC to come up before attempting txs.
+  # Avoid racing polystorechaind startup: wait for RPC to come up before attempting txs.
   if command -v curl >/dev/null 2>&1; then
     local rpc_ready=0
     local rpc_tries=30
@@ -536,7 +536,7 @@ register_demo_provider() {
       done
     fi
 
-    "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+    "$POLYSTORECHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
       --from faucet \
       "${endpoint_args[@]}" \
       --chain-id "$CHAIN_ID" \
@@ -552,12 +552,12 @@ register_demo_provider() {
       local idx
       for idx in $(seq 1 $((provider_count - 1))); do
         local key_name="provider${idx}"
-        if ! "$NILCHAIND_BIN" keys show "$key_name" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1; then
+        if ! "$POLYSTORECHAIND_BIN" keys show "$key_name" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1; then
           echo "Warning: missing key $key_name in local keyring; skipping provider registration for this key."
           continue
         fi
         local addr
-        addr=$("$NILCHAIND_BIN" keys show "$key_name" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)
+        addr=$("$POLYSTORECHAIND_BIN" keys show "$key_name" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)
         if [ -n "$addr" ]; then
           local port=$((8082 + idx))
           local -a endpoint_args_child=()
@@ -599,7 +599,7 @@ register_demo_provider() {
             done
           fi
 
-          "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+          "$POLYSTORECHAIND_BIN" tx polystorechain register-provider General 1099511627776 \
             --from "$key_name" \
             "${endpoint_args_child[@]}" \
             --chain-id "$CHAIN_ID" \
@@ -614,7 +614,7 @@ register_demo_provider() {
 
     # Check if we have enough providers for Mode 2 placement.
     local count
-    count=$("$NILCHAIND_BIN" query nilchain list-providers --node "$RPC_ADDR" --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
+    count=$("$POLYSTORECHAIND_BIN" query polystorechain list-providers --node "$RPC_ADDR" --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
     if [ "$count" -ge "$provider_count" ]; then
       echo "Demo providers registered successfully ($count provider(s))."
       return 0
@@ -624,20 +624,20 @@ register_demo_provider() {
     sleep 4
   done
 
-  echo "Warning: demo provider registration failed after $attempts attempts (see nilchaind logs)"
+  echo "Warning: demo provider registration failed after $attempts attempts (see polystorechaind logs)"
 }
 
 init_chain() {
   wipe_chain_home_if_safe
   banner "Initializing chain at $CHAIN_HOME"
-  "$NILCHAIND_BIN" init local --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
+  "$POLYSTORECHAIND_BIN" init local --chain-id "$CHAIN_ID" --home "$CHAIN_HOME"
 
   # Import faucet key (deterministic for local use)
-  printf '%s\n' "$FAUCET_MNEMONIC" | "$NILCHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
+  printf '%s\n' "$FAUCET_MNEMONIC" | "$POLYSTORECHAIND_BIN" keys add faucet --home "$CHAIN_HOME" --keyring-backend test --recover --output json >/dev/null
 
   # Pre-create and pre-fund provider keys in genesis for deterministic local
   # Mode 2 availability (avoids runtime funding/sequence races).
-  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  local provider_count="${POLYSTORE_LOCAL_PROVIDER_COUNT:-3}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi
@@ -645,27 +645,27 @@ init_chain() {
     local idx
     for idx in $(seq 1 $((provider_count - 1))); do
       local key_name="provider${idx}"
-      "$NILCHAIND_BIN" keys add "$key_name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
+      "$POLYSTORECHAIND_BIN" keys add "$key_name" --home "$CHAIN_HOME" --keyring-backend test --output json >/dev/null 2>&1 || true
       local addr
-      addr=$("$NILCHAIND_BIN" keys show "$key_name" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)
+      addr=$("$POLYSTORECHAIND_BIN" keys show "$key_name" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)
       if [ -n "$addr" ]; then
-        "$NILCHAIND_BIN" genesis add-genesis-account "$addr" "$NIL_AMOUNT" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1 || true
+        "$POLYSTORECHAIND_BIN" genesis add-genesis-account "$addr" "$POLYSTORE_AMOUNT" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1 || true
       fi
     done
   fi
 
   # Fund faucet + create validator
-  "$NILCHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" genesis add-genesis-account faucet "100000000000$DENOM,1000000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   # Pre-fund the EVM dev account (derived from the local Foundry mnemonic) so
-  # that MsgCreateDealFromEvm / NilBridge deployments have gas without relying
+  # that MsgCreateDealFromEvm / PolyStoreBridge deployments have gas without relying
   # on the faucet timing. This address is the bech32 mapping of the default
   # Foundry EVM deployer (0x4dd2C8c449581466Df3F62b007A24398DD858f5d).
-  "$NILCHAIND_BIN" genesis add-genesis-account nil1fhfv33zftq2xdhelv2cq0gjrnrwctr6ag75ey4 "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" genesis add-genesis-account nil1fhfv33zftq2xdhelv2cq0gjrnrwctr6ag75ey4 "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
   # Pre-fund additional EVM demo account (0xf7931ff7fc55d19ef4a8139fa7e4b3f06e03f2e2).
-  "$NILCHAIND_BIN" genesis add-genesis-account nil177f3lalu2hgeaa9gzw060e9n7phq8uhzpfks5m "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" genesis add-genesis-account nil177f3lalu2hgeaa9gzw060e9n7phq8uhzpfks5m "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test
 
   # Also pre-fund EVM signer accounts used by gateway/e2e/bridge deployment.
-  # This avoids relying on the faucet, which uses nilchaind CLI txs that can hang on some setups.
+  # This avoids relying on the faucet, which uses polystorechaind CLI txs that can hang on some setups.
   if command -v python3 >/dev/null 2>&1; then
     local signer_nil_addrs
     signer_nil_addrs=$(python3 - <<'PY' 2>/dev/null || true
@@ -674,7 +674,7 @@ import bech32, os
 
 keys = []
 keys.append(os.environ.get("EVM_PRIVKEY", "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1"))
-alt = os.environ.get("NIL_EVM_DEV_PRIVKEY", "").strip()
+alt = os.environ.get("POLYSTORE_EVM_DEV_PRIVKEY", "").strip()
 if alt:
     keys.append(alt)
 
@@ -693,28 +693,28 @@ for priv in keys:
 PY
     )
     if [ -n "$signer_nil_addrs" ]; then
-      while IFS= read -r signer_nil_addr; do
-        [ -z "$signer_nil_addr" ] && continue
-        if "$NILCHAIND_BIN" genesis add-genesis-account "$signer_nil_addr" "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1; then
-          echo "Pre-funded EVM signer account $signer_nil_addr"
+      while IFS= read -r signer_polystore_addr; do
+        [ -z "$signer_polystore_addr" ] && continue
+        if "$POLYSTORECHAIND_BIN" genesis add-genesis-account "$signer_polystore_addr" "1000000$DENOM,1000000000000000000aatom" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1; then
+          echo "Pre-funded EVM signer account $signer_polystore_addr"
         fi
       done <<< "$signer_nil_addrs"
     fi
   fi
-  "$NILCHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
-  "$NILCHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
+  "$POLYSTORECHAIND_BIN" genesis gentx faucet "50000000000$DENOM" --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" --keyring-backend test
+  "$POLYSTORECHAIND_BIN" genesis collect-gentxs --home "$CHAIN_HOME"
 
   ensure_metadata
 
   APP_TOML="$CHAIN_HOME/config/app.toml"
   perl -pi -e 's/^max-txs *= *-1/max-txs = 0/' "$APP_TOML"
   perl -pi -e 's/^enable *= *false/enable = true/' "$APP_TOML"            # JSON-RPC enable
-  if [ "$NIL_BIND_ALL" = "1" ]; then
+  if [ "$POLYSTORE_BIND_ALL" = "1" ]; then
     perl -pi -e "s|^address *= *\"127\\\\.0\\\\.0\\\\.1:[0-9]+\"|address = \"0.0.0.0:$EVM_RPC_PORT\"|" "$APP_TOML"
     perl -pi -e "s|^ws-address *= *\"127\\\\.0\\\\.0\\\\.1:[0-9]+\"|ws-address = \"0.0.0.0:$EVM_WS_PORT\"|" "$APP_TOML"
     perl -pi -e "s|^address *= *\"tcp://(?:localhost|127\\\\.0\\\\.0\\\\.1):[0-9]+\"|address = \"tcp://0.0.0.0:$LCD_PORT\"|" "$APP_TOML"
   else
-    # Safer local dev defaults: keep LCD + JSON-RPC local-only. Set NIL_BIND_ALL=1 to override.
+    # Safer local dev defaults: keep LCD + JSON-RPC local-only. Set POLYSTORE_BIND_ALL=1 to override.
     perl -pi -e "s|^address *= *\"0\\\\.0\\\\.0\\\\.0:[0-9]+\"|address = \"127.0.0.1:$EVM_RPC_PORT\"|" "$APP_TOML"
     perl -pi -e "s|^ws-address *= *\"0\\\\.0\\\\.0\\\\.0:[0-9]+\"|ws-address = \"127.0.0.1:$EVM_WS_PORT\"|" "$APP_TOML"
     perl -pi -e "s|^address *= *\"tcp://0\\\\.0\\\\.0\\\\.0:[0-9]+\"|address = \"tcp://127.0.0.1:$LCD_PORT\"|" "$APP_TOML"
@@ -727,7 +727,7 @@ PY
 import os, sys, pathlib
 path = pathlib.Path(sys.argv[1])
 txt = path.read_text()
-bind_all = os.environ.get("NIL_BIND_ALL", "0") == "1"
+bind_all = os.environ.get("POLYSTORE_BIND_ALL", "0") == "1"
 evm_rpc_port = os.environ.get("EVM_RPC_PORT", "8545")
 evm_ws_port = os.environ.get("EVM_WS_PORT", "8546")
 lcd_port = os.environ.get("LCD_PORT", "1317")
@@ -767,7 +767,7 @@ for idx, line in enumerate(lines):
         lines[idx] = f'ws-address = "{bind_host}:{evm_ws_port}"'
 path.write_text("\n".join(lines) + "\n")
 PY
-  if [ "$NIL_DISABLE_EVM_MEMPOOL" = "1" ]; then
+  if [ "$POLYSTORE_DISABLE_EVM_MEMPOOL" = "1" ]; then
     # JSON-RPC requires the ExperimentalEVMMempool. If we disable that for local
     # dev/e2e stability, also disable the JSON-RPC server to avoid a panic.
     python3 - "$APP_TOML" <<'PY' || true
@@ -826,7 +826,7 @@ bank["denom_metadata"] = md
 bank["supply"] = supply
 data["app_state"]["bank"] = bank
 
-# Enable NilStore EVM precompile for MetaMask tx UX.
+# Enable PolyStore EVM precompile for MetaMask tx UX.
 evm = data.get("app_state", {}).get("evm", {})
 params = evm.get("params", {})
 pre = params.get("active_static_precompiles", []) or []
@@ -838,26 +838,26 @@ params["active_static_precompiles"] = pre
 evm["params"] = params
 data["app_state"]["evm"] = evm
 
-# Keep nilchain EIP-712 domain chain id aligned with the local EVM chain id.
-nilchain = data.get("app_state", {}).get("nilchain", {})
-if isinstance(nilchain, dict):
-    nparams = nilchain.get("params", {})
+# Keep polystorechain EIP-712 domain chain id aligned with the local EVM chain id.
+polystorechain = data.get("app_state", {}).get("polystorechain", {})
+if isinstance(polystorechain, dict):
+    nparams = polystorechain.get("params", {})
     raw = (os.getenv("EVM_CHAIN_ID") or "").strip()
     if raw.isdigit():
         nparams["eip712_chain_id"] = raw
-    nilchain["params"] = nparams
-    data["app_state"]["nilchain"] = nilchain
+    polystorechain["params"] = nparams
+    data["app_state"]["polystorechain"] = polystorechain
 
 json.dump(data, open(path, "w"), indent=1)
 PY
 }
 
 start_chain() {
-  banner "Starting nilchaind"
+  banner "Starting polystorechaind"
   local grpc_flags=()
-  if [ "${NIL_GRPC_ENABLE:-0}" = "1" ]; then
+  if [ "${POLYSTORE_GRPC_ENABLE:-0}" = "1" ]; then
     grpc_flags+=(--grpc.enable=true)
-    if [ "${NIL_GRPC_WEB_ENABLE:-1}" = "1" ]; then
+    if [ "${POLYSTORE_GRPC_WEB_ENABLE:-1}" = "1" ]; then
       grpc_flags+=(--grpc-web.enable=true)
     else
       grpc_flags+=(--grpc-web.enable=false)
@@ -869,12 +869,12 @@ start_chain() {
   fi
   local json_rpc_addr="127.0.0.1:${EVM_RPC_PORT}"
   local json_rpc_ws_addr="127.0.0.1:${EVM_WS_PORT}"
-  if [ "$NIL_BIND_ALL" = "1" ]; then
+  if [ "$POLYSTORE_BIND_ALL" = "1" ]; then
     json_rpc_addr="0.0.0.0:${EVM_RPC_PORT}"
     json_rpc_ws_addr="0.0.0.0:${EVM_WS_PORT}"
   fi
-  nohup env NIL_DISABLE_EVM_MEMPOOL="$NIL_DISABLE_EVM_MEMPOOL" \
-    "$NILCHAIND_BIN" start \
+  nohup env POLYSTORE_DISABLE_EVM_MEMPOOL="$POLYSTORE_DISABLE_EVM_MEMPOOL" \
+    "$POLYSTORECHAIND_BIN" start \
     --home "$CHAIN_HOME" \
     --rpc.laddr "$RPC_ADDR" \
     --p2p.laddr "$P2P_ADDR" \
@@ -885,22 +885,22 @@ start_chain() {
     --json-rpc.address "$json_rpc_addr" \
     --json-rpc.ws-address "$json_rpc_ws_addr" \
     --json-rpc.api eth,net,web3 \
-    >"$LOG_DIR/nilchaind.log" 2>&1 &
-  echo $! > "$PID_DIR/nilchaind.pid"
+    >"$LOG_DIR/polystorechaind.log" 2>&1 &
+  echo $! > "$PID_DIR/polystorechaind.pid"
   sleep 1
-  if ! kill -0 "$(cat "$PID_DIR/nilchaind.pid")" 2>/dev/null; then
-    echo "nilchaind failed to start; check $LOG_DIR/nilchaind.log"
-    tail -n 40 "$LOG_DIR/nilchaind.log" || true
+  if ! kill -0 "$(cat "$PID_DIR/polystorechaind.pid")" 2>/dev/null; then
+    echo "polystorechaind failed to start; check $LOG_DIR/polystorechaind.log"
+    tail -n 40 "$LOG_DIR/polystorechaind.log" || true
     exit 1
   fi
-  echo "nilchaind pid $(cat "$PID_DIR/nilchaind.pid"), logs: $LOG_DIR/nilchaind.log"
+  echo "polystorechaind pid $(cat "$PID_DIR/polystorechaind.pid"), logs: $LOG_DIR/polystorechaind.log"
 }
 
 start_faucet() {
   banner "Starting faucet service"
   (
-    cd "$ROOT_DIR/nil_faucet"
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_DENOM="$DENOM" NIL_AMOUNT="$NIL_AMOUNT" NIL_GAS_PRICES="$GAS_PRICE" NIL_LISTEN_ADDR="127.0.0.1:${FAUCET_PORT}" \
+    cd "$ROOT_DIR/polystore_faucet"
+    nohup env POLYSTORE_CHAIN_ID="$CHAIN_ID" POLYSTORE_HOME="$CHAIN_HOME" POLYSTORE_NODE="$RPC_ADDR" POLYSTORE_DENOM="$DENOM" POLYSTORE_AMOUNT="$POLYSTORE_AMOUNT" POLYSTORE_GAS_PRICES="$GAS_PRICE" POLYSTORE_LISTEN_ADDR="127.0.0.1:${FAUCET_PORT}" \
       "$GO_BIN" run . \
       >"$LOG_DIR/faucet.log" 2>&1 &
     echo $! > "$PID_DIR/faucet.pid"
@@ -917,15 +917,15 @@ start_faucet() {
 start_sp_gateway() {
   banner "Starting SP gateway service(s) (ports starting at 8082)"
   ensure_polystore_cli
-  ensure_nil_gateway
-  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-6}"
+  ensure_polystore_gateway
+  local provider_count="${POLYSTORE_LOCAL_PROVIDER_COUNT:-6}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi
 
-  local p2p_enabled="${NIL_P2P_ENABLED_SP:-1}"
-  local p2p_base_port="${NIL_P2P_LISTEN_PORT_BASE_SP:-9102}"
-  local p2p_identity_dir="${NIL_P2P_IDENTITY_DIR_SP:-}"
+  local p2p_enabled="${POLYSTORE_P2P_ENABLED_SP:-1}"
+  local p2p_base_port="${POLYSTORE_P2P_LISTEN_PORT_BASE_SP:-9102}"
+  local p2p_identity_dir="${POLYSTORE_P2P_IDENTITY_DIR_SP:-}"
 
   local idx
   for idx in $(seq 0 $((provider_count - 1))); do
@@ -939,8 +939,8 @@ start_sp_gateway() {
     fi
 
     local port=$((8082 + idx))
-    local p2p_listen_addrs="${NIL_P2P_LISTEN_ADDRS_SP:-/ip4/127.0.0.1/tcp/9102/ws}"
-    local p2p_identity_path="${NIL_P2P_IDENTITY_PATH_SP:-}"
+    local p2p_listen_addrs="${POLYSTORE_P2P_LISTEN_ADDRS_SP:-/ip4/127.0.0.1/tcp/9102/ws}"
+    local p2p_identity_path="${POLYSTORE_P2P_IDENTITY_PATH_SP:-}"
     if [ "$provider_count" -gt 1 ]; then
       p2p_listen_addrs="/ip4/127.0.0.1/tcp/$((p2p_base_port + idx))/ws"
       if [ -n "$p2p_identity_dir" ]; then
@@ -952,24 +952,24 @@ start_sp_gateway() {
     fi
 
     (
-      cd "$ROOT_DIR/nil_gateway"
+      cd "$ROOT_DIR/polystore_gateway"
       # SP Mode (default). Each instance listens on its own port but can share the upload dir.
-      nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_LCD_BASE="http://127.0.0.1:$LCD_PORT" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
-        NIL_RUNTIME_PERSONA="provider-daemon" \
-        NIL_SESSION_DB_PATH="$LOG_DIR/sessions_sp_${key_name}.db" \
-        NIL_PROVIDER_KEY="$key_name" \
-        NIL_LISTEN_ADDR=":${port}" NIL_GATEWAY_ROUTER="0" NIL_GATEWAY_ROUTER_MODE="0" \
-      NIL_REQUIRE_ONCHAIN_SESSION="${NIL_REQUIRE_ONCHAIN_SESSION:-0}" \
-      NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
-      NIL_P2P_ENABLED="$p2p_enabled" \
-      NIL_P2P_LISTEN_ADDRS="$p2p_listen_addrs" \
-      NIL_P2P_IDENTITY_PATH="$p2p_identity_path" \
-      NIL_P2P_IDENTITY_B64="${NIL_P2P_IDENTITY_B64_SP:-}" \
-      NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS_SP:-}" \
-      NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS_SP:-}" \
-      NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-        NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
-        NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
+      nohup env POLYSTORE_CHAIN_ID="$CHAIN_ID" POLYSTORE_HOME="$CHAIN_HOME" POLYSTORE_NODE="$RPC_ADDR" POLYSTORE_LCD_BASE="http://127.0.0.1:$LCD_PORT" POLYSTORE_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
+        POLYSTORE_RUNTIME_PERSONA="provider-daemon" \
+        POLYSTORE_SESSION_DB_PATH="$LOG_DIR/sessions_sp_${key_name}.db" \
+        POLYSTORE_PROVIDER_KEY="$key_name" \
+        POLYSTORE_LISTEN_ADDR=":${port}" POLYSTORE_GATEWAY_ROUTER="0" POLYSTORE_GATEWAY_ROUTER_MODE="0" \
+      POLYSTORE_REQUIRE_ONCHAIN_SESSION="${POLYSTORE_REQUIRE_ONCHAIN_SESSION:-0}" \
+      POLYSTORE_ENABLE_TX_RELAY="${POLYSTORE_ENABLE_TX_RELAY:-1}" \
+      POLYSTORE_P2P_ENABLED="$p2p_enabled" \
+      POLYSTORE_P2P_LISTEN_ADDRS="$p2p_listen_addrs" \
+      POLYSTORE_P2P_IDENTITY_PATH="$p2p_identity_path" \
+      POLYSTORE_P2P_IDENTITY_B64="${POLYSTORE_P2P_IDENTITY_B64_SP:-}" \
+      POLYSTORE_P2P_RELAY_ADDRS="${POLYSTORE_P2P_RELAY_ADDRS_SP:-}" \
+      POLYSTORE_P2P_ANNOUNCE_ADDRS="${POLYSTORE_P2P_ANNOUNCE_ADDRS_SP:-}" \
+      POLYSTORE_GATEWAY_SP_AUTH="$POLYSTORE_GATEWAY_SP_AUTH" \
+        POLYSTORE_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" POLYSTORE_TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt" \
+        POLYSTORECHAIND_BIN="$POLYSTORECHAIND_BIN" POLYSTORE_CMD_TIMEOUT_SECONDS="240" \
         "$GATEWAY_BIN" \
         >"$LOG_DIR/$log_name" 2>&1 &
       echo $! > "$PID_DIR/$pid_name.pid"
@@ -986,24 +986,24 @@ start_sp_gateway() {
 }
 
 start_user_gateway() {
-  if [ "${NIL_DISABLE_GATEWAY:-0}" = "1" ]; then
-    echo "Skipping User Gateway (NIL_DISABLE_GATEWAY=1)"
+  if [ "${POLYSTORE_DISABLE_GATEWAY:-0}" = "1" ]; then
+    echo "Skipping User Gateway (POLYSTORE_DISABLE_GATEWAY=1)"
     return
   fi
-  if [ "${NIL_START_USER_GATEWAY:-1}" != "1" ]; then
-    echo "Skipping User Gateway (NIL_START_USER_GATEWAY=0)"
+  if [ "${POLYSTORE_START_USER_GATEWAY:-1}" != "1" ]; then
+    echo "Skipping User Gateway (POLYSTORE_START_USER_GATEWAY=0)"
     return
   fi
 
   banner "Starting User gateway service (Port 8080)"
   ensure_polystore_cli
-  ensure_nil_gateway
-  local user_gateway_proxy_mode="$NIL_USER_GATEWAY_PROXY_MODE"
+  ensure_polystore_gateway
+  local user_gateway_proxy_mode="$POLYSTORE_USER_GATEWAY_PROXY_MODE"
   if [ "$user_gateway_proxy_mode" != "1" ]; then
     user_gateway_proxy_mode="0"
   fi
-  local user_p2p_enabled="${NIL_P2P_ENABLED:-1}"
-  local user_p2p_listen="${NIL_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}"
+  local user_p2p_enabled="${POLYSTORE_P2P_ENABLED:-1}"
+  local user_p2p_listen="${POLYSTORE_P2P_LISTEN_ADDRS:-/ip4/127.0.0.1/tcp/9100/ws}"
   if [ "$user_p2p_enabled" = "1" ] && echo "$user_p2p_listen" | grep -q '/tcp/9100/'; then
     if ss -ltn '( sport = :9100 )' 2>/dev/null | tail -n +2 | grep -q .; then
       user_p2p_listen="${user_p2p_listen//\/tcp\/9100\//\/tcp\/19100\/}"
@@ -1011,25 +1011,25 @@ start_user_gateway() {
     fi
   fi
   (
-    cd "$ROOT_DIR/nil_gateway"
+    cd "$ROOT_DIR/polystore_gateway"
     # user-gateway persona on :8080.
     # Default is standalone mode (local slab/cache + orchestration).
-    # Set NIL_USER_GATEWAY_PROXY_MODE=1 for legacy proxy/router compatibility.
-    nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_NODE="$RPC_ADDR" NIL_LCD_BASE="http://127.0.0.1:$LCD_PORT" NIL_UPLOAD_DIR="$LOG_DIR/uploads_user" \
-      NIL_RUNTIME_PERSONA="user-gateway" \
-      NIL_LISTEN_ADDR=":8080" \
-      NIL_GATEWAY_ROUTER="$user_gateway_proxy_mode" NIL_GATEWAY_ROUTER_MODE="$user_gateway_proxy_mode" \
-    NIL_REQUIRE_ONCHAIN_SESSION="${NIL_REQUIRE_ONCHAIN_SESSION:-0}" \
-    NIL_ENABLE_TX_RELAY="${NIL_ENABLE_TX_RELAY:-1}" \
-    NIL_P2P_ENABLED="$user_p2p_enabled" \
-    NIL_P2P_LISTEN_ADDRS="$user_p2p_listen" \
-    NIL_P2P_IDENTITY_PATH="${NIL_P2P_IDENTITY_PATH:-}" \
-    NIL_P2P_IDENTITY_B64="${NIL_P2P_IDENTITY_B64:-}" \
-    NIL_P2P_RELAY_ADDRS="${NIL_P2P_RELAY_ADDRS:-}" \
-    NIL_P2P_ANNOUNCE_ADDRS="${NIL_P2P_ANNOUNCE_ADDRS:-}" \
-    NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
-      NIL_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
-      NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
+    # Set POLYSTORE_USER_GATEWAY_PROXY_MODE=1 for legacy proxy/router compatibility.
+    nohup env POLYSTORE_CHAIN_ID="$CHAIN_ID" POLYSTORE_HOME="$CHAIN_HOME" POLYSTORE_NODE="$RPC_ADDR" POLYSTORE_LCD_BASE="http://127.0.0.1:$LCD_PORT" POLYSTORE_UPLOAD_DIR="$LOG_DIR/uploads_user" \
+      POLYSTORE_RUNTIME_PERSONA="user-gateway" \
+      POLYSTORE_LISTEN_ADDR=":8080" \
+      POLYSTORE_GATEWAY_ROUTER="$user_gateway_proxy_mode" POLYSTORE_GATEWAY_ROUTER_MODE="$user_gateway_proxy_mode" \
+    POLYSTORE_REQUIRE_ONCHAIN_SESSION="${POLYSTORE_REQUIRE_ONCHAIN_SESSION:-0}" \
+    POLYSTORE_ENABLE_TX_RELAY="${POLYSTORE_ENABLE_TX_RELAY:-1}" \
+    POLYSTORE_P2P_ENABLED="$user_p2p_enabled" \
+    POLYSTORE_P2P_LISTEN_ADDRS="$user_p2p_listen" \
+    POLYSTORE_P2P_IDENTITY_PATH="${POLYSTORE_P2P_IDENTITY_PATH:-}" \
+    POLYSTORE_P2P_IDENTITY_B64="${POLYSTORE_P2P_IDENTITY_B64:-}" \
+    POLYSTORE_P2P_RELAY_ADDRS="${POLYSTORE_P2P_RELAY_ADDRS:-}" \
+    POLYSTORE_P2P_ANNOUNCE_ADDRS="${POLYSTORE_P2P_ANNOUNCE_ADDRS:-}" \
+    POLYSTORE_GATEWAY_SP_AUTH="$POLYSTORE_GATEWAY_SP_AUTH" \
+      POLYSTORE_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli" POLYSTORE_TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt" \
+      POLYSTORECHAIND_BIN="$POLYSTORECHAIND_BIN" POLYSTORE_CMD_TIMEOUT_SECONDS="240" \
       "$GATEWAY_BIN" \
       >"$LOG_DIR/gateway_user.log" 2>&1 &
     echo $! > "$PID_DIR/gateway_user.pid"
@@ -1049,14 +1049,14 @@ start_user_gateway() {
 }
 
 start_bridge() {
-  local mode="${NIL_DEPLOY_BRIDGE:-1}"
+  local mode="${POLYSTORE_DEPLOY_BRIDGE:-1}"
   if [ "$mode" = "0" ]; then
-    echo "Skipping bridge deployment (NIL_DEPLOY_BRIDGE=0)"
-    BRIDGE_STATUS="skipped (NIL_DEPLOY_BRIDGE=0)"
+    echo "Skipping bridge deployment (POLYSTORE_DEPLOY_BRIDGE=0)"
+    BRIDGE_STATUS="skipped (POLYSTORE_DEPLOY_BRIDGE=0)"
     return
   fi
   if ! command -v forge >/dev/null 2>&1 || ! command -v cast >/dev/null 2>&1; then
-    echo "Foundry tools not found; skipping NilBridge deployment. Install forge/cast or set NIL_DEPLOY_BRIDGE=0."
+    echo "Foundry tools not found; skipping PolyStoreBridge deployment. Install forge/cast or set POLYSTORE_DEPLOY_BRIDGE=0."
     BRIDGE_STATUS="skipped (forge/cast not found)"
     return
   fi
@@ -1078,16 +1078,16 @@ start_bridge() {
     sleep 1
   done
   if [ "$ready" != "1" ]; then
-    echo "EVM RPC never became ready; skipping NilBridge deployment."
+    echo "EVM RPC never became ready; skipping PolyStoreBridge deployment."
     BRIDGE_STATUS="failed (EVM RPC not ready)"
     return
   fi
 
-  banner "Deploying NilBridge to local EVM"
-  if env -u PRIVATE_KEY EVM_PRIVKEY= NIL_EVM_DEV_PRIVKEY="$NIL_EVM_DEV_PRIVKEY" "$ROOT_DIR/scripts/deploy_bridge_local.sh" >/tmp/bridge_deploy.log 2>&1; then
+  banner "Deploying PolyStoreBridge to local EVM"
+  if env -u PRIVATE_KEY EVM_PRIVKEY= POLYSTORE_EVM_DEV_PRIVKEY="$POLYSTORE_EVM_DEV_PRIVKEY" "$ROOT_DIR/scripts/deploy_bridge_local.sh" >/tmp/bridge_deploy.log 2>&1; then
     if [ -f "$BRIDGE_ADDR_FILE" ]; then
       BRIDGE_ADDRESS="$(cat "$BRIDGE_ADDR_FILE" | tr -d '\n' | tr -d '\r')"
-      echo "NilBridge deployed at $BRIDGE_ADDRESS (exported to VITE_BRIDGE_ADDRESS for the web UI)"
+      echo "PolyStoreBridge deployed at $BRIDGE_ADDRESS (exported to VITE_BRIDGE_ADDRESS for the web UI)"
       BRIDGE_STATUS="$BRIDGE_ADDRESS"
     else
       echo "Bridge deploy script completed but address file missing; check /tmp/bridge_deploy.log"
@@ -1096,14 +1096,14 @@ start_bridge() {
   else
     echo "Bridge deploy script failed; see /tmp/bridge_deploy.log. Continuing without bridge."
     echo "To retry later: ./scripts/deploy_bridge_local.sh"
-    echo "To skip next time: NIL_DEPLOY_BRIDGE=0 ./scripts/ensure_stack_local.sh"
+    echo "To skip next time: POLYSTORE_DEPLOY_BRIDGE=0 ./scripts/ensure_stack_local.sh"
     BRIDGE_STATUS="failed (see /tmp/bridge_deploy.log)"
   fi
 }
 
 start_web() {
-  if [ "${NIL_START_WEB}" != "1" ]; then
-    echo "Skipping web UI (NIL_START_WEB=0)"
+  if [ "${POLYSTORE_START_WEB}" != "1" ]; then
+    echo "Skipping web UI (POLYSTORE_START_WEB=0)"
     return
   fi
   banner "Starting web (Vite dev server)"
@@ -1117,8 +1117,8 @@ start_web() {
     VITE_SP_BASE="${VITE_SP_BASE:-http://localhost:8082}" \
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
-    VITE_ENABLE_FAUCET="${VITE_ENABLE_FAUCET:-${NIL_START_FAUCET:-0}}" \
-    VITE_NILSTORE_PRECOMPILE="${VITE_NILSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
+    VITE_ENABLE_FAUCET="${VITE_ENABLE_FAUCET:-${POLYSTORE_START_FAUCET:-0}}" \
+    VITE_POLYSTORE_PRECOMPILE="${VITE_POLYSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
     nohup npm run dev -- --host 0.0.0.0 --port 5173 >"$LOG_DIR/website.log" 2>&1 &
     echo $! > "$PID_DIR/website.pid"
   )
@@ -1189,7 +1189,7 @@ stop_sp_gateway_only() {
     fi
   done
 
-  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  local provider_count="${POLYSTORE_LOCAL_PROVIDER_COUNT:-3}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi
@@ -1235,15 +1235,15 @@ start_all() {
   stop_all
   rm -rf "$LOG_DIR/uploads_sp" "$LOG_DIR/uploads_user"
   ensure_polystore_core
-  ensure_nilchaind
+  ensure_polystorechaind
   init_chain
   start_chain
   register_demo_provider
-  if [ "${NIL_START_FAUCET}" = "1" ]; then
+  if [ "${POLYSTORE_START_FAUCET}" = "1" ]; then
     start_faucet
     auto_faucet_request
   else
-    echo "Skipping faucet (NIL_START_FAUCET=0)"
+    echo "Skipping faucet (POLYSTORE_START_FAUCET=0)"
   fi
   start_sp_gateway
   start_user_gateway
@@ -1253,21 +1253,21 @@ start_all() {
   cat <<EOF
 RPC:         http://localhost:${RPC_ADDR##*:}
 REST/LCD:    http://localhost:$LCD_PORT
-EVM RPC:     http://localhost:$EVM_RPC_PORT  (nilchaind, Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
+EVM RPC:     http://localhost:$EVM_RPC_PORT  (polystorechaind, Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
 Faucet:      http://localhost:${FAUCET_PORT}/faucet
 SP Gateways: http://localhost:8082.. (Uploads to $LOG_DIR/uploads_sp)
 User Gateway: http://localhost:8080 (Uploads to $LOG_DIR/uploads_user)
 Web UI:      http://localhost:5173/#/dashboard
 	Bridge:      ${BRIDGE_ADDRESS:-$BRIDGE_STATUS}
 	Home:        $CHAIN_HOME
-	Re-init:     To wipe a non-_artifacts Home, set NIL_REINIT_HOME=1
+	Re-init:     To wipe a non-_artifacts Home, set POLYSTORE_REINIT_HOME=1
 	To stop:     ./scripts/run_local_stack.sh stop
 EOF
 }
 
 stop_all() {
   banner "Stopping processes"
-  for svc in nilchaind faucet gateway_sp gateway_user website; do
+  for svc in polystorechaind faucet gateway_sp gateway_user website; do
     pid_file="$PID_DIR/$svc.pid"
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file")
@@ -1291,7 +1291,7 @@ stop_all() {
     fi
   done
 
-  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  local provider_count="${POLYSTORE_LOCAL_PROVIDER_COUNT:-3}"
   if [ "$provider_count" -lt 1 ]; then
     provider_count=1
   fi

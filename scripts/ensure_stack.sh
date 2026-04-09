@@ -25,13 +25,13 @@ if [ ! -f "$LIB_DIR/libpolystore_core.so" ] && [ ! -f "$LIB_DIR/libpolystore_cor
 fi
 export LD_LIBRARY_PATH="$LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-echo "Ensuring NilStore stack:"
+echo "Ensuring PolyStore stack:"
 echo "  profile=$PROFILE chain_id=$CHAIN_ID evm_chain_id=$EVM_CHAIN_ID providers=$WANT_PROVIDERS start_web=$START_WEB"
 
 # Best-effort: if root-level services are running, they can conflict with local ports.
 # Use non-interactive sudo to avoid blocking on password prompts.
 if command -v sudo >/dev/null 2>&1; then
-  sudo -n systemctl stop nilchaind nil-faucet nil-gateway-router nil-gateway-provider nil-gateway >/dev/null 2>&1 || true
+  sudo -n systemctl stop polystorechaind polystore-faucet polystore-gateway-router polystore-gateway-provider polystore-gateway >/dev/null 2>&1 || true
 fi
 
 # Always reset local devnet stack first.

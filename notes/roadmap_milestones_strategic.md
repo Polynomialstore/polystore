@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-NilStore has successfully demonstrated the core cryptographic primitives (Triple Proof, NilFS) and the interaction model (Gateway, Retrieval Sessions) in a "Mode 1" (Full Replica) environment. The critical path to Mainnet requires solving three major challenges:
+PolyStore has successfully demonstrated the core cryptographic primitives (Triple Proof, PolyFS) and the interaction model (Gateway, Retrieval Sessions) in a "Mode 1" (Full Replica) environment. The critical path to Mainnet requires solving three major challenges:
 1.  **Trustlessness:** Removing the Gateway as a custodian of user keys (Devnet Gamma).
 2.  **Throughput:** Overcoming the CPU-bound KZG generation bottleneck to match S3 upload speeds.
 3.  **Efficiency:** Transitioning from Mode 1 (12x overhead) to Mode 2 (1.5x overhead via Erasure Coding).
@@ -25,7 +25,7 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 *   **Bindings:**
     *   **Browser:** Calls `polystore_core` via WASM.
     *   **Go Gateway:** Calls `polystore_core` via CGO (FFI).
-*   **Result:** A single source of truth for the NilFS format, preventing bugs where the browser and gateway produce different roots for the same file.
+*   **Result:** A single source of truth for the PolyFS format, preventing bugs where the browser and gateway produce different roots for the same file.
 
 *   **Consulting Analysis:** Currently, the Gateway signs transactions on behalf of users. This masks gas costs and creates a central point of failure. We must shift to a model where the Browser is the primary "User Agent" (Thick Client), capable of operating independently via WASM, while optionally delegating heavy compute to a local Gateway. Simultaneously, we must deploy the real economic logic so users pay for what they use.
 *   **Key Deliverables:**
@@ -48,7 +48,7 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 
 *   **Consulting Analysis:** The `kzg_upload_bottleneck_report.md` is a critical red flag. CPU-based KZG generation (~8MB/s) is insufficient for the protocol's target use case. We cannot launch Mainnet with "dial-up" upload speeds for "broadband" data.
 *   **Key Deliverables:**
-    *   **GPU Acceleration (Icicle):** Integrate CUDA-accelerated KZG (e.g., Ingonyama's Icicle) into `polystore_cli` and `nil_gateway`. Target >500 MB/s throughput.
+    *   **GPU Acceleration (Icicle):** Integrate CUDA-accelerated KZG (e.g., Ingonyama's Icicle) into `polystore_cli` and `polystore_gateway`. Target >500 MB/s throughput.
     *   **Thick Client (WASM) Finalization:** Complete the Rust-to-WASM compilation pipeline (`polystore_core`) so that small files (<100MB) can be sharded and committed directly in the browser, bypassing the Gateway for small deals.
     *   **Parallel Ingest:** Refactor the Gateway ingest pipeline to handle parallel blob commitment generation across multiple GPU streams.
 
@@ -58,7 +58,7 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 *   **Consulting Analysis:** Mode 1 (Full Replica) is expensive and brittle. Mode 2 allows the network to survive node failures mathematically rather than just via redundancy. This is the most complex engineering phase.
 *   **Key Deliverables:**
     *   **Slot-Major Indexing:** Implement the "Slot-Major" leaf ordering defined in `mode2-framing.md`. This ensures providers can serve data efficiently (contiguous reads) while still supporting distributed repairs.
-    *   **Virtual Stripes on Chain:** Update `nilchain` to track `VirtualStripe` assignments (slot -> provider mapping).
+    *   **Virtual Stripes on Chain:** Update `polystorechain` to track `VirtualStripe` assignments (slot -> provider mapping).
     *   **Client-Side Reconstruction:** Update the Fetch logic to query `K` providers in parallel and perform Reed-Solomon reconstruction on the fly if some fail.
     *   **Parity Accountability:** Implement "Design A" from the framing notes: Parity shards must be committed and provable just like data shards (using Triple Proofs).
 
@@ -77,7 +77,7 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 
 *   **Consulting Analysis:** To capture non-crypto native demand (the "Enterprise User" archetype), the system needs to look like S3 but behave like crypto.
 *   **Key Deliverables:**
-    *   **S3 Adapter V1:** Polish the `nil_gateway` S3-compatible API to support standard tools like `aws-cli` or `rclone` for uploads/downloads.
+    *   **S3 Adapter V1:** Polish the `polystore_gateway` S3-compatible API to support standard tools like `aws-cli` or `rclone` for uploads/downloads.
     *   **Upload Delegations:** Implement the "Third-Party Uploader" pattern (from `launch_todos.md`) allowing an enterprise to fund a temporary key for a specific upload job without exposing their main wallet.
     *   **Audits:**
         *   **Cryptographic Audit:** Verify the KZG Trusted Setup and Triple Proof circuit logic.

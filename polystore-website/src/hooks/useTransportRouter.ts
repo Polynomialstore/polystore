@@ -10,7 +10,7 @@ import {
 } from '../api/gatewayClient'
 import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
 import { providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
-import type { ManifestInfoData, MduKzgData, NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 import { useTransportContext } from '../context/TransportContext'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
 import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
@@ -24,7 +24,7 @@ import {
   resolveTransportPreference,
 } from '../lib/transport/mode'
 
-const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected'
+const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
 
 function readLocalGatewayConnectedHint(): boolean {
   if (typeof window === 'undefined') return false
@@ -167,14 +167,14 @@ export function useTransportRouter() {
     return undefined
   }, [])
 
-  const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<NilfsFileEntry[]>> => {
+  const listFiles = useCallback(async (req: ListFilesRequest): Promise<TransportOutcome<PolyfsFileEntry[]>> => {
     const effectivePreference = resolvePreference(req.preference)
     const gatewayEnabled = isGatewayTransportEnabled({
       gatewayDisabled: appConfig.gatewayDisabled,
       gatewayBase: appConfig.gatewayBase,
       localGatewayConnected: readLocalGatewayConnectedHint(),
     })
-    const candidates: TransportCandidate<NilfsFileEntry[]>[] = [
+    const candidates: TransportCandidate<PolyfsFileEntry[]>[] = [
       ...(gatewayEnabled
         ? [{
             backend: 'gateway' as const,
@@ -497,14 +497,14 @@ export function useTransportRouter() {
         signal,
         headers: {
           Range: `bytes=${req.rangeStart}-${rangeEnd}`,
-          'X-Nil-Session-Id': req.sessionId,
+          'X-PolyStore-Session-Id': req.sessionId,
           ...(req.auth
             ? {
-                'X-Nil-Req-Sig': req.auth.reqSig,
-                'X-Nil-Req-Nonce': String(req.auth.reqNonce),
-                'X-Nil-Req-Expires-At': String(req.auth.reqExpiresAt),
-                'X-Nil-Req-Range-Start': String(req.auth.signedRangeStart),
-                'X-Nil-Req-Range-Len': String(req.auth.signedRangeLen),
+                'X-PolyStore-Req-Sig': req.auth.reqSig,
+                'X-PolyStore-Req-Nonce': String(req.auth.reqNonce),
+                'X-PolyStore-Req-Expires-At': String(req.auth.reqExpiresAt),
+                'X-PolyStore-Req-Range-Start': String(req.auth.signedRangeStart),
+                'X-PolyStore-Req-Range-Len': String(req.auth.signedRangeLen),
               }
             : {}),
         },
@@ -514,15 +514,15 @@ export function useTransportRouter() {
         throw new TransportError(txt || `fetch failed (${res.status})`, classifyStatus(res.status), res.status)
       }
 
-      const deputyHeader = String(res.headers.get('X-Nil-Deputy') || '').trim().toLowerCase()
+      const deputyHeader = String(res.headers.get('X-PolyStore-Deputy') || '').trim().toLowerCase()
       const deputyServed = deputy && (deputyHeader === '1' || deputyHeader === 'true' || deputyHeader === 'yes')
 
-      let provider = String(res.headers.get('X-Nil-Provider') || '').trim()
+      let provider = String(res.headers.get('X-PolyStore-Provider') || '').trim()
       if (!provider && req.expectedProvider && (deputyServed || throughGateway)) {
         provider = req.expectedProvider
       }
       if (!provider) {
-        throw new TransportError('missing X-Nil-Provider', 'invalid_response')
+        throw new TransportError('missing X-PolyStore-Provider', 'invalid_response')
       }
       if (req.expectedProvider && provider !== req.expectedProvider) {
         if (deputyServed || throughGateway) {
@@ -535,8 +535,8 @@ export function useTransportRouter() {
         }
       }
 
-      const cacheFreshness = String(res.headers.get('X-Nil-Cache-Freshness') || '').trim().toLowerCase()
-      const cacheFreshnessReason = String(res.headers.get('X-Nil-Cache-Freshness-Reason') || '').trim().toLowerCase()
+      const cacheFreshness = String(res.headers.get('X-PolyStore-Cache-Freshness') || '').trim().toLowerCase()
+      const cacheFreshnessReason = String(res.headers.get('X-PolyStore-Cache-Freshness-Reason') || '').trim().toLowerCase()
 
       return {
         bytes: new Uint8Array(await res.arrayBuffer()),
@@ -592,9 +592,9 @@ export function useTransportRouter() {
             )
           }
 
-          const provider = String(result.headers['X-Nil-Provider'] || '')
+          const provider = String(result.headers['X-PolyStore-Provider'] || '')
           if (!provider) {
-            throw new TransportError('missing X-Nil-Provider', 'invalid_response')
+            throw new TransportError('missing X-PolyStore-Provider', 'invalid_response')
           }
           if (req.expectedProvider && provider !== req.expectedProvider) {
             throw new TransportError(
@@ -603,9 +603,9 @@ export function useTransportRouter() {
             )
           }
 
-          const cacheFreshness = String(result.headers['X-Nil-Cache-Freshness'] || '').trim().toLowerCase()
-          const cacheFreshnessReason = String(result.headers['X-Nil-Cache-Freshness-Reason'] || '').trim().toLowerCase()
-          const deputyHeader = String(result.headers['X-Nil-Deputy'] || '').trim().toLowerCase()
+          const cacheFreshness = String(result.headers['X-PolyStore-Cache-Freshness'] || '').trim().toLowerCase()
+          const cacheFreshnessReason = String(result.headers['X-PolyStore-Cache-Freshness-Reason'] || '').trim().toLowerCase()
+          const deputyHeader = String(result.headers['X-PolyStore-Deputy'] || '').trim().toLowerCase()
           return {
             bytes: result.body,
             provider,

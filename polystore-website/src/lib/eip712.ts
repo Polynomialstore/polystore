@@ -1,8 +1,8 @@
-// Shared EIP-712 intent definitions for NilStore.
+// Shared EIP-712 intent definitions for PolyStore.
 // This file is the single source of truth for typed-data shapes used by
 // MetaMask signing, gateway payloads, and parity tests.
 
-export const EIP712_DOMAIN_NAME = 'NilStore' as const
+export const EIP712_DOMAIN_NAME = 'PolyStore' as const
 export const EIP712_DOMAIN_VERSION = '1' as const
 export const EIP712_VERIFYING_CONTRACT =
   '0x0000000000000000000000000000000000000000' as const
