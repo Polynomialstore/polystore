@@ -1,4 +1,4 @@
-Initializing KZG with path: nilchain/trusted_setup.txt
+Initializing KZG with path: polystorechain/trusted_setup.txt
 [90m12:13PM[0m [32mINF[0m [1mUnlocking keyring[0m [36mmodule=[0mserver
 [90m12:13PM[0m [32mINF[0m [1mstarting ABCI with CometBFT[0m [36mmodule=[0mserver
 [90m12:13PM[0m [32mINF[0m [1mconfiguring EVM mempool[0m [36mmodule=[0mevm-mempool
@@ -19,7 +19,7 @@ Initializing KZG with path: nilchain/trusted_setup.txt
 [90m12:13PM[0m [32mINF[0m [1mUpgrading IAVL storage for faster queries + execution on live state. This may take a while[0m [36mcommit=[0m436F6D6D697449447B5B5D3A307D [36mmodule=[0mserver [36mstore_key=[0m"KVStoreKey{0x140023cf590, upgrade}" [36mversion=[0m1
 [90m12:13PM[0m [32mINF[0m [1mUpgrading IAVL storage for faster queries + execution on live state. This may take a while[0m [36mcommit=[0m436F6D6D697449447B5B5D3A307D [36mmodule=[0mserver [36mstore_key=[0m"KVStoreKey{0x140021d4dc0, staking}" [36mversion=[0m1
 [90m12:13PM[0m [32mINF[0m [1mUpgrading IAVL storage for faster queries + execution on live state. This may take a while[0m [36mcommit=[0m436F6D6D697449447B5B5D3A307D [36mmodule=[0mserver [36mstore_key=[0m"KVStoreKey{0x140023871f0, authz}" [36mversion=[0m1
-[90m12:13PM[0m [32mINF[0m [1mUpgrading IAVL storage for faster queries + execution on live state. This may take a while[0m [36mcommit=[0m436F6D6D697449447B5B5D3A307D [36mmodule=[0mserver [36mstore_key=[0m"KVStoreKey{0x140023ceca0, nilchain}" [36mversion=[0m1
+[90m12:13PM[0m [32mINF[0m [1mUpgrading IAVL storage for faster queries + execution on live state. This may take a while[0m [36mcommit=[0m436F6D6D697449447B5B5D3A307D [36mmodule=[0mserver [36mstore_key=[0m"KVStoreKey{0x140023ceca0, polystorechain}" [36mversion=[0m1
 [90m12:13PM[0m [32mINF[0m [1mUpgrading IAVL storage for faster queries + execution on live state. This may take a while[0m [36mcommit=[0m436F6D6D697449447B5B5D3A307D [36mmodule=[0mserver [36mstore_key=[0m"KVStoreKey{0x140021f2160, gov}" [36mversion=[0m1
 [90m12:13PM[0m [32mINF[0m [1mUpgrading IAVL storage for faster queries + execution on live state. This may take a while[0m [36mcommit=[0m436F6D6D697449447B5B5D3A307D [36mmodule=[0mserver [36mstore_key=[0m"KVStoreKey{0x140021f3140, consensus}" [36mversion=[0m1
 [90m12:13PM[0m [32mINF[0m [1mUpgrading IAVL storage for faster queries + execution on live state. This may take a while[0m [36mcommit=[0m436F6D6D697449447B5B5D3A307D [36mmodule=[0mserver [36mstore_key=[0m"KVStoreKey{0x140046b6980, transfer}" [36mversion=[0m1
@@ -44,17 +44,17 @@ Initializing KZG with path: nilchain/trusted_setup.txt
 [90m12:13PM[0m [32mINF[0m [1mCompleted ABCI Handshake - CometBFT and App are synced[0m [36mappHash=[0mE3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855 [36mappHeight=[0m0 [36mmodule=[0mconsensus [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mVersion info[0m [36mabci=[0m2.0.0 [36mblock=[0m11 [36mcommit_hash=[0m [36mmodule=[0mserver [36mp2p=[0m8 [36mserver=[0mnode [36mtendermint_version=[0m0.38.19
 [90m12:13PM[0m [32mINF[0m [1mThis node is a validator[0m [36maddr=[0mAE70BBFA1783FC2FA7956B4AA4FBF2A0D2BF034A [36mmodule=[0mconsensus [36mpubKey=[0mPubKeyEd25519{2F5FD958AD542B1301A9C4104B37D47684267BF257E3634A86DE00BA7CF521D6} [36mserver=[0mnode
-[90m12:13PM[0m [32mINF[0m [1mP2P Node ID[0m [36mID=[0m1d82a21e3061fc42f42660f49e73db72b69c983e [36mfile=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/config/node_key.json [36mmodule=[0mp2p [36mserver=[0mnode
+[90m12:13PM[0m [32mINF[0m [1mP2P Node ID[0m [36mID=[0m1d82a21e3061fc42f42660f49e73db72b69c983e [36mfile=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/config/node_key.json [36mmodule=[0mp2p [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mAdding persistent peers[0m [36maddrs=[0m[] [36mmodule=[0mp2p [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mAdding unconditional peer ids[0m [36mids=[0m[] [36mmodule=[0mp2p [36mserver=[0mnode
-[90m12:13PM[0m [32mINF[0m [1mAdd our address to book[0m [36maddr=[0m1d82a21e3061fc42f42660f49e73db72b69c983e@0.0.0.0:26656 [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/config/addrbook.json [36mmodule=[0mp2p [36mserver=[0mnode
+[90m12:13PM[0m [32mINF[0m [1mAdd our address to book[0m [36maddr=[0m1d82a21e3061fc42f42660f49e73db72b69c983e@0.0.0.0:26656 [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/config/addrbook.json [36mmodule=[0mp2p [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mNode [36mmodule=[0mserver [36mmsg=[0m"Starting Node service" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mserve[0m [36mmodule=[0mrpc-server [36mmsg=[0m"Starting RPC HTTP server on 127.0.0.1:26657" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0m"P2P Switch" [36mmodule=[0mp2p [36mmsg=[0m"Starting P2P Switch service" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mEvidence [36mmodule=[0mevidence [36mmsg=[0m"Starting Evidence service" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mStateSync [36mmodule=[0mstatesync [36mmsg=[0m"Starting StateSync service" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mPEX [36mmodule=[0mpex [36mmsg=[0m"Starting PEX service" [36mserver=[0mnode
-[90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/config/addrbook.json [36mimpl=[0mAddrBook [36mmodule=[0mp2p [36mmsg=[0m"Starting AddrBook service" [36mserver=[0mnode
+[90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/config/addrbook.json [36mimpl=[0mAddrBook [36mmodule=[0mp2p [36mmsg=[0m"Starting AddrBook service" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mMempool [36mmodule=[0mmempool [36mmsg=[0m"Starting Mempool service" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mReactor [36mmodule=[0mblocksync [36mmsg=[0m"Starting Reactor service" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mEnsure peers[0m [36mmodule=[0mpex [36mnumDialing=[0m0 [36mnumInPeers=[0m0 [36mnumOutPeers=[0m0 [36mnumToDial=[0m10 [36mserver=[0mnode
@@ -62,15 +62,15 @@ Initializing KZG with path: nilchain/trusted_setup.txt
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mConsensusReactor [36mmodule=[0mconsensus [36mmsg=[0m"Starting Consensus service" [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mReactor [0m [36mmodule=[0mconsensus [36mserver=[0mnode [36mwaitSync=[0mfalse
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mConsensusState [36mmodule=[0mconsensus [36mmsg=[0m"Starting State service" [36mserver=[0mnode
-[90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mbaseWAL [36mmodule=[0mconsensus [36mmsg=[0m"Starting baseWAL service" [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/data/cs.wal/wal
-[90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mGroup [36mmodule=[0mconsensus [36mmsg=[0m"Starting Group service" [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/data/cs.wal/wal
+[90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mbaseWAL [36mmodule=[0mconsensus [36mmsg=[0m"Starting baseWAL service" [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/data/cs.wal/wal
+[90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mGroup [36mmodule=[0mconsensus [36mmsg=[0m"Starting Group service" [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/data/cs.wal/wal
 [90m12:13PM[0m [32mINF[0m [1mservice start[0m [36mimpl=[0mTimeoutTicker [36mmodule=[0mconsensus [36mmsg=[0m"Starting TimeoutTicker service" [36mserver=[0mnode
-[90m12:13PM[0m [32mINF[0m [1mSearching for height[0m [36mheight=[0m1 [36mmax=[0m0 [36mmin=[0m0 [36mmodule=[0mconsensus [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/data/cs.wal/wal
-[90m12:13PM[0m [32mINF[0m [1mSearching for height[0m [36mheight=[0m0 [36mmax=[0m0 [36mmin=[0m0 [36mmodule=[0mconsensus [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/data/cs.wal/wal
-[90m12:13PM[0m [32mINF[0m [1mFound[0m [36mheight=[0m0 [36mindex=[0m0 [36mmodule=[0mconsensus [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/data/cs.wal/wal
+[90m12:13PM[0m [32mINF[0m [1mSearching for height[0m [36mheight=[0m1 [36mmax=[0m0 [36mmin=[0m0 [36mmodule=[0mconsensus [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/data/cs.wal/wal
+[90m12:13PM[0m [32mINF[0m [1mSearching for height[0m [36mheight=[0m0 [36mmax=[0m0 [36mmin=[0m0 [36mmodule=[0mconsensus [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/data/cs.wal/wal
+[90m12:13PM[0m [32mINF[0m [1mFound[0m [36mheight=[0m0 [36mindex=[0m0 [36mmodule=[0mconsensus [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/data/cs.wal/wal
 [90m12:13PM[0m [32mINF[0m [1mCatchup by replaying consensus messages[0m [36mheight=[0m1 [36mmodule=[0mconsensus [36mserver=[0mnode
 [90m12:13PM[0m [32mINF[0m [1mReplay: Done[0m [36mmodule=[0mconsensus [36mserver=[0mnode
-[90m12:13PM[0m [32mINF[0m [1mSaving AddrBook to file[0m [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/config/addrbook.json [36mmodule=[0mp2p [36mserver=[0mnode [36msize=[0m0
+[90m12:13PM[0m [32mINF[0m [1mSaving AddrBook to file[0m [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/config/addrbook.json [36mmodule=[0mp2p [36mserver=[0mnode [36msize=[0m0
 [90m12:13PM[0m [32mINF[0m [1mstarting gRPC server...[0m [36maddress=[0mlocalhost:9090 [36mmodule=[0mgrpc-server
 [90m12:13PM[0m [32mINF[0m [1mstarting API server...[0m [36maddress=[0mtcp://0.0.0.0:1317 [36mmodule=[0mserver [36mserver=[0mapi
 [90m12:13PM[0m [32mINF[0m [1mserve[0m [36mmodule=[0mserver [36mmsg=[0m"Starting RPC HTTP server on [::]:1317" [36mserver=[0mapi
@@ -148,15 +148,15 @@ Initializing KZG with path: nilchain/trusted_setup.txt
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mIndexerService [36mmodule=[0mtxindex [36mmsg=[0m"Stopping IndexerService service" [36mserver=[0mnode
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0m"P2P Switch" [36mmodule=[0mp2p [36mmsg=[0m"Stopping P2P Switch service" [36mserver=[0mnode
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mPEX [36mmodule=[0mpex [36mmsg=[0m"Stopping PEX service" [36mserver=[0mnode
-[90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/config/addrbook.json [36mimpl=[0mAddrBook [36mmodule=[0mp2p [36mmsg=[0m"Stopping AddrBook service" [36mserver=[0mnode
+[90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/config/addrbook.json [36mimpl=[0mAddrBook [36mmodule=[0mp2p [36mmsg=[0m"Stopping AddrBook service" [36mserver=[0mnode
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mMempool [36mmodule=[0mmempool [36mmsg=[0m"Stopping Mempool service" [36mserver=[0mnode
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mReactor [36mmodule=[0mblocksync [36mmsg=[0m"Stopping Reactor service" [36mserver=[0mnode
-[90m12:14PM[0m [32mINF[0m [1mSaving AddrBook to file[0m [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/config/addrbook.json [36mmodule=[0mp2p [36mserver=[0mnode [36msize=[0m0
+[90m12:14PM[0m [32mINF[0m [1mSaving AddrBook to file[0m [36mbook=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/config/addrbook.json [36mmodule=[0mp2p [36mserver=[0mnode [36msize=[0m0
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mConsensusReactor [36mmodule=[0mconsensus [36mmsg=[0m"Stopping Consensus service" [36mserver=[0mnode
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mConsensusState [36mmodule=[0mconsensus [36mmsg=[0m"Stopping State service" [36mserver=[0mnode
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mTimeoutTicker [36mmodule=[0mconsensus [36mmsg=[0m"Stopping TimeoutTicker service" [36mserver=[0mnode
-[90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mbaseWAL [36mmodule=[0mconsensus [36mmsg=[0m"Stopping baseWAL service" [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/data/cs.wal/wal
-[90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mGroup [36mmodule=[0mconsensus [36mmsg=[0m"Stopping Group service" [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/nilchain_data/data/cs.wal/wal
+[90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mbaseWAL [36mmodule=[0mconsensus [36mmsg=[0m"Stopping baseWAL service" [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/data/cs.wal/wal
+[90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mGroup [36mmodule=[0mconsensus [36mmsg=[0m"Stopping Group service" [36mserver=[0mnode [36mwal=[0m/Users/michaelseiler/dev/snissn/nilcoin2/_artifacts/polystorechain_data/data/cs.wal/wal
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mEvidence [36mmodule=[0mevidence [36mmsg=[0m"Stopping Evidence service" [36mserver=[0mnode
 [90m12:14PM[0m [32mINF[0m [1mservice stop[0m [36mimpl=[0mStateSync [36mmodule=[0mstatesync [36mmsg=[0m"Stopping StateSync service" [36mserver=[0mnode
 [90m12:14PM[0m [31mERR[0m [1mStopped accept routine, as transport is closed[0m [36mmodule=[0mp2p [36mnumPeers=[0m0 [36mserver=[0mnode

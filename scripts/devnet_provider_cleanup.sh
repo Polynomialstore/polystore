@@ -15,7 +15,7 @@ Usage:
   scripts/devnet_provider_cleanup.sh [flags]
 
 Flags:
-  --provider-root DIR   Root containing provider homes (default: /var/lib/nilstore/providers)
+  --provider-root DIR   Root containing provider homes (default: /var/lib/polystore/providers)
   --lcd URL             LCD base URL (default: http://127.0.0.1:1317)
   --apply               Apply removals (default: dry-run)
   -h, --help            Show this help
@@ -39,7 +39,7 @@ require_cmd() {
   fi
 }
 
-PROVIDER_ROOT="/var/lib/nilstore/providers"
+PROVIDER_ROOT="/var/lib/polystore/providers"
 LCD_BASE="http://127.0.0.1:1317"
 APPLY=0
 
@@ -106,7 +106,7 @@ resolve_deal() {
   local tmp
   tmp="$(mktemp)"
   local code
-  code="$(curl -sS -o "$tmp" -w '%{http_code}' "$LCD_BASE/nilchain/nilchain/v1/deals/$deal_id" || true)"
+  code="$(curl -sS -o "$tmp" -w '%{http_code}' "$LCD_BASE/polystorechain/polystorechain/v1/deals/$deal_id" || true)"
   if [[ "$code" == "404" ]]; then
     DEAL_STATUS[$deal_id]="missing"
     DEAL_END[$deal_id]="0"

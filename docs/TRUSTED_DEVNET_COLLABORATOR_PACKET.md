@@ -7,11 +7,11 @@ Recommended public entry points:
 - Provider operators: `docs/ALPHA_PROVIDER_QUICKSTART.md` (legacy filename)
 
 For a concrete example with real hostnames, see:
-- `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_NILSTORE_ORG.md`
+- `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET_POLYNOMIALSTORE_COM.md`
 
 Audience:
 - **Website testers** (no server required)
-- **Storage Provider (SP) operators** (optional; run `nil_gateway` in provider mode)
+- **Storage Provider (SP) operators** (optional; run `polystore_gateway` in provider mode)
 
 If you are the hub operator, also read: `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 
@@ -20,7 +20,7 @@ If you are the hub operator, also read: `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 ## What you need from the hub operator
 
 You should receive:
-- Website URL: `https://nilstore.org/#/first-file` (default public onboarding route) or deployment-specific `https://web.<domain>/#/first-file`
+- Website URL: `https://polynomialstore.com/#/first-file` (default public onboarding route) or deployment-specific `https://web.<domain>/#/first-file`
 - EVM RPC: `https://evm.<domain>`
 - Chain ID: `<chain-id>` (e.g. `20260211`)
 - Faucet URL (optional): `https://faucet.<domain>/faucet`
@@ -30,7 +30,7 @@ You should receive:
 If you are running an SP, you also need:
 - Hub RPC: `https://rpc.<domain>`
 - Hub LCD: `https://lcd.<domain>`
-- Router↔provider shared secret: `NIL_GATEWAY_SP_AUTH=...` (treat like a password)
+- Router↔provider shared secret: `POLYSTORE_GATEWAY_SP_AUTH=...` (treat like a password)
 
 ---
 
@@ -42,12 +42,12 @@ If you want the shorter testnet-facing version of this path, use `docs/ALPHA_STO
 
 ### 1) Open the website + connect wallet
 
-1. Open `https://nilstore.org/#/first-file` (or the deployment-specific `https://web.<domain>/#/first-file` URL shared by the hub operator).
+1. Open `https://polynomialstore.com/#/first-file` (or the deployment-specific `https://web.<domain>/#/first-file` URL shared by the hub operator).
 2. Click **Connect wallet** (MetaMask).
-3. If prompted, add/switch to the NilStore devnet network using the RPC the hub operator gave you.
+3. If prompted, add/switch to the PolyStore devnet network using the RPC the hub operator gave you.
 
 If you need to add the network manually:
-- Network name: `NilStore Devnet`
+- Network name: `PolyStore Devnet`
 - RPC URL: `https://evm.<domain>`
 - Chain ID: `<chain-id>`
 - Currency symbol: `ATOM` (gas denom is `aatom` in the current devnet profile)
@@ -69,14 +69,14 @@ If the faucet UI is not enabled, ask the hub operator to fund your address.
 5. Retrieve the file back and confirm it matches what you uploaded.
 
 Optional but recommended:
-- Install Nil Gateway GUI and run it locally (`http://localhost:8080`) for gateway-assisted workflows.
-- Download from: `https://github.com/Nil-Store/nil-store/releases/latest`.
+- Install PolyStore Gateway GUI and run it locally (`http://localhost:8080`) for gateway-assisted workflows.
+- Download from: `https://github.com/Polynomialstore/polystore/releases/latest`.
 
 Fast full-local repo onboarding:
-- Start Nil Gateway GUI first and verify `curl -sf http://localhost:8080/health`.
+- Start PolyStore Gateway GUI first and verify `curl -sf http://localhost:8080/health`.
 - Run `scripts/testnet_burner_upload.sh <file_path>` with a small file to establish one wallet, one deal, and the MetaMask keystore export.
 - Import that same keystore into MetaMask.
-- Continue browser verification on `https://nilstore.org/#/dashboard` with the same wallet and local gateway after the first-file allocation step.
+- Continue browser verification on `https://polynomialstore.com/#/dashboard` with the same wallet and local gateway after the first-file allocation step.
 
 Tip: if you test with a text file, change a line and re-upload to confirm the commit changes the retrieval.
 
@@ -143,7 +143,7 @@ If the key is new and gas funding is still missing, fund the printed provider ad
 ```bash
 export PROVIDER_KEY="provider1"
 export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"   # or /ip4/<public-ip>/tcp/8091/http
-export NIL_GATEWAY_SP_AUTH="<shared-from-hub>"
+export POLYSTORE_GATEWAY_SP_AUTH="<shared-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"
 
 ./scripts/run_devnet_provider.sh bootstrap
@@ -154,7 +154,7 @@ Website-first operator flow:
 - connect the operator wallet
 - prepare the provider host checkout
 - pair provider identity (run one `pair` command, fund and rerun if needed, approve from wallet)
-- configure public access (endpoint + `NIL_GATEWAY_SP_AUTH`)
+- configure public access (endpoint + `POLYSTORE_GATEWAY_SP_AUTH`)
 - run bootstrap and finish verification from the website
 
 The canonical provider docs for this are:
@@ -198,8 +198,8 @@ Please capture:
 - What path you were following (A: website tester, B: provider operator)
 - Deal ID (if visible) and the action that failed (create / upload / commit / retrieve)
 - For retrieval failures:
-  - request headers you used (notably `X-Nil-Session-Id`, if you were using curl)
-  - hub response header `X-Nil-Provider` (who served the bytes)
+  - request headers you used (notably `X-PolyStore-Session-Id`, if you were using curl)
+  - hub response header `X-PolyStore-Provider` (who served the bytes)
   - whether you were using a local gateway (`http://localhost:8080`) and timestamp
 - A screenshot + browser console log (website), or command output (CLI)
 

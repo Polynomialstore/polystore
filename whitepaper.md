@@ -1,19 +1,19 @@
-# NilStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
+# PolyStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
 
 **(White Paper v2.7 - Retrieval Sessions)**
 
 **Date:** 2025-12-18
-**Authors:** NilStore Core Team
+**Authors:** PolyStore Core Team
 
 ## Abstract
 
-NilStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating user retrievals as valid storage proofs (**Unified Liveness**), the protocol eliminates wasted work. Placement is **System-Defined** but **Hint-Aware**. Crucially, the network supports **User-Funded Elasticity** with **8 MiB Mega-Data Units (MDUs)** and **Stripe-Aligned Scaling**, ensuring viral content remains available without punishing successful nodes.
+PolyStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating user retrievals as valid storage proofs (**Unified Liveness**), the protocol eliminates wasted work. Placement is **System-Defined** but **Hint-Aware**. Crucially, the network supports **User-Funded Elasticity** with **8 MiB Mega-Data Units (MDUs)** and **Stripe-Aligned Scaling**, ensuring viral content remains available without punishing successful nodes.
 
 ## 1\. Introduction
 
 ### 1.1 The "Double-Pay" Problem
 
-Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is inefficient. NilStore unifies them.
+Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is inefficient. PolyStore unifies them.
 
 ### 1.2 Key Innovations
 
@@ -56,7 +56,7 @@ Mode 2 uses the same session flow but proofs are slot-aware: multiple Providers 
 
 ### 2.4 Retrievability & Self-Healing Invariants
 
-NilStore’s long-term design is anchored on two invariants:
+PolyStore’s long-term design is anchored on two invariants:
 
 *   **Retrievability / Accountability:** For every `(Deal, Provider)` assignment, either the encrypted data is reliably retrievable under the protocol’s rules, or there exists high‑probability, verifiable evidence of SP failure that can be used to punish and eventually evict that Provider.
 *   **Self-Healing Placement:** Persistently underperforming or malicious Providers are automatically detected, de‑rewarded or slashed, and replaced by healthier Providers, so the network tends toward a state where Deals are held only by SPs that actually serve data.
@@ -88,7 +88,7 @@ If a Platinum-tier Provider is overwhelmed by traffic, they can submit a **Satur
 
 ## 4. The Lifecycle of a File
 
-NilStore supports two redundancy modes conceptually:
+PolyStore supports two redundancy modes conceptually:
 
 *   **Mode 1 – FullReplica (Alpha, Implemented):** Each assigned Provider stores a full copy of the file. Elasticity is expressed as changing the number of full replicas.
 *   **Mode 2 – StripeReplica (Implemented):** The file is striped across shard indices; each stripe has its own overlay provider set. Elasticity operates at the stripe layer (RS(K, K+M)).
@@ -127,7 +127,7 @@ Clients may run fully in-browser using WASM and OPFS for local slab storage, or 
 
 ## 6. Enterprise Features: Privacy & Deletion
 
-NilStore is built for **Zero-Trust** environments.
+PolyStore is built for **Zero-Trust** environments.
 
 ### 6.1 Zero-Knowledge Cloud
 *   **Encryption:** Data is encrypted client-side (`AES-256-GCM`) before it ever touches the network.

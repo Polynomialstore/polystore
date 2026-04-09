@@ -1,4 +1,4 @@
-# NilStore testnet launch next steps (engineering + policy)
+# PolyStore testnet launch next steps (engineering + policy)
 
 Last updated: 2026-01-22
 
@@ -29,7 +29,7 @@ This is a practical checklist that turns the current drafts into code + test gat
    - A mainnet decision is still needed for **what happens to remaining escrow at deal expiry** (refund vs burn vs other).
      This materially affects long-term token sinks and emission farming risk.
 
-## B. Code implementation items (nilchain module)
+## B. Code implementation items (polystorechain module)
 
 ### B1) Emissions engine (base reward pool)
 

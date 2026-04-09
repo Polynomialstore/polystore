@@ -21,7 +21,7 @@ We face a critical friction point where the Cryptographic Layer (KZG) collides w
 
 ## 2. The Solution: "The Blob is the Atom"
 
-We align NilStore with Ethereum's **EIP-4844** standard. This allows us to leverage existing hardware acceleration (ZK-ASIC) and optimized libraries (Gnark, Halo2).
+We align PolyStore with Ethereum's **EIP-4844** standard. This allows us to leverage existing hardware acceleration (ZK-ASIC) and optimized libraries (Gnark, Halo2).
 
 ### 2.1 The New Physics
 
