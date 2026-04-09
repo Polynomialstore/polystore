@@ -181,7 +181,9 @@ impl SidecarManager {
         configure_sidecar_from_binary_layout(&mut cmd, &binary);
 
         if let Ok(resource_dir) = app.path().resource_dir() {
-            let polystore_cli_path = resource_dir.join("bin").join(binary_filename("polystore_cli"));
+            let polystore_cli_path = resource_dir
+                .join("bin")
+                .join(binary_filename("polystore_cli"));
             if is_resource_ready(&polystore_cli_path) {
                 cmd.env("POLYSTORE_CLI_BIN", &polystore_cli_path);
             }
