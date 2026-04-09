@@ -227,7 +227,7 @@ func CmdCreateDeal() *cobra.Command {
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
 		},
 	}
-	cmd.Flags().String("service-hint", "General", "Service hint for placement (e.g. General[:owner=<polystoreAddress>][:rs=K+M]). replicas-only hints are deprecated; omit rs= to auto-select Mode 2.")
+	cmd.Flags().String("service-hint", "General", "Service hint for placement (e.g. General[:owner=<nil1... PolyStore address>][:rs=K+M]). replicas-only hints are deprecated; omit rs= to auto-select Mode 2.")
 	flags.AddTxFlagsToCmd(cmd)
 	return cmd
 }

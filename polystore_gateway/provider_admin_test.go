@@ -34,7 +34,7 @@ func providerAdminTestKey(t *testing.T) *ecdsa.PrivateKey {
 	return key
 }
 
-func providerAdminOperatorNilAddress(t *testing.T) string {
+func providerAdminOperatorPolystoreAddress(t *testing.T) string {
 	t.Helper()
 	key := providerAdminTestKey(t)
 	addr, err := evmHexToPolystoreAddress(gethCrypto.PubkeyToAddress(key.PublicKey).Hex())
@@ -85,7 +85,7 @@ func setupProviderAdminStatusEnv(t *testing.T, providerAddress string, localURL 
 }
 
 func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradminstatus"
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +166,7 @@ func TestSpAdminStatus_AllowsPairedOperator(t *testing.T) {
 }
 
 func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradmindoctor"
 
 	localSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +229,7 @@ func TestSpAdminDoctor_RejectsNonceReplay(t *testing.T) {
 }
 
 func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
-	operator := providerAdminOperatorNilAddress(t)
+	operator := providerAdminOperatorPolystoreAddress(t)
 	const provider = "nil1provideradminrotate"
 	const endpoint = "/dns4/new.example.com/tcp/443/https"
 
