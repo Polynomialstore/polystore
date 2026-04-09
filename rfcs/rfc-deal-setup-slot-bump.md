@@ -1,7 +1,7 @@
 # RFC: Deal Setup Slot Bump for Mode 2
 
-**Status:** Draft / Normative Candidate  
-**Scope:** Chain protocol (`polystorechain/`), EVM intents, website/gateway orchestration during initial deal setup  
+**Status:** Draft / Devnet Alpha Viability Candidate
+**Scope:** Minimal chain protocol (`polystorechain/`), EVM intents, website/gateway orchestration during initial deal setup
 **Depends on:** `spec.md` §6.0, `spec.md` §8.4, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-provider-exit-and-draining.md`
 
 ---
@@ -50,6 +50,17 @@ This RFC is about:
 - **before the first committed manifest exists**,
 - **without slashing or proving fraud**,
 - **without make-before-break complexity**, because there is no committed content yet.
+
+This RFC should be read as a **devnet-alpha viability design**, not as a claim that this is the final mainnet-ready abstraction.
+
+The intent is:
+
+- unblock real deal setup on the trusted devnet,
+- validate the browser/gateway/operator workflow,
+- keep the protocol surface as small as possible,
+- and defer richer readiness, conviction, and replacement semantics until later RFCs.
+
+If a later protocol design introduces a better readiness handshake, assignment probation model, or unified repair/setup state machine, that later design should be allowed to replace or absorb this mechanism.
 
 ---
 
@@ -112,6 +123,8 @@ This RFC does **not** attempt to solve:
 - cross-deal quality scoring.
 
 Those may exist later, but they are explicitly out of scope here.
+
+This RFC also does **not** claim that the exact message shape, state layout, or slot status semantics here are permanent. They are proposed as the smallest useful alpha implementation that preserves deterministic placement while making the devnet usable.
 
 ---
 
@@ -266,6 +279,8 @@ Therefore setup bump is a direct reassignment, not a repair lifecycle.
 
 This RFC intentionally keeps new state minimal.
 
+For devnet alpha, these additions are meant to be pragmatic rather than idealized. If a later design wants to fold this state into a broader per-slot readiness or repair ledger, this RFC should not block that refactor.
+
 ### 7.1 Per-slot setup bump nonce
 
 Add:
@@ -300,6 +315,8 @@ Rationale:
 
 - enough to recover from obvious bad first guesses,
 - not enough to let owners grind indefinitely through the provider pool.
+
+The exact default is a devnet tuning value, not a final protocol constant.
 
 ---
 
@@ -422,6 +439,8 @@ Those begin to matter only after the first committed content generation exists.
 
 ## 11. Implementation checklist
 
+The checklist below is intentionally scoped for the trusted devnet. It should be treated as an alpha delivery slice, not as a claim that every interface here is the final long-term contract.
+
 ### 11.1 Chain
 
 1. Add `MsgBumpDealSetupSlot`
@@ -471,6 +490,8 @@ If the gateway orchestrates setup uploads, it SHOULD expose structured slot fail
 
 ## 13. Open questions
 
+This section is especially important because the RFC is intentionally alpha-scoped. Some of these questions may be answered by replacing this mechanism rather than extending it.
+
 1. Should setup bump require a fresh deal query proof in the UI before signing, or is `expected_provider` enough?
 2. Should the chain require a non-empty endpoint list, or a stronger endpoint-shape validation, when selecting a setup bump candidate?
 3. Do we want a future batch form:
@@ -498,3 +519,5 @@ The protocol response should be:
 - deterministic,
 - non-punitive,
 - and integrated directly into the initial upload flow.
+
+For avoidance of doubt: this RFC is proposing a **minimal alpha implementation for devnet viability**. It is meant to make trusted-devnet deal setup work reliably now, while preserving room to redesign setup readiness and slot replacement more cleanly before final protocol lock-in.
