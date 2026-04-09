@@ -1,9 +1,11 @@
-import { useCallback } from 'react'
-import { useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
-import type { Hex } from 'viem'
+import { useCallback, useState } from 'react'
+import { useAccount, useWalletClient } from 'wagmi'
+import { encodeFunctionData, type Hex } from 'viem'
 import { POLYSTORE_PRECOMPILE_ABI } from '../lib/polystorePrecompile'
 import { appConfig } from '../config'
 import { classifyPolyfsCommitError } from '../lib/polyfsCommitError'
+import { waitForTransactionReceipt } from '../lib/evmRpc'
+import { resolveActiveEvmAddress } from '../lib/walletAddress'
 
 interface DirectCommitOptions {
   dealId: string; // The deal ID (string representation of uint64)
@@ -17,20 +19,22 @@ interface DirectCommitOptions {
 }
 
 export function useDirectCommit() {
-  const { data: hash, writeContractAsync, isPending, error: writeError } = useWriteContract()
-  
-  const { isLoading: isConfirming, isSuccess, error: receiptError } = useWaitForTransactionReceipt({
-    hash,
-  });
+  const { address: connectedAddress } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const [hash, setHash] = useState<Hex | undefined>(undefined)
+  const [isPending, setIsPending] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
+  const [isSuccess, setIsSuccess] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
 
   const commitContent = useCallback(async (options: DirectCommitOptions) => {
     const { dealId, previousManifestRoot, manifestRoot, fileSize, totalMdus, witnessMdus } = options
-    
+
     // Ensure manifestRoot is bytes (0x prefixed)
     const formattedPreviousRoot = previousManifestRoot
       ? (previousManifestRoot.startsWith('0x') ? previousManifestRoot : `0x${previousManifestRoot}`)
       : '0x'
-    const formattedRoot = manifestRoot.startsWith('0x') ? manifestRoot : `0x${manifestRoot}`;
+    const formattedRoot = manifestRoot.startsWith('0x') ? manifestRoot : `0x${manifestRoot}`
 
     const totalMdusInt = Math.max(0, Number(totalMdus))
     const witnessMdusInt = Math.max(0, Number(witnessMdus))
@@ -45,8 +49,15 @@ export function useDirectCommit() {
     }
 
     try {
-      const txHash = await writeContractAsync({
-        address: appConfig.polystorePrecompile as Hex,
+      if (!walletClient) throw new Error('Wallet not connected')
+      setError(null)
+      setHash(undefined)
+      setIsSuccess(false)
+      setIsConfirming(false)
+      setIsPending(true)
+
+      const signer = resolveActiveEvmAddress({ connectedAddress, creator: walletClient.account?.address })
+      const data = encodeFunctionData({
         abi: POLYSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealContent',
         args: [
@@ -58,21 +69,33 @@ export function useDirectCommit() {
           BigInt(witnessMdusInt),
         ],
       })
+
+      const txHash = await walletClient.sendTransaction({
+        account: signer as Hex,
+        to: appConfig.polystorePrecompile as Hex,
+        data,
+        gas: 5_000_000n,
+        chain: walletClient.chain ?? undefined,
+      })
+
+      setHash(txHash)
+      setIsPending(false)
+      setIsConfirming(true)
+      await waitForTransactionReceipt(txHash)
+      setIsConfirming(false)
+      setIsSuccess(true)
       options.onSuccess?.(String(txHash))
     } catch (e) {
       const classified = classifyPolyfsCommitError(e)
       const error = new Error(classified.message)
+      setIsPending(false)
+      setIsConfirming(false)
+      setIsSuccess(false)
+      setError(error)
       options.onError?.(error)
       throw error
     }
-  }, [writeContractAsync]);
-
-  const normalizedError = (() => {
-    const raw = writeError || receiptError
-    if (!raw) return null
-    const classified = classifyPolyfsCommitError(raw)
-    return new Error(classified.message)
-  })()
+  }, [connectedAddress, walletClient])
 
   return {
     commitContent,
@@ -80,6 +103,6 @@ export function useDirectCommit() {
     isConfirming,   // Waiting for block inclusion
     isSuccess,      // Transaction confirmed
     hash,
-    error: normalizedError,
-  };
+    error,
+  }
 }
