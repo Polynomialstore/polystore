@@ -109,8 +109,8 @@ impl PolyStoreNode {
         swarm
             .behaviour_mut()
             .gossipsub
-            .subscribe(&gossipsub::IdentTopic::new("nil-proxy"))
-            .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-proxy"))?;
+            .subscribe(&gossipsub::IdentTopic::new("polystore-proxy"))
+            .map_err(|_| anyhow::anyhow!("Failed to subscribe to polystore-proxy"))?;
 
         Ok(Self { swarm, command_rx })
     }

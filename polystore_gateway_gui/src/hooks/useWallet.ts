@@ -11,7 +11,7 @@ const PROJECT_ID =
 const metadata = {
   name: "PolyStore Gateway GUI",
   description: "PolyStore desktop gateway",
-  url: "https://nil.store",
+  url: "https://polynomialstore.com",
   icons: [],
 };
 
