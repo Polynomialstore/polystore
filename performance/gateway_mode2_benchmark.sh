@@ -33,14 +33,14 @@ Environment:
   GATEWAY_MODE2_BENCH_SERVICE_HINT
   GATEWAY_MODE2_BENCH_CHAIN_WAIT_SECONDS
   GATEWAY_MODE2_BENCH_STATUS_POLL_SECONDS
-  NILCHAIN_BIN
-  NILCHAIND_BIN
-  NIL_GATEWAY_URL
+  POLYSTORECHAIN_BIN
+  POLYSTORECHAIND_BIN
+  POLYSTORE_GATEWAY_URL
   GATEWAY_URL
   CHAIN_ID
   CHAIN_HOME
-  NILCHAIN_HOME
-  NILCHAIN_NODE
+  POLYSTORECHAIN_HOME
+  POLYSTORECHAIN_NODE
 EOF
 }
 
@@ -65,11 +65,11 @@ RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 sizes_csv="${GATEWAY_MODE2_BENCH_SIZES:-64,128,256}"
 iterations="${GATEWAY_MODE2_BENCH_ITERATIONS:-1}"
-gateway_url="${NIL_GATEWAY_URL:-${GATEWAY_URL:-http://localhost:8080}}"
+gateway_url="${POLYSTORE_GATEWAY_URL:-${GATEWAY_URL:-http://localhost:8080}}"
 chain_id="${CHAIN_ID:-test-1}"
-chain_home="${NILCHAIN_HOME:-${CHAIN_HOME:-../_artifacts/polystorechain_data}}"
-chain_node="${NILCHAIN_NODE:-tcp://127.0.0.1:26657}"
-chain_bin="${NILCHAIND_BIN:-${NILCHAIN_BIN:-polystorechaind}}"
+chain_home="${POLYSTORECHAIN_HOME:-${CHAIN_HOME:-../_artifacts/polystorechain_data}}"
+chain_node="${POLYSTORECHAIN_NODE:-tcp://127.0.0.1:26657}"
+chain_bin="${POLYSTORECHAIND_BIN:-${POLYSTORECHAIN_BIN:-polystorechaind}}"
 service_hint="${GATEWAY_MODE2_BENCH_SERVICE_HINT:-General:rs=8+4}"
 chain_duration="${GATEWAY_MODE2_BENCH_DURATION:-1000}"
 chain_escrow="${GATEWAY_MODE2_BENCH_ESCROW:-1000000}"

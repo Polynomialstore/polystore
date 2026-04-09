@@ -1,4 +1,4 @@
-# NilStore Core v 2.4
+# PolyStore Core v 2.4
 
 ### Cryptographic Primitives & Proof System Specification
 
@@ -6,7 +6,7 @@
 
 ## Abstract
 
-NilStore is a decentralized storage network that unifies **Storage** and **Retrieval** into a single **Demand-Driven Performance Market**. Instead of treating storage audits and user retrievals as separate events, NilStore implements a **Unified Liveness Protocol**: user retrievals *are* storage proofs.
+PolyStore is a decentralized storage network that unifies **Storage** and **Retrieval** into a single **Demand-Driven Performance Market**. Instead of treating storage audits and user retrievals as separate events, PolyStore implements a **Unified Liveness Protocol**: user retrievals *are* storage proofs.
 
 It specifies:
 1.  **Unified Liveness:** Organic user retrieval sessions act as valid storage proofs.
@@ -19,7 +19,7 @@ It specifies:
 
 ## § 1 Overview (Meta-Specification)
 
-NilStore’s protocol design is guided by a small set of architectural tenets:
+PolyStore’s protocol design is guided by a small set of architectural tenets:
 
 1.  **Retrieval IS Storage:** completed retrieval sessions count as valid storage proofs.
 2.  **The System is the User of Last Resort:** cold data is maintained via synthetic challenges when organic demand is low.
@@ -70,7 +70,7 @@ This section is intentionally conceptual; concrete placement optimization is an 
 
 ## § 4 Economics & Flow Control (Conceptual)
 
-NilStore’s economics combine a performance market with user-funded scaling:
+PolyStore’s economics combine a performance market with user-funded scaling:
 
 ### 4.1 Tiered Rewards (Parameters)
 Providers are rewarded by observed inclusion/latency tiers (e.g., Platinum/Gold/Silver/Fail). Exact tier windows and multipliers are protocol parameters (Appendix B).
@@ -122,7 +122,7 @@ When registering, SPs declare their intended service mode via `MsgRegisterProvid
 *   **Hot:** Biased towards `General` / `Edge`.
 
 #### 6.0.3 Deal Sizing (Dynamic)
-NilStore utilizes **Dynamic Thin Provisioning** for all storage deals.
+PolyStore utilizes **Dynamic Thin Provisioning** for all storage deals.
 
 *   **No Tiers:** Users do not pre-select a capacity tier.
 *   **Dynamic Expansion:** Deals start with minimal state and automatically expand as content is added via `MsgUpdateDealContent`.
@@ -152,7 +152,7 @@ Scaling is not free. It is strictly constrained by the User's budget.
 
 ### 6.2 Auto-Scaling (Stripe-Aligned Elasticity)
 
-NilStore supports two redundancy modes at the policy level:
+PolyStore supports two redundancy modes at the policy level:
 
 *   **Mode 1 – FullReplica (Alpha):** Each `Deal` is replicated in full across `CurrentReplication` providers. Scaling simply adds or removes full replicas. Retrieval is satisfied by any single provider in `Deal.providers[]`.
 *   **Mode 2 – StripeReplica (Implemented):** Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`). Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer. This mode uses the **Blob‑Aligned Striping** model defined in **§ 8**.
@@ -175,7 +175,7 @@ To prevent oscillation (rapidly spinning nodes up and down) and account for the 
     *   *Cost:* The User's escrow is debited for this minimum period upon spawn.
 
 ### 6.3 Deletion (Crypto-Erasure)
-*   **Mechanism:** True physical deletion cannot be proven. NilStore relies on **Crypto-Erasure**.
+*   **Mechanism:** True physical deletion cannot be proven. PolyStore relies on **Crypto-Erasure**.
 *   **Process:** To "delete" a file, the Data Owner destroys their copy of the `FMK`. Without this key, the stored ciphertext is statistically indistinguishable from random noise.
 *   **Garbage Collection:** When a Deal is cancelled (`MsgCancelDeal`) or expires, SPs act economically: they delete the data to free up space for paying content.
 
@@ -306,7 +306,7 @@ In future versions, non-append mutations (rewrite, delete/GC, compaction) SHOULD
 
 ### A.3 File Manifest & Crypto Policy (Normative)
 
-NilStore MAY use a content‑addressed *file* manifest at the application layer (encryption metadata, UX-level references). This is distinct from the protocol-level Deal commitment (`Deal.manifest_root`, the 48‑byte KZG root used by the Triple Proof) and PolyFS path addressing.
+PolyStore MAY use a content‑addressed *file* manifest at the application layer (encryption metadata, UX-level references). This is distinct from the protocol-level Deal commitment (`Deal.manifest_root`, the 48‑byte KZG root used by the Triple Proof) and PolyFS path addressing.
 
 **Gateway/API note:** Some app codepaths may still label the deal commitment as a `cid`. In all protocol-facing APIs:
 
@@ -331,7 +331,7 @@ This section norms the retrieval path for **Mode 1 – FullReplica** in the cu
 
 ### 7.0 Core Invariants (Planned, North-Star)
 
-NilStore’s retrieval system is designed to satisfy two invariants:
+PolyStore’s retrieval system is designed to satisfy two invariants:
 
 1.  **Retrievability / Accountability**
     *   For every `(Deal, Provider)` assignment, either:
@@ -371,7 +371,7 @@ For Mode 2, `Deal.providers[]` is interpreted as an ordered slot list `slot → 
 
 #### 7.1.2 Client bootstrap & caching (Non-normative guidance)
 
-Clients (Gateways, CLIs, browsers) SHOULD treat NilStore as a content-addressed system at the deal layer and cache aggressively:
+Clients (Gateways, CLIs, browsers) SHOULD treat PolyStore as a content-addressed system at the deal layer and cache aggressively:
 * **Bootstrap:** given `(deal_id, owner)` and the on-chain `Deal.manifest_root`, a client MUST be able to fetch and verify PolyFS metadata (MDU #0 + Witness MDUs) and enumerate valid `file_path` entries without any out-of-band index.
 * **Metadata caching:** cache verified metadata by `(deal_id, Deal.current_gen, mdu_index)`; in Mode 2 this is not per-provider because metadata MDUs are replicated and bit-identical across all slots.
 * **Browser caching:** when running in-browser, clients SHOULD persist slabs in OPFS to enable gateway‑absent reads and multi‑tab continuity.
@@ -379,7 +379,7 @@ Clients (Gateways, CLIs, browsers) SHOULD treat NilStore as a content-addressed 
 
 ### 7.2 Control Plane: Retrieval Sessions, Proof-of-Retrieval, and Completion (Planned → Mandated)
 
-NilStore’s devnet is converging on a **Retrieval Session** control-plane that makes retrievals accountable and grief-resistant while staying aligned to PolyFS + Triple Proof and the protocol’s atomic units:
+PolyStore’s devnet is converging on a **Retrieval Session** control-plane that makes retrievals accountable and grief-resistant while staying aligned to PolyFS + Triple Proof and the protocol’s atomic units:
 
 * **Atomic unit:** 128 KiB **Blob** (`BLOB_SIZE`). All on-chain accounting is in blob counts / blob-aligned bytes.
 * **Session unit:** a contiguous sequence of blobs that may span MDUs (8 MiB = 64 blobs).
@@ -399,7 +399,7 @@ The intended end state is: a provider only gets credit for a retrieval once the 
     *   **Session identity:** `session_id = keccak256(canonical_encode(fields...))` (canonical encoding MUST be specified and test-vectored; EVM precompile uses `abi.encode(...)`).
 
 2.  **Serve bytes (Provider, off-chain):**
-    *   Providers SHOULD refuse remote fetches that are not bound to an `OPEN` session (`X-Nil-Session-Id`).
+    *   Providers SHOULD refuse remote fetches that are not bound to an `OPEN` session (`X-PolyStore-Session-Id`).
     *   Each HTTP `Range` response MUST map to exactly one blob (bounded by blob boundaries); a session is satisfied by fetching the declared contiguous blob range (chunking is a client/gateway concern).
 
 3.  **Submit proof-of-retrieval (Provider, on-chain tx):**
@@ -479,7 +479,7 @@ The verifier (Chain Node) executes the following logic inside the `MsgProveLiven
 
 ### 7.5 Evidence Types & Fraud Proofs
 
-NilStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` (Mode 2: `blob_index = leaf_index`, §8.1.3).
+PolyStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` (Mode 2: `blob_index = leaf_index`, §8.1.3).
 
 1.  **Synthetic Storage Proofs (System‑Initiated):**
     *   For each epoch `e` and assignment `(deal_id, provider_id)`, the protocol derives a finite challenge set `S_e(D,P)` of `(mdu_index, blob_index)` pairs from `R_e`.
@@ -524,7 +524,7 @@ The normative requirement is that `required_e(D,P)` and the synthetic challenge 
 
 ### 7.7 Deputy / Proxy Retrieval (Planned, Anti-griefing Semantics)
 
-NilStore anticipates a “Deputy” (proxy) pattern where a provider may delegate *data-plane* serving (bandwidth, caching, egress) to an untrusted helper, while keeping *control-plane* accountability on the assigned Provider slot.
+PolyStore anticipates a “Deputy” (proxy) pattern where a provider may delegate *data-plane* serving (bandwidth, caching, egress) to an untrusted helper, while keeping *control-plane* accountability on the assigned Provider slot.
 
 Normative intent:
 * **Accountability remains with the assigned Provider:** rewards, liveness, and slashing attach to the on-chain provider assignment, not to deputies.
@@ -535,7 +535,7 @@ Detailed deputy selection, advertisement, and any explicit on-chain delegation/c
 
 ### 7.8 SP Audit Debt & Coverage Scaling (Planned)
 
-To ensure coverage scales with total stored data—even when clients are dormant—NilStore MAY introduce **audit debt** as a source of retrieval-style challenges.
+To ensure coverage scales with total stored data—even when clients are dormant—PolyStore MAY introduce **audit debt** as a source of retrieval-style challenges.
 
 Conceptual shape:
 1.  **Audit Debt Definition**

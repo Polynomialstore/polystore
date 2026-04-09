@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { createSparseHttpTransportPort } from './httpTransport'
 
-test('http transport forwards X-Nil-Previous-Manifest-Root when provided', async () => {
+test('http transport forwards X-PolyStore-Previous-Manifest-Root when provided', async () => {
   const calls: Array<{ url: string; headers: Record<string, string> }> = []
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (input: URL | RequestInfo, init?: RequestInit) => {
@@ -37,7 +37,7 @@ test('http transport forwards X-Nil-Previous-Manifest-Root when provided', async
 
   assert.equal(calls.length, 1)
   assert.equal(calls[0].url, 'http://provider.test/sp/upload_mdu')
-  assert.equal(calls[0].headers['X-Nil-Previous-Manifest-Root'], '0xprev')
+  assert.equal(calls[0].headers['X-PolyStore-Previous-Manifest-Root'], '0xprev')
 })
 
 test('http transport normalizes target base url once across repeated requests', async () => {
@@ -145,7 +145,7 @@ test('http transport bundles target artifacts into one binary bundle request', a
   }
 
   assert.equal(receivedUrl, 'http://provider.test/sp/upload_bundle')
-  assert.equal(receivedContentType, 'application/x.nilstore-bundle-v2')
+  assert.equal(receivedContentType, 'application/x.polystore-bundle-v2')
   assert.match(receivedMeta, /"deal_id":42/)
   assert.match(receivedMeta, /"kind":"mdu"/)
   assert.match(receivedMeta, /"kind":"manifest"/)

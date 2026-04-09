@@ -6,10 +6,10 @@ happy-path runbook.
 
 ---
 
-# Context for Next Agent: NilStore Network Phase 3 Implementation
+# Context for Next Agent: PolyStore Network Phase 3 Implementation
 
 ## Current Status
-We are currently in **Phase 3: Code Implementation** of the NilStore Network development roadmap. We have just completed a major architectural pivot in the specification (Phase 1) and a comprehensive audit (Phase 2).
+We are currently in **Phase 3: Code Implementation** of the PolyStore Network development roadmap. We have just completed a major architectural pivot in the specification (Phase 1) and a comprehensive audit (Phase 2).
 
 ### Recent Accomplishments
 1.  **Specification Overhaul (v2.6):**
@@ -59,7 +59,7 @@ The next agent should focus on **verifying and refining the implementation**.
 *   **`whitepaper.md`**: High-level unified economy logic.
 
 ## Prompt for Next Agent
-"You are resuming the implementation of the NilStore Network in Phase 3. The previous agent has implemented the core Message Handlers for `CreateDeal`, `ProveLiveness`, and `SignalSaturation` in `polystorechain/x/polystorechain/keeper/msg_server.go`, and updated the Rust `polystore_core` cryptography library to support MDU Merkle proofs.
+"You are resuming the implementation of the PolyStore Network in Phase 3. The previous agent has implemented the core Message Handlers for `CreateDeal`, `ProveLiveness`, and `SignalSaturation` in `polystorechain/x/polystorechain/keeper/msg_server.go`, and updated the Rust `polystore_core` cryptography library to support MDU Merkle proofs.
 
 Your goal is to **stabilize and verify** this code.
 1.  Run the build (`go build ./...` in `polystorechain`). Fix any syntax errors or missing imports in the new `msg_server.go` code.

@@ -152,7 +152,7 @@ Fallback (simpler, weaker): flat bond only (no assignment collateral).
 
 **Deterministic candidate selection:**
 - seed:
-  - `seed = SHA256("nilstore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
+  - `seed = SHA256("polystore/replace/v1" || R_e || deal_id || slot || current_gen || replace_nonce)`
 - rank provider registry by `SHA256(seed || provider_addr)` and choose first eligible.
 
 **Eligibility filter:**

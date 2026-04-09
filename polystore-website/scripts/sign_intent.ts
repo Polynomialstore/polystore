@@ -18,7 +18,7 @@ if (!mode || (mode !== 'create-deal' && mode !== 'update-content' && mode !== 's
   process.exit(1)
 }
 
-const privKey = (process.env.EVM_PRIVKEY || process.env.NIL_EVM_DEV_PRIVKEY) as Hex | undefined
+const privKey = (process.env.EVM_PRIVKEY || process.env.POLYSTORE_EVM_DEV_PRIVKEY) as Hex | undefined
 if (!privKey) {
   console.error('EVM_PRIVKEY env var required')
   process.exit(1)

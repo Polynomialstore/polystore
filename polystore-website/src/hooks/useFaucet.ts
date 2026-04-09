@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ethToNil } from '../lib/address'
+import { ethToPolystoreAddress } from '../lib/address'
 import { appConfig } from '../config'
 import { getFaucetAuthToken } from '../lib/faucetAuthToken'
 
@@ -20,7 +20,7 @@ export function useFaucet() {
     setTxStatus('idle')
     try {
         // Convert to Bech32 if it's an 0x address
-        const targetAddress = address.startsWith('0x') ? ethToNil(address) : address
+        const targetAddress = address.startsWith('0x') ? ethToPolystoreAddress(address) : address
 
         const maxAttempts = 5
         let lastError: Error | null = null
@@ -29,7 +29,7 @@ export function useFaucet() {
             const token = getFaucetAuthToken()
             const headers: Record<string, string> = { 'Content-Type': 'application/json' }
             if (token) {
-                headers['X-Nil-Faucet-Auth'] = token
+                headers['X-PolyStore-Faucet-Auth'] = token
             }
 
             const response = await fetch(`${appConfig.apiBase}/faucet`, {

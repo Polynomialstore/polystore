@@ -51,13 +51,13 @@ case "$cmd" in
     shift
     case "$sub" in
       show)
-        if [ ! -f "\${NIL_TEST_KEY_FLAG:?}" ]; then
+        if [ ! -f "\${POLYSTORE_TEST_KEY_FLAG:?}" ]; then
           exit 1
         fi
-        printf '%s\\n' "\${NIL_TEST_PROVIDER_ADDR:-nil1providerstubaddr0000000000000000000000000}"
+        printf '%s\\n' "\${POLYSTORE_TEST_PROVIDER_ADDR:-nil1providerstubaddr0000000000000000000000000}"
         ;;
       add)
-        : >"\${NIL_TEST_KEY_FLAG:?}"
+        : >"\${POLYSTORE_TEST_KEY_FLAG:?}"
         echo "stub mnemonic words words words" >&2
         ;;
       *)
@@ -68,7 +68,7 @@ case "$cmd" in
     ;;
   tx)
     if [ "$#" -ge 2 ] && [ "$1" = "polystorechain" ] && [ "$2" = "request-provider-link" ]; then
-      printf 'tx polystorechain request-provider-link %s\\n' "$3" >>"\${NIL_TEST_TX_LOG:?}"
+      printf 'tx polystorechain request-provider-link %s\\n' "$3" >>"\${POLYSTORE_TEST_TX_LOG:?}"
       exit 0
     fi
     echo "polystorechaind stub: unsupported tx invocation: $*" >&2
@@ -87,8 +87,8 @@ esac
     `#!/usr/bin/env bash
 set -euo pipefail
 
-scenario="\${NIL_TEST_CURL_SCENARIO:-missing-no-faucet}"
-state_dir="\${NIL_TEST_STATE_DIR:?}"
+scenario="\${POLYSTORE_TEST_CURL_SCENARIO:-missing-no-faucet}"
+state_dir="\${POLYSTORE_TEST_STATE_DIR:?}"
 funded_flag="$state_dir/funded"
 
 url=""
@@ -159,15 +159,15 @@ printf '%s' "$body"
     PATH: `${binDir}:${process.env.PATH}`,
     PROVIDER_KEY: 'provider1',
     OPERATOR_ADDRESS: 'nil1operatorstub0000000000000000000000000000',
-    NILCHAIND_BIN: polystorechaindStub,
-    NIL_TEST_PROVIDER_ADDR: 'nil1providerstub0000000000000000000000000',
-    NIL_TEST_KEY_FLAG: keyFlag,
-    NIL_TEST_TX_LOG: txLog,
-    NIL_TEST_CURL_SCENARIO: opts.scenario,
-    NIL_TEST_STATE_DIR: stateDir,
-    NIL_PROVIDER_AUTO_FAUCET: opts.autoFaucet,
-    NIL_FAUCET_URL: opts.faucetUrl ?? '',
-    NIL_FAUCET_AUTH_TOKEN: '',
+    POLYSTORECHAIND_BIN: polystorechaindStub,
+    POLYSTORE_TEST_PROVIDER_ADDR: 'nil1providerstub0000000000000000000000000',
+    POLYSTORE_TEST_KEY_FLAG: keyFlag,
+    POLYSTORE_TEST_TX_LOG: txLog,
+    POLYSTORE_TEST_CURL_SCENARIO: opts.scenario,
+    POLYSTORE_TEST_STATE_DIR: stateDir,
+    POLYSTORE_PROVIDER_AUTO_FAUCET: opts.autoFaucet,
+    POLYSTORE_FAUCET_URL: opts.faucetUrl ?? '',
+    POLYSTORE_FAUCET_AUTH_TOKEN: '',
     HUB_LCD: 'http://stub-lcd.local',
     HUB_NODE: 'http://stub-rpc.local',
     CHAIN_ID: 'polystorechain-stub',
@@ -214,7 +214,7 @@ test('run_devnet_provider link auto-funds from faucet then submits provider-link
     command: 'link',
     scenario: 'missing-then-funded',
     autoFaucet: '1',
-    faucetUrl: 'https://faucet.nilstore.test/faucet',
+    faucetUrl: 'https://faucet.polystore.test/faucet',
   })
 
   assert.equal(result.status, 0)
@@ -229,7 +229,7 @@ test('run_devnet_provider pair creates a missing key, auto-funds it, and submits
     command: 'pair',
     scenario: 'missing-then-funded',
     autoFaucet: '1',
-    faucetUrl: 'https://faucet.nilstore.test/faucet',
+    faucetUrl: 'https://faucet.polystore.test/faucet',
     keyState: 'missing',
   })
 

@@ -604,7 +604,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 
 	// Decode any overrides embedded in the service hint.
 	// Format used by the web gateway:
-	//   "<Hint>[:owner=<nilAddress>][:rs=K+M]"
+	//   "<Hint>[:owner=<nil1... PolyStore address>][:rs=K+M]"
 	// Note: Mode 1 (replicas-only) hints are deprecated; omit rs= to auto-select a balanced Mode 2 profile.
 	rawHint := strings.TrimSpace(msg.ServiceHint)
 	parsedHint, err := types.ParseServiceHint(rawHint)

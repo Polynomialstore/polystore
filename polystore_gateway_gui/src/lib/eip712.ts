@@ -32,7 +32,7 @@ export type TypedDataPayload = {
   message: Record<string, string>;
 };
 
-const DOMAIN_NAME = "NilStore";
+const DOMAIN_NAME = "PolyStore";
 const DOMAIN_VERSION = "1";
 const VERIFYING_CONTRACT =
   "0x0000000000000000000000000000000000000000";

@@ -147,7 +147,7 @@ export async function p2pGatewayFetchRange(
       path,
       headers: {
         range: `bytes=${params.rangeStart}-${params.rangeEnd}`,
-        'x-nil-session-id': params.sessionId,
+        'x-polystore-session-id': params.sessionId,
       },
     },
     signal,
@@ -158,9 +158,9 @@ export async function p2pGatewayFetchRange(
     throw new TransportError(text || `fetch failed (${res.status})`, classifyStatus(res.status), res.status)
   }
 
-  const provider = res.headers['x-nil-provider'] || ''
+  const provider = res.headers['x-polystore-provider'] || ''
   if (!provider) {
-    throw new TransportError('missing X-Nil-Provider', 'invalid_response')
+    throw new TransportError('missing X-PolyStore-Provider', 'invalid_response')
   }
   if (params.expectedProvider && provider !== params.expectedProvider) {
     throw new TransportError(

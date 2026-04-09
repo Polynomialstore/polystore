@@ -1,4 +1,4 @@
-# NilStore Economy (Draft, updated)
+# PolyStore Economy (Draft, updated)
 
 Last updated: 2026-01-22
 
@@ -11,7 +11,7 @@ It is intentionally **parameterized**: the policy knobs are explicit and governa
 
 ## 1. Role clarity: what pays for what?
 
-NilStore has two funding sources for storage providers (SPs):
+PolyStore has two funding sources for storage providers (SPs):
 
 1) **User-funded fees (escrow accounting, deterministic)**
    - Users deposit NIL into a deal’s escrow.
@@ -27,7 +27,7 @@ NilStore has two funding sources for storage providers (SPs):
 
 ## 2. Pricing & escrow accounting (frozen contract)
 
-NilStore’s pricing contract is “lock-in pricing” for storage and “spot-at-open” for retrieval sessions.
+PolyStore’s pricing contract is “lock-in pricing” for storage and “spot-at-open” for retrieval sessions.
 
 - Storage: when a deal’s `size_bytes` increases, it pays a lock-in charge based on `storage_price`, the byte delta, and a fixed deal duration.
 - Retrieval: sessions lock a base fee (burned) and variable fee (paid to SPs with burn cut) at open, and settle deterministically at completion.

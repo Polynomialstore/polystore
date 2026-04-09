@@ -11,12 +11,12 @@ NUM_NODES = 2
 START_PORT = 9000
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "../../"))
-NIL_P2P_BIN = os.path.join(PROJECT_ROOT, "polystore_p2p/target/debug/polystore_p2p")
+POLYSTORE_P2P_BIN = os.path.join(PROJECT_ROOT, "polystore_p2p/target/debug/polystore_p2p")
 ANNOUNCE_SHARD_ID = "shard-latency-test-1"
 
 def start_node(port, seed):
     """Starts a polystore_p2p node process."""
-    cmd = [NIL_P2P_BIN, "--port", str(port), "--seed", str(seed)]
+    cmd = [POLYSTORE_P2P_BIN, "--port", str(port), "--seed", str(seed)]
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -32,8 +32,8 @@ def start_node(port, seed):
 def main():
     print("--- ⏱️  Starting Latency Test  ⏱️ ---")
     
-    if not os.path.exists(NIL_P2P_BIN):
-        print(f"Error: Binary not found at {NIL_P2P_BIN}. Please run 'cargo build -p polystore_p2p' first.")
+    if not os.path.exists(POLYSTORE_P2P_BIN):
+        print(f"Error: Binary not found at {POLYSTORE_P2P_BIN}. Please run 'cargo build -p polystore_p2p' first.")
         sys.exit(1)
 
     nodes = []

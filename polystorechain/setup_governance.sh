@@ -18,10 +18,10 @@ ALICE_ADDR=$($BINARY keys show alice -a $KEYRING)
 echo "Alice: $ALICE_ADDR"
 
 # 1. Create the Group
-# Metadata: "NilStore Emergency Council"
+# Metadata: "PolyStore Emergency Council"
 # Members: defined in members.json
 echo "[Gov] Creating Group..."
-$BINARY tx group create-group "$ALICE_ADDR" "NilStore Emergency Council" members.json --from alice --chain-id $CHAIN_ID --yes $KEYRING
+$BINARY tx group create-group "$ALICE_ADDR" "PolyStore Emergency Council" members.json --from alice --chain-id $CHAIN_ID --yes $KEYRING
 
 sleep 6
 

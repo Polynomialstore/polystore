@@ -8,10 +8,10 @@ const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
 async function ensureWalletConnected(page: Page): Promise<void> {
   const walletAddressSelector = '[data-testid="wallet-address"], [data-testid="wallet-address-full"]'
   const walletAddress = page.locator(walletAddressSelector).first()
-  const cosmosIdentity = page.getByTestId('cosmos-identity')
+  const polystoreIdentity = page.getByTestId('polystore-identity')
   const connectBtn = page.getByTestId('connect-wallet').first()
 
-  await page.waitForSelector(`${walletAddressSelector}, [data-testid="cosmos-identity"], [data-testid="connect-wallet"]`, {
+  await page.waitForSelector(`${walletAddressSelector}, [data-testid="polystore-identity"], [data-testid="connect-wallet"]`, {
     timeout: 60_000,
     state: 'attached',
   })
@@ -20,8 +20,8 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const walletVisible = await walletAddress.isVisible().catch(() => false)
     if (walletVisible) return true
 
-    if (await cosmosIdentity.isVisible().catch(() => false)) {
-      const raw = ((await cosmosIdentity.textContent().catch(() => '')) || '').trim()
+    if (await polystoreIdentity.isVisible().catch(() => false)) {
+      const raw = ((await polystoreIdentity.textContent().catch(() => '')) || '').trim()
       if (raw && raw !== '—' && !/^not\s+connected$/i.test(raw)) return true
     }
     return false
@@ -49,7 +49,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 }
 
 async function ensureWalletFunded(page: Page, timeout = 120_000): Promise<void> {
-  const stakeBalance = page.getByTestId('cosmos-stake-balance')
+  const stakeBalance = page.getByTestId('polystore-stake-balance')
   const current = ((await stakeBalance.textContent().catch(() => '')) || '').trim()
   if (current && !/^(?:—|0 stake)$/.test(current)) return
 
@@ -97,18 +97,18 @@ test.describe('mode2 sparse live', () => {
     await page.route('**/sp/upload_mdu', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       mduUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-        mduIndex: headers['x-nil-mdu-index'] || '',
+        mduIndex: headers['x-polystore-mdu-index'] || '',
       })
       await recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'ok' }))
     })
     await page.route('**/sp/upload_manifest', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       manifestUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
@@ -118,12 +118,12 @@ test.describe('mode2 sparse live', () => {
     await page.route('**/sp/upload_shard', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
-      const fullSizeHeader = headers['x-nil-full-size']
+      const fullSizeHeader = headers['x-polystore-full-size']
       shardUploads.push({
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-        mduIndex: headers['x-nil-mdu-index'] || '',
-        slot: headers['x-nil-slot'] || '',
+        mduIndex: headers['x-polystore-mdu-index'] || '',
+        slot: headers['x-polystore-slot'] || '',
       })
       await recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'ok' }))
     })

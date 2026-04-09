@@ -6,9 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 SOURCE_ROOT="$REPO_ROOT_DEFAULT"
-TARGET_ROOT="/opt/nilstore"
+TARGET_ROOT="/opt/polystore"
 SERVICE_NAME="polystorechaind"
-ENV_FILE="/etc/nilstore/polystorechaind.env"
+ENV_FILE="/etc/polystore/polystorechaind.env"
 LCD_BASE="http://127.0.0.1:1317"
 OPERATOR_ADDRESS=""
 
@@ -17,8 +17,8 @@ VERIFY_ONLY=0
 DRY_RUN=0
 SKIP_BACKUP=0
 
-NILCHAIND_BIN=""
-NIL_HOME=""
+POLYSTORECHAIND_BIN=""
+POLYSTORE_HOME=""
 LAST_BACKUP=""
 SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_NAME"
 
@@ -30,15 +30,15 @@ Build and redeploy polystorechaind for a systemd-managed hub node.
 
 By default this script:
 1) builds polystorechaind from SOURCE_ROOT/polystorechain,
-2) backs up and installs the binary into NILCHAIND_BIN,
+2) backs up and installs the binary into POLYSTORECHAIND_BIN,
 3) prints the sudo restart command for systemd,
 4) prints a verify-only command for post-restart checks.
 
 Options:
   --source-root <path>      Source checkout root (default: $REPO_ROOT_DEFAULT)
-  --target-root <path>      Target runtime root (default: /opt/nilstore)
+  --target-root <path>      Target runtime root (default: /opt/polystore)
   --service <name>          systemd service name (default: polystorechaind)
-  --env-file <path>         EnvironmentFile path (default: /etc/nilstore/polystorechaind.env)
+  --env-file <path>         EnvironmentFile path (default: /etc/polystore/polystorechaind.env)
   --lcd-base <url>          LCD base for verification (default: http://127.0.0.1:1317)
   --operator-address <addr> Optional operator address to verify pending-by-operator endpoint
   --with-restart            Attempt restart automatically (uses sudo unless root)
@@ -48,8 +48,8 @@ Options:
   -h, --help                Show this help
 
 Environment knobs:
-  NILCHAIN_BUILD_GOFLAGS    GOFLAGS override for build (default appends -mod=mod)
-  NIL_CORE_LIB_DIR          Override path containing libpolystore_core.so / libpolystore_core.dylib
+  POLYSTORECHAIN_BUILD_GOFLAGS    GOFLAGS override for build (default appends -mod=mod)
+  POLYSTORE_CORE_LIB_DIR          Override path containing libpolystore_core.so / libpolystore_core.dylib
 USAGE
 }
 
@@ -180,8 +180,8 @@ load_env_file() {
     warn "env file not found at $ENV_FILE (continuing with defaults)"
   fi
 
-  NILCHAIND_BIN="${NILCHAIND_BIN:-$TARGET_ROOT/polystorechain/polystorechaind}"
-  NIL_HOME="${NIL_HOME:-/var/lib/nilstore/polystorechaind}"
+  POLYSTORECHAIND_BIN="${POLYSTORECHAIND_BIN:-$TARGET_ROOT/polystorechain/polystorechaind}"
+  POLYSTORE_HOME="${POLYSTORE_HOME:-/var/lib/polystore/polystorechaind}"
 }
 
 require_cmd() {
@@ -200,7 +200,7 @@ preflight_build() {
   [ -f "$SOURCE_ROOT/polystorechain/go.mod" ] || die "polystorechain/go.mod missing under source root: $SOURCE_ROOT"
 
   local target_dir
-  target_dir="$(dirname "$NILCHAIND_BIN")"
+  target_dir="$(dirname "$POLYSTORECHAIND_BIN")"
   [ -d "$target_dir" ] || die "target bin directory missing: $target_dir"
 
   if ! systemctl list-unit-files --no-legend "${SERVICE_NAME}.service" >/dev/null 2>&1; then
@@ -211,7 +211,7 @@ preflight_build() {
 find_polystore_core_lib_dir() {
   local candidate
   for candidate in \
-    "${NIL_CORE_LIB_DIR:-}" \
+    "${POLYSTORE_CORE_LIB_DIR:-}" \
     "$TARGET_ROOT/polystore_core/target/release" \
     "$SOURCE_ROOT/polystore_core/target/release"
   do
@@ -257,7 +257,7 @@ ensure_polystore_core_runtime() {
 
 build_polystorechaind() {
   local build_goflags
-  build_goflags="${NILCHAIN_BUILD_GOFLAGS:-${GOFLAGS:-}}"
+  build_goflags="${POLYSTORECHAIN_BUILD_GOFLAGS:-${GOFLAGS:-}}"
   case " $build_goflags " in
     *" -mod="*) ;;
     *) build_goflags="${build_goflags} -mod=mod" ;;
@@ -280,7 +280,7 @@ build_polystorechaind() {
 install_polystorechaind() {
   local source_bin target_bin target_dir timestamp
   source_bin="$SOURCE_ROOT/polystorechain/polystorechaind"
-  target_bin="$NILCHAIND_BIN"
+  target_bin="$POLYSTORECHAIND_BIN"
   target_dir="$(dirname "$target_bin")"
 
   [ -f "$source_bin" ] || die "built source binary not found: $source_bin"

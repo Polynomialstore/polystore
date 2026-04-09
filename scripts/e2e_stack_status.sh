@@ -10,7 +10,7 @@ health() {
   printf '%-20s %s (%s)\n' "$name" "$url" "$code"
 }
 
-echo "NilStore E2E stack status"
+echo "PolyStore E2E stack status"
 health "gateway" "http://localhost:8080/health"
 health "faucet" "http://localhost:8081/faucet"
 health "lcd" "http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info"

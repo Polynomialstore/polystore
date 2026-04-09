@@ -8,7 +8,7 @@ import (
 	"os"
 )
 
-type NilCliAggregateOutput struct {
+type PolyStoreCliAggregateOutput struct {
 	ManifestRootHex string `json:"manifest_root_hex"`
 	ManifestBlobHex string `json:"manifest_blob_hex"`
 }
@@ -39,7 +39,7 @@ func aggregateRootsWithContext(ctx context.Context, roots []string) (string, str
 
 	execCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	out, err := execNilCli(
+	out, err := execPolystoreCli(
 		execCtx,
 		"--trusted-setup", trustedSetup,
 		"aggregate",
@@ -62,7 +62,7 @@ func aggregateRootsWithContext(ctx context.Context, roots []string) (string, str
 		return "", "", err
 	}
 
-	var res NilCliAggregateOutput
+	var res PolyStoreCliAggregateOutput
 	if err := json.Unmarshal(data, &res); err != nil {
 		return "", "", err
 	}

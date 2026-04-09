@@ -11,7 +11,7 @@ interface TransportContextType {
 
 const TransportContext = createContext<TransportContextType | undefined>(undefined)
 
-const PREF_KEY = 'nil_transport_preference'
+const PREF_KEY = 'polystore_transport_preference'
 
 function getInitialPreference(): RoutePreference {
   if (typeof window === 'undefined') return 'auto'

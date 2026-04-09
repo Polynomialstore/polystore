@@ -1,4 +1,4 @@
-# NilStore Network Development Roadmap
+# PolyStore Network Development Roadmap
 
 ## Protocol for Agents
 **CRITICAL:** When pushing changes to the repository, use the canonical `origin` remote.
@@ -22,7 +22,7 @@
 *   Push to `origin` only:
     *   `git push origin <branch>`
 
-This document outlines a strategic "Go-to-Market" Engineering Roadmap for the NilStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
+This document outlines a strategic "Go-to-Market" Engineering Roadmap for the PolyStore Network, designed to iteratively validate, market, and refine the project from "Paperware" to "Software." It recognizes the need to align Technology, Community, and Economy.
 
 ## Runtime Persona Source of Truth
 - Canonical runtime role naming and ownership is defined in `docs/runtime-personas.md`.
@@ -202,7 +202,7 @@ This phase focuses on implementing the scalable "Triple Proof" architecture and 
         *   Output: `ManifestRoot` (G1) and `ManifestBlob` data.
 *   **Step C: Chain Verification Logic**
     *   [x] **Task (Core):** Implement `verify_manifest_inclusion` in `polystore_core` (Need to handle Roots of Unity coordinate mapping).
-    *   [x] **Task (FFI):** Expose `nil_verify_chained_proof` (Hop 1 + 3) and `nil_compute_manifest_commitment`.
+    *   [x] **Task (FFI):** Expose `polystore_verify_chained_proof` (Hop 1 + 3) and `polystore_compute_manifest_commitment`.
     *   [x] **File:** `polystorechain/x/polystorechain/keeper/msg_server.go` (or dedicated verifier).
     *   [x] **Task:** Implement `VerifyChainedProof` algorithm using FFI:
         *   Hop 1 (KZG): Verify MDU Root is in Manifest.
@@ -507,7 +507,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
     - **Test gate:** Browser uploads file directly to SP; SP acknowledges receipt.
 
 - [x] **Goal 3: Direct-to-Chain Commit (Metadata Path).**
-    - **Concept:** Use MetaMask (`eth_sendTransaction`) to call the NilStore Precompile (`0x...0900`) directly.
+    - **Concept:** Use MetaMask (`eth_sendTransaction`) to call the PolyStore Precompile (`0x...0900`) directly.
     - **Frontend:** Implement ABI encoding for `updateDealContent(dealId, cid, size)`.
     - **Test gate:** Browser commits content; `polystorechaind q polystorechain deal` shows updated `manifest_root`.
 
@@ -660,8 +660,8 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - [x] **Task 5: Tests + CI coverage.**
   - **Unit tests:** router tests live under `polystore-website/src/lib/transport/*.test.ts` so `npm run test:unit` covers them.
   - **E2E (browser) smoke:** add a Playwright spec that runs the “direct path” with the gateway disabled.
-    - Add stack control: update `scripts/run_local_stack.sh` to honor `NIL_DISABLE_GATEWAY=1` (do not start gateway; keep chain + SP + web).
-    - New test: `polystore-website/tests/fallback-no-gateway.spec.ts` runs `upload → commit → fetch` with `NIL_DISABLE_GATEWAY=1`.
+    - Add stack control: update `scripts/run_local_stack.sh` to honor `POLYSTORE_DISABLE_GATEWAY=1` (do not start gateway; keep chain + SP + web).
+    - New test: `polystore-website/tests/fallback-no-gateway.spec.ts` runs `upload → commit → fetch` with `POLYSTORE_DISABLE_GATEWAY=1`.
   - **CI integration:** extend `.github/workflows/ci.yml` e2e job to run the new Playwright test (or run an additional e2e script) with the gateway disabled.
   - **Pass gate:** GitHub CI runs:
     - unit tests (`npm run test:unit`)
@@ -778,7 +778,7 @@ This section tracks the currently active TODOs for the AI agent working in this 
   - User data MDUs are expanded into shards and uploaded per slot; metadata MDUs are replicated to all slots.
   - Manifest root is computed from Mode 2 MDU roots and committed on-chain.
 - [x] **Task 2: SP shard upload API.**
-  - Add `/sp/upload_shard` with `X-Nil-Deal-ID`, `X-Nil-Mdu-Index`, `X-Nil-Slot`, `X-Nil-Manifest-Root`.
+  - Add `/sp/upload_shard` with `X-PolyStore-Deal-ID`, `X-PolyStore-Mdu-Index`, `X-PolyStore-Slot`, `X-PolyStore-Manifest-Root`.
   - Store shards as `mdu_<index>_slot_<slot>.bin`.
   - Keep MDU #0 + Witness replicated to all slots via `/sp/upload_mdu`.
 - [x] **Task 3: Mode 2 retrieval aggregator.**
@@ -953,12 +953,12 @@ This sprint turns the current “single-machine” gateway/provider implementati
 #### Goal 2: Gateway becomes a router/proxy (no local proving)
 - [x] **Gateway:** Add “router mode” (env-gated) where `GatewayFetch`, `GatewayListFiles`, `GatewaySlab`, `GatewayUpload`, and session/receipt endpoints route to the assigned provider.
 - [x] **Gateway:** Implement provider selection using `Deal.providers[]` and provider endpoints from chain; pick an HTTP Multiaddr and convert to URL.
-- [x] **Gateway:** Forward streaming fetch responses without buffering; preserve receipt headers (`X-Nil-*`).
+- [x] **Gateway:** Forward streaming fetch responses without buffering; preserve receipt headers (`X-PolyStore-*`).
 - **Pass gate:** UI fetch/download works when gateway has no deal bytes on disk.
 - **Test gate:** `cd polystore_gateway && go test ./...`
 
 #### Goal 3: Provider is the serving/proving party (source of bytes + proof headers)
-- [x] **Provider:** Ensure provider-side `GatewayFetch` is the only place that generates `X-Nil-Proof-*` headers and session IDs.
+- [x] **Provider:** Ensure provider-side `GatewayFetch` is the only place that generates `X-PolyStore-Proof-*` headers and session IDs.
 - [x] **Provider:** Ensure download session chunks are recorded on the provider (not the gateway) in router mode.
 - **Pass gate:** Receipts/session receipts verify and submit even if the gateway restarts mid-download (provider session survives).
 
@@ -1006,7 +1006,7 @@ This sprint closes the biggest remaining UX/product gaps for multi-provider devn
 - [x] Replace `/gateway/create-deal-evm` and `/gateway/update-deal-content-evm` with a **wallet-sent transaction** path.
 - [x] Replace retrieval “receipt submission” with a wallet-sent transaction path or a single wallet-sent “session open” tx (no `eth_signTypedData_v4` prompts).
 - **Implementation options (choose one):**
-    - **A (Preferred):** Add an EVM precompile (or EVM contract + precompile) that exposes Nilchain actions as ABI methods, so the user uses `eth_sendTransaction` and pays gas normally. (**Implemented:** NilStore precompile at `0x0000000000000000000000000000000000000900`.)
+    - **A (Preferred):** Add an EVM precompile (or EVM contract + precompile) that exposes PolyStore Chain actions as ABI methods, so the user uses `eth_sendTransaction` and pays gas normally. (**Implemented:** PolyStore precompile at `0x0000000000000000000000000000000000000900`.)
     - **B:** Support EVM-signed Cosmos txs (EIP-712 sign mode) and broadcast directly from the browser to LCD (still “sign typed data”, not an EVM tx).
 - **Pass gate:** A user can create deal → commit content → download → finalize receipt with **zero gateway-held funded keys**.
 
@@ -1032,7 +1032,7 @@ This is the **canonical execution checklist** for the next development sprint. E
             - Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\\` separators, and whitespace-only).
             - Unknown `file_path` (or tombstone record) returns `404`.
             - Missing/invalid `deal_id` returns `400`; unknown `deal_id` returns `404`.
-            - `owner` must be the deal owner’s NilChain bech32 address; mismatch returns a clear non-200 (prefer `403`).
+            - `owner` must be the deal owner’s PolyStore Chain bech32 address; mismatch returns a clear non-200 (prefer `403`).
             - `manifest_root` parsing is strict: 48-byte compressed G1 (96 hex chars), allowing optional `0x` prefix (reject invalid compressed points / invalid subgroup encodings).
             - `manifest_root` normalization:
                 - Canonical string form for logs/responses: `0x` + lowercase hex (96 chars).
@@ -1083,8 +1083,8 @@ This is the **canonical execution checklist** for the next development sprint. E
 This sprint removes the devnet shortcut where the “provider” (currently `faucet`) pays gas and signs on-chain transactions for user actions. The gateway should behave like a user desktop daemon: it can compute/prepare proofs, but must not be a funded key holder.
 
 - [x] **Goal 1: Remove provider/faucet as tx signer.**
-    - **Change:** Eliminate `NIL_PROVIDER_KEY=faucet` / `polystorechaind tx ... --from faucet` from the critical path for deal lifecycle and user-side retrieval actions.
-    - **Implemented model (devnet):** Web uses MetaMask **transaction prompts** (`eth_sendTransaction`) against the NilStore EVM precompile at `0x0000000000000000000000000000000000000900` for `createDeal`, `updateDealContent`, and batched retrieval proofs; the gateway holds no user keys.
+    - **Change:** Eliminate `POLYSTORE_PROVIDER_KEY=faucet` / `polystorechaind tx ... --from faucet` from the critical path for deal lifecycle and user-side retrieval actions.
+    - **Implemented model (devnet):** Web uses MetaMask **transaction prompts** (`eth_sendTransaction`) against the PolyStore EVM precompile at `0x0000000000000000000000000000000000000900` for `createDeal`, `updateDealContent`, and batched retrieval proofs; the gateway holds no user keys.
     - **Pass gate:** A user can create deal → upload/commit → fetch → submit retrieval proof with no gateway-held funded keys, and on-chain heat increments.
         - Path normalization: URL encoding/decoding differences (spaces, `+`, `%2F`, double-encoding like `%252F`) can cause silent mismatches; add unit tests for tricky paths and ensure we decode exactly once.
         - Duplicate paths: if upload/append allows multiple File Table entries with the same `file_path`, a naive resolver might return the *wrong* record (stale bytes). Enforce uniqueness or implement last-write-wins semantics explicitly (and test it).
@@ -1123,10 +1123,10 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Steps:** `11.4.1` deterministic E2E wallet; `11.4.2` stable selectors; `11.4.3` dashboard lifecycle smoke; `11.4.4` deal explorer smoke; `11.4.5` one-command runner.
     - **Key files:** `polystore-website/tests/*.spec.ts`, `polystore-website/src/context/Web3Provider.tsx`, `scripts/run_local_stack.sh`, `scripts/e2e_browser_smoke.sh`
     - **Wallet strategy (recommended):**
-        - Prefer an **injected EIP-1193 shim / deterministic test connector** (env-gated, e.g. `NIL_E2E=1`) over automating a real MetaMask extension in CI.
+        - Prefer an **injected EIP-1193 shim / deterministic test connector** (env-gated, e.g. `POLYSTORE_E2E=1`) over automating a real MetaMask extension in CI.
         - The E2E wallet MUST support `eth_signTypedData_v4` for CreateDeal + UpdateContent and send txs against the local EVM (chain id `31337`).
         - Implementation sketch (recommended):
-            - In `NIL_E2E=1`, `Web3Provider` uses a custom Wagmi connector backed by a fixed dev private key (env: `NIL_E2E_PK`).
+            - In `POLYSTORE_E2E=1`, `Web3Provider` uses a custom Wagmi connector backed by a fixed dev private key (env: `POLYSTORE_E2E_PK`).
             - For Playwright, inject `window.ethereum` early (or rely on the connector only) so app code never needs MetaMask.
             - Provider API (minimum): `request({ method, params })` supports `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `eth_signTypedData_v4`, and `eth_sendTransaction` (plus `wallet_switchEthereumChain` as a no-op or deterministic error).
     - **Risk hotspots:**
@@ -1168,7 +1168,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
     - **Test gate:** `cd polystore-website && npm run test:e2e`
 
 - [x] **Goal 4: Gateway/SP: enforce session-bound fetch and durable session proof assembly.**
-    - **Fetch contract:** remote fetches require `X-Nil-Session-Id`; the gateway verifies on-chain session is `OPEN` and provider matches before serving.
+    - **Fetch contract:** remote fetches require `X-PolyStore-Session-Id`; the gateway verifies on-chain session is `OPEN` and provider matches before serving.
     - **Range contract:** each HTTP range maps to exactly one blob; session covers `{start_mdu_index,start_blob_index}+blob_count` contiguous blobs (gateway may choose chunking).
     - **Proof assembly:** gateway records one `ChainedProof` per served blob under `session_id` (restart-safe).
     - **Provider submission:** provider submits `MsgSubmitRetrievalSessionProof(session_id, proofs...)`; chain marks `PROOF_SUBMITTED` and only increments “successful retrievals” once `COMPLETED`.
@@ -1182,7 +1182,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 
 ### 11.1 EVM Integration UX (Phase 5 Step 2–3)
 - [x] Implement and stabilize `PolyStoreBridge.sol` deployment to the internal EVM (Foundry), including fixing funding for the deploy key so `scripts/deploy_bridge_local.sh` succeeds by default under `./scripts/run_local_stack.sh start`.
-- [x] Ensure `NIL_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
+- [x] Ensure `POLYSTORE_DEPLOY_BRIDGE=1` remains the default behavior and that a successful deploy writes `_artifacts/bridge_address.txt`, which is then wired into the web app via `VITE_BRIDGE_ADDRESS`.
 - [x] Verify and, if needed, finish the Wagmi/Viem Web3 provider wiring in `polystore-website` (Connect MetaMask, chain config, RPC URL).
 - [x] Add a “Connect MetaMask” flow that shows the user’s NIL balance and exposes at least one happy-path PolyStoreBridge interaction (e.g., a simple `ping`/view or demo call) from the dashboard.
 
@@ -1284,7 +1284,7 @@ This sprint removes the devnet shortcut where the “provider” (currently `fau
 #### 11.6.A Gateway‑First Canonicalization (V1 PolyFS + Triple Proof)
 - [x] **A1. Make `/gateway/upload` canonical by default.**
     - **Change:** Replace `fastShardQuick` / `IngestNewDealFast` as the default with `IngestNewDeal` (full PolyFS slab build: MDU #0 + Witness MDUs + User MDUs + ManifestRoot).
-    - **Keep fake modes only behind explicit env:** e.g. `NIL_FAKE_INGEST=1` for simulations.
+    - **Keep fake modes only behind explicit env:** e.g. `POLYSTORE_FAKE_INGEST=1` for simulations.
     - **Pass gate:** `./scripts/e2e_lifecycle.sh` passes with *no* ingest env flags set, and the returned `manifest_root` matches the on‑chain `Deal.manifest_root` after commit.
     - **Commit gate:** After pass, commit `feat(polystore_gateway): default to canonical ingest` and push to `origin`.
 

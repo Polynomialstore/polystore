@@ -29,8 +29,8 @@ func (app *App) initEVMMempool() error {
 
 	logger.Info("configuring EVM mempool")
 
-	if os.Getenv("NIL_DISABLE_EVM_MEMPOOL") == "1" {
-		logger.Info("NIL_DISABLE_EVM_MEMPOOL=1; skipping EVM mempool configuration")
+	if os.Getenv("POLYSTORE_DISABLE_EVM_MEMPOOL") == "1" {
+		logger.Info("POLYSTORE_DISABLE_EVM_MEMPOOL=1; skipping EVM mempool configuration")
 		return nil
 	}
 

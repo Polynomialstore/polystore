@@ -1,4 +1,4 @@
-# NilGateway & NilProvider Separation Specification
+# PolyStore Gateway & Provider-Daemon Separation Specification
 
 **Status:** Draft (Phase 1)
 **Target:** "Store Wars" Devnet (Retrieval Separation)
@@ -6,18 +6,18 @@
 ## 1. Overview
 
 This specification defines the architectural split of the legacy combined gateway/provider service into two distinct logical roles:
-1.  **`nil_provider` (Storage Provider):** A passive, "dumb" storage server that holds raw data (MDUs) and submits proofs to the chain upon receiving valid receipts. It holds the **Provider Key**.
+1.  **`provider-daemon` (Storage Provider):** A passive, "dumb" storage server that holds raw data (MDUs) and submits proofs to the chain upon receiving valid receipts. It holds the **Provider Key**.
 2.  **`polystore_gateway` (User Daemon):** An intelligent user agent (Thick Client helper) that performs cryptographic verification, packing, and serves the frontend. It does **not** hold user keys (for the main flow); it delegates signing to the Client (Browser/CLI).
 
 ## 2. Architecture & Roles
 
-### 2.1 `nil_provider` (The Storage Provider)
+### 2.1 `provider-daemon` (The Storage Provider)
 *   **Role:** Passive Server.
-*   **Key:** `NIL_PROVIDER_KEY` (e.g., `faucet` or a dedicated SP key).
+*   **Key:** `POLYSTORE_PROVIDER_KEY` (e.g., `faucet` or a dedicated SP key).
 *   **Responsibility:**
     *   **Store:** Accept raw MDUs via `PUT`.
     *   **Serve:** Serve raw MDUs via `GET`.
-    *   **Prove:** Accept signed `RetrievalReceipts` via `POST`, validate them, and batch-submit `MsgProveLiveness` to NilChain.
+    *   **Prove:** Accept signed `RetrievalReceipts` via `POST`, validate them, and batch-submit `MsgProveLiveness` to PolyStore Chain.
 *   **State:**
     *   `uploads/<manifest_root_key>/` (The Slab).
     *   `receipts.db` (Buffer of unsubmitted receipts).
@@ -26,8 +26,8 @@ This specification defines the architectural split of the legacy combined gatewa
 *   **Role:** Active Client Helper / "Thick Client" Daemon.
 *   **Key:** None (Delegates to Frontend/CLI). *Exception: E2E testing mode.*
 *   **Responsibility:**
-    *   **Upload (Packer):** Accept files -> Generate MDUs (PolyFS) -> Push to `nil_provider`.
-    *   **Download (Verifier):** Fetch MDUs from `nil_provider` -> Verify (Triple Proof) -> Stream to User -> **Proxy Receipt to Provider**.
+    *   **Upload (Packer):** Accept files -> Generate MDUs (PolyFS) -> Push to `provider-daemon`.
+    *   **Download (Verifier):** Fetch MDUs from `provider-daemon` -> Verify (Triple Proof) -> Stream to User -> **Proxy Receipt to Provider**.
 *   **State:**
     *   Stateless (mostly). May cache `trusted_setup` or temporary artifacts.
 
@@ -42,7 +42,7 @@ This flow replaces the "Simulated Liveness" where the Gateway signed receipts on
 ### 3.1 Flow Diagram
 
 ```text
-User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
+User (Browser)        Gateway (Daemon)      Provider (SP)       PolyStore Chain
       |                      |                    |                 |
       |-- 1. GET File ------>|                    |                 |
       |                      |-- 2. Fetch MDU --->|                 |
@@ -69,12 +69,12 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
     *   (Future) Verifies KZG Proof.
     *   Streams bytes to Browser.
     *   **Crucial Change:** The Gateway response headers MUST include the **Receipt Metadata** needed for the client to sign.
-        *   `X-Nil-Deal-ID`: `<uint64>`
-        *   `X-Nil-Epoch`: `<uint64>`
-        *   `X-Nil-Bytes-Served`: `<uint64>`
-        *   `X-Nil-Provider`: `<bech32_address>`
-        *   `X-Nil-Proof-JSON`: base64 JSON wrapper containing `proof_details` (and optionally `proof_hash`).
-        *   `X-Nil-Proof-Hash`: `0x` + 32-byte keccak256 of canonical `ChainedProof` encoding.
+        *   `X-PolyStore-Deal-ID`: `<uint64>`
+        *   `X-PolyStore-Epoch`: `<uint64>`
+        *   `X-PolyStore-Bytes-Served`: `<uint64>`
+        *   `X-PolyStore-Provider`: `<bech32_address>`
+        *   `X-PolyStore-Proof-JSON`: base64 JSON wrapper containing `proof_details` (and optionally `proof_hash`).
+        *   `X-PolyStore-Proof-Hash`: `0x` + 32-byte keccak256 of canonical `ChainedProof` encoding.
 
 #### Step 5: Client Signing
 *   **Browser:**
@@ -99,7 +99,7 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
 
 ## 4. API Specification
 
-### 4.1 Provider API (`nil_provider`)
+### 4.1 Provider API (`provider-daemon`)
 
 *   **`POST /sp/receipt`**
     *   **Input:** JSON `RetrievalReceipt` (Signed).
@@ -118,7 +118,7 @@ User (Browser)        Gateway (Daemon)      Provider (SP)       NilChain
 
 *   **`GET /gateway/fetch/{manifest_root}`** (Updated)
     *   **Behavior:** Streams file.
-    *   **Headers:** Adds `X-Nil-Receipt-*` headers.
+    *   **Headers:** Adds `X-PolyStore-Receipt-*` headers.
     *   **Logic:** Does **NOT** auto-submit proofs anymore.
 
 *   **`POST /gateway/receipt`** (New)

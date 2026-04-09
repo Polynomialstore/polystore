@@ -9,7 +9,7 @@ echo "S3 Server started at PID $S3_PID"
 sleep 2
 
 # 2. Create a test file
-echo "Hello NilStore S3 World!" > test_obj.txt
+echo "Hello PolyStore S3 World!" > test_obj.txt
 
 # 3. Upload file
 echo "Uploading file..."
