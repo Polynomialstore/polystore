@@ -676,6 +676,7 @@ This specification defines normative *interfaces* and verification rules but int
 
 10. **Base Reward Pool & Emissions:** deterministic minting schedule, distribution rules, and unearned-reward handling. *(See `rfcs/rfc-base-reward-pool-and-emissions.md`.)*
 11. **Provider Exit / Draining / Rotation:** non-punitive exit path, drain scheduler, and churn guardrails. *(See `rfcs/rfc-provider-exit-and-draining.md`.)*
+12. **Setup-Phase Slot Bump:** owner-driven, deterministic pre-activation replacement for Mode 2 slots that fail initial deal setup before the first committed content generation. *(See `rfcs/rfc-deal-setup-slot-bump.md`.)*
 
 ---
 
