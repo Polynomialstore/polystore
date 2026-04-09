@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build nil-website with public endpoint env vars embedded at build time.
+# Build polystore-website with public endpoint env vars embedded at build time.
 # Usage:
 #   scripts/build_website_public.sh <domain>
 # Example:
@@ -14,7 +14,7 @@ fi
 
 DOMAIN="$1"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WEB_DIR="$ROOT_DIR/nil-website"
+WEB_DIR="$ROOT_DIR/polystore-website"
 
 # Public collaborator defaults live in a repo-tracked env file so the website
 # and CLI bootstrap paths stay aligned by default.
@@ -36,7 +36,7 @@ VITE_EVM_RPC="${VITE_EVM_RPC:-${POLYSTORE_TESTNET_EVM_RPC:-https://evm.${DOMAIN}
 cd "$WEB_DIR"
 npm ci
 
-echo "Building nil-website with:"
+echo "Building polystore-website with:"
 echo "  VITE_API_BASE=$VITE_API_BASE"
 echo "  VITE_LCD_BASE=$VITE_LCD_BASE"
 echo "  VITE_GATEWAY_BASE=$VITE_GATEWAY_BASE"

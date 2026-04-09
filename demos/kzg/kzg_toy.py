@@ -3,7 +3,7 @@
 # --------------------------------------------------
 # This notebook implements a toy, fully self-contained demonstration of
 # Kate–Zaverucha–Goldberg (KZG) polynomial commitments in the style used by
-# Nilcoin/NilStore for PoUD-style plaintext possession checks.
+# Nilcoin/PolyStore for PoUD-style plaintext possession checks.
 #
 # ⚠️ SECURITY WARNING:
 #   - This is a didactic simulation. It uses a "pairing simulator" (we track

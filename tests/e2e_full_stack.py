@@ -58,7 +58,7 @@ def create_deal():
     service_hint = "General"
 
     domain_data = {
-        "name": "NilStore",
+        "name": "PolyStore",
         "version": "1",
         "chainId": EVM_CHAIN_ID,
         "verifyingContract": VERIFYING_CONTRACT,
@@ -119,7 +119,7 @@ def verify_deal(deal_id):
     print(f"Verifying Deal {deal_id}...")
     for _ in range(10):
         try:
-            resp = requests.get(f"{LCD_URL}/nilchain/nilchain/v1/deals/{deal_id}")
+            resp = requests.get(f"{LCD_URL}/polystorechain/polystorechain/v1/deals/{deal_id}")
             if resp.status_code == 200:
                 data = resp.json()
                 if 'deal' in data:
@@ -136,7 +136,7 @@ def verify_deal(deal_id):
 
 # --- 3. Upload Content ---
 def upload_content():
-    content = b"Hello NilStore E2E Test" * 100
+    content = b"Hello PolyStore E2E Test" * 100
     files = {'file': ('test.txt', content)}
     
     print("Uploading file...")
@@ -154,7 +154,7 @@ def update_content(deal_id, cid, size_bytes):
     nonce = 2 # Increment nonce
     
     domain_data = {
-        "name": "NilStore",
+        "name": "PolyStore",
         "version": "1",
         "chainId": EVM_CHAIN_ID,
         "verifyingContract": VERIFYING_CONTRACT,
@@ -224,7 +224,7 @@ def verify_final(deal_id, cid, size_bytes):
     print("Verifying final state...")
     for _ in range(20):
         try:
-            resp = requests.get(f"{LCD_URL}/nilchain/nilchain/v1/deals/{deal_id}")
+            resp = requests.get(f"{LCD_URL}/polystorechain/polystorechain/v1/deals/{deal_id}")
             data = resp.json()
             if 'deal' not in data:
                 time.sleep(1)

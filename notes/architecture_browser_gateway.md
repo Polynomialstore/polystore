@@ -1,11 +1,11 @@
 # Architectural Review: The Browser-Based Gateway ("Thick Client")
 
 **Date:** 2025-12-15
-**Context:** Pivoting from a local Go daemon (`nil_gateway`) to a pure browser experience.
+**Context:** Pivoting from a local Go daemon (`polystore_gateway`) to a pure browser experience.
 
 ## 1. Executive Summary
 
-Moving the Gateway logic into the browser transforms NilStore from a "Tethered" application (requiring a local CLI/Server) to a true "Web3" DApp. This removes the biggest friction point for new users (installing software) but shifts the burden of cryptography, file management, and networking onto the browser runtime.
+Moving the Gateway logic into the browser transforms PolyStore from a "Tethered" application (requiring a local CLI/Server) to a true "Web3" DApp. This removes the biggest friction point for new users (installing software) but shifts the burden of cryptography, file management, and networking onto the browser runtime.
 
 **Recommendation:** Proceed with this architecture for **"Consumer" use cases** (files < 1GB). Retain the Go Gateway/CLI for "Enterprise" bulk data (TB-scale) where browser memory limits and WASM performance are prohibitive.
 
@@ -13,7 +13,7 @@ Moving the Gateway logic into the browser transforms NilStore from a "Tethered" 
 
 ## 2. Architecture: "The Gateway is a Library"
 
-We are effectively moving the `nil_gateway` logic into a TypeScript/WASM library running inside a Web Worker.
+We are effectively moving the `polystore_gateway` logic into a TypeScript/WASM library running inside a Web Worker.
 
 ### Current Flow (Thin Client)
 `Browser UI` -> `Local HTTP` -> `Go Gateway` -> `Disk/Network`
@@ -26,13 +26,13 @@ We are effectively moving the `nil_gateway` logic into a TypeScript/WASM library
 ## 3. Component Analysis & Gap Analysis
 
 ### 3.1 Cryptography & Sharding (The Engine)
-*   **Current State:** `nil_core` (Rust) compiled to WASM already exists for basic sharding (`expand_file`).
+*   **Current State:** `polystore_core` (Rust) compiled to WASM already exists for basic sharding (`expand_file`).
 *   **Challenge:** While the atomic unit is a 128KB blob and processing occurs at the MDU (64MB) level, attempting to load an *entire large file* (e.g., 1GB) into WASM linear memory *at once* can still lead to browser tab crashes or significant performance degradation. Processing must be done incrementally.
 *   **Solution:** **Streaming Architecture at the MDU/Blob Level.**
     *   The WASM interface must accept input in chunks (e.g., MDU by MDU) via `ReadableStream` or `ArrayBuffer` batches.
     *   KZG Commitments for each MDU must be computed incrementally (streaming MSM if possible) or MDU by MDU.
     *   This leverages our existing data model (128KB blobs, 64MB MDUs) to break down large files into manageable batches, avoiding monolithic memory loads.
-*   **Gap:** Update `nil_core` WASM bindings and JavaScript glue code to explicitly support this MDU/blob-level streaming processing, ensuring efficient memory usage and avoiding OOM errors. Verify performance characteristics under this streaming model.
+*   **Gap:** Update `polystore_core` WASM bindings and JavaScript glue code to explicitly support this MDU/blob-level streaming processing, ensuring efficient memory usage and avoiding OOM errors. Verify performance characteristics under this streaming model.
 
 ### 3.2 File System (The Slab)
 *   **Current State:** Go code manages `uploads/` directory on the OS filesystem.
@@ -61,9 +61,9 @@ We are effectively moving the `nil_gateway` logic into a TypeScript/WASM library
 ## 4. Detailed Implementation Roadmap
 
 ### Phase 1: WASM Parity (The Core)
-*   **Goal:** `nil_core` WASM can do everything the Go Gateway needs to do for a single file.
+*   **Goal:** `polystore_core` WASM can do everything the Go Gateway needs to do for a single file.
 *   **Tasks:**
-    1.  Expose `Mdu0Builder` logic (building the NilFS file table) via WASM. currently this logic is in Go (`nil_gateway/pkg/builder`). **Decision:** Port `Mdu0Builder` to Rust in `nil_core` to share logic between CLI and Browser.
+    1.  Expose `Mdu0Builder` logic (building the PolyFS file table) via WASM. currently this logic is in Go (`polystore_gateway/pkg/builder`). **Decision:** Port `Mdu0Builder` to Rust in `polystore_core` to share logic between CLI and Browser.
     2.  Implement `StreamingSharder` in WASM (input: stream of bytes, output: stream of blobs/commitments).
 
 ### Phase 2: The Virtual Gateway (State & Storage)
@@ -138,16 +138,16 @@ You mentioned **libp2p**.
 
 We should not "rewrite" the Go Gateway in JS. We should **move logic to Rust**, then call it from both Go (via FFI or cgo) and JS (via WASM).
 
-1.  **Stop writing Go logic for core formats.** Move `nil_gateway/pkg/builder` (File Table construction) to `nil_core` (Rust).
+1.  **Stop writing Go logic for core formats.** Move `polystore_gateway/pkg/builder` (File Table construction) to `polystore_core` (Rust).
 2.  **Compile Rust to WASM.**
-3.  **Build the TS `NilStoreClient`.**
+3.  **Build the TS `PolyStoreClient`.**
 
 ## 7. Immediate Next Steps (Pure Browser Pilot)
 
-1.  **Refactor `nil_core`:** Implement the "Filesystem Builder" (MDU #0 creation) in Rust.
+1.  **Refactor `polystore_core`:** Implement the "Filesystem Builder" (MDU #0 creation) in Rust.
 2.  **Browser POC:** Create a React page that:
     *   Takes a file drop.
     *   Uses WASM to generate the `ManifestRoot` and `MDU #0` bytes.
     *   Stores them in OPFS.
-    *   Displays the resulting NilFS structure.
+    *   Displays the resulting PolyFS structure.
     *   *No networking yet—just proof of data structures.*

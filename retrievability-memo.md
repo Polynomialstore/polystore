@@ -1,8 +1,8 @@
-# NilStore Retrievability Memo – Problem Statement
+# PolyStore Retrievability Memo – Problem Statement
 
 ## 1. Purpose
 
-Define the precise retrievability guarantee NilStore aims to provide and the conditions under which Storage Providers (SPs) must be punished when they fail to uphold it. This memo is intentionally **problem‑only**: no protocol design, only what must be true of the system’s behavior.
+Define the precise retrievability guarantee PolyStore aims to provide and the conditions under which Storage Providers (SPs) must be punished when they fail to uphold it. This memo is intentionally **problem‑only**: no protocol design, only what must be true of the system’s behavior.
 
 ---
 
@@ -196,7 +196,7 @@ We only require that:
 
 ## 11. Restated Goal
 
-NilStore’s retrieval subsystem must be designed so that, for every SP and every Deal they accept:
+PolyStore’s retrieval subsystem must be designed so that, for every SP and every Deal they accept:
 
 1. There is a well‑defined notion of a **valid retrieval challenge** and response;
 2. The system continuously or periodically exercises those challenges with sufficient coverage;

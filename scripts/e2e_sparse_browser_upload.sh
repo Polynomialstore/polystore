@@ -44,7 +44,7 @@ export VITE_ENABLE_FAUCET=1
 
 echo "==> Starting website dev server (browser-only sparse proof)..."
 (
-  cd "$ROOT_DIR/nil-website"
+  cd "$ROOT_DIR/polystore-website"
   npm run dev -- --host 127.0.0.1 --port "$WEB_PORT"
 ) &
 DEV_PID=$!
@@ -52,4 +52,4 @@ DEV_PID=$!
 wait_for_http "web" "http://127.0.0.1:${WEB_PORT}/"
 
 echo "==> Running sparse browser upload proof..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e:sparse-browser)
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e:sparse-browser)
