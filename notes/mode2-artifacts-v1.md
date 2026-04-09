@@ -6,7 +6,7 @@ The goal is that the **gateway** and the **browser/WASM** implementation can pro
 
 ## Directory Roots
 
-- **Gateway (disk):** `nil_gateway/uploads/deals/<deal_id>/<manifest_root_key>/`
+- **Gateway (disk):** `polystore_gateway/uploads/deals/<deal_id>/<manifest_root_key>/`
 - **Browser (OPFS):** `OPFS:/deal-<deal_id>/`
 
 `manifest_root_key` is a filesystem-safe key derived from the 48-byte manifest root:
@@ -18,10 +18,10 @@ The goal is that the **gateway** and the **browser/WASM** implementation can pro
 ### Metadata MDUs
 
 - `mdu_0.bin`
-  - 8 MiB NilFS MDU #0 (super-manifest / root table + file table)
+  - 8 MiB PolyFS MDU #0 (super-manifest / root table + file table)
 - `mdu_1.bin .. mdu_W.bin`
   - 8 MiB Witness MDUs (packed commitment witnesses)
-  - `W` is determined by the NilFS builder given:
+  - `W` is determined by the PolyFS builder given:
     - user MDU count
     - commitments-per-user-MDU (`leaf_count`)
 
@@ -46,14 +46,14 @@ For each provider slot `slot` (0..N-1), where `N = K + M`, store:
 
 ### Raw payload → encoded user MDU bytes
 
-Raw payload bytes are encoded into an 8 MiB user MDU using the NilFS scalar packing rule:
+Raw payload bytes are encoded into an 8 MiB user MDU using the PolyFS scalar packing rule:
 - payload is chunked into 31-byte groups
 - each group is placed into a 32-byte scalar, **left-padded with zeros** so the payload lands at the end of the scalar
 - scalars are written sequentially until the payload is exhausted
 
 This must match:
-- `nil_gateway/ingest_mode2.go:encodePayloadToMdu`
-- `nil_core` scalar packing implementation used by WASM/FFI
+- `polystore_gateway/ingest_mode2.go:encodePayloadToMdu`
+- `polystore_core` scalar packing implementation used by WASM/FFI
 
 ### RS shard ordering (slot-major)
 

@@ -1,4 +1,4 @@
-# NilStore Logo: Visual Identity & Technical Specification
+# PolyStore Logo: Visual Identity & Technical Specification
 
 **Document Version:** 1.1  
 **Date:** 2025-12-04  
@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-The NilStore logo is a visual synthesis of the network's core philosophy: **"Structured Infinity."** It combines rigid, higher-dimensional geometry (the Tesseract/Hypercube) with fluid, self-healing topology (the Möbius Lattice). This document serves as the source of truth for reproducing, analyzing, or briefing designers on the brand mark.
+The PolyStore logo is a visual synthesis of the network's core philosophy: **"Structured Infinity."** It combines rigid, higher-dimensional geometry (the Tesseract/Hypercube) with fluid, self-healing topology (the Möbius Lattice). This document serves as the source of truth for reproducing, analyzing, or briefing designers on the brand mark.
 
 ## 2. Typography
 
@@ -28,7 +28,7 @@ This section defines the aesthetic properties for brand consistency.
 
 ### A. Geometry & Structure
 *   **The Frame (Container):** A neon wireframe depicting a **Tesseract** (hypercube) projection. It represents the rigid, immutable structure of the ledger and the consensus layer. It is defined by sharp $90^\circ$ vertices and straight, glowing lines.
-*   **The Ribbon (Flow):** Intertwined with the frame is a continuous tubular structure forming a distorted **Torus Knot** or Möbius loop. It represents the fluid data layer (NilFS) and the self-healing "Ricci Flow" of the network.
+*   **The Ribbon (Flow):** Intertwined with the frame is a continuous tubular structure forming a distorted **Torus Knot** or Möbius loop. It represents the fluid data layer (PolyFS) and the self-healing "Ricci Flow" of the network.
 *   **Interaction:** The ribbon weaves *through* the rigid faces of the cube, symbolizing the seamless movement of data across the immutable lattice.
 
 ### B. Texture & Pattern
@@ -51,7 +51,7 @@ The palette is high-contrast "Synthwave" set against a deep void.
 ## 4. Asset Usage Guide
 
 ### Theme Compatibility
-NilStore uses a theme-aware logo strategy to ensure visibility across different environments.
+PolyStore uses a theme-aware logo strategy to ensure visibility across different environments.
 
 *   **Standard Logo (`logo_light.jpg`):**
     *   **Description:** The original "Neon on Black" rendering.

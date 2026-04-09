@@ -12,8 +12,8 @@ PROVIDER_COUNT="${PROVIDER_COUNT:-3}"
 START_WEB="${START_WEB:-1}"
 START_GUI="${START_GUI:-1}"
 GUI_CMD="${GUI_CMD:-npm run tauri dev}"
-NIL_LOCAL_IMPORT_ENABLED="${NIL_LOCAL_IMPORT_ENABLED:-1}"
-NIL_LOCAL_IMPORT_ALLOW_ABS="${NIL_LOCAL_IMPORT_ALLOW_ABS:-1}"
+POLYSTORE_LOCAL_IMPORT_ENABLED="${POLYSTORE_LOCAL_IMPORT_ENABLED:-1}"
+POLYSTORE_LOCAL_IMPORT_ALLOW_ABS="${POLYSTORE_LOCAL_IMPORT_ALLOW_ABS:-1}"
 
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
@@ -28,11 +28,11 @@ Usage:
 
 Env overrides:
   PROVIDER_COUNT=12           number of providers
-  START_WEB=1                 start nil-website
+  START_WEB=1                 start polystore-website
   START_GUI=1                 start Tauri GUI (default on)
   GUI_CMD="npm run tauri dev" command to launch GUI
-  NIL_LOCAL_IMPORT_ENABLED=1  allow local import in gateway
-  NIL_LOCAL_IMPORT_ALLOW_ABS=1 allow absolute paths
+  POLYSTORE_LOCAL_IMPORT_ENABLED=1  allow local import in gateway
+  POLYSTORE_LOCAL_IMPORT_ALLOW_ABS=1 allow absolute paths
 USAGE
 }
 
@@ -62,8 +62,8 @@ start_gui() {
     fi
   fi
 
-  echo "Starting NilGateway GUI..."
-  pushd "$ROOT_DIR/nil_gateway_gui" >/dev/null
+  echo "Starting PolyStore Gateway GUI..."
+  pushd "$ROOT_DIR/polystore_gateway_gui" >/dev/null
   if [ ! -d node_modules ]; then
     npm install
   fi
@@ -96,8 +96,8 @@ stop_gui() {
 
 start_stack() {
   echo "Starting devnet stack..."
-  NIL_LOCAL_IMPORT_ENABLED="$NIL_LOCAL_IMPORT_ENABLED" \
-  NIL_LOCAL_IMPORT_ALLOW_ABS="$NIL_LOCAL_IMPORT_ALLOW_ABS" \
+  POLYSTORE_LOCAL_IMPORT_ENABLED="$POLYSTORE_LOCAL_IMPORT_ENABLED" \
+  POLYSTORE_LOCAL_IMPORT_ALLOW_ABS="$POLYSTORE_LOCAL_IMPORT_ALLOW_ABS" \
   PROVIDER_COUNT="$PROVIDER_COUNT" \
   START_WEB="$START_WEB" \
   "$STACK_SCRIPT" start
@@ -112,7 +112,7 @@ status() {
   local stack_pid_dir="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp/pids"
   echo "Stack:"
   if [ -d "$stack_pid_dir" ]; then
-    for svc in nilchaind faucet router website; do
+    for svc in polystorechaind faucet router website; do
       local pid_file="$stack_pid_dir/$svc.pid"
       if [ -f "$pid_file" ]; then
         local pid

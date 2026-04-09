@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "NilStore Provider Onboarding Bundle",
+  "title": "PolyStore Provider Onboarding Bundle",
   "type": "object",
   "required": [
     "chain_id",

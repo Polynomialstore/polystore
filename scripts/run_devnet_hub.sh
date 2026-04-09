@@ -4,10 +4,10 @@ set -euo pipefail
 # Hub launcher for a multi-machine devnet.
 #
 # Starts:
-# - nilchaind (RPC/LCD/EVM)
-# - nil_faucet
-# - nil_gateway in router mode (:8080)
-# - nil-website (optional, on by default)
+# - polystorechaind (RPC/LCD/EVM)
+# - polystore_faucet
+# - polystore_gateway in router mode (:8080)
+# - polystore-website (optional, on by default)
 #
 # Does NOT start any local providers. Remote providers can register and join.
 #

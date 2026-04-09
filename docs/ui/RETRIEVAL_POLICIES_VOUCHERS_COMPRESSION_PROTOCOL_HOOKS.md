@@ -1,8 +1,8 @@
-# NilStore UI/UX Spec Notes — Retrieval Policies (Public/Restricted/Allowlist/Voucher) + Compression
+# PolyStore UI/UX Spec Notes — Retrieval Policies (Public/Restricted/Allowlist/Voucher) + Compression
 
 Last updated: 2026-01-23
 
-This document is intentionally **implementation-oriented** for `nil-website/` and `nil_gateway/` and aligns with:
+This document is intentionally **implementation-oriented** for `polystore-website/` and `polystore_gateway/` and aligns with:
 
 - `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers_PROTOCOL_HOOKS.md`
 - `rfcs/rfc-mandatory-retrieval-sessions-and-batching_ACCESS_CONTROL_PROTOCOL_HOOKS.md`
@@ -55,7 +55,7 @@ Before asking the user to sign an “Open session” tx:
 
 ### 2.2 Owner retrieval flow
 - Call `MsgOpenRetrievalSession` (owner-paid).
-- Then download using `X-Nil-Session-Id`.
+- Then download using `X-PolyStore-Session-Id`.
 
 ### 2.3 Non-owner flow (Public / Allowlist / Voucher)
 - Call `MsgOpenRetrievalSessionSponsored` so the requester pays.
@@ -95,7 +95,7 @@ Show:
   - retrieve ciphertext,
   - verify proofs,
   - decrypt,
-  - parse NilCE header,
+  - parse PolyCE header,
   - decompress if needed.
 
 Advanced option (optional):
@@ -105,7 +105,7 @@ Advanced option (optional):
 
 ## 4) Public data explorer UX (separate side project)
 
-The explorer is not required in core UI, but NilStore should link to it and support it via queries/events.
+The explorer is not required in core UI, but PolyStore should link to it and support it via queries/events.
 
 Minimum explorer screens:
 - “Public deals” list
@@ -119,5 +119,5 @@ Minimum explorer screens:
 Whenever a user selects anything other than Owner-only:
 - show a warning:
 
-> “NilStore does not provide confidentiality by default. If your data is sensitive, encrypt it before upload. Retrieval access policies control who can *request* retrieval sessions, not who can theoretically obtain bytes.”
+> “PolyStore does not provide confidentiality by default. If your data is sensitive, encrypt it before upload. Retrieval access policies control who can *request* retrieval sessions, not who can theoretically obtain bytes.”
 

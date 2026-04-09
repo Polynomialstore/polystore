@@ -1,4 +1,4 @@
-# NilStore Core v 2.4
+# PolyStore Core v 2.4
 
 ### Cryptographic Primitives & Proof System Specification
 
@@ -6,7 +6,7 @@
 
 ## Abstract
 
-NilStore is a decentralized storage network that unifies **Storage** and **Retrieval** into a single **Demand-Driven Performance Market**. Instead of treating storage audits and user retrievals as separate events, NilStore implements a **Unified Liveness Protocol**: user retrievals *are* storage proofs.
+PolyStore is a decentralized storage network that unifies **Storage** and **Retrieval** into a single **Demand-Driven Performance Market**. Instead of treating storage audits and user retrievals as separate events, PolyStore implements a **Unified Liveness Protocol**: user retrievals *are* storage proofs.
 
 It specifies:
 1.  **Unified Liveness:** Organic user retrieval sessions act as valid storage proofs.
@@ -19,7 +19,7 @@ It specifies:
 
 ## § 1 Overview (Meta-Specification)
 
-NilStore’s protocol design is guided by a small set of architectural tenets:
+PolyStore’s protocol design is guided by a small set of architectural tenets:
 
 1.  **Retrieval IS Storage:** completed retrieval sessions count as valid storage proofs.
 2.  **The System is the User of Last Resort:** cold data is maintained via synthetic challenges when organic demand is low.
@@ -36,7 +36,7 @@ Key fields:
 *   **Identity:** `deal_id` (uint64), `owner` (address).
 *   **Commitment Root:** `manifest_root` (48‑byte KZG commitment, BLS12‑381 G1 compressed). This is the protocol’s anchor for all proofs (§7.3).
 *   **Provisioning:** thin-provisioned container expanded only via content commits (§6.0.3).
-    *   **Logical size:** `Deal.size` / `size_bytes` (sum of non-tombstone NilFS file lengths).
+    *   **Logical size:** `Deal.size` / `size_bytes` (sum of non-tombstone PolyFS file lengths).
     *   **Slab bounds:** `Deal.total_mdus` (count of committed MDU roots in the Manifest commitment; includes MDU #0 + witness + user MDUs).
     *   **Metadata size:** `Deal.witness_mdus` (count of witness MDUs after MDU #0; required to derive the user‑MDU range).
     *   **Gateway compat:** some REST responses may include legacy `allocated_length` as an alias for `total_mdus` (count), not bytes.
@@ -84,7 +84,7 @@ This section is intentionally conceptual; concrete placement optimization is an 
 
 ## § 4 Economics & Flow Control (Conceptual)
 
-NilStore’s economics combine a performance market with user-funded scaling:
+PolyStore’s economics combine a performance market with user-funded scaling:
 
 ### 4.1 Tiered Rewards (Parameters)
 Providers are rewarded by observed inclusion/latency tiers (e.g., Platinum/Gold/Silver/Fail). Exact tier windows and multipliers are protocol parameters (Appendix B).
@@ -138,7 +138,7 @@ When registering, SPs declare their intended service mode via `MsgRegisterProvid
 *   **Hot:** Biased towards `General` / `Edge`.
 
 #### 6.0.3 Deal Sizing (Dynamic)
-NilStore utilizes **Dynamic Thin Provisioning** for all storage deals.
+PolyStore utilizes **Dynamic Thin Provisioning** for all storage deals.
 
 *   **No Tiers:** Users do not pre-select a capacity tier.
 *   **Dynamic Expansion:** Deals start with minimal state and automatically expand as content is added via `MsgUpdateDealContent`.
@@ -170,7 +170,7 @@ Scaling is not free. It is strictly constrained by the User's budget.
 
 ### 6.2 Auto-Scaling (Stripe-Aligned Elasticity)
 
-NilStore supports two redundancy modes at the policy level:
+PolyStore supports two redundancy modes at the policy level:
 
 *   **Mode 1 – FullReplica (Legacy / Deprecated):** Each `Deal` is replicated in full across `CurrentReplication` providers. This mode cannot self-heal (no parity), and **new Mode 1 deals are disallowed**.
     *   **Soft lock:** the chain rejects `service_hint` strings that specify `replicas=N` without an `rs=K+M` profile.
@@ -200,7 +200,7 @@ To prevent oscillation (rapidly spinning nodes up and down) and account for the 
 
 ### 6.3 Deletion and Deal Expiry (Crypto-Erasure + Garbage Collection)
 
-*   **Mechanism:** True physical deletion cannot be proven. NilStore relies on **Crypto‑Erasure** (destroy the `FMK`) plus economic incentives.
+*   **Mechanism:** True physical deletion cannot be proven. PolyStore relies on **Crypto‑Erasure** (destroy the `FMK`) plus economic incentives.
 *   **Expiry is real (normative):** Deals have an `end_block` (exclusive). Once `current_height ≥ end_block`, the deal is **expired**:
     *   `MsgUpdateDealContent*` MUST be rejected.
     *   `MsgOpenRetrievalSession` MUST be rejected.
@@ -300,7 +300,7 @@ To support this model, the "Map" must be fully replicated:
 
 **Witness Expansion:** For each data‑bearing SP‑MDU, the Witness MDUs MUST contain KZG commitments for **ALL `L = (K+M) * (64/K)` shard Blobs** (data + parity). This allows any provider (data or parity) to prove its holding against the global root. (Default `K=8`, `M=4` gives `L=96`.)
 
-**MDU index convention (Mode 2):** NilFS metadata occupies the lowest `mdu_index` values (`MDU #0` first, followed by the Witness MDUs). Synthetic challenges MUST be derived only over striped user‑data MDUs; metadata MDUs are replicated and are not used for per‑slot accountability.
+**MDU index convention (Mode 2):** PolyFS metadata occupies the lowest `mdu_index` values (`MDU #0` first, followed by the Witness MDUs). Synthetic challenges MUST be derived only over striped user‑data MDUs; metadata MDUs are replicated and are not used for per‑slot accountability.
 
 ### 8.4 Deal Generations & Repair Mode (Planned, Forward-Compatible)
 
@@ -336,8 +336,8 @@ Append-only updates advance `Deal.current_gen` and `Deal.manifest_root`. Repairi
 #### 8.4.4 Future: full versioned writes
 In future versions, non-append mutations (rewrite, delete/GC, compaction) SHOULD be represented as a new “pending generation” promoted to current only once placement conditions are met. This generalizes the append-only rule without changing the read/repair model.
 
-#### 8.4.5 NilFS generation compare-and-swap (normative)
-Every NilFS content mutation MUST be treated as a **generation swap**:
+#### 8.4.5 PolyFS generation compare-and-swap (normative)
+Every PolyFS content mutation MUST be treated as a **generation swap**:
 * `previous_manifest_root = H1`
 * `new_manifest_root = H2`
 
@@ -352,21 +352,21 @@ Consequences:
 * A provider or gateway MUST NOT be trusted as the sole source of `previous_manifest_root`; any provider/gateway copy is advisory preflight data only.
 
 #### 8.4.6 Browser/bootstrap semantics (normative)
-Clients MUST treat local NilFS caches as generation-scoped:
+Clients MUST treat local PolyFS caches as generation-scoped:
 * Before appending or rewriting content, a client MUST compare its local cached generation against the on-chain `Deal.manifest_root`.
 * If the local cache is missing or stale, the client MUST bootstrap the **current committed generation** from the retrieval path before preparing a mutation.
 * A client MUST NOT silently fall back from “append to current generation” into “build from empty state” when the deal already has a committed `manifest_root`.
 
 For browser clients:
 * OPFS SHOULD be used as the persistent local slab cache.
-* A fresh browser instance SHOULD reconstruct the committed NilFS state into OPFS before preparing an append.
+* A fresh browser instance SHOULD reconstruct the committed PolyFS state into OPFS before preparing an append.
 * The browser happy-path download SHOULD prefer OPFS when the cached generation matches the on-chain `Deal.manifest_root`.
 
 #### 8.4.7 Provider/gateway staged generations (normative target)
-Providers and gateways SHOULD treat incoming NilFS writes as **provisional generations** until the signed chain swap succeeds:
+Providers and gateways SHOULD treat incoming PolyFS writes as **provisional generations** until the signed chain swap succeeds:
 * New bytes for `new_manifest_root` MAY be uploaded before the chain update is finalized.
 * The previously committed generation `previous_manifest_root` MUST remain readable while the new generation is provisional.
-* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-Nil-Previous-Manifest-Root`.
+* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-PolyStore-Previous-Manifest-Root`.
 * If that expected-base header is present and stale, the provider/gateway SHOULD reject the upload before consuming artifact bytes.
 * A failed or stale chain swap MUST NOT cause the live generation to be discarded.
 
@@ -379,33 +379,33 @@ Abandoned provisional generations are a storage-churn / griefing surface and MUS
 Devnet gateway policy:
 * user-gateway/provider-daemon implementations MAY retain provisional generations for a bounded TTL before GC.
 * The current devnet reference behavior is: complete provisional generations older than 24 hours MAY be removed during startup/recovery cleanup if they were never promoted on-chain.
-* The reference gateway exposes this as `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` and reports the effective TTL via `/status` as `nilfs_generation_provisional_retention_ttl_seconds`.
-* Setting `NIL_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC; it does not delete provisional generations immediately.
-* The reference gateway also reports stale compare-and-swap preflight rejections via `/status` as `nilfs_cas_preflight_conflicts_total`, `nilfs_cas_preflight_conflicts_legacy`, `nilfs_cas_preflight_conflicts_evm`, and `nilfs_cas_preflight_conflicts_upload` so operators can observe concurrent-writer / churn pressure across relay and artifact-ingest paths.
+* The reference gateway exposes this as `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL` and reports the effective TTL via `/status` as `polyfs_generation_provisional_retention_ttl_seconds`.
+* Setting `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC; it does not delete provisional generations immediately.
+* The reference gateway also reports stale compare-and-swap preflight rejections via `/status` as `polyfs_cas_preflight_conflicts_total`, `polyfs_cas_preflight_conflicts_legacy`, `polyfs_cas_preflight_conflicts_evm`, and `polyfs_cas_preflight_conflicts_upload` so operators can observe concurrent-writer / churn pressure across relay and artifact-ingest paths.
 * The reference gateway exposes per-deal local generation inspection at `GET /gateway/deal-generations/{deal_id}`, including active/provisional/incomplete/invalid generation classification, `previous_manifest_root`, and local byte counts so abandoned staged generations can be inspected before cleanup.
 
 ## Appendix A: Core Cryptographic Primitives
 
 ### A.3 File Manifest & Crypto Policy (Normative)
 
-NilStore MAY use a content‑addressed *file* manifest at the application layer (encryption metadata, UX-level references). This is distinct from the protocol-level Deal commitment (`Deal.manifest_root`, the 48‑byte KZG root used by the Triple Proof) and NilFS path addressing.
+PolyStore MAY use a content‑addressed *file* manifest at the application layer (encryption metadata, UX-level references). This is distinct from the protocol-level Deal commitment (`Deal.manifest_root`, the 48‑byte KZG root used by the Triple Proof) and PolyFS path addressing.
 
 **Gateway/API note:** Some app codepaths may still label the deal commitment as a `cid`. In all protocol-facing APIs:
 
 *   `cid` is a legacy alias for the *deal-level* `Deal.manifest_root` (not the Root/DU CIDs below).
 *   For REST/path params, `manifest_root` parsing is strict: 48‑byte compressed BLS12‑381 G1 (96 hex chars, optional `0x` prefix), rejecting invalid encodings and invalid subgroup points (return `400`).
-*   Retrieval/proof flows are keyed by NilFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks).
+*   Retrieval/proof flows are keyed by PolyFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks).
 *   `file_path` is **mandatory** and MUST be unique within a deal; uploads to an existing path overwrite deterministically and `GET /gateway/list-files/{manifest_root}` returns a deduplicated view (latest non-tombstone record per path).
 *   `file_path` decoding is strict: decode at most once, reject traversal/absolute paths, and beware `+` vs `%20` (clients should use JS `encodeURIComponent`).
-*   For devnet convenience endpoints (e.g., `/gateway/fetch/{manifest_root}`, `/gateway/list-files/{manifest_root}`, `/gateway/prove-retrieval`), the gateway MUST enforce retrieval authorization via on-chain sessions and `Deal.retrieval_policy` (owner-only / allowlist / voucher / public), and MUST reject stale `manifest_root` values that do not match on-chain deal state (prefer `409`). In testnet/mainnet posture, these endpoints MUST require `X‑Nil‑Session-Id` and MUST reject out‑of‑session reads (prefer `403`).
-*   Retrieval session enforcement (Gamma‑4+): data-plane fetches MUST include `X‑Nil‑Session‑Id` for **all served bytes**, and the server MUST reject out‑of‑session reads. Batching is preserved: a response MAY include multiple contiguous blobs as long as requests remain blob-aligned and a subset of the session’s range. Proof submission MUST be session‑bound and submitted via `/gateway/session-proof` (forwarded to a provider) or `/sp/session-proof` directly. The gateway is a relay/compute helper only; user authorization lives on‑chain (EVM precompile).
+*   For devnet convenience endpoints (e.g., `/gateway/fetch/{manifest_root}`, `/gateway/list-files/{manifest_root}`, `/gateway/prove-retrieval`), the gateway MUST enforce retrieval authorization via on-chain sessions and `Deal.retrieval_policy` (owner-only / allowlist / voucher / public), and MUST reject stale `manifest_root` values that do not match on-chain deal state (prefer `409`). In testnet/mainnet posture, these endpoints MUST require `X‑PolyStore‑Session-Id` and MUST reject out‑of‑session reads (prefer `403`).
+*   Retrieval session enforcement (Gamma‑4+): data-plane fetches MUST include `X‑PolyStore‑Session‑Id` for **all served bytes**, and the server MUST reject out‑of‑session reads. Batching is preserved: a response MAY include multiple contiguous blobs as long as requests remain blob-aligned and a subset of the session’s range. Proof submission MUST be session‑bound and submitted via `/gateway/session-proof` (forwarded to a provider) or `/sp/session-proof` directly. The gateway is a relay/compute helper only; user authorization lives on‑chain (EVM precompile).
 *   Non-200 responses MUST be JSON `{ "error": "...", "hint": "..." }` (even if the success path is a byte stream). Missing/invalid `file_path` returns `400` with a remediation hint (call `/gateway/list-files/{manifest_root}` to discover valid paths).
 
   * **Root CID** = `Blake2s-256("FILE-MANIFEST-V1" || CanonicalCBOR(manifest))`.
   * **DU CID** = `Blake2s-256("DU-CID-V1" || ciphertext||tag)`.
   * **Encryption:** All data is encrypted client-side before ingress. Deal commitments (and KZG proofs) bind to the **ciphertext bytes**; decryption is purely a client concern.
   * **Compression (recommended):** Clients SHOULD compress plaintext before encryption when beneficial, and include a small in-band content-encoding header so retrieval can transparently decompress after decrypt. Pricing applies to the resulting ciphertext bytes (see `rfcs/rfc-content-encoding-and-compression.md`).
-  * **Metadata confidentiality (optional):** NilFS metadata (MDU #0 and higher-level manifests) MAY be encrypted the same way as file data. If metadata is encrypted, SPs remain oblivious (they store bytes), while clients decrypt after verifying against `Deal.manifest_root`.
+  * **Metadata confidentiality (optional):** PolyFS metadata (MDU #0 and higher-level manifests) MAY be encrypted the same way as file data. If metadata is encrypted, SPs remain oblivious (they store bytes), while clients decrypt after verifying against `Deal.manifest_root`.
   * **Deletion:** Achieved via key destruction (Crypto-Erasure).
 
 ## § 7 Retrieval Semantics (Mode 1 Implementation)
@@ -414,7 +414,7 @@ This section norms the retrieval path for **Mode 1 – FullReplica** in the cu
 
 ### 7.0 Core Invariants (Planned, North-Star)
 
-NilStore’s retrieval system is designed to satisfy two invariants:
+PolyStore’s retrieval system is designed to satisfy two invariants:
 
 1.  **Retrievability / Accountability**
     *   For every `(Deal, Provider)` assignment, either:
@@ -439,7 +439,7 @@ To support the invariants, the protocol uses three challenge families, all bindi
 ### 7.1 Data Plane: Fetching From Providers
 
 1.  **Lookup (Deal):** Given a `deal_id`, the client queries chain state for the corresponding `Deal` and reads `Deal.providers[]`.
-2.  **Resolve (NilFS):** The requested file within the Deal is identified by `file_path` (NilFS). The client mounts the Deal’s NilFS File Table (MDU #0) to map `file_path` → byte offsets / MDU ranges.
+2.  **Resolve (PolyFS):** The requested file within the Deal is identified by `file_path` (PolyFS). The client mounts the Deal’s PolyFS File Table (MDU #0) to map `file_path` → byte offsets / MDU ranges.
 3.  **Selection:** The client selects a single Provider from `Deal.providers[]` (e.g., the nearest or least loaded). In Mode 1, each Provider holds a full replica, so any assigned Provider is sufficient.
 4.  **Delivery:** The client fetches the file (or an 8 MiB MDU) from that Provider using an application‑level protocol (HTTP/S3 adapter, gRPC, or a custom P2P layer). The data is served as encrypted MDUs with accompanying KZG proof material. A local gateway may proxy these calls, but it is optional; direct‑to‑provider fetches are first‑class.
 
@@ -454,15 +454,15 @@ For Mode 2, `Deal.providers[]` is interpreted as an ordered slot list `slot → 
 
 #### 7.1.2 Client bootstrap & caching (Non-normative guidance)
 
-Clients (Gateways, CLIs, browsers) SHOULD treat NilStore as a content-addressed system at the deal layer and cache aggressively:
-* **Bootstrap:** given `(deal_id, owner)` and the on-chain `Deal.manifest_root`, a client MUST be able to fetch and verify NilFS metadata (MDU #0 + Witness MDUs) and enumerate valid `file_path` entries without any out-of-band index.
+Clients (Gateways, CLIs, browsers) SHOULD treat PolyStore as a content-addressed system at the deal layer and cache aggressively:
+* **Bootstrap:** given `(deal_id, owner)` and the on-chain `Deal.manifest_root`, a client MUST be able to fetch and verify PolyFS metadata (MDU #0 + Witness MDUs) and enumerate valid `file_path` entries without any out-of-band index.
 * **Metadata caching:** cache verified metadata by `(deal_id, Deal.current_gen, mdu_index)`; in Mode 2 this is not per-provider because metadata MDUs are replicated and bit-identical across all slots.
 * **Browser caching:** when running in-browser, clients SHOULD persist slabs in OPFS to enable gateway‑absent reads and multi‑tab continuity.
 * **Data caching:** cache reconstructed plaintext files (or reconstructed SP‑MDUs) behind an LRU keyed by `(deal_id, Deal.current_gen, file_path, byte_range)` to avoid repeated network fetches; revalidation can be performed by re-checking on-chain `Deal.manifest_root` and (optionally) re-verifying proofs on cache fill.
 
 ### 7.2 Control Plane: Retrieval Sessions, Proof-of-Retrieval, and Completion (Planned → Mandated)
 
-NilStore’s devnet is converging on a **Retrieval Session** control-plane that makes retrievals accountable and grief-resistant while staying aligned to NilFS + Triple Proof and the protocol’s atomic units:
+PolyStore’s devnet is converging on a **Retrieval Session** control-plane that makes retrievals accountable and grief-resistant while staying aligned to PolyFS + Triple Proof and the protocol’s atomic units:
 
 * **Atomic unit:** 128 KiB **Blob** (`BLOB_SIZE`). All on-chain accounting is in blob counts / blob-aligned bytes.
 * **Session unit:** a contiguous sequence of blobs that may span MDUs (8 MiB = 64 blobs).
@@ -494,7 +494,7 @@ The intended end state is: a provider only gets credit for a retrieval once the 
     *   **Session identity:** `session_id = keccak256(canonical_encode(fields...))` (canonical encoding MUST be specified and test-vectored; EVM precompile uses `abi.encode(...)`).
 
 2.  **Serve bytes (Provider / Gateway / Deputy, off-chain):**
-    *   Serving nodes MUST refuse remote fetches that are not bound to an `OPEN` session (`X-Nil-Session-Id`).
+    *   Serving nodes MUST refuse remote fetches that are not bound to an `OPEN` session (`X-PolyStore-Session-Id`).
     *   Served ranges MUST be:
         *   blob-aligned (`BLOB_SIZE` boundaries), and
         *   a subset of the session’s declared blob-range.
@@ -523,7 +523,7 @@ For Gamma-4, retrieval pricing is **fee-based** (no credits). Fees are charged a
 * **Variable fee (per blob):** On `MsgOpenRetrievalSession`, the chain MUST lock `variable = retrieval_price_per_blob * blob_count` against `Deal.escrow_balance`.
 * **Completion payout:** When a session reaches `COMPLETED`, the chain MUST:
   * burn `ceil(variable * retrieval_burn_bps / 10000)`, and
-  * transfer the remaining `variable - burn_cut` from the `nilchain` module account to the Provider.
+  * transfer the remaining `variable - burn_cut` from the `polystorechain` module account to the Provider.
 * **Expiry/refund:** If a session expires without completion, the locked `variable` amount MAY be unlocked by an owner-initiated cancel transaction (base fee remains burned).
 
 Retrieval credits and byte-based allowances are out of scope for Gamma-4 and may be introduced later.
@@ -577,7 +577,7 @@ The verifier (Chain Node) executes the following logic inside the `MsgProveLiven
 
 ### 7.5 Evidence Types & Fraud Proofs
 
-NilStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` (Mode 2: `blob_index = leaf_index`, §8.1.3).
+PolyStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` (Mode 2: `blob_index = leaf_index`, §8.1.3).
 
 1.  **Synthetic Storage Proofs (System‑Initiated):**
     *   For each epoch `e` and assignment `(deal_id, provider_id)`, the protocol derives a finite challenge set `S_e(D,P)` of `(mdu_index, blob_index)` pairs from `R_e`.
@@ -622,7 +622,7 @@ The normative requirement is that `required_e(D,P)` and the synthetic challenge 
 
 ### 7.7 Deputy / Proxy Retrieval (Planned, Anti-griefing Semantics)
 
-NilStore anticipates a “Deputy” (proxy) pattern where a provider may delegate *data-plane* serving (bandwidth, caching, egress) to an untrusted helper, while keeping *control-plane* accountability on the assigned Provider slot.
+PolyStore anticipates a “Deputy” (proxy) pattern where a provider may delegate *data-plane* serving (bandwidth, caching, egress) to an untrusted helper, while keeping *control-plane* accountability on the assigned Provider slot.
 
 Normative intent:
 * **Accountability remains with the assigned Provider:** rewards, liveness, and slashing attach to the on-chain provider assignment, not to deputies.
@@ -633,7 +633,7 @@ Detailed deputy selection, advertisement, and any explicit on-chain delegation/c
 
 ### 7.8 SP Audit Debt & Coverage Scaling (Planned)
 
-To ensure coverage scales with total stored data—even when clients are dormant—NilStore MAY introduce **audit debt** as a source of retrieval-style challenges.
+To ensure coverage scales with total stored data—even when clients are dormant—PolyStore MAY introduce **audit debt** as a source of retrieval-style challenges.
 
 Conceptual shape:
 1.  **Audit Debt Definition**

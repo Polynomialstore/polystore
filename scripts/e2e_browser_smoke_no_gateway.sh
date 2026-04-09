@@ -37,7 +37,7 @@ wait_for_http() {
   return 1
 }
 
-export NIL_DISABLE_GATEWAY=1
+export POLYSTORE_DISABLE_GATEWAY=1
 export VITE_E2E=1
 export VITE_DISABLE_GATEWAY=1
 export E2E_LOCAL_STACK=1
@@ -52,4 +52,4 @@ wait_for_http "web" "http://localhost:5173/"
 wait_for_http "sp gateway" "http://localhost:8082/health"
 
 echo "==> Running Playwright (gateway absent)..."
-(cd "$ROOT_DIR/nil-website" && npm run test:e2e -- tests/gateway-absent-ui.spec.ts)
+(cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/gateway-absent-ui.spec.ts)

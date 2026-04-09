@@ -34,8 +34,8 @@ The alpha launch work needs to reuse the homepage visual language for storage on
 
 ## Testing
 
-- `cd nil-website && npm run lint`
-- `cd nil-website && npm run build`
+- `cd polystore-website && npm run lint`
+- `cd polystore-website && npm run build`
 
 ## Notes For Reviewers
 
@@ -77,8 +77,8 @@ The existing homepage and nav structure did not clearly separate the alpha launc
 
 ## Testing
 
-- `cd nil-website && npm run lint`
-- `cd nil-website && npm run build`
+- `cd polystore-website && npm run lint`
+- `cd polystore-website && npm run build`
 
 ## Notes For Reviewers
 
@@ -116,8 +116,8 @@ For alpha launch, storage users should have the easiest path. This PR makes the 
 
 ## Testing
 
-- `cd nil-website && npm run lint`
-- `cd nil-website && npm run build`
+- `cd polystore-website && npm run lint`
+- `cd polystore-website && npm run build`
 
 ## Notes For Reviewers
 
@@ -156,8 +156,8 @@ The previous provider UI still read like a local demo tool. For alpha launch, th
 
 ## Testing
 
-- `cd nil-website && npm run lint`
-- `cd nil-website && npm run build`
+- `cd polystore-website && npm run lint`
+- `cd polystore-website && npm run build`
 
 ## Notes For Reviewers
 
@@ -196,8 +196,8 @@ The onboarding plan assumes many provider operators will have access to a coding
 
 ## Testing
 
-- `cd nil-website && npm run lint`
-- `cd nil-website && npm run build`
+- `cd polystore-website && npm run lint`
+- `cd polystore-website && npm run build`
 
 ## Notes For Reviewers
 
@@ -278,8 +278,8 @@ Both alpha personas need a single place to check whether the network is healthy 
 
 ## Testing
 
-- `cd nil-website && npm run lint`
-- `cd nil-website && npm run build`
+- `cd polystore-website && npm run lint`
+- `cd polystore-website && npm run build`
 
 ## Notes For Reviewers
 
@@ -318,8 +318,8 @@ By this point in the stack, the website already has the right alpha flows. This 
 
 ## Testing
 
-- `cd nil-website && npm run lint`
-- `cd nil-website && npm run build`
+- `cd polystore-website && npm run lint`
+- `cd polystore-website && npm run build`
 
 ## Notes For Reviewers
 

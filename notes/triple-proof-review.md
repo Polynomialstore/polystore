@@ -1,14 +1,14 @@
-# Technical Review: The Triple Proof & NilFS Architecture
+# Technical Review: The Triple Proof & PolyFS Architecture
 
 > **⚠️ STATUS: DEFERRED (FUTURE ROADMAP)**
-> This document outlines the **V2 Specification** for the NilFS Layout (Detached Paths & Inodes).
+> This document outlines the **V2 Specification** for the PolyFS Layout (Detached Paths & Inodes).
 > **Current Decision (Dec 2025):** The project is proceeding with the **V1 (Fixed Table)** layout for the Devnet phase to prioritize simplicity. The architecture described below (FileRecordV2) is reserved for the Mainnet upgrade path.
 
 **Date:** 2025-12-10
 **Target Document:** `@notes/triple-proof.md`
 **Reviewer:** Gemini (Agent)
 
-This document outlines a technical review of the "Filesystem on Slab" (NilFS) architecture proposed for the Triple Proof system. While the core cryptographic architecture (Hybrid Merkle-KZG) is sound and elegant, there are significant practical limitations in the proposed "File Table" structure that may hinder the usability of the Wholesale Slab (512GB) product.
+This document outlines a technical review of the "Filesystem on Slab" (PolyFS) architecture proposed for the Triple Proof system. While the core cryptographic architecture (Hybrid Merkle-KZG) is sound and elegant, there are significant practical limitations in the proposed "File Table" structure that may hinder the usability of the Wholesale Slab (512GB) product.
 
 ---
 
@@ -49,7 +49,7 @@ path: [u8; 40],    // 40 bytes
 
 ## 2. Architecture Characterization
 
-### The Mental Model: "NILFS"
+### The Mental Model: "POLYFS"
 The proposal effectively moves the filesystem logic into "User Space" (or rather, "Deal Space"). The "Disk" is the Deal (Slab). `MDU #0` acts as the **Superblock + Inode Table**.
 *   **Pros:** This is excellent for portability. The entire filesystem structure moves with the data. It allows "Lazy Filling" (Thin Provisioning), where deals start at `size = 0` and only grow as content is committed, up to the 512 GiB hard cap.
 *   **Cons:** It inherits the rigidity of old-school filesystems (like FAT16/FAT32) regarding fixed table sizes.

@@ -1,0 +1,7 @@
+*
+!.gitignore
+!polystore_core.d.ts
+!polystore_core.js
+!polystore_core_bg.wasm
+!polystore_core_bg.wasm.d.ts
+!package.json
