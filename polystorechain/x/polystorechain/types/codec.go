@@ -18,6 +18,7 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 		&MsgUnpairProvider{},
 		&MsgCreateDeal{},
 		&MsgUpdateDealContent{},
+		&MsgBumpDealSetupSlot{},
 		&MsgCreateDealFromEvm{},
 		&MsgUpdateDealContentFromEvm{},
 		&MsgOpenRetrievalSession{},

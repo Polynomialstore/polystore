@@ -21,6 +21,17 @@ func normalizeServiceHintBase(base string) string {
 	return b
 }
 
+func providerMatchesBaseHint(provider types.Provider, baseHint string) bool {
+	switch normalizeServiceHintBase(baseHint) {
+	case "Hot":
+		return provider.Capabilities == "General" || provider.Capabilities == "Edge"
+	case "Cold":
+		return provider.Capabilities == "Archive" || provider.Capabilities == "General"
+	default:
+		return true
+	}
+}
+
 func autoSelectMode2Profile(eligibleProviders uint64) (k uint64, m uint64, err error) {
 	if eligibleProviders < minMode2Slots {
 		return 0, 0, fmt.Errorf("not enough eligible providers for Mode 2 (need >= %d, got %d)", minMode2Slots, eligibleProviders)
@@ -58,20 +69,7 @@ func (k Keeper) eligibleProviderCountForBaseHint(ctx sdk.Context, baseHint strin
 		if provider.Draining {
 			return false, nil
 		}
-
-		switch serviceHint {
-		case "Hot":
-			if provider.Capabilities == "General" || provider.Capabilities == "Edge" {
-				count++
-			}
-		case "Cold":
-			if provider.Capabilities == "Archive" || provider.Capabilities == "General" {
-				count++
-			}
-		case "General", "":
-			count++
-		default:
-			// Should be validated by callers, but don't blow up assignment.
+		if providerMatchesBaseHint(provider, serviceHint) {
 			count++
 		}
 		return false, nil

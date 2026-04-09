@@ -53,6 +53,17 @@ const polystoreABIJSON = `[
   },
   {
     "type":"function",
+    "name":"bumpDealSetupSlot",
+    "stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"dealId","type":"uint64"},
+      {"name":"slot","type":"uint32"},
+      {"name":"expectedProvider","type":"string"}
+    ],
+    "outputs":[{"name":"ok","type":"bool"}]
+  },
+  {
+    "type":"function",
     "name":"requestProviderLink",
     "stateMutability":"nonpayable",
     "inputs":[
@@ -261,6 +272,7 @@ const polystoreABIJSON = `[
   },
   {"type":"event","name":"DealCreated","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true}]},
   {"type":"event","name":"DealContentUpdated","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"manifestRoot","type":"bytes","indexed":false},{"name":"sizeBytes","type":"uint64","indexed":false}]},
+  {"type":"event","name":"DealSetupSlotBumped","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"slot","type":"uint32","indexed":true},{"name":"oldProvider","type":"string","indexed":false},{"name":"newProvider","type":"string","indexed":false}]},
   {"type":"event","name":"RetrievalProved","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"filePath","type":"string","indexed":false},{"name":"bytesServed","type":"uint64","indexed":false},{"name":"nonce","type":"uint64","indexed":false}]},
   {"type":"event","name":"RetrievalSessionOpened","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"sessionId","type":"bytes32","indexed":false}]},
   {"type":"event","name":"RetrievalSessionConfirmed","inputs":[{"name":"sessionId","type":"bytes32","indexed":true},{"name":"owner","type":"address","indexed":true}]}
@@ -331,6 +343,8 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return p.runCreateDeal(ctx, evm, contract, method, input[4:])
 	case "updateDealContent":
 		return p.runUpdateDealContent(ctx, evm, contract, method, input[4:])
+	case "bumpDealSetupSlot":
+		return p.runBumpDealSetupSlot(ctx, evm, contract, method, input[4:])
 	case "requestProviderLink":
 		return p.runRequestProviderLink(ctx, evm, contract, method, input[4:])
 	case "approveProviderLink":
@@ -1151,6 +1165,57 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 	return out, nil
 }
 
+func (p *Precompile) runBumpDealSetupSlot(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	args := make(map[string]any)
+	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
+		return nil, fmt.Errorf("bumpDealSetupSlot: failed to unpack args: %w", err)
+	}
+
+	dealID, err := asUint64(args["dealId"])
+	if err != nil {
+		return nil, errors.New("bumpDealSetupSlot: invalid dealId")
+	}
+	slotU64, err := asUint64(args["slot"])
+	if err != nil || slotU64 > uint64(^uint32(0)) {
+		return nil, errors.New("bumpDealSetupSlot: invalid slot")
+	}
+	slot := uint32(slotU64)
+	expectedProvider, err := asString(args["expectedProvider"])
+	if err != nil {
+		return nil, errors.New("bumpDealSetupSlot: invalid expectedProvider")
+	}
+
+	caller := contract.Caller()
+	creator := sdk.AccAddress(caller.Bytes()).String()
+	deal, err := p.keeper.Deals.Get(ctx, dealID)
+	if err != nil {
+		return nil, err
+	}
+	if int(slot) >= len(deal.Mode2Slots) || deal.Mode2Slots[int(slot)] == nil {
+		return nil, errors.New("bumpDealSetupSlot: invalid slot")
+	}
+	oldProvider := strings.TrimSpace(deal.Mode2Slots[int(slot)].Provider)
+
+	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
+	res, err := msgServer.BumpDealSetupSlot(sdk.WrapSDKContext(ctx), &types.MsgBumpDealSetupSlot{
+		Creator:          creator,
+		DealId:           dealID,
+		Slot:             slot,
+		ExpectedProvider: strings.TrimSpace(expectedProvider),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	p.emitEventDealSetupSlotBumped(evm, dealID, slot, oldProvider, strings.TrimSpace(res.NewProvider))
+
+	out, err := method.Outputs.Pack(true)
+	if err != nil {
+		return nil, fmt.Errorf("bumpDealSetupSlot: failed to pack outputs: %w", err)
+	}
+	return out, nil
+}
+
 func (p *Precompile) runExtendDeal(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
 	args := make(map[string]any)
 	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
@@ -1545,6 +1610,29 @@ func (p *Precompile) emitEventDealContentUpdated(evm *vm.EVM, dealID uint64, man
 		Address: p.Address(),
 		Topics:  []common.Hash{ev.ID, common.BigToHash(new(big.Int).SetUint64(dealID))},
 		Data:    data,
+	})
+}
+
+func (p *Precompile) emitEventDealSetupSlotBumped(evm *vm.EVM, dealID uint64, slot uint32, oldProvider string, newProvider string) {
+	if evm == nil || evm.StateDB == nil {
+		return
+	}
+	ev, ok := p.abi.Events["DealSetupSlotBumped"]
+	if !ok {
+		return
+	}
+	data, err := ev.Inputs.NonIndexed().Pack(oldProvider, newProvider)
+	if err != nil {
+		return
+	}
+	evm.StateDB.AddLog(&ethtypes.Log{
+		Address: p.Address(),
+		Topics: []common.Hash{
+			ev.ID,
+			common.BigToHash(new(big.Int).SetUint64(dealID)),
+			common.BigToHash(new(big.Int).SetUint64(uint64(slot))),
+		},
+		Data: data,
 	})
 }
 

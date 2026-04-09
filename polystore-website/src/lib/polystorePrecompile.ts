@@ -29,6 +29,17 @@ export const POLYSTORE_PRECOMPILE_ABI = [
   },
   {
     type: 'function',
+    name: 'bumpDealSetupSlot',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'dealId', type: 'uint64' },
+      { name: 'slot', type: 'uint32' },
+      { name: 'expectedProvider', type: 'string' },
+    ],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'requestProviderLink',
     stateMutability: 'nonpayable',
     inputs: [{ name: 'operator', type: 'string' }],
@@ -273,6 +284,16 @@ export const POLYSTORE_PRECOMPILE_ABI = [
       { name: 'dealId', type: 'uint64', indexed: true },
       { name: 'manifestRoot', type: 'bytes', indexed: false },
       { name: 'sizeBytes', type: 'uint64', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'DealSetupSlotBumped',
+    inputs: [
+      { name: 'dealId', type: 'uint64', indexed: true },
+      { name: 'slot', type: 'uint32', indexed: true },
+      { name: 'oldProvider', type: 'string', indexed: false },
+      { name: 'newProvider', type: 'string', indexed: false },
     ],
   },
   {

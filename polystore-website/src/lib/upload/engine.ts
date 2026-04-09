@@ -122,6 +122,20 @@ export interface StripedUploadInput {
   onTaskEvent?: (event: UploadTaskEvent) => void
 }
 
+export interface StripedSlotUploadInput {
+  dealId: string
+  manifestRoot: string
+  previousManifestRoot?: string
+  manifestBlob?: Uint8Array | null
+  manifestBlobFullSize?: number
+  metadataMdus: PreparedMdu[]
+  shardSets?: PreparedShardSet[]
+  slot: number
+  target: UploadTarget
+  onProgress?: (steps: UploadProgressStep[]) => void
+  onTaskEvent?: (event: UploadTaskEvent) => void
+}
+
 export interface PreparedCommitInput {
   dealId: string
   previousManifestRoot: string
@@ -216,6 +230,42 @@ function buildStripedUploadSteps(input: StripedUploadInput): UploadProgressStep[
   return steps
 }
 
+function buildStripedSlotUploadSteps(input: StripedSlotUploadInput): UploadProgressStep[] {
+  const shardSets = input.shardSets ?? []
+  const totalSteps = input.metadataMdus.length + 1 + shardSets.length
+  const targetLabel = input.target.label || input.target.baseUrl
+  const steps: UploadProgressStep[] = []
+  for (const mdu of input.metadataMdus) {
+    steps.push({
+      kind: 'mdu',
+      label: `MDU #${mdu.index}`,
+      index: mdu.index,
+      target: targetLabel,
+      totalSteps,
+      status: 'pending',
+    })
+  }
+  steps.push({
+    kind: 'manifest',
+    label: 'manifest.bin',
+    target: targetLabel,
+    totalSteps,
+    status: 'pending',
+  })
+  for (const shardSet of shardSets) {
+    steps.push({
+      kind: 'shard',
+      label: `Shard mdu=${shardSet.index} slot=${input.slot}`,
+      index: shardSet.index,
+      slot: input.slot,
+      target: targetLabel,
+      totalSteps,
+      status: 'pending',
+    })
+  }
+  return steps
+}
+
 function emitProgress(steps: UploadProgressStep[], onProgress?: (steps: UploadProgressStep[]) => void): UploadProgressStep[] {
   if (!onProgress) {
     return steps
@@ -265,9 +315,11 @@ async function runUploadTasks(
   onTaskEvent: ((event: UploadTaskEvent) => void) | undefined,
   concurrency: number,
   transport: UploadTransportPort,
+  options?: { continueOnError?: boolean },
 ): Promise<UploadEngineResult> {
   const trackProgress = Boolean(onProgress) && initialSteps.length > 0
   const trackTaskEvents = Boolean(onTaskEvent)
+  const continueOnError = Boolean(options?.continueOnError)
   let steps = initialSteps
   let nextIndex = 0
   let active = 0
@@ -276,7 +328,7 @@ async function runUploadTasks(
   return await new Promise<UploadEngineResult>((resolve) => {
     const settleIfDone = () => {
       if (active !== 0) return
-      if (nextIndex < tasks.length && !firstError) return
+      if (nextIndex < tasks.length && (!firstError || continueOnError)) return
       if (firstError) {
         resolve({ ok: false, steps, error: firstError })
       } else {
@@ -285,7 +337,7 @@ async function runUploadTasks(
     }
 
     const launchNext = () => {
-      while (!firstError && active < concurrency && nextIndex < tasks.length) {
+      while ((continueOnError || !firstError) && active < concurrency && nextIndex < tasks.length) {
         const task = tasks[nextIndex]
         nextIndex += 1
         active += 1
@@ -395,9 +447,11 @@ async function runUploadTaskBundles(
   onTaskEvent: ((event: UploadTaskEvent) => void) | undefined,
   concurrency: number,
   transport: UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
+  options?: { continueOnError?: boolean },
 ): Promise<UploadEngineResult & { bundleUnsupported?: boolean }> {
   const trackProgress = Boolean(onProgress) && initialSteps.length > 0
   const trackTaskEvents = Boolean(onTaskEvent)
+  const continueOnError = Boolean(options?.continueOnError)
   let steps = initialSteps
   let nextIndex = 0
   let active = 0
@@ -407,7 +461,7 @@ async function runUploadTaskBundles(
   return await new Promise<UploadEngineResult & { bundleUnsupported?: boolean }>((resolve) => {
     const settleIfDone = () => {
       if (active !== 0) return
-      if (nextIndex < bundles.length && !firstError && !bundleUnsupported) return
+      if (nextIndex < bundles.length && (!firstError || continueOnError) && !bundleUnsupported) return
       if (bundleUnsupported) {
         resolve({ ok: false, steps, error: 'bundle upload unsupported', bundleUnsupported: true })
       } else if (firstError) {
@@ -418,7 +472,7 @@ async function runUploadTaskBundles(
     }
 
     const launchNext = () => {
-      while (!firstError && !bundleUnsupported && active < concurrency && nextIndex < bundles.length) {
+      while ((continueOnError || !firstError) && !bundleUnsupported && active < concurrency && nextIndex < bundles.length) {
         const bundle = bundles[nextIndex]
         nextIndex += 1
         active += 1
@@ -730,6 +784,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           input.onTaskEvent,
           Math.max(1, Math.min(groupedBundles.length, combinedConcurrency)),
           ports.transport as UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
+          { continueOnError: true },
         )
         if (!bundleResult.bundleUnsupported) {
           return bundleResult
@@ -737,7 +792,100 @@ export function createUploadEngine(options: UploadEngineOptions) {
         steps = trackSteps ? emitProgress(buildStripedUploadSteps(input), input.onProgress) : []
       }
 
-      return runUploadTasks(combinedTasks, steps, input.onProgress, input.onTaskEvent, combinedConcurrency, ports.transport)
+      return runUploadTasks(
+        combinedTasks,
+        steps,
+        input.onProgress,
+        input.onTaskEvent,
+        combinedConcurrency,
+        ports.transport,
+        { continueOnError: true },
+      )
+    },
+
+    async uploadStripedSlot(input: StripedSlotUploadInput): Promise<UploadEngineResult> {
+      const trackSteps = Boolean(input.onProgress)
+      let steps = trackSteps ? emitProgress(buildStripedSlotUploadSteps(input), input.onProgress) : []
+      const stepIndices = trackSteps ? indexUploadSteps(steps) : new Map<string, number>()
+      const resolveStepIndex = trackSteps
+        ? (kind: SparseArtifactKind, target: string, index?: number, slot?: number) =>
+            stepIndices.get(stepKey(kind, target, index, slot)) ?? -1
+        : () => -1
+      if (!input.manifestBlob || input.manifestBlob.byteLength === 0) {
+        const message = 'manifest blob missing (re-shard to regenerate)'
+        const targetLabel = input.target.label || input.target.baseUrl
+        if (trackSteps) {
+          const manifestIndex = resolveStepIndex('manifest', targetLabel)
+          steps = emitProgress(updateStep(steps, manifestIndex ?? -1, { status: 'error', error: message }), input.onProgress)
+        }
+        return { ok: false, steps, error: message }
+      }
+
+      const targetLabel = input.target.label || input.target.baseUrl
+      const tasks: UploadTask[] = []
+      for (const mdu of input.metadataMdus) {
+        tasks.push({
+          stepIndex: resolveStepIndex('mdu', targetLabel, mdu.index),
+          request: {
+            dealId: input.dealId,
+            manifestRoot: input.manifestRoot,
+            previousManifestRoot: input.previousManifestRoot,
+            target: input.target,
+            artifact: { kind: 'mdu', index: mdu.index, bytes: mdu.data, fullSize: mdu.fullSize } as const,
+          },
+        })
+      }
+      tasks.push({
+        stepIndex: resolveStepIndex('manifest', targetLabel),
+        request: {
+          dealId: input.dealId,
+          manifestRoot: input.manifestRoot,
+          previousManifestRoot: input.previousManifestRoot,
+          target: input.target,
+          artifact: { kind: 'manifest', bytes: input.manifestBlob, fullSize: input.manifestBlobFullSize } as const,
+        },
+      })
+      for (const shardSet of input.shardSets ?? []) {
+        const shard = shardSet.shards[input.slot]
+        if (!shard) {
+          const message = `missing shard for slot ${input.slot}`
+          if (trackSteps) {
+            steps = emitProgress(
+              updateStep(steps, resolveStepIndex('shard', targetLabel, shardSet.index, input.slot), { status: 'error', error: message }),
+              input.onProgress,
+            )
+          }
+          return { ok: false, steps, error: message }
+        }
+        tasks.push({
+          stepIndex: resolveStepIndex('shard', targetLabel, shardSet.index, input.slot),
+          request: {
+            dealId: input.dealId,
+            manifestRoot: input.manifestRoot,
+            previousManifestRoot: input.previousManifestRoot,
+            target: input.target,
+            artifact: { kind: 'shard', index: shardSet.index, slot: input.slot, bytes: shard.data, fullSize: shard.fullSize } as const,
+          },
+        })
+      }
+
+      if (ports.transport.sendBundle) {
+        const bundleResult = await runUploadTaskBundles(
+          groupUploadTasksByTarget(tasks),
+          steps,
+          input.onProgress,
+          input.onTaskEvent,
+          1,
+          ports.transport as UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
+        )
+        if (!bundleResult.bundleUnsupported) {
+          return bundleResult
+        }
+        steps = trackSteps ? emitProgress(buildStripedSlotUploadSteps(input), input.onProgress) : []
+      }
+
+      const slotConcurrency = Math.max(1, Math.min(tasks.length, stripedMetadataConcurrency + stripedShardConcurrency))
+      return runUploadTasks(tasks, steps, input.onProgress, input.onTaskEvent, slotConcurrency, ports.transport)
     },
 
     async commitPreparedContent(input: PreparedCommitInput): Promise<ChainCommitRequest> {

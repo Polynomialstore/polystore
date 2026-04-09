@@ -45,6 +45,10 @@ service Msg {
   // MsgUpdateDealContent allows a user to commit or update the content (manifest) of a deal.
   rpc UpdateDealContent(MsgUpdateDealContent) returns (MsgUpdateDealContentResponse);
 
+  // MsgBumpDealSetupSlot allows a deal owner to replace a single Mode 2 slot
+  // during setup, before the first content commit.
+  rpc BumpDealSetupSlot(MsgBumpDealSetupSlot) returns (MsgBumpDealSetupSlotResponse);
+
   // MsgCreateDealFromEvm allows a user to create a new storage deal
   // using an EVM-signed intent bridged into polystorechaind.
   rpc CreateDealFromEvm(MsgCreateDealFromEvm) returns (MsgCreateDealFromEvmResponse);
@@ -243,6 +247,22 @@ message MsgUpdateDealContent {
 
 message MsgUpdateDealContentResponse {
   bool success = 1;
+}
+
+// MsgBumpDealSetupSlot lets the deal owner replace one setup-phase Mode 2 slot.
+message MsgBumpDealSetupSlot {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgBumpDealSetupSlot";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 deal_id = 2;
+  uint32 slot = 3;
+  string expected_provider = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+}
+
+message MsgBumpDealSetupSlotResponse {
+  bool success = 1;
+  string new_provider = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
 }
 
 // EvmCreateDealIntent captures the fields that an EVM wallet signs over

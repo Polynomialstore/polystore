@@ -45,6 +45,8 @@ type Keeper struct {
 	ReceiptNoncesByDealFile    collections.Map[collections.Pair[uint64, string], uint64]
 	EvmNonces                  collections.Map[string, uint64]
 	DealHeatStates             collections.Map[uint64, types.DealHeatState]
+	SetupBumpNonce             collections.Map[collections.Pair[uint64, uint32], uint64]
+	SetupTriedProvider         collections.Map[collections.Pair[collections.Pair[uint64, uint32], string], bool]
 
 	RetrievalSessions             collections.Map[[]byte, types.RetrievalSession]
 	RetrievalSessionsByOwner      collections.Map[collections.Pair[string, []byte], uint64]
@@ -112,6 +114,14 @@ func NewKeeper(
 		ReceiptNoncesByDealFile:    collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		EvmNonces:                  collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
 		DealHeatStates:             collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
+		SetupBumpNonce:             collections.NewMap(sb, types.SetupBumpNonceKey, "setup_bump_nonce", collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Value),
+		SetupTriedProvider: collections.NewMap(
+			sb,
+			types.SetupTriedProviderKey,
+			"setup_tried_provider",
+			collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.StringKey),
+			collections.BoolValue,
+		),
 
 		RetrievalSessions:           collections.NewMap(sb, types.RetrievalSessionsKey, "retrieval_sessions", collections.BytesKey, codec.CollValue[types.RetrievalSession](cdc)),
 		RetrievalSessionsByOwner:    collections.NewMap(sb, types.RetrievalSessionsByOwnerKey, "retrieval_sessions_by_owner", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
@@ -259,13 +269,7 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		if provider.Draining {
 			continue
 		}
-
-		// Apply service hint filter
-		if serviceHint == "Hot" && (provider.Capabilities == "General" || provider.Capabilities == "Edge") {
-			candidateProviders = append(candidateProviders, provider)
-		} else if serviceHint == "Cold" && (provider.Capabilities == "Archive" || provider.Capabilities == "General") {
-			candidateProviders = append(candidateProviders, provider)
-		} else if serviceHint == "" || serviceHint == "General" { // Default/No specific hint, consider General and above
+		if providerMatchesBaseHint(provider, serviceHint) {
 			candidateProviders = append(candidateProviders, provider)
 		}
 	}

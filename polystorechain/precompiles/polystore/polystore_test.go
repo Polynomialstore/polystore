@@ -2,6 +2,7 @@ package polystore
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"cosmossdk.io/core/address"
@@ -82,6 +83,27 @@ func initFixture(t *testing.T) *testFixture {
 	}
 }
 
+func registerSetupBumpProviders(t *testing.T, f *testFixture, prefix string, count int) []string {
+	t.Helper()
+
+	msgServer := nilkeeper.NewMsgServerImpl(f.keeper)
+	providers := make([]string, 0, count)
+	for i := 0; i < count; i += 1 {
+		addrBz := []byte(fmt.Sprintf("%s%02d", prefix, i))
+		addr, err := f.addressCodec.BytesToString(addrBz)
+		require.NoError(t, err)
+		_, err = msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    []string{"/ip4/127.0.0.1/tcp/8080/http"},
+		})
+		require.NoError(t, err)
+		providers = append(providers, addr)
+	}
+	return providers
+}
+
 func TestPrecompileIncludesRequestProviderLinkMethod(t *testing.T) {
 	f := initFixture(t)
 	precompile, err := New(&f.keeper)
@@ -127,6 +149,18 @@ func TestPrecompileIncludesUnpairProviderMethod(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "unpairProvider", method.Name)
 	require.Len(t, method.Inputs, 1)
+	require.Len(t, method.Outputs, 1)
+}
+
+func TestPrecompileIncludesBumpDealSetupSlotMethod(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	method, ok := precompile.abi.Methods["bumpDealSetupSlot"]
+	require.True(t, ok)
+	require.Equal(t, "bumpDealSetupSlot", method.Name)
+	require.Len(t, method.Inputs, 3)
 	require.Len(t, method.Outputs, 1)
 }
 
@@ -279,4 +313,51 @@ func TestRunUnpairProviderRemovesPairingForEvmCaller(t *testing.T) {
 
 	_, err = f.keeper.ProviderPairings.Get(sdkCtx, provider)
 	require.Error(t, err)
+}
+
+func TestRunBumpDealSetupSlotSwapsProviderForEvmCaller(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx)
+	registerSetupBumpProviders(t, f, "precompile_bump_______", 6)
+	msgServer := nilkeeper.NewMsgServerImpl(f.keeper)
+
+	caller := common.HexToAddress("0x00000000000000000000000000000000000000d1")
+	creator := sdk.AccAddress(caller.Bytes()).String()
+	res, err := msgServer.CreateDeal(sdk.WrapSDKContext(sdkCtx), &types.MsgCreateDeal{
+		Creator:             creator,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=2+1",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	})
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(sdkCtx, res.DealId)
+	require.NoError(t, err)
+	oldProvider := deal.Mode2Slots[0].Provider
+
+	method := precompile.abi.Methods["bumpDealSetupSlot"]
+	input, err := method.Inputs.Pack(res.DealId, uint32(0), oldProvider)
+	require.NoError(t, err)
+
+	contract := vm.NewPrecompile(caller, Address, uint256.NewInt(0), 5_000_000)
+	contract.Input = append(method.ID, input...)
+
+	out, err := precompile.runBumpDealSetupSlot(sdkCtx, nil, contract, &method, input)
+	require.NoError(t, err)
+
+	decoded, err := method.Outputs.Unpack(out)
+	require.NoError(t, err)
+	require.Len(t, decoded, 1)
+	ok, cast := decoded[0].(bool)
+	require.True(t, cast)
+	require.True(t, ok)
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, res.DealId)
+	require.NoError(t, err)
+	require.NotEqual(t, oldProvider, updated.Mode2Slots[0].Provider)
+	require.Equal(t, updated.Mode2Slots[0].Provider, updated.Providers[0])
 }

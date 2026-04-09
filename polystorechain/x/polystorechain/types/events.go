@@ -9,6 +9,7 @@ const (
 	TypeMsgCancelProviderLink      = "cancel_provider_link"
 	TypeMsgUnpairProvider          = "unpair_provider"
 	TypeMsgCreateDeal              = "create_deal"
+	TypeMsgBumpDealSetupSlot       = "bump_deal_setup_slot"
 	TypeMsgProveLiveness           = "prove_liveness"
 	TypeMsgSignalSaturation        = "signal_saturation"
 

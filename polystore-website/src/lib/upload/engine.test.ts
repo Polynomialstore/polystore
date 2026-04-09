@@ -439,3 +439,138 @@ test('buildCommitRequest: mode1 uses concrete MDU count', () => {
     },
   )
 })
+
+test('upload engine: striped upload continues dispatching later slots after one slot fails', async () => {
+  const transport = makeRecordingTransport((request) => {
+    if (
+      request.target.label === 'provider-b' &&
+      request.artifact.kind === 'shard' &&
+      request.artifact.slot === 1
+    ) {
+      return 'slot 1 failed'
+    }
+    return null
+  })
+  const engine = createUploadEngine({ transport: transport.transport })
+
+  const result = await engine.uploadStriped({
+    dealId: '19',
+    manifestRoot: '0xcontinue',
+    previousManifestRoot: '0xprev',
+    manifestBlob: new Uint8Array([1, 2, 3]),
+    manifestBlobFullSize: 128 * 1024,
+    metadataMdus: [{ index: 0, data: new Uint8Array([9]), fullSize: 8 * 1024 * 1024 }],
+    shardSets: [
+      {
+        index: 2,
+        shards: [
+          { data: new Uint8Array([7]), fullSize: 1024 },
+          { data: new Uint8Array([8]), fullSize: 1024 },
+          { data: new Uint8Array([9]), fullSize: 1024 },
+        ],
+      },
+    ],
+    metadataTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-b',
+      },
+      {
+        baseUrl: 'http://provider-c',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-c',
+      },
+    ],
+    shardTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-b',
+      },
+      {
+        baseUrl: 'http://provider-c',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        label: 'provider-c',
+      },
+    ],
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, 'slot 1 failed')
+  assert.ok(
+    transport.calls.some(
+      (call) =>
+        call.target.label === 'provider-c' &&
+        call.artifact.kind === 'shard' &&
+        call.artifact.slot === 2,
+    ),
+  )
+  assert.ok(
+    transport.calls.some(
+      (call) =>
+        call.target.label === 'provider-c' &&
+        call.artifact.kind === 'manifest',
+    ),
+  )
+})
+
+test('upload engine: striped slot upload only sends the selected slot shards', async () => {
+  const transport = makeRecordingTransport()
+  const engine = createUploadEngine({ transport: transport.transport })
+
+  const result = await engine.uploadStripedSlot({
+    dealId: '20',
+    manifestRoot: '0xslot',
+    previousManifestRoot: '0xprev',
+    manifestBlob: new Uint8Array([1, 2, 3]),
+    manifestBlobFullSize: 128 * 1024,
+    metadataMdus: [{ index: 0, data: new Uint8Array([9]), fullSize: 8 * 1024 * 1024 }],
+    shardSets: [
+      {
+        index: 2,
+        shards: [
+          { data: new Uint8Array([7]), fullSize: 1024 },
+          { data: new Uint8Array([8]), fullSize: 1024 },
+          { data: new Uint8Array([9]), fullSize: 1024 },
+        ],
+      },
+    ],
+    slot: 1,
+    target: {
+      baseUrl: 'http://provider-b',
+      mduPath: '/sp/upload_mdu',
+      manifestPath: '/sp/upload_manifest',
+      shardPath: '/sp/upload_shard',
+      label: 'provider-b',
+    },
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(
+    transport.calls.map((call) => `${call.artifact.kind}:${call.artifact.index ?? 'manifest'}:${call.artifact.slot ?? '-'}`),
+    ['mdu:0:-', 'manifest:manifest:-', 'shard:2:1'],
+  )
+})

@@ -133,4 +133,9 @@ message Params {
   // Max per-epoch step (basis points) for dynamic price updates.
   // 0 disables the step clamp (directly set to target).
   uint64 dynamic_pricing_max_step_bps = 37;
+
+  // --- Setup-phase slot bump (devnet alpha) ---
+  // Maximum number of owner-triggered setup bumps allowed per slot before the
+  // first content commit. 0 disables setup bumping.
+  uint64 max_setup_bumps_per_slot = 38;
 }

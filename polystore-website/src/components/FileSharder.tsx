@@ -6,6 +6,7 @@ import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
 import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
+import { useBumpDealSetupSlot } from '../hooks/useBumpDealSetupSlot';
 import { appConfig } from '../config';
 import { POLYFS_RECORD_PATH_MAX_BYTES, sanitizePolyfsRecordPath } from '../lib/polyfsPath';
 import {
@@ -44,13 +45,14 @@ import {
   PLANNER_TRIVIAL_BLOB_WEIGHT,
   weightedWorkForMdu,
 } from '../lib/upload/planner';
-import { createUploadEngine, type UploadTaskEvent } from '../lib/upload/engine';
+import { createUploadEngine, type UploadTaskEvent, type UploadTarget } from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
 import { pickUploadParallelism } from '../lib/upload/uploadParallelism';
 import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
 import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../lib/upload/gatewayRecovery';
+import { collectMode2SlotFailures } from '../lib/upload/mode2Recovery';
 import { classifyPolyfsCommitError } from '../lib/polyfsCommitError';
 import { waitForTransactionReceipt } from '../lib/evmRpc';
 import {
@@ -87,6 +89,14 @@ interface PreparedBrowserShardSet {
 type WorkflowStepState = 'idle' | 'active' | 'done' | 'error'
 type UploadPanelState = 'idle' | 'running' | 'success' | 'error'
 type DealSetupStatus = 'loading' | 'ready' | 'error'
+
+type DealSetupSnapshot = {
+  baseManifestRoot: string
+  owner: string
+  stripeParams: { k: number; m: number } | null
+  slotBases: string[]
+  slotProviders: string[]
+}
 
 type WorkflowDoneSummaryTone = 'neutral' | 'primary' | 'success'
 
@@ -464,6 +474,17 @@ function makePreparedManifest(bytes: Uint8Array, fullSize = MANIFEST_BLOB_SIZE_B
   return { bytes: sparse.bytes, fullSize: sparse.fullSize }
 }
 
+function buildMode2UploadTarget(baseUrl: string): UploadTarget {
+  return {
+    baseUrl,
+    mduPath: '/sp/upload_mdu',
+    manifestPath: '/sp/upload_manifest',
+    shardPath: '/sp/upload_shard',
+    bundlePath: '/sp/upload_bundle',
+    label: baseUrl,
+  }
+}
+
 export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }: FileSharderProps) {
   const { isConnected, address } = useAccount();
   const { data: walletClient } = useWalletClient();
@@ -536,6 +557,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
   // Use the direct commit hook
   const { commitContent, isPending: isCommitPending, isConfirming: isCommitConfirming, isSuccess: isCommitSuccess, hash: commitHash, error: commitError } = useDirectCommit();
+  const { bumpSetupSlot } = useBumpDealSetupSlot()
   const uploadEngine = useMemo(
     () =>
       createUploadEngine({
@@ -783,6 +805,70 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     ? mode2UploadComplete
     : uploadProgress.length > 0 && uploadProgress.every(p => p.status === 'complete');
 
+  const applyDealSetupSnapshot = useCallback((snapshot: DealSetupSnapshot) => {
+    setBaseManifestRoot(snapshot.baseManifestRoot)
+    setDealOwner(snapshot.owner)
+    setStripeParams(snapshot.stripeParams)
+    setSlotBases(snapshot.slotBases)
+    setSlotProviders(snapshot.slotProviders)
+  }, [])
+
+  const loadDealSetupSnapshot = useCallback(async (): Promise<DealSetupSnapshot> => {
+    const deal = await lcdFetchDeal(appConfig.lcdBase, dealId)
+    const parsed = parseServiceHint(deal?.service_hint)
+    const nextStripeParams =
+      parsed.mode === 'mode2' && parsed.rsK && parsed.rsM
+        ? { k: parsed.rsK, m: parsed.rsM }
+        : parsed.mode === 'auto'
+          ? { k: appConfig.defaultRsK, m: appConfig.defaultRsM }
+          : null
+    const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
+    const readyEndpoints = endpoints.filter((endpoint) => String(endpoint.baseUrl || '').trim())
+    const requiredEndpointCount =
+      Array.isArray(deal?.providers) && deal.providers.length > 0
+        ? deal.providers.length
+        : nextStripeParams
+          ? nextStripeParams.k + nextStripeParams.m
+          : 1
+    if (readyEndpoints.length < requiredEndpointCount) {
+      throw new Error(
+        `Waiting for ${String(requiredEndpointCount)} provider endpoints (${String(readyEndpoints.length)} ready).`,
+      )
+    }
+    return {
+      baseManifestRoot: String(deal?.cid || '').trim(),
+      owner: String(deal?.owner || '').trim(),
+      stripeParams: nextStripeParams,
+      slotBases: readyEndpoints.map((endpoint) => endpoint.baseUrl),
+      slotProviders: readyEndpoints.map((endpoint) => endpoint.provider),
+    }
+  }, [dealId])
+
+  const waitForUpdatedSetupSlot = useCallback(
+    async (slot: number, previousProvider: string, expectedProvider?: string | null): Promise<DealSetupSnapshot> => {
+      for (let attempt = 0; attempt < dealSetupMaxAttempts; attempt += 1) {
+        const snapshot = await loadDealSetupSnapshot()
+        const nextProvider = String(snapshot.slotProviders[slot] || '').trim()
+        const nextBase = String(snapshot.slotBases[slot] || '').trim()
+        if (
+          nextProvider &&
+          nextBase &&
+          nextProvider !== String(previousProvider || '').trim() &&
+          (!expectedProvider || nextProvider === String(expectedProvider).trim())
+        ) {
+          applyDealSetupSnapshot(snapshot)
+          setDealSetupStatus('ready')
+          setDealSetupMessage(null)
+          setStripeParamsLoaded(true)
+          return snapshot
+        }
+        await new Promise((resolve) => setTimeout(resolve, dealSetupPollIntervalMs))
+      }
+      throw new Error(`Replacement provider for slot ${slot} did not become ready`)
+    },
+    [applyDealSetupSnapshot, loadDealSetupSnapshot],
+  )
+
   useEffect(() => {
     let cancelled = false
     async function loadDeal() {
@@ -803,33 +889,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       for (let attempt = 0; attempt < dealSetupMaxAttempts && !cancelled; attempt += 1) {
         dealSetupAttemptRef.current = attempt + 1
         try {
-          const deal = await lcdFetchDeal(appConfig.lcdBase, dealId)
-          const parsed = parseServiceHint(deal?.service_hint)
-          const nextStripeParams =
-            parsed.mode === 'mode2' && parsed.rsK && parsed.rsM
-              ? { k: parsed.rsK, m: parsed.rsM }
-              : parsed.mode === 'auto'
-                ? { k: appConfig.defaultRsK, m: appConfig.defaultRsM }
-                : null
-          const endpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId)
-          const readyEndpoints = endpoints.filter((endpoint) => String(endpoint.baseUrl || '').trim())
-          const requiredEndpointCount =
-            Array.isArray(deal?.providers) && deal.providers.length > 0
-              ? deal.providers.length
-              : nextStripeParams
-                ? nextStripeParams.k + nextStripeParams.m
-                : 1
-          if (readyEndpoints.length < requiredEndpointCount) {
-            throw new Error(
-              `Waiting for ${String(requiredEndpointCount)} provider endpoints (${String(readyEndpoints.length)} ready).`,
-            )
-          }
+          const snapshot = await loadDealSetupSnapshot()
           if (!cancelled) {
-            setBaseManifestRoot(String(deal?.cid || '').trim())
-            setDealOwner(String(deal?.owner || '').trim())
-            setStripeParams(nextStripeParams)
-            setSlotBases(readyEndpoints.map((endpoint) => endpoint.baseUrl))
-            setSlotProviders(readyEndpoints.map((endpoint) => endpoint.provider))
+            applyDealSetupSnapshot(snapshot)
             setDealSetupStatus('ready')
             setDealSetupMessage(null)
             setStripeParamsLoaded(true)
@@ -860,7 +922,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     return () => {
       cancelled = true
     }
-  }, [dealId, dealSetupReloadNonce]);
+  }, [applyDealSetupSnapshot, dealId, dealSetupReloadNonce, loadDealSetupSnapshot]);
 
   useEffect(() => {
     if (!isCommitSuccess) return;
@@ -1145,6 +1207,100 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       })
   }, [addLog, commitError, dealId]);
 
+  const recoverMode2SlotUpload = useCallback(
+    async (params: { slot: number; provider: string }): Promise<DealSetupSnapshot> => {
+      if (!currentManifestRoot || !currentManifestBlob) {
+        throw new Error('Manifest data missing; shard first.')
+      }
+      if (!stripeParams) {
+        throw new Error('Mode 2 params not available.')
+      }
+
+      const witnessCount = shardProgress.totalWitnessMdus
+      const metadataMdus = collectedMdus.filter((mdu) => mdu.index <= witnessCount)
+      const shardSets = mode2Shards.map((mdu) => ({
+        index: 1 + witnessCount + mdu.index,
+        shards: mdu.shards,
+      }))
+
+      let currentProvider = String(params.provider || '').trim()
+      if (!currentProvider) {
+        throw new Error(`Missing provider assignment for slot ${params.slot}`)
+      }
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        addLog(`> Slot ${params.slot} upload failed on ${currentProvider}. Requesting replacement...`)
+        addLog('> Approve the replacement transaction in MetaMask to continue.')
+        const bumpResult = await bumpSetupSlot({
+          dealId,
+          slot: params.slot,
+          expectedProvider: currentProvider,
+        })
+        addLog(`> Slot ${params.slot} replacement transaction submitted: ${bumpResult.txHash}`)
+        addLog(`> Waiting for updated provider routing for slot ${params.slot}...`)
+
+        const snapshot = await waitForUpdatedSetupSlot(params.slot, currentProvider, bumpResult.newProvider)
+        const nextProvider = String(snapshot.slotProviders[params.slot] || '').trim()
+        const nextBase = String(snapshot.slotBases[params.slot] || '').trim()
+        if (!nextProvider || !nextBase) {
+          throw new Error(`Replacement routing for slot ${params.slot} is incomplete`)
+        }
+
+        addLog(`> Slot ${params.slot} reassigned to ${nextProvider}. Retrying only that slot...`)
+        const retryEvents: UploadTaskEvent[] = []
+        const retryResult = await uploadEngine.uploadStripedSlot({
+          dealId,
+          manifestRoot: currentManifestRoot,
+          previousManifestRoot: baseManifestRoot || '',
+          manifestBlob: currentManifestBlob,
+          manifestBlobFullSize: currentManifestBlobFullSize ?? undefined,
+          metadataMdus,
+          shardSets,
+          slot: params.slot,
+          target: buildMode2UploadTarget(nextBase),
+          onTaskEvent: (event) => {
+            retryEvents.push(event)
+            browserPerfUploadTaskEvent(event)
+          },
+        })
+        if (retryResult.ok) {
+          addLog(`> Slot ${params.slot} upload recovered on ${nextProvider}.`)
+          return snapshot
+        }
+
+        const retryFailures = collectMode2SlotFailures({
+          events: retryEvents,
+          slotBases: snapshot.slotBases,
+          slotProviders: snapshot.slotProviders,
+        }).filter((failure) => failure.slot === params.slot)
+        const retryFailure = retryFailures[0]
+        if (!retryFailure) {
+          throw new Error(retryResult.error || `Slot ${params.slot} retry failed`)
+        }
+        currentProvider = retryFailure.provider || nextProvider
+        addLog(`> Slot ${params.slot} retry failed on ${currentProvider}: ${retryFailure.reason}`)
+      }
+
+      throw new Error(`Slot ${params.slot} exceeded automatic setup recovery attempts`)
+    },
+    [
+      addLog,
+      baseManifestRoot,
+      browserPerfUploadTaskEvent,
+      bumpSetupSlot,
+      collectedMdus,
+      currentManifestBlob,
+      currentManifestBlobFullSize,
+      currentManifestRoot,
+      dealId,
+      mode2Shards,
+      shardProgress.totalWitnessMdus,
+      stripeParams,
+      uploadEngine,
+      waitForUpdatedSetupSlot,
+    ],
+  )
+
   const uploadMode2 = useCallback(async () => {
     if (!currentManifestRoot || !currentManifestBlob) {
       setMode2UploadError('Manifest data missing; shard first.')
@@ -1156,7 +1312,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     }
     const slotCount = stripeParams.k + stripeParams.m
     const bases = slotBases.slice(0, slotCount)
-    if (bases.length < slotCount || bases.some((b) => !b)) {
+    const providers = slotProviders.slice(0, slotCount)
+    if (bases.length < slotCount || providers.length < slotCount || bases.some((b) => !b) || providers.some((p) => !p)) {
       setMode2UploadError('Missing provider endpoints for all slots.')
       return false
     }
@@ -1164,14 +1321,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     const manifestRoot = currentManifestRoot
     const witnessCount = shardProgress.totalWitnessMdus
     const metadataMdus = collectedMdus.filter((mdu) => mdu.index <= witnessCount)
-    const metadataTargets = bases.map((base) => ({
-      baseUrl: base,
-      mduPath: '/sp/upload_mdu',
-      manifestPath: '/sp/upload_manifest',
-      shardPath: '/sp/upload_shard',
-      bundlePath: '/sp/upload_bundle',
-      label: base,
-    }))
+    const metadataTargets = bases.map((base) => buildMode2UploadTarget(base))
     const shardTargets = metadataTargets
     const shardSets = mode2Shards.map((mdu) => ({
       index: 1 + witnessCount + mdu.index,
@@ -1183,6 +1333,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     setMode2UploadComplete(false)
 
     try {
+      const taskEvents: UploadTaskEvent[] = []
       const result = await uploadEngine.uploadStriped({
         dealId,
         manifestRoot,
@@ -1193,10 +1344,40 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         shardSets,
         metadataTargets,
         shardTargets,
-        onTaskEvent: browserPerfUploadTaskEvent,
+        onTaskEvent: (event) => {
+          taskEvents.push(event)
+          browserPerfUploadTaskEvent(event)
+        },
       })
       if (!result.ok) {
-        throw new Error(result.error || 'Mode 2 upload failed')
+        const failures = collectMode2SlotFailures({
+          events: taskEvents,
+          slotBases: bases,
+          slotProviders: providers,
+        })
+        if (failures.length === 0) {
+          throw new Error(result.error || 'Mode 2 upload failed')
+        }
+
+        addLog(`> Detected ${failures.length} failing setup slot(s). Starting automatic replacement...`)
+        let snapshot: DealSetupSnapshot = {
+          baseManifestRoot: baseManifestRoot || '',
+          owner: dealOwner,
+          stripeParams,
+          slotBases: bases,
+          slotProviders: providers,
+        }
+        for (const failure of failures) {
+          const activeProvider = String(snapshot.slotProviders[failure.slot] || failure.provider || '').trim()
+          if (!activeProvider) {
+            throw new Error(`Unable to determine provider for failing slot ${failure.slot}`)
+          }
+          addLog(`> Slot ${failure.slot} failed during ${failure.kind} upload: ${failure.reason}`)
+          snapshot = await recoverMode2SlotUpload({
+            slot: failure.slot,
+            provider: activeProvider,
+          })
+        }
       }
 
       setMode2UploadComplete(true)
@@ -1208,7 +1389,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     } finally {
       setMode2Uploading(false)
     }
-  }, [baseManifestRoot, browserPerfUploadTaskEvent, collectedMdus, currentManifestBlob, currentManifestBlobFullSize, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams, uploadEngine])
+  }, [addLog, baseManifestRoot, browserPerfUploadTaskEvent, collectedMdus, currentManifestBlob, currentManifestBlobFullSize, currentManifestRoot, dealId, dealOwner, mode2Shards, recoverMode2SlotUpload, shardProgress.totalWitnessMdus, slotBases, slotProviders, stripeParams, uploadEngine])
 
   const rehydrateGatewayFromOpfs = useCallback(async (): Promise<boolean> => {
     const gatewaySeed = (localGateway.url || appConfig.gatewayBase || 'http://127.0.0.1:8080').replace(/\/$/, '')
