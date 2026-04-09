@@ -1,6 +1,6 @@
-# polystorechain (NilStore L1)
+# polystorechain (PolyStore L1)
 
-`polystorechain` is the Cosmos SDK + Ethermint chain for NilStore. It tracks Deals,
+`polystorechain` is the Cosmos SDK + Ethermint chain for PolyStore. It tracks Deals,
 Providers, retrieval sessions, rewards, Mode2 slot state, and audit/repair flows.
 
 Canonical protocol spec: `../spec.md` and `../rfcs/`.

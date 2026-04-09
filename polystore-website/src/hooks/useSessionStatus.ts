@@ -2,7 +2,7 @@ import { createContext, createElement, useCallback, useContext, useEffect, useMe
 import { useAccount, useBalance } from 'wagmi'
 import { formatUnits } from 'viem'
 
-import { ethToNil } from '../lib/address'
+import { ethToPolystoreAddress } from '../lib/address'
 import { appConfig } from '../config'
 import { useFaucet } from './useFaucet'
 import { useLocalGateway } from './useLocalGateway'
@@ -28,7 +28,7 @@ export type UseSessionStatusOptions = {
 export type SessionStatus = {
   isConnected: boolean
   address: string | undefined
-  nilAddress: string
+  polystoreAddress: string
   walletAddressShort: string
   balance: ReturnType<typeof useBalance>['data']
   balanceLabel: string
@@ -82,9 +82,9 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
   })
   const balance = balanceQuery.data
 
-  const nilAddress = useMemo(() => {
+  const polystoreAddress = useMemo(() => {
     if (!address) return ''
-    return address.startsWith('0x') ? ethToNil(address) : address
+    return address.startsWith('0x') ? ethToPolystoreAddress(address) : address
   }, [address])
   const [lcdStakeBalance, setLcdStakeBalance] = useState<string | null>(null)
   const [lcdBalanceLoaded, setLcdBalanceLoaded] = useState(false)
@@ -103,7 +103,7 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
   }, [balance?.value])
 
   useEffect(() => {
-    if (!nilAddress) {
+    if (!polystoreAddress) {
       setLcdStakeBalance(null)
       setLcdBalanceLoaded(false)
       return
@@ -114,7 +114,7 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
 
     const load = async () => {
       try {
-        const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${nilAddress}`)
+        const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${polystoreAddress}`)
         const json = await res.json()
         const balances = Array.isArray(json?.balances) ? json.balances : []
         const match = balances.find(
@@ -149,7 +149,7 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
       cancelled = true
       if (timer !== null) window.clearTimeout(timer)
     }
-  }, [nilAddress, faucetTxStatus, options?.lcdBalancePollMs])
+  }, [polystoreAddress, faucetTxStatus, options?.lcdBalancePollMs])
 
   const hasFunds = useMemo(() => {
     if (!lcdBalanceLoaded) return evmHasFunds
@@ -201,7 +201,7 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
   return {
     isConnected,
     address,
-    nilAddress,
+    polystoreAddress,
     walletAddressShort,
     balance,
     balanceLabel,

@@ -1,7 +1,7 @@
-use polystore_core::kzg::{BLOB_SIZE, KzgContext};
-use polystore_core::utils::{frs_to_blobs, z_for_cell};
 use num_bigint::BigUint;
 use num_traits::One;
+use polystore_core::kzg::{BLOB_SIZE, KzgContext};
+use polystore_core::utils::{frs_to_blobs, z_for_cell};
 use std::path::PathBuf;
 
 fn get_trusted_setup_path() -> PathBuf {

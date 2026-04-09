@@ -49,7 +49,7 @@ type providerDaemonStatusDetail struct {
 	PublicHealthOK     bool     `json:"public_health_ok"`
 	SpAuthPresent      bool     `json:"sp_auth_present"`
 	UploadDir          string   `json:"upload_dir,omitempty"`
-	NilHome            string   `json:"nil_home,omitempty"`
+	PolyStoreHome      string   `json:"polystore_home,omitempty"`
 	ChainID            string   `json:"chain_id,omitempty"`
 	LCDBase            string   `json:"lcd_base,omitempty"`
 	NodeAddr           string   `json:"node_addr,omitempty"`
@@ -128,7 +128,7 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 		mode = "router"
 	}
 	persona := currentRuntimePersona()
-	listenAddr := envDefault("NIL_LISTEN_ADDR", ":8080")
+	listenAddr := envDefault("POLYSTORE_LISTEN_ADDR", ":8080")
 	lcdNodeInfoURL := statusLCDNodeInfoURL()
 	spHealthURL := strings.TrimRight(strings.TrimSpace(providerBase), "/") + "/health"
 	if persona == runtimePersonaProviderDaemon {
@@ -191,7 +191,7 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 
 	p2pAddrs := getP2PAnnounceAddrs()
 	if len(p2pAddrs) == 0 {
-		p2pAddrs = parseP2PAddrList(envDefault("NIL_P2P_ADDRS", ""))
+		p2pAddrs = parseP2PAddrList(envDefault("POLYSTORE_P2P_ADDRS", ""))
 	}
 	if len(p2pAddrs) == 0 {
 		if providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context())); providerAddr != "" {
@@ -210,15 +210,15 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 
 func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReachable bool) (*providerDaemonStatusDetail, []string) {
 	detail := &providerDaemonStatusDetail{
-		KeyName:       strings.TrimSpace(os.Getenv("NIL_PROVIDER_KEY")),
-		ConfiguredOperator: strings.TrimSpace(os.Getenv("NIL_OPERATOR_ADDRESS")),
-		SpAuthPresent: strings.TrimSpace(os.Getenv("NIL_GATEWAY_SP_AUTH")) != "",
-		UploadDir:     uploadDir,
-		NilHome:       homeDir,
-		ChainID:       strings.TrimSpace(chainID),
-		LCDBase:       strings.TrimSpace(lcdBase),
-		NodeAddr:      strings.TrimSpace(nodeAddr),
-		UptimeSeconds: statusUptimeSeconds(),
+		KeyName:            strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_KEY")),
+		ConfiguredOperator: strings.TrimSpace(os.Getenv("POLYSTORE_OPERATOR_ADDRESS")),
+		SpAuthPresent:      strings.TrimSpace(os.Getenv("POLYSTORE_GATEWAY_SP_AUTH")) != "",
+		UploadDir:          uploadDir,
+		PolyStoreHome:      homeDir,
+		ChainID:            strings.TrimSpace(chainID),
+		LCDBase:            strings.TrimSpace(lcdBase),
+		NodeAddr:           strings.TrimSpace(nodeAddr),
+		UptimeSeconds:      statusUptimeSeconds(),
 	}
 	issues := make([]string, 0, 8)
 
@@ -229,7 +229,7 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 	}
 
 	if !detail.SpAuthPresent {
-		issues = append(issues, "NIL_GATEWAY_SP_AUTH is missing")
+		issues = append(issues, "POLYSTORE_GATEWAY_SP_AUTH is missing")
 	}
 	if strings.TrimSpace(detail.LCDBase) == "" {
 		issues = append(issues, "LCD base is not configured")
@@ -239,7 +239,7 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 
 	detail.Address = strings.TrimSpace(cachedProviderAddress(ctx))
 	if detail.Address == "" {
-		issues = append(issues, "provider address could not be resolved from NIL_PROVIDER_KEY/NIL_PROVIDER_ADDRESS")
+		issues = append(issues, "provider address could not be resolved from POLYSTORE_PROVIDER_KEY/POLYSTORE_PROVIDER_ADDRESS")
 		detail.PairingStatus = "unknown"
 		detail.RegistrationStatus = "unknown"
 		if !detail.LocalHealthOK {
@@ -248,7 +248,7 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 		return detail, dedupeIssues(issues)
 	}
 
-	detail.Endpoints = parseP2PAddrList(strings.TrimSpace(os.Getenv("NIL_PROVIDER_ENDPOINTS")))
+	detail.Endpoints = parseP2PAddrList(strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_ENDPOINTS")))
 
 	record, registrationStatus, regErr := fetchProviderStatusFromLCD(ctx, detail.Address)
 	detail.RegistrationStatus = registrationStatus

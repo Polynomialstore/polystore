@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-const nilUploadPreviousManifestRootHeader = "X-Nil-Previous-Manifest-Root"
+const polystoreUploadPreviousManifestRootHeader = "X-PolyStore-Previous-Manifest-Root"
 
 var errInvalidUploadPreviousManifestRoot = errors.New("invalid upload previous manifest root")
 
@@ -38,7 +38,7 @@ type polyfsUploadRootPreflightCacheEntry struct {
 
 var (
 	polyfsUploadRootPreflightCache    sync.Map
-	polyfsUploadRootPreflightCacheTTL = time.Duration(envInt("NIL_UPLOAD_ROOT_PREFLIGHT_CACHE_TTL_MS", 15000)) * time.Millisecond
+	polyfsUploadRootPreflightCacheTTL = time.Duration(envInt("POLYSTORE_UPLOAD_ROOT_PREFLIGHT_CACHE_TTL_MS", 15000)) * time.Millisecond
 	polyfsUploadRootPreflightGroup    singleflight.Group
 )
 
@@ -56,7 +56,7 @@ func validatePolyfsUploadPreviousManifestRoot(
 	_ = manifestRoot
 	previousManifestRoot, err := parseManifestRootOrEmpty(rawPreviousManifestRoot)
 	if err != nil {
-		return fmt.Errorf("%w: %s: %v", errInvalidUploadPreviousManifestRoot, nilUploadPreviousManifestRootHeader, err)
+		return fmt.Errorf("%w: %s: %v", errInvalidUploadPreviousManifestRoot, polystoreUploadPreviousManifestRootHeader, err)
 	}
 	key := polyfsUploadRootPreflightCacheKey{
 		dealID:               dealID,
@@ -103,7 +103,7 @@ func uploadPreviousManifestRootHeader(r *http.Request) string {
 	if r == nil {
 		return ""
 	}
-	return strings.TrimSpace(r.Header.Get(nilUploadPreviousManifestRootHeader))
+	return strings.TrimSpace(r.Header.Get(polystoreUploadPreviousManifestRootHeader))
 }
 
 func classifyPolyfsUploadPreviousManifestRootError(err error) int {

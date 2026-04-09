@@ -5,8 +5,8 @@ import { defineChain } from 'viem'
 import { appConfig } from '../config'
 import { installE2eWallet } from './e2eWallet'
 
-// Define the local NilChain network
-export const nilChain = defineChain({
+// Define the local PolyStore Chain network
+export const polyStoreChain = defineChain({
   id: appConfig.chainId,
   name: 'PolyStore Devnet',
   nativeCurrency: {
@@ -29,7 +29,7 @@ const walletConnectProjectId = appConfig.walletConnectProjectId || '000000000000
 export const config = getDefaultConfig({
   appName: 'PolyStore',
   projectId: walletConnectProjectId,
-  chains: [nilChain],
+  chains: [polyStoreChain],
   wallets: [
     {
       groupName: 'Wallets',
@@ -37,6 +37,6 @@ export const config = getDefaultConfig({
     },
   ],
   transports: {
-    [nilChain.id]: http(appConfig.evmRpc),
+    [polyStoreChain.id]: http(appConfig.evmRpc),
   },
 })

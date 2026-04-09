@@ -1,4 +1,4 @@
-# NilStore testnet launch next steps (engineering + policy)
+# PolyStore testnet launch next steps (engineering + policy)
 
 Last updated: 2026-01-22
 

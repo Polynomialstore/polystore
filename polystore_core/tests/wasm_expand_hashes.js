@@ -1,11 +1,11 @@
-// Computes SHA-256 digests of NilWasm.expand_file outputs for a fixed 8MiB fixture.
+// Computes SHA-256 digests of PolyStoreWasm.expand_file outputs for a fixed 8MiB fixture.
 // Intended to be invoked from Rust tests (see expand_parity_test.rs).
 
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const { NilWasm } = require("../pkg/polystore_core.js");
+const { PolyStoreWasm } = require("../pkg/polystore_core.js");
 
 function fixtureData() {
   const size = 8 * 1024 * 1024;
@@ -44,7 +44,7 @@ function main() {
   );
   const trustedSetup = fs.readFileSync(trustedSetupPath);
 
-  const wasm = new NilWasm(trustedSetup);
+  const wasm = new PolyStoreWasm(trustedSetup);
   const expanded = wasm.expand_file(fixtureData());
 
   const witnessHex = sha256Hex(expanded.witness);

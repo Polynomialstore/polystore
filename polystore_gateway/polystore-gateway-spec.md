@@ -1,4 +1,4 @@
-# NilGateway — S3 Adapter & Web2 Gateway Specification (`polystore_gateway`)
+# PolyStore Gateway — S3 Adapter & Web2 Gateway Specification (`polystore_gateway`)
 
 **Component:** `polystore_gateway`
 **Role:** Web2 Gateway, S3 Compatibility Layer, and Devnet Relayer.
@@ -7,7 +7,7 @@
 ## 1. Overview
 
 `polystore_gateway` is a dual-purpose service that acts as:
-1.  **S3-Compatible Adapter:** Allows legacy applications to `PUT` and `GET` objects using standard S3 semantics, transparently handling NilStore sharding and on-chain storage.
+1.  **S3-Compatible Adapter:** Allows legacy applications to `PUT` and `GET` objects using standard S3 semantics, transparently handling PolyStore sharding and on-chain storage.
 2.  **Optional Web Gateway:** Provides REST endpoints for the `polystore-website` frontend to offload heavy cryptographic operations (MDU packing, KZG commitments) and to relay provider proofs.
 
 In the current **Devnet** architecture, the browser can operate without a local gateway (direct SP + MetaMask). The gateway is an **optional sidecar** that improves performance and UX, but it is not a signing authority.
@@ -78,7 +78,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 
 *   **`POST /sp/upload_shard`** *(Mode 2 Provider API)*
     *   **Input:** Raw shard bytes (body) with headers:
-        * `X-Nil-Deal-ID` (uint64), `X-Nil-Mdu-Index` (uint64), `X-Nil-Slot` (uint64), `X-Nil-Manifest-Root` (`0x` + 96 hex).
+        * `X-PolyStore-Deal-ID` (uint64), `X-PolyStore-Mdu-Index` (uint64), `X-PolyStore-Slot` (uint64), `X-PolyStore-Manifest-Root` (`0x` + 96 hex).
     *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<manifest_root_key>/`.
     *   **Role:** Slot-specific shard ingestion for Mode 2 (StripeReplica).
         *   **Provider is a dumb pipe:** the server does not need to understand Mode 1 vs Mode 2 beyond writing/serving bytes addressed by the headers.
@@ -88,9 +88,9 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
     *   **Role:** Optional browser-side mirroring into a local user-gateway cache (used when the user-gateway is running in proxy mode and `/sp/*` endpoints are not exposed on that process).
     *   **Generation semantics:** mirrored bytes are provisional generation artifacts until the signed chain swap succeeds; the current live generation remains bound to the current on-chain `manifest_root`.
-    *   **CAS preflight header:** artifact uploads may include `X-Nil-Previous-Manifest-Root` as an advisory expected-base root; stale values are rejected before the gateway/provider consumes upload bytes.
+    *   **CAS preflight header:** artifact uploads may include `X-PolyStore-Previous-Manifest-Root` as an advisory expected-base root; stale values are rejected before the gateway/provider consumes upload bytes.
     *   **Devnet retention policy:** complete provisional generations older than 24 hours may be removed during startup/recovery cleanup if they were never promoted on-chain.
-    *   **Operator control:** `NIL_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
+    *   **Operator control:** `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL` sets the age-based GC window for provisional generations; `0` disables this GC path.
     *   **Observability:** `/status` reports the effective TTL and generation counters via `polyfs_generation_*` fields, plus stale CAS preflight counters via `polyfs_cas_preflight_conflicts_*`.
     *   **Inspection tooling:** `GET /gateway/deal-generations/{deal_id}` returns the local active/provisional/incomplete/invalid generations for a specific deal, including `previous_manifest_root`, age/classification, and on-disk bytes.
 
@@ -131,9 +131,9 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Query Params (target):** `deal_id`, `owner`, `file_path` (**required**).
     *   **Logic:**
         1.  Verifies `deal_id` exists on-chain and matches `owner`.
-        2.  Enforces retrieval sessions when enabled: requests MUST include `X‑Nil‑Session‑Id`, and ranges must be within the opened session.
+        2.  Enforces retrieval sessions when enabled: requests MUST include `X‑PolyStore‑Session‑Id`, and ranges must be within the opened session.
         3.  Records per-blob proof artifacts for later submission.
-        4.  Streams the file content to the response and sets `X‑Nil‑Provider`.
+        4.  Streams the file content to the response and sets `X‑PolyStore‑Provider`.
     *   **Role:** Acts as a retrieval proxy and proof recorder; it does **not** sign user transactions.
     *   **Mode 2 behavior:** If the local slab is missing a user MDU, the gateway may fetch `K` shards from providers (slot 0..K-1 by default) via `/sp/shard`, reconstruct the MDU with RS decoding, and stream the requested range. Ranges must be slot-aligned (single-slot blob ranges).
     *   **PolyFS Path Fetch (target end state):**
@@ -159,7 +159,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Role:** Canonical proof submission path.
 
 *   **`GET /sp/shard`** *(Mode 2 Provider API; internal)*
-    *   **Headers:** `X‑Nil‑Gateway‑Auth: <shared token>` (**required**).
+    *   **Headers:** `X‑PolyStore‑Gateway‑Auth: <shared token>` (**required**).
     *   **Query Params:** `deal_id`, `manifest_root`, `mdu_index`, `slot`.
     *   **Logic:** Streams `mdu_<index>_slot_<slot>.bin` from the provider’s storage root.
     *   **Role:** Provider‑to‑provider shard reads used to reconstruct Mode 2 MDUs when local shards are missing. Browsers should fetch bytes via `/gateway/fetch/...` instead.
@@ -212,7 +212,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gat
 1.  **The "Faucet Relayer":**
     *   The gateway can relay user‑signed intents (e.g., `create-deal-from-evm`, `update-deal-content-evm`) and submit provider proofs using a local key.
     *   This acts as a "Meta-Transaction" layer, sponsoring gas for web users while keeping user authorization in MetaMask.
-    *   **Dev-only:** this path is disabled by default. Enable with `NIL_ENABLE_TX_RELAY=1`; optional auto-funding uses `NIL_AUTO_FAUCET_EVM=1` (or `NIL_AUTO_FAUCET=1`).
+    *   **Dev-only:** this path is disabled by default. Enable with `POLYSTORE_ENABLE_TX_RELAY=1`; optional auto-funding uses `POLYSTORE_AUTO_FAUCET_EVM=1` (or `POLYSTORE_AUTO_FAUCET=1`).
 
 2.  **Triple Proof Generation:**
     *   Session‑proof submission uses on‑disk PolyFS slabs to build `ChainedProof` objects for the requested blob range.

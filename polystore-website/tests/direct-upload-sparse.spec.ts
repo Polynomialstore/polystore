@@ -11,7 +11,7 @@ const largeUploadTimeoutMs = uploadSizeBytes > 32 * 1024 * 1024 ? 900_000 : 120_
 const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
 const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
 
-function ethToNil(ethAddress: string): string {
+function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
   const words = bech32.toWords(data)
   return bech32.encode('nil', words)
@@ -24,7 +24,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const account = privateKeyToAccount(randomPk)
   const chainId = Number(process.env.CHAIN_ID || 20260211)
   const chainIdHex = `0x${chainId.toString(16)}`
-  const nilAddress = ethToNil(account.address)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const mduUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string }> = []
   const manifestUploads: Array<{ bodyLen: number; fullSize: number | null }> = []
@@ -101,11 +101,11 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('**/sp/upload_mdu', async (route) => {
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     mduUploads.push({
       bodyLen: body.length,
       fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-      mduIndex: headers['x-nil-mdu-index'] || '',
+      mduIndex: headers['x-polystore-mdu-index'] || '',
     })
     return recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'OK' }))
   })
@@ -113,7 +113,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('**/sp/upload_manifest', async (route) => {
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     manifestUploads.push({
       bodyLen: body.length,
       fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
@@ -124,12 +124,12 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('**/sp/upload_shard', async (route) => {
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
-    const fullSizeHeader = headers['x-nil-full-size']
+    const fullSizeHeader = headers['x-polystore-full-size']
     shardUploads.push({
       bodyLen: body.length,
       fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
-      mduIndex: headers['x-nil-mdu-index'] || '',
-      slot: headers['x-nil-slot'] || '',
+      mduIndex: headers['x-polystore-mdu-index'] || '',
+      slot: headers['x-polystore-slot'] || '',
     })
     return recordConcurrentUpload(() => route.fulfill({ status: 200, body: 'OK' }))
   })
@@ -174,7 +174,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
 
     const deal = {
       id: '1',
-      owner: nilAddress,
+      owner: polystoreAddress,
       cid: '',
       size: '0',
       escrow_balance: '1000000',
@@ -222,7 +222,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
 
     w.ethereum = {
       isMetaMask: true,
-      isNilStoreE2E: true,
+      isPolyStoreE2E: true,
       selectedAddress: address,
       on: () => {},
       removeListener: () => {},

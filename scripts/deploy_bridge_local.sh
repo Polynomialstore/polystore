@@ -21,8 +21,8 @@ if [ -z "$PRIVATE_KEY" ]; then
   # then the explicit bridge dev key, otherwise derive from mnemonic.
   if [ -n "${EVM_PRIVKEY:-}" ]; then
     PRIVATE_KEY="${EVM_PRIVKEY}"
-  elif [ -n "${NIL_EVM_DEV_PRIVKEY:-}" ]; then
-    PRIVATE_KEY="${NIL_EVM_DEV_PRIVKEY}"
+  elif [ -n "${POLYSTORE_EVM_DEV_PRIVKEY:-}" ]; then
+    PRIVATE_KEY="${POLYSTORE_EVM_DEV_PRIVKEY}"
   else
     # Derive the faucet dev key used by the local stack (index 0).
     PRIVATE_KEY=$(cast wallet private-key --mnemonic "$MNEMONIC")

@@ -11,7 +11,7 @@ function requiredEnv(name: string): string {
 }
 
 async function main() {
-  const privKey = (process.env.EVM_PRIVKEY || process.env.NIL_EVM_DEV_PRIVKEY) as Hex | undefined
+  const privKey = (process.env.EVM_PRIVKEY || process.env.POLYSTORE_EVM_DEV_PRIVKEY) as Hex | undefined
   if (!privKey) throw new Error('EVM_PRIVKEY env var required')
 
   const rpcUrl = process.env.EVM_RPC || process.env.VITE_EVM_RPC || 'http://localhost:8545'
@@ -25,7 +25,7 @@ async function main() {
   const client = createPublicClient({
     chain: {
       id: chainId,
-      name: 'nilstore-e2e',
+      name: 'polystore-e2e',
       nativeCurrency: { name: 'ATOM', symbol: 'ATOM', decimals: 18 },
       rpcUrls: { default: { http: [rpcUrl] } },
     },

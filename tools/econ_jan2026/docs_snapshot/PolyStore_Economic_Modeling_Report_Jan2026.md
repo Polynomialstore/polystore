@@ -1,4 +1,4 @@
-    # NilStore Economic Modeling & Policy Spec (Draft v0.1)
+    # PolyStore Economic Modeling & Policy Spec (Draft v0.1)
 
     Last updated: 2026-01-22
 

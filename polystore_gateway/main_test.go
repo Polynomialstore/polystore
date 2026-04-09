@@ -128,11 +128,11 @@ func testDealOwner(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("HexToECDSA failed: %v", err)
 	}
-	nilAddr, err := evmHexToNilAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
+	polystoreAddr, err := evmHexToPolystoreAddress(ethcrypto.PubkeyToAddress(key.PublicKey).Hex())
 	if err != nil {
-		t.Fatalf("evmHexToNilAddress failed: %v", err)
+		t.Fatalf("evmHexToPolystoreAddress failed: %v", err)
 	}
-	return nilAddr
+	return polystoreAddr
 }
 
 func signRetrievalRequest(t *testing.T, dealID uint64, filePath string, rangeStart uint64, rangeLen uint64, nonce uint64, expiresAt uint64) string {
@@ -188,7 +188,7 @@ func TestGlobalCORSPreflight_AllowsUnknownPathAndRequestedHeaders(t *testing.T) 
 	req := httptest.NewRequest(http.MethodOptions, "/sp/not-registered", nil)
 	req.Header.Set("Origin", "https://polynomialstore.com")
 	req.Header.Set("Access-Control-Request-Method", "POST")
-	req.Header.Set("Access-Control-Request-Headers", "x-nil-deal-id,x-nil-slot,x-nil-custom-header,content-type")
+	req.Header.Set("Access-Control-Request-Headers", "x-polystore-deal-id,x-polystore-slot,x-polystore-custom-header,content-type")
 	w := httptest.NewRecorder()
 
 	h.ServeHTTP(w, req)
@@ -200,7 +200,7 @@ func TestGlobalCORSPreflight_AllowsUnknownPathAndRequestedHeaders(t *testing.T) 
 		t.Fatalf("expected Access-Control-Allow-Origin to echo request origin, got %q", got)
 	}
 	allowHeaders := w.Header().Get("Access-Control-Allow-Headers")
-	for _, needed := range []string{"x-nil-deal-id", "x-nil-slot", "x-nil-custom-header", "content-type"} {
+	for _, needed := range []string{"x-polystore-deal-id", "x-polystore-slot", "x-polystore-custom-header", "content-type"} {
 		if !csvHeaderContains(allowHeaders, needed) {
 			t.Fatalf("expected Access-Control-Allow-Headers to include %q, got %q", needed, allowHeaders)
 		}
@@ -236,7 +236,7 @@ func TestSpUploadMdu_PreflightReturnsCORSHeaders(t *testing.T) {
 	req := httptest.NewRequest(http.MethodOptions, "/sp/upload_mdu", nil)
 	req.Header.Set("Origin", "https://web.polynomialstore.com")
 	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
-	req.Header.Set("Access-Control-Request-Headers", "x-nil-deal-id,x-nil-mdu-index,x-nil-manifest-root,x-nil-full-size,content-type")
+	req.Header.Set("Access-Control-Request-Headers", "x-polystore-deal-id,x-polystore-mdu-index,x-polystore-manifest-root,x-polystore-full-size,content-type")
 	w := httptest.NewRecorder()
 
 	h.ServeHTTP(w, req)
@@ -251,10 +251,10 @@ func TestSpUploadMdu_PreflightReturnsCORSHeaders(t *testing.T) {
 		t.Fatalf("expected Access-Control-Allow-Methods to include POST, got %q", w.Header().Get("Access-Control-Allow-Methods"))
 	}
 	for _, needed := range []string{
-		"x-nil-deal-id",
-		"x-nil-mdu-index",
-		"x-nil-manifest-root",
-		"x-nil-full-size",
+		"x-polystore-deal-id",
+		"x-polystore-mdu-index",
+		"x-polystore-manifest-root",
+		"x-polystore-full-size",
 		"content-type",
 	} {
 		if !csvHeaderContains(w.Header().Get("Access-Control-Allow-Headers"), needed) {
@@ -336,11 +336,11 @@ func TestSpUploadMdu_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 
 	body := bytes.Repeat([]byte{0xAB}, 2048)
 	req := httptest.NewRequest(http.MethodPost, "/sp/upload_mdu", bytes.NewReader(body))
-	req.Header.Set("X-Nil-Deal-ID", "1")
-	req.Header.Set("X-Nil-Mdu-Index", "0")
-	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
-	req.Header.Set(nilUploadPreviousManifestRootHeader, "")
-	req.Header.Set("X-Nil-Full-Size", strconv.Itoa(types.MDU_SIZE))
+	req.Header.Set("X-PolyStore-Deal-ID", "1")
+	req.Header.Set("X-PolyStore-Mdu-Index", "0")
+	req.Header.Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set(polystoreUploadPreviousManifestRootHeader, "")
+	req.Header.Set("X-PolyStore-Full-Size", strconv.Itoa(types.MDU_SIZE))
 	req.Header.Set("Content-Type", "application/octet-stream")
 
 	w := httptest.NewRecorder()
@@ -384,11 +384,11 @@ func TestSpUploadMdu_RejectsStalePreviousManifestRoot(t *testing.T) {
 	t.Cleanup(func() { lcdBase = oldLCD })
 
 	req := httptest.NewRequest(http.MethodPost, "/sp/upload_mdu", bytes.NewReader(bytes.Repeat([]byte{0xAB}, 128)))
-	req.Header.Set("X-Nil-Deal-ID", "1")
-	req.Header.Set("X-Nil-Mdu-Index", "0")
-	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
-	req.Header.Set(nilUploadPreviousManifestRootHeader, mustTestManifestRoot(t, "sp-upload-mdu-stale-prev").Canonical)
-	req.Header.Set("X-Nil-Full-Size", strconv.Itoa(types.MDU_SIZE))
+	req.Header.Set("X-PolyStore-Deal-ID", "1")
+	req.Header.Set("X-PolyStore-Mdu-Index", "0")
+	req.Header.Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set(polystoreUploadPreviousManifestRootHeader, mustTestManifestRoot(t, "sp-upload-mdu-stale-prev").Canonical)
+	req.Header.Set("X-PolyStore-Full-Size", strconv.Itoa(types.MDU_SIZE))
 
 	w := httptest.NewRecorder()
 	http.HandlerFunc(SpUploadMdu).ServeHTTP(w, req)
@@ -427,12 +427,12 @@ func TestSpUploadShard_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	body := bytes.Repeat([]byte{0xCD}, 1024)
 	fullSize := 4096
 	req := httptest.NewRequest(http.MethodPost, "/sp/upload_shard", bytes.NewReader(body))
-	req.Header.Set("X-Nil-Deal-ID", "1")
-	req.Header.Set("X-Nil-Mdu-Index", "2")
-	req.Header.Set("X-Nil-Slot", "1")
-	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
-	req.Header.Set(nilUploadPreviousManifestRootHeader, "")
-	req.Header.Set("X-Nil-Full-Size", strconv.Itoa(fullSize))
+	req.Header.Set("X-PolyStore-Deal-ID", "1")
+	req.Header.Set("X-PolyStore-Mdu-Index", "2")
+	req.Header.Set("X-PolyStore-Slot", "1")
+	req.Header.Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set(polystoreUploadPreviousManifestRootHeader, "")
+	req.Header.Set("X-PolyStore-Full-Size", strconv.Itoa(fullSize))
 	req.Header.Set("Content-Type", "application/octet-stream")
 
 	w := httptest.NewRecorder()
@@ -476,12 +476,12 @@ func TestSpUploadShard_RejectsStalePreviousManifestRoot(t *testing.T) {
 	t.Cleanup(func() { lcdBase = oldLCD })
 
 	req := httptest.NewRequest(http.MethodPost, "/sp/upload_shard", bytes.NewReader(bytes.Repeat([]byte{0xCD}, 128)))
-	req.Header.Set("X-Nil-Deal-ID", "1")
-	req.Header.Set("X-Nil-Mdu-Index", "2")
-	req.Header.Set("X-Nil-Slot", "1")
-	req.Header.Set("X-Nil-Manifest-Root", manifestRoot.Canonical)
-	req.Header.Set(nilUploadPreviousManifestRootHeader, mustTestManifestRoot(t, "sp-upload-shard-stale-prev").Canonical)
-	req.Header.Set("X-Nil-Full-Size", "4096")
+	req.Header.Set("X-PolyStore-Deal-ID", "1")
+	req.Header.Set("X-PolyStore-Mdu-Index", "2")
+	req.Header.Set("X-PolyStore-Slot", "1")
+	req.Header.Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
+	req.Header.Set(polystoreUploadPreviousManifestRootHeader, mustTestManifestRoot(t, "sp-upload-shard-stale-prev").Canonical)
+	req.Header.Set("X-PolyStore-Full-Size", "4096")
 
 	w := httptest.NewRecorder()
 	http.HandlerFunc(SpUploadShard).ServeHTTP(w, req)
@@ -594,11 +594,11 @@ func TestGatewayFetch_OwnerMismatch(t *testing.T) {
 	q.Set("owner", "nil1otherowner")
 	q.Set("file_path", "video.mp4")
 	req := httptest.NewRequest("GET", "/gateway/fetch/"+root.Canonical+"?"+q.Encode(), nil)
-	req.Header.Set("X-Nil-Req-Sig", "0x"+strings.Repeat("11", 65))
-	req.Header.Set("X-Nil-Req-Nonce", "1")
-	req.Header.Set("X-Nil-Req-Expires-At", strconv.FormatUint(uint64(time.Now().Unix())+120, 10))
-	req.Header.Set("X-Nil-Req-Range-Start", "0")
-	req.Header.Set("X-Nil-Req-Range-Len", "0")
+	req.Header.Set("X-PolyStore-Req-Sig", "0x"+strings.Repeat("11", 65))
+	req.Header.Set("X-PolyStore-Req-Nonce", "1")
+	req.Header.Set("X-PolyStore-Req-Expires-At", strconv.FormatUint(uint64(time.Now().Unix())+120, 10))
+	req.Header.Set("X-PolyStore-Req-Range-Start", "0")
+	req.Header.Set("X-PolyStore-Req-Range-Len", "0")
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -635,11 +635,11 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	nonce := uint64(1)
 	expiresAt := uint64(time.Now().Unix()) + 120
 	req := httptest.NewRequest("GET", "/gateway/fetch/"+rootReq.Canonical+"?"+q.Encode(), nil)
-	req.Header.Set("X-Nil-Req-Sig", signRetrievalRequest(t, 2, "video.mp4", 0, 0, nonce, expiresAt))
-	req.Header.Set("X-Nil-Req-Nonce", strconv.FormatUint(nonce, 10))
-	req.Header.Set("X-Nil-Req-Expires-At", strconv.FormatUint(expiresAt, 10))
-	req.Header.Set("X-Nil-Req-Range-Start", "0")
-	req.Header.Set("X-Nil-Req-Range-Len", "0")
+	req.Header.Set("X-PolyStore-Req-Sig", signRetrievalRequest(t, 2, "video.mp4", 0, 0, nonce, expiresAt))
+	req.Header.Set("X-PolyStore-Req-Nonce", strconv.FormatUint(nonce, 10))
+	req.Header.Set("X-PolyStore-Req-Expires-At", strconv.FormatUint(expiresAt, 10))
+	req.Header.Set("X-PolyStore-Req-Range-Start", "0")
+	req.Header.Set("X-PolyStore-Req-Range-Len", "0")
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -647,10 +647,10 @@ func TestGatewayFetch_CIDMismatch(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for cid mismatch, got %d", w.Code)
 	}
-	if got := strings.TrimSpace(w.Header().Get("X-Nil-Cache-Freshness")); got != "stale" {
+	if got := strings.TrimSpace(w.Header().Get("X-PolyStore-Cache-Freshness")); got != "stale" {
 		t.Fatalf("expected stale cache freshness header, got %q", got)
 	}
-	if got := strings.TrimSpace(w.Header().Get("X-Nil-Cache-Freshness-Reason")); got != "stale_manifest_mismatch" {
+	if got := strings.TrimSpace(w.Header().Get("X-PolyStore-Cache-Freshness-Reason")); got != "stale_manifest_mismatch" {
 		t.Fatalf("expected stale_manifest_mismatch reason, got %q", got)
 	}
 }
@@ -687,10 +687,10 @@ func TestGatewayFetch_ChainLookupFailureSetsFreshnessReason(t *testing.T) {
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 for chain lookup failure, got %d", w.Code)
 	}
-	if got := strings.TrimSpace(w.Header().Get("X-Nil-Cache-Freshness")); got != "unknown" {
+	if got := strings.TrimSpace(w.Header().Get("X-PolyStore-Cache-Freshness")); got != "unknown" {
 		t.Fatalf("expected unknown cache freshness header, got %q", got)
 	}
-	if got := strings.TrimSpace(w.Header().Get("X-Nil-Cache-Freshness-Reason")); got != "chain_lookup_failed" {
+	if got := strings.TrimSpace(w.Header().Get("X-PolyStore-Cache-Freshness-Reason")); got != "chain_lookup_failed" {
 		t.Fatalf("expected chain_lookup_failed reason, got %q", got)
 	}
 }
@@ -797,7 +797,7 @@ func TestHelperProcess(t *testing.T) {
 	}
 	defer os.Exit(0)
 
-	if raw := strings.TrimSpace(os.Getenv("NIL_HELPER_SLEEP_MS")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("POLYSTORE_HELPER_SLEEP_MS")); raw != "" {
 		if ms, err := strconv.Atoi(raw); err == nil && ms > 0 {
 			time.Sleep(time.Duration(ms) * time.Millisecond)
 		}
@@ -880,7 +880,7 @@ func TestHelperProcess(t *testing.T) {
 			}
 		}
 
-		output := NilCliOutput{
+		output := PolyStoreCliOutput{
 			ManifestRootHex: deterministicManifestRootHex("user-root"),
 			ManifestBlobHex: "0xdeadbeef",
 			FileSize:        100,
@@ -913,7 +913,7 @@ func TestHelperProcess(t *testing.T) {
 			fmt.Fprintf(os.Stderr, "Missing --out for aggregate\n")
 			os.Exit(1)
 		}
-		res := NilCliAggregateOutput{
+		res := PolyStoreCliAggregateOutput{
 			ManifestRootHex: deterministicManifestRootHex("aggregate-root"),
 			ManifestBlobHex: "0xfeedface",
 		}
@@ -949,12 +949,12 @@ func handleSavePrefix(args []string) error {
 func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath {
+		if name == polystoreCliPath {
 			if hasArg(args, "shard") {
 				if err := handleSavePrefix(args); err != nil {
 					return nil, err
 				}
-				output := NilCliOutput{
+				output := PolyStoreCliOutput{
 					ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
 					ManifestBlobHex: "0xdeadbeef",
 					FileSize:        100,
@@ -972,7 +972,7 @@ func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 					}
 				}
 				if outPath != "" {
-					res := NilCliAggregateOutput{
+					res := PolyStoreCliAggregateOutput{
 						ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
 						ManifestBlobHex: "0xfeedface",
 					}
@@ -1021,12 +1021,12 @@ func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 func TestShardFile_TimeoutCancels(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
+		if name == polystoreCliPath && hasArg(args, "shard") {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-time.After(200 * time.Millisecond): // Simulate long running command
-				output := NilCliOutput{ManifestRootHex: deterministicManifestRootHex("timeout-shard")}
+				output := PolyStoreCliOutput{ManifestRootHex: deterministicManifestRootHex("timeout-shard")}
 				data, _ := json.Marshal(output)
 				return data, nil
 			}
@@ -1054,7 +1054,7 @@ func TestShardFile_TimeoutCancels(t *testing.T) {
 func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
+		if name == polystoreCliPath && hasArg(args, "shard") {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -1103,9 +1103,9 @@ func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath {
+		if name == polystoreCliPath {
 			if hasArg(args, "shard") {
-				output := NilCliOutput{
+				output := PolyStoreCliOutput{
 					ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 					ManifestBlobHex: "0xdeadbeef",
 					FileSize:        100,
@@ -1130,7 +1130,7 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 					}
 				}
 				if outPath != "" {
-					res := NilCliAggregateOutput{
+					res := PolyStoreCliAggregateOutput{
 						ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 						ManifestBlobHex: "0xfeedface",
 					}
@@ -1175,7 +1175,7 @@ func hasArg(args []string, target string) bool {
 func TestGatewayFetch_DealIDZero(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 	oldRequireSig := requireRetrievalReqSig
 	requireRetrievalReqSig = true
@@ -1241,11 +1241,11 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 	nonce := uint64(1)
 	expiresAt := uint64(time.Now().Unix()) + 120
 	fetchReq := httptest.NewRequest("GET", fetchURL, nil)
-	fetchReq.Header.Set("X-Nil-Req-Sig", signRetrievalRequest(t, dealID, "deal0_test.txt", 0, 0, nonce, expiresAt))
-	fetchReq.Header.Set("X-Nil-Req-Nonce", strconv.FormatUint(nonce, 10))
-	fetchReq.Header.Set("X-Nil-Req-Expires-At", strconv.FormatUint(expiresAt, 10))
-	fetchReq.Header.Set("X-Nil-Req-Range-Start", "0")
-	fetchReq.Header.Set("X-Nil-Req-Range-Len", "0")
+	fetchReq.Header.Set("X-PolyStore-Req-Sig", signRetrievalRequest(t, dealID, "deal0_test.txt", 0, 0, nonce, expiresAt))
+	fetchReq.Header.Set("X-PolyStore-Req-Nonce", strconv.FormatUint(nonce, 10))
+	fetchReq.Header.Set("X-PolyStore-Req-Expires-At", strconv.FormatUint(expiresAt, 10))
+	fetchReq.Header.Set("X-PolyStore-Req-Range-Start", "0")
+	fetchReq.Header.Set("X-PolyStore-Req-Range-Len", "0")
 	fetchW := httptest.NewRecorder()
 
 	r.ServeHTTP(fetchW, fetchReq)
@@ -1262,7 +1262,7 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 
 func TestGatewayOpenSession_UnsignedDoesNotRequireNonce(t *testing.T) {
 	useTempUploadDir(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1testprovider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1testprovider")
 	owner := testDealOwner(t)
 
 	oldRequireSig := requireRetrievalReqSig
@@ -1378,8 +1378,8 @@ func preparePlanRetrievalTestSlab(t *testing.T, dealID uint64, root ManifestRoot
 func TestGatewayPlanRetrievalSession_UsesMetadataProviderWithoutLocalProvider(t *testing.T) {
 	useTempUploadDir(t)
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "")
-	t.Setenv("NIL_PROVIDER_KEY", "missing-provider-key")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "missing-provider-key")
 
 	dealID := uint64(11)
 	owner := testDealOwner(t)
@@ -1442,7 +1442,7 @@ func TestGatewayPlanRetrievalSession_UsesMetadataProviderWithoutLocalProvider(t 
 func TestGatewayPlanRetrievalSession_PrefersMetadataProviderOverLocalEnv(t *testing.T) {
 	useTempUploadDir(t)
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1localprovideroverride")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1localprovideroverride")
 
 	dealID := uint64(12)
 	owner := testDealOwner(t)
@@ -1515,7 +1515,7 @@ func setPlanResolverForTest(t *testing.T, resolver func(context.Context, uint64,
 func TestGatewayPlanRetrievalSession_ProviderResolutionStatusMapping(t *testing.T) {
 	useTempUploadDir(t)
 	resetProviderAddressCacheForTest(t)
-	t.Setenv("NIL_PROVIDER_ADDRESS", "")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
 
 	dealID := uint64(13)
 	owner := testDealOwner(t)

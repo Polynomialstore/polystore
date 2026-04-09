@@ -22,8 +22,8 @@ import (
 func TestGatewayManifestInfo_Basic(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
-			output := NilCliOutput{
+		if name == polystoreCliPath && hasArg(args, "shard") {
+			output := PolyStoreCliOutput{
 				ManifestRootHex: deterministicManifestRootHex("ingest-raw"), // unused by manifest-info but part of struct
 				ManifestBlobHex: "0x0102",
 				FileSize:        100,
@@ -128,8 +128,8 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 func TestGatewayMduKzg_Basic(t *testing.T) {
 	useTempUploadDir(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		if name == nilCliPath && hasArg(args, "shard") {
-			output := NilCliOutput{
+		if name == polystoreCliPath && hasArg(args, "shard") {
+			output := PolyStoreCliOutput{
 				ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 				ManifestBlobHex: "0xdeadbeef",
 				FileSize:        100,
@@ -238,8 +238,8 @@ func TestGatewayMdu_Basic(t *testing.T) {
 	if got := w.Header().Get("Content-Type"); got != "application/octet-stream" {
 		t.Fatalf("expected octet-stream content-type, got %q", got)
 	}
-	if got := w.Header().Get("X-Nil-Mdu-Index"); got != "0" {
-		t.Fatalf("expected X-Nil-Mdu-Index=0, got %q", got)
+	if got := w.Header().Get("X-PolyStore-Mdu-Index"); got != "0" {
+		t.Fatalf("expected X-PolyStore-Mdu-Index=0, got %q", got)
 	}
 	if got := w.Body.Bytes(); len(got) != len(mdu0Bytes) {
 		t.Fatalf("expected %d bytes, got %d", len(mdu0Bytes), len(got))
@@ -297,7 +297,7 @@ func TestProviderGatewayMdu_RequiresOnchainSession(t *testing.T) {
 	oldLCD := lcdBase
 	lcdBase = lcdSrv.URL
 	t.Cleanup(func() { lcdBase = oldLCD })
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1provider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1provider")
 
 	r := mux.NewRouter()
 	registerProviderDaemonRoutes(r)
@@ -312,7 +312,7 @@ func TestProviderGatewayMdu_RequiresOnchainSession(t *testing.T) {
 func TestProviderGatewayMdu_AllowsOnchainSession(t *testing.T) {
 	useTempUploadDir(t)
 	dealMetaCache = sync.Map{}
-	t.Setenv("NIL_PROVIDER_ADDRESS", "nil1provider")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "nil1provider")
 
 	cid := mustTestManifestRoot(t, "provider-mdu-session-ok")
 	dealDir := filepath.Join(uploadDir, cid.Key)
@@ -394,13 +394,13 @@ func TestProviderGatewayMdu_AllowsOnchainSession(t *testing.T) {
 	r := mux.NewRouter()
 	registerProviderDaemonRoutes(r)
 	req := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+cid.Canonical+"/0?deal_id=1&owner="+owner, nil)
-	req.Header.Set("X-Nil-Session-Id", sessionHex)
+	req.Header.Set("X-PolyStore-Session-Id", sessionHex)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
 	}
-	if got := w.Header().Get("X-Nil-Mdu-Index"); got != "0" {
+	if got := w.Header().Get("X-PolyStore-Mdu-Index"); got != "0" {
 		t.Fatalf("expected mdu index header 0, got %q", got)
 	}
 	if len(w.Body.Bytes()) != len(mdu0Bytes) {

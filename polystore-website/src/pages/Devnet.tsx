@@ -64,7 +64,7 @@ export function Devnet() {
       'OPERATOR_ADDRESS="<operator-nil1-address>" \\',
       'PROVIDER_KEY="provider1" \\',
       'PROVIDER_ENDPOINT="/ip4/<public-ip>/tcp/8091/http" \\',
-      'NIL_GATEWAY_SP_AUTH="<shared-from-hub>" \\',
+      'POLYSTORE_GATEWAY_SP_AUTH="<shared-from-hub>" \\',
       './scripts/run_devnet_provider.sh bootstrap',
       '',
       '# Then approve the pending provider link from the website operator wallet step.',
@@ -118,7 +118,7 @@ export function Devnet() {
             Join As A Provider
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Providers should start from the web onboarding flow, then run the staged host bootstrap: init the key, fund it, request link from the host, approve it in the browser wallet, and then bootstrap the provider-daemon. The hub operator must share a `NIL_GATEWAY_SP_AUTH` token. User gateways are optional; direct-to-provider flows are supported for browser clients.
+            Providers should start from the web onboarding flow, then run the staged host bootstrap: init the key, fund it, request link from the host, approve it in the browser wallet, and then bootstrap the provider-daemon. The hub operator must share a `POLYSTORE_GATEWAY_SP_AUTH` token. User gateways are optional; direct-to-provider flows are supported for browser clients.
           </p>
           <pre className="mt-4 text-xs bg-secondary/20 border border-border rounded-none p-4 overflow-x-auto text-muted-foreground">
             {joinSnippet}

@@ -121,7 +121,7 @@ function decodeGatewayHttpError(status: number, bodyText: string): string {
     const err = typeof parsed.error === 'string' ? parsed.error.trim() : ''
     const hint = typeof parsed.hint === 'string' ? parsed.hint.trim() : ''
     const message = typeof parsed.message === 'string' ? parsed.message.trim() : ''
-    if (/missing X-Nil-Session-Id/i.test(err)) {
+    if (/missing X-PolyStore-Session-Id/i.test(err)) {
       return 'Gateway requires an on-chain retrieval session. Use Onchain Retrieval (or Auto source) and approve wallet access.'
     }
     if (err && hint) return `${err} (${hint})`
@@ -176,7 +176,7 @@ async function ensureWasmReady(): Promise<void> {
     const buf = await res.arrayBuffer()
     const trustedSetupBytes = new Uint8Array(buf)
     try {
-      await workerClient.initNilWasm(trustedSetupBytes)
+      await workerClient.initPolyStoreWasm(trustedSetupBytes)
     } catch (e) {
       // If the worker was already initialized, ignore and proceed.
       void e
@@ -187,7 +187,7 @@ async function ensureWasmReady(): Promise<void> {
 
 interface DealDetailProps {
   deal: LcdDeal
-  nilAddress: string
+  polystoreAddress: string
   onFileActivity?: (activity: FileActivity) => void
   topPanel?: ReactNode
   uploadWorkflowActive?: boolean
@@ -973,7 +973,7 @@ function FileRow({
 
 export function DealDetail({
   deal,
-  nilAddress,
+  polystoreAddress,
   onFileActivity,
   topPanel,
   uploadWorkflowActive = false,
@@ -983,7 +983,7 @@ export function DealDetail({
   const serviceHint = parseServiceHint(deal?.service_hint)
   const dealOwner = String(deal.owner || '').trim()
   const fallbackManifestRoot = normalizeManifestRoot(String(deal.cid || ''))
-  const fallbackOwner = dealOwner || String(nilAddress || '').trim()
+  const fallbackOwner = dealOwner || String(polystoreAddress || '').trim()
   const [authoritativeManifestRoot, setAuthoritativeManifestRoot] = useState<string>(fallbackManifestRoot)
   const [authoritativeOwner, setAuthoritativeOwner] = useState<string>(fallbackOwner)
   const [authoritativeDealLoaded, setAuthoritativeDealLoaded] = useState(false)
@@ -1028,7 +1028,7 @@ export function DealDetail({
   const [, setPolicyError] = useState<string | null>(null)
   const [, setPolicyStatus] = useState<string | null>(null)
   const [sponsoredAuth, setSponsoredAuth] = useState<SponsoredRetrievalAuth>({ type: 'none' })
-  const authStorageKey = useMemo(() => `nilstore.retrievalAuth.${deal.id}`, [deal.id])
+  const authStorageKey = useMemo(() => `polystore.retrievalAuth.${deal.id}`, [deal.id])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
@@ -1219,7 +1219,7 @@ export function DealDetail({
   const dealProviders = useMemo(() => deal.providers || [], [deal.providers])
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
-  const isDealOwner = Boolean(nilAddress && dealOwner === String(nilAddress).trim())
+  const isDealOwner = Boolean(polystoreAddress && dealOwner === String(polystoreAddress).trim())
   const [routeOverride, setRouteOverride] = useState<string>('')
   const [, setRouteModeOverride] = useState<string>('')
   const [cacheSourceOverride, setCacheSourceOverride] = useState<string>('')
@@ -3025,7 +3025,7 @@ export function DealDetail({
                           disabled={!selectedMduRecord || !explorerManifestRoot || loadingMduKzg}
                           onClick={() => {
                             if (!selectedMduRecord || !explorerManifestRoot) return
-                            void fetchMduKzg(explorerManifestRoot, selectedMduRecord.mdu_index, deal.id, nilAddress)
+                            void fetchMduKzg(explorerManifestRoot, selectedMduRecord.mdu_index, deal.id, polystoreAddress)
                           }}
                           className="text-[10px] px-3 py-2 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors disabled:opacity-50"
                         >
@@ -3241,7 +3241,7 @@ export function DealDetail({
                                 onClick={() => {
                                   setSelectedMdu(record.mdu_index)
                                   if (explorerManifestRoot) {
-                                    void fetchMduKzg(explorerManifestRoot, record.mdu_index, deal.id, nilAddress)
+                                    void fetchMduKzg(explorerManifestRoot, record.mdu_index, deal.id, polystoreAddress)
                                   }
                                 }}
                                 className="shrink-0 text-[10px] px-2 py-1 rounded-none border border-border bg-secondary hover:bg-secondary/70 text-foreground transition-colors"

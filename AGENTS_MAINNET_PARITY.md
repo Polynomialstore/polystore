@@ -425,7 +425,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
   1. Implement epoch randomness `R_e` derivation exactly per RFC:
 
-     * `R_e = SHA256("nilstore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))`
+     * `R_e = SHA256("polystore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))`
      * store `block_hash(epoch_start_height)` deterministically at epoch boundary if required.
   2. Implement derivation functions for:
 

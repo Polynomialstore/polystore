@@ -58,7 +58,7 @@ func NewRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			// Initialize KZG Trusted Setup
-			tsPath := os.Getenv("NIL_TRUSTED_SETUP")
+			tsPath := os.Getenv("POLYSTORE_TRUSTED_SETUP")
 			if tsPath == "" {
 				tsPath = "polystorechain/trusted_setup.txt"
 			}

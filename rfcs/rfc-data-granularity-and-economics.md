@@ -12,7 +12,7 @@
 ---
 
 ## 1. Motivation & Problem Statement
-NilStore faces a fundamental architectural tension between Scalability and Performance.
+PolyStore faces a fundamental architectural tension between Scalability and Performance.
 
 * **The Scalability Constraint:** To store Exabytes of data without halting the blockchain, the ledger must track large aggregations of data. If the chain tracks small chunks individually, the state database will explode ("State Bloat").
 * **The Performance Constraint:** To serve "Hot" data with sub-second latency, the system must allow users to retrieve specific, granular chunks instantly without waiting hours to "unseal" a large volume.
@@ -22,7 +22,7 @@ NilStore faces a fundamental architectural tension between Scalability and Perfo
 ---
 
 ## 2. The Financial Container: Thin-Provisioned Deals (No Tiers)
-NilStore uses a **thin-provisioned** Deal container model:
+PolyStore uses a **thin-provisioned** Deal container model:
 
 *   `MsgCreateDeal*` creates a Deal with `manifest_root = empty`, `size = 0` (and `total_mdus = 0` until first commit).
 *   `MsgUpdateDealContent*` commits content and advances the Deal’s `manifest_root`, `size`, and `total_mdus`.

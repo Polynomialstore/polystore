@@ -11,7 +11,7 @@ Companion docs:
 
 ## Stage 0.5 — Wallet-first chain writes (MetaMask / EVM bridge)
 - [ ] Ensure all user actions land via EVM bridge/precompile (no gateway relayer in production mode).
-- [ ] Disable auto-faucet behavior by default; keep faucet as dev-only toggle (`NIL_AUTO_FAUCET_EVM=0` by default).
+- [ ] Disable auto-faucet behavior by default; keep faucet as dev-only toggle (`POLYSTORE_AUTO_FAUCET_EVM=0` by default).
 - [ ] UI: implement MetaMask flows for create/top-up/commit/extend/open/confirm/cancel (no server-side signing).
 
 ## Stage 1 — Storage lock-in pricing + escrow accounting (A1)
@@ -30,7 +30,7 @@ Companion docs:
 - [ ] Add e2e: expire → renew → read; expire → GC delete (`scripts/`, `tests/`).
 ## Stage 2 — Retrieval session economics (A2)
 - [ ] Enforce session open burns base fee + locks variable fee; rejects insufficient escrow (`polystorechain/`).
-- [ ] Enforce **mandatory sessions for all served bytes**: provider + gateway reject out-of-session reads (`X-Nil-Session-Id` required); blob alignment + session range subset enforced; segmented/batched downloads within one session supported (`nil-provider/`, `polystore_gateway/`, `polystore-website/`).
+- [ ] Enforce **mandatory sessions for all served bytes**: provider + gateway reject out-of-session reads (`X-PolyStore-Session-Id` required); blob alignment + session range subset enforced; segmented/batched downloads within one session supported (`nil-provider/`, `polystore_gateway/`, `polystore-website/`).
 - [ ] Enforce completion settlement: burn cut + provider payout; cancel/expiry refunds locked fee only (`polystorechain/`).
 - [ ] Extend econ e2e: open → complete; open → cancel/expire; verify burns/payouts/refunds (`scripts/`, `tests/`).
 

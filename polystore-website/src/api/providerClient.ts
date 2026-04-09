@@ -24,7 +24,7 @@ export interface ProviderAdminStatusDetail {
   public_health_ok?: boolean
   sp_auth_present?: boolean
   upload_dir?: string
-  nil_home?: string
+  polystore_home?: string
   chain_id?: string
   lcd_base?: string
   node_addr?: string
@@ -448,7 +448,7 @@ export async function providerFetchMduWithSession(
     {
       method: 'GET',
       headers: {
-        'X-Nil-Session-Id': params.sessionId,
+        'X-PolyStore-Session-Id': params.sessionId,
       },
     },
     60_000,
@@ -482,9 +482,9 @@ export async function providerFetchMduWindowWithSession(
     {
       method: 'GET',
       headers: {
-        'X-Nil-Session-Id': params.sessionId,
-        'X-Nil-Start-Blob-Index': String(Math.max(0, Number(params.startBlobIndex || 0))),
-        'X-Nil-Blob-Count': String(Math.max(0, Number(params.blobCount || 0))),
+        'X-PolyStore-Session-Id': params.sessionId,
+        'X-PolyStore-Start-Blob-Index': String(Math.max(0, Number(params.startBlobIndex || 0))),
+        'X-PolyStore-Blob-Count': String(Math.max(0, Number(params.blobCount || 0))),
       },
     },
     60_000,
@@ -567,7 +567,7 @@ export async function providerDownloadWithBundledSession(
       method: 'GET',
       headers: {
         Range: `bytes=${rangeStart}-${rangeEnd}`,
-        'X-Nil-Download-Session': downloadSession,
+        'X-PolyStore-Download-Session': downloadSession,
       },
     },
     60_000,

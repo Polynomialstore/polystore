@@ -30,7 +30,7 @@ interface StagingContextType {
 
 const StagingContext = createContext<StagingContextType | undefined>(undefined);
 
-const DB_NAME = 'nilstore-staging';
+const DB_NAME = 'polystore-staging';
 const DB_VERSION = 1;
 
 export function StagingProvider({ children }: { children: React.ReactNode }) {

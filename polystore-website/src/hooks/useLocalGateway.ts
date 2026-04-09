@@ -28,7 +28,7 @@ const GATEWAY_STATUS_ENDPOINT = '/status';
 const GATEWAY_HEALTH_ENDPOINT = '/health';
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const HIDDEN_POLL_INTERVAL_MS = 300_000;
-const LOCAL_GATEWAY_CONNECTED_KEY = 'nil_local_gateway_connected';
+const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected';
 const DEFAULT_LOCAL_GATEWAY_BASE = 'http://127.0.0.1:8080';
 
 function swapLoopbackHost(baseUrl: string): string | null {

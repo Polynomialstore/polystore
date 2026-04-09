@@ -103,7 +103,7 @@ The agent should execute (adapt as needed):
 - `rg -n "metamask|wallet" -S ui/ web/ apps/ .`
 - `rg -n "precompile|evm bridge" -S .`
 - `rg -n "zstd|gzip|compress" -S .`
-- `rg -n "X-Nil-Session-Id" -S .`
+- `rg -n "X-PolyStore-Session-Id" -S .`
 
 ---
 
@@ -124,7 +124,7 @@ The agent should execute (adapt as needed):
 
 **Phase 2 – Retrieval sessions mandatory (data-plane)**
 - Outputs:
-  - Provider + gateway reject all byte-serving requests without `X-Nil-Session-Id`.
+  - Provider + gateway reject all byte-serving requests without `X-PolyStore-Session-Id`.
   - Subset + blob-alignment rules implemented (batching preserved).
   - E2E tests for segmented downloads.
 
@@ -241,7 +241,7 @@ Unit tests:
 
 ### 6.1 Data-plane invariant
 Any response that includes Deal bytes MUST require:
-- `X-Nil-Session-Id: <session_id>` header
+- `X-PolyStore-Session-Id: <session_id>` header
 - Session must be OPEN and unexpired on-chain
 - Session must bind to deal_id, provider/slot assignment, manifest_root (if pinned)
 

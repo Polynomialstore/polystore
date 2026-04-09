@@ -55,7 +55,7 @@ Before asking the user to sign an “Open session” tx:
 
 ### 2.2 Owner retrieval flow
 - Call `MsgOpenRetrievalSession` (owner-paid).
-- Then download using `X-Nil-Session-Id`.
+- Then download using `X-PolyStore-Session-Id`.
 
 ### 2.3 Non-owner flow (Public / Allowlist / Voucher)
 - Call `MsgOpenRetrievalSessionSponsored` so the requester pays.

@@ -8,7 +8,7 @@
 
 ## 1. Motivation & Problem Statement
 
-NilStore faces a "Map vs. Territory" problem. The on-chain "Map" (Deals, heat scores, reported capacity) is a lagged, low-resolution approximation of the physical "Territory" (real-time bandwidth, node health, viral spikes).
+PolyStore faces a "Map vs. Territory" problem. The on-chain "Map" (Deals, heat scores, reported capacity) is a lagged, low-resolution approximation of the physical "Territory" (real-time bandwidth, node health, viral spikes).
 
 Attempting to solve the "Knapsack Problem" (optimal data placement) in real-time on-chain is theoretically flawed because:
 1.  **Micro-Management Fail:** The chain cannot react fast enough to viral events without thrashing. (This is the job of the **Elasticity Layer**, where users pay for immediate replicas).
