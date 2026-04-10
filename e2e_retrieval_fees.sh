@@ -259,7 +259,9 @@ PER_BLOB_FEE=$(echo "$PARAMS_JSON" | jq -r '.params.retrieval_price_per_blob.amo
 ESCROW_BEFORE=$(echo "$DEAL_JSON" | jq -r '.deal.escrow_balance // "0"')
 
 HEIGHT=$(timeout 10s curl -s "$RPC_STATUS" | jq -r '.result.sync_info.latest_block_height')
-EXPIRES_AT=$((HEIGHT + 2))
+# Give the session a few blocks of slack so CI doesn't race past expiry
+# between height sampling and tx inclusion.
+EXPIRES_AT=$((HEIGHT + 10))
 NONCE=$(python3 - <<'PY'
 import time
 print(time.time_ns())
