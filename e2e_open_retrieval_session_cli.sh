@@ -233,7 +233,7 @@ if [ -z "$PROVIDER_ADDR" ] || [ "$PROVIDER_ADDR" = "null" ]; then
   exit 1
 fi
 
-run_yes chain_tx open-retrieval-session \
+OPEN_RES=$(run_yes chain_tx open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER_ADDR" \
   --manifest-root "$MANIFEST_ROOT" \
@@ -242,26 +242,33 @@ run_yes chain_tx open-retrieval-session \
   --blob-count 1 \
   --nonce "$NONCE" \
   --expires-at "$EXPIRES_AT" \
-  --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
-
-SESSION_ID=""
-for i in {1..30}; do
-  SESSION_JSON=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/retrieval-sessions/by-owner/$ALICE_ADDR")
-  SESSION_ID=$(echo "$SESSION_JSON" | jq -r --arg deal "$DEAL_ID" '.sessions[]? | select((.deal_id | tostring) == $deal) | .session_id' | head -n 1)
-  if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ]; then
-    break
-  fi
-  sleep 1
-done
-
-if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
-  echo "Failed to resolve session id"
+  --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
+OPEN_HASH=$(echo "$OPEN_RES" | jq -r '.txhash // empty')
+if [ -z "$OPEN_HASH" ]; then
+  echo "Failed to parse open retrieval session tx hash"
+  exit 1
+fi
+OPEN_TX=$(wait_for_tx "$OPEN_HASH" 30 1) || { echo "OpenRetrievalSession tx not found"; exit 1; }
+OPEN_CODE=$(echo "$OPEN_TX" | jq -r '.code // "0"')
+if [ "$OPEN_CODE" != "0" ]; then
+  echo "OpenRetrievalSession tx failed: $(echo "$OPEN_TX" | jq -r '.raw_log // "unknown error"')"
   exit 1
 fi
 
-STATUS=$(echo "$SESSION_JSON" | jq -r --arg deal "$DEAL_ID" '.sessions[]? | select((.deal_id | tostring) == $deal) | .status' | head -n 1)
-if [ "$STATUS" != "RETRIEVAL_SESSION_STATUS_OPEN" ] && [ "$STATUS" != "1" ]; then
-  echo "Unexpected session status: $STATUS"
+SESSION_ID=$(compute_retrieval_session_id_hex \
+  "$CHAIN_DIR" \
+  "$ALICE_ADDR" \
+  "$DEAL_ID" \
+  "$PROVIDER_ADDR" \
+  "$MANIFEST_ROOT" \
+  0 \
+  0 \
+  1 \
+  "$NONCE" \
+  "$EXPIRES_AT")
+
+if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
+  echo "Failed to resolve session id"
   exit 1
 fi
 

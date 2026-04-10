@@ -284,21 +284,28 @@ if [ -z "$OPEN_HASH" ]; then
   exit 1
 fi
 OPEN_TX=$(wait_for_tx "$OPEN_HASH" 30 1) || { echo "OpenRetrievalSession tx not found"; exit 1; }
+OPEN_CODE=$(echo "$OPEN_TX" | jq -r '.code // "0"')
+if [ "$OPEN_CODE" != "0" ]; then
+  echo "OpenRetrievalSession tx failed: $(echo "$OPEN_TX" | jq -r '.raw_log // "unknown error"')"
+  exit 1
+fi
 OPEN_HEIGHT=$(echo "$OPEN_TX" | jq -r '.height // empty')
 if [ -z "$OPEN_HEIGHT" ] || [ "$OPEN_HEIGHT" = "null" ]; then
   echo "Failed to parse open retrieval session height"
   exit 1
 fi
 
-SESSION_ID=""
-for i in {1..30}; do
-  SESSION_JSON=$(timeout 10s curl -s "$LCD_BASE/polystorechain/polystorechain/v1/retrieval-sessions/by-owner/$ALICE_ADDR")
-  SESSION_ID=$(echo "$SESSION_JSON" | jq -r --arg deal "$DEAL_ID" '.sessions[]? | select((.deal_id | tostring) == $deal) | .session_id' | head -n 1)
-  if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ]; then
-    break
-  fi
-  sleep 1
-done
+SESSION_ID=$(compute_retrieval_session_id_hex \
+  "$CHAIN_DIR" \
+  "$ALICE_ADDR" \
+  "$DEAL_ID" \
+  "$PROVIDER" \
+  "$MANIFEST_ROOT" \
+  0 \
+  0 \
+  "$BLOB_COUNT" \
+  "$NONCE" \
+  "$EXPIRES_AT")
 if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
   echo "Failed to resolve session id"
   exit 1

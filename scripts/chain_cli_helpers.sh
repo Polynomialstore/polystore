@@ -26,3 +26,30 @@ detect_chain_module_cli_name() {
   echo "ERROR: failed to detect polystore module CLI namespace for $binary" >&2
   return 1
 }
+
+compute_retrieval_session_id_hex() {
+  local chain_dir="${1:?chain dir required}"
+  local owner="${2:?owner required}"
+  local deal_id="${3:?deal id required}"
+  local provider="${4:?provider required}"
+  local manifest_root="${5:?manifest root required}"
+  local start_mdu_index="${6:?start mdu index required}"
+  local start_blob_index="${7:?start blob index required}"
+  local blob_count="${8:?blob count required}"
+  local nonce="${9:?nonce required}"
+  local expires_at="${10:?expires_at required}"
+
+  (
+    cd "$chain_dir"
+    go run ./tools/compute_retrieval_session_id \
+      --owner "$owner" \
+      --deal-id "$deal_id" \
+      --provider "$provider" \
+      --manifest-root "$manifest_root" \
+      --start-mdu-index "$start_mdu_index" \
+      --start-blob-index "$start_blob_index" \
+      --blob-count "$blob_count" \
+      --nonce "$nonce" \
+      --expires-at "$expires_at"
+  )
+}
