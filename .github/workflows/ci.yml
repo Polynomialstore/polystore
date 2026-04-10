@@ -314,10 +314,6 @@ jobs:
         working-directory: polystore-website
         run: npm ci
 
-      - name: Install Playwright Browsers
-        working-directory: polystore-website
-        run: npx playwright install --with-deps
-
       - name: Build WASM for website
         run: cd polystore_core && wasm-pack build --release --target web --out-dir ../polystore-website/public/wasm --out-name polystore_core
 
