@@ -5,6 +5,7 @@ set -euo pipefail
 # Ensures slot-aware provider selection is enforced on-chain.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT_DIR/scripts/chain_cli_helpers.sh"
 CHAIN_DIR="$ROOT_DIR/polystorechain"
 CORE_DIR="$ROOT_DIR/polystore_core"
 HOME_DIR="$ROOT_DIR/polystorechain/.polystorechain/open_session_mode2"
@@ -14,6 +15,7 @@ TRUSTED_SETUP="$ROOT_DIR/polystorechain/trusted_setup.txt"
 BINARY="$ROOT_DIR/polystorechaind"
 LCD_BASE="http://127.0.0.1:1317"
 RPC_STATUS="http://127.0.0.1:26657/status"
+CHAIN_MODULE_CLI_NAME="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-}"
 
 RS_K=8
 RS_M=4
@@ -33,6 +35,12 @@ run_yes() {
   local status=$?
   set -o pipefail
   return $status
+}
+
+chain_tx() {
+  local module_cli
+  module_cli="$(detect_chain_module_cli_name "$BINARY")"
+  "$BINARY" tx "$module_cli" "$@"
 }
 
 banner() {
@@ -180,7 +188,7 @@ banner "Registering providers"
 for idx in "${!PROVIDER_NAMES[@]}"; do
   name="${PROVIDER_NAMES[$idx]}"
   port=$((8082 + idx))
-  run_yes "$BINARY" tx polystorechain register-provider General 1000000000 \
+  run_yes chain_tx register-provider General 1000000000 \
     --from "$name" \
     --endpoint "/ip4/127.0.0.1/tcp/${port}/http" \
     --chain-id "$CHAIN_ID" \
@@ -192,7 +200,7 @@ sleep 2
 SERVICE_HINT="General:rs=${RS_K}+${RS_M}"
 
 banner "Creating Mode 2 deal"
-CREATE_RES=$(run_yes "$BINARY" tx polystorechain create-deal 50 1000000 5000 --service-hint "$SERVICE_HINT" \
+CREATE_RES=$(run_yes chain_tx create-deal 50 1000000 5000 --service-hint "$SERVICE_HINT" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
 CREATE_TX=$(wait_for_tx "$CREATE_HASH" 30 1) || { echo "CreateDeal tx not found"; exit 1; }
@@ -209,7 +217,7 @@ PY
 SIZE_BYTES=131072
 
 banner "Updating deal content"
-run_yes "$BINARY" tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" --total-mdus 3 --witness-mdus 1 \
+run_yes chain_tx update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" --total-mdus 3 --witness-mdus 1 \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 sleep 2
 
@@ -249,7 +257,7 @@ PY
 )
 
 banner "Opening retrieval session (Mode 2 slot-aware)"
-run_yes "$BINARY" tx polystorechain open-retrieval-session \
+run_yes chain_tx open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER_ADDR" \
   --manifest-root "$MANIFEST_ROOT" \
