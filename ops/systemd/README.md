@@ -5,6 +5,7 @@ These are **templates** for running a long-lived hub + remote SP devnet using sy
 Files:
 - `ops/systemd/*.service`: unit templates
 - `ops/systemd/env/*.env`: EnvironmentFile templates (copy to `/etc/polystore/*.env`)
+- `ops/systemd/cloudflared-*.service`: user-systemd tunnel units for the `*.polynomialstore.com` deployment
 
 For the full “blank box → running devnet” hub runbook, see `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 
@@ -53,6 +54,23 @@ sudo systemctl restart polystorechaind && sudo systemctl status --no-pager polys
 ```bash
 journalctl -u polystorechaind -f
 ```
+
+## User-level Cloudflare tunnel units
+
+For the current `polynomialstore.com` deployment, the Cloudflare tunnels run cleanly as
+user services:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp ops/systemd/cloudflared-hub.service ~/.config/systemd/user/
+cp ops/systemd/cloudflared-providers.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now cloudflared-hub.service
+systemctl --user enable --now cloudflared-providers.service
+```
+
+These units intentionally use `Restart=always`. `cloudflared` can exit with status `0`
+after all connections drop, and `Restart=on-failure` leaves the tunnel down.
 
 ## Provider quick usage
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=cloudflared tunnel for PolyStore hub hostnames
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config %h/.config/cloudflared/hub.polynomialstore.com.user.yml tunnel run
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

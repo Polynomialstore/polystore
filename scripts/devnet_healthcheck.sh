@@ -22,6 +22,8 @@ Hub flags (defaults are localhost):
   --rpc URL        (default: http://127.0.0.1:26657)
   --lcd URL        (default: http://127.0.0.1:1317)
   --evm URL        (default: http://127.0.0.1:8545)
+  --browser-origin ORIGIN
+                   Optional browser origin to use for an EVM JSON-RPC CORS preflight + POST check
   --gateway URL    (default: http://127.0.0.1:8080)
   --faucet URL     (default: http://127.0.0.1:8081)
   --no-faucet      Skip faucet check
@@ -45,6 +47,7 @@ Examples:
     --rpc https://rpc.<domain> \
     --lcd https://lcd.<domain> \
     --evm https://evm.<domain> \
+    --browser-origin https://<domain> \
     --gateway http://127.0.0.1:8080 \
     --faucet https://faucet.<domain>
 
@@ -69,6 +72,20 @@ require_cmd() {
 
 trim_trailing_slash() {
   printf '%s' "${1%/}"
+}
+
+header_value() {
+  local file="$1"
+  local name="$2"
+  awk -v name="$name" '
+    BEGIN { IGNORECASE = 1 }
+    $0 ~ ("^" name ":") {
+      sub(/^[^:]+:[[:space:]]*/, "", $0)
+      sub(/\r$/, "", $0)
+      print
+      exit
+    }
+  ' "$file"
 }
 
 FAILS=0
@@ -181,6 +198,100 @@ check_evm_chain_id() {
   fi
 }
 
+check_evm_cors() {
+  local evm_base="$1"
+  local browser_origin="$2"
+  local preflight_headers preflight_body preflight_status allow_origin allow_methods allow_headers
+  local post_headers post_body post_status post_allow_origin chain_id
+  preflight_headers="$(mktemp)"
+  preflight_body="$(mktemp)"
+  post_headers="$(mktemp)"
+  post_body="$(mktemp)"
+
+  if ! curl -sS --max-time "$HC_TIMEOUT" \
+    -D "$preflight_headers" \
+    -o "$preflight_body" \
+    -X OPTIONS \
+    -H "Origin: $browser_origin" \
+    -H 'Access-Control-Request-Method: POST' \
+    -H 'Access-Control-Request-Headers: content-type' \
+    "$evm_base" >/dev/null; then
+    rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+    fail "EVM CORS preflight ($evm_base, origin=$browser_origin) unreachable"
+    return
+  fi
+
+  preflight_status="$(awk 'NR == 1 { print $2 }' "$preflight_headers")"
+  allow_origin="$(header_value "$preflight_headers" 'Access-Control-Allow-Origin')"
+  allow_methods="$(header_value "$preflight_headers" 'Access-Control-Allow-Methods')"
+  allow_headers="$(header_value "$preflight_headers" 'Access-Control-Allow-Headers')"
+
+  if [[ "$preflight_status" != "200" && "$preflight_status" != "204" ]]; then
+    rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+    fail "EVM CORS preflight ($evm_base) expected HTTP 200/204, got ${preflight_status:-000}"
+    return
+  fi
+
+  if [[ "$allow_origin" != "*" && "$allow_origin" != "$browser_origin" ]]; then
+    rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+    fail "EVM CORS preflight ($evm_base) missing matching Access-Control-Allow-Origin for $browser_origin"
+    return
+  fi
+
+  if [[ "${allow_methods,,}" != *post* ]]; then
+    rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+    fail "EVM CORS preflight ($evm_base) missing POST in Access-Control-Allow-Methods"
+    return
+  fi
+
+  if [[ "${allow_headers,,}" != *content-type* ]]; then
+    rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+    fail "EVM CORS preflight ($evm_base) missing content-type in Access-Control-Allow-Headers"
+    return
+  fi
+
+  if ! curl -sS --max-time "$HC_TIMEOUT" \
+    -D "$post_headers" \
+    -o "$post_body" \
+    -H "Origin: $browser_origin" \
+    -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
+    "$evm_base" >/dev/null; then
+    rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+    fail "EVM CORS POST ($evm_base, origin=$browser_origin) unreachable"
+    return
+  fi
+
+  post_status="$(awk 'NR == 1 { print $2 }' "$post_headers")"
+  post_allow_origin="$(header_value "$post_headers" 'Access-Control-Allow-Origin')"
+
+  if [[ "$post_status" != "200" ]]; then
+    rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+    fail "EVM CORS POST ($evm_base) expected HTTP 200, got ${post_status:-000}"
+    return
+  fi
+
+  if [[ "$post_allow_origin" != "*" && "$post_allow_origin" != "$browser_origin" ]]; then
+    rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+    fail "EVM CORS POST ($evm_base) missing matching Access-Control-Allow-Origin for $browser_origin"
+    return
+  fi
+
+  if have_cmd jq; then
+    chain_id="$(jq -r '.result // empty' <"$post_body" 2>/dev/null || true)"
+    if [[ -z "$chain_id" ]]; then
+      rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+      fail "EVM CORS POST ($evm_base) returned unexpected JSON (missing .result)"
+      return
+    fi
+    ok "EVM browser CORS origin=$browser_origin chain_id=$chain_id"
+  else
+    ok "EVM browser CORS origin=$browser_origin"
+  fi
+
+  rm -f "$preflight_headers" "$preflight_body" "$post_headers" "$post_body"
+}
+
 check_gateway_health() {
   local gateway_base="$1"
   check_http_200 "Gateway /health" "$gateway_base/health"
@@ -223,6 +334,7 @@ EVM="$EVM_DEFAULT"
 GATEWAY="$GATEWAY_DEFAULT"
 FAUCET="$FAUCET_DEFAULT"
 CHECK_FAUCET=1
+BROWSER_ORIGIN=""
 
 PROVIDER="$PROVIDER_DEFAULT"
 HUB_LCD=""
@@ -234,6 +346,7 @@ while [[ $# -gt 0 ]]; do
     --rpc) RPC="$2"; shift 2 ;;
     --lcd) LCD="$2"; shift 2 ;;
     --evm) EVM="$2"; shift 2 ;;
+    --browser-origin) BROWSER_ORIGIN="$2"; shift 2 ;;
     --gateway) GATEWAY="$2"; shift 2 ;;
     --faucet) FAUCET="$2"; CHECK_FAUCET=1; shift 2 ;;
     --no-faucet) CHECK_FAUCET=0; shift ;;
@@ -258,6 +371,7 @@ LCD="$(trim_trailing_slash "$LCD")"
 EVM="$(trim_trailing_slash "$EVM")"
 GATEWAY="$(trim_trailing_slash "$GATEWAY")"
 FAUCET="$(trim_trailing_slash "$FAUCET")"
+BROWSER_ORIGIN="$(trim_trailing_slash "$BROWSER_ORIGIN")"
 PROVIDER="$(trim_trailing_slash "$PROVIDER")"
 HUB_LCD="$(trim_trailing_slash "$HUB_LCD")"
 PROVIDER_PUBLIC="$(trim_trailing_slash "$PROVIDER_PUBLIC")"
@@ -272,6 +386,11 @@ if [[ "$MODE" == "hub" ]]; then
   check_lcd_node_info "$LCD"
   check_polystorechain_params "$LCD"
   check_evm_chain_id "$EVM"
+  if [[ -n "$BROWSER_ORIGIN" ]]; then
+    check_evm_cors "$EVM" "$BROWSER_ORIGIN"
+  else
+    ok "EVM browser CORS check skipped"
+  fi
   check_gateway_health "$GATEWAY"
   if [[ "$CHECK_FAUCET" == "1" ]]; then
     check_faucet_health "$FAUCET"

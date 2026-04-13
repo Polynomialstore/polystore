@@ -347,7 +347,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config %h/.config/cloudflared/providers.<domain>.yml tunnel run
-Restart=on-failure
+Restart=always
 RestartSec=2
 
 [Install]
