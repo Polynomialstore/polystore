@@ -1,7 +1,7 @@
 # RFC: Retrieval Access Control + Sponsored & Protocol Retrieval Sessions (Draft)
 
-**Status:** Draft (pre‑alpha)  
-**Last updated:** 2026-01-23  
+**Status:** Implemented in devnet
+**Last updated:** 2026-01-23
 **Scope:** Chain (`polystorechain/`), Gateway/router (`polystore_gateway/`), Providers, UI (`polystore-website/`), and side projects (public explorers)
 **Hard constraints respected:** does **not** change storage lock‑in pricing or the settlement semantics of **owner‑paid** retrieval sessions in `rfcs/rfc-pricing-and-escrow-accounting.md`; no off-chain oracles; deterministic on-chain behavior.
 
@@ -19,7 +19,7 @@ PolyStore needs retrieval authorization semantics that are both **product‑mean
 
 Separately, PolyStore’s frozen accounting RFC currently assumes `MsgOpenRetrievalSession` is **owner‑paid** (fees charged against `Deal.escrow_balance`). If we simply allow “anyone can open a retrieval session” for public deals, strangers could drain the owner’s long‑term escrow. This RFC therefore introduces:
 
-1) **Sponsored** session opens (requester pays), and  
+1) **Sponsored** session opens (requester pays), and
 2) **Protocol** session opens (audit/repair/healing; protocol budget pays),
 
 while keeping the owner‑paid path unchanged.
@@ -164,7 +164,7 @@ Fields (conceptual):
 - `start_mdu_index`, `start_blob_index`, `blob_count`, `expires_at`
 - `auth` (oneof):
   - `AuditTaskRef { epoch, task_id }` (deterministic audit assignment; see §6.3)
-  - `RepairAuth { deal_id, slot }`   (Mode 2 repair authorization; see §6.4)
+  - `RepairAuth { deal_id, slot }`   (striped repair authorization; see §6.4)
 - `max_total_fee` (optional)
 
 Funding semantics (normative):
@@ -214,7 +214,7 @@ All opens MUST enforce:
 - `current_height < Deal.end_block` (deal ACTIVE)
 - `expires_at <= Deal.end_block`
 - `manifest_root == Deal.manifest_root`
-- provider/slot belongs to the deal assignment (Mode 2: slot binding must match current assignment)
+- provider/slot belongs to the deal assignment (for striped deals, slot binding must match the current assignment)
 
 ### 6.2 Policy checks for sponsored opens (`MsgOpenRetrievalSessionSponsored`)
 
@@ -252,12 +252,12 @@ A protocol audit session is only valid if it is bound to a deterministic audit a
 
 This closes the “restricted deals still allow protocol audit” story without requiring the UI to expose any special flow.
 
-### 6.4 Protocol repair authorization (Mode 2; deterministic)
+### 6.4 Protocol repair authorization (striped layout; deterministic)
 
 A protocol repair session is valid if it is opened by the replacement candidate while a slot is REPAIRING.
 
 `MsgOpenProtocolRetrievalSession(purpose=PROTOCOL_REPAIR, auth=RepairAuth{deal_id, slot})` MUST enforce:
-- Deal is Mode 2 and has `mode2_slots[slot]`
+- Deal uses the striped layout and has `mode2_slots[slot]`
 - `mode2_slots[slot].status == REPAIRING`
 - `creator == mode2_slots[slot].pending_provider`
 - The session `provider/slot` being fetched MUST be an **ACTIVE** slot provider for the same deal (source of truth bytes)

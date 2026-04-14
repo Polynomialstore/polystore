@@ -333,7 +333,7 @@ func (k Keeper) GetAuthority() []byte {
 	return k.authority
 }
 
-// IncrementHeat updates the traffic statistics for a deal.
+// IncrementHeat updates the legacy-named retrieval activity counters for a deal.
 func (k Keeper) IncrementHeat(ctx sdk.Context, dealID uint64, bytesServed uint64, failed bool) error {
 	state, err := k.DealHeatStates.Get(ctx, dealID)
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {

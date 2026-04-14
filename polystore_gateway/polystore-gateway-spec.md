@@ -56,7 +56,7 @@ The gateway also exposes a **minimal, path-style S3 surface** at the HTTP root f
 | `HEAD` | `/{bucket}` | Bucket existence check (Deal exists on chain). |
 | `GET` | `/{bucket}` | List objects (PolyFS file table) for the Deal’s current `manifest_root`. |
 | `GET` / `HEAD` | `/{bucket}/{key...}` | Fetch an object from PolyFS by `file_path` (supports explicit `Range: bytes=start-end`). |
-| `PUT` | `/{bucket}/{key...}` | Upload an object, ingest via Mode 2, upload to providers, and **commit** via `update-deal-content` (devnet: requires a faucet-authorized deal). |
+| `PUT` | `/{bucket}/{key...}` | Upload an object, ingest via the striped RS path, upload to providers, and **commit** via `update-deal-content` (devnet: requires a faucet-authorized deal). |
 | `DELETE` | `/{bucket}/{key...}` | Not implemented yet (PolyFS tombstoning still needs wiring). |
 
 ### 3.2 Gateway (Web Frontend Support)
@@ -76,12 +76,12 @@ These endpoints support the `polystore-website` "Thin Client" flow.
         *   **Compatibility:** Current responses may include legacy aliases: `cid == manifest_root` and `allocated_length == total_mdus`.
     *   **Role:** Offloads canonical ingest and commitment generation from the browser (until thick-client parity is complete).
 
-*   **`POST /sp/upload_shard`** *(Mode 2 Provider API)*
+*   **`POST /sp/upload_shard`** *(Striped Provider API)*
     *   **Input:** Raw shard bytes (body) with headers:
         * `X-PolyStore-Deal-ID` (uint64), `X-PolyStore-Mdu-Index` (uint64), `X-PolyStore-Slot` (uint64), `X-PolyStore-Manifest-Root` (`0x` + 96 hex).
     *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<manifest_root_key>/`.
-    *   **Role:** Slot-specific shard ingestion for Mode 2 (StripeReplica).
-        *   **Provider is a dumb pipe:** the server does not need to understand Mode 1 vs Mode 2 beyond writing/serving bytes addressed by the headers.
+    *   **Role:** Slot-specific shard ingestion for the striped StripeReplica layout.
+        *   **Provider is a dumb pipe:** the server does not need to understand layout variants beyond writing/serving bytes addressed by the headers.
         *   Metadata MDUs (MDU #0 + Witness) remain replicated to all slots via `/sp/upload_mdu`.
 
 *   **`POST /gateway/mirror_mdu` / `/gateway/mirror_manifest` / `/gateway/mirror_shard`** *(Gateway mirror helpers)*
@@ -98,7 +98,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 *   **`GET /health`**
     *   **Role:** Lightweight liveness probe (200 if gateway is reachable).
 *   **`GET /status`**
-    *   **Role:** Returns gateway capabilities and mode (used by the web UI “green dot” and to prefer gateway Mode 2 when available).
+    *   **Role:** Returns gateway capabilities and ingest mode (used by the web UI “green dot” and to prefer the local striped gateway path when available).
     *   **Target fields (recommended):**
         *   `capabilities.mode2_rs = true|false`
         *   `extra.rs_profile = "8+4"` (or similar)
@@ -135,7 +135,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
         3.  Records per-blob proof artifacts for later submission.
         4.  Streams the file content to the response and sets `X‑PolyStore‑Provider`.
     *   **Role:** Acts as a retrieval proxy and proof recorder; it does **not** sign user transactions.
-    *   **Mode 2 behavior:** If the local slab is missing a user MDU, the gateway may fetch `K` shards from providers (slot 0..K-1 by default) via `/sp/shard`, reconstruct the MDU with RS decoding, and stream the requested range. Ranges must be slot-aligned (single-slot blob ranges).
+    *   **Striped behavior:** If the local slab is missing a user MDU, the gateway may fetch `K` shards from providers (slot 0..K-1 by default) via `/sp/shard`, reconstruct the MDU with RS decoding, and stream the requested range. Ranges must be slot-aligned (single-slot blob ranges).
     *   **PolyFS Path Fetch (target end state):**
         *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
         *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\\` separators, whitespace-only, NUL bytes, and control characters).
@@ -158,11 +158,11 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Logic:** Provider submits `MsgSubmitRetrievalSessionProof` on-chain.
     *   **Role:** Canonical proof submission path.
 
-*   **`GET /sp/shard`** *(Mode 2 Provider API; internal)*
+*   **`GET /sp/shard`** *(Striped Provider API; internal)*
     *   **Headers:** `X‑PolyStore‑Gateway‑Auth: <shared token>` (**required**).
     *   **Query Params:** `deal_id`, `manifest_root`, `mdu_index`, `slot`.
     *   **Logic:** Streams `mdu_<index>_slot_<slot>.bin` from the provider’s storage root.
-    *   **Role:** Provider‑to‑provider shard reads used to reconstruct Mode 2 MDUs when local shards are missing. Browsers should fetch bytes via `/gateway/fetch/...` instead.
+    *   **Role:** Provider‑to‑provider shard reads used to reconstruct striped MDUs when local shards are missing. Browsers should fetch bytes via `/gateway/fetch/...` instead.
 
 *   **`POST /gateway/prove-retrieval`** *(Devnet helper; subject to change)*
     *   **Input (target):** JSON `{ "deal_id": 123, "epoch_id": 1, "manifest_root": "0x...", "file_path": "video.mp4" }`.
@@ -221,7 +221,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gat
 
 3.  **Local Storage:**
     *   The Gateway can act as a Storage Provider for local devnet flows, but it is **not** required to be the sole provider.
-    *   When configured with multiple providers, the gateway uploads Mode 2 shards to the assigned slots and can reconstruct missing shards on fetch.
+    *   When configured with multiple providers, the gateway uploads striped shards to the assigned slots and can reconstruct missing shards on fetch.
 
 ## 5. Future Roadmap
 

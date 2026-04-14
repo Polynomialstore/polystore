@@ -1,6 +1,6 @@
 # RFC: Challenge Derivation & Proof Quota Policy (Unified Liveness v1)
 
-**Status:** Sprint‑0 Frozen (Ready for implementation)
+**Status:** Partially implemented in devnet
 **Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
@@ -32,18 +32,18 @@ PolyStore defines a **liveness epoch** with fixed length:
 
 ### 1.2 Assignment
 An **assignment** is:
-- Mode 1: `(deal_id, provider)` where `provider ∈ Deal.providers[]`
-- Mode 2: `(deal_id, slot)` where `slot ∈ [0..K+M-1]` and `slot.provider` is the accountable provider
+- legacy full-replica compatibility: `(deal_id, provider)` where `provider ∈ Deal.providers[]`
+- striped layout: `(deal_id, slot)` where `slot ∈ [0..K+M-1]` and `slot.provider` is the accountable provider
 
 ### 1.3 Challenge position
 A synthetic challenge position is a pair:
 - `(mdu_index, blob_index)`
-  - Mode 1: `blob_index ∈ [0..63]` (Blob within MDU)
-  - Mode 2: `blob_index` MUST be interpreted as `leaf_index` per slot-major ordering (§8.1.3); `blob_index ∈ [0..leafCount-1]`
+  - legacy full-replica compatibility: `blob_index ∈ [0..63]` (Blob within MDU)
+  - striped layout: `blob_index` MUST be interpreted as `leaf_index` per slot-major ordering (§8.1.3); `blob_index ∈ [0..leafCount-1]`
 
 ### 1.4 Credit
 A **credit** is a unit of evidence earned via organic retrieval that reduces synthetic demand.
-This RFC accounts credits in **blob-proofs** (not bytes) to avoid ambiguity across Mode 1 vs Mode 2.
+This RFC accounts credits in **blob-proofs** (not bytes) to avoid ambiguity across legacy full-replica compatibility and the striped layout.
 
 ---
 
@@ -52,7 +52,7 @@ This RFC accounts credits in **blob-proofs** (not bytes) to avoid ambiguity acro
 Challenge derivation and quota computation MUST be computable from:
 - current block height (for epoch)
 - `Deal`: `redundancy_mode`, `service_hint` (legacy), `providers[]`
-- **Frozen additions:** `Deal.total_mdus`, `Deal.witness_mdus`, and for Mode 2 the explicit `(K,M)` and slot order (see `rfcs/rfc-mode2-onchain-state.md`)
+- **Frozen additions:** `Deal.total_mdus`, `Deal.witness_mdus`, and for striped deals the explicit `(K,M)` and slot order (see `rfcs/rfc-mode2-onchain-state.md`)
 - epoch randomness `R_e` (see §3.1)
 - per-epoch counters for credits + satisfied synthetic challenges (new state; see §5)
 
@@ -93,10 +93,10 @@ synthetic_needed = max(0, quota_blobs - credits_blobs)
 The synthetic challenge set for the assignment is:
 - `S_e(deal, assignment) = { C_i | i ∈ [0..synthetic_needed-1] }`
 
-### 3.3 Mode 2: slot-major derivation
+### 3.3 Striped slot-major derivation
 
 Let:
-- `K,M` be the deal’s Mode 2 profile
+- `K,M` be the deal’s striped profile
 - `N = K+M`
 - `rows = 64 / K`
 - `leafCount = N * rows`
@@ -118,9 +118,9 @@ The challenge position is `(mdu_index, blob_index=leaf_index)`.
 
 **Exclusions (frozen):**
 - Synthetic challenges MUST NOT target metadata MDUs (`mdu_index < meta_mdus`).
-- Synthetic challenges MUST NOT target Mode 2 slots with `status != ACTIVE` (repairing slots are excluded).
+- Synthetic challenges MUST NOT target striped slots with `status != ACTIVE` (repairing slots are excluded).
 
-### 3.4 Mode 1: replica derivation
+### 3.4 Legacy full-replica compatibility
 
 Let:
 - `meta_mdus = 1 + witness_mdus`
@@ -151,9 +151,9 @@ All of the following are chain params:
 
 ### 4.2 Normalized “slot bytes”
 Quota targets are computed over **slot-responsible bytes** (not entire deal bytes):
-- Mode 2: each slot stores `rows * BLOB_SIZE` per user MDU.
+- striped layout: each slot stores `rows * BLOB_SIZE` per user MDU.
   - `slot_bytes = user_mdus * rows * BLOB_SIZE`
-- Mode 1: each provider stores full MDUs.
+- legacy full-replica compatibility: each provider stores full MDUs.
   - `slot_bytes = user_mdus * MDU_SIZE`
 
 ### 4.3 Required blobs function
@@ -166,7 +166,7 @@ quota_blobs  = clamp(quota_min_blobs, target_blobs, quota_max_blobs)
 ```
 
 Notes:
-- using `BLOB_SIZE` as the unit makes Mode 1 and Mode 2 comparable
+- using `BLOB_SIZE` as the unit makes legacy full-replica compatibility and the striped layout comparable
 - caps ensure quotas remain operationally feasible on low-end nodes
 
 ---

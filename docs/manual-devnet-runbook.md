@@ -359,7 +359,7 @@ cmp -s "$UPLOAD_FILE" fetched.bin && echo "OK: fetched bytes match"
 
 Mirrors `scripts/e2e_gateway_retrieval_multi_sp.sh`:
 
-1. Create a Mode2 deal using `General:rs=2+1` so the gateway splits shards across many SPs (`polystorechain tx polystorechain create-deal ... --service-hint "General:rs=2+1"`).
+1. Create a striped deal using `General:rs=2+1` so the gateway splits shards across many SPs (`polystorechain tx polystorechain create-deal ... --service-hint "General:rs=2+1"`).
 2. Upload and commit a 1 MiB payload via the router exactly as above.
 3. Use `polystorechain query polystorechain get-deal --id <deal_id>` to read `providers[]` and choose the assigned provider that differs from the owner. Note its `endpoints[0]`.
 4. Hit the router’s `/gateway/prove-retrieval` endpoint with JSON:
@@ -374,13 +374,13 @@ Mirrors `scripts/e2e_gateway_retrieval_multi_sp.sh`:
    }
    ```
    (The epoch can be computed via `curl http://127.0.0.1:26657/status`, matching the script’s `current_epoch` helper.)
-5. Watch the gateway reply with a `tx_hash`. Use `polystorechain query tx <hash>` to confirm the `MsgSubmitRetrievalProof` succeeded under the assigned provider key. This proves the router can reconstruct Mode2 MDUs and authorize cross-account receipts.
+5. Watch the gateway reply with a `tx_hash`. Use `polystorechain query tx <hash>` to confirm the `MsgSubmitRetrievalProof` succeeded under the assigned provider key. This proves the router can reconstruct striped MDUs and authorize cross-account receipts.
 
 ## 4. Deputy-led healing / repair validation
 
 Following the latter half of `scripts/e2e_deputy_ghost_repair_multi_sp.sh`:
 
-1. Create another deal (Mode2), upload/commit, and request a retrieval plan with `curl http://localhost:8080/gateway/plan-retrieval-session/<manifest>?deal_id=<id>&owner=<owner>&file_path=<file>&range_start=0&range_len=<bytes>`. Capture the returned provider; this is the planned slot owner.
+1. Create another striped deal, upload/commit, and request a retrieval plan with `curl http://localhost:8080/gateway/plan-retrieval-session/<manifest>?deal_id=<id>&owner=<owner>&file_path=<file>&range_start=0&range_len=<bytes>`. Capture the returned provider; this is the planned slot owner.
 2. Fetch bytes via `/gateway/fetch/...` using the owner signature. Inspect `X-PolyStore-Provider` in the response headers—if the planner routes around the busy slot, the header should show a deputy provider.
 3. Submit a deputy session proof: POST to `/gateway/session-proof` with the same `session_id` and the deputy provider address. The gateway should reply `{"status":"success"}`.
 4. Wait for the next epoch boundary (see the script’s `wait_for_height` logic) and inspect `polystorechain query polystorechain get-deal --id <id>` to confirm the targeted `mode2_slots` entry shows `status=REPAIRING` with a `pending_provider`.
@@ -390,7 +390,7 @@ Following the latter half of `scripts/e2e_deputy_ghost_repair_multi_sp.sh`:
 
 Manual checks derived from keeper tests:
 
-- Query `polystorechain query polystorechain params` and `polystorechain query polystorechain list-deals` to examine `Params.max_drain_bytes_per_epoch`, `Params.max_repairing_bytes_ratio_bps`, and deal heat statistics.
+- Query `polystorechain query polystorechain params` and `polystorechain query polystorechain list-deals` to examine `Params.max_drain_bytes_per_epoch`, `Params.max_repairing_bytes_ratio_bps`, and deal retrieval activity counters (legacy `/heat` view).
 - Execute `polystorechain tx polystorechain set-provider-draining <provider>` to test that new placement requests avoid that provider, as tested in `polystorechain/x/polystorechain/keeper/draining_test.go`.
 - Open sponsored retrieval sessions and vouchers via `/gateway/plan-retrieval-session` + `/gateway/session-receipt`; inspect `polystorechain query polystorechain retrieval-sessions` to ensure quotas decrement just like `msg_server_sponsored_sessions_test.go`.
 - Watch reward distribution by querying `polystorechain query polystorechain rewards` or running dedicated `go test ./polystorechain/x/polystorechain/keeper/base_rewards_test.go` for a reference baseline.

@@ -15,7 +15,7 @@ Recommended public entry points:
 - Faucet: `https://faucet.polynomialstore.com/faucet`
 - Chain ID: `20260211` (`0x1352573`)
 
-Provider public endpoints (Mode 2 `2+1` baseline):
+Provider public endpoints (striped `2+1` baseline):
 - `https://sp1.polynomialstore.com` → provider `nil1jtqzjx7y9kh3un3a86u774mucsq4q3vshh8sr0`
 - `https://sp2.polynomialstore.com` → provider `nil1w98n98a8gnrwnyz62wfvya9wzvdr92uwz7dssk`
 - `https://sp3.polynomialstore.com` → provider `nil182f6qy5taazj5fa722p2ut4d0v5j2gkap0dprj`

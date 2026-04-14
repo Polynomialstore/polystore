@@ -65,11 +65,11 @@ To enable the Browser Gateway without creating protocol drift, we must unify the
 ## Milestone 4: Testnet "Store Wars" (Incentivized)
 **Goal:** Stress-test the economics and adversarial resistance.
 
-*   **Consulting Analysis:** Once Mode 2 is functional, the system needs chaos. We need to verify that "Heat" correctly routes traffic and that Slashing actually deters laziness.
+*   **Consulting Analysis:** Once StripeReplica is functional, the system needs chaos. We need to verify that retrieval activity telemetry is actually useful and that slashing actually deters laziness.
 *   **Key Deliverables:**
     *   **Economic Parameters:** Finalize the "Tiered Reward" curves (Platinum/Gold/Silver) based on latency.
     *   **Slashing & Jailing:** Enable automatic slashing for failed proofs and missing Retrieval Session completions.
-    *   **The "Heat" Oracle:** Fully implement the on-chain Heat tracking to dynamically adjust provider rewards based on proven throughput.
+    *   **Retrieval Activity Counters:** Keep on-chain bytes-served / successful-retrieval / failed-challenge tracking for observability only; do not tie provider rewards to it without a fresh RFC.
     *   **Adversarial Bots:** Build bots that try to submit fake proofs, withhold data, or flood the network, to verify the chain's defenses.
 
 ## Milestone 5: Mainnet Launch (Enterprise Ready)

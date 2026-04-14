@@ -1,4 +1,4 @@
-# RFC: Deal Setup Slot Bump for Mode 2
+# RFC: Deal Setup Slot Bump for Striped Deals
 
 **Status:** Draft / Devnet Alpha Viability Candidate
 **Scope:** Minimal chain protocol (`polystorechain/`), EVM intents, website/gateway orchestration during initial deal setup
@@ -8,7 +8,7 @@
 
 ## 1. Problem statement
 
-PolyStore currently assumes that once providers are deterministically assigned to a new Mode 2 deal, those slots are immediately usable.
+PolyStore currently assumes that once providers are deterministically assigned to a new striped deal, those slots are immediately usable.
 
 In practice, there is a specific failure mode that is both common and painful:
 
@@ -36,7 +36,7 @@ This creates a bad UX:
 
 ## 2. Design goal
 
-Add a **fast, deterministic, owner-controlled slot replacement path** for **empty Mode 2 deals**.
+Add a **fast, deterministic, owner-controlled slot replacement path** for **empty striped deals**.
 
 In plain terms:
 
@@ -200,7 +200,7 @@ Setup failure is **not** chain-verifiable evidence by itself.
 
 ### 5.3 Setup bump
 
-A **setup bump** is a deterministic reassignment of one Mode 2 slot to a different provider while the deal is still in setup phase.
+A **setup bump** is a deterministic reassignment of one striped slot to a different provider while the deal is still in setup phase.
 
 ### 5.4 Tried provider set
 
@@ -366,7 +366,7 @@ This RFC is most valuable when the browser and gateway use it automatically.
 
 ### 8.1 Happy path
 
-1. User creates a Mode 2 deal.
+1. User creates a striped deal.
 2. Chain assigns `N = K+M` providers.
 3. Browser/gateway uploads initial artifacts to the assigned slots.
 4. All slots succeed.
@@ -375,7 +375,7 @@ This RFC is most valuable when the browser and gateway use it automatically.
 
 ### 8.2 Sad path: one slot fails during upload
 
-1. User creates a Mode 2 deal.
+1. User creates a striped deal.
 2. Upload to slot `s` fails.
 3. Browser/gateway identifies the failing provider for slot `s`.
 4. Browser submits `MsgBumpDealSetupSlot(deal_id, slot=s, expected_provider=current_provider)`.
@@ -453,7 +453,7 @@ Separate observability may later count setup bump frequency for ops dashboards, 
 
 ## 10. Interaction with existing RFCs
 
-### 10.1 Mode 2 on-chain state
+### 10.1 striped on-chain state
 
 This RFC complements [rfc-mode2-onchain-state.md](rfcs/rfc-mode2-onchain-state.md):
 
@@ -498,7 +498,7 @@ The checklist below is intentionally scoped for the trusted devnet. It should be
 
 ### 11.2 Website
 
-1. Detect slot-specific upload failures in the Mode 2 upload flow
+1. Detect slot-specific upload failures in the striped upload flow
 2. Call the bump transaction for the failing slot
 3. Refresh LCD deal state
 4. Resolve new provider endpoint
@@ -601,7 +601,7 @@ Primary files:
 - `polystore-website/src/hooks/useCreateDeal.ts`
 - `polystore-website/src/hooks/useDirectCommit.ts`
 - `polystore-website/src/components/Dashboard.tsx`
-- any deal-detail or upload-state components that surface Mode 2 progress
+- any deal-detail or upload-state components that surface striped progress
 - Playwright coverage under `polystore-website/tests/`
 
 Scope:
@@ -643,7 +643,7 @@ This sequencing keeps the devnet usable at each step and avoids building UI assu
 ## 12. Test gates
 
 1. **Owner-only:** non-owner cannot bump setup slot
-2. **Mode 2 only:** Mode 1 or malformed deals reject
+2. **Striped deals only:** legacy full-replica or malformed deals reject
 3. **Setup-phase only:** bump rejected after first content commit
 4. **Expected provider guard:** stale expected provider rejects
 5. **Deterministic replacement:** same state yields same replacement
@@ -670,7 +670,7 @@ This section is especially important because the RFC is intentionally alpha-scop
 
 This RFC adds one narrow but high-value capability:
 
-> If a Mode 2 provider fails during the very first deal setup, the owner can ask the chain for a deterministic replacement before committing content.
+> If a striped-slot provider fails during the very first deal setup, the owner can ask the chain for a deterministic replacement before committing content.
 
 That matches the real failure mode users hit today:
 

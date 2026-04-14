@@ -25,7 +25,7 @@ type queryServer struct {
 	k Keeper
 }
 
-// GetDealHeat implements types.QueryServer.
+// GetDealHeat implements the legacy-named retrieval activity query.
 func (q queryServer) GetDealHeat(goCtx context.Context, req *types.QueryGetDealHeatRequest) (*types.QueryGetDealHeatResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
@@ -36,7 +36,7 @@ func (q queryServer) GetDealHeat(goCtx context.Context, req *types.QueryGetDealH
 	heat, err := q.k.DealHeatStates.Get(ctx, req.DealId)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
-			// Return empty heat state instead of error for UX
+			// Return an empty retrieval activity state instead of error for UX
 			return &types.QueryGetDealHeatResponse{
 				Heat: types.DealHeatState{
 					BytesServedTotal:      0,

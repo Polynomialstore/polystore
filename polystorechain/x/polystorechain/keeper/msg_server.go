@@ -1434,14 +1434,14 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			return fmt.Errorf("failed to update receipt nonce: %w", err)
 		}
 
-		// Track bandwidth for escrow/payment accounting and UI heat stats.
+		// Track bandwidth for escrow/payment accounting and UI retrieval activity counters.
 		if bandwidthBytes > bandwidthBytes+receipt.BytesServed {
 			return sdkerrors.ErrInvalidRequest.Wrap("receipt bytes overflow")
 		}
 		bandwidthBytes += receipt.BytesServed
 
 		if err := k.IncrementHeat(ctx, deal.Id, receipt.BytesServed, false); err != nil {
-			ctx.Logger().Error("failed to increment heat", "error", err)
+			ctx.Logger().Error("failed to increment retrieval activity counters", "error", err)
 		}
 
 		if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, creator, receipt.ProofDetails.MduIndex, receipt.ProofDetails.BlobIndex); err != nil {
@@ -1651,7 +1651,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			bandwidthBytes += chunk.RangeLen
 
 			if err := k.IncrementHeat(ctx, deal.Id, chunk.RangeLen, false); err != nil {
-				ctx.Logger().Error("failed to increment heat", "error", err)
+				ctx.Logger().Error("failed to increment retrieval activity counters", "error", err)
 			}
 
 			if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, creator, chunk.ProofDetails.MduIndex, chunk.ProofDetails.BlobIndex); err != nil {
@@ -3172,7 +3172,7 @@ func (k msgServer) ConfirmRetrievalSession(goCtx context.Context, msg *types.Msg
 
 	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
 		if err := k.IncrementHeat(ctx, session.DealId, session.TotalBytes, false); err != nil {
-			ctx.Logger().Error("failed to increment heat on session completion", "error", err)
+			ctx.Logger().Error("failed to increment retrieval activity counters on session completion", "error", err)
 		}
 	}
 
@@ -3214,7 +3214,7 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 			ctx.Logger().Error("failed to record non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
 		}
 		if err := k.IncrementHeat(ctx, session.DealId, 0, true); err != nil {
-			ctx.Logger().Error("failed to increment heat for non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
+			ctx.Logger().Error("failed to increment retrieval activity counters for non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
 		}
 		k.trackProviderHealth(ctx, session.DealId, session.Provider, false)
 	}
@@ -3476,7 +3476,7 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 
 	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
 		if err := k.IncrementHeat(ctx, session.DealId, session.TotalBytes, false); err != nil {
-			ctx.Logger().Error("failed to increment heat on session completion", "error", err)
+			ctx.Logger().Error("failed to increment retrieval activity counters on session completion", "error", err)
 		}
 	}
 
@@ -3621,7 +3621,7 @@ func (k Keeper) recordEvidenceSummary(ctx sdk.Context, dealID uint64, provider s
 	}
 	if shouldCountEvidenceAsFailedChallenge(kind, ok) {
 		if err := k.IncrementHeat(ctx, dealID, 0, true); err != nil {
-			ctx.Logger().Error("failed to increment heat for evidence summary", "deal", dealID, "kind", kind, "error", err)
+			ctx.Logger().Error("failed to increment retrieval activity counters for evidence summary", "deal", dealID, "kind", kind, "error", err)
 		}
 	}
 

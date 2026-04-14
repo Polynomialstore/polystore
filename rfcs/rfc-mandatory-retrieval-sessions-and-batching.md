@@ -1,8 +1,8 @@
 # RFC: Mandatory Retrieval Sessions for All Served Bytes + Batching Semantics (Access Control + Protocol Hooks) (Draft)
 
-**Status:** Draft (pre‑alpha)  
-**Last updated:** 2026-01-23  
-**Scope:** Providers, Gateway/router, UI client, deputies/proxies, and protocol audit/repair paths  
+**Status:** Implemented on primary fetch paths / endpoint audit pending
+**Last updated:** 2026-01-23
+**Scope:** Providers, Gateway/router, UI client, deputies/proxies, and protocol audit/repair paths
 **Hard constraints respected:** does **not** modify `rfcs/rfc-pricing-and-escrow-accounting.md` (owner-paid settlement semantics); no oracles; deterministic on-chain state.
 
 ---
@@ -28,7 +28,7 @@ This updated draft also clarifies how session gating composes with:
 ## 2. Definitions
 
 - **Blob:** accounting atom of size `BLOB_SIZE = 128 KiB`.
-- **Blob-address:** `(mdu_index, blob_index)`; in Mode 2 uses aligned `leaf_index`.
+- **Blob-address:** `(mdu_index, blob_index)`; in the striped layout this uses aligned `leaf_index`.
 - **Session range:** a contiguous blob range defined at session open by:
   - `start_mdu_index`, `start_blob_index`, `blob_count`
 - **Served bytes:** any response payload containing Deal bytes, regardless of whether delivered directly by the provider, proxied by a gateway, or relayed by a deputy.
@@ -65,19 +65,19 @@ Serving nodes MUST NOT attempt to re-implement deal authorization policy. They o
 Authorization policy is enforced at **session open** via chain rules in:
 - `MsgOpenRetrievalSession` (owner-paid; owner-only),
 - `MsgOpenRetrievalSessionSponsored` (requester-paid; public/allowlist/voucher),
-- `MsgOpenProtocolRetrievalSession` (protocol-paid; audit/repair hooks).  
+- `MsgOpenProtocolRetrievalSession` (protocol-paid; audit/repair hooks).
 See: `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`.
 
 ### R3 — Session validation procedure
 
 Before serving bytes, the serving node MUST validate (by querying chain state):
 
-1) `session.status == OPEN` and `current_height <= session.expires_at`  
-2) `session.deal_id == requested_deal_id`  
-3) `session.manifest_root == Deal.manifest_root` (content pin)  
+1) `session.status == OPEN` and `current_height <= session.expires_at`
+2) `session.deal_id == requested_deal_id`
+3) `session.manifest_root == Deal.manifest_root` (content pin)
 4) **Provider binding**
-   - Mode 1: `session.provider` MUST be a member of `Deal.providers[]`.
-   - Mode 2: `session.slot` MUST match the slot assignment for the provider serving the bytes.
+   - For legacy full-replica compatibility, `session.provider` MUST be a member of `Deal.providers[]`.
+   - For striped deals, `session.slot` MUST match the slot assignment for the provider serving the bytes.
 5) **Deal term coupling**
    - `current_height < Deal.end_block` (deal ACTIVE), and
    - `session.expires_at ≤ Deal.end_block` (sessions cannot outlive the paid term).
@@ -139,7 +139,7 @@ Protocol operations that fetch bytes (audit debt, repair catch-up, healing reads
 
 This RFC intentionally limits stable invariants to:
 
-1) session binding, and  
+1) session binding, and
 2) blob-aligned subset-of-range delivery.
 
 Future optimizations that remain compatible:

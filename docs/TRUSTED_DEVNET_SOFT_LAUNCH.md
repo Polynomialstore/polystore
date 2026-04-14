@@ -363,7 +363,7 @@ Then register provider endpoints on-chain as:
 - `/dns4/sp2.<domain>/tcp/443/https`
 - `/dns4/sp3.<domain>/tcp/443/https`
 
-If the router/local Gateway runs on the same host as those provider processes, set a local upload fast-path override so Mode2 uploads avoid Cloudflare round-trips:
+If the router/local Gateway runs on the same host as those provider processes, set a local upload fast-path override so striped uploads avoid Cloudflare round-trips:
 
 ```bash
 export POLYSTORE_PROVIDER_HTTP_BASE_OVERRIDES="sp1.<domain>=http://127.0.0.1:8091,sp2.<domain>=http://127.0.0.1:8092,sp3.<domain>=http://127.0.0.1:8093"
@@ -612,10 +612,10 @@ Website UI (optional):
 
 For a collaborator validating their SP is actually participating:
 
-1) Use the website to create a deal (trusted-devnet default: Mode 2 `2+1`).
+1) Use the website to create a deal (trusted-devnet default: striped `2+1`).
 2) Wait for the success message: `Capacity Allocated. Deal ID: <id>`.
 3) Select that exact deal row, upload a file, and commit.
-   - In local-gateway Mode 2 fast path, the UI may go directly to `Commit to Chain` (no separate upload button).
+   - In the local-gateway striped fast path, the UI may go directly to `Commit to Chain` (no separate upload button).
 4) Verify on-chain deal state is updated:
 
 ```bash
@@ -688,7 +688,7 @@ Important:
   - endpoint multiaddr not reachable from hub (firewall/NAT)
   - provider tunnel misconfigured (`cloudflared` down, wrong hostname, or wrong local service port)
   - `POLYSTORE_GATEWAY_SP_AUTH` mismatch between router and provider
-- Mode2 upload feels unexpectedly slow for small files:
+- Striped upload feels unexpectedly slow for small files:
   - ensure router + providers are on a build that supports sparse upload transport (`X-PolyStore-Full-Size`)
   - sparse transport is enabled by default; verify it wasn't disabled via `POLYSTORE_MODE2_SPARSE_UPLOAD=0`
   - restart router + providers after updating binaries/config so the optimization applies end-to-end
@@ -706,7 +706,7 @@ Important:
   - in the current gateway build, system liveness now auto-skips expired deals (`height >= end_block`) and applies per-challenge retry backoff for expected local-data misses
   - inspect counters via provider `/status`:
     - `curl -sf http://127.0.0.1:8091/status | jq '.extra | with_entries(select(.key|startswith("system_liveness_")))'`
-  - inspect Mode2 reconstruction counters (assigned-provider vs fallback-provider behavior):
+  - inspect striped reconstruction counters (assigned-provider vs fallback-provider behavior):
     - `curl -sf http://127.0.0.1:8091/status | jq '.extra | with_entries(select(.key|startswith("mode2_reconstruct_")))'`
     - key signals:
       - `mode2_reconstruct_fallback_provider_successes` rising means repair-aware fallback is actively serving chunks.
@@ -747,7 +747,7 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 
 - Web build points at the correct HTTPS endpoints (`VITE_*` vars) and loads without console errors.
 - “Connect wallet” works and MetaMask is on the correct network (RPC + chain id).
-- Mode2 retrieval succeeds with temporary SP outage (website retries alternate providers when a primary fetch path fails).
+- Striped retrieval succeeds with temporary SP outage (website retries alternate providers when a primary fetch path fails).
 - If faucet UI is enabled (`VITE_ENABLE_FAUCET=1`), the token flow works (paste token → fund → clear token works).
   - If using `VITE_FAUCET_AUTH_TOKEN`, verify faucet requests succeed without manual token entry.
 

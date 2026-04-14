@@ -120,7 +120,7 @@ When a deputy or auditor cannot retrieve bytes for a valid session:
 
 Repairs require moving bytes without requiring the deal owner to be online.
 
-- When a Mode 2 slot enters `REPAIRING`, the `pending_provider` must catch up by fetching shards from ACTIVE slots.
+- When a striped slot enters `REPAIRING`, the `pending_provider` must catch up by fetching shards from ACTIVE slots.
 - These transfers MUST be session-accounted via `MsgOpenProtocolRetrievalSession(purpose=PROTOCOL_REPAIR, auth=RepairAuth{deal_id, slot})`.
 - This closes the “restricted deals still allow repair” story: restricted deals do not block protocol repair sessions.
 

@@ -1,6 +1,6 @@
 # RFC: Deal Expiry, Renewal (ExtendDeal), and Provider Garbage Collection (Draft)
 
-**Status:** Draft (pre‑alpha)  
+**Status:** Implemented on chain/gateway / provider GC pending
 **Last updated:** 2026-01-23
 
 **Scope:** Chain (`polystorechain/`), Gateway (`polystore_gateway/`), Providers, UI (`polystore-website/`)
@@ -16,8 +16,8 @@
 
 PolyStore’s docs already reference that “deals can expire” and providers should garbage-collect expired data, but the protocol lacks:
 
-1) **Enforcement**: chain-side checks that prohibit mutations / sessions / proofs after deal expiry.  
-2) **Renewal**: a deterministic `ExtendDeal` path that charges **spot storage_price at extension time** for the next period.  
+1) **Enforcement**: chain-side checks that prohibit mutations / sessions / proofs after deal expiry.
+2) **Renewal**: a deterministic `ExtendDeal` path that charges **spot storage_price at extension time** for the next period.
 3) **Operational deletion**: provider/gateway behavior for post-expiry deletion (crypto-erasure + garbage collection).
 
 This RFC makes “deal end” real, without changing escrow settlement semantics.
@@ -33,7 +33,7 @@ Each `Deal` has:
 - `end_block` (uint64): the first block height at which the deal is considered **expired**.
 
 **Active predicate (normative):**
-- `ACTIVE(deal, h) := (h < deal.end_block) AND (deal.cancelled == false)`  
+- `ACTIVE(deal, h) := (h < deal.end_block) AND (deal.cancelled == false)`
   (i.e., end_block is **exclusive**).
 
 ### 2.2 Renewal grace (retention window)
@@ -65,7 +65,7 @@ This is not a cryptographic deletion guarantee; it is an operational norm + ince
 Let `h = ctx.BlockHeight()`.
 
 Define:
-- `base = max(deal.end_block, h)`  
+- `base = max(deal.end_block, h)`
 - `new_end = base + additional_duration_blocks`
 
 Update:
@@ -123,7 +123,7 @@ The chain MUST enforce `ACTIVE(deal,h)` at these state transitions:
 
 ### 4.2 Retrieval sessions
 - `MsgOpenRetrievalSession` and `MsgOpenRetrievalSessionSponsored` MUST reject if deal is not ACTIVE.
-- Additionally, enforce: `session.expires_at ≤ deal.end_block`  
+- Additionally, enforce: `session.expires_at ≤ deal.end_block`
   (sessions cannot outlive the paid storage term).
 
 Cancellation/refund path:

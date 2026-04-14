@@ -40,9 +40,7 @@ Key fields:
     *   **Slab bounds:** `Deal.total_mdus` (count of committed MDU roots in the Manifest commitment; includes MDU #0 + witness + user MDUs).
     *   **Metadata size:** `Deal.witness_mdus` (count of witness MDUs after MDU #0; required to derive the user‑MDU range).
     *   **Gateway compat:** some REST responses may include legacy `allocated_length` as an alias for `total_mdus` (count), not bytes.
-*   **Placement:** `providers[]` is the assigned provider set.
-    *   **Mode 1:** unordered replica set; any single provider can satisfy retrievals.
-    *   **Mode 2:** ordered slot list `slot → provider` of length `N = K+M` (§7.1.1, §8.1.3).
+*   **Placement:** the current protocol uses an ordered slot list `slot → provider` of length `N = K+M` (§7.1.1, §8.1.3). Some APIs still expose a legacy `providers[]` mirror and historical full-replica deals may exist during transition, but new deals use the striped slot assignment.
 *   **Service Hint:** `Hot | Cold` informs placement/elasticity policy (§6.0.2).
 *   **Economics:** `escrow` (combined storage + bandwidth), plus `max_monthly_spend` for user-funded elasticity (§6.1.2).
 *   **Retrieval policy:** `retrieval_policy` governs who may open **user/sponsored** retrieval sessions for this Deal:
@@ -59,7 +57,7 @@ Key fields:
 *   **Renewal anchor:** `pricing_anchor_block` is the block height used as the pricing anchor for storage lock‑in charges on **new bytes**.
     *   On creation: `pricing_anchor_block = start_block`.
     *   On renewal (`MsgExtendDeal`): `pricing_anchor_block = current_height`.
-*   **Redundancy Mode:** Mode 1 (FullReplica) or Mode 2 (StripeReplica / RS(K,K+M)) (§6.2, §8).
+*   **Layout compatibility:** the canonical layout is StripeReplica / RS(K,K+M) (§6.2, §8). Some chain/schema surfaces still expose legacy `redundancy_mode` numerics and `mode2_*` field names for compatibility.
 
 Constants:
 *   `MDU_SIZE = 8,388,608` bytes (8 MiB) is an immutable protocol constant.
@@ -149,7 +147,7 @@ The `MDU_SIZE` (Mega-Data Unit) remains an immutable protocol constant of **8,38
 
 ### 6.1 The Unified Market & Elasticity
 
-**Implementation status (Feb 2026):** `MsgSignalSaturation` exists and is unit-tested, but Mode 2 overlay elasticity (multi‑stripe provider sets + `mode2_slots` expansion / selection) is not yet modeled end‑to‑end. Treat §6.1–§6.2 as **design intent** beyond the parts explicitly called out as “current implementation”. For repo‑anchored reality, see `docs/GAP_REPORT_REPO_ANCHORED.md`.
+**Implementation status (Feb 2026):** `MsgSignalSaturation` exists and is unit-tested, but striped overlay elasticity (multi‑stripe provider sets + `mode2_slots` expansion / selection) is not yet modeled end‑to‑end. Treat §6.1–§6.2 as **design intent** beyond the parts explicitly called out as “current implementation”. For repo‑anchored reality, see `docs/GAP_REPORT_REPO_ANCHORED.md`.
 
 #### 6.1.1 Traffic Management (Saturation)
 To prevent punishment of high-performing nodes during viral events, the protocol supports **Pre-emptive Scaling**.
@@ -170,24 +168,25 @@ Scaling is not free. It is strictly constrained by the User's budget.
 
 ### 6.2 Auto-Scaling (Stripe-Aligned Elasticity)
 
-PolyStore supports two redundancy modes at the policy level:
+PolyStore’s canonical layout is **StripeReplica**:
 
-*   **Mode 1 – FullReplica (Legacy / Deprecated):** Each `Deal` is replicated in full across `CurrentReplication` providers. This mode cannot self-heal (no parity), and **new Mode 1 deals are disallowed**.
-    *   **Soft lock:** the chain rejects `service_hint` strings that specify `replicas=N` without an `rs=K+M` profile.
-    *   Existing historical Mode 1 deals may remain supported for a transition period.
-*   **Mode 2 – StripeReplica (Implemented / Canonical):** Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`). Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer. This mode uses the **Blob‑Aligned Striping** model defined in **§ 8**.
+*   Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`).
+*   Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer.
+*   The Blob‑Aligned Striping model is defined in **§ 8**.
+*   Historical full-replica deals may remain readable during transition, but they are a compatibility path only. New full-replica deals are disallowed.
+*   **Soft lock:** the chain rejects `service_hint` strings that specify `replicas=N` without an `rs=K+M` profile.
 
 **Profile selection (current implementation):**
 
-* If `service_hint` includes `rs=K+M` (for example, `General:rs=8+4`), the chain treats the deal as **Mode 2** and assigns `N = K+M` ordered providers as slots.
-* If `service_hint` omits `rs=`, the chain auto-selects a balanced Mode 2 profile based on the eligible provider set and stores the canonical `rs=K+M` back into `Deal.service_hint` on-chain.
+* If `service_hint` includes `rs=K+M` (for example, `General:rs=8+4`), the chain assigns `N = K+M` ordered providers as slots.
+* If `service_hint` omits `rs=`, the chain auto-selects a balanced striped profile based on the eligible provider set and stores the canonical `rs=K+M` back into `Deal.service_hint` on-chain.
 * `replicas=` is deprecated and should not be used.
 
 To ensure effective throughput scaling, the protocol avoids "bottlenecking" by scaling the entire dataset uniformly.
 
 #### 6.2.1 The Stripe Unit
 *   **Principle:** Increasing the capacity of Shard #1 does not help if Shards #2-12 are saturated.
-*   **Mechanism (Mode 2):** Scaling operations occur in **Stripe Units**. When triggered, the protocol recruits `n` new Overlay Providers, creating one new replica for *each* shard index. In Mode 1, this is approximated by adding `n` full replicas (additional providers in `Deal.providers[]`) without per-stripe awareness.
+*   **Mechanism:** Scaling operations occur in **Stripe Units**. When triggered, the protocol recruits `n` new Overlay Providers, creating one new replica for *each* shard index. Historical full-replica deals approximate this by adding `n` full replicas (additional providers in `Deal.providers[]`) without per-stripe awareness.
 
 #### 6.2.2 Damping & Hysteresis (Intelligent Triggers)
 To prevent oscillation (rapidly spinning nodes up and down) and account for the cost of data transfer:
@@ -213,23 +212,23 @@ To prevent oscillation (rapidly spinning nodes up and down) and account for the 
 
 See: `rfcs/rfc-deal-expiry-and-extension.md` for the normative chain enforcement and pricing rules.
 
-## § 8 Mode 2: StripeReplica & Erasure Coding (Normative Extension)
+## § 8 StripeReplica & Erasure Coding (Normative Extension)
 
-This section norms the **Blob-Aligned Striping** model required for Mode 2 operation, resolving the conflict between cryptographic verification (KZG) and network distribution (Erasure Coding).
+This section norms the **Blob-Aligned Striping** model used by the current protocol, resolving the conflict between cryptographic verification (KZG) and network distribution (Erasure Coding).
 
-### 8.0 Mode 2 Ingestion (Gateway-Optional)
-Mode 2 deals require **RS(K, K+M) encoding** of each SP‑MDU before upload. In devnet, Mode 2 ingestion MAY be performed by:
+### 8.0 Striped Ingestion (Gateway-Optional)
+StripeReplica deals require **RS(K, K+M) encoding** of each SP‑MDU before upload. In devnet, striped ingestion MAY be performed by:
 * **Local Gateway (preferred when present):** performs packing, witness generation, RS encoding, and uploads bytes to providers.
 * **Browser/WASM (fallback default):** performs the same work in a worker and persists artifacts to OPFS.
 * **CLI** tooling for debugging and automation.
 
 The **local gateway is optional** and MUST NOT sign on the user’s behalf. All chain transactions remain user‑signed (MetaMask / wallet).
 
-**Provider role (normative):** providers are a **dumb pipe** for bytes addressed by `(deal_id, mdu_index, slot, manifest_root)` and do not need to understand Mode 1 vs Mode 2 beyond storing and serving the requested objects.
+**Provider role (normative):** providers are a **dumb pipe** for bytes addressed by `(deal_id, mdu_index, slot, manifest_root)` and do not need to understand higher-level layout policy beyond storing and serving the requested objects.
 
 **Determinism & repair confidence:** implementations SHOULD aim for byte‑identical artifact bytes across Gateway and Browser for the same input and RS profile. If strict byte‑identity is not feasible across runtimes, they MUST still agree on all cryptographic commitments (manifest root, MDU roots, witness commitments) so repairs and verification remain correct.
 
-**Devnet UX default (policy):** if a reachable local gateway reports Mode 2 support, clients SHOULD use the gateway path; otherwise clients SHOULD use the browser Mode 2 path (not Mode 1) as the default suggested flow.
+**Devnet UX default (policy):** if a reachable local gateway reports striped-ingest support, clients SHOULD use the gateway path; otherwise clients SHOULD use the browser striped path as the default suggested flow.
 
 **Devnet artifact layout (recommended):** clients SHOULD follow the canonical `mode2-artifacts-v1` contract (`notes/mode2-artifacts-v1.md`) for local persistence and repairs:
 * replicated metadata (`mdu_0.bin`, `mdu_1.bin .. mdu_W.bin`, `manifest.bin`), and
@@ -242,10 +241,10 @@ To enable **Shared-Nothing Verification** (where a provider can verify their own
 #### 8.1.1 Constants
 *   **Blob (Atom):** 128 KiB ($2^{12}$ field elements).
 *   **MDU (Retrieval Unit):** 8 MiB (64 Blobs).
-*   **Erasure Configuration (Mode 2):** RS(K, K+M) with default `K=8`, `M=4`, and constraint `K | 64`.
+*   **Erasure Configuration:** RS(K, K+M) with default `K=8`, `M=4`, and constraint `K | 64`.
 
 #### 8.1.2 The "Card Dealing" Algorithm
-An 8 MiB SP‑MDU consists of 64 **data Blobs**. Conceptually, these are a deck of cards (`data_blob_id ∈ [0..63]`) and Mode 2 “deals” them into `K` data slots in *rows* so striping aligns with the Blob‑level KZG atom.
+An 8 MiB SP‑MDU consists of 64 **data Blobs**. Conceptually, these are a deck of cards (`data_blob_id ∈ [0..63]`) dealt into `K` data slots in *rows* so striping aligns with the Blob‑level KZG atom.
 
 Let:
 * `K` = data slots, `M` = parity slots, `N = K+M`
@@ -263,12 +262,12 @@ For each `row`, apply RS(K, K+M) across slots to produce `N` shard Blobs `S[slot
 
 #### 8.1.3 Locked: Slot-major `leaf_index` ordering
 
-To prioritize the hot-path (serving/proving), Mode 2 uses a **slot-major** canonical leaf ordering for the per-SP‑MDU Merkle tree.
+To prioritize the hot-path (serving/proving), StripeReplica uses a **slot-major** canonical leaf ordering for the per-SP‑MDU Merkle tree.
 
 Index spaces:
 * `data_blob_id ∈ [0..63]` refers to the 64 logical data Blobs inside the unencoded SP‑MDU (conceptual packing only).
 * `leaf_index ∈ [0..L-1]` refers to the Merkle leaf index for the encoded per‑slot shard Blobs.
-* In **Mode 2**, `ChainedProof.blob_index` MUST be interpreted as `leaf_index`.
+* In the striped layout, `ChainedProof.blob_index` MUST be interpreted as `leaf_index`.
 
 Definitions:
 *   `K` = data slots
@@ -276,7 +275,7 @@ Definitions:
 *   `N = K+M` = total slots/providers
 *   Constraint: `K | 64` (so `rows` are integral)
 *   `rows = 64 / K`
-*   `L = N * rows` (Merkle leaves per SP‑MDU in Mode 2)
+*   `L = N * rows` (Merkle leaves per SP‑MDU in the striped layout)
 
 Leaf mapping (canonical):
 *   `leaf_index = slot * rows + row`
@@ -300,14 +299,14 @@ To support this model, the "Map" must be fully replicated:
 
 **Witness Expansion:** For each data‑bearing SP‑MDU, the Witness MDUs MUST contain KZG commitments for **ALL `L = (K+M) * (64/K)` shard Blobs** (data + parity). This allows any provider (data or parity) to prove its holding against the global root. (Default `K=8`, `M=4` gives `L=96`.)
 
-**MDU index convention (Mode 2):** PolyFS metadata occupies the lowest `mdu_index` values (`MDU #0` first, followed by the Witness MDUs). Synthetic challenges MUST be derived only over striped user‑data MDUs; metadata MDUs are replicated and are not used for per‑slot accountability.
+**MDU index convention:** PolyFS metadata occupies the lowest `mdu_index` values (`MDU #0` first, followed by the Witness MDUs). Synthetic challenges MUST be derived only over striped user‑data MDUs; metadata MDUs are replicated and are not used for per‑slot accountability.
 
 ### 8.4 Deal Generations & Repair Mode (Planned, Forward-Compatible)
 
-Mode 2 requires the chain to represent “where the deal is in time” so repairs, reads, and writes can safely overlap.
+The striped layout requires the chain to represent “where the deal is in time” so repairs, reads, and writes can safely overlap.
 
 #### 8.4.1 Deal generation fields (conceptual)
-A Mode 2 Deal is associated with a monotonic **generation**:
+A striped deal is associated with a monotonic **generation**:
 * `Deal.current_gen` (monotonic counter)
 * `Deal.manifest_root` and `Deal.total_mdus` are interpreted as the **current generation**’s committed state.
 
@@ -325,7 +324,7 @@ While `slot_status[slot] = REPAIRING`:
 When the replacement provider has reconstructed and stored its shard Blobs up to the current generation, the chain transitions the slot back to ACTIVE.
 
 #### 8.4.3 Append-only writes during repair (near-term rule)
-To avoid write/repair races while keeping the system usable, Mode 2 supports **append-only** deal updates even while one or more slots are REPAIRING.
+To avoid write/repair races while keeping the system usable, the striped layout supports **append-only** deal updates even while one or more slots are REPAIRING.
 
 An update is append-only iff:
 * `new_total_mdus >= old_total_mdus`, and
@@ -408,9 +407,9 @@ PolyStore MAY use a content‑addressed *file* manifest at the application layer
   * **Metadata confidentiality (optional):** PolyFS metadata (MDU #0 and higher-level manifests) MAY be encrypted the same way as file data. If metadata is encrypted, SPs remain oblivious (they store bytes), while clients decrypt after verifying against `Deal.manifest_root`.
   * **Deletion:** Achieved via key destruction (Crypto-Erasure).
 
-## § 7 Retrieval Semantics (Mode 1 Implementation)
+## § 7 Retrieval Semantics
 
-This section norms the retrieval path for **Mode 1 – FullReplica** in the current devnet implementation and defines the evidence model used for retrievability and accountability. Several subsections are explicitly marked as planned, forward-compatible extensions.
+This section norms the retrieval path for the current striped protocol and defines the evidence model used for retrievability and accountability. Historical full-replica behavior is retained only as a compatibility note where older deals or store layouts still expose it. Several subsections are explicitly marked as planned, forward-compatible extensions.
 
 ### 7.0 Core Invariants (Planned, North-Star)
 
@@ -440,23 +439,23 @@ To support the invariants, the protocol uses three challenge families, all bindi
 
 1.  **Lookup (Deal):** Given a `deal_id`, the client queries chain state for the corresponding `Deal` and reads `Deal.providers[]`.
 2.  **Resolve (PolyFS):** The requested file within the Deal is identified by `file_path` (PolyFS). The client mounts the Deal’s PolyFS File Table (MDU #0) to map `file_path` → byte offsets / MDU ranges.
-3.  **Selection:** The client selects a single Provider from `Deal.providers[]` (e.g., the nearest or least loaded). In Mode 1, each Provider holds a full replica, so any assigned Provider is sufficient.
-4.  **Delivery:** The client fetches the file (or an 8 MiB MDU) from that Provider using an application‑level protocol (HTTP/S3 adapter, gRPC, or a custom P2P layer). The data is served as encrypted MDUs with accompanying KZG proof material. A local gateway may proxy these calls, but it is optional; direct‑to‑provider fetches are first‑class.
+3.  **Selection:** The client resolves the deal’s slot assignment and chooses any `K` ACTIVE slots for each required SP‑MDU (e.g., the nearest or healthiest slots).
+4.  **Delivery:** The client fetches the required shard Blobs from those slots using an application‑level protocol (HTTP/S3 adapter, gRPC, or a custom P2P layer), verifies them against `Deal.manifest_root` using `ChainedProof`, then RS‑decodes to reconstruct the requested bytes. A local gateway may proxy or reconstruct these calls, but it is optional; direct‑to‑provider fetches are first‑class.
 
-In Mode 1, bandwidth aggregation across multiple Providers is **not** required. The protocol only assumes that at least one assigned Provider can serve a valid chunk per retrieval. Mode 2 uses stripe‑aware fetching across any `K` slots per MDU.
+Historical full-replica deals may still be served by a single assigned provider as a compatibility path, but new deals assume slot-aware striped retrieval.
 
-#### 7.1.1 Mode 2: Stripe-aware retrieval & challenges
+#### 7.1.1 Stripe-aware retrieval & challenges
 
-For Mode 2, `Deal.providers[]` is interpreted as an ordered slot list `slot → provider` of length `N = K+M`.
+For striped deals, `Deal.providers[]` is treated as a legacy mirror of the canonical ordered slot list `slot → provider` of length `N = K+M`.
 
-* **Retrieval (hot path):** for each required SP‑MDU, the client fetches shard Blobs for any `K` slots (simple routing: take the first `K` slots by index), verifies each received shard against `Deal.manifest_root` using a `ChainedProof` (with `Proof.blob_index = leaf_index` per §8.1.3), then RS‑decodes to reconstruct the SP‑MDU bytes.
-* **Synthetic challenges (accountability):** the protocol derives challenges keyed by `(deal_id, slot)` so every slot is independently accountable. In a Mode 2 proof, the chain enforces that the submitting provider matches the challenged `slot` (see §7.4).
+* **Retrieval (hot path):** for each required SP‑MDU, the client fetches shard Blobs for any `K` slots (simple routing: take the first `K` ACTIVE slots by index), verifies each received shard against `Deal.manifest_root` using a `ChainedProof` (with `Proof.blob_index = leaf_index` per §8.1.3), then RS‑decodes to reconstruct the SP‑MDU bytes.
+* **Synthetic challenges (accountability):** the protocol derives challenges keyed by `(deal_id, slot)` so every slot is independently accountable. In a striped proof, the chain enforces that the submitting provider matches the challenged `slot` (see §7.4).
 
 #### 7.1.2 Client bootstrap & caching (Non-normative guidance)
 
 Clients (Gateways, CLIs, browsers) SHOULD treat PolyStore as a content-addressed system at the deal layer and cache aggressively:
 * **Bootstrap:** given `(deal_id, owner)` and the on-chain `Deal.manifest_root`, a client MUST be able to fetch and verify PolyFS metadata (MDU #0 + Witness MDUs) and enumerate valid `file_path` entries without any out-of-band index.
-* **Metadata caching:** cache verified metadata by `(deal_id, Deal.current_gen, mdu_index)`; in Mode 2 this is not per-provider because metadata MDUs are replicated and bit-identical across all slots.
+* **Metadata caching:** cache verified metadata by `(deal_id, Deal.current_gen, mdu_index)`; this is not per-provider for striped deals because metadata MDUs are replicated and bit-identical across all slots.
 * **Browser caching:** when running in-browser, clients SHOULD persist slabs in OPFS to enable gateway‑absent reads and multi‑tab continuity.
 * **Data caching:** cache reconstructed plaintext files (or reconstructed SP‑MDUs) behind an LRU keyed by `(deal_id, Deal.current_gen, file_path, byte_range)` to avoid repeated network fetches; revalidation can be performed by re-checking on-chain `Deal.manifest_root` and (optionally) re-verifying proofs on cache fill.
 
@@ -483,12 +482,12 @@ The intended end state is: a provider only gets credit for a retrieval once the 
     *   The requester opens a session bound to a specific `(deal_id, provider/slot, manifest_root, blob-range)`:
         *   `{deal_id, provider_or_slot, manifest_root, start_mdu_index, start_blob_index, blob_count, nonce, expires_at}`.
     *   Invariants:
-        *   Provider MUST be assigned in `Deal.providers[]` (Mode 2: the session MUST bind to a specific `slot → provider` assignment).
+        *   Provider MUST be assigned in `Deal.providers[]`; for striped deals the session MUST bind to a specific `slot → provider` assignment.
         *   `manifest_root` MUST match the current on-chain `Deal.manifest_root` (pin content).
         *   The deal MUST be ACTIVE at session open (`current_height < Deal.end_block`).
         *   `expires_at` MUST be `≤ Deal.end_block` (sessions cannot outlive the paid storage term).
-        *   **Mode 1:** `start_blob_index < BLOBS_PER_MDU`.
-        *   **Mode 2:** `start_blob_index < leaf_count` where `leaf_count = (K+M) * rows`, `rows = 64 / K`.
+        *   For legacy full-replica compatibility, require `start_blob_index < BLOBS_PER_MDU`.
+        *   For striped deals, require `start_blob_index < leaf_count` where `leaf_count = (K+M) * rows`, `rows = 64 / K`.
         *   `blob_count > 0`.
         *   `total_bytes = blob_count * 131072` and MUST be a multiple of 128 KiB (by construction).
     *   **Session identity:** `session_id = keccak256(canonical_encode(fields...))` (canonical encoding MUST be specified and test-vectored; EVM precompile uses `abi.encode(...)`).
@@ -513,7 +512,7 @@ The intended end state is: a provider only gets credit for a retrieval once the 
         *   provider proof-of-retrieval for the declared blob range, and
         *   user confirmation,
         *   all before `expires_at`.
-    *   Only `COMPLETED` sessions increment `DealHeatState.successful_retrievals_total` and contribute to rewards/health.
+    *   Only `COMPLETED` sessions increment the legacy retrieval activity counter `DealHeatState.successful_retrievals_total`; reward and health accounting is driven by session completion itself, not by any separate heat score.
 
 #### 7.2.1 Gamma-4 Retrieval Fees (Devnet, Normative)
 
@@ -534,7 +533,7 @@ Earlier devnet iterations used per-range user message signatures (`RetrievalRece
 
 ### 7.3 Data Commitment Binding (Normative: The Triple Proof)
 
-To prevent proofs over arbitrary data while enabling scalability to Petabyte datasets, all Mode 1 retrieval and storage proofs MUST use the **Triple Proof (Chained Verification)** architecture. This mechanism enables the blockchain to verify a specific byte of data while storing only a single 48-byte commitment (`ManifestRoot`) for the entire Deal.
+To prevent proofs over arbitrary data while enabling scalability to Petabyte datasets, all retrieval and storage proofs MUST use the **Triple Proof (Chained Verification)** architecture. This mechanism enables the blockchain to verify a specific byte of data while storing only a single 48-byte commitment (`ManifestRoot`) for the entire Deal.
 
 1.  **Deal Commitments:** For each `Deal`, the chain stores only the **Manifest Root** (48-byte KZG Commitment). This root commits to a Manifest Polynomial $P(x)$ where each evaluation $y = P(i)$ corresponds to the scalar field representation of the Merkle Root of MDU $i$.
     *   `Deal.manifest_root` is the anchor of trust for the entire file.
@@ -555,9 +554,9 @@ The verifier (Chain Node) executes the following logic inside the `MsgProveLiven
 1.  **Input Sanity Check:**
       * Ensure `Proof.mdu_index` matches the MDU index derived from `Challenge`.
       * Ensure `Proof.mdu_index < Deal.total_mdus`.
-      * Ensure `Proof.blob_index` is in range for the Deal’s redundancy mode:
-          * **Mode 1:** require `Proof.blob_index < 64`.
-          * **Mode 2:** compute `rows = 64 / K`, `L = (K+M) * rows`, require `Proof.blob_index < L`, and for striped user‑data MDUs require `slot(Proof.blob_index) == slot(msg.creator)` using `slot(i) = i / rows`.
+      * Ensure `Proof.blob_index` is in range for the deal layout:
+          * Legacy full-replica compatibility requires `Proof.blob_index < 64`.
+          * Striped deals compute `rows = 64 / K`, `L = (K+M) * rows`, require `Proof.blob_index < L`, and for striped user‑data MDUs require `slot(Proof.blob_index) == slot(msg.creator)` using `slot(i) = i / rows`.
 
 2.  **Hop 1: Verify Identity (The Map) [KZG]**
       * *Goal:* Prove that the SP isn't lying about the Merkle Root of the target MDU.
@@ -577,7 +576,7 @@ The verifier (Chain Node) executes the following logic inside the `MsgProveLiven
 
 ### 7.5 Evidence Types & Fraud Proofs
 
-PolyStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` (Mode 2: `blob_index = leaf_index`, §8.1.3).
+PolyStore recognizes several classes of evidence derived from retrievals and synthetic checks. All evidence MUST ultimately be verifiable against the Deal’s on‑chain commitments (Section 7.3) and attributable to a specific `(deal_id, provider_id, epoch_e, mdu_index, blob_index)` (for striped deals, `blob_index = leaf_index`, §8.1.3).
 
 1.  **Synthetic Storage Proofs (System‑Initiated):**
     *   For each epoch `e` and assignment `(deal_id, provider_id)`, the protocol derives a finite challenge set `S_e(D,P)` of `(mdu_index, blob_index)` pairs from `R_e`.
@@ -665,7 +664,7 @@ Self‑healing can be expressed via per‑assignment and per‑provider health m
 This specification defines normative *interfaces* and verification rules but intentionally leaves several “policy” and “parameterization” areas underspecified for v2.4. The following items SHOULD be captured as dedicated RFCs before mainnet hardening:
 
 1. **System Placement Algorithm:** deterministic provider selection/weighting, hint scoring, anti-correlation rules, and upgrade strategy without reshuffling failure domains unexpectedly.
-2. **Mode 2 On-Chain Encoding:** explicit representation of `(K, M)`, ordered `slot → provider` mapping, overlay scaling state, and replacement triggers/authorization. *(See `rfcs/rfc-mode2-onchain-state.md`.)*
+2. **Striped On-Chain Encoding:** explicit representation of `(K, M)`, ordered `slot → provider` mapping, overlay scaling state, and replacement triggers/authorization. *(See `rfcs/rfc-mode2-onchain-state.md`.)*
 3. **Challenge Derivation Function:** exact mapping from `(deal_id, epoch_e, provider/slot)` to a finite challenge set with anti-grind properties and coverage guarantees. *(See `rfcs/rfc-challenge-derivation-and-quotas.md`.)*
 4. **Penalty & Eviction Curve:** concrete slashing parameters, reputation decay, jail/unjail, and eviction thresholds; distinguish invalid-proof slashing vs quota non-compliance. *(See `rfcs/rfc-challenge-derivation-and-quotas.md`.)*
 5. **Pricing & Escrow Accounting:** bandwidth pricing model, debit schedule, tier reward curves, and how user-funded elasticity is bounded/enforced. *(See `rfcs/rfc-pricing-and-escrow-accounting.md`.)*
@@ -676,7 +675,7 @@ This specification defines normative *interfaces* and verification rules but int
 
 10. **Base Reward Pool & Emissions:** deterministic minting schedule, distribution rules, and unearned-reward handling. *(See `rfcs/rfc-base-reward-pool-and-emissions.md`.)*
 11. **Provider Exit / Draining / Rotation:** non-punitive exit path, drain scheduler, and churn guardrails. *(See `rfcs/rfc-provider-exit-and-draining.md`.)*
-12. **Setup-Phase Slot Bump:** owner-driven, deterministic pre-activation replacement for Mode 2 slots that fail initial deal setup before the first committed content generation. *(See `rfcs/rfc-deal-setup-slot-bump.md`.)*
+12. **Setup-Phase Slot Bump:** owner-driven, deterministic pre-activation replacement for striped slots that fail initial deal setup before the first committed content generation. *(See `rfcs/rfc-deal-setup-slot-bump.md`.)*
 
 ---
 
@@ -686,7 +685,7 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 
 ### C.1 Guiding constraints
 
-* **Mode 2 only (devnet):** new deals use StripeReplica (RS(K, K+M)). Repair/rebalancing remain deferred.
+* **StripeReplica only (devnet):** new deals use RS(K, K+M). Repair/rebalancing remain deferred.
 * **Serving provider is the prover:** bytes and proof material MUST come from the provider that will be named in the session proof (or from an explicit deputy, once specified).
 * **Endpoint discovery is on-chain:** providers advertise transport endpoints as Multiaddrs; HTTP is used initially, libp2p is future-compatible.
 
@@ -698,23 +697,23 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 | On-chain provider endpoint discovery | MUST | `Provider.endpoints[]` as Multiaddr strings |
 | HTTP transport | MUST | e.g. `/dns4/sp1.example.com/tcp/8080/http` |
 | libp2p transport | DEFER | Multiaddr format reserved (`/p2p/<peerid>`) |
-| Mode 1 replication (`providers[]` length > 1) | NO | Mode 1 is deprecated; new deals must be Mode 2 |
-| Mode 2 RS deals | YES (devnet) | `service_hint` includes `rs=K+M` or omits `rs=` for auto-selection |
-| Gateway role | OPTIONAL | routing + cache helper; direct‑to‑provider is first‑class and preferred for Mode 2 |
+| Legacy full-replica deal creation | NO | full-replica deals are deprecated; new deals use StripeReplica |
+| StripeReplica deals | YES (devnet) | `service_hint` includes `rs=K+M` or omits `rs=` for auto-selection |
+| Gateway role | OPTIONAL | routing + cache helper; direct‑to‑provider is first‑class and preferred for striped ingestion/retrieval |
 | Provider role | MUST | stores deal slab; serves bytes+proof headers; owns fetch/download session state |
-| Upload/ingest | MUST | per‑slot upload to assigned providers; Mode 2 encoding is client‑side (WASM/CLI); gateway mirroring optional |
+| Upload/ingest | MUST | per‑slot upload to assigned providers; striped encoding is client‑side (WASM/CLI); gateway mirroring optional |
 | Retrieval by `file_path` + `Range` | MUST | chunked retrievals; max chunk ≤ one blob (`BLOB_SIZE`) |
 | Session proof submission | MUST | session-bound proofs; provider submits to chain |
 | Bundled session proofs | SHOULD | reduce wallet prompts / tx count |
 | Synthetic challenges | DEFER | no hard quotas; sessions are still accepted evidence |
 | Deputy / proxy routing | DEFER | tracked as an RFC / later sprint |
-| Repair / rotation / rebalancing | NO | deferred to Mode 2 + deputy + policy |
+| Repair / rotation / rebalancing | NO | deferred to striped repair + deputy + policy |
 | Docker/devnet orchestration | SHOULD | compose scripts to run 1 gateway + N providers |
 
 ### C.3 Definition of Done (Devnet Alpha)
 
 Given 3–5 providers with advertised HTTP Multiaddrs:
-1. Create a deal with `service_hint=General` (auto Mode 2), or pin a small profile like `General:rs=2+1` for a 3-provider devnet.
+1. Create a deal with `service_hint=General` (auto striped profile), or pin a small profile like `General:rs=2+1` for a 3-provider devnet.
 2. Upload content to the assigned provider and commit `Deal.manifest_root`.
 3. Fetch a multi-chunk range through the gateway/router from that provider.
 4. Submit a bundled session proof (or batched proofs) and observe `MsgSubmitRetrievalSessionProof` succeed on-chain.

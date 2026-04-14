@@ -52,7 +52,7 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
   - Watch `system_liveness_proofs_backoff_skipped` and `system_liveness_missing_data_skips`; if they climb continuously for old deals, dry-run cleanup:
     - `scripts/devnet_provider_cleanup.sh --provider-root /var/lib/polystore/providers --lcd http://127.0.0.1:1317`
     - then `--apply` and restart the provider service.
-- Mode2 reconstruction fallback is healthy:
+- Striped reconstruction fallback is healthy:
   - `curl -sf http://127.0.0.1:<PORT>/status | jq '.extra | with_entries(select(.key|startswith("mode2_reconstruct_")))'`
   - `mode2_reconstruct_fallback_provider_successes` should increase during provider mismatch/outage recovery.
   - `mode2_reconstruct_not_enough_shards_failures` should stay near zero during normal operation.
@@ -62,4 +62,4 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 - **Chain stuck**: check disk full first, then `polystorechaind` logs for consensus errors; restart only after disk/IO is healthy.
 - **Provider missing**: re-check funding for provider key (gas), endpoint multiaddr reachability, and `POLYSTORE_GATEWAY_SP_AUTH` match.
 - **Fetch failing**: confirm sessions are opening on-chain and clients are sending `X-PolyStore-Session-Id` (sessions are required by default).
-- **Mode2 fetch intermittently failing**: inspect `mode2_reconstruct_*` counters and verify at least `K` shards remain available across assigned + fallback providers.
+- **Striped fetch intermittently failing**: inspect `mode2_reconstruct_*` counters and verify at least `K` shards remain available across assigned + fallback providers.

@@ -20,7 +20,7 @@
 ├── assets/                 # Static images (logo variants)
 ├── components/             # Reusable UI modules
 │   ├── Dashboard.tsx       # [Core] Main user interaction hub (Alloc/Content tabs)
-│   ├── DealDetail.tsx      # [Core] Modal for inspecting Deal Manifests & Heatmaps
+│   ├── DealDetail.tsx      # [Core] Modal for inspecting Deal Manifests & activity views
 │   ├── Layout.tsx          # [Shell] Global navigation, footer, and mobile menu
 │   ├── ConnectWallet.tsx   # [Auth] Wallet connection button
 │   ├── StatusBar.tsx       # [Global] Network status indicator
@@ -206,15 +206,15 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 
 ### 4.1 `useCreateDeal` (`src/hooks/useCreateDeal.ts`)
 *   **Purpose:** Orchestrates Deal creation (thin-provisioned container; no capacity tiers).
-*   **Input:** `CreateDealInput` (duration, escrow, maxSpend, replication).
-*   **Flow:** MetaMask `eth_sendTransaction` to the PolyStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`); `service_hint` encodes replica count and (for Mode 2) `rs=K+M`.
+*   **Input:** `CreateDealInput` (`creator`, `durationSeconds`, `initialEscrow`, `maxMonthlySpend`, optional `serviceHint`).
+*   **Flow:** MetaMask `eth_sendTransaction` to the PolyStore precompile (`createDeal(duration, service_hint, initial_escrow, max_monthly_spend)`). If `serviceHint` is omitted, the hook emits the default striped RS profile from `VITE_DEFAULT_RS_K` / `VITE_DEFAULT_RS_M`; replicas-only hints are deprecated and should not be emitted.
 *   **Output:** `deal_id` parsed from the `DealCreated` event.
 
 ### 4.2 `useUpdateDealContent` (`src/hooks/useUpdateDealContent.ts`)
 *   **Purpose:** Commits a file Manifest to an existing Deal.
-*   **Input:** `UpdateDealContentInput` (dealId, manifestRoot, sizeBytes).
-*   **Flow:** MetaMask `eth_sendTransaction` to the PolyStore precompile (`updateDealContent(dealId, manifestRoot, sizeBytes)`).
-    *   **Compatibility:** Some codepaths may still label this field as `cid`, but it is always the *deal-level* `manifest_root` (not a file identifier).
+*   **Input:** `UpdateDealContentInput` (`creator`, `dealId`, `previousManifestRoot`, `cid`, `sizeBytes`, `totalMdus`, `witnessMdus`).
+*   **Flow:** MetaMask `eth_sendTransaction` to the PolyStore precompile (`updateDealContent(dealId, previousManifestRoot, manifestRoot, sizeBytes, totalMdus, witnessMdus)`).
+    *   **Compatibility:** Some codepaths still label the new root as `cid`, but it is always the *deal-level* `manifest_root` (not a file identifier).
 
 ### 4.3 `useUpload` (`src/hooks/useUpload.ts`)
 *   **Purpose:** Handles thin-client file upload via the transport router (gateway or direct SP).
@@ -222,7 +222,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
     1.  Converts EVM address to the current PolyStore Chain bech32 format if needed using `ethToPolystoreAddress`.
     2.  Constructs `FormData` with `file`, `owner`, and optional controls (`deal_id`, `max_user_mdus`, `file_path`).
     3.  Calls `transport.uploadFile(...)` which selects `gatewayBase` or `spBase` based on routing preference and availability.
-*   **Returns:** `{ manifestRoot, sizeBytes, fileSizeBytes, allocatedLength?, filename }`.
+*   **Returns:** `{ manifestRoot, sizeBytes, fileSizeBytes, totalMdus?, witnessMdus?, allocatedLength?, filename }`.
     *   **Compatibility:** Responses may include legacy aliases `cid == manifest_root` and `allocated_length == total_mdus` (count).
     *   **PolyFS invariant:** `filePath` is the authoritative identifier for later fetch/prove and MUST be unique within a deal (re-upload is overwrite).
 
@@ -232,18 +232,18 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 *   **Preference:** `auto`, `prefer_gateway`, `prefer_direct_sp` (persisted in localStorage via `TransportContext`).
 
 ### 4.5 `useFetch` (`src/hooks/useFetch.ts`)
-*   **Purpose:** Orchestrates retrieval sessions, byte fetch, and proof submission (Mode 1 + Mode 2).
+*   **Purpose:** Orchestrates retrieval sessions, byte fetch, and proof submission for the current striped retrieval path.
 *   **Flow:**
     1.  Plan blob-range via `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...` (gateway or direct SP).
     2.  Open session on-chain via MetaMask (`openRetrievalSession` precompile).
     3.  Fetch bytes with `X-PolyStore-Session-Id` header via `/gateway/fetch/{manifest_root}` (gateway or direct SP).
     4.  Confirm completion on-chain (`confirmRetrievalSession`).
     5.  Submit proof relay via `POST /gateway/session-proof` (gateway forwards to provider).
-*   **Mode 2:** When the deal is striped, the fetch path is slot-aware (blob ranges must stay within a slot); gateways may reconstruct missing MDUs from `/sp/shard`.
+*   **Striped retrieval:** Blob ranges remain slot-aware, and gateways may reconstruct missing MDUs from `/sp/shard`. Historical full-replica handling is compatibility-only.
 
 ### 4.6 `useFaucet` (`src/hooks/useFaucet.ts`)
 *   **Purpose:** Requests test tokens for the connected address.
-*   **API:** GET `${API_BASE}/request?addr={address}`.
+*   **API:** `POST ${API_BASE}/faucet` with JSON body `{ address }`; when present, the UI forwards `X-PolyStore-Faucet-Auth` from local storage or `VITE_FAUCET_AUTH_TOKEN`.
 
 ---
 
@@ -264,7 +264,7 @@ The central hub for deal management.
     *   `providers`: Active SP list.
     *   `polystoreAddress`: Derived PolyStore Chain address from the connected EVM wallet.
 *   **Key Interactions:**
-    *   **Allocation:** Form -> `useCreateDeal` (Mode 1 or Mode 2 with RS selector).
+    *   **Allocation:** Form -> `useCreateDeal` (thin-provisioned deal allocation with optional RS profile override).
     *   **Commitment (Content tab):** File Input -> `useUpload` -> `useUpdateDealContent`.
     *   **Commitment (MDU tab):** `FileSharder` (WASM) -> uploads metadata + shards -> `useUpdateDealContent`.
     *   **Inspection:** Clicking a deal row opens `DealDetail`.
@@ -275,7 +275,7 @@ The central hub for deal management.
 *   **Tabs:**
     1.  **Overview:** Metadata (ID, Owner, Size, Economics), Provider List, Download Button.
     2.  **Manifest & MDUs:** Visualizes the Deal *slab layout* (MDU #0 + Witness + User) and provides an educational viewer for roots/commitments.
-    3.  **Heat:** Traffic stats and `DealLivenessHeatmap`.
+    3.  **Traffic & Liveness:** Retrieval activity counters and `DealLivenessHeatmap`.
 *   **Key Definitions:**
     *   **Manifest Root:** 48-byte KZG commitment over the ordered vector of **MDU Roots**: `[Root(MDU0), Root(MDU1), ..., Root(MDUN)]`.
     *   **MDU Root:** 32-byte Blake2s Merkle root of the 64 **Blob Commitments** for a single 8 MiB MDU.
@@ -320,7 +320,7 @@ The central hub for deal management.
 ### 5.7 Utility Components
 *   **`ModeToggle.tsx`:** Sun/Moon icon toggle using `useTheme`.
 *   **`FaucetWidget.tsx`:** Standalone button triggering `useFaucet`.
-*   **`FileSharder.tsx`:** Thick-client sharder. Uses `polystore_core` WASM to expand MDUs, generate commitments, and (for Mode 2) produce RS shards. Uploads via the transport router and supports direct-to-SP flows.
+*   **`FileSharder.tsx`:** Thick-client sharder. Uses `polystore_core` WASM to expand MDUs, generate commitments, and produce striped RS shards. Uploads via the transport router and supports direct-to-SP flows.
 
 ---
 
@@ -383,8 +383,8 @@ The website depends on the following services (configured in `config.ts`):
 
 ### Key Endpoints
 *   `POST /gateway/upload`: `FormData{file, owner, deal_id?, max_user_mdus?, file_path?}` -> `{manifest_root, size_bytes, file_size_bytes, total_mdus, witness_mdus, file_path, filename}` (legacy aliases: `cid`, `allocated_length`).
-*   `POST /sp/upload_shard`: Raw shard bytes with headers `X-PolyStore-Deal-ID`, `X-PolyStore-Mdu-Index`, `X-PolyStore-Slot`, `X-PolyStore-Manifest-Root` (Mode 2).
-*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (Mode 2; internal provider↔provider only; requires `X‑PolyStore‑Gateway‑Auth`).
+*   `POST /sp/upload_shard`: Raw striped shard bytes with headers `X-PolyStore-Deal-ID`, `X-PolyStore-Mdu-Index`, `X-PolyStore-Slot`, `X-PolyStore-Manifest-Root`.
+*   `GET /sp/shard?deal_id=...&manifest_root=...&mdu_index=...&slot=...`: Streams a stored shard (internal provider↔provider path; requires `X‑PolyStore‑Gateway‑Auth`).
 *   `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...`: Returns slab segment ranges + counts (MDU #0 / Witness / User).
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
 *   `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`: Returns blob-range plan for retrieval sessions.
@@ -440,7 +440,7 @@ The website depends on the following services (configured in `config.ts`):
 *   **Spec:** Client locally packs files into 8 MiB MDUs, computes KZG commitments (Triple Proof root), and uploads encrypted shards to SPs.
 *   **Actual (two paths):**
     1. **Gateway ingest (Content tab):** Client uploads raw `FormData` to `/gateway/upload` (gateway or SP base). The server performs sharding, KZG commitments, and PolyFS packing, returning `manifest_root` and `size_bytes`.
-    2. **Thick client ingest (MDU tab):** Client uses WASM to shard locally, uploads metadata MDUs to all slots (`/sp/upload_mdu`) and user shards via `/sp/upload_shard` (Mode 2), then commits the `manifest_root` on-chain.
+    2. **Thick client ingest (MDU tab):** Client uses WASM to shard locally, uploads metadata MDUs to all slots (`/sp/upload_mdu`) and user shards via `/sp/upload_shard`, then commits the `manifest_root` on-chain.
 
 ### 8.2 Data Retrieval (Download)
 *   **Spec:** Client fetches chunks from SPs (or gateway acting as SP proxy), verifies the KZG Triple Proof, and confirms success on-chain.
@@ -467,7 +467,7 @@ Example (viem-style):
 ```
 
 ### 8.3 Visualizations vs. Logic
-*   **`FileSharder.tsx`:** Uses `polystore_core` WASM to generate real MDU roots, manifest commitments, and Mode 2 shards; outputs are valid for on-chain commit.
+*   **`FileSharder.tsx`:** Uses `polystore_core` WASM to generate real MDU roots, manifest commitments, and striped shards; outputs are valid for on-chain commit.
 *   **Real Data Flow:** The actual data flow for a deal is:
     1.  `useCreateDeal` -> Creates a thin-provisioned Deal on-chain.
     2.  **Gateway path:** `useUpload` streams raw file to Gateway -> Gateway returns `manifest_root`.
@@ -485,7 +485,7 @@ This sprint prioritizes a clean separation between:
 
 ### 9.1 Primary Observables (Authoritative Sources)
 *   **Deal (LCD):** `GET /polystorechain/polystorechain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
-*   **Heat (LCD):** `GET /polystorechain/polystorechain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
+*   **Traffic counters (LCD, legacy `/heat` route):** `GET /polystorechain/polystorechain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
 *   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
 *   **PolyFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
 *   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,witness_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.

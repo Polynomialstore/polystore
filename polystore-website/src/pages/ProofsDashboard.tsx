@@ -295,7 +295,7 @@ export const ProofsDashboard = () => {
           <p className="text-sm md:text-base text-muted-foreground">
             Live view of on-chain retrieval sessions (and related liveness signals) flowing through the PolyStore
             network. On this devnet, retrieval activity is tracked via <span className="font-semibold">sessions</span>{' '}
-            and heat counters; the legacy <span className="font-mono">/proofs</span> store may be empty.
+            and legacy <span className="font-mono">/heat</span> counters; the legacy <span className="font-mono">/proofs</span> store may be empty.
           </p>
         </div>
         <div className="text-xs text-muted-foreground">

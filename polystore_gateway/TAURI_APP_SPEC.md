@@ -12,7 +12,7 @@ This document is written to be **unambiguous enough that a Codex agent can imple
 - Provide a **desktop GUI** for PolyStore’s devnet workflows using **Tauri**.
 - Ship a **self-contained app** that runs a local gateway sidecar and supports:
   - Deal creation (EVM intent + wallet signature)
-  - File ingest/upload into PolyFS / Mode 2 slab
+  - File ingest/upload into the PolyFS striped slab
   - Commit content (EVM intent + wallet signature)
   - Browse deal state, list files, fetch/download, and view proof/receipt status
 - Keep UX **“no private key import”**: user ownership is via an external wallet signature flow; the app holds **only a relayer/provider key** for gas sponsorship / proof submission.
@@ -51,8 +51,8 @@ The GUI must treat `{cid}` as a **legacy alias** for the deal-level **`manifest_
  
 Canonical behavior for these endpoints is documented in `polystore_gateway/polystore-gateway-spec.md`.
  
-### 1.2 Existing Cryptography / Mode 2
-Mode 2 ingest paths already use `polystorechain/x/crypto_ffi` (Go ↔ Rust FFI). The GUI plan assumes **Mode 2 is the primary supported path**.
+### 1.2 Existing Cryptography / Striped Ingest
+Striped ingest paths already use `polystorechain/x/crypto_ffi` (Go ↔ Rust FFI). The GUI plan assumes **the striped path is the primary supported flow**.
  
 ## 2. Target Architecture (Monolithic Sidecar + GUI)
 
@@ -80,7 +80,7 @@ The GUI must run without requiring the user to install build tools or CLI binari
    - The host sets `POLYSTORE_TRUSTED_SETUP`, `POLYSTORECHAIND_BIN`, and other paths to bundle-resident locations.
 2. **Eliminate external exec dependencies (target hardening):**
    - Remove `execPolystorechaind` usage from `polystore_gateway` by broadcasting/querying via Cosmos SDK libraries or LCD/gRPC clients.
-   - Ensure Mode 2 ingest does not require `polystore_cli` subprocesses (prefer `crypto_ffi`, which already exists for RS + KZG primitives).
+   - Ensure striped ingest does not require `polystore_cli` subprocesses (prefer `crypto_ffi`, which already exists for RS + KZG primitives).
 
 The plan below assumes Strategy (1) first, then Strategy (2) as a follow-up hardening phase.
  

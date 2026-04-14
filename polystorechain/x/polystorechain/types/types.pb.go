@@ -589,8 +589,8 @@ func (m *Deal) GetRetrievalPolicy() RetrievalPolicy {
 	return RetrievalPolicy{}
 }
 
-// DealHeatState tracks aggregate traffic and performance metrics for a deal.
-// Used for "Heat" observability and potential future economic tilting.
+// DealHeatState is a legacy-named retrieval activity counter bucket for a deal.
+// It records traffic and failure totals only; it is not a pricing or placement signal.
 type DealHeatState struct {
 	BytesServedTotal          uint64 `protobuf:"varint,1,opt,name=bytes_served_total,json=bytesServedTotal,proto3" json:"bytes_served_total,omitempty"`
 	FailedChallengesTotal     uint64 `protobuf:"varint,2,opt,name=failed_challenges_total,json=failedChallengesTotal,proto3" json:"failed_challenges_total,omitempty"`

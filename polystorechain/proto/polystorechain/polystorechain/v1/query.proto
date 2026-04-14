@@ -63,7 +63,7 @@ service Query {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-pairings/pending-by-operator/{operator}";
   }
 
-  // Queries the Heat State for a Deal.
+  // Queries legacy-named retrieval activity counters for a deal.
   rpc GetDealHeat(QueryGetDealHeatRequest) returns (QueryGetDealHeatResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/heat";
   }

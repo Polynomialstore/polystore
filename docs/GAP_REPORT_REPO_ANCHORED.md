@@ -44,7 +44,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 
 - WAN / multi-host devnet behavior (real latency, NAT, TLS, firewalling)
 - Long-running durability (restarts, reorgs, disk corruption, GC/compaction)
-- Mode2 Stripe behavior under background `polystore_gateway` system liveness prover load (CI disables it for determinism via `POLYSTORE_DISABLE_SYSTEM_LIVENESS=1`)
+- Striped retrieval behavior under background `polystore_gateway` system liveness prover load (CI disables it for determinism via `POLYSTORE_DISABLE_SYSTEM_LIVENESS=1`)
 - Dynamic pricing stability/tuning beyond bounded, unit-tested epoch adjustments (no long-running devnet evidence)
 - Adversarial cryptoeconomic behavior (griefing, strategic downtime, bribery)
 - Comprehensive security review / external audit
@@ -54,7 +54,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Requirement | Status | Spec/RFC anchor | Current implementation (refs) | CI proof | Not proven / gap | Planned fix |
 |---|---:|---|---|---|---|---|
 | Enforce `MAX_DEAL_BYTES` hard cap (avoid unbounded state bloat) | DONE | `spec.md` (“Hard Cap: 512 GiB”); `rfcs/rfc-data-granularity-and-economics.md` | `polystorechain/x/polystorechain/types/types.go` (`MAX_DEAL_BYTES`); `polystorechain/x/polystorechain/keeper/msg_server.go` (`MsgUpdateDealContent*`) | `cd polystorechain && go test ./...` (unit tests) | — | — |
-| Mode2 Stripe retrieval: verify downloaded bytes == uploaded bytes | DONE | `rfcs/rfc-blob-alignment-and-striping.md` | Playwright asserts sha256(downloaded) == sha256(uploaded) in `polystore-website/tests/mode2-stripe.spec.ts` | `scripts/e2e_mode2_stripe_multi_sp.sh` | — | — |
+| Striped retrieval: verify downloaded bytes == uploaded bytes | DONE | `rfcs/rfc-blob-alignment-and-striping.md` | Playwright asserts sha256(downloaded) == sha256(uploaded) in `polystore-website/tests/mode2-stripe.spec.ts` | `scripts/e2e_mode2_stripe_multi_sp.sh` | — | — |
 | Allowlist retrieval policy verification has test vectors | DONE | `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` | Allowlist verification in `polystorechain/x/polystorechain/keeper/msg_server.go` (`OpenRetrievalSessionSponsored`) + test vectors in `polystorechain/x/polystorechain/keeper/msg_server_sponsored_sessions_test.go` | `cd polystorechain && go test ./...` | — | — |
 | PolyCE round-trip semantics are end-to-end and documented | PARTIAL | `rfcs/rfc-content-encoding-and-compression.md` | Upload-side wrapping + header parsing helpers exist in `polystore_gateway/` (opt-in `POLYSTORE_POLYCE=1`) | `go test ./polystore_gateway/...` (PolyCE unit tests) | Not required by CI E2E; fetch path does not currently auto-decode to match original bytes for Web2-style users | Defer (track separately if needed for launch) |
 
@@ -76,7 +76,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 |---|---:|---|---|---|
 | Data-plane requests MUST include `X-PolyStore-Session-Id` | DONE | `polystore_gateway/main.go`: `POLYSTORE_REQUIRE_ONCHAIN_SESSION=1` default; enforced in `GatewayFetch` and `SpFetchShard` | `polystore_gateway/session_enforcement_test.go`; `e2e_open_retrieval_session_cli.sh` | — |
 | Validate session is `OPEN`, unexpired, and bound to (deal, provider/slot, manifest_root) | DONE | `polystore_gateway/main.go` (`SpFetchShard` validates deal+root+status+expiry); chain validates on open | `polystore_gateway/session_enforcement_test.go`; `polystorechain/x/polystorechain/keeper/msg_server_retrieval_sessions_test.go` | Gateway-wide “all endpoints” auditing is not automated (human review needed when adding new byte-serving endpoints) |
-| Enforce Mode2 slot confinement + subset-of-session-range (batching preserved) | DONE | Chain range invariants in `polystorechain/x/polystorechain/keeper/msg_server.go`; gateway enforces slot mapping in `SpFetchShard` | `e2e_open_retrieval_session_mode2_cli.sh`; keeper tests | — |
+| Enforce striped slot confinement + subset-of-session-range (batching preserved) | DONE | Chain range invariants in `polystorechain/x/polystorechain/keeper/msg_server.go`; gateway enforces slot mapping in `SpFetchShard` | `e2e_open_retrieval_session_mode2_cli.sh`; keeper tests | — |
 
 ## Phase 3 — Retrieval policies + sponsored/public sessions
 
@@ -93,7 +93,7 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 | Requirement | Status | Current implementation (refs) | CI proof | Not proven / gap |
 |---|---:|---|---|---|
 | Implement `MsgOpenProtocolRetrievalSession` | DONE | `polystorechain/proto/.../tx.proto` + `polystorechain/x/polystorechain/keeper/msg_server.go` | `polystorechain/x/polystorechain/keeper/msg_server_protocol_sessions_test.go` | — |
-| Deterministic protocol auth (repair sessions only for pending provider of repairing slot) | DONE | `OpenProtocolRetrievalSession` REPAIR auth + Mode2 slot checks in keeper | `polystorechain/x/polystorechain/keeper/msg_server_protocol_sessions_test.go` | Multi-host repair flows are not yet validated (CI is single-machine) |
+| Deterministic protocol auth (repair sessions only for pending provider of repairing slot) | DONE | `OpenProtocolRetrievalSession` REPAIR auth + striped slot checks in keeper | `polystorechain/x/polystorechain/keeper/msg_server_protocol_sessions_test.go` | Multi-host repair flows are not yet validated (CI is single-machine) |
 | Audit budget mint/caps + spending for protocol sessions | DONE | `polystorechain/x/polystorechain/keeper/epoch_audit.go` + protocol budget module accounting | `polystorechain/x/polystorechain/keeper/epoch_audit_test.go` | — |
 
 ## Phase 5 — Compression-aware content pipeline (PolyCEv1)
@@ -115,6 +115,6 @@ The authoritative CI definition is `.github/workflows/ci.yml` (plus `e2e_playwri
 |---|---:|---|---|---|
 | Base reward pool mint/distribution | DONE | `polystorechain/x/polystorechain/keeper/base_rewards.go` | `polystorechain/x/polystorechain/keeper/base_rewards_test.go` | — |
 | Provider draining / exit | DONE | `polystorechain/x/polystorechain/keeper/draining.go`, `polystorechain/x/polystorechain/keeper/msg_provider_draining.go` | `polystorechain/x/polystorechain/keeper/draining_test.go` | — |
-| Elasticity (saturation signal → pre-emptive scaling) | PARTIAL | `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto` (`MsgSignalSaturation`); `polystorechain/x/polystorechain/keeper/msg_server.go` (`SignalSaturation`) | `polystorechain/x/polystorechain/keeper/msg_server_test.go` (`TestSignalSaturation`) | Mode2 overlay stripes are not fully modeled yet: the handler appends to `deal.providers` / updates `current_replication` but does not update `mode2_slots` or any router selection; no E2E coverage; treat as experimental / dev-only. |
+| Elasticity (saturation signal → pre-emptive scaling) | PARTIAL | `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto` (`MsgSignalSaturation`); `polystorechain/x/polystorechain/keeper/msg_server.go` (`SignalSaturation`) | `polystorechain/x/polystorechain/keeper/msg_server_test.go` (`TestSignalSaturation`) | Striped overlay replicas are not fully modeled yet: the handler appends to `deal.providers` / updates `current_replication` but does not update `mode2_slots` or any router selection; no E2E coverage; treat as experimental / dev-only. |
 | Retrieval fees (base + per-blob) settlement | DONE | `polystorechain/x/polystorechain/keeper/msg_server_retrieval_fees_test.go` | `e2e_retrieval_fees.sh` | Dynamic pricing is optional and not exercised by CI E2E (unit-tested only). Manual smoke: `POLYSTORE_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh` (retrieval only). |
 | Dynamic pricing (storage + retrieval params; epoch-based controller) | DONE | `polystorechain/proto/polystorechain/polystorechain/v1/params.proto`; `polystorechain/x/polystorechain/keeper/dynamic_pricing.go` | `polystorechain/x/polystorechain/keeper/dynamic_pricing_test.go` | Disabled by default; economics not tuned; no long-running devnet evidence. Manual smoke: `POLYSTORE_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh` (asserts both `retrieval_price_per_blob` and `storage_price` update at the next epoch). |

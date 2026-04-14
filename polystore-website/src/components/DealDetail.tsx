@@ -2398,7 +2398,7 @@ export function DealDetail({
               }
           }
       } catch (e) {
-          console.error("Failed to fetch heat", e)
+          console.error("Failed to fetch retrieval activity counters", e)
       }
   }, [])
 
@@ -2527,7 +2527,7 @@ export function DealDetail({
           data-testid="deal-detail-tab-heat"
           className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'heat' ? 'border-primary text-foreground bg-secondary' : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
         >
-          Heat &amp; Liveness
+          Traffic &amp; Liveness
         </button>
       </div>
 

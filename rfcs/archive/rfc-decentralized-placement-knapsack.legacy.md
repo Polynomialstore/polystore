@@ -1,8 +1,8 @@
 # RFC: Decentralized Placement & Knapsack Solver (Archived Draft)
 
-**Status:** Archived (superseded by `rfcs/rfc-decentralized-placement-knapsack.md`)
+**Status:** Archived legacy research
 **Scope:** Off‑chain / committee‑driven placement optimization
-**Depends on:** `spec.md` (Mode 1), `spec.md` §7.0 + §7.9, `rfcs/rfc-heat-and-dynamic-placement.md`
+**Note:** Retained for historical context only; this draft depends on deleted heat/placement research and legacy full-replica assumptions.
 
 ---
 
@@ -141,7 +141,7 @@ If the committee proposes "No Change" (Empty Diff) to save compute:
 
 ## 7. Interaction with Heat RFC
 
-This RFC consumes the metrics from `rfc-heat-and-dynamic-placement.md`:
+This RFC consumed the metrics from a now-deleted heat/placement draft:
 -   It reads $H(D)$ (Heat) and $r_{target}(D)$.
 -   It *executes* the replication strategy that Heat recommends.
 -   While Heat RFC defines "Measurement", this RFC defines "Action".

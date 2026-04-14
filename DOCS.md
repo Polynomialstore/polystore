@@ -23,7 +23,6 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
     - `rfcs/rfc-provider-exit-and-draining.md` (provider exit/draining + repair/GC interactions)
     - `rfcs/rfc-base-reward-pool-and-emissions.md` (issuance + base reward pool)
     - `rfcs/rfc-retrieval-validation.md` and `rfcs/rfc-retrieval-security.md` (retrieval evidence, deputy/griefing)
-    - `rfcs/rfc-heat-and-dynamic-placement.md` (heat/placement instrumentation)
 - `rfcs/archive/`: Historical / research-only materials kept for reference.
 
 ## Notes (Working Memory)

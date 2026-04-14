@@ -1596,7 +1596,7 @@ type QueryClient interface {
 	GetPendingProviderLink(ctx context.Context, in *QueryGetPendingProviderLinkRequest, opts ...grpc.CallOption) (*QueryGetPendingProviderLinkResponse, error)
 	// Lists pending provider links for an operator address.
 	ListPendingProviderLinksByOperator(ctx context.Context, in *QueryListPendingProviderLinksByOperatorRequest, opts ...grpc.CallOption) (*QueryListPendingProviderLinksByOperatorResponse, error)
-	// Queries the Heat State for a Deal.
+	// Queries legacy-named retrieval activity counters for a deal.
 	GetDealHeat(ctx context.Context, in *QueryGetDealHeatRequest, opts ...grpc.CallOption) (*QueryGetDealHeatResponse, error)
 	// Queries the last accepted retrieval receipt nonce for a specific (deal_id, file_path).
 	GetReceiptNonce(ctx context.Context, in *QueryGetReceiptNonceRequest, opts ...grpc.CallOption) (*QueryGetReceiptNonceResponse, error)
@@ -1773,7 +1773,7 @@ type QueryServer interface {
 	GetPendingProviderLink(context.Context, *QueryGetPendingProviderLinkRequest) (*QueryGetPendingProviderLinkResponse, error)
 	// Lists pending provider links for an operator address.
 	ListPendingProviderLinksByOperator(context.Context, *QueryListPendingProviderLinksByOperatorRequest) (*QueryListPendingProviderLinksByOperatorResponse, error)
-	// Queries the Heat State for a Deal.
+	// Queries legacy-named retrieval activity counters for a deal.
 	GetDealHeat(context.Context, *QueryGetDealHeatRequest) (*QueryGetDealHeatResponse, error)
 	// Queries the last accepted retrieval receipt nonce for a specific (deal_id, file_path).
 	GetReceiptNonce(context.Context, *QueryGetReceiptNonceRequest) (*QueryGetReceiptNonceResponse, error)

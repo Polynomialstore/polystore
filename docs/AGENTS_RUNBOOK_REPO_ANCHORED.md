@@ -42,7 +42,7 @@ It maps the runbook phases to real directories, files, and existing test gates i
     - `CreateDeal` / `CreateDealFromEvm`
     - `UpdateDealContent` / `UpdateDealContentFromEvm`
     - `OpenRetrievalSession` / `ConfirmRetrievalSession` / `CancelRetrievalSession`
-    - `ProveLiveness` (unified liveness, includes Mode 2 repairing slot rules)
+    - `ProveLiveness` (unified liveness, includes striped repairing-slot rules)
 - Quotas / unified liveness:
   - `polystorechain/x/polystorechain/keeper/unified_liveness.go`
   - `polystorechain/x/polystorechain/keeper/slashing.go` (quota miss -> repair triggers, evidence summaries)
@@ -56,7 +56,7 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
 - HTTP router + handlers:
   - `polystore_gateway/main.go`
     - `GatewayFetch` (user-facing download path; **requires** `X-PolyStore-Session-Id` by default via `POLYSTORE_REQUIRE_ONCHAIN_SESSION=1`)
-    - `SpFetchShard` (provider shard fetch; validates on-chain session + Mode2 slot/range constraints when sessions are required)
+    - `SpFetchShard` (provider shard fetch; validates on-chain session + striped slot/range constraints when sessions are required)
     - dev-only tx relay flows (`POLYSTORE_ENABLE_TX_RELAY=0` by default; CI lifecycle scripts enable it explicitly)
   - `polystore_gateway/router_proxy.go` (gateway proxy/router for provider requests)
   - `polystore_gateway/p2p_server.go` (P2P requests; forwards `X-PolyStore-Session-Id` when present)
@@ -94,7 +94,7 @@ In this repo, provider byte-serving endpoints are implemented in `polystore_gate
   - `./e2e_retrieval_fees.sh`
   - `./e2e_open_retrieval_session_cli.sh`
   - `./e2e_open_retrieval_session_mode2_cli.sh`
-- Mode 2 + repair:
+- Striped retrieval + repair:
   - `./scripts/e2e_mode2_stripe_multi_sp.sh`
   - `./scripts/e2e_deputy_ghost_repair_multi_sp.sh`
 
@@ -130,8 +130,8 @@ At a high level, CI exercises:
 - Frontend: build + unit tests + lint (`polystore-website`)
 - Tauri GUI: build + unit tests + clippy (`polystore_gateway_gui`)
 - Native/WASM parity: `polystore_core` wasm-pack build + `tools/parity/compare_parity.ts`
-- Local-stack E2E: lifecycle (with and without a local gateway), retrieval fees, and retrieval sessions (Mode1 + Mode2)
-- Browser E2E (Playwright): gateway-absent, libp2p-relay, Mode2 stripe (12 SPs)
+- Local-stack E2E: lifecycle (with and without a local gateway), retrieval fees, and retrieval sessions (legacy full-replica compatibility + striped path)
+- Browser E2E (Playwright): gateway-absent, libp2p-relay, striped retrieval (12 SPs)
 - Multi-SP regression: `scripts/ci_e2e_gateway_retrieval_multi_sp.sh`
 - Solidity: `forge test` under `polystore_bridge`
 

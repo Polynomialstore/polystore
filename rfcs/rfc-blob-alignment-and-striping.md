@@ -1,6 +1,6 @@
-# RFC: Blob Alignment & Parity Striping (Mode 2)
+# RFC: Blob Alignment & Parity Striping
 
-**Status:** Proposed Normative
+**Status:** Implemented in devnet / normative
 **Scope:** Core Cryptography / Networking / Erasure Coding
 **Depends on:** `spec.md`, `rfc-data-granularity-and-economics.md`, `notes/triple-proof.md`
 
@@ -11,7 +11,7 @@
 We face a critical friction point where the Cryptographic Layer (KZG) collides with the Networking Layer (Erasure Coding).
 
   * **Current Spec:** The Atomic Unit is the **MDU** (8 MiB).
-  * **The Conflict:** In Mode 2 (StripeReplica), we split each 8 MiB SP‑MDU across `N = K+M` providers using Reed‑Solomon (RS(K, K+M), default `K=8`, `M=4`).
+  * **The Conflict:** In the StripeReplica layout, we split each 8 MiB SP‑MDU across `N = K+M` providers using Reed‑Solomon (RS(K, K+M), default `K=8`, `M=4`).
       * **The Problem:** KZG commitments bind to a specific polynomial. You cannot simply "cut" a polynomial into 8 pieces and expect the pieces to be valid, independently verifiable KZG commitments.
       * **The Failure Mode:** If the MDU is the atomic KZG unit, an SP holding 1/8th of the data cannot verify their own shard without the other 7/8ths. This defeats the purpose of distributed striping.
 
@@ -34,7 +34,7 @@ We align PolyStore with Ethereum's **EIP-4844** standard. This allows us to leve
 
 -----
 
-## 3. The "Aligned" Striping Model (Mode 2)
+## 3. The "Aligned" Striping Model
 
 We solve the striping issue by treating the MDU as a deck of cards (Blobs) rather than a single solid block.
 
@@ -56,7 +56,7 @@ For each `row`, apply RS(K, K+M) across slots to produce shard Blobs `S[slot][ro
 
 ### 3.3 Locked: Slot-major `leaf_index` ordering (serve-first)
 
-To prioritize serving/proving, Mode 2 defines the canonical Merkle leaf ordering for one SP‑MDU as **slot-major**.
+To prioritize serving/proving, StripeReplica defines the canonical Merkle leaf ordering for one SP‑MDU as **slot-major**.
 
 Let:
 * `K` = data slots, `M` = parity slots, `N = K+M`
@@ -69,7 +69,7 @@ Canonical mapping:
 * `slot = leaf_index / rows`
 * `row  = leaf_index % rows`
 
-In Mode 2, `ChainedProof.blob_index` MUST be interpreted as `leaf_index`. This makes the leaf ranges per provider slot contiguous (good for the hot path). RS repair still operates row-by-row but becomes strided in this ordering.
+In the striped layout, `ChainedProof.blob_index` MUST be interpreted as `leaf_index`. This makes the leaf ranges per provider slot contiguous (good for the hot path). RS repair still operates row-by-row but becomes strided in this ordering.
 
 ### 3.2 Parity Calculation & Homomorphism
 
@@ -94,7 +94,7 @@ To enable **Shared-Nothing Verification** (where $SP_i$ can prove their shard wi
 2.  **Witness MDUs:** The array of all KZG Blob Commitments.
 
 ### 4.2 Replication Rule
-For any Deal in Mode 2:
+For any striped deal:
 *   **User Data MDUs:** **Striped** (one slot’s shard Blobs per Provider).
 *   **Metadata MDUs (MDU #0 + Witness):** **Fully Replicated** (Full Copy on All `N = K+M` Providers).
 
@@ -108,7 +108,7 @@ This allows the Chain to challenge a Parity Node ($SP_9$) for a specific byte, a
 
 ## 5. The Lifecycle & Verification Flow
 
-This section defines the normative flow for a file "Life Cycle" in Mode 2.
+This section defines the normative flow for a file "Life Cycle" in the striped layout.
 
 ### 5.1 Phase 1: Expansion (Client-Side)
 1.  **Input:** 8 MiB user data (64 data Blobs).
@@ -148,7 +148,7 @@ This section defines the normative flow for a file "Life Cycle" in Mode 2.
 ```go
 const BLOB_SIZE = 131072        // 128 KiB
 const MDU_PAYLOAD_SIZE = 8388608 // 8 MiB (64 Blobs)
-// Mode 2 parameters:
+// StripeReplica parameters:
 //   N = K+M
 //   rows = 64 / K   (requires K | 64)
 //   LEAVES_PER_MDU = N * rows

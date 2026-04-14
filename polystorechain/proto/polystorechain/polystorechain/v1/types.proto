@@ -87,8 +87,8 @@ message Deal {
   RetrievalPolicy retrieval_policy = 22 [(gogoproto.nullable) = false];
 }
 
-// DealHeatState tracks aggregate traffic and performance metrics for a deal.
-// Used for "Heat" observability and potential future economic tilting.
+// DealHeatState is a legacy-named retrieval activity counter bucket for a deal.
+// It records traffic and failure totals only; it is not a pricing or placement signal.
 message DealHeatState {
   uint64 bytes_served_total = 1;
   uint64 failed_challenges_total = 2;

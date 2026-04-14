@@ -89,7 +89,7 @@ Provider draining is implemented as:
 - On-chain flag: `Provider.draining`
 - Tx: `MsgSetProviderDraining`
 - Placement filter: draining providers are excluded from new assignments and repair candidate selection.
-- Epoch-end deterministic drain scheduler (Mode2-only) bounded by:
+- Epoch-end deterministic drain scheduler (striped-layout only) bounded by:
   - `Params.max_drain_bytes_per_epoch`
   - `Params.max_repairing_bytes_ratio_bps` (optional global cap)
 
@@ -105,8 +105,8 @@ go test ./...
 
 ## What remains / known gaps
 
-- Mode1 does not yet have explicit make-before-break churn state (drain/rotation schedulers are Mode2-only).
-- Mode2 Stripe Playwright E2E asserts **byte-for-byte equality** between uploaded and downloaded payloads (`polystore-website/tests/mode2-stripe.spec.ts`).
+- Legacy full-replica handling does not yet have explicit make-before-break churn state (drain/rotation schedulers currently target the striped layout only).
+- Striped Playwright E2E asserts **byte-for-byte equality** between uploaded and downloaded payloads (`polystore-website/tests/mode2-stripe.spec.ts`).
 
 ## CI does NOT prove (read before inviting collaborators)
 

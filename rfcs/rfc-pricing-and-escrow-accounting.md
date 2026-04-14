@@ -1,6 +1,6 @@
 # RFC: Pricing & Escrow Accounting (Lock-in + Retrieval Fees + Elasticity Caps)
 
-**Status:** Sprint‑0 Frozen (Ready for implementation)
+**Status:** Partially implemented in devnet
 **Scope:** Chain economics (`polystorechain/`) + gateway/UI intent fields
 **Motivation:** `spec.md` §6.1–§6.2, §7.2.1; Appendix B #5
 **Depends on:** `rfcs/rfc-data-granularity-and-economics.md`
@@ -79,7 +79,13 @@ Let:
 - `old_size = Deal.size_bytes`
 - `new_size = msg.size_bytes`
 - `delta = max(0, new_size - old_size)`
-- `duration = Deal.end_block - Deal.start_block` (fixed at deal creation for v1)
+- `duration = Deal.end_block - Deal.pricing_anchor_block`
+
+Where:
+- `pricing_anchor_block = start_block` on `MsgCreateDeal`
+- `pricing_anchor_block = current_height` on `MsgExtendDeal`
+
+This prevents new bytes added after an extension from being charged for already-elapsed time.
 
 **Cost function:**
 ```
@@ -94,8 +100,8 @@ storage_cost = ceil(storage_price * delta * duration)
 - Only incremental bytes are charged at the new spot price.
 - Previously committed bytes are not repriced.
 
-### 4.2 Future extension (out of scope)
-Extending lifetime past `end_block` requires a `MsgExtendDeal` (or equivalent) and a lock-in charge using the spot `storage_price` at extension time.
+### 4.2 Extension path
+Extending lifetime past `end_block` is handled by `MsgExtendDeal` (see `rfcs/rfc-deal-expiry-and-extension.md`). Renewal charges existing committed bytes at the current `storage_price`, while future `MsgUpdateDealContent*` charges use `pricing_anchor_block` for new bytes.
 
 ---
 
@@ -171,7 +177,7 @@ elasticity_cost = base_stripe_cost * delta_replication
 - `Deal.escrow_balance -= elasticity_cost`
 - `spend_window_spent += elasticity_cost`
 
-**Implementation note:** current devnet `MsgSignalSaturation` enforces the cap but does not debit; mainnet requires the debit.
+**Implementation note:** current devnet `MsgSignalSaturation` enforces the cap and debits both `Deal.escrow_balance` and `spend_window_spent`. The remaining gap is not debit accounting; it is that striped overlay slot modeling and end-to-end routing behavior are still partial.
 
 ---
 

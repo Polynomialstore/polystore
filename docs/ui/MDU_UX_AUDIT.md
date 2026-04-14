@@ -6,7 +6,7 @@ Scope: user-visible MDU concepts across the website (`polystore-website`) and de
 
 ## Why this matters
 
-MDUs are not just an internal implementation detail — they are the product’s *verifiability unit*, *throughput unit*, and (in Mode 2) the bridge between “normal files” and a striped, self-healing storage market. Treating MDUs as a first-class UX object is a direct lever for:
+MDUs are not just an internal implementation detail — they are the product’s *verifiability unit*, *throughput unit*, and (in the striped layout) the bridge between “normal files” and a striped, self-healing storage market. Treating MDUs as a first-class UX object is a direct lever for:
 
 - User trust (“what exactly is stored and verified?”)
 - Troubleshooting (“why did my upload/download behave this way?”)
@@ -23,7 +23,7 @@ Recommended stable, user-facing baseline:
 - **MDU #0 (PolyFS Super-Manifest)**: file table + root table.
 - **Witness MDUs**: commitment cache/acceleration structure.
 - **User MDUs**: data-bearing MDUs (file bytes packed into PolyFS).
-- **Mode 2 slot shard**: the per-provider share of an MDU (`8 MiB / K` bytes) plus parity shards (conceptually).
+- **Striped slot shard**: the per-provider share of an MDU (`8 MiB / K` bytes) plus parity shards (conceptually).
 
 If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and phase it out.
 
@@ -35,7 +35,7 @@ If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and
 - `polystore-website/src/components/FileSharder.tsx`
   - Shows: “MDUs expanded” grid, each tile labeled `#<id>` and `8MiB`.
   - Tracks: `totalUserMdus`, `totalWitnessMdus`, “1 meta”.
-  - Mode 2 copy: “Upload Stripes (Mode 2)” vs Mode 1 “Upload N MDUs to SP”.
+  - Current copy: “Upload Stripes” vs older generic MDU upload wording.
   - Gap: MDU tiles don’t explain *type* (MDU #0 vs witness vs user) and always render as “8MiB” even when it’s metadata; commitments shown are truncated and not contextualized.
 
 2) **Deal Explorer → “Manifest & MDUs” tab**
@@ -47,7 +47,7 @@ If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and
     - A per-MDU inspector: select `MDU #n` and load commitments; shows:
       - MDU root (Merkle root over commitments)
       - blob commitment count
-      - stripe layout grid (Mode 2 visual)
+      - stripe layout grid (striped layout visual)
   - Gap:
     - No “file → MDU range” mapping surfaced (which MDUs does `video.mp4` occupy?).
     - The stripe grid is a good start, but it mixes “data blob” and “parity shard” semantics without connecting to *providers/slots* for this specific deal.
@@ -115,7 +115,7 @@ If “DU” remains in copy, explicitly alias it to MDU (“DU (aka MDU)”) and
   - range chunking is blob-aligned
   - one “download a file” may correspond to many proof submissions
 
-5) **Mode 2: slot + shard reality**
+5) **Striped slot + shard reality**
 - The UI can show stripe math, but not:
   - “which provider is slot 0/1/2… for this deal?”
   - “how many bytes per slot shard for this file?”
@@ -140,7 +140,7 @@ In Deal Explorer, add an MDU-centric view that answers:
 - **MDU drill-down:** for an MDU:
   - commitments summary (already exists)
   - show “blob count, blob size, expected receipts if fetched fully”
-  - show “slot shards” for Mode 2 (bytes per slot, parity)
+  - show “slot shards” for striped deals (bytes per slot, parity)
 
 ### C) Retrieval transparency (“what just happened?”)
 

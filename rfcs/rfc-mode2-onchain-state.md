@@ -1,15 +1,15 @@
-# RFC: Mode 2 On-Chain State (Slots, Generations, Repairs)
+# RFC: Striped On-Chain State (Slots, Generations, Repairs)
 
-**Status:** Sprint‑0 Frozen (Ready for implementation)
+**Status:** Implemented in devnet / migration cleanup pending
 **Scope:** Chain protocol state (`polystorechain/`)
 **Depends on:** `spec.md` §6.2, §8.3–§8.4; `rfcs/rfc-blob-alignment-and-striping.md`
-**Motivation:** Appendix B #2 (Mode 2 encoding), #6 (write semantics beyond append-only; near-term constraints)
+**Motivation:** Appendix B #2 (striped encoding), #6 (write semantics beyond append-only; near-term constraints)
 
 ---
 
 ## 0. Executive Summary
 
-Devnet Mode 2 currently relies on **implicit encoding**:
+Earlier devnet StripeReplica deals relied on **implicit encoding**:
 - `(K,M)` is derived by parsing `Deal.service_hint` (`rs=K+M`)
 - `Deal.providers[]` is treated as the slot order (by convention)
 
@@ -18,7 +18,7 @@ Mainnet requires **explicit typed state** so the chain can:
 - coordinate **repairs and make‑before‑break replacement**
 - derive deterministic per-slot policy (synthetic challenges, quotas, health)
 
-This RFC freezes a **concrete on-chain representation** for Mode 2 and a minimal lifecycle state machine that is forward-compatible with “pending generation” writes later.
+This RFC freezes a **concrete on-chain representation** for the striped layout and a minimal lifecycle state machine that is forward-compatible with “pending generation” writes later. The wire/schema field names retain `mode2_*` for compatibility, but this document treats the striped layout as the canonical protocol path.
 
 ---
 
@@ -52,7 +52,7 @@ Notes:
 ### 2.1 New messages
 
 ```proto
-// StripeReplica profile parameters for Mode 2.
+// StripeReplica profile parameters for the canonical striped layout.
 message StripeReplicaProfile {
   uint32 k = 1; // data slots
   uint32 m = 2; // parity slots
@@ -64,7 +64,7 @@ enum SlotStatus {
   SLOT_STATUS_REPAIRING = 2; // slot is being replaced/catching up; excluded from quota + rewards
 }
 
-// Slot state for Mode 2 (base slot + optional replacement candidate).
+// Slot state for the canonical striped layout (base slot + optional replacement candidate).
 message DealSlot {
   uint32 slot = 1; // 0..N-1
   string provider = 2; // current accountable provider (bech32)
@@ -87,7 +87,7 @@ We keep existing fields for devnet compatibility (notably `providers[]` and `ser
 message Deal {
   // existing fields...
 
-  // --- Mode 2 explicit encoding (new canonical state) ---
+  // --- Striped explicit encoding (new canonical state; field names retained for compatibility) ---
   StripeReplicaProfile mode2_profile = 15; // set iff redundancy_mode == 2
   repeated DealSlot mode2_slots = 16;      // length N, slot-ordered
 
@@ -106,14 +106,14 @@ message Deal {
 
 **Legacy fields during migration window:**
 - `providers[]` remains populated for LCD/UI convenience and backwards compatibility.
-- For Mode 2, `providers[]` MUST equal `[slot.provider for slot in mode2_slots]` until `providers[]` can be deprecated.
+- For striped deals, `providers[]` MUST equal `[slot.provider for slot in mode2_slots]` until `providers[]` can be deprecated.
 - `service_hint` may still include `rs=K+M`, but once `mode2_profile` exists, it is treated as **intent only**, not canonical state.
 
 ---
 
 ## 3. Lifecycle State Machine (Freeze)
 
-### 3.1 CreateDeal (Mode 2)
+### 3.1 CreateDeal (Striped layout)
 At `MsgCreateDeal*` time:
 - `mode2_profile` and `mode2_slots` are derived from the request (legacy: parsed from `service_hint`)
 - `current_gen = 0`
@@ -147,7 +147,7 @@ At `MsgUpdateDealContent*` time:
 - `slot.repair_target_gen = 0`
 
 **Policy note:** While a slot is `REPAIRING`:
-- clients SHOULD route around that slot for Mode 2 reads (fetch any `K` ACTIVE slots per MDU)
+- clients SHOULD route around that slot for striped reads (fetch any `K` ACTIVE slots per MDU)
 - synthetic challenges and quota accounting MUST ignore repairing slots
 - repairing slots MUST NOT earn rewards for liveness proofs (they may still submit a “readiness proof” message; not defined here)
 
@@ -198,24 +198,23 @@ Add a one-time migration that:
 
 ## 6. Test Gates (for later sprints)
 
-- **Migration test:** legacy Mode 2 deals survive upgrade with identical slot ordering and `(K,M)` values.
+- **Migration test:** legacy striped deals survive upgrade with identical slot ordering and `(K,M)` values.
 - **Invariants tests:** reject inconsistent `(K,M)` vs slot length; reject invalid slot indices.
 - **Repair e2e:** multi-SP: mark slot repairing → candidate catch-up → promote → reads stay available (fetch any `K`).
 
 ---
 
-## 7. Implementation Checklist (Sprint 3/4)
+## 7. Current Implementation Status
 
-1. Protobuf + codegen:
-   - `polystorechain/proto/polystorechain/polystorechain/v1/types.proto`: add `StripeReplicaProfile`, `DealSlot`, `SlotStatus`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`.
-   - `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`: extend `MsgUpdateDealContent` + `EvmUpdateContentIntent`.
-2. Keeper logic:
-   - Populate typed fields at `CreateDeal`.
-   - Persist `total_mdus/witness_mdus/current_gen` at `UpdateDealContent*`.
-3. Read path constraints:
-   - Update `stripeParamsForDeal()` and `providerSlotIndex()` to use typed fields when present.
-4. Gateway/UI:
-   - Ensure `/gateway/upload` returns `total_mdus` and `witness_mdus` (keep legacy alias fields for transition).
-5. Store migration:
-   - Add an upgrade handler to backfill typed Mode 2 state for existing deals.
+Completed in the current repo state:
+1. Protobuf + codegen landed for `StripeReplicaProfile`, `DealSlot`, `Deal.current_gen`, `Deal.witness_mdus`, `Deal.mode2_*`, and the extended update-intent fields.
+2. Keeper logic populates typed striped state at `CreateDeal` and persists `total_mdus`, `witness_mdus`, and `current_gen` at `UpdateDealContent*`.
+3. Read-path helpers prefer typed fields when present (`stripeParamsForDeal()`, `providerSlotIndex()`), while preserving legacy mirrors.
+4. Gateway/UI upload paths carry `total_mdus` and `witness_mdus`, with `allocated_length` retained only as a compatibility alias.
+5. Slot repair messages (`StartSlotRepair`, `CompleteSlotRepair`) are implemented in keeper logic.
+
+Remaining cleanup:
+1. Add or document the migration/backfill path for older deals that predate typed striped state.
+2. Decide when schema/wire names like `mode2_profile` and `mode2_slots` can be renamed or formally frozen as compatibility identifiers.
+3. Keep the gap report authoritative for overlay elasticity, which is still not modeled end-to-end in typed slot state.
 

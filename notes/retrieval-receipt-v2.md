@@ -12,7 +12,7 @@ The current end-to-end “download → sign → `MsgProveLiveness`” flow has r
 2. **Receipt fields are not enforced consistent with the transaction envelope.**
    - The chain must enforce `receipt.provider == msg.creator`, `receipt.deal_id == msg.deal_id`, `receipt.epoch_id == msg.epoch_id`.
 3. **Client-side submission reliability is weak.**
-   - “Fire-and-forget” or missing headers can lead to successful downloads without an accepted receipt (no heat increment).
+   - “Fire-and-forget” or missing headers can lead to successful downloads without an accepted receipt (no retrieval activity counter increment).
 4. **Consensus verification bypass exists.**
    - `SKIP_KZG_VERIFY` must not exist in any environment claiming cryptographic verification.
 
@@ -61,7 +61,7 @@ Frontend rule:
 ## 5. UX / Observability Requirements
 
 - The UI must show a “Receipt submitted / rejected” state (and allow retry).
-- `DealHeatState.bytes_served_total` and `successful_retrievals_total` must be visible in the dashboard and deal detail views.
+- The legacy `DealHeatState` retrieval counters (`bytes_served_total`, `successful_retrievals_total`) must be visible in the dashboard and deal detail views.
 
 ## 6. Milestones
 
@@ -91,7 +91,7 @@ Frontend rule:
 4. Add query endpoint: `GetReceiptNonce(owner)` returning `last_nonce`.
 
 **Test gates (chain):**
-- Unit test: valid v2 receipt increments heat; invalid signature fails.
+- Unit test: valid v2 receipt increments retrieval activity counters; invalid signature fails.
 - Unit test: mismatch `receipt.provider != msg.creator` fails.
 - Unit test: nonce replay fails.
 - Unit test: v1 receipts (if enabled) still verify during migration.
@@ -112,7 +112,7 @@ Frontend rule:
 
 **Test gates (frontend):**
 - Unit test: typed-data shape matches chain (golden vector).
-- Smoke test: download triggers signature prompt and receipt submission; heat increments.
+- Smoke test: download triggers signature prompt and receipt submission; retrieval activity counters increment.
 
 ---
 
@@ -169,5 +169,5 @@ This phase removes the remaining “short-circuit” surfaces and improves the a
 - Unit test: receipt submission fails without session or with mismatched bytes/proof hash.
 
 **Browser E2E:**
-- Smoke: download triggers two signatures (request + receipt) and heat increments.
+- Smoke: download triggers two signatures (request + receipt) and retrieval activity counters increment.
 - Smoke: direct fetch perf test includes signed request headers (no query signatures).
