@@ -25,20 +25,20 @@ type queryServer struct {
 	k Keeper
 }
 
-// GetDealHeat implements the legacy-named retrieval activity query.
-func (q queryServer) GetDealHeat(goCtx context.Context, req *types.QueryGetDealHeatRequest) (*types.QueryGetDealHeatResponse, error) {
+// GetDealActivity implements the deal activity query.
+func (q queryServer) GetDealActivity(goCtx context.Context, req *types.QueryGetDealActivityRequest) (*types.QueryGetDealActivityResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	heat, err := q.k.DealHeatStates.Get(ctx, req.DealId)
+	activity, err := q.k.DealActivityStates.Get(ctx, req.DealId)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
-			// Return an empty retrieval activity state instead of error for UX
-			return &types.QueryGetDealHeatResponse{
-				Heat: types.DealHeatState{
+			// Return an empty activity state instead of error for UX
+			return &types.QueryGetDealActivityResponse{
+				Activity: types.DealActivityState{
 					BytesServedTotal:      0,
 					FailedChallengesTotal: 0,
 					LastUpdateHeight:      0,
@@ -48,7 +48,7 @@ func (q queryServer) GetDealHeat(goCtx context.Context, req *types.QueryGetDealH
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return &types.QueryGetDealHeatResponse{Heat: heat}, nil
+	return &types.QueryGetDealActivityResponse{Activity: activity}, nil
 }
 
 // GetReceiptNonce returns the last accepted retrieval receipt nonce for a (deal_id, file_path).

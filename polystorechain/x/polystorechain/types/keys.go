@@ -41,7 +41,7 @@ var (
 	ReceiptNonceKey                  = collections.NewPrefix("ReceiptNonce/value/")
 	ReceiptNonceDealFileKey          = collections.NewPrefix("ReceiptNonceDealFile/value/")
 	EvmNonceKey                      = collections.NewPrefix("EvmNonce/value/")
-	DealHeatStateKey                 = collections.NewPrefix("DealHeatState/value/")
+	DealActivityStateKey             = collections.NewPrefix("DealActivityState/value/")
 	SetupBumpNonceKey                = collections.NewPrefix("SetupBumpNonce/value/")
 	SetupTriedProviderKey            = collections.NewPrefix("SetupTriedProvider/value/")
 	RetrievalSessionsKey             = collections.NewPrefix("RetrievalSessions/value/")

@@ -390,7 +390,7 @@ Following the latter half of `scripts/e2e_deputy_ghost_repair_multi_sp.sh`:
 
 Manual checks derived from keeper tests:
 
-- Query `polystorechain query polystorechain params` and `polystorechain query polystorechain list-deals` to examine `Params.max_drain_bytes_per_epoch`, `Params.max_repairing_bytes_ratio_bps`, and deal retrieval activity counters (legacy `/heat` view).
+- Query `polystorechain query polystorechain params` and `polystorechain query polystorechain list-deals` to examine `Params.max_drain_bytes_per_epoch`, `Params.max_repairing_bytes_ratio_bps`, and deal activity counters (`/activity` view).
 - Execute `polystorechain tx polystorechain set-provider-draining <provider>` to test that new placement requests avoid that provider, as tested in `polystorechain/x/polystorechain/keeper/draining_test.go`.
 - Open sponsored retrieval sessions and vouchers via `/gateway/plan-retrieval-session` + `/gateway/session-receipt`; inspect `polystorechain query polystorechain retrieval-sessions` to ensure quotas decrement just like `msg_server_sponsored_sessions_test.go`.
 - Watch reward distribution by querying `polystorechain query polystorechain rewards` or running dedicated `go test ./polystorechain/x/polystorechain/keeper/base_rewards_test.go` for a reference baseline.

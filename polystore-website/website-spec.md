@@ -485,7 +485,7 @@ This sprint prioritizes a clean separation between:
 
 ### 9.1 Primary Observables (Authoritative Sources)
 *   **Deal (LCD):** `GET /polystorechain/polystorechain/v1/deals` → `Deal.id`, `Deal.owner`, `Deal.manifest_root` (48 bytes), `Deal.size`.
-*   **Traffic counters (LCD, legacy `/heat` route):** `GET /polystorechain/polystorechain/v1/deals/{deal_id}/heat` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
+*   **Activity counters (LCD):** `GET /polystorechain/polystorechain/v1/deals/{deal_id}/activity` → `bytes_served_total`, `successful_retrievals_total`, `failed_challenges_total`.
 *   **Slab layout (Gateway):** `GET /gateway/slab/{manifest_root}?deal_id=...&owner=...` → `total_mdus`, `witness_mdus`, `user_mdus`, and segment ranges (MDU #0, witness, user).
 *   **PolyFS file table (Gateway):** `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...` → `{files:[{path,size_bytes,start_offset,flags}]}` parsed from `mdu_0.bin`.
 *   **Upload staging (Gateway response):** `POST /gateway/upload` → `{manifest_root,size_bytes,file_size_bytes,total_mdus,witness_mdus,file_path}` (legacy alias: `allocated_length`) used for immediate UX before LCD reflects the commit.

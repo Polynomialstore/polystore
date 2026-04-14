@@ -266,7 +266,7 @@ export function Dashboard() {
   const optimisticCidTtlMs = 2 * 60_000
   const optimisticCidOverridesRef = useRef<Record<string, { cid: string; expiresAtMs: number }>>({})
   const [pendingScrollTarget, setPendingScrollTarget] = useState<'workspace' | 'deal' | 'create' | null>(null)
-  const [dealDetailRequestedTab] = useState<'files' | 'info' | 'manifest' | 'heat' | null>(null)
+  const [dealDetailRequestedTab] = useState<'files' | 'info' | 'manifest' | 'activity' | null>(null)
   const [dealDetailRequestedTabNonce] = useState(0)
 
   const handleWalletError = useCallback((error: unknown, fallback: string) => {

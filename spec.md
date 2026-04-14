@@ -512,7 +512,7 @@ The intended end state is: a provider only gets credit for a retrieval once the 
         *   provider proof-of-retrieval for the declared blob range, and
         *   user confirmation,
         *   all before `expires_at`.
-    *   Only `COMPLETED` sessions increment the legacy retrieval activity counter `DealHeatState.successful_retrievals_total`; reward and health accounting is driven by session completion itself, not by any separate heat score.
+    *   Only `COMPLETED` sessions increment `DealActivityState.successful_retrievals_total`; reward and health accounting is driven by session completion itself, not by any separate activity score.
 
 #### 7.2.1 Gamma-4 Retrieval Fees (Devnet, Normative)
 

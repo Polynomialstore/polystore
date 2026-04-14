@@ -142,10 +142,10 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED, session.Status)
 
-	heat, err := f.keeper.DealHeatStates.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
+	activity, err := f.keeper.DealActivityStates.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
 	require.NoError(t, err)
-	require.Equal(t, uint64(128*1024), heat.BytesServedTotal)
-	require.Equal(t, uint64(1), heat.SuccessfulRetrievalsTotal)
+	require.Equal(t, uint64(128*1024), activity.BytesServedTotal)
+	require.Equal(t, uint64(1), activity.SuccessfulRetrievalsTotal)
 }
 
 func TestRetrievalSession_OpenRejectsNonceReplay(t *testing.T) {

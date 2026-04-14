@@ -87,9 +87,9 @@ message Deal {
   RetrievalPolicy retrieval_policy = 22 [(gogoproto.nullable) = false];
 }
 
-// DealHeatState is a legacy-named retrieval activity counter bucket for a deal.
-// It records traffic and failure totals only; it is not a pricing or placement signal.
-message DealHeatState {
+// DealActivityState tracks aggregate retrieval and liveness activity counters for a deal.
+// It records bytes served, completed retrievals, failed challenges, and the last update height.
+message DealActivityState {
   uint64 bytes_served_total = 1;
   uint64 failed_challenges_total = 2;
   int64 last_update_height = 3;

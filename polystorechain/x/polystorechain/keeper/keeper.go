@@ -44,7 +44,7 @@ type Keeper struct {
 	ReceiptNonces              collections.Map[string, uint64]
 	ReceiptNoncesByDealFile    collections.Map[collections.Pair[uint64, string], uint64]
 	EvmNonces                  collections.Map[string, uint64]
-	DealHeatStates             collections.Map[uint64, types.DealHeatState]
+	DealActivityStates         collections.Map[uint64, types.DealActivityState]
 	SetupBumpNonce             collections.Map[collections.Pair[uint64, uint32], uint64]
 	SetupTriedProvider         collections.Map[collections.Pair[collections.Pair[uint64, uint32], string], bool]
 
@@ -113,7 +113,7 @@ func NewKeeper(
 		ReceiptNonces:              collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
 		ReceiptNoncesByDealFile:    collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		EvmNonces:                  collections.NewMap(sb, types.EvmNonceKey, "evm_nonces", collections.StringKey, collections.Uint64Value),
-		DealHeatStates:             collections.NewMap(sb, types.DealHeatStateKey, "deal_heat_states", collections.Uint64Key, codec.CollValue[types.DealHeatState](cdc)),
+		DealActivityStates:         collections.NewMap(sb, types.DealActivityStateKey, "deal_activity_states", collections.Uint64Key, codec.CollValue[types.DealActivityState](cdc)),
 		SetupBumpNonce:             collections.NewMap(sb, types.SetupBumpNonceKey, "setup_bump_nonce", collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Value),
 		SetupTriedProvider: collections.NewMap(
 			sb,
@@ -333,9 +333,9 @@ func (k Keeper) GetAuthority() []byte {
 	return k.authority
 }
 
-// IncrementHeat updates the legacy-named retrieval activity counters for a deal.
-func (k Keeper) IncrementHeat(ctx sdk.Context, dealID uint64, bytesServed uint64, failed bool) error {
-	state, err := k.DealHeatStates.Get(ctx, dealID)
+// RecordDealActivity updates the retrieval and liveness activity counters for a deal.
+func (k Keeper) RecordDealActivity(ctx sdk.Context, dealID uint64, bytesServed uint64, failed bool) error {
+	state, err := k.DealActivityStates.Get(ctx, dealID)
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {
 		return err
 	}
@@ -349,5 +349,5 @@ func (k Keeper) IncrementHeat(ctx sdk.Context, dealID uint64, bytesServed uint64
 	}
 	state.LastUpdateHeight = ctx.BlockHeight()
 
-	return k.DealHeatStates.Set(ctx, dealID, state)
+	return k.DealActivityStates.Set(ctx, dealID, state)
 }

@@ -170,10 +170,10 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), nonceB)
 
-	heat, err := f.keeper.DealHeatStates.Get(f.ctx, resDeal.DealId)
+	activity, err := f.keeper.DealActivityStates.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
-	require.Equal(t, uint64(2), heat.SuccessfulRetrievalsTotal)
-	require.Equal(t, uint64(2048), heat.BytesServedTotal)
+	require.Equal(t, uint64(2), activity.SuccessfulRetrievalsTotal)
+	require.Equal(t, uint64(2048), activity.BytesServedTotal)
 }
 
 func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
@@ -317,8 +317,8 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), nonce)
 
-	heat, err := f.keeper.DealHeatStates.Get(f.ctx, resDeal.DealId)
+	activity, err := f.keeper.DealActivityStates.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
-	require.Equal(t, uint64(2), heat.SuccessfulRetrievalsTotal)
-	require.Equal(t, uint64(2048), heat.BytesServedTotal)
+	require.Equal(t, uint64(2), activity.SuccessfulRetrievalsTotal)
+	require.Equal(t, uint64(2048), activity.BytesServedTotal)
 }

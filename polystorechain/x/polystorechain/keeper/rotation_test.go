@@ -102,6 +102,6 @@ func TestCheckMissedProofs_SchedulesRotationRepairs(t *testing.T) {
 	}))
 	require.True(t, foundEvidence)
 
-	_, err = f.keeper.DealHeatStates.Get(sdkCtx, dealID)
+	_, err = f.keeper.DealActivityStates.Get(sdkCtx, dealID)
 	require.ErrorIs(t, err, collections.ErrNotFound)
 }

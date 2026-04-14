@@ -61,7 +61,7 @@ Frontend rule:
 ## 5. UX / Observability Requirements
 
 - The UI must show a “Receipt submitted / rejected” state (and allow retry).
-- The legacy `DealHeatState` retrieval counters (`bytes_served_total`, `successful_retrievals_total`) must be visible in the dashboard and deal detail views.
+- `DealActivityState` counters (`bytes_served_total`, `successful_retrievals_total`) must be visible in the dashboard and deal detail views.
 
 ## 6. Milestones
 

@@ -91,9 +91,9 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED, session.Status)
 
-	heat, err := f.keeper.DealHeatStates.Get(ctxExpired, resDeal.DealId)
+	activity, err := f.keeper.DealActivityStates.Get(ctxExpired, resDeal.DealId)
 	require.NoError(t, err)
-	require.Equal(t, uint64(1), heat.FailedChallengesTotal)
+	require.Equal(t, uint64(1), activity.FailedChallengesTotal)
 
 	failures, err := f.keeper.DealProviderFailures.Get(ctxExpired, collections.Join(resDeal.DealId, assignedProvider))
 	require.NoError(t, err)

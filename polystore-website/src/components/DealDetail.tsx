@@ -191,11 +191,11 @@ interface DealDetailProps {
   onFileActivity?: (activity: FileActivity) => void
   topPanel?: ReactNode
   uploadWorkflowActive?: boolean
-  requestedTab?: 'files' | 'info' | 'manifest' | 'heat'
+  requestedTab?: 'files' | 'info' | 'manifest' | 'activity'
   requestedTabNonce?: number
 }
 
-interface HeatState {
+interface DealActivityState {
     bytes_served_total: string
     failed_challenges_total: string
     last_update_height: string
@@ -292,7 +292,7 @@ interface FileRowProps {
   transportPreference?: string
   gatewayModePreferred: boolean
   setSelectedMdu: React.Dispatch<React.SetStateAction<number>>
-  setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'heat') => void
+  setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'activity') => void
 }
 
 async function persistCachedDownloadState(dealId: string, manifestRoot: string, filePath: string, bytes: Uint8Array): Promise<void> {
@@ -1032,7 +1032,7 @@ export function DealDetail({
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
   const [, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
-  const [heat, setHeat] = useState<HeatState | null>(null)
+  const [activity, setActivity] = useState<DealActivityState | null>(null)
   const [providersByAddr, setProvidersByAddr] = useState<Record<string, ProviderInfo>>({})
   const [loadingSlab, setLoadingSlab] = useState(false)
   const [files, setFiles] = useState<PolyfsFileEntry[] | null>(null)
@@ -1089,7 +1089,7 @@ export function DealDetail({
   const [mduKzgError, setMduKzgError] = useState<string | null>(null)
   const [mduRootMerkle, setMduRootMerkle] = useState<string[][] | null>(null)
   const [merkleError, setMerkleError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'files' | 'info' | 'manifest' | 'heat'>('files')
+  const [activeTab, setActiveTab] = useState<'files' | 'info' | 'manifest' | 'activity'>('files')
   const mduExplorerRecords = useMemo<MduExplorerRecord[]>(() => {
     const totalMdus = Math.max(0, Number(slab?.total_mdus ?? manifestInfo?.total_mdus ?? 0))
     const witnessMdus = Math.max(0, Number(slab?.witness_mdus ?? manifestInfo?.witness_mdus ?? 0))
@@ -1209,13 +1209,13 @@ export function DealDetail({
     () => dealProofs.reduce((max, proof) => Math.max(max, Number(proof.blockHeight) || 0), 0),
     [dealProofs],
   )
-  const heatBytesServedTotal = Number(heat?.bytes_served_total ?? 0) || 0
-  const heatSuccessfulRetrievals = Number(heat?.successful_retrievals_total ?? 0) || 0
-  const heatFailedChallenges = Number(heat?.failed_challenges_total ?? 0) || 0
-  const heatLastUpdateHeight = Number(heat?.last_update_height ?? 0) || 0
-  const displayFailedProofs = Math.max(heatFailedChallenges, observedFailedProofs)
-  const displayLastActivityHeight = Math.max(heatLastUpdateHeight, observedLastProofHeight)
-  const hasHeatOrProofActivity = Boolean(heat) || dealProofs.length > 0
+  const activityBytesServedTotal = Number(activity?.bytes_served_total ?? 0) || 0
+  const activitySuccessfulRetrievals = Number(activity?.successful_retrievals_total ?? 0) || 0
+  const activityFailedChallenges = Number(activity?.failed_challenges_total ?? 0) || 0
+  const activityLastUpdateHeight = Number(activity?.last_update_height ?? 0) || 0
+  const displayFailedProofs = Math.max(activityFailedChallenges, observedFailedProofs)
+  const displayLastActivityHeight = Math.max(activityLastUpdateHeight, observedLastProofHeight)
+  const hasActivityOrProofData = Boolean(activity) || dealProofs.length > 0
   const dealProviders = useMemo(() => deal.providers || [], [deal.providers])
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
@@ -2388,13 +2388,13 @@ export function DealDetail({
     }
   }
 
-  const fetchHeat = useCallback(async (dealId: string) => {
+  const fetchActivity = useCallback(async (dealId: string) => {
       try {
-          const res = await fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/deals/${dealId}/heat`)
+          const res = await fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/deals/${dealId}/activity`)
           if (res.ok) {
               const json = await res.json()
-              if (json.heat) {
-                  setHeat(json.heat)
+              if (json.activity) {
+                  setActivity(json.activity)
               }
           }
       } catch (e) {
@@ -2409,7 +2409,7 @@ export function DealDetail({
       // The provider submits the receipt tx; wait briefly for inclusion even in sync-broadcast mode.
       for (let i = 0; i < 8; i++) {
         if (canceled) return
-        await fetchHeat(deal.id)
+        await fetchActivity(deal.id)
         await new Promise((r) => setTimeout(r, 750))
       }
     }
@@ -2417,7 +2417,7 @@ export function DealDetail({
     return () => {
       canceled = true
     }
-  }, [fetchHeat, receiptStatus, deal.id])
+  }, [fetchActivity, receiptStatus, deal.id])
 
   useEffect(() => {
     if (!authoritativeDealLoaded) return
@@ -2448,8 +2448,8 @@ export function DealDetail({
       setDealIndexSyncMessage('')
     }
     setFileActionError(null)
-    void fetchHeat(deal.id)
-  }, [authoritativeDealLoaded, committedManifestRoot, deal.id, fetchFiles, fetchHeat, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
+    void fetchActivity(deal.id)
+  }, [authoritativeDealLoaded, committedManifestRoot, deal.id, fetchFiles, fetchActivity, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
 
   const requiresDealIndexSync =
     dealIndexRequirement.status === 'needs_sync_missing' ||
@@ -2523,9 +2523,9 @@ export function DealDetail({
           Manifest &amp; MDUs
         </button>
         <button
-          onClick={() => setActiveTab('heat')}
-          data-testid="deal-detail-tab-heat"
-          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'heat' ? 'border-primary text-foreground bg-secondary' : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
+          onClick={() => setActiveTab('activity')}
+          data-testid="deal-detail-tab-activity"
+          className={`py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === 'activity' ? 'border-primary text-foreground bg-secondary' : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
         >
           Traffic &amp; Liveness
         </button>
@@ -2687,7 +2687,7 @@ export function DealDetail({
                               <div className="nil-detail-metric">
                                 <div className="text-[9px] text-muted-foreground uppercase font-bold">Traffic</div>
                                 <div className="font-mono-data text-[11px] text-foreground font-bold">
-                                  {heat ? `${(Number(heat.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                  {activity ? `${(Number(activity.bytes_served_total) / 1024 / 1024).toFixed(2)} MB` : '—'}
                                 </div>
                               </div>
                               <div className="nil-detail-metric">
@@ -3315,7 +3315,7 @@ export function DealDetail({
             </div>
           )}
 
-        {activeTab === 'heat' && (
+        {activeTab === 'activity' && (
             <div className="space-y-4">
                   <div className="bg-secondary/50 border border-border rounded-none p-4 text-center">
                       <Activity className="w-8 h-8 text-primary mx-auto mb-2" />
@@ -3323,18 +3323,18 @@ export function DealDetail({
                       <p className="text-xs text-muted-foreground mt-1">Real-time stats from chain state</p>
                   </div>
                   
-                  {hasHeatOrProofActivity ? (
+                  {hasActivityOrProofData ? (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                           <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Total Traffic</div>
                               <div className="text-lg font-mono-data text-foreground">
-                                  {(heatBytesServedTotal / 1024 / 1024).toFixed(2)} MB
+                                  {(activityBytesServedTotal / 1024 / 1024).toFixed(2)} MB
                               </div>
                           </div>
                           <div className="bg-secondary/50 p-3 rounded-none border border-border">
                               <div className="text-muted-foreground uppercase text-[10px]">Total Retrievals</div>
                               <div className="text-lg font-mono-data text-success">
-                                  {heatSuccessfulRetrievals}
+                                  {activitySuccessfulRetrievals}
                               </div>
                           </div>
                           <div className="bg-secondary/50 p-3 rounded-none border border-border">

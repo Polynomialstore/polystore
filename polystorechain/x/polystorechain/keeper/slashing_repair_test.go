@@ -109,9 +109,9 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 	}))
 	require.True(t, foundEvidence)
 
-	heat, err := f.keeper.DealHeatStates.Get(sdkCtx, dealID)
+	activity, err := f.keeper.DealActivityStates.Get(sdkCtx, dealID)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, heat.FailedChallengesTotal, uint64(1))
+	require.GreaterOrEqual(t, activity.FailedChallengesTotal, uint64(1))
 }
 
 func TestCheckMissedProofs_Mode2RepairFallbackReusesProvider(t *testing.T) {
@@ -383,7 +383,7 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 	}))
 	require.True(t, foundEvidence)
 
-	heat, err := f.keeper.DealHeatStates.Get(sdkCtx, dealID)
+	activity, err := f.keeper.DealActivityStates.Get(sdkCtx, dealID)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, heat.FailedChallengesTotal, uint64(1))
+	require.GreaterOrEqual(t, activity.FailedChallengesTotal, uint64(1))
 }
