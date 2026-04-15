@@ -16,7 +16,7 @@ It should not be a paraphrase of `spec.md`, and it should not read like a market
 
 * Write in continuous argument, not branded bullet piles.
 * Introduce PolyFS and the retrieval model together near the front of the paper.
-* Use one running example and one recurring system diagram.
+* Use one running example and one recurring system diagram: a 64 MiB dataset shard packed into PolyFS, committed by one `manifest_root`, then retrieved for one 256 KiB range.
 * Prefer mechanism-first explanations over comparative marketing language.
 * Do not use legacy mode terminology or migration framing.
 * When a claim depends on a mechanism, show the mechanism.
@@ -183,14 +183,16 @@ Explain how served bytes are checked against the on-chain commitment.
 Tie sections 3 through 7 into one concrete story with numbers.
 
 ### Required example flow
+Use one fixed example throughout the whitepaper: a 64 MiB dataset shard packed into PolyFS under the default RS(8,12) profile.
+
 1. Create a deal.
-2. Pack one file into PolyFS.
-3. Assign `N = K+M` slots.
+2. Pack the 64 MiB file into PolyFS as `MDU #0`, the required witness MDUs, and 8 user-data MDUs.
+3. Assign `N = K+M = 12` slots/providers.
 4. Upload striped user-data shards and replicated metadata.
 5. Commit `manifest_root`.
-6. Open one retrieval session for a concrete byte range.
-7. Serve data from assigned providers.
-8. Verify proofs and confirm completion.
+6. Open one retrieval session for a concrete 256 KiB range inside one user-data MDU.
+7. Serve bytes and compact proof material from the assigned providers.
+8. Verify the KZG-backed proof path from the served bytes back to the commitment rooted in `manifest_root`, then confirm completion.
 9. Settle fees and record outcome.
 
 ### Why this section is mandatory

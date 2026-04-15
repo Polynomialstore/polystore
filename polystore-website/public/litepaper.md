@@ -22,7 +22,7 @@ The document should stay concrete, compact, and example-driven.
 
 ## Drafting Rules
 
-* Use one running example throughout the paper: one file, one deal, one retrieval session, one settlement path.
+* Use one running example throughout the paper: a 64 MiB dataset shard, one deal, one 256 KiB retrieval session, and one settlement path.
 * Introduce PolyFS early, then explain its internal structure: `MDU #0`, witness MDUs, user MDUs, blobs, slots, and `manifest_root`.
 * Explain retrieval early as part of the same story, not as a later feature.
 * Prefer short paragraphs over glossary dumping.
@@ -102,20 +102,22 @@ Explain why retrieval is not a side path layered on top of storage.
 Make the whole system feel real in one continuous example.
 
 ### Required worked example
-Walk one file through:
+Use one fixed example throughout the litepaper: a 64 MiB dataset shard packed into PolyFS under the default RS(8,12) profile.
+
+Walk that file through:
 
 1. A user opens a deal.
-2. The file is packed into PolyFS (`MDU #0`, witness MDUs, user MDUs).
-3. User-data MDUs are striped across assigned slots.
-4. Providers receive their assigned shard data and replicated metadata.
+2. The 64 MiB file is packed into PolyFS as `MDU #0`, the required witness MDUs, and 8 user-data MDUs.
+3. Each user-data MDU is striped across the 12 assigned slots/providers.
+4. Providers receive their assigned shard data plus the replicated PolyFS metadata.
 5. The user commits the resulting `manifest_root`.
-6. Later, a reader opens a retrieval session for a concrete range.
-7. Providers serve the needed bytes and proof material.
-8. The reader verifies completion.
+6. Later, a reader opens one retrieval session for a concrete 256 KiB range inside one user-data MDU.
+7. Providers serve the needed bytes plus the compact proof material tied to the committed PolyFS structure.
+8. The reader and chain verify the claim through the KZG-backed path rooted in `manifest_root`, without treating the whole raw file as the verification object.
 9. The chain settles the session.
 
 ### Editorial note
-Use concrete values for file size, `K`, `M`, MDU counts, and fee flow. The example should not stay abstract.
+Keep the numbers fixed: 64 MiB file, RS(8,12), 8 user-data MDUs, and one 256 KiB read. The example should stay concrete all the way through.
 
 ---
 
