@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState, useEffect } from "react";
-import { Menu, X, Github, ChevronDown, Rocket, Trophy, Activity, Terminal, Server, Database } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Rocket, Trophy, Activity, Terminal, Server, Database, BookOpen, FileText, FileCode } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LivingGrid } from "@nil-store/cybergrid-theme/react/living-grid";
 import { NavDropdown, NavItem } from "./NavDropdown";
@@ -51,7 +51,7 @@ export const Layout = () => {
   const isActive = (path: string) => location.pathname === path;
 
   // Navigation Hierarchy (Rich Data)
-  const navStructure: { type: "link" | "dropdown", name: "Store Data" | "Provide Storage" | "Testnet Info", path?: string, items?: NavItem[] }[] = [
+  const navStructure: { type: "link" | "dropdown", name: "Store Data" | "Provide Storage" | "Testnet Info" | "Learn", path?: string, items?: NavItem[] }[] = [
     { 
       type: "dropdown", 
       name: "Store Data", 
@@ -85,6 +85,15 @@ export const Layout = () => {
         { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
           //{ name: "Governance", path: "/governance", description: "DAO proposals and voting.", icon: <Vote className="w-5 h-5" /> },
           //{ name: "GitHub", path: "https://github.com/Polynomialstore/polystore", external: true, description: "Source code and contributions.", icon: <Github className="w-5 h-5" /> },
+        ] 
+      },
+    { 
+        type: "dropdown", 
+        name: "Learn", 
+        items: [
+        { name: "Whitepaper", path: "/whitepaper", description: "The full technical paper for PolyStore.", icon: <BookOpen className="w-5 h-5" /> },
+        { name: "Litepaper", path: "/litepaper", description: "A shorter overview of the architecture and model.", icon: <FileText className="w-5 h-5" /> },
+        { name: "Spec", path: "/spec", description: "The canonical protocol specification.", icon: <FileCode className="w-5 h-5" /> },
         ] 
       },
   ];
