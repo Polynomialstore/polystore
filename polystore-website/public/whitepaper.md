@@ -1,145 +1,306 @@
-# PolyStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
+# PolyStore Whitepaper
 
-**(White Paper v2.8 - Striped Retrieval Sessions)**
+**Outline Draft for Rewrite**
 
-**Date:** 2026-04-15
-**Authors:** PolyStore Core Team
+## Purpose
 
-## Abstract
+This document should become the technical narrative for PolyStore. It should explain the protocol as a system, defend the architectural choices, and give readers enough structure to understand how the spec hangs together.
 
-PolyStore is a decentralized storage network that unifies storage and retrieval into a single **Demand-Driven Performance Market**. By treating validated user retrievals as storage proofs (**Unified Liveness**), the protocol eliminates wasted work. Placement is **System-Defined** but **Hint-Aware**. The network stores data as **8 MiB Mega-Data Units (MDUs)** in a canonical striped RS(`K`,`K+M`) layout, and scales demand with **additional slot-aligned placements**, ensuring viral content remains available without punishing successful nodes.
+It should not be a paraphrase of `spec.md`, and it should not be a market-facing brochure. The job of the whitepaper is to connect:
+
+* the problem,
+* the system model,
+* the commitment model,
+* the retrieval/session model,
+* the economics,
+* and the threat model.
+
+If the litepaper is the shortest serious introduction, the whitepaper should be the first serious technical argument.
+
+---
+
+## Drafting Rules
+
+* Write in continuous argument, not branded bullet lists.
+* Every major section should answer a real technical question.
+* Use one running example and one system diagram that recur throughout the document.
+* Do not use legacy mode language or historical migration framing.
+* Do not over-brand ordinary mechanisms.
+* When a claim depends on a mechanism, show the mechanism.
+
+---
+
+## Proposed Structure
 
 ## 1. Introduction
 
-### 1.1 The "Double-Pay" Problem
+### Goal of the section
+State the protocol thesis, the system boundary, and the central design tradeoff.
 
-Legacy networks treat "Storage" and "Retrieval" as separate jobs. This is inefficient. PolyStore unifies them.
+### What it needs to do
+* Define PolyStore as a decentralized storage protocol centered on striped data placement and accountable retrieval.
+* Explain that retrieval is the operational center of the system, not a secondary concern.
+* Frame the whitepaper around the question: how do we make stored data retrievable, verifiable, and economically accountable?
 
-### 1.2 Key Innovations
-
-*   **Unified Liveness:** A validated user retrieval is storage evidence.
-*   **Synthetic Challenges:** The network audits cold data automatically.
-*   **Performance Market:** Rewards are based on speed through tiered performance rewards.
-*   **Elasticity:** The network automatically scales demand with **additional slot-aligned placements** funded by the user's prepaid escrow.
-
----
-
-## 2. The Unified Liveness Protocol
-
-### 2.1 Hot Data (Path A)
-1.  **User Request:** "I need chunk #50."
-2.  **Session Open (MetaMask):** User opens a retrieval session on-chain, locking a per-blob fee and burning a base fee.
-3.  **Service:** A slot-assigned Provider sends data + KZG proof material bound to the `session_id`.
-4.  **Session Confirm (MetaMask):** User confirms the session on-chain after a successful download.
-5.  **Consensus:** Provider submits proof-of-retrieval for the session; the chain settles payment.
-6.  **Result:** Provider earns **Storage Reward** (for liveness) and **Bandwidth Fee** (less a protocol burn).
-
-### 2.2 Cold Data (Path B)
-1.  **System Silence:** No user asks for data.
-2.  **Random Challenge:** Chain issues "I need chunk #50" (pseudo-random).
-3.  **Service:** A slot-assigned Provider computes the required proof.
-4.  **Consensus:** Provider submits proof to chain.
-5.  **Result:** Provider earns **Storage Reward** (for proving liveness).
-
-### 2.3 On-Chain Observability
-
-Retrieval events are surfaced on-chain via **Retrieval Sessions**:
-
-*   **User Authorization:** The Data Owner or authorized requester opens and confirms a retrieval session on-chain (EVM precompile / MetaMask).
-*   **Provider Submission:** The Storage Provider submits a session-bound `MsgSubmitRetrievalSessionProof` containing chained proofs for the served blob range. The module verifies:
-    *   The Provider is assigned to the relevant slots for the Deal.
-    *   The proof is valid for the declared blob range.
-    *   The session is `OPEN` and later confirmed by the requester.
-*   **Proof Stream:** The chain aggregates a compact stream of `Proof` summaries (`deal:<id>/epoch:<epoch>/tier:<tier>`) which can be rendered in dashboards to show liveness and performance over time.
-
-Because the layout is striped, multiple Providers can contribute retrieval sessions for different stripes of the same Deal under one canonical commitment.
-
-### 2.4 Retrievability & Self-Healing Invariants
-
-PolyStore's long-term design is anchored on two invariants:
-
-*   **Retrievability / Accountability:** For every `(Deal, Slot)` assignment, either the encrypted data is reliably retrievable under the protocol's rules, or there exists high-probability, verifiable evidence of failure that can be used to punish and eventually replace the accountable Provider.
-*   **Self-Healing Placement:** Persistently underperforming or malicious Providers are automatically detected, de-rewarded or slashed, and replaced by healthier Providers, so the network tends toward a state where Deals are held only by SPs that actually serve data.
-
-To support these invariants, PolyStore extends the Unified Liveness protocol with:
-
-*   **Valid Retrieval Challenges:** Every retrieval against `(Deal, Slot)` in epoch `e` is tagged with randomness `R_e` and a session nonce, and both client and Provider derive a deterministic KZG checkpoint inside the requested range. This makes each retrieval a potential storage proof.
-*   **Synthetic Storage Challenges:** For each epoch and `(Deal, Slot)`, the chain selects a small set of blob indices to probe purely from `R_e`. Providers that wish to earn storage rewards must satisfy these either via synthetic proofs or retrieval-based proofs.
-*   **Provider Audit Debt:** Each Provider accumulates an "audit debt" proportional to the total bytes it stores; it must act as an auditor for other Providers' Deals, issuing retrieval challenges and reporting misbehavior.
-*   **Health Metrics & Eviction:** The chain maintains rolling health metrics per `(Deal, Slot)` (success ratios, fraud rate, basic latency). When an assignment is clearly unhealthy, the placement engine recruits replacements and evicts the bad Provider once new placements prove themselves.
-
-The north star is simple: **data is either retrievable or the chain can prove that a specific Provider failed and punish them accordingly**.
+### Desired outcome
+By the end of the introduction, the reader should know what problem the paper is solving and why the design is not just "another storage chain."
 
 ---
 
-## 3. Traffic Management (Elasticity)
+## 2. Problem Statement and Design Constraints
 
-### 3.1 The Saturation Signal
-If a Platinum-tier Provider is overwhelmed by traffic on its assigned slots, it can submit a **Saturation Signal** to the chain.
+### Goal of the section
+Make the constraints explicit before introducing mechanisms.
 
-*   **Condition:** The Provider must be in good standing (Platinum/Gold) and show high retrieval session volume on the affected slots.
-*   **Response:** The chain verifies the user has **Budget Available** in escrow.
-*   **Action:** The chain authorizes **additional slot-aligned placements** on new edge nodes to absorb the load. The original Provider is *not* penalized.
+### Constraints to name
+* Users care about getting bytes back, not isolated proof theater.
+* The chain cannot store or verify whole datasets directly.
+* Providers should be selected and paid under anti-sybil, budget-aware rules.
+* Retrieval must be verifiable without trusting a gateway.
+* The protocol needs a compact on-chain commitment anchor for large data.
 
-### 3.2 User Controls
-*   **Budget Cap:** Users set a `MaxMonthlySpend`. The protocol will never authorize additional placements if doing so would exceed this cap.
-*   **Result:** "Viral" content scales automatically. "Budget" content is rate-limited.
-
----
-
-## 4. The Lifecycle of a File
-
-PolyStore uses one canonical storage layout:
-
-*   **Striped RS(`K`,`K+M`) Layout:** The chain assigns an ordered slot list of size `N = K+M`. Metadata MDUs are replicated across all slots. User data MDUs are striped across the slot map and reconstructed from any valid `K` shards.
-
-Clients may run fully in-browser using WASM and OPFS for local slab storage, or use the Go gateway/S3 adapter and CLI. The gateway is optional routing + caching infrastructure and never signs on behalf of the user; all on-chain actions require a wallet signature.
-
-*Devnet note:* a faucet-backed relay can be enabled for demos (sponsoring gas while preserving MetaMask authorization), but it is disabled by default in the mainnet-parity posture.
-
-### Step 1: Ingestion & Placement
-1.  **Deal Creation:** User submits `MsgCreateDeal` with service preferences and spend controls, creating an empty deal container.
-2.  **Assignment:** The chain deterministically assigns an ordered slot list of size `N = K+M`.
-3.  **Upload:** The client performs RS(`K`,`K+M`) encoding for each storage unit (WASM/CLI) and uploads per-slot shards directly to the assigned Providers. A gateway may optionally mirror/cache, but it is not required for correctness.
-4.  **Commit Content:** After upload, the user commits the returned `manifest_root` via `MsgUpdateDealContent` (the Deal is empty until this commit).
-
-### Step 2: The Liveness Loop
-*   **Scenario 1 (Viral):** Users swarm the file via retrieval sessions. Providers signal saturation. Chain checks `MaxSpend` and authorizes **additional slot-aligned placements** for the affected slots.
-*   **Scenario 2 (Archive):** File sits idle. Chain issues random challenges.
+### Why this section matters
+It gives the rest of the paper a falsifiable frame. Every later mechanism should clearly answer one of these constraints.
 
 ---
 
-## 5. Security Analysis
+## 3. System Model
 
-| Threat | Mitigation |
-| :--- | :--- |
-| **Sybil Attack** | **System-Defined Placement.** |
-| **Constraint Attack** | **Rebalancing Fees.** Providers pay to rotate off constrained placements early. |
-| **Billing Runaway** | **Spend Caps.** Protocol strictly enforces user-defined limits. |
+### Goal of the section
+Define the actors and objects in a compact, rigorous way.
+
+### Actors
+* Data owner
+* Requester / reader
+* Storage provider
+* Chain
+* Optional gateway / client helper
+
+### Core objects
+* Deal
+* Manifest root
+* MDU
+* Blob
+* Slot assignment
+* Retrieval session
+
+### What it needs to say
+* A deal is the central on-chain object.
+* Content is committed by manifest root.
+* Placement is an ordered slot map for striped storage.
+* Retrieval sessions bind payer, content, provider/slot, and byte range into one accountable event.
 
 ---
 
-## 6. Enterprise Features: Privacy & Deletion
+## 4. Data Layout and Commitments
 
-PolyStore is built for **Zero-Trust** environments.
+### Goal of the section
+Explain how data is structured and what exactly is committed on-chain.
 
-### 6.1 Zero-Knowledge Cloud
-*   **Encryption:** Data is encrypted client-side (`AES-256-GCM`) before it ever touches the network.
-*   **Blind Replication:** When the network scales up with **additional slot-aligned placements**, it copies **8 MiB encrypted MDUs** as ciphertext. Providers act as blind mules; they store and serve data they cannot read.
-*   **Zero-Touch Scaling:** Because the network replicates already-encrypted ciphertext, it can expand placement autonomously. The Data Owner does **not** need to be online to re-encrypt data for new nodes.
+### Required content
+* MDU and blob granularity
+* PolyFS / file-to-range mapping
+* Metadata region versus user-data region
+* Manifest-root commitment model
+* Why this layout is chosen
 
-### 6.2 Proof of Deletion (Crypto-Erasure)
-Regulatory compliance (GDPR/CCPA) requires the ability to delete data.
-
-*   **The Problem:** You cannot prove a remote server wiped a hard drive.
-*   **The Solution:** Rely on **Crypto-Erasure**.
-*   **Mechanism:** The User holds the **File Master Key (FMK)**. To "delete" the data globally, the User destroys the FMK. The encrypted data remaining on the network becomes mathematically irretrievable garbage.
+### What the section must answer
+* How does a file map into committed storage units?
+* What does the chain actually store?
+* Why is the manifest root sufficient as the trust anchor?
 
 ---
 
-## 7. Roadmap
+## 5. Striped Placement Model
 
-1.  **Phase 1:** Core Crypto & CLI.
-2.  **Phase 2:** Multi-provider striped devnet with direct retrieval sessions.
-3.  **Phase 3:** Elasticity, self-healing, and retrieval market hardening.
-4.  **Phase 4:** Mainnet launch.
+### Goal of the section
+Explain the canonical striped layout and why the protocol standardizes on it.
+
+### Required content
+* Ordered slot assignment
+* RS(`K`,`K+M`) profile
+* Metadata replication
+* User-data striping
+* Reconstruction from any valid `K` shards
+
+### What it needs to argue
+* Striping is the core architecture, not an optional mode.
+* The slot map is what makes provider accountability and retrieval routing coherent.
+* The protocol's availability story depends on this structure.
+
+---
+
+## 6. Retrieval Sessions
+
+### Goal of the section
+Make retrieval sessions feel like the protocol center of gravity.
+
+### Required content
+* Session open
+* Session binding fields
+* Off-chain byte serving
+* Proof submission
+* Completion confirmation
+* Settlement conditions
+
+### What this section must answer
+* Why is a retrieval session necessary?
+* What exactly is being authorized and paid for?
+* When does a provider get credit?
+
+### Editorial note
+This section should be prose-first, with one compact message-flow diagram.
+
+---
+
+## 7. Proof Model and Verification Path
+
+### Goal of the section
+Explain how the protocol binds served bytes back to the on-chain commitment.
+
+### Required content
+* Triple proof / chained verification
+* Manifest inclusion
+* Blob inclusion / structure proof
+* Data opening / byte-level verification
+* Why the chain can verify specific retrieval claims without holding full data
+
+### What it must avoid
+* Pure symbol dumping without narrative.
+* Hand-wavy statements like "cryptographic proof" without path explanation.
+
+---
+
+## 8. End-to-End Worked Example
+
+### Goal of the section
+Give the reader one concrete story that ties together sections 3 through 7.
+
+### Required example flow
+1. Create a deal.
+2. Assign `N = K+M` slots.
+3. Encode and upload one file.
+4. Commit `manifest_root`.
+5. Open one retrieval session for a concrete byte range.
+6. Serve data from assigned providers.
+7. Submit proofs.
+8. Confirm completion.
+9. Settle fees and record outcome.
+
+### Why this section is mandatory
+Without it, the paper will continue to feel abstract and synthetic.
+
+---
+
+## 9. Economics and Pricing
+
+### Goal of the section
+Explain the protocol's money flow and why it is aligned with the retrieval-first design.
+
+### Required content
+* Storage term / deal funding
+* Retrieval fees
+* Base fee and variable fee
+* Completion payout
+* Budget limits
+* User-funded elasticity
+
+### What it needs to argue
+* Retrieval work is not just observed; it is settled.
+* Provider compensation follows accountable service.
+* Elasticity must be budgeted and bounded.
+
+---
+
+## 10. Elasticity and Additional Slot-Aligned Placements
+
+### Goal of the section
+Explain the scaling path without sounding like marketing.
+
+### Required content
+* Saturation signal
+* When additional placements are justified
+* Why scaling is attached to slot structure
+* Why this must remain budget-aware
+
+### Editorial note
+This section should be careful, mechanistic, and short. It should not sound like CDN copy.
+
+---
+
+## 11. Security and Threat Model
+
+### Goal of the section
+State what the protocol defends against and how.
+
+### Threats to cover
+* Wrong data / fraud proofs
+* Non-response / liveness failure
+* Sybil and placement manipulation
+* Wash traffic / fake demand
+* Gateway trust minimization
+
+### What it needs to argue
+* Integrity is rooted in the commitment chain.
+* Availability/accountability is rooted in retrieval sessions and slot assignments.
+* The system's economics make abuse costly rather than free.
+
+---
+
+## 12. Privacy, Confidentiality, and Deletion
+
+### Goal of the section
+Say only what the protocol can actually claim.
+
+### Required content
+* Client-side encryption model
+* What providers can and cannot learn
+* Ciphertext replication
+* Crypto-erasure as the deletion model
+* Boundaries around metadata leakage and operational limits
+
+### Editorial note
+This section should be disciplined and precise, not venture-copy.
+
+---
+
+## 13. Implementation Surface and Client Roles
+
+### Goal of the section
+Clarify how browsers, gateways, and providers relate to the protocol.
+
+### Required content
+* Browser/WASM path
+* Gateway as optional helper, not trust anchor
+* Direct-to-provider retrieval and upload
+* Wallet-signed control-plane actions
+
+### Why this matters
+Readers should leave understanding that the protocol is not "the gateway."
+
+---
+
+## 14. Boundaries, Open Questions, and Scope Discipline
+
+### Goal of the section
+Make the document sound authored rather than inflated.
+
+### Good topics
+* Repair and replacement policy details
+* Long-horizon elasticity policy
+* Retrieval-policy ergonomics
+* Metadata privacy tradeoffs
+* Parameter tuning versus architectural commitments
+
+### Editorial note
+This section is not about weakness; it is about intellectual honesty.
+
+---
+
+## 15. Conclusion
+
+### Goal of the section
+Restate the full claim of the paper in tighter form.
+
+### Desired closing idea
+PolyStore should be presented as a protocol that treats retrievability as the central storage fact, uses compact commitments to anchor large datasets, and settles real retrieval work through accountable, budgeted, verifiable sessions.

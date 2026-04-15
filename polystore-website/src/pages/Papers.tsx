@@ -90,16 +90,18 @@ const MarkdownPage = ({ filePath, title, description, eyebrow = 'PolyStore Resea
 export const Litepaper = () => (
   <MarkdownPage
     filePath="/litepaper.md"
-    title="PolyStore Litepaper"
-    description="An accessible overview of PolyStore's architecture, incentives, and performance guarantees."
+    title="PolyStore Litepaper Outline"
+    description="Outline draft for a shorter, example-driven rewrite of the PolyStore litepaper."
+    eyebrow="Outline Draft"
   />
 );
 
 export const Whitepaper = () => (
   <MarkdownPage
     filePath="/whitepaper.md"
-    title="PolyStore Whitepaper"
-    description="The canonical research paper detailing PolyStore's storage, retrieval, and verification model."
+    title="PolyStore Whitepaper Outline"
+    description="Outline draft for a technical rewrite of the PolyStore whitepaper."
+    eyebrow="Outline Draft"
   />
 );
 
