@@ -4,6 +4,7 @@ Notes are working documents. Unless explicitly called out as normative, the prot
 
 ## Active / Reference
 
+- `notes/terminology-cleanup-followup.md`: Deferred follow-up checklist for finishing the StripeReplica/activity terminology sweep across the repo.
 - `notes/mode2-framing.md`: Shared framing for Mode 2 (StripeReplica) design and accountability model.
 - `notes/triple-proof.md`: Triple Proof (3-hop) explanation and binding model.
 - `notes/triple-proof-review.md`: Review notes on Triple Proof; useful context for edge cases and future work.

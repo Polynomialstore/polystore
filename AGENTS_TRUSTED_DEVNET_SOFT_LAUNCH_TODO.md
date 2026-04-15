@@ -679,3 +679,22 @@ Checklist:
 - [ ] Call the setup bump wallet flow for the failing slot and refresh deal state.
 - [ ] Retry only the failed slot after reassignment.
 - [ ] Show explicit UI states for setup failure, replacement request, reassignment, retry, and exhaustion.
+
+---
+
+### PR44 — Cleanup: StripeReplica terminology sweep (DEFERRED)
+
+- Branch: `codex/terminology-cleanup-sweep`
+- Goal: Finish the repo-wide cleanup after the initial spec/doc + activity rename pass, without mixing it into unrelated protocol work.
+- Tracking:
+  - Issue: https://github.com/Polynomialstore/polystore/issues/31
+  - Repo note: `notes/terminology-cleanup-followup.md`
+- Test gate:
+  - docs-only sweep: `git diff --check`
+  - if code/schema names change: rerun targeted `go test` / website build for touched surfaces
+
+Checklist:
+- [ ] Finish removing stale `Mode 1` / `Mode 2` terminology from active repo surfaces.
+- [ ] Decide whether remaining `mode2_*` code/schema/store names should be renamed now that breaking changes are acceptable.
+- [ ] Rename active filenames/tests/scripts/docs that are now misleading.
+- [ ] Optionally prune stale snapshots, prompt assets, and historical artifacts after the active surfaces are clean.
