@@ -90,9 +90,9 @@ const MarkdownPage = ({ filePath, title, description, eyebrow = 'PolyStore Resea
 export const Litepaper = () => (
   <MarkdownPage
     filePath="/litepaper.md"
-    title="PolyStore Litepaper Outline"
-    description="Outline draft for a shorter, example-driven rewrite of the PolyStore litepaper."
-    eyebrow="Outline Draft"
+    title="PolyStore Litepaper"
+    description="A shorter, example-driven draft of the PolyStore litepaper."
+    eyebrow="Research Draft"
   />
 );
 
