@@ -1,259 +1,141 @@
 # PolyStore Whitepaper
 
-**Outline Draft for Rewrite**
-
-## Purpose
-
-This document should become the first serious technical argument for PolyStore.
-
-Its job is to explain one coherent system early: PolyStore organizes content as PolyFS, a verifiable file layout whose internal units are MDUs and blobs, and preserves efficient KZG-backed proof paths so possession and retrieval claims can be verified on chain with low overhead. It treats retrieval as a first-class protocol event. The whitepaper should show how that single design choice propagates through commitments, placement, proof verification, economics, and threat model.
-
-It should not be a paraphrase of `spec.md`, and it should not read like a market-facing brochure. The paper should explain how the system fits together and why the mechanisms belong together.
-
----
-
-## Drafting Rules
-
-* Write in continuous argument, not branded bullet piles.
-* Introduce PolyFS and the retrieval model together near the front of the paper.
-* Use one running example and one recurring system diagram: a 64 MiB dataset shard packed into PolyFS, committed by one `manifest_root`, then retrieved for one 256 KiB range.
-* Prefer mechanism-first explanations over comparative marketing language.
-* Do not use legacy mode terminology or migration framing.
-* When a claim depends on a mechanism, show the mechanism.
-
----
-
-## Proposed Structure
+*Draft*
 
 ## 1. Introduction: PolyFS Makes Retrieval Verifiable
 
-### Goal of the section
-State the thesis, the system boundary, and the central design move.
+PolyStore is a decentralized storage protocol built around a narrow technical claim: retrievability must be designed into the data layout itself. If a protocol stores data in one form, proves possession in another, and settles retrievals in a third, it will eventually force users to trust glue code, trusted gateways, or weak economic proxies. PolyStore's architecture is an attempt to remove that split.
 
-### What it needs to do
-* Define PolyStore as a decentralized storage protocol built around two linked commitments: PolyFS as the canonical file layout and accountable retrieval sessions.
-* Explain that PolyFS is not just a file layout; it is arranged to preserve efficient KZG polynomial proof paths so data possession and served bytes can be checked on chain by decentralized verifiers.
-* Explain that retrievability is the central storage fact the protocol cares about.
-* State the paper's core question: how do we organize data as PolyFS so reads can be direct, verifiable, and economically accountable without putting the whole dataset on-chain?
+The system's central design move is to organize content as PolyFS, commit that structure on chain through a compact `manifest_root`, and make retrieval sessions the protocol object that connects real reads to settlement. PolyFS is not just a file layout. Its internal units are chosen so the same committed structure that anchors storage can also support efficient KZG-backed proof paths for possession and served bytes. The chain does not need to reason about whole files. It only needs to verify compact proofs against a small commitment root.
 
-### Desired outcome
-By the end of the introduction, the reader should understand that the paper is about the design of retrievability, not about generic storage-chain branding.
+That property matters because the protocol is trying to solve a harder problem than "can a provider answer an audit challenge." It is trying to answer: how do we make stored data retrievable, verifiable, and economically accountable without turning the chain into the storage layer? PolyStore's answer is to keep the on-chain trust anchor compact, keep the off-chain data path direct, and make every meaningful retrieval event legible to the protocol.
 
----
+This paper explains how that design choice propagates through file layout, commitments, placement, verification, pricing, and trust boundaries.
 
 ## 2. Problem Statement and Design Constraints
 
-### Goal of the section
-Make the constraints explicit before introducing the mechanism.
+The protocol starts from a simple observation: users care about getting bytes back. A storage system that can emit proofs in isolation but cannot reliably connect those proofs to real retrieval demand is misaligned with the thing users actually buy.
 
-### Constraints to name
-* Users care about getting bytes back, not isolated proof theater.
-* The chain cannot store or verify whole datasets directly.
-* Files must map into a structure that clients can resolve and providers can serve deterministically.
-* Providers should be assigned and paid under anti-sybil, budget-aware rules.
-* Retrieval must be verifiable without trusting a gateway.
-* The protocol needs a compact on-chain commitment anchor for large datasets.
-* Verification overhead must stay low enough that decentralized on-chain checking remains practical.
+That observation creates several constraints.
 
-### Why this section matters
-Every later mechanism should visibly answer one of these constraints.
+First, the chain cannot store or verify whole datasets directly. A storage protocol needs a compact commitment anchor that can stand in for a large object without becoming a second copy of the data.
 
----
+Second, files cannot remain opaque blobs if the protocol wants efficient decentralized verification. Clients need to resolve file ranges deterministically. Providers need to know exactly what they are responsible for serving. The chain needs a way to verify specific retrieval claims against committed structure.
+
+Third, placement cannot be left to ad hoc bilateral choice. Providers need to be assigned under anti-sybil, budget-aware rules so the protocol can reason about responsibility, routing, and payout.
+
+Fourth, retrieval must be verifiable without trusting a gateway. A gateway may be convenient, but it cannot be the thing that makes a read believable. Verification has to survive direct-to-provider operation.
+
+Fifth, verification overhead must stay low enough that on-chain checking remains practical. If every storage or retrieval claim drags the full raw file back into the verification path, the protocol loses the benefit of decentralized settlement.
+
+Everything else in the design is downstream of those constraints.
 
 ## 3. System Overview: One Deal, One PolyFS, One Retrieval
 
-### Goal of the section
-Give the reader a compact system picture before diving into individual mechanisms.
+The central on-chain object is the Deal. A Deal identifies the owner, the current committed content, the current provider assignment, the economic budget, and the retrieval policy. The Deal's main trust anchor is `manifest_root`, a compact KZG commitment that stands for the committed PolyFS state of the deal.
 
-### Actors
-* data owner
-* requester / reader
-* storage provider
-* chain
-* optional gateway / client helper
+The main actors are straightforward.
 
-### Core objects
-* deal
-* `manifest_root`
-* blob
-* MDU
-* `MDU #0`
-* witness MDUs
-* user MDUs
-* slot assignment
-* retrieval session
+A data owner funds a Deal and commits content into it. A requester or reader opens retrieval sessions against that committed content. Storage providers hold assigned shard data and replicated metadata, serve reads, and submit proof material tied to what they stored and served. The chain anchors commitments, enforces session rules, and settles economic outcomes. A gateway may help with packing, routing, or local convenience, but it is an optional helper rather than a trust anchor.
 
-### What it needs to say
-* A deal is the on-chain anchor for committed content and economics.
-* Files become ranges inside PolyFS, whose internal structure is made of metadata MDUs and user-data MDUs.
-* The slot map determines which providers hold which striped user-data shards and which metadata is replicated.
-* A retrieval session binds a read request to payer, scope, slot responsibility, and completion conditions.
+The protocol's object model is equally compact. Files live inside PolyFS. PolyFS is made of MDUs and Blobs. The Deal stores a `manifest_root` that commits to the PolyFS state. Providers are assigned through an ordered slot map. Retrievals are represented by retrieval sessions that bind a read request to a concrete deal, commitment root, slot responsibility, range, payer, and expiry.
 
-### Editorial note
-This section should include a miniature end-to-end flow, not just definitions. It is the paper's first grounding point.
-
----
+In one sentence, the system works like this: a file is packed into PolyFS, PolyFS is committed by `manifest_root`, the committed user-data units are striped across assigned providers, and later retrieval sessions authorize direct reads whose proof paths run back to the same commitment root.
 
 ## 4. PolyFS and the Commitment Model
 
-### Goal of the section
-Explain exactly how PolyFS turns files into committed structure, and how the MDU system supports it.
+PolyFS is the canonical file layout for a Deal. It exists to make file resolution, proof generation, and retrieval verification agree on the same structure.
 
-### Required content
-* MDU and blob granularity
-* `MDU #0` as the file table / root table anchor
-* witness MDUs as commitment-bearing metadata
-* user-data MDUs as the data-bearing layer
-* file-to-range mapping inside PolyFS
-* `manifest_root` as the compact chain commitment
-* why PolyFS preserves efficient KZG proof openings rather than fighting them
+The atomic cryptographic unit is the Blob. In the current profile, a Blob is 128 KiB. The larger retrieval unit is the MDU, or Mega-Data Unit. In the current profile, an MDU is 8 MiB, which means each MDU contains 64 Blobs. This pairing matters: Blobs are small enough to support efficient KZG-based verification, while MDUs are large enough to be practical for storage, striping, and range planning.
 
-### What this section must answer
-* How does a file map into PolyFS, MDUs, and blobs?
-* What metadata must be replicated to make retrieval practical?
-* Why is the `manifest_root` sufficient as the on-chain trust anchor?
-* How does PolyFS keep decentralized verification overhead low enough to be practical on chain?
+PolyFS organizes those units into three layers.
 
----
+`MDU #0` is the filesystem anchor. It carries the file table and root table that let a client resolve a file path into byte ranges and MDU references. Witness MDUs carry commitment-bearing metadata that accelerate verification and make proof lookup practical. User-data MDUs carry the actual file bytes that the user cares about. The metadata MDUs are replicated across the assigned providers. The user-data MDUs are the units that become striped data.
+
+The Deal does not place all of this state on chain. Instead, the chain stores a compact `manifest_root` commitment. Conceptually, that root anchors the committed MDU structure of the Deal. The important consequence is that later proofs do not have to reintroduce the full file as the verification object. They only need to show how a specific served byte range is connected to a Blob, how that Blob is connected to its containing MDU, and how that MDU is connected to the Deal's committed root.
+
+This is why PolyFS is a proof-preserving layout rather than a neutral filesystem veneer. It does not fight the verification model. It keeps the internal boundaries aligned with the cryptographic atom, so KZG openings stay small and practical. That is what makes decentralized verification feasible at chain scale.
 
 ## 5. Striped Placement and Provider Responsibilities
 
-### Goal of the section
-Explain how committed PolyFS data is distributed across providers.
+PolyStore's canonical placement model is striped. In the current profile, each user-data MDU is encoded under RS(8,12): eight data slots and four parity slots. The ordered slot map determines which provider is responsible for which slot. Metadata remains replicated. User data becomes striped shard data.
 
-### Required content
-* ordered slot assignment
-* RS(`K`,`K+M`) profile
-* metadata replication
-* user-data striping
-* reconstruction from any valid `K` slots
-* provider obligations at the slot level
+This arrangement gives the protocol three useful properties at once.
 
-### What it needs to argue
-* Striping is the canonical architecture, not an optional flavor.
-* Slot assignment is what makes routing, accountability, and reconstruction coherent.
-* PolyFS and the slot layout are designed together.
+It gives reconstruction flexibility, because any valid `K` slots can reconstruct the user-data MDU. It gives accountability, because slot assignment makes provider responsibility explicit rather than implied. It gives routing structure, because a client can plan reads in terms of slots, active providers, and concrete MDUs instead of opaque replicas.
 
----
+A provider's job is therefore specific. Store the shard Blobs assigned to its slot. Store the replicated PolyFS metadata. Serve reads for the slot responsibilities it holds. Submit proof material tied to the committed structure. In the striped model, provider responsibility is not vague availability. It is concrete responsibility for a position in a known slot layout.
+
+This is also why PolyStore standardizes on striping as the core architecture rather than treating it as an optional flavor. The slot layout is not just a storage efficiency trick. It is the structure that makes routing, reconstruction, and accountability cohere.
 
 ## 6. Retrieval Sessions and Settlement
 
-### Goal of the section
-Make retrieval sessions feel like the protocol center of gravity.
+Retrieval sessions are the control-plane object that turns an off-chain byte transfer into a protocol event. Without them, a retrieval is just traffic. With them, a retrieval becomes authorizable, billable, and settleable.
 
-### Required content
-* session open
-* authorized scope and funding path
-* off-chain byte serving
-* proof submission
-* completion confirmation
-* settlement and expiry rules
+A retrieval session binds the fields that matter: deal identity, provider or slot responsibility, the current `manifest_root`, the requested blob-aligned range, a payer, a nonce, and an expiry. The session's range is blob-aligned because the protocol's accounting and proof model operate at Blob granularity. A retrieval session may be owner-paid, requester-paid, or protocol-paid, depending on who is opening the read and under what policy. That funding distinction matters because public access should not silently drain the owner's long-lived storage escrow.
 
-### What this section must answer
-* Why does a retrieval need an explicit session object?
-* What exactly is being authorized and paid for?
-* When does a provider receive protocol credit or payout?
+Once a session is open, serving nodes are expected to serve only within that session's declared scope. Off-chain delivery remains off chain, but it is no longer economically invisible. The provider serves the requested bytes and the associated proof material. The user or requester confirms completion. The provider submits proof-of-retrieval material. The chain can then decide whether the session has become `COMPLETED` under the protocol's rules.
 
-### Editorial note
-This section should be prose-first with one compact message-flow diagram.
+This is the bridge between the data plane and the accounting plane. A provider is not paid merely for claiming that it responded quickly. It is paid when the retrieval has been opened under explicit funding rules, served within explicit scope, tied back to committed data, and completed under explicit confirmation rules.
 
----
+In the current pricing model, that means retrieval fees are charged at session open and settled at completion. There is a base anti-spam fee, a variable fee tied to blob count, a completion payout to the provider, and defined expiry behavior for sessions that do not complete. Retrieval work is not merely observed. It is priced, bounded, and settled.
 
 ## 7. Verification Path: From Served Bytes Back to the Commitment
 
-### Goal of the section
-Explain how served bytes are checked against the on-chain commitment.
+The whitepaper's central verification claim is that PolyStore can verify a specific retrieval claim against a compact on-chain root. That requires a clear proof path.
 
-### Required content
-* chained / triple-proof overview
-* manifest inclusion
-* structure proof inside the target MDU
-* byte- or blob-level opening
-* why the chain can verify a specific retrieval claim without holding the dataset
+PolyStore's answer is the chained, or triple, proof architecture.
 
-### What it must avoid
-* Pure symbol dumping without narrative.
-* Unexplained references to "cryptographic proof" without the path.
+The first hop proves identity: the relevant MDU root is committed inside the Deal's manifest commitment. This is a KZG opening against `manifest_root` at the appropriate MDU index.
 
----
+The second hop proves structure: the Blob commitment used for the retrieval is actually inside the target MDU. This is a Merkle-style structural proof over the MDU's commitment structure.
+
+The third hop proves data: the served byte content is a valid opening of the Blob polynomial at the requested evaluation point. This is another KZG opening, now against the Blob commitment itself.
+
+Taken together, those three hops let the verifier move from a concrete retrieval claim back to the compact root the Deal committed on chain. The chain does not need the whole file. It does not need to trust the gateway. It does not need to take the provider's word for what was served. It only needs the committed root and the compact proof path.
+
+In the striped case, the slot map adds one more discipline: the proof must be attributable to the provider responsible for the relevant slot. That prevents the system from collapsing accountability into a generic multi-provider pool.
 
 ## 8. End-to-End Worked Example
 
-### Goal of the section
-Tie sections 3 through 7 into one concrete story with numbers.
+Use one fixed example throughout the paper. A data owner wants to store a 64 MiB dataset shard. Under the current profile, that object becomes `MDU #0`, the required witness MDUs, and 8 user-data MDUs inside PolyFS.
 
-### Required example flow
-Use one fixed example throughout the whitepaper: a 64 MiB dataset shard packed into PolyFS under the default RS(8,12) profile.
+Each user-data MDU is then encoded under RS(8,12). The chain assigns 12 ordered slots. Providers receive the shard data for the slots they are responsible for, along with the replicated PolyFS metadata. Once the owner has prepared the full layout, the owner commits the resulting `manifest_root` on chain. The Deal now has a compact on-chain trust anchor for the full 64 MiB object.
 
-1. Create a deal.
-2. Pack the 64 MiB file into PolyFS as `MDU #0`, the required witness MDUs, and 8 user-data MDUs.
-3. Assign `N = K+M = 12` slots/providers.
-4. Upload striped user-data shards and replicated metadata.
-5. Commit `manifest_root`.
-6. Open one retrieval session for a concrete 256 KiB range inside one user-data MDU.
-7. Serve bytes and compact proof material from the assigned providers.
-8. Verify the KZG-backed proof path from the served bytes back to the commitment rooted in `manifest_root`, then confirm completion.
-9. Settle fees and record outcome.
+Later, a reader wants a 256 KiB range inside one user-data MDU. Because the protocol is Blob-aligned, that request corresponds to two 128 KiB Blobs. The reader opens a retrieval session naming the Deal, the current `manifest_root`, the relevant provider or slot responsibility, the requested blob range, the payer, and the expiry.
 
-### Why this section is mandatory
-Without one full example, the paper will still feel assembled rather than argued.
+To satisfy that session, the client resolves the file path through PolyFS, identifies the relevant user-data MDU and Blob range, selects the required healthy slots, fetches the shard Blobs and proof material, and reconstructs the requested bytes. The verification step is the important part: the served bytes are checked through the KZG-backed path from Blob to MDU to `manifest_root`. The chain never needs to make the 64 MiB file itself the verification object.
 
----
+Once proof material has been submitted and the user confirms successful completion, the session reaches its settled outcome. This one example is enough to show the protocol's whole spine: file layout, compact commitment, slot assignment, direct retrieval, proof path, and settlement.
 
 ## 9. Economics and Additional Slot-Aligned Placements
 
-### Goal of the section
-Explain the money flow and the bounded scaling path in one place.
+The protocol's economic model follows the retrieval-first architecture.
 
-### Required content
-* storage term / deal funding
-* retrieval fees
-* base fee and variable fee
-* completion payout
-* budget limits
-* user-funded elasticity
-* when additional slot-aligned placements are justified
+A Deal has a storage term and a retrieval path. Storage funding keeps the committed content available over time. Retrieval sessions draw explicit fees when users or other authorized requesters consume reads. Completion determines payout. This means provider compensation follows accountable service rather than generic background scoring.
 
-### What it needs to argue
-* Retrieval work is settled, not merely observed.
-* Provider compensation follows accountable service.
-* Scaling must stay attached to slot structure and explicit budget.
+The same logic governs scaling. If demand rises, PolyStore's preferred scaling path is not arbitrary extra replicas. It is additional slot-aligned placements that preserve the same routing and accountability structure as the base stripe. That matters because the protocol does not want to solve traffic spikes by escaping its own model.
 
----
+At the same time, scaling is budgeted. New placements cost money. Elasticity therefore remains attached to explicit user or protocol budget rather than being treated as a free assumption. This is what keeps the throughput story economically disciplined.
 
 ## 10. Security, Privacy, and Trust Boundaries
 
-### Goal of the section
-State what the protocol defends, what it exposes, and where trust is minimized.
+PolyStore's integrity model is rooted in the commitment chain. If a provider serves wrong data, the proof path should fail. If a provider claims possession of data it does not hold, the KZG-backed opening path should fail. If a provider does not respond, the retrieval session or synthetic challenge path records the absence economically rather than hand-waving around it.
 
-### Topics to cover
-* wrong data / fraud proofs
-* non-response / liveness failure
-* sybil and placement manipulation
-* wash traffic / fake demand
-* gateway trust minimization
-* client-side encryption model
-* metadata leakage boundaries
-* crypto-erasure framing
+Its availability and accountability model is rooted in slot assignment plus retrieval sessions. The striped layout makes provider responsibility explicit. The session model makes retrieval demand explicit. Taken together, they let the protocol talk concretely about who was responsible for what service event.
 
-### What it needs to argue
-* Integrity is rooted in the commitment chain.
-* Availability and accountability are rooted in slot assignment plus retrieval sessions.
-* Privacy claims should stop where metadata and operational reality begin.
+Its anti-sybil position comes from deterministic placement and bounded assignment rules rather than from trusting users to choose honest providers. Its anti-wash position comes from the fact that retrievals are not free signaling games. Opening and settling retrievals has explicit cost and accounting consequences.
 
----
+Privacy is narrower than integrity. PolyStore can support client-side encryption, and that is the right mechanism for confidentiality. But retrieval policy is not the same thing as privacy, and metadata does not disappear automatically. Providers may still learn operational facts such as object size, access timing, or assignment position unless those surfaces are separately minimized. Deletion is best understood through crypto-erasure and term-bounded garbage collection rather than through unverifiable promises of physical wipe.
+
+The gateway boundary is also explicit. A gateway may help with packing, caching, reconstruction, and UX. It is not supposed to be the thing that makes a read trustworthy. The system should still make sense if the client talks to providers directly.
 
 ## 11. Client Roles, Scope Discipline, and Conclusion
 
-### Goal of the section
-Close the paper without turning it into a roadmap dump.
+PolyStore supports several client shapes without changing the trust model. A browser or WASM client can prepare or verify data locally. A gateway can act as a convenience layer for packing, caching, or routing. A provider daemon stores shards, serves reads, and submits proofs. The chain anchors commitments and settles accountable events. Those roles are different, but the trust anchor stays the same: committed PolyFS state plus proof paths back to `manifest_root`.
 
-### Required content
-* browser/WASM path
-* gateway as optional helper, not trust anchor
-* direct-to-provider data path
-* wallet-signed control-plane actions
-* bounded list of open questions: repair policy, elasticity tuning, policy ergonomics
+That division of labor is important because it keeps the protocol from collapsing into "the gateway is the system." The gateway is useful. It is not the source of truth.
 
-### Desired closing idea
-PolyStore should be presented as a protocol that organizes files into verifiable PolyFS structure so retrieval can be direct, provable, and economically accountable under explicit on-chain rules.
+The whitepaper's main claim is therefore simple. PolyStore works by choosing a file layout that preserves efficient decentralized verification, committing that layout compactly on chain, distributing responsibility through an ordered striped slot map, and treating retrieval sessions as the accountable event that connects real reads to economics. The protocol is not trying to prove that bytes exist in the abstract. It is trying to prove that committed bytes can be served back under explicit cryptographic and economic rules.
+
+That is what PolyFS is for. That is why retrieval is first-class. And that is why a compact commitment can still anchor a real storage protocol.

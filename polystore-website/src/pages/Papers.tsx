@@ -99,9 +99,9 @@ export const Litepaper = () => (
 export const Whitepaper = () => (
   <MarkdownPage
     filePath="/whitepaper.md"
-    title="PolyStore Whitepaper Outline"
-    description="Outline draft for a technical rewrite of the PolyStore whitepaper."
-    eyebrow="Outline Draft"
+    title="PolyStore Whitepaper"
+    description="A technical draft of the PolyStore whitepaper."
+    eyebrow="Research Draft"
   />
 );
 
