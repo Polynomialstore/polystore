@@ -14,7 +14,7 @@ By utilizing a **Performance Market** (tiered rewards) and **System-Defined Plac
 ### Value for Data Owners
 *   **Instant Availability:** Data is stored in 8 MiB Mega-Data Units (MDUs) for efficient retrieval.
 *   **User-Funded Elasticity:** Viral content automatically scales using **additional slot-aligned placements** funded by the deal's escrow.
-*   **Configurable Resilience:** Users choose service intent and redundancy profile, and the network assigns an ordered slot map for RS(`K`,`K+M`) retrieval.
+*   **Configurable Resilience:** Users choose durability and budget preferences, and the network assigns an ordered slot map for RS(`K`,`K+M`) retrieval.
 *   **Enterprise Privacy:** Data is encrypted client-side. Scaling is "Zero-Touch" because the network can replicate ciphertext. Deletion is handled via **Crypto-Erasure**.
 
 ---
@@ -44,7 +44,7 @@ Concretely, the architecture adds:
 
 *   **Challenge Structure:** Each retrieval carries enough information (epoch randomness, nonce, deal and slot IDs) for the protocol to derive a deterministic KZG checkpoint inside the requested range, making every retrieval a potential storage proof.
 *   **Synthetic Checks for Cold Data:** The chain periodically selects random chunks for each Deal/Slot and requires proofs even when no one is actively downloading the file.
-*   **Provider Audit Debt:** Providers periodically act as mystery shoppers for other Providers, issuing retrievals and reporting misbehavior. The more data you store, the more audits you are expected to perform.
+*   **Provider Audit Debt:** Providers periodically act as auditors for other Providers, issuing retrievals and reporting misbehavior. The more data you store, the more audits you are expected to perform.
 *   **Health & Eviction:** The protocol maintains simple health scores per Deal/Slot and uses them to decide when to add new placements and evict bad actors, so the network self-heals as it runs.
 
 ---
@@ -68,9 +68,9 @@ Concretely, the architecture adds:
 ## 4. The Lifecycle of a File
 
 ### Step 1: Ingestion
-1.  **Deal:** User sends `MsgCreateDeal`, creating a thin-provisioned container with service intent and budget controls.
+1.  **Deal:** User sends `MsgCreateDeal`, creating an empty deal container with service preferences and budget controls.
 2.  **Placement:** The chain deterministically assigns an ordered slot list of size `N = K+M`.
-3.  **Upload:** The client performs RS(`K`,`K+M`) encoding per SP-MDU and uploads per-slot shards directly to the assigned Providers.
+3.  **Upload:** The client performs RS(`K`,`K+M`) encoding for each storage unit and uploads per-slot shards directly to the assigned Providers.
 4.  **Commit:** User submits `MsgUpdateDealContent` to commit the `manifest_root`.
 
 *Devnet note:* a gateway relay/faucet can sponsor gas for demos, but it is disabled by default in the mainnet-parity posture.
