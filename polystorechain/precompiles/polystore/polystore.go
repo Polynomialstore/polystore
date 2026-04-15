@@ -1403,8 +1403,8 @@ func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contra
 		}
 
 		bytesServed += c.RangeLen
-		if err := p.keeper.IncrementHeat(ctx, deal.Id, c.RangeLen, false); err != nil {
-			ctx.Logger().Error("failed to increment heat", "error", err)
+		if err := p.keeper.RecordDealActivity(ctx, deal.Id, c.RangeLen, false); err != nil {
+			ctx.Logger().Error("failed to record deal activity", "error", err)
 		}
 	}
 

@@ -165,10 +165,10 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('**/polystorechain/polystorechain/v1/deals**', async (route) => {
     const url = route.request().url()
 
-    if (url.includes('/heat')) {
+    if (url.includes('/activity')) {
       return route.fulfill({
         status: 200,
-        body: JSON.stringify({ heat: { bytes_served: '0' } }),
+        body: JSON.stringify({ activity: { bytes_served_total: '0', successful_retrievals_total: '0', failed_challenges_total: '0', last_update_height: 0 } }),
       })
     }
 
