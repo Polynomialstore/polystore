@@ -50,7 +50,7 @@ The atomic cryptographic unit is the Blob. In the current profile, a Blob is 128
 
 PolyFS organizes those units into three layers.
 
-`MDU #0` is the filesystem anchor. It carries the file table and root table that let a client resolve a file path into byte ranges and MDU references. Witness MDUs carry commitment-bearing metadata that accelerate verification and make proof lookup practical. User-data MDUs carry the actual file bytes that the user cares about. The metadata MDUs are replicated across the assigned providers. The user-data MDUs are the units that become striped data.
+`MDU #0` is the filesystem anchor. It carries the file table and root table that let a client resolve a file path into byte ranges and MDU references. Witness MDUs carry commitment-bearing metadata that accelerate verification and make proof lookup practical. User-data MDUs carry the actual file bytes that the user cares about. Because the metadata MDUs are replicated across the assigned providers, any serving provider can furnish path-resolution and proof context without relying on a privileged coordinator. The user-data MDUs are the units that become striped data.
 
 The Deal does not place all of this state on chain. Instead, the chain stores a compact `manifest_root` commitment. Conceptually, that root anchors the committed MDU structure of the Deal. The important consequence is that later proofs do not have to reintroduce the full file as the verification object. They only need to show how a specific served byte range is connected to a Blob, how that Blob is connected to its containing MDU, and how that MDU is connected to the Deal's committed root.
 
@@ -136,6 +136,6 @@ PolyStore supports several client shapes without changing the trust model. A bro
 
 That division of labor is important because it keeps the protocol from collapsing into "the gateway is the system." The gateway is useful. It is not the source of truth.
 
-The whitepaper's main claim is therefore simple. PolyStore works by choosing a file layout that preserves efficient decentralized verification, committing that layout compactly on chain, distributing responsibility through an ordered striped slot map, and treating retrieval sessions as the accountable event that connects real reads to economics. The protocol is not trying to prove that bytes exist in the abstract. It is trying to prove that committed bytes can be served back under explicit cryptographic and economic rules.
+The whitepaper's main claim is therefore simple. PolyStore chooses a file layout that preserves decentralized verification, commits the current PolyFS state compactly on chain, distributes responsibility through an ordered striped slot map, and settles retrieval as accountable protocol work. The protocol is not trying to prove that bytes exist in the abstract. It is trying to prove that committed bytes can be served back under explicit cryptographic and economic rules.
 
-That is what PolyFS is for. That is why retrieval is first-class. And that is why a compact commitment can still anchor a real storage protocol.
+PolyFS is the mechanism that keeps those claims aligned. Retrieval is first-class because user demand is the thing the protocol is ultimately for. A compact commitment works because the layout preserves a cheap proof path back to it.

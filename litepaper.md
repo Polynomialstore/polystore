@@ -8,7 +8,7 @@ PolyStore is a decentralized storage protocol built around a narrow claim: stora
 
 PolyStore's answer is to organize files as PolyFS, commit the current PolyFS state on chain through a compact `manifest_root`, and treat retrieval sessions as the protocol object that turns real reads into accountable events. PolyFS is not just a packing format. It is arranged so data possession and served bytes can be checked through efficient KZG-backed proof paths, without forcing the chain to reason about whole raw files. The chain keeps a compact trust anchor while providers move and serve the data off chain. Clients and the chain can still verify what was actually stored and served.
 
-This is why PolyStore does not separate file layout, proof structure, and retrieval accounting into unrelated subsystems. PolyFS exists so retrieval can be direct, verifiable, routable, and settleable. Retrieval sessions exist so reads are not invisible side effects; they are named protocol events with a payer, a scope, a commitment root, and a completion condition.
+PolyStore does not treat file layout, proof structure, and retrieval accounting as separate concerns. PolyFS exists so retrieval can be direct, verifiable, and settleable. Retrieval sessions exist so reads are not invisible side effects; they are named protocol events with a payer, a scope, a commitment root, and a completion condition.
 
 The result is a storage protocol centered on getting bytes back under explicit rules, not just on watching providers pass background audits.
 
@@ -18,7 +18,7 @@ PolyFS is the canonical file layout for a deal. Instead of handing providers an 
 
 The basic units are Blobs and MDUs. A Blob is the atomic KZG verification unit. An MDU is the larger retrieval unit that groups Blobs into a layout that is practical for storage, routing, and reconstruction. In the current profile, a Blob is 128 KiB and an MDU is 8 MiB, so each MDU contains 64 Blobs.
 
-PolyFS uses that structure in three layers. `MDU #0` is the filesystem anchor: it carries the file table and root table that let a client resolve a file path into byte ranges and committed storage units. Witness MDUs carry the commitment-bearing metadata needed to verify the structure efficiently. User-data MDUs carry the actual file bytes. The metadata MDUs are replicated. The user-data MDUs are the units that get striped across providers.
+PolyFS uses that structure in three layers. `MDU #0` is the filesystem anchor: it carries the file table and root table that let a client resolve a file path into byte ranges and committed storage units. Witness MDUs carry the commitment-bearing metadata needed to verify the structure efficiently. User-data MDUs carry the actual file bytes. Because the metadata MDUs are replicated, any serving node can resolve paths and supply proof context without relying on a privileged coordinator. The user-data MDUs are the units that get striped across providers.
 
 This matters because PolyFS is shaped for proof efficiency, not just for neat packing. The chain does not store whole-file state. It stores a compact `manifest_root` commitment that anchors the committed PolyFS structure. When a provider later proves possession or proves that it served a requested range, the proof path runs from the served bytes back through PolyFS and into that commitment root. The chain verifies compact openings against committed structure instead of carrying the overhead of raw-file verification.
 
@@ -52,15 +52,15 @@ The data owner's role is straightforward. Fund a deal, commit content, choose re
 
 The provider role is also concrete. Providers store the shard data assigned to their slots, store the replicated PolyFS metadata, serve reads for the slots they are responsible for, and submit proof material tied to committed data. "Being fast" is not a slogan here. It means responding to retrieval demand in a way that can be checked and settled.
 
-The money flow follows that operational model. A deal has a storage term and a retrieval path. Retrieval sessions consume budget when they are opened and settle when they complete. That means demand is not merely observed. It is priced and accounted for.
+Economically, a deal has a storage term and a retrieval path. Retrieval sessions consume budget when they are opened and settle when they complete. Demand is not merely observed; it is priced and accounted for.
 
 Scaling follows the same discipline. When demand grows, PolyStore's preferred expansion path is additional slot-aligned placements. The important point is that this is not fuzzy replication rhetoric. It is budgeted elasticity attached to the slot structure the protocol already uses for routing, accountability, and reconstruction.
 
 ## Why This Design Matters, and Where It Stops
 
-PolyStore's main distinction is not that it has erasure coding, or KZG commitments, or a gateway, or a retrieval API. Those pieces exist elsewhere. The distinction is that PolyFS, compact commitments, retrieval sessions, and settlement are designed as one system. The file layout is chosen so decentralized verification remains practical. The retrieval path is chosen so real reads can count as accountable protocol work. The commitment model is chosen so the chain can anchor large datasets without turning into the storage layer itself.
+PolyStore's distinction is compositional rather than ornamental. Erasure coding, KZG commitments, gateways, and retrieval APIs all exist elsewhere. What matters here is that PolyFS, compact commitments, retrieval sessions, and settlement are designed as one system. The file layout preserves efficient verification. The retrieval path turns actual reads into accountable protocol work. The commitment model keeps the chain small while still anchoring large datasets.
 
-That gives PolyStore a cleaner answer to a basic question: what should a storage protocol actually verify? The answer is not merely that a provider can answer synthetic challenges in the abstract. The answer is that committed data can be served back under explicit economic and cryptographic rules.
+That gives PolyStore a clear answer to a basic question: what should a storage protocol actually verify? Not just that a provider can answer synthetic challenges, but that committed data can be served back under explicit economic and cryptographic rules.
 
 There are also clear limits. PolyStore is not a magical universal filesystem. It is a protocol for verifiable storage coordination and retrieval settlement. Encryption does not eliminate all metadata leakage by itself. Repair policy, long-horizon elasticity, and retrieval ergonomics still need disciplined design. None of those caveats weaken the core claim. They just keep it honest.
 
