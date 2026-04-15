@@ -36,7 +36,8 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 
 ## Narrative / Tokenomics (Non-normative)
 
-- `whitepaper.md`, `litepaper.md`: Narrative docs; may contain example parameters and forward-looking statements.
+- `whitepaper.md`, `litepaper.md`: Canonical narrative docs; may contain example parameters and forward-looking statements.
+- `polystore-website/public/whitepaper.md`, `polystore-website/public/litepaper.md`: Synced website copies generated from the repo-root papers via `polystore-website/scripts/sync-papers.mjs`.
 - `ECONOMY.md`: Tokenomics overview; values should be treated as examples unless explicitly marked “normative in spec”.
 
 ## Implementation Onboarding
