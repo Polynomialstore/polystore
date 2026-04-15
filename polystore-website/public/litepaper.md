@@ -1,12 +1,12 @@
 # PolyStore Litepaper
 
-*Draft*
+*Research Draft*
 
 ## The Core Claim
 
 PolyStore is a decentralized storage protocol built around a narrow claim: storage only matters if the bytes can be retrieved under conditions that are direct, checkable, and economically accountable. A system that can produce isolated proof artifacts but cannot turn real reads into verifiable protocol events is solving the wrong problem.
 
-PolyStore's answer is to organize files as PolyFS, commit that structure on chain through a compact `manifest_root`, and treat retrieval as a first-class protocol action. PolyFS is not just a packing format. It is arranged so data possession and served bytes can be checked through efficient KZG-backed proof paths, without forcing the chain to reason about whole raw files. The chain keeps a compact trust anchor. Providers move and serve the data off chain. Clients and the chain can still verify what was actually stored and served.
+PolyStore's answer is to organize files as PolyFS, commit the current PolyFS state on chain through a compact `manifest_root`, and treat retrieval as a first-class protocol action. PolyFS is not just a packing format. It is arranged so data possession and served bytes can be checked through efficient KZG-backed proof paths, without forcing the chain to reason about whole raw files. The chain keeps a compact trust anchor. Providers move and serve the data off chain. Clients and the chain can still verify what was actually stored and served.
 
 This is why PolyStore does not separate file layout, proof structure, and retrieval accounting into unrelated subsystems. PolyFS exists so retrieval can be direct, verifiable, routable, and settleable. Retrieval sessions exist so reads are not invisible side effects; they are named protocol events with a payer, a scope, a commitment root, and a completion condition.
 
@@ -36,9 +36,9 @@ The practical effect is that payment, verification, and actual demand point at t
 
 ## One File, End to End
 
-Use one fixed example. A data owner wants to store a 64 MiB dataset shard. Under the current default profile, PolyFS packs that object into `MDU #0`, the required witness MDUs, and 8 user-data MDUs. Those 8 user-data MDUs hold the file's actual bytes. Each one is then encoded under the default RS(8,12) profile so it can be distributed across 12 assigned slots or providers.
+Use one fixed example. A data owner wants to store a 64 MiB dataset shard. Under the current default profile, PolyFS packs that object into `MDU #0`, the required witness MDUs, and 8 user-data MDUs. Those 8 user-data MDUs hold the file's actual bytes. Each one is then encoded under the default RS(8,12) profile so it can be distributed across 12 ordered slots with assigned providers.
 
-The owner opens a deal and prepares the file as PolyFS. `MDU #0` records how the file maps into the deal. The witness MDUs carry the proof-oriented metadata. The 8 user-data MDUs carry the content itself. After striping, each assigned provider receives the shard data for its slots plus the replicated PolyFS metadata. Once the full layout is ready, the owner commits the resulting `manifest_root` on chain. At that point the deal has a compact on-chain trust anchor for the whole 64 MiB object without putting the raw file on chain.
+The owner opens a deal and prepares the file as PolyFS. `MDU #0` records how the file maps into the deal. The witness MDUs carry the proof-oriented metadata. The 8 user-data MDUs carry the content itself. After striping, each assigned provider receives the shard data for its ordered slots plus the replicated PolyFS metadata. Once the full layout is ready, the owner commits the resulting `manifest_root` on chain. At that point the Deal has a compact on-chain trust anchor for the whole 64 MiB object without putting the raw file on chain.
 
 Later, a reader wants one 256 KiB range inside one user-data MDU. Because PolyStore accounts in blob-aligned units, this retrieval corresponds to two 128 KiB Blobs. The reader opens a retrieval session naming the deal, the current `manifest_root`, the assigned provider or slot responsibility, the requested blob range, the payer, and the expiry. The session creates an accountable envelope for the read before any bytes move.
 

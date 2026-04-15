@@ -1,6 +1,6 @@
 # PolyStore Whitepaper
 
-*Draft*
+*Research Draft*
 
 ## 1. Introduction: PolyFS Makes Retrieval Verifiable
 
@@ -32,7 +32,7 @@ Everything else in the design is downstream of those constraints.
 
 ## 3. System Overview: One Deal, One PolyFS, One Retrieval
 
-The central on-chain object is the Deal. A Deal identifies the owner, the current committed content, the current provider assignment, the economic budget, and the retrieval policy. The Deal's main trust anchor is `manifest_root`, a compact KZG commitment that stands for the committed PolyFS state of the deal.
+The central on-chain object is the Deal. A Deal identifies the owner, the current committed content, the current provider assignment, the economic budget, and the retrieval policy. The Deal's main trust anchor is the current `manifest_root`, a compact KZG commitment for the committed PolyFS state of the deal.
 
 The main actors are straightforward.
 
@@ -58,7 +58,7 @@ This is why PolyFS is a proof-preserving layout rather than a neutral filesystem
 
 ## 5. Striped Placement and Provider Responsibilities
 
-PolyStore's canonical placement model is striped. In the current profile, each user-data MDU is encoded under RS(8,12): eight data slots and four parity slots. The ordered slot map determines which provider is responsible for which slot. Metadata remains replicated. User data becomes striped shard data.
+PolyStore's canonical placement model is striped. In the current profile, each user-data MDU is encoded under RS(8,12): eight data slots and four parity slots. The ordered slot map determines which provider is responsible for each ordered slot. Metadata remains replicated. User data becomes striped shard data.
 
 This arrangement gives the protocol three useful properties at once.
 
@@ -98,9 +98,9 @@ In the striped case, the slot map adds one more discipline: the proof must be at
 
 ## 8. End-to-End Worked Example
 
-Use one fixed example throughout the paper. A data owner wants to store a 64 MiB dataset shard. Under the current profile, that object becomes `MDU #0`, the required witness MDUs, and 8 user-data MDUs inside PolyFS.
+Use one fixed example throughout the paper. A data owner wants to store a 64 MiB dataset shard. Under the current default profile, that object becomes `MDU #0`, the required witness MDUs, and 8 user-data MDUs inside PolyFS.
 
-Each user-data MDU is then encoded under RS(8,12). The chain assigns 12 ordered slots. Providers receive the shard data for the slots they are responsible for, along with the replicated PolyFS metadata. Once the owner has prepared the full layout, the owner commits the resulting `manifest_root` on chain. The Deal now has a compact on-chain trust anchor for the full 64 MiB object.
+Each user-data MDU is then encoded under RS(8,12). The chain assigns 12 ordered slots with assigned providers. Providers receive the shard data for the slots they are responsible for, along with the replicated PolyFS metadata. Once the owner has prepared the full layout, the owner commits the resulting `manifest_root` on chain. The Deal now has a compact on-chain trust anchor for the full 64 MiB object.
 
 Later, a reader wants a 256 KiB range inside one user-data MDU. Because the protocol is Blob-aligned, that request corresponds to two 128 KiB Blobs. The reader opens a retrieval session naming the Deal, the current `manifest_root`, the relevant provider or slot responsibility, the requested blob range, the payer, and the expiry.
 
