@@ -6,13 +6,13 @@
 
 This document should become the shortest serious introduction to PolyStore.
 
-Its job is to explain one compact argument early and clearly: PolyStore turns files into a verifiable MDU-based slab layout, and it treats retrieval as a first-class protocol action rather than an afterthought. The litepaper should make those two ideas feel like one coherent design.
+Its job is to explain one compact argument early and clearly: PolyStore turns files into PolyFS, a verifiable file layout whose internal units are MDUs and blobs, and it treats retrieval as a first-class protocol action rather than an afterthought. The litepaper should make those two ideas feel like one coherent design.
 
 It should answer five questions without sounding like a spec or like product copy:
 
 1. What is PolyStore?
 2. Why does the system start from retrievability rather than audit theater?
-3. How do files become MDUs, commitments, and provider assignments?
+3. How do files become PolyFS structure, commitments, and provider assignments?
 4. How does a retrieval become a provable, paid protocol event?
 5. Why is this design meaningfully different from storage systems that separate storage proofs from actual reads?
 
@@ -23,7 +23,7 @@ The document should stay concrete, compact, and example-driven.
 ## Drafting Rules
 
 * Use one running example throughout the paper: one file, one deal, one retrieval session, one settlement path.
-* Introduce the PolyFS slab layout early: `MDU #0`, witness MDUs, user MDUs, blobs, slots, and `manifest_root`.
+* Introduce PolyFS early, then explain its internal structure: `MDU #0`, witness MDUs, user MDUs, blobs, slots, and `manifest_root`.
 * Explain retrieval early as part of the same story, not as a later feature.
 * Prefer short paragraphs over glossary dumping.
 * Use mechanisms and examples instead of slogans.
@@ -39,19 +39,19 @@ The document should stay concrete, compact, and example-driven.
 Explain PolyStore in a page without losing the mechanism.
 
 ### What it needs to say
-* PolyStore stores files inside a verifiable slab layout built from MDUs, blobs, and a compact `manifest_root` commitment.
+* PolyStore stores files inside PolyFS, a verifiable file layout anchored by a compact `manifest_root` commitment and built from MDUs and blobs.
 * PolyStore treats retrieval as the central accountable act: reads are opened as retrieval sessions, served by assigned providers, checked against commitments, and settled on completion.
-* These are not separate features. The slab layout exists so retrieval can be direct, verifiable, routable, and economically accountable.
+* These are not separate features. PolyFS exists so retrieval can be direct, verifiable, routable, and economically accountable.
 
 ### Desired outcome
 By the end of the opening, the reader should understand that PolyStore is about getting bytes back under checkable conditions, not just about providers passing isolated audits.
 
 ---
 
-## 2. The Slab: How Files Become Verifiable Structure
+## 2. PolyFS: How Files Become Verifiable Structure
 
 ### Goal of the section
-Introduce the MDU system early enough that the rest of the paper has a concrete object model.
+Introduce PolyFS early enough that the rest of the paper has a concrete object model, then explain the MDU system inside it.
 
 ### Concepts to define
 * deal
@@ -64,13 +64,13 @@ Introduce the MDU system early enough that the rest of the paper has a concrete 
 * slot assignment
 
 ### What it needs to say
-* Files are packed into a filesystem-on-slab layout rather than treated as opaque objects.
+* Files are packed into PolyFS rather than treated as opaque objects.
 * `MDU #0` and witness MDUs carry the metadata and proof structure that let clients resolve files and verify what providers serve.
 * User data MDUs are the data-bearing units that get striped across providers.
 * The chain stores a compact commitment to this structure instead of whole-file state.
 
 ### Editorial note
-This section should make the slab feel operational, not mystical. Readers should come away understanding why the MDU model exists.
+This section should make PolyFS feel operational, not mystical. Readers should come away understanding why its MDU model exists.
 
 ---
 
@@ -103,7 +103,7 @@ Make the whole system feel real in one continuous example.
 Walk one file through:
 
 1. A user opens a deal.
-2. The file is packed into the PolyFS slab (`MDU #0`, witness MDUs, user MDUs).
+2. The file is packed into PolyFS (`MDU #0`, witness MDUs, user MDUs).
 3. User-data MDUs are striped across assigned slots.
 4. Providers receive their assigned shard data and replicated metadata.
 5. The user commits the resulting `manifest_root`.
@@ -140,7 +140,7 @@ Explain what users and providers actually do, and how the money flow matches the
 End with real differentiation and real boundaries.
 
 ### Claims worth making if defended
-* The file layout and the retrieval path are designed together instead of being bolted together.
+* PolyFS and the retrieval path are designed together instead of being bolted together.
 * Compact commitments let the chain anchor large data without becoming the storage layer.
 * Retrieval sessions make delivery accountable instead of observational.
 
@@ -150,4 +150,4 @@ End with real differentiation and real boundaries.
 * Repair, elasticity, and policy need discipline; they are not excuses for uncontrolled complexity.
 
 ### Desired closing idea
-PolyStore should read as a system that structures data so real reads can be verified, routed, and paid for under explicit protocol rules.
+PolyStore should read as a system that organizes files as PolyFS so real reads can be verified, routed, and paid for under explicit protocol rules.

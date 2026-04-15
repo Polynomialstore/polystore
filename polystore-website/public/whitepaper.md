@@ -6,7 +6,7 @@
 
 This document should become the first serious technical argument for PolyStore.
 
-Its job is to explain one coherent system early: PolyStore organizes content as a verifiable MDU-based slab layout and treats retrieval as a first-class protocol event. The whitepaper should show how that single design choice propagates through commitments, placement, proof verification, economics, and threat model.
+Its job is to explain one coherent system early: PolyStore organizes content as PolyFS, a verifiable file layout whose internal units are MDUs and blobs, and treats retrieval as a first-class protocol event. The whitepaper should show how that single design choice propagates through commitments, placement, proof verification, economics, and threat model.
 
 It should not be a paraphrase of `spec.md`, and it should not read like a market-facing brochure. The paper should explain how the system fits together and why the mechanisms belong together.
 
@@ -15,7 +15,7 @@ It should not be a paraphrase of `spec.md`, and it should not read like a market
 ## Drafting Rules
 
 * Write in continuous argument, not branded bullet piles.
-* Introduce the slab model and the retrieval model together near the front of the paper.
+* Introduce PolyFS and the retrieval model together near the front of the paper.
 * Use one running example and one recurring system diagram.
 * Prefer mechanism-first explanations over comparative marketing language.
 * Do not use legacy mode terminology or migration framing.
@@ -25,15 +25,15 @@ It should not be a paraphrase of `spec.md`, and it should not read like a market
 
 ## Proposed Structure
 
-## 1. Introduction: Retrieval Requires Structure
+## 1. Introduction: PolyFS Makes Retrieval Verifiable
 
 ### Goal of the section
 State the thesis, the system boundary, and the central design move.
 
 ### What it needs to do
-* Define PolyStore as a decentralized storage protocol built around two linked commitments: a filesystem-on-slab layout and accountable retrieval sessions.
+* Define PolyStore as a decentralized storage protocol built around two linked commitments: PolyFS as the canonical file layout and accountable retrieval sessions.
 * Explain that retrievability is the central storage fact the protocol cares about.
-* State the paper's core question: how do we organize data so reads can be direct, verifiable, and economically accountable without putting the whole dataset on-chain?
+* State the paper's core question: how do we organize data as PolyFS so reads can be direct, verifiable, and economically accountable without putting the whole dataset on-chain?
 
 ### Desired outcome
 By the end of the introduction, the reader should understand that the paper is about the design of retrievability, not about generic storage-chain branding.
@@ -58,7 +58,7 @@ Every later mechanism should visibly answer one of these constraints.
 
 ---
 
-## 3. System Overview: One Deal, One Slab, One Retrieval
+## 3. System Overview: One Deal, One PolyFS, One Retrieval
 
 ### Goal of the section
 Give the reader a compact system picture before diving into individual mechanisms.
@@ -83,7 +83,7 @@ Give the reader a compact system picture before diving into individual mechanism
 
 ### What it needs to say
 * A deal is the on-chain anchor for committed content and economics.
-* Files become ranges inside a slab made of metadata MDUs and user-data MDUs.
+* Files become ranges inside PolyFS, whose internal structure is made of metadata MDUs and user-data MDUs.
 * The slot map determines which providers hold which striped user-data shards and which metadata is replicated.
 * A retrieval session binds a read request to payer, scope, slot responsibility, and completion conditions.
 
@@ -92,21 +92,21 @@ This section should include a miniature end-to-end flow, not just definitions. I
 
 ---
 
-## 4. The Slab Layout and Commitment Model
+## 4. PolyFS and the Commitment Model
 
 ### Goal of the section
-Explain exactly how the MDU system turns files into committed structure.
+Explain exactly how PolyFS turns files into committed structure, and how the MDU system supports it.
 
 ### Required content
 * MDU and blob granularity
 * `MDU #0` as the file table / root table anchor
 * witness MDUs as commitment-bearing metadata
 * user-data MDUs as the data-bearing layer
-* file-to-range mapping inside the slab
+* file-to-range mapping inside PolyFS
 * `manifest_root` as the compact chain commitment
 
 ### What this section must answer
-* How does a file map into MDUs and blobs?
+* How does a file map into PolyFS, MDUs, and blobs?
 * What metadata must be replicated to make retrieval practical?
 * Why is the `manifest_root` sufficient as the on-chain trust anchor?
 
@@ -115,7 +115,7 @@ Explain exactly how the MDU system turns files into committed structure.
 ## 5. Striped Placement and Provider Responsibilities
 
 ### Goal of the section
-Explain how the committed slab is distributed across providers.
+Explain how committed PolyFS data is distributed across providers.
 
 ### Required content
 * ordered slot assignment
@@ -128,7 +128,7 @@ Explain how the committed slab is distributed across providers.
 ### What it needs to argue
 * Striping is the canonical architecture, not an optional flavor.
 * Slot assignment is what makes routing, accountability, and reconstruction coherent.
-* The slab layout and the slot layout are designed together.
+* PolyFS and the slot layout are designed together.
 
 ---
 
@@ -180,7 +180,7 @@ Tie sections 3 through 7 into one concrete story with numbers.
 
 ### Required example flow
 1. Create a deal.
-2. Pack one file into the slab.
+2. Pack one file into PolyFS.
 3. Assign `N = K+M` slots.
 4. Upload striped user-data shards and replicated metadata.
 5. Commit `manifest_root`.
@@ -250,4 +250,4 @@ Close the paper without turning it into a roadmap dump.
 * bounded list of open questions: repair policy, elasticity tuning, policy ergonomics
 
 ### Desired closing idea
-PolyStore should be presented as a protocol that organizes files into verifiable slab structure so retrieval can be direct, provable, and economically accountable under explicit on-chain rules.
+PolyStore should be presented as a protocol that organizes files into verifiable PolyFS structure so retrieval can be direct, provable, and economically accountable under explicit on-chain rules.
