@@ -6,7 +6,7 @@
 
 This document should become the shortest serious introduction to PolyStore.
 
-Its job is to explain one compact argument early and clearly: PolyStore turns files into PolyFS, a verifiable file layout whose internal units are MDUs and blobs, and it treats retrieval as a first-class protocol action rather than an afterthought. The litepaper should make those two ideas feel like one coherent design.
+Its job is to explain one compact argument early and clearly: PolyStore turns files into PolyFS, a verifiable file layout whose internal units are MDUs and blobs, and preserves efficient KZG-backed proof paths so data possession and served bytes can be verified on chain with minimal overhead. It treats retrieval as a first-class protocol action rather than an afterthought. The litepaper should make those ideas feel like one coherent design.
 
 It should answer five questions without sounding like a spec or like product copy:
 
@@ -40,6 +40,7 @@ Explain PolyStore in a page without losing the mechanism.
 
 ### What it needs to say
 * PolyStore stores files inside PolyFS, a verifiable file layout anchored by a compact `manifest_root` commitment and built from MDUs and blobs.
+* PolyFS is shaped to preserve efficient KZG-based proof paths, so possession and served data can be verified on chain with minimal overhead instead of requiring the chain to reason about whole files.
 * PolyStore treats retrieval as the central accountable act: reads are opened as retrieval sessions, served by assigned providers, checked against commitments, and settled on completion.
 * These are not separate features. PolyFS exists so retrieval can be direct, verifiable, routable, and economically accountable.
 
@@ -66,8 +67,9 @@ Introduce PolyFS early enough that the rest of the paper has a concrete object m
 ### What it needs to say
 * Files are packed into PolyFS rather than treated as opaque objects.
 * `MDU #0` and witness MDUs carry the metadata and proof structure that let clients resolve files and verify what providers serve.
+* That structure is arranged so the chain can verify compact KZG-backed openings against committed data instead of carrying raw-file verification overhead.
 * User data MDUs are the data-bearing units that get striped across providers.
-* The chain stores a compact commitment to this structure instead of whole-file state.
+* The chain stores a compact commitment to this structure instead of whole-file state, which is what makes decentralized on-chain verification practical.
 
 ### Editorial note
 This section should make PolyFS feel operational, not mystical. Readers should come away understanding why its MDU model exists.

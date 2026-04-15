@@ -6,7 +6,7 @@
 
 This document should become the first serious technical argument for PolyStore.
 
-Its job is to explain one coherent system early: PolyStore organizes content as PolyFS, a verifiable file layout whose internal units are MDUs and blobs, and treats retrieval as a first-class protocol event. The whitepaper should show how that single design choice propagates through commitments, placement, proof verification, economics, and threat model.
+Its job is to explain one coherent system early: PolyStore organizes content as PolyFS, a verifiable file layout whose internal units are MDUs and blobs, and preserves efficient KZG-backed proof paths so possession and retrieval claims can be verified on chain with low overhead. It treats retrieval as a first-class protocol event. The whitepaper should show how that single design choice propagates through commitments, placement, proof verification, economics, and threat model.
 
 It should not be a paraphrase of `spec.md`, and it should not read like a market-facing brochure. The paper should explain how the system fits together and why the mechanisms belong together.
 
@@ -32,6 +32,7 @@ State the thesis, the system boundary, and the central design move.
 
 ### What it needs to do
 * Define PolyStore as a decentralized storage protocol built around two linked commitments: PolyFS as the canonical file layout and accountable retrieval sessions.
+* Explain that PolyFS is not just a file layout; it is arranged to preserve efficient KZG polynomial proof paths so data possession and served bytes can be checked on chain by decentralized verifiers.
 * Explain that retrievability is the central storage fact the protocol cares about.
 * State the paper's core question: how do we organize data as PolyFS so reads can be direct, verifiable, and economically accountable without putting the whole dataset on-chain?
 
@@ -52,6 +53,7 @@ Make the constraints explicit before introducing the mechanism.
 * Providers should be assigned and paid under anti-sybil, budget-aware rules.
 * Retrieval must be verifiable without trusting a gateway.
 * The protocol needs a compact on-chain commitment anchor for large datasets.
+* Verification overhead must stay low enough that decentralized on-chain checking remains practical.
 
 ### Why this section matters
 Every later mechanism should visibly answer one of these constraints.
@@ -104,11 +106,13 @@ Explain exactly how PolyFS turns files into committed structure, and how the MDU
 * user-data MDUs as the data-bearing layer
 * file-to-range mapping inside PolyFS
 * `manifest_root` as the compact chain commitment
+* why PolyFS preserves efficient KZG proof openings rather than fighting them
 
 ### What this section must answer
 * How does a file map into PolyFS, MDUs, and blobs?
 * What metadata must be replicated to make retrieval practical?
 * Why is the `manifest_root` sufficient as the on-chain trust anchor?
+* How does PolyFS keep decentralized verification overhead low enough to be practical on chain?
 
 ---
 
