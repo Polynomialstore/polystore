@@ -37,16 +37,13 @@ const createSlugger = () => {
   };
 };
 
-const stripDocumentHeader = (markdown: string, title: string, eyebrow: string) => {
+const stripDocumentHeader = (markdown: string, eyebrow: string) => {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
 
   while (lines[0]?.trim() === '') lines.shift();
 
   if (/^#\s+/.test(lines[0] ?? '')) {
-    const heading = (lines[0] ?? '').replace(/^#\s+/, '').trim().toLowerCase();
-    if (!title || heading === title.trim().toLowerCase()) {
-      lines.shift();
-    }
+    lines.shift();
   }
 
   while (lines[0]?.trim() === '') lines.shift();
@@ -96,6 +93,89 @@ const annotateHeadingIds = (html: string, headings: DocumentHeading[]) => {
   });
 };
 
+const ALLOWED_MARKDOWN_TAGS = new Set([
+  'a',
+  'blockquote',
+  'br',
+  'code',
+  'del',
+  'em',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'hr',
+  'img',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  'strong',
+  'table',
+  'tbody',
+  'td',
+  'th',
+  'thead',
+  'tr',
+  'ul',
+]);
+
+const ALLOWED_MARKDOWN_ATTRS: Record<string, Set<string>> = {
+  a: new Set(['href', 'title']),
+  h1: new Set(['id']),
+  h2: new Set(['id']),
+  h3: new Set(['id']),
+  h4: new Set(['id']),
+  h5: new Set(['id']),
+  h6: new Set(['id']),
+  img: new Set(['alt', 'src', 'title']),
+};
+
+const SAFE_MARKDOWN_URL = /^(https?:|mailto:|\/|#)/i;
+
+const sanitizeRenderedHtml = (html: string) => {
+  if (typeof document === 'undefined') return html;
+
+  const template = document.createElement('template');
+  template.innerHTML = html;
+
+  const sanitizeNode = (node: Node) => {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const element = child as HTMLElement;
+        const tag = element.tagName.toLowerCase();
+
+        if (!ALLOWED_MARKDOWN_TAGS.has(tag)) {
+          element.replaceWith(document.createTextNode(element.textContent ?? ''));
+          continue;
+        }
+
+        const allowedAttrs = ALLOWED_MARKDOWN_ATTRS[tag] ?? new Set<string>();
+        for (const attr of Array.from(element.attributes)) {
+          const name = attr.name.toLowerCase();
+          const value = attr.value.trim();
+
+          if (name.startsWith('on') || !allowedAttrs.has(name)) {
+            element.removeAttribute(attr.name);
+            continue;
+          }
+
+          if ((name === 'href' || name === 'src') && value && !SAFE_MARKDOWN_URL.test(value)) {
+            element.removeAttribute(attr.name);
+          }
+        }
+      }
+
+      sanitizeNode(child);
+    }
+  };
+
+  sanitizeNode(template.content);
+  return template.innerHTML;
+};
+
 const MarkdownPage = ({ filePath, title, description, eyebrow = 'PolyStore Research' }: MarkdownPageProps) => {
   const [content, setContent] = useState('');
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
@@ -104,17 +184,24 @@ const MarkdownPage = ({ filePath, title, description, eyebrow = 'PolyStore Resea
 
   useEffect(() => {
     const fetchMarkdown = async () => {
+      setLoading(true);
+      setError(null);
+      setContent('');
+      setHeadings([]);
+
       try {
         const response = await fetch(filePath);
         if (!response.ok) {
           throw new Error(`Failed to fetch ${filePath}: ${response.statusText}`);
         }
         const text = await response.text();
-        const bodyMarkdown = stripDocumentHeader(text, title, eyebrow);
+        const bodyMarkdown = stripDocumentHeader(text, eyebrow);
         const nextHeadings = extractHeadings(bodyMarkdown);
 
+        const renderedHtml = annotateHeadingIds(marked.parse(bodyMarkdown), nextHeadings);
+
         setHeadings(nextHeadings);
-        setContent(annotateHeadingIds(marked.parse(bodyMarkdown), nextHeadings));
+        setContent(sanitizeRenderedHtml(renderedHtml));
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
