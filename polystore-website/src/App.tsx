@@ -14,7 +14,7 @@ import { EconomyDashboard } from "./pages/EconomyDashboard";
 import { AdversarialSimulation } from "./pages/AdversarialSimulation";
 import { Security } from "./pages/Security";
 import { PerformanceReport } from "./pages/PerformanceReport";
-import { Litepaper, Whitepaper } from "./pages/Papers"; // Import both
+import { Litepaper, Spec, Whitepaper } from "./pages/Papers";
 import { ProofsDashboard } from "./pages/ProofsDashboard";
 import { FAQ } from "./pages/FAQ";
 import { LogoShowcase } from "./pages/LogoShowcase";
@@ -57,6 +57,7 @@ function App() {
               <Route path="adversarial-simulation" element={<AdversarialSimulation />} />
               <Route path="litepaper" element={<Litepaper />} />
               <Route path="whitepaper" element={<Whitepaper />} />
+              <Route path="spec" element={<Spec />} />
               <Route path="faq" element={<FAQ />} />
               <Route path="technology" element={<TechnologyLayout />}>
                 <Route index element={<Technology />} />

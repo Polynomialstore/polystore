@@ -285,6 +285,7 @@ export const Layout = () => {
               <h4 className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-4">/core_tech</h4>
               <ul className="space-y-3">
                 <li><Link to="/technology" className="font-mono-data text-[11px] hover:text-primary transition-colors">Architecture</Link></li>
+                <li><Link to="/spec" className="font-mono-data text-[11px] hover:text-primary transition-colors">Spec</Link></li>
                 <li><Link to="/economy" className="font-mono-data text-[11px] hover:text-primary transition-colors">Economy</Link></li>
               </ul>
             </div>

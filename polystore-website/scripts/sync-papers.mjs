@@ -10,6 +10,7 @@ const checkOnly = process.argv.includes("--check");
 const mappings = [
   ["whitepaper.md", path.join("polystore-website", "public", "whitepaper.md")],
   ["litepaper.md", path.join("polystore-website", "public", "litepaper.md")],
+  ["spec.md", path.join("polystore-website", "public", "spec.md")],
 ];
 
 let hasDiff = false;

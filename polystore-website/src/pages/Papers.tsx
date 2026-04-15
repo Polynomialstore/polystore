@@ -6,9 +6,10 @@ interface MarkdownPageProps {
   filePath: string;
   title: string;
   description?: string;
+  eyebrow?: string;
 }
 
-const MarkdownPage = ({ filePath, title, description }: MarkdownPageProps) => {
+const MarkdownPage = ({ filePath, title, description, eyebrow = 'PolyStore Research' }: MarkdownPageProps) => {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +39,7 @@ const MarkdownPage = ({ filePath, title, description }: MarkdownPageProps) => {
         <div className="relative overflow-hidden rounded-none border border-border bg-card shadow-sm">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-background opacity-90" />
           <div className="relative p-8 md:p-10 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">PolyStore Research</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">{eyebrow}</p>
             <h1 className="text-4xl md:text-5xl font-bold text-foreground leading-tight">{title}</h1>
             {description ? (
               <p className="text-lg text-muted-foreground max-w-3xl">{description}</p>
@@ -72,7 +73,7 @@ const MarkdownPage = ({ filePath, title, description }: MarkdownPageProps) => {
   if (error) {
     return renderBody(
       <div className="rounded-none border border-destructive/30 bg-destructive/10 p-4 text-destructive">
-        <p className="font-semibold">Unable to load this paper.</p>
+        <p className="font-semibold">Unable to load this document.</p>
         <p className="text-sm">{error}</p>
       </div>
     );
@@ -99,5 +100,14 @@ export const Whitepaper = () => (
     filePath="/whitepaper.md"
     title="PolyStore Whitepaper"
     description="The canonical research paper detailing PolyStore's storage, retrieval, and verification model."
+  />
+);
+
+export const Spec = () => (
+  <MarkdownPage
+    filePath="/spec.md"
+    title="PolyStore Spec"
+    description="The canonical protocol specification for PolyStore's storage, retrieval, and verification model."
+    eyebrow="Protocol Specification"
   />
 );
