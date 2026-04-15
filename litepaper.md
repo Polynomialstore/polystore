@@ -1,97 +1,67 @@
-# PolyStore Litepaper: The Sealing-Free Storage Network
-**Technical Overview v2.8**
+# PolyStore Litepaper
 
-## 1. Introduction & Value Proposition
-PolyStore is a high-throughput, verifiable decentralized storage network designed to democratize access to the storage economy while delivering cloud-grade performance.
+*Research Draft*
 
-By utilizing a **Performance Market** (tiered rewards) and **System-Defined Placement**, PolyStore enables a diverse marketplace of Storage Providers (SPs) to provide instant, verifiable data retrieval. The network stores data in a canonical striped RS(`K`,`K+M`) layout, giving users cloud-grade throughput without the latency or hardware overhead of legacy "sealing" protocols.
+## The Core Claim
 
-### Value for Storage Providers
-*   **Commodity Hardware Access:** No GPU sealing. Providers are judged on **Response Time**, incentivizing standard NVMe/SSD storage.
-*   **Fair Competition:** Deterministic placement ensures that even small providers get assigned deals, preventing monopolies.
-*   **Unified Revenue:** Earn rewards for both **Storage** (liveness) and **Bandwidth** (traffic) in a single flow.
+PolyStore is a decentralized storage protocol built around a narrow claim: storage only matters if the bytes can be retrieved under conditions that are direct, checkable, and economically accountable. A system that can produce isolated proof artifacts but cannot turn real reads into verifiable protocol events is solving the wrong problem.
 
-### Value for Data Owners
-*   **Instant Availability:** Data is stored in 8 MiB Mega-Data Units (MDUs) for efficient retrieval.
-*   **User-Funded Elasticity:** Viral content automatically scales using **additional slot-aligned placements** funded by the deal's escrow.
-*   **Configurable Resilience:** Users choose durability and budget preferences, and the network assigns an ordered slot map for RS(`K`,`K+M`) retrieval.
-*   **Enterprise Privacy:** Data is encrypted client-side. Scaling is "Zero-Touch" because the network can replicate ciphertext. Deletion is handled via **Crypto-Erasure**.
+PolyStore's answer is to organize files as PolyFS, commit the current PolyFS state on chain through a compact `manifest_root`, and treat retrieval sessions as the protocol object that turns real reads into accountable events. PolyFS is not just a packing format. It is arranged so data possession and served bytes can be checked through efficient KZG-backed proof paths, without forcing the chain to reason about whole raw files. The chain keeps a compact trust anchor while providers move and serve the data off chain. Clients and the chain can still verify what was actually stored and served.
 
----
+PolyStore does not treat file layout, proof structure, and retrieval accounting as separate concerns. PolyFS exists so retrieval can be direct, verifiable, and settleable. Retrieval sessions exist so reads are not invisible side effects; they are named protocol events with a payer, a scope, a commitment root, and a completion condition.
 
-## 2. The Core Innovation: Unified Liveness
-Instead of separate "Storage Audits" and "Retrieval Requests," PolyStore unifies them.
+The result is a storage protocol centered on getting bytes back under explicit rules, not just on watching providers pass background audits.
 
-### A. The "User is the Auditor"
-*   **Hot Data:** When a user downloads a file, they open a **Retrieval Session** on-chain (MetaMask), fetch the data, and confirm completion. The Provider submits a session-bound proof; session completion becomes storage evidence for that retrieval.
-*   **Pricing (Gamma-4):** A base fee is burned on session open and a per-blob fee is locked from escrow and paid to the Provider on completion (minus a protocol burn).
-*   **Cold Data:** If no user asks for the file, the **System** acts as the "User of Last Resort," issuing a random challenge. The Provider responds to prove liveness.
+## PolyFS: How Files Become Verifiable Structure
 
-### B. The Performance Market (Tiered Rewards)
-We don't ban S3. We just pay for speed.
-*   **Platinum (example: Block H+1):** 100% Reward. (Requires local NVMe).
-*   **Gold (example: Block H+5):** 80% Reward.
-*   **Fail (example: >H+20):** 0% Reward + Slash. (Glacier/Offline).
+PolyFS is the canonical file layout for a deal. Instead of handing providers an opaque object and hoping later proofs can somehow be attached to it, PolyStore turns the file into a structured layout whose internal units are aligned with retrieval and proof verification.
 
-### C. Retrievability & Self-Healing (High-Level)
+The basic units are Blobs and MDUs. A Blob is the atomic KZG verification unit. An MDU is the larger retrieval unit that groups Blobs into a layout that is practical for storage, routing, and reconstruction. In the current profile, a Blob is 128 KiB and an MDU is 8 MiB, so each MDU contains 64 Blobs.
 
-PolyStore's retrieval layer is designed so that:
+PolyFS uses that structure in three layers. `MDU #0` is the filesystem anchor: it carries the file table and root table that let a client resolve a file path into byte ranges and committed storage units. Witness MDUs carry the commitment-bearing metadata needed to verify the structure efficiently. User-data MDUs carry the actual file bytes. Because the metadata MDUs are replicated, any serving node can resolve paths and supply proof context without relying on a privileged coordinator. The user-data MDUs are the units that get striped across providers.
 
-*   For every `(Deal, Slot)` pair, either the data is retrievable under protocol rules, or there is verifiable evidence the accountable Provider failed (wrong data or non-response) and can be punished.
-*   Providers who repeatedly fail retrievals are automatically pushed out of placements and replaced by healthier nodes over time.
+This matters because PolyFS is shaped for proof efficiency, not just for neat packing. The chain does not store whole-file state. It stores a compact `manifest_root` commitment that anchors the committed PolyFS structure. When a provider later proves possession or proves that it served a requested range, the proof path runs from the served bytes back through PolyFS and into that commitment root. The chain verifies compact openings against committed structure instead of carrying the overhead of raw-file verification.
 
-Concretely, the architecture adds:
+That is the core advantage. PolyStore gets decentralized verification with low on-chain overhead because the file layout, commitment model, and retrieval path were designed together from the start.
 
-*   **Challenge Structure:** Each retrieval carries enough information (epoch randomness, nonce, deal and slot IDs) for the protocol to derive a deterministic KZG checkpoint inside the requested range, making every retrieval a potential storage proof.
-*   **Synthetic Checks for Cold Data:** The chain periodically selects random chunks for each Deal/Slot and requires proofs even when no one is actively downloading the file.
-*   **Provider Audit Debt:** Providers periodically act as auditors for other Providers, issuing retrievals and reporting misbehavior. The more data you store, the more audits you are expected to perform.
-*   **Health & Eviction:** The protocol maintains simple health scores per Deal/Slot and uses them to decide when to add new placements and evict bad actors, so the network self-heals as it runs.
+## Retrieval Is the Protocol Center
 
----
+Most storage systems treat retrieval as something that happens after the protocol has already decided who is healthy, who gets paid, and what counts as proof. PolyStore does not. In PolyStore, retrieval is the operational center of gravity.
 
-## 3. The Architecture: A Hybrid Approach
+A retrieval session binds the important facts of a read into one accountable object: which deal is being read, which committed `manifest_root` is being referenced, which provider or slot assignment is responsible, which blob-aligned range is being requested, who is paying, and when the request expires. That turns a read into something the protocol can reason about.
 
-### Layer 1: Consensus (Cosmos-SDK)
-*   **Role:** The "Dispatcher."
-*   **Function:** Manages the **Active Provider List**, executes **System-Defined Placement**, verifies **KZG Proofs**, and tracks slot assignments and retrieval outcomes.
+This changes the economic model. Providers do not receive protocol credit for vague availability claims. They receive credit for serving bytes that can be tied back to committed data. The user or requester does not just hope the data path worked; successful delivery is connected to proof submission and completion. The chain does not need to become a data mover, but it can still settle the event because the read is bound to a compact commitment and a concrete session.
 
-### Layer 2: EVM Compatibility (MetaMask)
-*   **Role:** Wallet-facing execution inside PolyStore Chain (no separate settlement chain in devnet).
-*   **Function:** Hosts EVM-compatible signatures and the PolyStore precompile used for retrieval sessions and future contracts.
+The practical effect is that payment, verification, and actual demand point at the same thing. A retrieval is no longer a side channel bolted onto storage. It is the place where storage claims meet user reality.
 
-### Client Layer: Browser + Gateway (Optional)
-*   **Browser/WASM:** Generates stripes and proofs locally and stores slabs in OPFS.
-*   **Gateway/CLI:** Optional routing + caching infrastructure (also powers the S3 adapter). Gateways never sign on behalf of users.
+## One File, End to End
 
----
+Use one fixed example. A data owner wants to store a 64 MiB dataset shard. Under the current default profile, PolyFS packs that object into `MDU #0`, the required witness MDUs, and 8 user-data MDUs. Those 8 user-data MDUs hold the file's actual bytes. Each one is then encoded under the default RS(8,12) profile so it can be distributed across 12 ordered slots with assigned providers.
 
-## 4. The Lifecycle of a File
+The owner opens a deal and prepares the file as PolyFS. `MDU #0` records how the file maps into the deal. The witness MDUs carry the proof-oriented metadata. The 8 user-data MDUs carry the content itself. After striping, each assigned provider receives the shard data for its ordered slots plus the replicated PolyFS metadata. Once the full layout is ready, the owner commits the resulting `manifest_root` on chain. At that point the Deal has a compact on-chain trust anchor for the whole 64 MiB object without putting the raw file on chain.
 
-### Step 1: Ingestion
-1.  **Deal:** User sends `MsgCreateDeal`, creating an empty deal container with service preferences and budget controls.
-2.  **Placement:** The chain deterministically assigns an ordered slot list of size `N = K+M`.
-3.  **Upload:** The client performs RS(`K`,`K+M`) encoding for each storage unit and uploads per-slot shards directly to the assigned Providers.
-4.  **Commit:** User submits `MsgUpdateDealContent` to commit the `manifest_root`.
+Later, a reader wants one 256 KiB range inside one user-data MDU. Because PolyStore accounts in blob-aligned units, this retrieval corresponds to two 128 KiB Blobs. The reader opens a retrieval session naming the deal, the current `manifest_root`, the assigned provider or slot responsibility, the requested blob range, the payer, and the expiry. The session creates an accountable envelope for the read before any bytes move.
 
-*Devnet note:* a gateway relay/faucet can sponsor gas for demos, but it is disabled by default in the mainnet-parity posture.
+Providers then serve the needed bytes together with compact proof material tied to the committed PolyFS structure. The compact verification step is three linked checks: the served bytes open against the relevant Blob commitment, that Blob commitment is proven inside the target MDU, and that MDU is opened against the Deal's `manifest_root`. The chain can verify that path without treating the whole 64 MiB file as the verification object. The point is not that the chain replays the full retrieval. The point is that the retrieval can be checked against the same compact commitment that anchored the original deal.
 
-### Step 2: The Loop
-*   **Traffic:** Users request data via retrieval sessions. After a successful download, the user confirms the session and the Provider submits the session proof for liveness and bandwidth fees.
-*   **Silence:** When nobody requests the file, the chain issues synthetic challenges. Providers respond with proofs derived from their stored MDUs.
+Once the provider has supplied the required proof material and the session reaches completion, the protocol can settle the event. The read is no longer an off-ledger anecdote. It is a real protocol action: authorized, served, checked, and paid.
 
-### Step 3: Scaling
-*   **Saturation:** If a Platinum node is overwhelmed, it signals the chain.
-*   **Action:** The chain checks the User's `MaxSpend` budget. If funds exist, it authorizes **additional slot-aligned placements** on new edge nodes to absorb the load.
+## Roles, Economics, and Scaling
 
----
+The data owner's role is straightforward. Fund a deal, commit content, choose retrieval exposure, and, if confidentiality matters, encrypt before upload. PolyFS does not require the owner to trust a gateway as the source of truth. A gateway may help with convenience, packing, or routing, but the trust anchor is still the committed structure and the proof path back to `manifest_root`.
 
-## 5. The Economy (Token-Denominated)
-*   **Token Denom:** The protocol uses the chain's bond denom (devnet defaults to `stake`; `$STOR` is a future branding choice).
-*   **Burn Mechanism:** A portion of every retrieval fee is **burned** (base fee + configurable burn bps on the variable fee).
-*   **Real Pricing:** Storage and bandwidth are priced by the market to reflect physical infrastructure costs.
+The provider role is also concrete. Providers store the shard data assigned to their slots, store the replicated PolyFS metadata, serve reads for the slots they are responsible for, and submit proof material tied to committed data. "Being fast" is not a slogan here. It means responding to retrieval demand in a way that can be checked and settled.
 
----
+Economically, a deal has a storage term and a retrieval path. Retrieval sessions consume budget when they are opened and settle when they complete. Demand is not merely observed; it is priced and accounted for.
 
-## 6. Enterprise Features
-*   **Zero-Knowledge Cloud:** Providers store encrypted 8 MiB MDUs (`AES-256-GCM`). They cannot read your data.
-*   **Proof of Deletion:** You hold the key. Destroy the key, and the data becomes irretrievable everywhere it was stored (Crypto-Erasure).
+Scaling follows the same discipline. When demand grows, PolyStore's preferred expansion path is additional slot-aligned placements. The important point is that this is not fuzzy replication rhetoric. It is budgeted elasticity attached to the slot structure the protocol already uses for routing, accountability, and reconstruction.
+
+## Why This Design Matters, and Where It Stops
+
+PolyStore's distinction is compositional rather than ornamental. Erasure coding, KZG commitments, gateways, and retrieval APIs all exist elsewhere. What matters here is that PolyFS, compact commitments, retrieval sessions, and settlement are designed as one system. The file layout preserves efficient verification. The retrieval path turns actual reads into accountable protocol work. The commitment model keeps the chain small while still anchoring large datasets.
+
+That gives PolyStore a clear answer to a basic question: what should a storage protocol actually verify? Not just that a provider can answer synthetic challenges, but that committed data can be served back under explicit economic and cryptographic rules.
+
+There are also clear limits. PolyStore is not a magical universal filesystem. It is a protocol for verifiable storage coordination and retrieval settlement. Encryption does not eliminate all metadata leakage by itself. Repair policy, long-horizon elasticity, and retrieval ergonomics still need disciplined design. None of those caveats weaken the core claim. They just keep it honest.
+
+PolyStore should be understood as a system that organizes files as PolyFS so real reads can be verified, routed, and paid for under explicit on-chain rules.

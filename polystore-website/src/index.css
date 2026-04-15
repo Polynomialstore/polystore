@@ -13,7 +13,7 @@
   .markdown-content {
     color: hsl(var(--foreground));
     font-size: 1.0625rem;
-    line-height: 1.8;
+    line-height: 1.84;
   }
 
   .markdown-content > :first-child {
@@ -45,11 +45,17 @@
   }
 
   .markdown-content h2 {
-    margin-top: 3.25rem;
+    margin-top: 3.75rem;
     margin-bottom: 1rem;
-    padding-top: 0.5rem;
+    padding-top: 0.75rem;
     border-top: 1px solid hsl(var(--border));
     font-size: clamp(1.5rem, 3vw, 2.125rem);
+  }
+
+  .markdown-content > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
   }
 
   .markdown-content h3 {
@@ -79,6 +85,11 @@
   .markdown-content p,
   .markdown-content li {
     color: hsl(var(--foreground));
+    text-wrap: pretty;
+  }
+
+  .markdown-content p + p {
+    margin-top: 1.2rem;
   }
 
   .markdown-content strong {
@@ -128,8 +139,8 @@
 
   .markdown-content blockquote {
     padding: 1rem 1.25rem;
-    border-left: 3px solid hsl(var(--primary));
-    background: hsl(var(--primary) / 0.06);
+    border-left: 2px solid hsl(var(--primary));
+    background: hsl(var(--primary) / 0.05);
     color: hsl(var(--muted-foreground));
   }
 
@@ -200,7 +211,11 @@
     }
 
     .markdown-content h2 {
-      margin-top: 2.5rem;
+      margin-top: 2.75rem;
+    }
+
+    .markdown-content > h2:first-child {
+      margin-top: 0;
     }
 
     .markdown-content ul,
