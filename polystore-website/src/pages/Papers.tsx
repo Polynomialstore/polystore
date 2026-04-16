@@ -220,21 +220,32 @@ const MarkdownPage = ({ filePath, title, description, eyebrow = 'PolyStore Resea
   };
 
   const renderBody = (body: ReactNode) => (
-    <div className="px-4 pb-20 pt-24">
+    <div className="px-4 pb-20 pt-20 md:pt-24">
       <div className="container mx-auto max-w-6xl">
-        <div className="max-w-4xl border-b border-border/80 pb-8 md:pb-10">
-          <div className="space-y-3 md:space-y-4">
-            <p className="font-mono-data text-[11px] font-bold uppercase tracking-[0.24em] text-primary">{eyebrow}</p>
-            <h1 className="max-w-4xl text-4xl font-extrabold leading-[1.08] tracking-tight text-foreground sm:text-5xl md:text-[3.7rem]">
-              {title}
-            </h1>
-            {description ? (
-              <p className="max-w-3xl text-base leading-relaxed text-muted-foreground sm:text-lg">{description}</p>
-            ) : null}
-          </div>
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_18rem] xl:gap-8">
+          <motion.header
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="min-w-0"
+          >
+            <div className="glass-panel industrial-border bg-background/90 px-5 py-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
+              <div className="space-y-3 md:space-y-4">
+                <p className="font-mono-data text-[11px] font-bold uppercase tracking-[0.24em] text-primary">{eyebrow}</p>
+                <h1 className="max-w-3xl text-4xl font-extrabold leading-[1.04] tracking-tight text-foreground sm:text-5xl lg:text-[3.65rem]">
+                  {title}
+                </h1>
+                {description ? (
+                  <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">{description}</p>
+                ) : null}
+              </div>
+            </div>
+          </motion.header>
+
+          <div className="hidden xl:block" aria-hidden="true" />
         </div>
 
-        <div className="mt-10 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_18rem] xl:gap-8">
+        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_18rem] xl:gap-8">
           <motion.article
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
