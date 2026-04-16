@@ -220,45 +220,51 @@ const MarkdownPage = ({ filePath, title, description, eyebrow = 'PolyStore Resea
   };
 
   const renderBody = (body: ReactNode) => (
-    <div className="pt-24 pb-20 px-4">
-      <div className="mx-auto max-w-7xl">
-        <div className="border-b border-border/80 pb-8 md:pb-10">
-          <div className="max-w-4xl space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">{eyebrow}</p>
-            <h1 className="text-4xl md:text-5xl font-bold text-foreground leading-tight">{title}</h1>
+    <div className="px-4 pb-20 pt-24">
+      <div className="container mx-auto max-w-6xl">
+        <div className="max-w-4xl border-b border-border/80 pb-8 md:pb-10">
+          <div className="space-y-3 md:space-y-4">
+            <p className="font-mono-data text-[11px] font-bold uppercase tracking-[0.24em] text-primary">{eyebrow}</p>
+            <h1 className="max-w-4xl text-4xl font-extrabold leading-[1.08] tracking-tight text-foreground sm:text-5xl md:text-[3.7rem]">
+              {title}
+            </h1>
             {description ? (
-              <p className="max-w-3xl text-lg text-muted-foreground">{description}</p>
+              <p className="max-w-3xl text-base leading-relaxed text-muted-foreground sm:text-lg">{description}</p>
             ) : null}
           </div>
         </div>
 
-        <div className="mt-8 grid gap-10 xl:grid-cols-[minmax(0,46rem)_15rem] xl:items-start">
+        <div className="mt-10 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_18rem] xl:gap-8">
           <motion.article
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             className="min-w-0"
           >
-            <div className="max-w-3xl bg-background/80 pb-2 backdrop-blur-sm">
+            <div className="glass-panel industrial-border bg-background/90 px-5 py-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
               {body}
             </div>
           </motion.article>
 
           {headings.length > 0 ? (
             <aside className="hidden xl:block xl:sticky xl:top-24">
-              <div className="border-l border-border/80 pl-5">
-                <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">
+              <div className="glass-panel industrial-border bg-background/90 p-5">
+                <p className="font-mono-data text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
                   On This Page
                 </p>
-                <nav aria-label="Document sections">
+                <nav aria-label="Document sections" className="mt-4 max-h-[calc(100vh-8rem)] overflow-auto pr-1">
                   <ul className="space-y-1.5">
                     {headings.map((heading) => (
                       <li key={heading.id}>
                         <button
                           type="button"
                           onClick={() => scrollToHeading(heading.id)}
-                          className={`block text-left text-sm leading-6 text-muted-foreground transition-colors hover:text-foreground ${
-                            heading.depth === 3 ? 'pl-4' : heading.depth >= 4 ? 'pl-8' : ''
+                          className={`block w-full border-l border-transparent py-1 pr-2 text-left text-[13px] leading-5 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground ${
+                            heading.depth === 3
+                              ? 'pl-6'
+                              : heading.depth >= 4
+                                ? 'pl-9 text-[12px] leading-[1.35rem]'
+                                : 'pl-3'
                           }`}
                         >
                           {heading.text}

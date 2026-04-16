@@ -11,6 +11,7 @@
 
 @layer components {
   .markdown-content {
+    max-width: 100%;
     color: hsl(var(--foreground));
     font-size: 1.0625rem;
     line-height: 1.84;
@@ -85,6 +86,7 @@
   .markdown-content p,
   .markdown-content li {
     color: hsl(var(--foreground));
+    overflow-wrap: anywhere;
     text-wrap: pretty;
   }
 
@@ -171,7 +173,9 @@
   }
 
   .markdown-content table {
+    display: block;
     width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
     font-size: 0.98rem;
   }
@@ -198,6 +202,8 @@
     max-width: 100%;
     height: auto;
     margin: 1.5rem 0;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--background));
   }
 
   .markdown-content :where(h2, h3, h4) + :where(p, ul, ol) {
