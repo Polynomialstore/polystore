@@ -1,125 +1,142 @@
 # PolyStore Litepaper
 
-*Research Draft*
+*Revised Draft*
 
-## PolyFS Makes Retrieval Verifiable
+PolyStore is a decentralized storage protocol built around one simple claim: **retrieval is storage proof when it completes under protocol rules**. Instead of treating storage audits and user reads as separate systems, PolyStore turns retrieval into an accountable protocol event. A compact on-chain root anchors each committed generation, the chain assigns providers to ordered stripe slots, and completed retrieval sessions become evidence that the network is actually serving committed data.
 
-PolyFS is the deal filesystem that makes files path-resolvable, proof-addressable, and stripeable under one committed root.
+This litepaper describes the canonical striped design at the protocol level. It is an overview, not a line-by-line specification.
 
-That is the shortest way to understand PolyStore. Files are organized as PolyFS, the current PolyFS state is committed on chain through a compact `manifest_root`, and protocol-accounted remote reads are bound to retrieval sessions. The result is a storage protocol that can keep its on-chain trust anchor small while still making real retrievals direct, checkable, and economically accountable.
+## 1. Why decentralized storage still has a proof gap
 
-The practical value proposition is straightforward. Data owners get one compact on-chain root for large committed datasets. Providers get explicit slot responsibility instead of vague replica ownership. Readers get direct verification against committed structure and the ability to reconstruct reads under bounded provider outages. The protocol pays for real service events rather than only for background audit theater.
+Most decentralized storage systems split two questions that users experience as one.
 
-PolyStore therefore makes three different verification claims, and it helps to state them plainly.
+The first question is whether a provider can pass an audit or periodic proof. The second is whether a user can actually retrieve the requested bytes, within a useful time window, from a provider that can be held accountable for the result. In many systems those answers come from different mechanisms: background storage proofs on one side, ordinary downloads or gateway behavior on the other.
 
-**Data possession verification** checks that specific served shard or blob bytes match the committed structure.
+That separation creates a persistent gap. A network can look healthy in audit terms while real reads are slow, expensive, hard to attribute, or hard to settle fairly. Users, however, do not buy abstract proof participation. They buy the ability to retrieve committed data when they ask for it.
 
-**Range availability, or reconstructability under K-of-N slot availability,** checks that enough healthy slot contributions exist to reconstruct the requested logical bytes under the deal's erasure-coding profile. This is a retrieval-layer reconstructability claim, not a consensus-layer data-availability-sampling claim.
+PolyStore is designed around that operational reality. Its goal is not merely to show that someone probably still has data somewhere. Its goal is to make actual reads direct, checkable, attributable, and payable under one protocol model.
 
-**Retrieval settlement verification** checks that a paid retrieval session was opened against the current committed generation, served within scope, and completed under the protocol's settlement rules.
+## 2. PolyStore’s core claim: Unified Liveness
 
-## PolyFS: One Filesystem for Paths, Proofs, and Striping
+PolyStore closes the proof gap by treating retrieval as the primary liveness event. A completed retrieval session is not just a download that happened to pass through the network. It is protocol evidence that assigned providers served committed data under a pinned scope and within explicit settlement rules.
 
-PolyFS is not just a packing format. It is the deal filesystem that keeps path resolution, proof assembly, and reconstruction planning on the same committed structure.
+This is the protocol’s **Unified Liveness** model: **retrieval is storage proof** when it completes under protocol rules.
 
-The basic units are simple. A **Blob** is the atomic KZG verification unit. In the current profile it is 128 KiB. An **MDU** is the larger retrieval and layout unit. In the current profile it is 8 MiB, so each MDU contains 64 Blobs.
+That matters for both hot and cold data. When demand is organic, real user retrievals supply the evidence. When demand is low, the protocol can open the same kind of session itself and act as the **user of last resort**. Synthetic retrieval is therefore not a separate trust model layered beside ordinary reads. It reuses the same accountable session path.
 
-PolyFS uses those units in three layers:
+The result is a demand-driven performance market. Providers do not earn only for claiming long-term possession in the abstract. They earn for completing retrieval sessions that prove they can serve committed data when demand appears, whether that demand comes from users or from the protocol’s own synthetic checks.
+
+PolyStore makes three narrower verification claims inside that model:
+
+- it can verify that specific served shard or Blob bytes belong to a committed generation;
+- it can verify that a requested logical range is reconstructable from any `K` healthy slot contributions per affected row under the deal’s striped profile; and
+- it can verify that a paid retrieval session completed under protocol rules and should settle.
+
+The second claim is intentionally operational. It is a claim about reconstructability of requested ranges under a striped retrieval model, not a consensus-style data-availability-sampling claim.
+
+The blockchain’s role is therefore specific. It does not store raw files. It anchors one compact `manifest_root` for each committed generation, assigns providers to ordered slot responsibilities, authorizes and funds retrieval sessions, verifies the compact proof and completion conditions needed for settlement, and turns completed retrievals into attributable liveness evidence.
+
+## 3. One committed generation at a time
+
+A PolyStore Deal is mutable as an on-chain object, but its content is not treated as mutable in place. Every content update produces a new committed **generation** with a new `manifest_root`.
+
+That generation model matters because retrieval must remain unambiguous while content changes, repairs, or later updates happen elsewhere in the system. PolyStore therefore uses a strict rule: a retrieval session is pinned to the generation that is current at the moment the session opens. It does not float to a newer root later.
+
+If a Deal advances from generation `H1` to `H2` while a read against `H1` is still in flight, the open session remains bound to `H1`. New reads may target `H2`, but the old session does not silently migrate. That keeps retrieval, proof verification, and settlement scoped to one immutable snapshot.
+
+Updates follow compare-and-swap semantics. The signed update names the previous `manifest_root` it expects to replace. The chain rejects the write if the Deal has already advanced in the meantime. That prevents concurrent writers, stale gateways, or stale local state from overwriting the wrong generation.
+
+Inside each generation, PolyStore uses **PolyFS**, the deal filesystem that makes files path-resolvable, proof-addressable, and stripeable under one committed root.
+
+> Current protocol constants: **Blob = 128 KiB** and **MDU = 8 MiB**. The default striped profile is **RS(8,12)**.
+
+PolyFS organizes a generation into three functional layers:
+
+- **`MDU #0`** is the filesystem anchor used for path resolution.
+- **Witness MDUs** carry proof-index metadata that helps any assigned provider assemble proof paths.
+- **User-data MDUs** carry the committed payload bytes that are later striped across slots.
+
+The key design point is not the naming. It is the alignment. The structure that tells a client where a file lives is also the structure that tells the client how to verify served bytes and how to plan reconstruction.
+
+## 4. Placement and retrieval
+
+PolyStore’s canonical placement model uses an ordered slot map rather than vague replica ownership. Clients may express hot or cold intent, but placement remains system-defined. The chain assigns providers to named slot positions drawn from the eligible set, which reduces direct self-dealing and makes responsibility attributable.
+
+For striped user data, responsibility attaches to the slot, not to a general claim like “one of the replica holders.” Under the default RS(8,12) profile, each row can be reconstructed from any 8 healthy slots, so up to 4 missing slots per row can be tolerated.
+
+```text
+metadata ........ replicated to all assigned providers
+user-data row ... slot0 slot1 slot2 slot3 slot4 slot5 slot6 slot7 slot8 slot9 slot10 slot11
+
+retrieve from any 8 healthy slots for that row
+```
+
+A protocol-accounted read then follows one control-plane path:
+
+1. The client resolves the requested file path and byte range from replicated metadata.
+2. For each affected row, the client chooses healthy slots.
+3. The client opens retrieval sessions pinned to the Deal, the generation current at session open, the named slot responsibilities, the requested Blob-aligned range, the payer, and the expiry.
+4. Providers serve the requested shard Blobs directly, or through an optional gateway that helps with routing or caching.
+5. The client verifies the returned shard Blobs, reconstructs the requested logical bytes from any `K` healthy slot contributions, and decides whether the read completed successfully.
+6. The session settles only if the required proof material and the completion signal arrive before expiry.
+
+This flow makes retrieval legible to the protocol. The bytes move off-chain, but the session boundary, proof boundary, and settlement boundary are explicit.
+
+The client is responsible for path resolution, slot selection, and immediate verification of the bytes it is about to use. The chain is responsible for compact proof validation, expiry rules, and the settlement conditions that determine whether the session completed.
+
+Funding is explicit as well. Retrieval sessions may be **owner-paid**, **requester-paid**, or **protocol-paid**. That matters because public or third-party reads do not need to silently drain long-term storage escrow, and cold-data checks can be funded by the protocol itself without introducing a separate audit system.
+
+The same model also makes failure legible. A session can expire. A provider can fail to answer. A client can route around an unhealthy slot and open a new session against another healthy slot. The replacement read is a new accountable event, not an invisible retry buried inside an off-chain gateway.
+
+## 5. Triple Proof: how a compact root verifies a read
+
+PolyStore does not ask the chain to store full files or replay full retrievals. It asks the chain to anchor one compact `manifest_root` and verify that served bytes link back to that root through a bounded proof path.
+
+That path is the **Triple Proof**:
 
 ```text
 manifest_root
-   |
-   +-- MDU #0 ............ file table and root table for path resolution
-   +-- witness MDUs ...... proof-index metadata
-   +-- user-data MDUs .... actual file bytes, later striped across slots
+   -> target MDU root
+      -> shard/blob commitment
+         -> served bytes
 ```
 
-`MDU #0` is the filesystem anchor. It lets a client resolve a file path into concrete byte ranges and MDU references. Witness MDUs carry the commitment-bearing metadata that lets any serving provider assemble proof paths without relying on a privileged coordinator. User-data MDUs carry the actual bytes the user wants back. Those are the MDUs that become striped data.
+In plain language, the verifier checks three linked facts:
 
-That distinction matters. The proof claim for a read is about bytes in a user-data MDU. Witness MDUs are proof-index metadata, not the thing the user is trying to retrieve. They exist so proof lookup stays practical and decentralized.
+1. the committed generation includes the target MDU;
+2. the target MDU includes the relevant shard or Blob commitment; and
+3. the served bytes are a valid opening of that commitment.
 
-PolyFS is not only useful for proving that a particular shard or byte range belongs to committed data. Combined with striped placement, it also supports verifying that enough slot contributions exist to reconstruct the requested logical bytes. In other words, the same committed structure that tells a client where bytes live also tells the client how to verify membership and how to plan reconstruction.
+Witness MDUs help providers and clients assemble that path, but the proof claim remains about the user-data bytes being served, not about witness bytes themselves.
 
-## Slots, Striping, and Why Reed-Solomon Matters
+This is why the protocol can keep the trust anchor small. Verification stays at Blob-sized units and MDU-local structure. The system does not need to drag entire raw files on chain to verify a real read. It verifies exactly the committed data that was served and exactly the sessions that are meant to settle.
 
-PolyStore's canonical placement model stripes each user-data MDU across an ordered slot map. In the current default profile, each user-data MDU is encoded under RS(8,12): 8 data slots and 4 parity slots.
+## 6. What this architecture buys
 
-A **slot** is a fixed position in each stripe row. The ordered slot map tells the protocol which provider is responsible for each position, so routing and accountability attach to named positions rather than to a fuzzy pool of replicas.
+The first consequence is **accountable retrieval**. PolyStore does not rely on a vague statement that storage and retrieval are somehow related. It uses the same session object to authorize the read, bind it to a pinned generation, prove the served bytes, and settle the event. Real retrievals become real evidence.
 
-```text
-one stripe row under RS(8,12)
+The second consequence is **parallel fan-out with bounded outage tolerance**. A large read does not need to wait on one full replica holder when the requested rows can be reconstructed from any `K` healthy slots. Under the default RS(8,12) profile, a row remains readable through up to four missing slots, and the client can pull shard contributions from multiple providers in parallel.
 
-[slot0][slot1][slot2][slot3][slot4][slot5][slot6][slot7][slot8][slot9][slot10][slot11]
-  data   data   data   data   data   data   data   data   parity  parity   parity   parity
+The third consequence is **direct verification without a privileged gateway**. Gateways may still help with packing, routing, caching, proof assembly, or UX, but they are optional helpers. A client can verify served bytes against the committed generation root without trusting a gateway to be the source of truth.
 
-retrieve from any 8 healthy slots in the row
-```
+The fourth consequence is a clearer separation between **integrity**, **availability**, and **confidentiality**. Integrity comes from the Triple Proof back to `manifest_root`. Reconstructability comes from obtaining enough valid slot contributions under the striped profile. Confidentiality comes from client-side encryption, not from retrieval policy alone.
 
-This gives PolyStore four operational benefits in plain language.
+Those properties support three natural operating modes:
 
-First, it tolerates outages. In general, RS(`K`,`K+M`) preserves retrieval under up to `M` unavailable slots per row.
+- **Hot public content**, where parallel reads and explicit retrieval funding matter most.
+- **Private encrypted datasets**, where served bytes must still be verifiable even though confidentiality lives above the storage layer.
+- **Cold archival content**, where the protocol can become the user of last resort and maintain liveness through synthetic retrieval sessions.
 
-Second, it parallelizes reads. Large retrievals can fan out across multiple providers and multiple rows at once, then reconstruct incrementally. The throughput gain comes from aggregate provider bandwidth and row-level parallelism, not from Reed-Solomon coding somehow making a single disk faster.
+## 7. Trust boundaries, current status, and next steps
 
-Third, it avoids single-provider bottlenecks. A large read does not have to wait on one full replica holder if the requested rows can be assembled from any `K` healthy slots.
+PolyStore’s integrity model is narrower than its marketing risk would suggest, and that is deliberate.
 
-Fourth, it preserves explicit provider responsibility. Metadata remains replicated so any assigned provider can resolve paths and assemble proof context, but user-data responsibility is still slot-specific and therefore attributable.
+It does not claim that access control is the same as privacy. Restricted retrieval policy controls who may open user or sponsored retrieval sessions, but confidentiality still depends on client-side encryption. It does not claim that gateways disappear. Gateways remain useful for convenience and performance, but they are not the trust anchor. It does not claim that a compact root removes all retrieval complexity. The protocol still has to plan slot selection, move bytes, and handle failure explicitly.
 
-## Retrieval Sessions Turn Reads Into Protocol Events
+This litepaper also distinguishes the canonical design from the full roadmap. The striped generation model, ordered slot accountability, retrieval-session funding and settlement model, and Triple Proof are the design center. Historical full-replica behavior is compatibility only. The document should not be read as a claim that every policy module is already shipped end to end. Some broader policy layers remain under active development, including elastic multi-stripe scaling, provider rotation and rebalancing, deputy or proxy serving patterns, and some quota and penalty parameters for long-horizon challenge policy.
 
-Every protocol-accounted remote read is sessionized. Retrieval sessions are the control-plane object that turns off-chain byte transfer into something the protocol can authorize, price, verify, and settle.
+The core thesis does not depend on every one of those policy layers being finalized. One compact generation root, explicit generation pinning, system-defined placement, slot-accountable striping, and sessionized retrieval are already enough to state the protocol’s main claim clearly:
 
-At open, a retrieval session pins the deal, the current `manifest_root`, the responsible slot or provider, the requested blob-aligned range, the payer, a nonce, and an expiry. In the current model, opening the session also locks or burns the relevant retrieval fees according to policy, so the funding source is explicit before bytes move. Sessions may be owner-paid, requester-paid, or protocol-paid, depending on who is authorized to open the read and which budget is being used. Deal policy can restrict who may open user retrieval sessions, but that access-control surface is not the same thing as privacy.
+**decentralized storage should prove itself through served bytes, not only through separate audit theater.**
 
-Serving then stays inside that envelope. Providers are expected to serve only the declared range and to return the proof material tied to that committed range. The client verifies what it receives against committed structure and, in the striped case, reconstructs the requested logical bytes from the selected healthy slots.
-
-Settlement is defined on completion, not on vague progress claims. If the required proof material and the completion signal arrive before expiry, the session can settle. If the session times out or never reaches completion, the provider does not receive a completion payout under the normal settlement path. Partial transfer may happen on the wire, but the litepaper's core accounting claim is whole-session completion rather than partial-byte payout.
-
-The verification boundary is also explicit. The client handles path resolution, slot selection, row reconstruction, and immediate safety checks for the data it is about to use. The chain handles the compact proof checks and the session rules needed for settlement: pinned `manifest_root`, slot responsibility, proof validity, expiry, and completion conditions. A gateway may help with routing, caching, or reconstruction, but it is a convenience layer rather than the trust anchor.
-
-## Proof Path and Why the Cost Stays Bounded
-
-PolyStore's proof path is compact because PolyFS keeps the verification boundaries aligned with storage boundaries.
-
-```text
-served shard/blob bytes
-        |
-        v
-opening against the relevant shard/blob commitment
-        |
-        v
-proof that the shard/blob belongs to the target user-data MDU
-        |
-        v
-opening of that MDU against the deal's manifest_root
-
-witness MDUs help assemble this path, but the claim remains about user-data bytes
-```
-
-Conceptually, the verifier checks three linked facts. First, the target user-data MDU is committed under the deal's `manifest_root`. Second, the relevant shard or blob commitment belongs to that user-data MDU. Third, the served bytes are a valid opening of that commitment. In the striped case, the proof must also be attributable to the provider responsible for the relevant slot.
-
-Why this stays practical is not that "KZG is magic." It is that verification stays at blob-sized units and MDU-local structure. The system does not ask the chain or the client to replay whole files, perform sealing-style work, or drag the entire raw object through settlement. Proof objects stay compact because the layout was designed for proof-addressable retrieval from the start.
-
-The overhead story is also explicit rather than hidden. PolyFS metadata overhead is mainly `MDU #0` plus the witness MDUs. Striping overhead is the Reed-Solomon expansion from `K` to `K+M`. Additional slot-aligned placements are a separate scaling choice, not hidden duplication. When demand grows, that is the preferred way to add capacity while preserving the same slot-accountability model. Those costs are the price of bounded outage tolerance, parallel retrieval, and accountable verification.
-
-## One File, End to End
-
-Use one fixed example. A data owner wants to store a 64 MiB payload. Here, **64 MiB means payload bytes only**. Because each user-data MDU is 8 MiB, the payload occupies 8 user-data MDUs. PolyFS then adds `MDU #0` and the required witness MDUs as separate metadata overhead.
-
-The owner prepares the file as PolyFS. `MDU #0` records how the file maps into the deal. The witness MDUs hold the proof-index metadata. The 8 user-data MDUs hold the content itself. Each user-data MDU is then encoded under RS(8,12) and assigned across 12 ordered slots with assigned providers. Metadata is replicated to the assigned providers; user data is striped by slot. Once the full layout is ready, the owner commits the resulting `manifest_root` on chain. The deal now has one compact trust anchor for the payload plus its committed filesystem structure.
-
-Later, a reader wants a 256 KiB range inside one user-data MDU. Because the protocol accounts in blob-aligned units, that request corresponds to two 128 KiB Blobs. The reader opens the required retrieval sessions, each pinned to the current `manifest_root`, the responsible slot assignment, the requested blob range, the payer, and the expiry.
-
-To satisfy the read, the client resolves the file path through `MDU #0`, uses the witness MDUs to assemble the proof context, selects healthy slots for the needed stripe rows, fetches shard data and proof material, and reconstructs the requested logical bytes. If one or more slots are unavailable, the read can still succeed so long as each involved row still has any 8 healthy slots. More generally, RS(`K`,`K+M`) tolerates up to `M` missing slots per row.
-
-The throughput story is equally direct. For a larger read, the client can pull shard data from multiple providers in parallel and reconstruct rows incrementally as they arrive. The benefit comes from aggregating provider links across the selected slots, not from pretending that coding alone creates free bandwidth.
-
-Verification still follows the same compact path: the served bytes open against the relevant shard or blob commitment for the target user-data MDU, the proof path shows that commitment belongs to that committed user-data MDU, and the user-data MDU is opened against the deal's `manifest_root`. Witness MDUs supply the proof-index metadata used to assemble that path. Once the required proof material is submitted and the session completes under policy, the protocol can settle the event.
-
-## What PolyStore Is Claiming, and What It Is Not
-
-PolyStore's claim is narrow but useful. By organizing content as PolyFS, the protocol can keep files path-resolvable, proof-addressable, and stripeable under one committed root. That makes it possible to verify possession of served bytes, verify reconstructability of requested ranges under bounded slot outages, and settle paid retrievals against the same compact commitment anchor.
-
-PolyStore is not claiming that access control equals privacy, that gateways disappear, or that a compact root removes all retrieval complexity. Confidentiality still comes from client-side encryption. Gateways remain useful for convenience, caching, and UX. Repair, elasticity, and retrieval policy still require disciplined protocol design.
-
-The practical advantage is simpler than the mechanism: **a small root, explicit slot responsibility, direct verification, K-of-N resilience, and paid reads tied to real service.**
+By making retrieval the accountable event, PolyStore ties storage, performance, and payment to the same read path.
