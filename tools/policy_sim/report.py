@@ -1205,10 +1205,10 @@ def write_line_svg(
     secondary_label: str = "",
 ) -> None:
     width = 860
-    height = 440
+    height = 420
     left = 86
     right = 36
-    top = 96
+    top = 78
     bottom = 78
     plot_width = width - left - right
     plot_height = height - top - bottom
@@ -1266,14 +1266,13 @@ def write_line_svg(
     if secondary:
         secondary_polyline = f'<polyline fill="none" stroke="#d97706" stroke-width="2.5" points="{points(secondary)}" />'
         secondary_legend = f'''
-  <line x1="{left + 190}" y1="72" x2="{left + 220}" y2="72" stroke="#d97706" stroke-width="3"/>
-  <text x="{left + 226}" y="76" font-family="sans-serif" font-size="12" fill="#374151">{escape_xml(secondary_label or "Secondary")}</text>'''
+  <line x1="{left + 190}" y1="52" x2="{left + 220}" y2="52" stroke="#d97706" stroke-width="3"/>
+  <text x="{left + 226}" y="56" font-family="sans-serif" font-size="12" fill="#374151">{escape_xml(secondary_label or "Secondary")}</text>'''
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <text x="{left}" y="26" font-family="sans-serif" font-size="18" font-weight="700" fill="#111827">{escape_xml(title)}</text>
-  <text x="{left}" y="48" font-family="sans-serif" font-size="12" fill="#6b7280">Scale: x=epoch, y={escape_xml(title)}; displayed range {escape_xml(axis_tick(lo))} to {escape_xml(axis_tick(hi))}</text>
-  <line x1="{left}" y1="72" x2="{left + 30}" y2="72" stroke="#2563eb" stroke-width="3"/>
-  <text x="{left + 36}" y="76" font-family="sans-serif" font-size="12" fill="#374151">{escape_xml(primary_label)}</text>
+  <line x1="{left}" y1="52" x2="{left + 30}" y2="52" stroke="#2563eb" stroke-width="3"/>
+  <text x="{left + 36}" y="56" font-family="sans-serif" font-size="12" fill="#374151">{escape_xml(primary_label)}</text>
   {secondary_legend}
   <rect x="{left}" y="{top}" width="{plot_width}" height="{plot_height}" fill="#ffffff" stroke="#d1d5db"/>
   {"".join(y_grid)}
