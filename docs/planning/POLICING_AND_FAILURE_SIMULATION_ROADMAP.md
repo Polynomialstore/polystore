@@ -52,6 +52,21 @@ The remaining work is to organize these mechanisms into an explicit reliability
 and policing program, then calibrate the policy using simulations, keeper tests,
 and selected process-level devnet e2e scenarios.
 
+### 3.1 Review Findings Resolved in This Pass
+
+This pass reviewed the roadmap against `spec.md`, `ECONOMY.md`,
+`MAINNET_ECON_PARITY_CHECKLIST.md`, and the economics RFCs. The main concerns
+were:
+
+| Concern | Why it mattered | Resolution in this roadmap |
+|---|---|---|
+| Economic self-calibration was implicit, not a first-class workstream. | The target network depends on storage pricing, retrieval pricing, rewards, audit budget, and elasticity converging together. | Added a dedicated financial market section and expanded goals, metrics, scenarios, workstreams, and DoD. |
+| Policing could be interpreted as only fault detection and slashing. | The intended system also uses pricing, escrow, reward exclusion, bond requirements, and spend caps as primary control surfaces. | Added economic control loops and market-failure scenarios before punitive rollout. |
+| Provider behavior was modeled without provider profit and cost. | A provider can be honest but economically unable to remain in the active set if prices or subsidies are wrong. | Added provider P&L, cost shocks, utilization, churn, and fee-vs-issuance metrics to the simulator requirements. |
+| Elasticity was described operationally but not financially. | Overlay expansion must be demand-funded and bounded by user escrow and spend windows. | Added explicit elasticity accounting invariants and viral-demand scenarios. |
+| Audit and deputy behavior lacked a full market-clearing view. | Audit budget, deputy premiums, evidence bonds, and bounties can underpay honest work or invite spam. | Added audit/deputy market metrics, scenarios, and calibration gates. |
+| Completion criteria did not require economic equilibrium evidence. | A network can be reliable in a short devnet and still economically unstable. | Added fee-dominant steady-state, price convergence, and anti-wash DoD items. |
+
 ## 4. Goals
 
 1. Maintain availability under normal failures.
@@ -61,6 +76,12 @@ and selected process-level devnet e2e scenarios.
 5. Make repair, reward exclusion, jailing, and slashing explainable.
 6. Produce quantitative outputs for every policy change.
 7. Keep simulation scenarios aligned with real chain and gateway concepts.
+8. Model the financial market as a deterministic control system, not only as
+   reward constants.
+9. Calibrate toward a fee-dominant equilibrium where marginal honest providers
+   can cover costs primarily from user-funded storage and retrieval fees.
+10. Make price, escrow, reward, audit, and elasticity changes testable before
+    they become consensus-critical defaults.
 
 ## 5. Non-Goals
 
@@ -69,6 +90,9 @@ and selected process-level devnet e2e scenarios.
 3. Do not make the simulator a parallel protocol with fantasy state.
 4. Do not promote every simulation scenario into a slow e2e test.
 5. Do not rely on provider goodwill or gateway trust for correctness.
+6. Do not tune market parameters from one happy-path devnet run.
+7. Do not use dynamic pricing to hide missing accounting, missing evidence, or
+   insufficient provider incentives.
 
 ## 6. Failure Taxonomy
 
@@ -87,6 +111,12 @@ and selected process-level devnet e2e scenarios.
 | Deputy evidence spam | Deputy submits many low-quality failure claims. | Evidence-market signal | Evidence bond, burn-on-expiry, bounty only on conviction. |
 | Gateway misbehavior | Gateway withholds, rewrites, or misroutes requests. | Client/provider observable | Gateway is not a trust anchor; clients and chain verify roots/sessions. |
 | Coordinated provider failure | Multiple assigned slots fail together. | Mixed | Availability threshold analysis, repair backlog controls, operator alerts. |
+| Underpriced storage | Storage price does not cover honest provider cost at target utilization. | Market simulation / chain params | Price controller tuning, subsidy review, assignment throttling. |
+| Overpriced storage | Storage price suppresses user demand or causes systematic escrow underfunding. | Market simulation / user telemetry | Price bounds, quote UX, governance/default review. |
+| Price oscillation | Dynamic pricing overreacts to utilization or retrieval bursts. | Chain state / simulator | Step clamps, EMA windows, dampening, delayed activation. |
+| Wash retrieval traffic | Actors create fake retrievals to farm rewards or credits. | Session accounting / burn economics | Mandatory burns, credit caps, requester-paid sessions, anomaly alerts. |
+| Viral debt | Public or hot content exhausts escrow during a traffic spike. | Escrow/spend-window state | Sponsored sessions, top-ups, rate limiting, bounded elasticity. |
+| Subsidy farming | Providers create storage responsibility mainly to extract emissions. | Reward/accounting analysis | Fee-backed rent base, compliance gating, burn unearned rewards. |
 
 ## 7. Evidence Classes
 
@@ -138,6 +168,15 @@ The program should standardize metrics before adding more enforcement:
 | Provider concentration | Detects placement capture risk. |
 | Audit budget utilization | Shows whether audit policy is underfunded or overminting. |
 | Evidence conviction ratio | Detects spam if too low and systemic outage if too high. |
+| Storage utilization | Drives storage price and supply calibration. |
+| Retrieval demand by epoch | Drives retrieval price calibration and hot-deal routing. |
+| Storage price trajectory | Detects underpricing, overpricing, and oscillation. |
+| Retrieval price trajectory | Detects spam pressure, affordability issues, and burst sensitivity. |
+| Provider profit/loss | Shows whether honest marginal providers can remain online. |
+| Fee-vs-issuance share | Measures progress toward fee-dominant equilibrium. |
+| Burn/mint ratio | Detects missing sinks, excessive burns, or reward starvation. |
+| Escrow runway | Shows whether users can sustain committed storage and expected retrievals. |
+| Elasticity spend-window usage | Shows whether demand-funded scaling is useful or cap-bound. |
 
 Every scenario should define expected bounds for the metrics it exercises.
 
@@ -161,6 +200,10 @@ The logical simulator should remain anchored to real protocol state:
 6. Deputy-served evidence and audit debt.
 7. `ACTIVE` / `REPAIRING` slot lifecycle.
 8. Draining and deterministic replacement selection.
+9. Storage and retrieval pricing parameters.
+10. Deal escrow, spend windows, and sponsored requester funding.
+11. Base reward pool, audit budget, burns, and provider payouts.
+12. Provider costs, capacity, bond requirements, and churn behavior.
 
 ## 11. Scenario Matrix
 
@@ -179,6 +222,13 @@ The logical simulator should remain anchored to real protocol state:
 | Deputy evidence spam | Is spam uneconomic? | Bond burn exceeds expected spam gain. | Evidence-market keeper tests. |
 | Audit budget exhaustion | Does the system degrade predictably? | Backlog grows, no unbounded mint. | Audit budget cap tests. |
 | Coordinated regional outage | What is the availability cliff? | Success drops only when fewer than `K` slots remain. | Nightly/long-running multi-SP tests. |
+| Underpriced supply collapse | Do honest providers churn when price is below cost? | Provider P&L turns negative and capacity exits. | Dynamic pricing and subsidy calibration tests. |
+| Overpriced demand collapse | Does high price suppress useful demand? | New deal creation and retrieval demand fall below target. | Quote UX and pricing-bound tests. |
+| Price oscillation | Does the controller converge after demand shocks? | Price remains within bounds and settles without repeated overshoot. | Epoch pricing keeper tests. |
+| Wash traffic | Can fake retrievals profit from rewards or credits? | Burn and fees exceed expected reward or credit value. | Session fee, credit cap, and anomaly tests. |
+| Viral public retrieval | Does public demand scale without draining owner escrow? | Sponsored sessions fund retrieval; owner escrow remains stable. | Sponsored-session e2e. |
+| Elasticity cap hit | What happens when demand exceeds user budget? | Scaling stops cleanly and service is rate-limited, not unbounded. | `MsgSignalSaturation` spend-window e2e. |
+| Subsidy farming | Can providers earn emissions without useful service? | Non-compliant or idle responsibility is unrewarded or uneconomic. | Base reward compliance tests. |
 
 ## 12. Milestone Sequence
 
@@ -219,11 +269,17 @@ Deliverables:
 3. Repair cooldown and attempt cap recommendations.
 4. Evidence bond and bounty calibration.
 5. Audit budget sizing recommendations.
+6. Storage and retrieval pricing controller parameters.
+7. Base reward start/tail bps and halving interval recommendations.
+8. Elasticity cost, spend-window, and TTL recommendations.
+9. Provider cost assumptions and marginal-provider profitability report.
 
 Exit criteria:
 
 1. Chosen parameters have documented metric tradeoffs.
 2. False-positive rates are tracked explicitly.
+3. Economic parameters have documented convergence, affordability, and
+   provider-profitability tradeoffs.
 
 ### Milestone 3: Keeper Test Graduation
 
@@ -324,7 +380,7 @@ A scenario should not move to punitive enforcement until:
 | `polystore_gateway` user-gateway mode | Session planning, route selection, fallback, error classification, user-facing retrieval behavior. |
 | `polystore_gateway` provider-daemon mode | Byte serving, session validation, proof headers, provider-side session durability, protocol audit/repair handling. |
 | `polystore-website` | Degraded-state UX, provider/slot visibility, clear route and repair status. |
-| `tools/policy_sim` | Fast deterministic policy simulation and quantitative scenario assertions. |
+| `tools/policy_sim` | Fast deterministic policy, reliability, and market simulation with quantitative scenario assertions. |
 | `scripts/e2e_*` | Slow confirmation for critical real-stack failure scenarios. |
 | Docs/RFCs | Evidence taxonomy, policy defaults, operational runbooks, launch posture. |
 
@@ -372,6 +428,12 @@ At maturity, the network should provide:
    slashing all have explicit evidence classes and event reason codes.
 8. **Operational clarity:** users, provider operators, and maintainers can see
    why a route, repair, demotion, promotion, or penalty occurred.
+9. **Financial self-calibration:** storage price, retrieval price, issuance,
+   burns, rewards, audit budget, and elasticity spending move toward a stable
+   operating point.
+10. **Fee-dominant steady state:** protocol issuance bootstraps reliability,
+    but honest providers can eventually cover marginal cost mostly from
+    user-funded storage and retrieval demand.
 
 The rest of this document should be read as the implementation map to reach
 that state.
@@ -591,6 +653,12 @@ Implementation requirements:
 5. Avoid slashing based solely on latency unless a future threshold-evidence
    design makes it defensible.
 
+Performance-market rewards should be simulated together with provider costs.
+A provider that is consistently `Silver` may still be useful for cold data, but
+should not be able to dominate hot placement or earn high-bandwidth rewards.
+Likewise, `Platinum` providers should receive more opportunity only while
+assignment caps, operator concentration limits, and bond headroom stay healthy.
+
 ## 22. Elasticity and Overflow Scaling
 
 The spec describes user-funded elasticity and saturation signaling. The current
@@ -623,6 +691,20 @@ Simulation requirements:
 3. Measure time to absorb traffic surge.
 4. Measure whether elasticity causes provider concentration.
 5. Verify spend-window caps prevent unbounded user cost.
+6. Verify sponsored public retrievals do not drain owner escrow.
+7. Verify scale-up and scale-down hysteresis prevents oscillation.
+8. Verify overlay providers become accountable for the service they are paid to
+   provide.
+
+Economic invariants:
+
+1. A scaling event must fail closed if `Deal.escrow_balance` or
+   `Deal.max_monthly_spend` cannot pay for it.
+2. Scaling should add capacity only for a minimum TTL long enough to amortize
+   replication cost.
+3. Overlay providers must not dilute accountability for base slots.
+4. Elasticity should degrade into rate limiting when unfunded, not into
+   unbounded protocol subsidy.
 
 ## 23. Chain and Consensus Implementation Scope
 
@@ -646,6 +728,14 @@ Potential state additions:
 10. `AssignmentCollateral(provider, deal_id, slot)`.
 11. `ProviderJailState(provider)`.
 12. Overlay or elasticity state for high-demand deals.
+13. `DynamicPricingState(epoch)`.
+14. `TotalActiveSlotBytes` accumulator.
+15. `RetrievalDemandState(epoch)`.
+16. `RewardPoolState(epoch)`.
+17. `AuditBudgetState(epoch)`.
+18. `DealSpendWindow(deal_id)`.
+19. `SponsoredSessionFunding(session_id)`.
+20. `ProviderPayoutLedger(provider, epoch)`.
 
 ### 23.2 Params
 
@@ -663,6 +753,11 @@ Likely params:
 10. Audit budget sizing and carryover.
 11. Evidence bond, bounty, and burn-on-expiry.
 12. Overlay elasticity spend and churn caps.
+13. Dynamic pricing enablement, min/max bounds, targets, and max step bps.
+14. Base reward start bps, tail bps, halving interval, and start height.
+15. Retrieval burn bps and base fee defaults.
+16. Storage and retrieval affordability floors for devnet/testnet launch.
+17. Assignment collateral formula and bond months.
 
 ### 23.3 Messages
 
@@ -677,6 +772,10 @@ Likely messages:
 6. `MsgSignalSaturation` hardening for Mode 2 overlay elasticity.
 7. `MsgUpdateProviderBond` or staking integration.
 8. `MsgUpdateProviderCapabilities` or capability attestation.
+9. `MsgOpenRetrievalSessionSponsored` for requester-funded public retrieval.
+10. `MsgOpenProtocolRetrievalSession` for audit, repair, and healing.
+11. `MsgCloseDeal` or explicit expiry/escrow-close path.
+12. Governance or authority-gated `MsgUpdateMarketParams`.
 
 ### 23.4 Queries and Events
 
@@ -692,6 +791,11 @@ Queries/events should make the system explainable:
 8. Reward eligibility and exclusion reason.
 9. Jail/slash history.
 10. Elasticity overlays and spend-window usage.
+11. Current storage and retrieval price with prior-epoch deltas.
+12. Storage utilization and retrieval demand inputs used by pricing.
+13. Base reward pool minted, paid, and burned by epoch.
+14. Audit budget minted, spent, carried over, and exhausted by epoch.
+15. Provider revenue, slash, burn, and reward-exclusion summaries.
 
 ## 24. Provider-Daemon Implementation Scope
 
@@ -801,6 +905,12 @@ The simulator should model:
    failures.
 6. Adversaries such as corrupt providers, withholding providers, lazy
    providers, Sybil operators, replacement grinders, and evidence spammers.
+7. Market state such as storage utilization, retrieval demand, storage price,
+   retrieval price, reward pools, burns, and audit budget.
+8. Provider economics such as storage cost, bandwidth cost, fixed operator
+   cost, bond opportunity cost, revenue, slashing, and churn threshold.
+9. User economics such as escrow balance, spend windows, retrieval budget,
+   sponsored-session demand, top-up behavior, and willingness to pay.
 
 ### 27.2 Scenario DSL
 
@@ -840,6 +950,10 @@ Standard outputs:
 4. Evidence and consequence ledger.
 5. Parameter sensitivity report.
 6. Scenario comparison report for changed policy parameters.
+7. Price trajectory and convergence report.
+8. Provider P&L and churn report.
+9. Fee, burn, mint, reward, and audit-budget accounting report.
+10. Escrow runway and elasticity-spend report.
 
 ### 27.4 Simulator Tests
 
@@ -852,6 +966,10 @@ The simulator itself needs tests:
 5. Repair/promotion state machine tests.
 6. Credit/quota accounting tests.
 7. Regression fixtures for canonical scenarios.
+8. Dynamic pricing convergence and step-clamp tests.
+9. Reward pool mint/pay/burn accounting tests.
+10. Sponsored retrieval and owner-escrow isolation tests.
+11. Provider P&L and churn-threshold tests.
 
 ## 28. Code Implementation Workstreams
 
@@ -867,6 +985,9 @@ This program should be split into workstreams that can land independently.
 | Evidence/deputies | Add threshold evidence and incentives. | Chain keeper, gateway/provider proof paths |
 | Bonding/slashing | Make penalties economically meaningful. | Chain keeper/bank/staking integration |
 | Elasticity overlays | Add user-funded overflow capacity. | Chain state, gateway routing, provider storage |
+| Market simulator | Model price, demand, supply, provider P&L, burn/mint, and elasticity convergence. | `tools/policy_sim`, future economics reports |
+| Pricing and escrow | Implement storage lock-in, retrieval settlement, sponsored sessions, spend windows, and close/refund semantics. | Chain keeper, EVM bridge, website quoting |
+| Rewards and audit funding | Implement base rewards, compliance gating, reward burns, audit budget, and protocol session funding. | Chain keeper, epoch hooks |
 | Observability | Explain state and consequences. | Queries, events, website, dashboards |
 | E2E harness | Prove real-stack behavior for critical scenarios. | `scripts/e2e_*`, Playwright, provider fault modes |
 
@@ -885,6 +1006,10 @@ CI should cover:
 4. One provider unavailable during retrieval, read succeeds from other slots.
 5. One setup slot upload fails, setup bump succeeds, commit succeeds.
 6. Quota miss triggers `REPAIRING` in keeper tests, not necessarily full stack.
+7. Upload quote matches storage lock-in charge on commit.
+8. Retrieval open/complete burns and pays exactly as quoted.
+9. Sponsored retrieval does not debit owner deal escrow.
+10. Elasticity spend-window rejection is deterministic when cap is exhausted.
 
 ### 29.2 Nightly or Manual E2E
 
@@ -900,6 +1025,11 @@ Nightly/manual should cover:
 8. Elasticity/overflow under sustained hot-deal demand.
 9. Regional/correlated outage simulation.
 10. Restart durability during sessions and repairs.
+11. Dynamic pricing under storage utilization shock.
+12. Dynamic pricing under retrieval demand spike.
+13. Audit budget exhaustion and carryover behavior.
+14. Provider cost shock causing churn and replacement pressure.
+15. Wash-traffic attack with burns, credit caps, and reward accounting enabled.
 
 ### 29.3 Fault Injection Requirements
 
@@ -939,6 +1069,16 @@ Required event reason codes:
 15. `provider_draining`
 16. `elasticity_overlay_added`
 17. `repair_backoff_entered`
+18. `storage_price_updated`
+19. `retrieval_price_updated`
+20. `base_reward_pool_minted`
+21. `base_reward_remainder_burned`
+22. `audit_budget_minted`
+23. `audit_budget_exhausted`
+24. `sponsored_session_opened`
+25. `elasticity_spend_rejected`
+26. `provider_underbonded`
+27. `provider_profitability_at_risk`
 
 Recommended dashboards:
 
@@ -952,6 +1092,14 @@ Recommended dashboards:
 8. Hot-deal saturation and elasticity spend.
 9. Provider concentration and Sybil-risk indicators.
 10. False positive review queue for trusted devnet.
+11. Storage and retrieval price trajectories.
+12. Storage utilization vs target utilization.
+13. Retrieval demand vs target demand.
+14. Fee-vs-issuance share.
+15. Burn/mint ratio.
+16. Provider revenue, P&L estimates, and churn risk.
+17. Escrow runway and sponsored-session volume.
+18. Dynamic pricing controller changes by epoch.
 
 ## 31. Definition of Done for a Fully Functioning Implementation
 
@@ -980,6 +1128,18 @@ The policing milestone is not complete until all of these are true:
 13. Operators and users can inspect why a provider or slot changed state.
 14. Launch configs can choose measure-only, repair-only, reward-exclusion,
     jail, or slash modes.
+15. Storage and retrieval prices converge under modeled demand and supply
+    shocks without repeated oscillation.
+16. Honest marginal providers can cover modeled storage, bandwidth, fixed, and
+    bond costs under the target fee/subsidy mix.
+17. Fee-funded revenue becomes the dominant provider income path as issuance
+    decays toward tail emission.
+18. Wash retrieval, subsidy farming, and public-retrieval escrow drain are
+    uneconomic in canonical simulations.
+19. Audit budget can clear expected protocol audit and repair load without
+    unbounded minting.
+20. Elasticity either scales demand-funded capacity or fails closed into
+    explicit rate limiting when unfunded.
 
 ## 32. Expanded Immediate Planning Tasks
 
@@ -1000,8 +1160,130 @@ Before implementing the next large slice:
 9. Map each canonical scenario to exact chain, gateway, provider, UI, and e2e
    tests.
 10. Decide which process-level e2e tests are CI-grade versus nightly/manual.
+11. Decide the first economic scenarios and target metrics:
+    underpriced supply, overpriced demand, price oscillation, wash traffic,
+    viral retrieval, and subsidy farming.
+12. Define provider cost assumptions for devnet/testnet simulation.
+13. Decide whether dynamic pricing remains disabled, measure-only, or active
+    during trusted devnet.
+14. Decide the escrow close/refund semantics needed before fee-dominant
+    equilibrium analysis is meaningful.
 
-## 33. Open Questions
+## 33. Financial Market and Self-Calibration
+
+The target network is not only a failure detector. It is a deterministic market
+that should continually rebalance storage supply, retrieval demand, protocol
+subsidy, audit load, and user-funded elasticity.
+
+### 33.1 Intended Equilibrium
+
+The long-run target is a fee-dominant steady state:
+
+1. Users pay storage lock-in charges when content is committed.
+2. Requesters pay retrieval fees through mandatory sessions.
+3. Providers earn from successful retrievals and quota-compliant storage
+   responsibility.
+4. Protocol issuance bootstraps storage supply and liveness, then decays toward
+   a bounded tail.
+5. Audit and repair are funded by a bounded protocol budget derived from
+   notional slot rent.
+6. Burns and failed-reward remainders prevent free spam, wash traffic, and
+   cartel reward leakage.
+7. Elasticity is demand-funded and bounded by escrow and spend windows.
+
+Success means the marginal honest provider can remain profitable without the
+network depending indefinitely on large emissions, while users receive
+predictable quotes and explicit rate limits when demand exceeds funded capacity.
+
+### 33.2 Market Control Loops
+
+The simulator and keeper tests should treat these loops as first-class:
+
+| Loop | Input signal | Protocol action | Failure to detect |
+|---|---|---|---|
+| Storage pricing | Active slot bytes vs active provider capacity | Update or recommend `storage_price` within bounds. | Underpriced supply collapse or overpriced demand collapse. |
+| Retrieval pricing | Prior-epoch session blob demand | Update or recommend `retrieval_price_per_blob` within bounds. | Spam pressure, unaffordable reads, or burst oscillation. |
+| Storage lock-in | New committed bytes and remaining duration | Charge `ceil(storage_price * delta * duration)` into escrow. | Underfunded storage or inconsistent quote/sign behavior. |
+| Retrieval settlement | Opened, completed, expired, and canceled sessions | Burn base fee, lock variable fee, pay provider on completion, refund eligible cancels. | Free bytes, owner-escrow drain, unpaid honest service. |
+| Base rewards | Storage price and total active slot bytes | Mint bounded reward pool, pay compliant active slots, burn remainder. | Subsidy farming, reward leakage, or provider starvation. |
+| Audit budget | Epoch slot rent and audit backlog | Mint bounded audit budget and fund protocol sessions. | Audit debt growth or unbounded protocol subsidy. |
+| Elasticity | Saturation and retrieval load EMA | Add overlay capacity only within escrow/spend caps and TTL. | Viral debt, provider concentration, or oscillating overlays. |
+| Provider supply | Profitability, health, bond, capacity, and churn | Promote, demote, repair, exclude, or throttle assignments. | Honest churn, Sybil concentration, or over-assignment. |
+
+### 33.3 Economic State to Model
+
+The policy simulator should include at least:
+
+1. Provider cost model: storage cost, bandwidth cost, fixed cost, bond
+   opportunity cost, and churn threshold.
+2. User demand model: write demand, read demand, public/sponsored reads,
+   top-up behavior, and willingness to pay.
+3. Supply model: provider capacity, bandwidth, assignment caps, region,
+   lifecycle state, and bond headroom.
+4. Price controller: utilization target, demand target, min/max bounds, step
+   clamp, EMA windows, and enabled/measure-only mode.
+5. Escrow model: storage lock-in, retrieval locks, sponsored-session payer
+   isolation, spend-window accounting, and deal close/refund semantics.
+6. Emission model: base reward start/tail bps, halving interval, reward
+   eligibility, and burned remainder.
+7. Audit model: audit budget bps, cap bps, carryover, backlog, and fairness.
+8. Anti-abuse model: burn cost, evidence bond, deputy bounty, credit caps,
+   session uniqueness, and wash-traffic profitability.
+
+### 33.4 Economic Scenarios
+
+The canonical economic scenarios should run alongside reliability scenarios:
+
+| Scenario | Question | Expected assertion |
+|---|---|---|
+| Underpriced storage | Does provider supply leave when price is below cost? | Honest provider churn rises and capacity drops until price/subsidy changes. |
+| Overpriced storage | Does demand collapse or escrow funding fail? | Deal creation or committed bytes fall below target; quote rejection rises. |
+| Storage price shock | Does the controller converge after supply/demand changes? | Price changes stay within step bounds and settle near target utilization. |
+| Retrieval demand spike | Does retrieval pricing and elasticity absorb burst demand? | Reads remain paid and attributable; overlays spawn only when funded. |
+| Viral public content | Can third-party demand pay without draining owner escrow? | Sponsored sessions carry public retrieval cost; owner escrow stays stable. |
+| Wash retrieval | Can fake reads profit from rewards or credits? | Base burns, variable burns, and credit caps make the strategy negative EV. |
+| Subsidy farming | Can inactive providers farm emissions from slot responsibility? | Non-compliant slots earn zero or insufficient rewards; remainders burn. |
+| Audit budget exhaustion | Does protocol audit load exceed funding? | Backlog and alerts grow, but minting remains capped. |
+| Cost shock | What if bandwidth or storage costs double? | Provider P&L and churn reflect pressure before availability collapses. |
+| Elasticity cap hit | What if demand exceeds budget? | Scaling fails closed and route/rate-limit state is visible. |
+
+### 33.5 Implementation Integration
+
+The economic implementation should be staged:
+
+1. **Measure-only accounting:** expose prices, charges, rewards, burns, and
+   budgets without dynamic parameter changes.
+2. **Frozen accounting tests:** harden storage lock-in, retrieval settlement,
+   spend windows, sponsored sessions, protocol sessions, and reward burns.
+3. **Market simulator:** model supply, demand, provider P&L, and price
+   controller behavior across seeded scenarios.
+4. **Keeper graduation:** add deterministic epoch tests for pricing, reward
+   pools, audit budget, and elasticity caps.
+5. **E2E confirmation:** verify quote-to-charge parity, retrieval
+   burn/payout, sponsored-session isolation, and saturation spend rejection.
+6. **Dynamic pricing trial:** enable measure-only or devnet-only price updates
+   with conservative bounds and dashboard alerts.
+7. **Governance launch posture:** decide which market params are fixed,
+   dynamic, governance-adjustable, or disabled for each launch phase.
+
+### 33.6 Economic Definition of Done
+
+The financial market portion is not complete until:
+
+1. A fixed-seed simulation can show stable behavior for normal demand,
+   degraded supply, malicious traffic, and viral-demand scenarios.
+2. Provider P&L is positive for target honest providers and negative for
+   canonical abuse strategies.
+3. Fee-vs-issuance share is measurable and trends toward the desired launch
+   posture.
+4. Price controller bounds prevent runaway oscillation in stress scenarios.
+5. Escrow and sponsored-session accounting prevent public demand from draining
+   long-term storage funding.
+6. Audit budget sizing clears expected audit and repair load without uncapped
+   minting.
+7. Elasticity can absorb demand when funded and fails closed when unfunded.
+
+## 34. Open Questions
 
 1. Should hot and cold deals use separate missed-epoch thresholds from the start?
 2. What false-positive repair rate is acceptable during trusted devnet?
@@ -1020,3 +1302,16 @@ Before implementing the next large slice:
     concentration limits?
 13. Which punitive policies are disabled, measure-only, or active for each
     devnet/testnet/mainnet phase?
+14. Should dynamic pricing be disabled, measure-only, or active during trusted
+    devnet?
+15. What provider cost model should be used for devnet, testnet, and mainnet
+    simulation?
+16. What fee-vs-issuance target defines "healthy enough" before incentives are
+    tightened?
+17. What are the end-of-deal escrow close/refund semantics?
+18. Should reward remainders always burn, or can any phase route them to a
+    protocol sink without creating cartel incentives?
+19. What storage and retrieval price bounds preserve affordability while
+    preventing underpriced supply?
+20. How should wash-traffic alerts distinguish spam from legitimate viral
+    demand?
