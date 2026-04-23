@@ -188,7 +188,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 
 | Assertion | Status | Meaning | Detail |
 |---|---|---|---|
-| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1.0, required>=0.95 |
+| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.95 |
 | `min_offline_responses` | `PASS` | Custom assertion. Review the detail and fixture threshold. | offline_responses=280, required>=1 |
 | `min_repair_backoffs` | `PASS` | Scale fixture must expose healing coordination pressure. | repair_backoffs=72, required>=1 |
 | `max_providers_over_capacity` | `PASS` | Assignment must respect modeled provider capacity. | providers_over_capacity=0, required<=0 |

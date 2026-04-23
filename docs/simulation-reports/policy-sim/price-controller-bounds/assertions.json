@@ -1,26 +1,26 @@
 [
   {
-    "detail": "success_rate=1.0, required>=0.99",
+    "detail": "success_rate=1, required>=0.99",
     "name": "min_success_rate",
     "passed": true
   },
   {
-    "detail": "final_storage_price=1.4482981664981096, required>=1.0",
+    "detail": "final_storage_price=1.4482981665, required>=1",
     "name": "min_final_storage_price",
     "passed": true
   },
   {
-    "detail": "final_storage_price=1.4482981664981096, required<=2.0",
+    "detail": "final_storage_price=1.4482981665, required<=2",
     "name": "max_final_storage_price",
     "passed": true
   },
   {
-    "detail": "final_retrieval_price=0.014482981664981095, required>=0.01",
+    "detail": "final_retrieval_price=0.014482981665, required>=0.01",
     "name": "min_final_retrieval_price",
     "passed": true
   },
   {
-    "detail": "final_retrieval_price=0.014482981664981095, required<=0.05",
+    "detail": "final_retrieval_price=0.014482981665, required<=0.05",
     "name": "max_final_retrieval_price",
     "passed": true
   },

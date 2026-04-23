@@ -1,6 +1,6 @@
 [
   {
-    "detail": "success_rate=1.0, required>=0.99",
+    "detail": "success_rate=1, required>=0.99",
     "name": "min_success_rate",
     "passed": true
   },

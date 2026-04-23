@@ -1,7 +1,7 @@
 {
   "assertions": [
     {
-      "detail": "success_rate=1.0, required>=1.0",
+      "detail": "success_rate=1, required>=1",
       "name": "min_success_rate",
       "passed": true
     },
@@ -16,7 +16,7 @@
       "passed": true
     },
     {
-      "detail": "elasticity_spent=0.0, required<=0.0",
+      "detail": "elasticity_spent=0, required<=0",
       "name": "max_elasticity_spent",
       "passed": true
     }
@@ -113,15 +113,15 @@
     "max_storage_price": 1.0,
     "min_provider_bandwidth_capacity": 0,
     "min_provider_capacity": 16,
-    "min_provider_pnl": 6.748000000000041,
+    "min_provider_pnl": 6.748,
     "min_retrieval_price": 0.01,
     "min_storage_price": 1.0,
     "offline_responses": 0,
     "paid_corrupt_bytes": 0,
     "provider_cost": 66.4,
     "provider_hard_faults": 0,
-    "provider_pnl": 342.40000000000185,
-    "provider_revenue": 408.8000000000017,
+    "provider_pnl": 342.400000000002,
+    "provider_revenue": 408.800000000002,
     "provider_slashed": 0.0,
     "providers_negative_pnl": 0,
     "providers_over_capacity": 0,
@@ -131,15 +131,15 @@
     "repairs_completed": 0,
     "repairs_started": 0,
     "retrieval_attempts": 5000,
-    "retrieval_base_burned": 5.0000000000000036,
-    "retrieval_provider_payouts": 379.9999999999966,
+    "retrieval_base_burned": 5.0,
+    "retrieval_provider_payouts": 379.999999999997,
     "retrieval_successes": 5000,
-    "retrieval_variable_burned": 20.000000000000014,
+    "retrieval_variable_burned": 20.0,
     "reward_burned": 0.0,
     "reward_coverage": 1.0,
     "reward_eligible_slots": 1440,
-    "reward_paid": 28.799999999999997,
-    "reward_pool_minted": 28.799999999999997,
+    "reward_paid": 28.8,
+    "reward_pool_minted": 28.8,
     "saturated_responses": 0,
     "success_rate": 1.0,
     "unavailable_reads": 0,

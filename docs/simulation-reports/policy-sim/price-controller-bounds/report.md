@@ -175,11 +175,11 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 
 | Assertion | Status | Meaning | Detail |
 |---|---|---|---|
-| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1.0, required>=0.99 |
-| `min_final_storage_price` | `PASS` | Dynamic pricing should move storage price to or above this value by run end. | final_storage_price=1.4482981664981096, required>=1.0 |
-| `max_final_storage_price` | `PASS` | Dynamic pricing should keep storage price at or below this value by run end. | final_storage_price=1.4482981664981096, required<=2.0 |
-| `min_final_retrieval_price` | `PASS` | Dynamic pricing should move retrieval price to or above this value by run end. | final_retrieval_price=0.014482981664981095, required>=0.01 |
-| `max_final_retrieval_price` | `PASS` | Dynamic pricing should keep retrieval price at or below this value by run end. | final_retrieval_price=0.014482981664981095, required<=0.05 |
+| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.99 |
+| `min_final_storage_price` | `PASS` | Dynamic pricing should move storage price to or above this value by run end. | final_storage_price=1.4482981665, required>=1 |
+| `max_final_storage_price` | `PASS` | Dynamic pricing should keep storage price at or below this value by run end. | final_storage_price=1.4482981665, required<=2 |
+| `min_final_retrieval_price` | `PASS` | Dynamic pricing should move retrieval price to or above this value by run end. | final_retrieval_price=0.014482981665, required>=0.01 |
+| `max_final_retrieval_price` | `PASS` | Dynamic pricing should keep retrieval price at or below this value by run end. | final_retrieval_price=0.014482981665, required<=0.05 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `max_paid_corrupt_bytes` | `PASS` | Corrupt data must not earn payment. | paid_corrupt_bytes=0, required<=0 |
 

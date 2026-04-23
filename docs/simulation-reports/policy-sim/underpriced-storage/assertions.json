@@ -10,7 +10,7 @@
     "passed": true
   },
   {
-    "detail": "success_rate=1.0, required<=1.0",
+    "detail": "success_rate=1, required<=1",
     "name": "max_success_rate",
     "passed": true
   }

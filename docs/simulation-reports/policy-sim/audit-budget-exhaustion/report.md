@@ -186,7 +186,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 
 | Assertion | Status | Meaning | Detail |
 |---|---|---|---|
-| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1.0, required>=0.99 |
+| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.99 |
 | `min_quota_misses` | `PASS` | Fault fixture must generate quota evidence. | quota_misses=64, required>=1 |
 | `min_audit_budget_spent` | `PASS` | Audit demand should spend at least this much budget in the fixture. | audit_budget_spent=0.1, required>=0.1 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |

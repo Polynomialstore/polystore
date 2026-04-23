@@ -1280,20 +1280,42 @@ def add_generic_assertion(add, totals: dict[str, Any], name: str, expected: Any)
     if name.startswith("min_"):
         metric = name[4:]
         actual = totals.get(metric)
-        add(name, actual is not None and actual >= expected, f"{metric}={actual}, required>={expected}")
+        add(
+            name,
+            actual is not None and actual >= expected,
+            f"{metric}={format_assert_value(actual)}, required>={format_assert_value(expected)}",
+        )
         return
     if name.startswith("max_"):
         metric = name[4:]
         actual = totals.get(metric)
-        add(name, actual is not None and actual <= expected, f"{metric}={actual}, required<={expected}")
+        add(
+            name,
+            actual is not None and actual <= expected,
+            f"{metric}={format_assert_value(actual)}, required<={format_assert_value(expected)}",
+        )
         return
     if name.startswith("exact_"):
         metric = name[6:]
         actual = totals.get(metric)
-        add(name, actual == expected, f"{metric}={actual}, required={expected}")
+        add(
+            name,
+            actual == expected,
+            f"{metric}={format_assert_value(actual)}, required={format_assert_value(expected)}",
+        )
         return
     actual = totals.get(name)
-    add(name, actual == expected, f"{name}={actual}, required={expected}")
+    add(
+        name,
+        actual == expected,
+        f"{name}={format_assert_value(actual)}, required={format_assert_value(expected)}",
+    )
+
+
+def format_assert_value(value: Any) -> str:
+    if isinstance(value, float):
+        return f"{value:.12g}"
+    return str(value)
 
 
 def stable_digest(*parts: str) -> str:
@@ -1405,7 +1427,20 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
 
 
 def write_json(path: Path, result: SimResult) -> None:
-    path.write_text(json.dumps(result.to_jsonable(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(stable_json_value(result.to_jsonable()), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def stable_json_value(value: Any) -> Any:
+    if isinstance(value, float):
+        return round(value, 12)
+    if isinstance(value, dict):
+        return {key: stable_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [stable_json_value(item) for item in value]
+    return value
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -1431,9 +1466,17 @@ def write_output_dir(path: Path, result: SimResult) -> None:
         "final_slots": result.final_slots,
         "assertions": [asdict(item) for item in result.assertions],
     }
-    (path / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (path / "summary.json").write_text(
+        json.dumps(stable_json_value(summary), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     (path / "assertions.json").write_text(
-        json.dumps([asdict(item) for item in result.assertions], indent=2, sort_keys=True) + "\n",
+        json.dumps(
+            stable_json_value([asdict(item) for item in result.assertions]),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
     write_csv(path / "epochs.csv", result.epochs)

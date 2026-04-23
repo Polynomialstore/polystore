@@ -1,11 +1,11 @@
 [
   {
-    "detail": "success_rate=1.0, required>=1.0",
+    "detail": "success_rate=1, required>=1",
     "name": "min_success_rate",
     "passed": true
   },
   {
-    "detail": "retrieval_base_burned=28.79999999999965, required>=1.0",
+    "detail": "retrieval_base_burned=28.8, required>=1",
     "name": "min_retrieval_base_burned",
     "passed": true
   },
@@ -15,7 +15,7 @@
     "passed": true
   },
   {
-    "detail": "retrieval_variable_burned=46.080000000000034, required>=1.0",
+    "detail": "retrieval_variable_burned=46.08, required>=1",
     "name": "min_retrieval_variable_burned",
     "passed": true
   }

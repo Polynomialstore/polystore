@@ -187,7 +187,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 
 | Assertion | Status | Meaning | Detail |
 |---|---|---|---|
-| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1.0, required>=0.99 |
+| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.99 |
 | `min_offline_responses` | `PASS` | Custom assertion. Review the detail and fixture threshold. | offline_responses=18, required>=1 |
 | `min_repairs_started` | `PASS` | Repair liveness: policy must start reassignment when evidence warrants it. | repairs_started=6, required>=1 |
 | `min_repairs_completed` | `PASS` | Repair completion: make-before-break reassignment must finish within the run. | repairs_completed=6, required>=1 |

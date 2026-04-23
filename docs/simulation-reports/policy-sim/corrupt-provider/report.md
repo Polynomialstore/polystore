@@ -187,10 +187,10 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 
 | Assertion | Status | Meaning | Detail |
 |---|---|---|---|
-| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1.0, required>=0.95 |
+| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.95 |
 | `min_invalid_proofs` | `PASS` | Hard-fault fixture must generate invalid-proof evidence. | invalid_proofs=6, required>=1 |
 | `min_repairs_started` | `PASS` | Repair liveness: policy must start reassignment when evidence warrants it. | repairs_started=6, required>=1 |
-| `min_provider_slashed` | `PASS` | Simulated slashing must affect hard-fault providers. | provider_slashed=6.0, required>=1.0 |
+| `min_provider_slashed` | `PASS` | Simulated slashing must affect hard-fault providers. | provider_slashed=6, required>=1 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `max_paid_corrupt_bytes` | `PASS` | Corrupt data must not earn payment. | paid_corrupt_bytes=0, required<=0 |
 

@@ -169,7 +169,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 |---|---|---|---|
 | `min_providers_negative_pnl` | `PASS` | Market warning: some providers must become economically distressed. | providers_negative_pnl=48, required>=1 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
-| `max_success_rate` | `PASS` | Control bound: used when the scenario is not intended to prove availability loss. | success_rate=1.0, required<=1.0 |
+| `max_success_rate` | `PASS` | Control bound: used when the scenario is not intended to prove availability loss. | success_rate=1, required<=1 |
 
 ## Evidence Ledger Excerpt
 

@@ -168,10 +168,10 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 
 | Assertion | Status | Meaning | Detail |
 |---|---|---|---|
-| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1.0, required>=1.0 |
+| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=1 |
 | `min_elasticity_rejections` | `PASS` | Spend cap must reject excess elasticity demand. | elasticity_rejections=5, required>=1 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
-| `max_elasticity_spent` | `PASS` | Elasticity spend must not exceed the configured cap. | elasticity_spent=0.0, required<=0.0 |
+| `max_elasticity_spent` | `PASS` | Elasticity spend must not exceed the configured cap. | elasticity_spent=0, required<=0 |
 
 ## Evidence Ledger Excerpt
 

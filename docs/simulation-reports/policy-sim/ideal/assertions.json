@@ -1,6 +1,6 @@
 [
   {
-    "detail": "success_rate=1.0, required>=1.0",
+    "detail": "success_rate=1, required>=1",
     "name": "min_success_rate",
     "passed": true
   },
@@ -30,7 +30,7 @@
     "passed": true
   },
   {
-    "detail": "reward_coverage=1.0, required>=1.0",
+    "detail": "reward_coverage=1, required>=1",
     "name": "min_reward_coverage",
     "passed": true
   }

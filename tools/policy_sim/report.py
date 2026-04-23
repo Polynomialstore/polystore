@@ -282,11 +282,24 @@ def generate_run_report(run_dir: Path, out_dir: Path) -> None:
     graphs_dir.mkdir(exist_ok=True)
 
     signals = compute_signals(summary, epochs, providers, repairs, economy)
-    (out_dir / "signals.json").write_text(json.dumps(signals, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (out_dir / "signals.json").write_text(
+        json.dumps(stable_json_value(signals), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     write_report_md(out_dir / "report.md", summary, epochs, providers, slots, evidence, repairs, economy)
     write_risk_register(out_dir / "risk_register.md", summary, providers, evidence, repairs, economy)
     write_graduation_report(out_dir / "graduation.md", summary)
     write_graphs(graphs_dir, epochs, economy)
+
+
+def stable_json_value(value: Any) -> Any:
+    if isinstance(value, float):
+        return round(value, 12)
+    if isinstance(value, dict):
+        return {key: stable_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [stable_json_value(item) for item in value]
+    return value
 
 
 def compute_signals(

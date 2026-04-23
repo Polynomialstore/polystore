@@ -165,10 +165,10 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 
 | Assertion | Status | Meaning | Detail |
 |---|---|---|---|
-| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1.0, required>=1.0 |
-| `min_retrieval_base_burned` | `PASS` | Requester/session demand must pay a non-zero base burn. | retrieval_base_burned=28.79999999999965, required>=1.0 |
+| `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=1 |
+| `min_retrieval_base_burned` | `PASS` | Requester/session demand must pay a non-zero base burn. | retrieval_base_burned=28.8, required>=1 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
-| `min_retrieval_variable_burned` | `PASS` | Variable retrieval activity must contribute non-zero burn. | retrieval_variable_burned=46.080000000000034, required>=1.0 |
+| `min_retrieval_variable_burned` | `PASS` | Variable retrieval activity must contribute non-zero burn. | retrieval_variable_burned=46.08, required>=1 |
 
 ## Evidence Ledger Excerpt
 

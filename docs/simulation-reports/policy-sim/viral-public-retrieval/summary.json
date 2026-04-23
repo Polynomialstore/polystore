@@ -1,12 +1,12 @@
 {
   "assertions": [
     {
-      "detail": "success_rate=1.0, required>=1.0",
+      "detail": "success_rate=1, required>=1",
       "name": "min_success_rate",
       "passed": true
     },
     {
-      "detail": "retrieval_provider_payouts=1026.0000000000205, required>=100.0",
+      "detail": "retrieval_provider_payouts=1026, required>=100",
       "name": "min_retrieval_provider_payouts",
       "passed": true
     },
@@ -16,7 +16,7 @@
       "passed": true
     },
     {
-      "detail": "retrieval_base_burned=44.999999999999176, required>=1.0",
+      "detail": "retrieval_base_burned=45, required>=1",
       "name": "min_retrieval_base_burned",
       "passed": true
     }
@@ -108,20 +108,20 @@
     "invalid_proofs": 0,
     "max_provider_bandwidth_capacity": 0,
     "max_provider_capacity": 16,
-    "max_provider_pnl": 11.296000000000076,
+    "max_provider_pnl": 11.296,
     "max_retrieval_price": 0.015,
     "max_storage_price": 1.0,
     "min_provider_bandwidth_capacity": 0,
     "min_provider_capacity": 16,
-    "min_provider_pnl": 9.321749999999996,
+    "min_provider_pnl": 9.32175,
     "min_retrieval_price": 0.015,
     "min_storage_price": 1.0,
     "offline_responses": 0,
     "paid_corrupt_bytes": 0,
     "provider_cost": 135.36,
     "provider_hard_faults": 0,
-    "provider_pnl": 959.7600000000024,
-    "provider_revenue": 1095.1200000000026,
+    "provider_pnl": 959.760000000002,
+    "provider_revenue": 1095.120000000003,
     "provider_slashed": 0.0,
     "providers_negative_pnl": 0,
     "providers_over_capacity": 0,
@@ -131,15 +131,15 @@
     "repairs_completed": 0,
     "repairs_started": 0,
     "retrieval_attempts": 9000,
-    "retrieval_base_burned": 44.999999999999176,
-    "retrieval_provider_payouts": 1026.0000000000205,
+    "retrieval_base_burned": 44.999999999999,
+    "retrieval_provider_payouts": 1026.00000000002,
     "retrieval_successes": 9000,
-    "retrieval_variable_burned": 54.00000000000072,
+    "retrieval_variable_burned": 54.000000000001,
     "reward_burned": 0.0,
     "reward_coverage": 1.0,
     "reward_eligible_slots": 3456,
-    "reward_paid": 69.11999999999999,
-    "reward_pool_minted": 69.11999999999999,
+    "reward_paid": 69.12,
+    "reward_pool_minted": 69.12,
     "saturated_responses": 0,
     "success_rate": 1.0,
     "unavailable_reads": 0,

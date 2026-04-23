@@ -1,11 +1,11 @@
 [
   {
-    "detail": "success_rate=1.0, required>=1.0",
+    "detail": "success_rate=1, required>=1",
     "name": "min_success_rate",
     "passed": true
   },
   {
-    "detail": "retrieval_provider_payouts=1026.0000000000205, required>=100.0",
+    "detail": "retrieval_provider_payouts=1026, required>=100",
     "name": "min_retrieval_provider_payouts",
     "passed": true
   },
@@ -15,7 +15,7 @@
     "passed": true
   },
   {
-    "detail": "retrieval_base_burned=44.999999999999176, required>=1.0",
+    "detail": "retrieval_base_burned=45, required>=1",
     "name": "min_retrieval_base_burned",
     "passed": true
   }

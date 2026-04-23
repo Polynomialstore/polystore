@@ -1,6 +1,6 @@
 [
   {
-    "detail": "success_rate=1.0, required>=1.0",
+    "detail": "success_rate=1, required>=1",
     "name": "min_success_rate",
     "passed": true
   },
@@ -15,7 +15,7 @@
     "passed": true
   },
   {
-    "detail": "elasticity_spent=0.0, required<=0.0",
+    "detail": "elasticity_spent=0, required<=0",
     "name": "max_elasticity_spent",
     "passed": true
   }
