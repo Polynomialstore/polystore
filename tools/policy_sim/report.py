@@ -167,8 +167,20 @@ def fmt_pct(value: Any) -> str:
     return f"{fnum(value) * 100:.2f}%"
 
 
+def fmt_bps(value: Any) -> str:
+    return fmt_pct(fnum(value) / 10_000)
+
+
 def metric_sum(rows: list[dict[str, str]], key: str) -> float:
     return sum(fnum(row.get(key)) for row in rows)
+
+
+def percentile(values: list[float], pct: float) -> float:
+    if not values:
+        return 0.0
+    sorted_values = sorted(values)
+    idx = min(len(sorted_values) - 1, max(0, round((pct / 100) * (len(sorted_values) - 1))))
+    return sorted_values[idx]
 
 
 def first_epoch(rows: list[dict[str, str]], predicate) -> str:
@@ -202,10 +214,170 @@ def generate_run_report(run_dir: Path, out_dir: Path) -> None:
     graphs_dir = out_dir / "graphs"
     graphs_dir.mkdir(exist_ok=True)
 
+    signals = compute_signals(summary, epochs, providers, repairs, economy)
+    (out_dir / "signals.json").write_text(json.dumps(signals, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     write_report_md(out_dir / "report.md", summary, epochs, providers, slots, evidence, repairs, economy)
     write_risk_register(out_dir / "risk_register.md", summary, providers, evidence, repairs, economy)
     write_graduation_report(out_dir / "graduation.md", summary)
     write_graphs(graphs_dir, epochs, economy)
+
+
+def compute_signals(
+    summary: dict[str, Any],
+    epochs: list[dict[str, str]],
+    providers: list[dict[str, str]],
+    repairs: list[dict[str, str]],
+    economy: list[dict[str, str]],
+) -> dict[str, Any]:
+    totals = summary["totals"]
+    worst_epoch = min(epochs, key=lambda row: safe_rate(row, "retrieval_successes", "retrieval_attempts"), default={})
+    peak_saturation_epoch = max(epochs, key=lambda row: fnum(row.get("saturated_responses")), default={})
+    peak_repair_backoff_epoch = max(epochs, key=lambda row: fnum(row.get("repair_backoffs")), default={})
+    peak_repairing_epoch = max(epochs, key=lambda row: fnum(row.get("repairing_slots")), default={})
+    degraded_epochs = [
+        row
+        for row in epochs
+        if safe_rate(row, "retrieval_successes", "retrieval_attempts") < 0.999
+        or fnum(row.get("unavailable_reads")) > 0
+    ]
+    worst_epoch_number = int(fnum(worst_epoch.get("epoch"))) if worst_epoch else 0
+    recovery_epoch = 0
+    for row in epochs:
+        epoch = int(fnum(row.get("epoch")))
+        if epoch <= worst_epoch_number:
+            continue
+        if safe_rate(row, "retrieval_successes", "retrieval_attempts") >= 0.999 and fnum(row.get("unavailable_reads")) == 0:
+            recovery_epoch = epoch
+            break
+
+    repair_started = fnum(totals.get("repairs_started"))
+    repair_completed = fnum(totals.get("repairs_completed"))
+    retrieval_attempts = max(1.0, fnum(totals.get("retrieval_attempts")))
+    storage_prices = [fnum(row.get("storage_price")) for row in economy]
+    retrieval_prices = [fnum(row.get("retrieval_price_per_slot")) for row in economy]
+    capacity_utils = [fnum(row.get("capacity_utilization_bps")) for row in providers]
+    pnls = [fnum(row.get("pnl")) for row in providers]
+    bandwidth_caps = [fnum(row.get("bandwidth_capacity_per_epoch")) for row in providers if fnum(row.get("bandwidth_capacity_per_epoch")) > 0]
+    online_probs = [fnum(row.get("online_probability")) for row in providers]
+    assigned_slots = sum(fnum(row.get("assigned_slots")) for row in providers)
+    capacity_slots = sum(fnum(row.get("capacity_slots")) for row in providers)
+    regions = regional_signals(providers)
+
+    return {
+        "availability": {
+            "success_rate": fnum(totals.get("success_rate")),
+            "unavailable_reads": fnum(totals.get("unavailable_reads")),
+            "worst_epoch": int(fnum(worst_epoch.get("epoch"))),
+            "worst_epoch_success_rate": safe_rate(worst_epoch, "retrieval_successes", "retrieval_attempts") if worst_epoch else 0.0,
+            "degraded_epochs": len(degraded_epochs),
+            "recovery_epoch_after_worst": recovery_epoch,
+        },
+        "saturation": {
+            "saturated_responses": fnum(totals.get("saturated_responses")),
+            "saturation_per_retrieval_attempt": fnum(totals.get("saturated_responses")) / retrieval_attempts,
+            "peak_saturation_epoch": int(fnum(peak_saturation_epoch.get("epoch"))),
+            "peak_saturated_responses": fnum(peak_saturation_epoch.get("saturated_responses")),
+        },
+        "repair": {
+            "started": repair_started,
+            "completed": repair_completed,
+            "completion_ratio": repair_completed / repair_started if repair_started else 1.0,
+            "backoffs": fnum(totals.get("repair_backoffs")),
+            "backoffs_per_started_repair": fnum(totals.get("repair_backoffs")) / max(1.0, repair_started),
+            "peak_backoff_epoch": int(fnum(peak_repair_backoff_epoch.get("epoch"))),
+            "peak_repair_backoffs": fnum(peak_repair_backoff_epoch.get("repair_backoffs")),
+            "peak_repairing_epoch": int(fnum(peak_repairing_epoch.get("epoch"))),
+            "peak_repairing_slots": fnum(peak_repairing_epoch.get("repairing_slots")),
+            "final_repair_backlog": max(0.0, repair_started - repair_completed),
+        },
+        "capacity": {
+            "assigned_slots": assigned_slots,
+            "capacity_slots": capacity_slots,
+            "final_utilization_bps": fnum(totals.get("final_storage_utilization_bps")),
+            "providers_over_capacity": fnum(totals.get("providers_over_capacity")),
+            "provider_capacity_utilization_p50_bps": percentile(capacity_utils, 50),
+            "provider_capacity_utilization_p90_bps": percentile(capacity_utils, 90),
+            "provider_capacity_utilization_max_bps": max(capacity_utils, default=0.0),
+            "bandwidth_capacity_p10": percentile(bandwidth_caps, 10),
+            "bandwidth_capacity_p50": percentile(bandwidth_caps, 50),
+            "bandwidth_capacity_p90": percentile(bandwidth_caps, 90),
+            "online_probability_p10": percentile(online_probs, 10),
+            "online_probability_p50": percentile(online_probs, 50),
+            "online_probability_p90": percentile(online_probs, 90),
+        },
+        "economics": {
+            "provider_pnl": fnum(totals.get("provider_pnl")),
+            "providers_negative_pnl": fnum(totals.get("providers_negative_pnl")),
+            "provider_pnl_p10": percentile(pnls, 10),
+            "provider_pnl_p50": percentile(pnls, 50),
+            "provider_pnl_p90": percentile(pnls, 90),
+            "storage_price_start": storage_prices[0] if storage_prices else 0.0,
+            "storage_price_end": storage_prices[-1] if storage_prices else 0.0,
+            "storage_price_min": min(storage_prices, default=0.0),
+            "storage_price_max": max(storage_prices, default=0.0),
+            "retrieval_price_start": retrieval_prices[0] if retrieval_prices else 0.0,
+            "retrieval_price_end": retrieval_prices[-1] if retrieval_prices else 0.0,
+            "retrieval_price_min": min(retrieval_prices, default=0.0),
+            "retrieval_price_max": max(retrieval_prices, default=0.0),
+        },
+        "regions": regions,
+        "top_bottleneck_providers": top_bottleneck_providers(providers),
+    }
+
+
+def regional_signals(providers: list[dict[str, str]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in providers:
+        grouped[row.get("region", "unknown")].append(row)
+    regions = []
+    for region, rows in sorted(grouped.items()):
+        assigned = sum(fnum(row.get("assigned_slots")) for row in rows)
+        capacity = sum(fnum(row.get("capacity_slots")) for row in rows)
+        pnls = [fnum(row.get("pnl")) for row in rows]
+        regions.append(
+            {
+                "region": region,
+                "providers": len(rows),
+                "assigned_slots": assigned,
+                "capacity_slots": capacity,
+                "utilization_bps": int(assigned * 10_000 / max(1.0, capacity)),
+                "offline_responses": sum(fnum(row.get("offline_responses")) for row in rows),
+                "saturated_responses": sum(fnum(row.get("saturated_responses")) for row in rows),
+                "negative_pnl_providers": sum(1 for row in rows if fnum(row.get("pnl")) < 0),
+                "avg_provider_pnl": sum(pnls) / len(pnls) if pnls else 0.0,
+            }
+        )
+    return regions
+
+
+def top_bottleneck_providers(providers: list[dict[str, str]]) -> list[dict[str, Any]]:
+    ranked = sorted(
+        providers,
+        key=lambda row: (
+            fnum(row.get("saturated_responses"))
+            + fnum(row.get("offline_responses"))
+            + max(0.0, fnum(row.get("capacity_utilization_bps")) - 10_000) / 100,
+            fnum(row.get("retrieval_attempts")),
+        ),
+        reverse=True,
+    )
+    out = []
+    for row in ranked[:8]:
+        out.append(
+            {
+                "provider_id": row.get("provider_id", ""),
+                "region": row.get("region", ""),
+                "assigned_slots": fnum(row.get("assigned_slots")),
+                "capacity_slots": fnum(row.get("capacity_slots")),
+                "capacity_utilization_bps": fnum(row.get("capacity_utilization_bps")),
+                "bandwidth_capacity_per_epoch": fnum(row.get("bandwidth_capacity_per_epoch")),
+                "retrieval_attempts": fnum(row.get("retrieval_attempts")),
+                "offline_responses": fnum(row.get("offline_responses")),
+                "saturated_responses": fnum(row.get("saturated_responses")),
+                "pnl": fnum(row.get("pnl")),
+            }
+        )
+    return out
 
 
 def write_report_md(
@@ -236,6 +408,7 @@ def write_report_md(
     verdict = "PASS" if assertions and not failed else "NEEDS REVIEW"
     if not assertions:
         verdict = "UNASSERTED"
+    signals = compute_signals(summary, epochs, providers, repairs, economy)
 
     lines = [
         f"# Policy Simulation Report: {guide['title']}",
@@ -287,6 +460,20 @@ def write_report_md(
         "## What Happened",
         "",
         build_behavior_narrative(totals, evidence, repairs, providers, economy),
+        "",
+        "## Diagnostic Signals",
+        "",
+        "These are derived from the raw CSV/JSON outputs and are intended to make scale behavior reviewable without manually scanning ledgers.",
+        "",
+        *diagnostic_signal_lines(signals),
+        "",
+        "### Regional Signals",
+        "",
+        *regional_signal_lines(signals),
+        "",
+        "### Top Bottleneck Providers",
+        "",
+        *bottleneck_provider_lines(signals),
         "",
         "### Timeline",
         "",
@@ -382,11 +569,23 @@ def write_report_md(
             "",
             "![Price Trajectory](graphs/price_trajectory.svg)",
             "",
+            "### Capacity Utilization",
+            "",
+            "Shows active storage responsibility against modeled provider capacity.",
+            "",
+            "![Capacity Utilization](graphs/capacity_utilization.svg)",
+            "",
             "### Saturation And Repair Pressure",
             "",
             "Shows provider bandwidth saturation and repair backoffs, which are scale-specific stress signals.",
             "",
             "![Saturation And Repair Pressure](graphs/saturation_and_repair.svg)",
+            "",
+            "### Repair Backlog",
+            "",
+            "Shows whether started repairs are accumulating faster than they complete.",
+            "",
+            "![Repair Backlog](graphs/repair_backlog.svg)",
             "",
             "## Raw Artifacts",
             "",
@@ -397,6 +596,7 @@ def write_report_md(
             "- `evidence.csv`: policy evidence events.",
             "- `repairs.csv`: repair start/completion events.",
             "- `economy.csv`: per-epoch market and accounting ledger.",
+            "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -479,6 +679,66 @@ def build_behavior_narrative(
         parts.append(f"The directly implicated provider set begins with: `{ids}`.")
 
     return "\n\n".join(parts)
+
+
+def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
+    availability = signals["availability"]
+    saturation = signals["saturation"]
+    repair = signals["repair"]
+    capacity = signals["capacity"]
+    economics = signals["economics"]
+    return [
+        "| Signal | Value | Why It Matters |",
+        "|---|---:|---|",
+        f"| Worst epoch success | `{fmt_pct(availability['worst_epoch_success_rate'])}` at epoch `{availability['worst_epoch']}` | Identifies the availability cliff instead of hiding it in aggregate success. |",
+        f"| Degraded epochs | `{fmt_num(availability['degraded_epochs'])}` | Counts epochs with unavailable reads or success below 99.9%. |",
+        f"| Recovery epoch after worst | `{availability['recovery_epoch_after_worst'] or 'not recovered'}` | Shows whether the network returned to clean steady state after the worst point. |",
+        f"| Saturation rate | `{fmt_pct(saturation['saturation_per_retrieval_attempt'])}` | Provider bandwidth saturation per retrieval attempt. |",
+        f"| Peak saturation | `{fmt_num(saturation['peak_saturated_responses'])}` at epoch `{saturation['peak_saturation_epoch']}` | Reveals when bandwidth, not storage correctness, became the bottleneck. |",
+        f"| Repair completion ratio | `{fmt_pct(repair['completion_ratio'])}` | Measures whether healing catches up with detection. |",
+        f"| Repair backoff pressure | `{fmt_num(repair['backoffs_per_started_repair'])}` backoffs per started repair | Shows whether repair coordination is saturated. |",
+        f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed repairs at run end. |",
+        f"| Final storage utilization | `{fmt_bps(capacity['final_utilization_bps'])}` | Active slots versus modeled provider capacity. |",
+        f"| Provider utilization p50 / p90 / max | `{fmt_bps(capacity['provider_capacity_utilization_p50_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_p90_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_max_bps'])}` | Detects assignment concentration and capacity cliffs. |",
+        f"| Provider P&L p10 / p50 / p90 | `{fmt_money(economics['provider_pnl_p10'])}` / `{fmt_money(economics['provider_pnl_p50'])}` / `{fmt_money(economics['provider_pnl_p90'])}` | Shows whether aggregate P&L hides marginal-provider distress. |",
+        f"| Storage price start/end/range | `{fmt_money(economics['storage_price_start'])}` -> `{fmt_money(economics['storage_price_end'])}` (`{fmt_money(economics['storage_price_min'])}`-`{fmt_money(economics['storage_price_max'])}`) | Shows dynamic pricing movement and bounds. |",
+        f"| Retrieval price start/end/range | `{fmt_money(economics['retrieval_price_start'])}` -> `{fmt_money(economics['retrieval_price_end'])}` (`{fmt_money(economics['retrieval_price_min'])}`-`{fmt_money(economics['retrieval_price_max'])}`) | Shows whether demand pressure moved retrieval pricing. |",
+    ]
+
+
+def regional_signal_lines(signals: dict[str, Any]) -> list[str]:
+    regions = signals.get("regions", [])
+    if not regions:
+        return ["- No regional provider metadata was recorded."]
+    lines = [
+        "| Region | Providers | Utilization | Offline Responses | Saturated Responses | Negative P&L Providers | Avg P&L |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in regions:
+        lines.append(
+            f"| `{row['region']}` | {fmt_num(row['providers'])} | {fmt_bps(row['utilization_bps'])} | "
+            f"{fmt_num(row['offline_responses'])} | {fmt_num(row['saturated_responses'])} | "
+            f"{fmt_num(row['negative_pnl_providers'])} | {fmt_money(row['avg_provider_pnl'])} |"
+        )
+    return lines
+
+
+def bottleneck_provider_lines(signals: dict[str, Any]) -> list[str]:
+    providers = signals.get("top_bottleneck_providers", [])
+    if not providers:
+        return ["- No provider bottleneck rows were recorded."]
+    lines = [
+        "| Provider | Region | Slots/Capacity | Utilization | Bandwidth Cap | Attempts | Offline | Saturated | P&L |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in providers:
+        lines.append(
+            f"| `{row['provider_id']}` | `{row['region']}` | {fmt_num(row['assigned_slots'])}/{fmt_num(row['capacity_slots'])} | "
+            f"{fmt_bps(row['capacity_utilization_bps'])} | {fmt_num(row['bandwidth_capacity_per_epoch'])} | "
+            f"{fmt_num(row['retrieval_attempts'])} | {fmt_num(row['offline_responses'])} | "
+            f"{fmt_num(row['saturated_responses'])} | {fmt_money(row['pnl'])} |"
+        )
+    return lines
 
 
 def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
@@ -897,11 +1157,21 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         secondary_label="Retrieval Price",
     )
     write_line_svg(
+        graphs_dir / "capacity_utilization.svg",
+        "Capacity Utilization BPS",
+        [fnum(row.get("storage_utilization_bps")) for row in economy],
+    )
+    write_line_svg(
         graphs_dir / "saturation_and_repair.svg",
         "Saturation And Repair Pressure",
         [fnum(row.get("saturated_responses")) for row in epochs],
         secondary=[fnum(row.get("repair_backoffs")) for row in epochs],
         secondary_label="Repair Backoffs",
+    )
+    write_line_svg(
+        graphs_dir / "repair_backlog.svg",
+        "Repair Backlog",
+        repair_backlog_series(epochs),
     )
 
 
@@ -916,6 +1186,15 @@ def burn_mint_ratio(row: dict[str, str]) -> float:
     burned = fnum(row.get("retrieval_base_burned")) + fnum(row.get("retrieval_variable_burned")) + fnum(row.get("reward_burned"))
     minted = fnum(row.get("reward_pool_minted")) + fnum(row.get("audit_budget_minted"))
     return burned / minted if minted else 0.0
+
+
+def repair_backlog_series(epochs: list[dict[str, str]]) -> list[float]:
+    backlog = 0.0
+    out = []
+    for row in epochs:
+        backlog += fnum(row.get("repairs_started")) - fnum(row.get("repairs_completed"))
+        out.append(max(0.0, backlog))
+    return out
 
 
 def write_line_svg(

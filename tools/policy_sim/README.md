@@ -126,6 +126,7 @@ When `--out-dir` is supplied, the simulator emits:
 - `risk_register.md`
 - `graduation.md`
 - `policy_delta.md` for baseline/candidate comparisons
+- `signals.json`
 - `graphs/*.svg`
 
 The Markdown reports are intended to be human review artifacts, not just metric
@@ -134,7 +135,10 @@ over the timeline, enforcement interpretation, economic interpretation, the
 assertion contract, evidence excerpts, generated graphs, and remaining review
 questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
-provider P&L, burn/mint ratio, price trajectory, and saturation/repair pressure.
+provider P&L, burn/mint ratio, price trajectory, capacity utilization,
+saturation/repair pressure, and repair backlog. `signals.json` records derived
+availability, saturation, repair, capacity, economic, regional, and provider
+bottleneck signals for downstream analysis.
 
 The simulator should remain deterministic and machine-output focused. Reporting
 and graph generation belong in `report.py`.

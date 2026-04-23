@@ -1121,6 +1121,9 @@ Outputs:
    concentration risks, and open review items.
 5. `graduation.md`: recommended keeper/e2e graduation targets and missing
    implementation surfaces.
+6. `signals.json`: derived diagnostic signals for availability cliffs, recovery
+   epoch, saturation rate, repair backlog, capacity utilization percentiles,
+   price movement, regional concentration, and bottleneck providers.
 
 The first report implementation must be stdlib-only and Markdown/CSV focused.
 Graph generation starts with SVG written directly by the report tool. Optional
