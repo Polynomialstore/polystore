@@ -155,6 +155,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
             graph_text = (report_dir / "graphs" / "retrieval_success_rate.svg").read_text(encoding="utf-8")
             self.assertIn("Scale: x=epoch", graph_text)
+            self.assertIn('y1="72"', graph_text)
             self.assertIn(">Epoch<", graph_text)
             self.assertIn("Retrieval Success Rate", graph_text)
             report_text = (report_dir / "report.md").read_text(encoding="utf-8")
