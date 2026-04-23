@@ -346,7 +346,662 @@ Recommended first canonical scenarios:
 4. Corrupt data or invalid proof.
 5. Setup failure before first commit.
 
-## 16. Open Questions
+## 16. Full Desired Network State
+
+The end state is a self-healing storage network with explicit policy state,
+not a happy-path devnet with manual operator intervention.
+
+At maturity, the network should provide:
+
+1. **Provider lifecycle management:** providers progress through onboarding,
+   probation, active service, higher-capability promotion, degradation,
+   delinquency, repair, draining, jailing, and exit states.
+2. **Slot lifecycle automation:** every assigned slot has health, evidence,
+   replacement, catch-up, and promotion state.
+3. **Automatic delinquency handling:** when a slot is delinquent, the chain can
+   mark it `REPAIRING`, attach a deterministic pending provider, route around
+   it, verify catch-up, and promote the replacement.
+4. **Performance-aware placement:** service hints such as `Hot`, `Cold`,
+   `General`, `Archive`, and `Edge` affect placement, audit frequency, quotas,
+   reward multipliers, and promotion eligibility.
+5. **User-funded elasticity:** bandwidth or replication increases only when the
+   user's escrow and spend window can pay for it.
+6. **Protocol-funded audit and repair:** protocol sessions can audit or repair
+   restricted deals without bypassing retrieval-session accounting.
+7. **Evidence-backed consequences:** repair, reward exclusion, jailing, and
+   slashing all have explicit evidence classes and event reason codes.
+8. **Operational clarity:** users, provider operators, and maintainers can see
+   why a route, repair, demotion, promotion, or penalty occurred.
+
+The rest of this document should be read as the implementation map to reach
+that state.
+
+## 17. Provider Lifecycle State Machine
+
+The current chain has a simple provider registry with `Active` and `draining`
+concepts. The desired network needs a richer lifecycle. Not every state needs
+to be consensus-critical on day one, but the model should be explicit so
+simulation, policy, UI, and chain implementation do not diverge.
+
+| State | Meaning | Eligible for new assignments? | Typical transitions |
+|---|---|---:|---|
+| `CANDIDATE` | Operator has identity and endpoint but has not proven readiness. | No | Pairing requested, endpoint checked. |
+| `PAIRED` | Provider identity is linked to an operator or wallet. | No | Operator approval, funding/bond check. |
+| `PROBATIONARY` | Provider can receive low-risk assignments with caps. | Limited | Pass readiness tests, serve trial traffic. |
+| `ACTIVE` | Provider is eligible for normal placement. | Yes | Good health and sufficient bond/capacity. |
+| `PREFERRED` | Provider has sustained good performance and reliability. | Yes, with higher caps | Better placement priority or hot-deal eligibility. |
+| `HIGH_BANDWIDTH` | Provider qualifies for higher-throughput or hot-path routing. | Yes, for high bandwidth demand | Promotion from measured throughput and low error rate. |
+| `DEGRADED` | Provider has soft-fault history but is not yet delinquent. | Limited or no | Health decay, operator alert, lower placement priority. |
+| `DELINQUENT` | Provider exceeded soft-fault thresholds for one or more assignments. | No | Slot repair, reward exclusion, possible evidence workflow. |
+| `DRAINING` | Provider is voluntarily exiting new work. | No | Existing slots replaced under churn caps. |
+| `JAILED` | Provider is temporarily ineligible due to hard or convicted faults. | No | Jail expiry plus reactivation conditions. |
+| `EXITED` | Provider has completed exit or is removed. | No | Unbonding and final GC policy. |
+
+Required implementation decisions:
+
+1. Which states are consensus fields versus derived query/UI state.
+2. Whether `DEGRADED` and `DELINQUENT` are global provider states, per-slot
+   states, or both.
+3. How provider state affects placement, repair selection, reward eligibility,
+   and audit targeting.
+4. Whether `HIGH_BANDWIDTH` is a separate state, a capability label, or a
+   scored tier.
+
+## 18. Slot Lifecycle State Machine
+
+Provider state is not enough. Accountability is per assignment, especially for
+Mode 2. The slot lifecycle should be the primary unit for repair and
+delinquency.
+
+| State | Meaning | Reads | Quotas/rewards | Transition triggers |
+|---|---|---|---|---|
+| `SETUP_PENDING` | Slot assigned before first content commit. | No committed data yet | No quota | Deal created. |
+| `SETUP_FAILED` | Initial upload to this slot failed. | No committed data yet | No quota | Client/gateway detects upload failure. |
+| `ACTIVE` | Slot is current accountable provider. | Route eligible | Quota/reward eligible | Successful setup or promotion. |
+| `SUSPECT` | Soft failures observed but below repair threshold. | Route with lower priority | Quota still applies | Timeouts, latency, deputy-served hints. |
+| `DELINQUENT` | Threshold crossed for soft non-compliance. | Route around if possible | Reward excluded | Missed epochs or confirmed non-response. |
+| `REPAIRING` | Replacement candidate is catching up. | Route around old slot | Excluded from quotas/rewards | Repair start. |
+| `CATCHUP_READY` | Pending provider claims it has caught up. | Optional verification route | Not yet active | Readiness proof submitted. |
+| `ACTIVE_PROMOTED` | Pending provider becomes current provider. | Route eligible | Quota/reward eligible | Chain promotes pending provider. |
+| `REPAIR_BACKOFF` | Repair attempts exhausted or no eligible candidate. | Route around if possible | No reward | Attempt cap or candidate exhaustion. |
+| `EXPIRED` | Deal expired; slot no longer serves. | No | No | Deal expiry / GC. |
+
+Current implementation already has `ACTIVE`, `REPAIRING`, `pending_provider`,
+and `repair_target_gen`. Missing desired-state pieces include:
+
+1. Explicit `SUSPECT` / `DELINQUENT` reason codes.
+2. Repair attempt counters and cooldown windows.
+3. Readiness proof or catch-up proof before promotion.
+4. Per-slot health queries for UI and operator tooling.
+5. A unified treatment of setup-phase bumping and post-commit repair.
+
+## 19. Automatic Delinquency Repair and Promotion Flow
+
+The most important automation loop is: mark one SP delinquent, demote it for
+that slot, and promote a replacement without losing availability.
+
+Desired flow:
+
+1. **Evidence accrues:** quota shortfall, zero direct service with deputy
+   service, threshold non-response, invalid proof, corrupt response, or
+   operator-initiated drain.
+2. **Classification occurs:** the chain or policy layer classifies the event as
+   hard fault, soft fault, setup failure, maintenance/drain, or inconclusive.
+3. **Slot is marked:** for post-commit content, the slot moves to `REPAIRING`;
+   for setup-phase content, the slot uses deterministic setup bumping.
+4. **Replacement is selected:** the chain deterministically selects an eligible
+   provider, excluding jailed, draining, underbonded, insufficient-capacity,
+   already-assigned, incompatible, or recently-failed candidates.
+5. **Reads route around repair:** user-gateways and clients choose any `K`
+   healthy `ACTIVE` slots.
+6. **Protocol repair session opens:** pending provider fetches data using
+   protocol-authorized retrieval sessions, not free side-channel reads.
+7. **Pending provider catches up:** it reconstructs and stores required shards
+   through `repair_target_gen` and any append-only generations that occurred
+   during repair.
+8. **Readiness is verified:** pending provider submits a readiness proof,
+   catch-up proof, or satisfies a repair quota window.
+9. **Promotion occurs:** chain swaps `slot.provider = pending_provider`, clears
+   `pending_provider`, sets slot `ACTIVE`, advances generation or replacement
+   nonce as needed, and mirrors legacy `providers[]`.
+10. **Old provider consequences apply:** old provider may be no-op, degraded,
+    reward-excluded, jailed, or slashed depending on evidence class.
+
+Required policy gates:
+
+1. A soft-fault repair should not imply slash.
+2. A hard-fault repair may imply immediate penalty if evidence is deterministic.
+3. A setup bump should not imply fraud or penalty.
+4. A draining repair should not imply penalty if the provider continues serving
+   until replaced.
+5. If no replacement is available, the slot enters backoff and emits an alert.
+
+Implementation surfaces:
+
+| Surface | Required work |
+|---|---|
+| Chain | Slot health state, repair attempt ledger, deterministic candidate selection, readiness proof, promotion conditions, events. |
+| Provider-daemon | Protocol repair fetch, local catch-up storage, readiness proof generation, storage of repaired shards. |
+| User-gateway | Route around `REPAIRING`, expose repair status, retry after promotion. |
+| Website | Show degraded/repairing slot state and current provider/pending provider. |
+| Simulator | Model delinquency thresholds, candidate exhaustion, repair duration, false positives, and promotion success. |
+| E2E | Kill/withhold/corrupt provider, verify repair starts, pending provider catches up, promotion occurs, reads remain available. |
+
+## 20. New SP Onboarding and Higher-Bandwidth Promotion
+
+The network should not treat every new provider as equally reliable or equally
+capable. New SPs need a promotion path from "can join" to "trusted for hot or
+high-bandwidth work."
+
+### 20.1 Onboarding Pipeline
+
+Desired onboarding stages:
+
+1. **Identity creation:** provider key exists and is paired with an operator.
+2. **Endpoint registration:** endpoints are canonical, reachable, and versioned.
+3. **Health check:** provider responds to `/health`, status, and capability
+   queries.
+4. **Storage readiness:** provider proves writable storage root and minimum free
+   space.
+5. **Bandwidth probe:** provider completes controlled upload/download probes.
+6. **Protocol readiness:** provider can open/serve retrieval sessions and submit
+   proof paths.
+7. **Probation:** provider receives limited assignments and is watched closely.
+8. **Promotion:** provider becomes eligible for normal, preferred, or
+   high-bandwidth work.
+
+### 20.2 Promotion Signals
+
+Promotion should use multiple signals, not a single speed test:
+
+| Signal | Use |
+|---|---|
+| Successful setup uploads | Proves the provider can receive assigned artifacts. |
+| Retrieval success rate | Measures real serving reliability. |
+| Time to first byte / throughput | Determines hot/high-bandwidth eligibility. |
+| Synthetic proof completion | Measures accountability under protocol liveness. |
+| Protocol repair participation | Measures usefulness during failure recovery. |
+| Error rate and timeout rate | Drives demotion or probation extension. |
+| Bond and capacity headroom | Prevents over-assignment. |
+| Version and feature compatibility | Ensures provider supports required protocol features. |
+
+### 20.3 Assignment Caps
+
+Promotion should affect maximum responsibility:
+
+| Tier | Assignment posture |
+|---|---|
+| `PROBATIONARY` | Low cap, small/cold deals only, no hot deals. |
+| `ACTIVE` | Normal assignment caps. |
+| `PREFERRED` | Higher placement priority and higher caps. |
+| `HIGH_BANDWIDTH` | Eligible for hot deals, larger egress load, and overflow routing. |
+| `DEGRADED` | No new assignments, existing assignments watched. |
+
+Caps should be enforced per provider and possibly per operator to limit Sybil
+concentration.
+
+### 20.4 High-Bandwidth Promotion
+
+High-bandwidth promotion should be tied to measurable capability:
+
+1. Controlled benchmark sessions run through normal retrieval-session paths.
+2. Provider serves multiple blob ranges with low error rate and stable
+   throughput.
+3. Provider demonstrates concurrency without degrading proof/session behavior.
+4. Provider has enough bond and capacity for the extra responsibility.
+5. Promotion is revocable if later measurements regress.
+
+Simulation should model high-bandwidth SPs separately from normal SPs so policy
+can answer:
+
+1. How quickly should a new fast SP receive more work?
+2. How much assignment should one fast SP be allowed to accumulate?
+3. How sensitive should hot-deal routing be to transient latency?
+4. What happens when a high-bandwidth SP fails suddenly?
+
+## 21. Performance Market and Service Classes
+
+`spec.md` defines a performance market with service hints and reward tiers. The
+roadmap should treat this as a first-class policing surface, not a UI label.
+
+Desired service classes:
+
+| Class | Intended provider pool | Policy differences |
+|---|---|---|
+| `Cold` | `Archive` / `General` | Lower audit frequency, looser latency, lower quota pressure, larger capacity. |
+| `General` | Balanced providers | Default quotas and repair thresholds. |
+| `Hot` | `General` / `Edge` / high-bandwidth providers | Higher audit frequency, tighter health thresholds, faster repair, higher reward multipliers. |
+
+Desired reward tiers:
+
+| Tier | Meaning | Policy use |
+|---|---|---|
+| `Platinum` | Very fast successful service. | Highest retrieval/performance reward. |
+| `Gold` | Good service within target. | Normal positive reward. |
+| `Silver` | Acceptable but slow service. | Lower reward, possible health note. |
+| `Fail` | Missed response or invalid service. | No reward, health impact. |
+
+Implementation requirements:
+
+1. Define latency/throughput windows as params or profile values.
+2. Attribute each retrieval/proof to provider, slot, service class, and epoch.
+3. Keep latency rewards separate from hard correctness.
+4. Use service class to tune quotas, repair thresholds, audit sampling, and
+   placement priority.
+5. Avoid slashing based solely on latency unless a future threshold-evidence
+   design makes it defensible.
+
+## 22. Elasticity and Overflow Scaling
+
+The spec describes user-funded elasticity and saturation signaling. The current
+gap report notes that striped overlay elasticity is not yet fully modeled
+end-to-end. The implementation roadmap should explicitly include it.
+
+Desired behavior:
+
+1. Assigned provider signals saturation or gateway observes sustained pressure.
+2. Chain checks the user's max spend window and escrow.
+3. Chain selects additional providers or overlay slots deterministically.
+4. New providers receive data through protocol repair/replication sessions.
+5. Routing expands to include new capacity once ready.
+6. Rewards and accountability include overlay providers without weakening the
+   base `K`-of-`N` invariant.
+
+Open design choices:
+
+1. Whether overlays are per slot, per deal, or per hot object/range.
+2. Whether overlay providers are accountable for full slot shards or cached
+   hot ranges only.
+3. How synthetic challenges target overlay replicas.
+4. How overlay providers are paid and demoted.
+5. How user-funded elasticity interacts with base storage escrow.
+
+Simulation requirements:
+
+1. Model demand spikes and provider saturation.
+2. Model cost and benefit of adding overlay/high-bandwidth providers.
+3. Measure time to absorb traffic surge.
+4. Measure whether elasticity causes provider concentration.
+5. Verify spend-window caps prevent unbounded user cost.
+
+## 23. Chain and Consensus Implementation Scope
+
+The chain is responsible for deterministic state transitions and economic
+accounting. Full implementation likely requires the following additions or
+hardening beyond current devnet behavior.
+
+### 23.1 State
+
+Potential state additions:
+
+1. `ProviderLifecycleState(provider)`.
+2. `ProviderHealthState(provider, epoch_window)`.
+3. `ProviderCapabilityScore(provider)` or explicit capability tiers.
+4. `SlotHealthState(deal_id, slot)`.
+5. `SlotRepairAttempt(deal_id, slot, window)`.
+6. `RepairReadinessProof(deal_id, slot, pending_provider, gen)`.
+7. `EvidenceCase(evidence_id)`.
+8. `NonResponseAccumulator(provider, deal_id, slot, window)`.
+9. `ProviderBondState(provider)`.
+10. `AssignmentCollateral(provider, deal_id, slot)`.
+11. `ProviderJailState(provider)`.
+12. Overlay or elasticity state for high-demand deals.
+
+### 23.2 Params
+
+Likely params:
+
+1. Hot/cold missed-epoch thresholds.
+2. Non-response threshold and window.
+3. Repair cooldown and attempt caps.
+4. Jail durations by evidence class.
+5. Slash bps by hard-fault class.
+6. Minimum provider bond and assignment collateral formula.
+7. Probation assignment caps.
+8. High-bandwidth promotion thresholds.
+9. Performance tier windows and multipliers.
+10. Audit budget sizing and carryover.
+11. Evidence bond, bounty, and burn-on-expiry.
+12. Overlay elasticity spend and churn caps.
+
+### 23.3 Messages
+
+Likely messages:
+
+1. `MsgSubmitEvidence` for non-response, wrong data, or deputy transcripts.
+2. `MsgSubmitRepairReadiness` for pending provider catch-up proof.
+3. `MsgStartSlotRepair` / `MsgCompleteSlotRepair` hardening, or automatic
+   epoch-hook variants.
+4. `MsgSetProviderMaintenance` distinct from full draining.
+5. `MsgRequestSlotExit` convenience path for voluntary provider exit.
+6. `MsgSignalSaturation` hardening for Mode 2 overlay elasticity.
+7. `MsgUpdateProviderBond` or staking integration.
+8. `MsgUpdateProviderCapabilities` or capability attestation.
+
+### 23.4 Queries and Events
+
+Queries/events should make the system explainable:
+
+1. Provider lifecycle state and reason.
+2. Provider health summary.
+3. Slot health and current repair status.
+4. Pending provider and repair target generation.
+5. Evidence case status.
+6. Repair attempt history.
+7. Audit debt by provider/slot.
+8. Reward eligibility and exclusion reason.
+9. Jail/slash history.
+10. Elasticity overlays and spend-window usage.
+
+## 24. Provider-Daemon Implementation Scope
+
+The provider-daemon should remain a dumb byte pipe for file semantics, but it
+must be policy-aware for accountability and repair.
+
+Required capabilities:
+
+1. Serve bytes only for valid sessions, including protocol audit/repair
+   sessions.
+2. Return structured error classes: timeout, unavailable, not found,
+   unauthorized session, stale manifest root, invalid range, internal error.
+3. Store and serve Mode 2 slot shards by `(deal_id, mdu_index, slot,
+   manifest_root)`.
+4. Support repair catch-up fetches and writes.
+5. Generate or help produce readiness proofs for repaired shards.
+6. Report local health, storage headroom, endpoint version, and capability.
+7. Expose controlled benchmark/probe endpoints or use normal session paths for
+   promotion tests.
+8. Implement safe staged-generation cleanup.
+9. Support operator maintenance mode separately from draining.
+10. Provide deterministic fault-injection switches for test/devnet e2e.
+
+Provider-daemon tests should cover:
+
+1. Session-required serving.
+2. Range and slot confinement.
+3. Corrupt/missing shard behavior.
+4. Protocol repair catch-up.
+5. Restart durability during sessions and repairs.
+6. Staged upload cleanup.
+7. Health and capability reporting.
+
+## 25. User-Gateway and Router Implementation Scope
+
+The user-gateway/router is the main availability-preserving component for many
+users. It should not be trusted for correctness, but it should be smart about
+routing and recovery.
+
+Required capabilities:
+
+1. Resolve deal slot topology and provider endpoint metadata.
+2. Choose any `K` healthy `ACTIVE` slots for reads.
+3. Route around `REPAIRING`, jailed, draining, degraded, or unreachable slots
+   where possible.
+4. Use structured retry policies with bounded attempts.
+5. Classify provider errors into the failure taxonomy.
+6. Trigger setup bump flows for setup-phase slot upload failure.
+7. Surface slot-specific upload errors instead of generic upload failure.
+8. Preserve session binding and blob-range subset rules.
+9. Provide fallback from direct provider to gateway/proxy/deputy paths.
+10. Record metrics for route source, provider served, latency, failure class,
+    and proof validity.
+
+Gateway tests should cover:
+
+1. No session means no bytes.
+2. `K`-of-`N` route selection under failures.
+3. Provider corruption does not result in accepted data.
+4. Setup bump and retry for one failed slot.
+5. Repairing slot route-around.
+6. Endpoint discovery and stale provider metadata.
+7. Fault-classification determinism.
+
+## 26. Client and Website UX Scope
+
+The website should not hide degraded behavior. It should make the network state
+understandable without overwhelming normal users.
+
+Required user-facing surfaces:
+
+1. Deal slot map: provider, status, endpoint, route health.
+2. Retrieval route: which provider/slot served the data.
+3. Degraded-read explanation: "provider X unavailable, reconstructed from K
+   other slots."
+4. Repair status: old provider, pending provider, repair generation, progress.
+5. Setup failure recovery: slot-specific bump-and-retry flow.
+6. Provider dashboard: health, assignment count, quota status, rewards, missed
+   epochs, audit tasks.
+7. High-bandwidth/probation status for provider operators.
+8. Warning surfaces before punitive consequences become active.
+
+UX tests should cover:
+
+1. User can complete upload when one setup slot fails and is bumped.
+2. User can download while one slot is repairing.
+3. Provider operator can see why they are degraded or ineligible.
+4. UI labels distinguish `user-gateway` and `provider-daemon` terminology.
+
+## 27. Simulation Program Expansion
+
+The current `tools/policy_sim` is a seed. It should become a policy workbench.
+
+### 27.1 Model Dimensions
+
+The simulator should model:
+
+1. Providers with capacity, bandwidth, latency, bond, uptime, region, operator,
+   lifecycle state, and fault behavior.
+2. Users with retrieval demand, write demand, public/private access patterns,
+   and spend budgets.
+3. Deals with service class, size, RS profile, heat, expiry, escrow, and
+   elasticity settings.
+4. Slots with health, evidence, missed epochs, repair state, pending provider,
+   and assignment history.
+5. Network conditions such as regional outage, latency spikes, and correlated
+   failures.
+6. Adversaries such as corrupt providers, withholding providers, lazy
+   providers, Sybil operators, replacement grinders, and evidence spammers.
+
+### 27.2 Scenario DSL
+
+The simulator should support scenario files, not only CLI flags:
+
+```yaml
+name: hot-deal-provider-delinquency
+seed: 42
+providers: 200
+users: 1000
+deals:
+  count: 120
+  service_mix:
+    hot: 0.20
+    general: 0.60
+    cold: 0.20
+faults:
+  - kind: offline
+    provider_selector: tier:high_bandwidth
+    epochs: 8-12
+  - kind: withhold
+    provider: sp-014
+    rate: 1.0
+assertions:
+  min_success_rate: 0.995
+  max_false_repair_rate: 0.01
+  max_corrupt_bytes_paid: 0
+```
+
+### 27.3 Outputs
+
+Standard outputs:
+
+1. Per-epoch JSON and CSV metrics.
+2. Per-provider summary.
+3. Per-slot repair history.
+4. Evidence and consequence ledger.
+5. Parameter sensitivity report.
+6. Scenario comparison report for changed policy parameters.
+
+### 27.4 Simulator Tests
+
+The simulator itself needs tests:
+
+1. Determinism for fixed seeds.
+2. Scenario parser tests.
+3. Assertion failure tests.
+4. Candidate selection determinism.
+5. Repair/promotion state machine tests.
+6. Credit/quota accounting tests.
+7. Regression fixtures for canonical scenarios.
+
+## 28. Code Implementation Workstreams
+
+This program should be split into workstreams that can land independently.
+
+| Workstream | Goal | Primary code |
+|---|---|---|
+| Policy simulator | Make policy measurable before consensus hardening. | `tools/policy_sim` |
+| Chain health state | Add provider/slot health and evidence state. | `polystorechain/x/polystorechain/keeper` |
+| Automatic repair | Automate delinquency to repair to promotion. | Chain keeper, provider-daemon, gateway |
+| Provider lifecycle | Track readiness, probation, promotion, demotion, jail, exit. | Chain keeper, provider admin, website |
+| High-bandwidth promotion | Measure and promote capable SPs for hot/overflow work. | Simulator, chain params/state, gateway probes |
+| Evidence/deputies | Add threshold evidence and incentives. | Chain keeper, gateway/provider proof paths |
+| Bonding/slashing | Make penalties economically meaningful. | Chain keeper/bank/staking integration |
+| Elasticity overlays | Add user-funded overflow capacity. | Chain state, gateway routing, provider storage |
+| Observability | Explain state and consequences. | Queries, events, website, dashboards |
+| E2E harness | Prove real-stack behavior for critical scenarios. | `scripts/e2e_*`, Playwright, provider fault modes |
+
+## 29. End-to-End Test Program
+
+The full system needs layered e2e coverage. The target should be few reliable
+tests in CI and richer stress scenarios for nightly/manual runs.
+
+### 29.1 CI-Level E2E
+
+CI should cover:
+
+1. Happy path upload/commit/fetch.
+2. Mandatory retrieval session enforcement.
+3. Mode 2 striped retrieval with multiple providers.
+4. One provider unavailable during retrieval, read succeeds from other slots.
+5. One setup slot upload fails, setup bump succeeds, commit succeeds.
+6. Quota miss triggers `REPAIRING` in keeper tests, not necessarily full stack.
+
+### 29.2 Nightly or Manual E2E
+
+Nightly/manual should cover:
+
+1. 12+ provider Mode 2 devnet.
+2. Provider-daemon killed mid-retrieval.
+3. Provider returns corrupt shard/proof.
+4. Withholding provider forces deputy/route-around path.
+5. Repair catch-up and pending-provider promotion.
+6. Provider draining across multiple deals.
+7. High-bandwidth SP promotion and later demotion.
+8. Elasticity/overflow under sustained hot-deal demand.
+9. Regional/correlated outage simulation.
+10. Restart durability during sessions and repairs.
+
+### 29.3 Fault Injection Requirements
+
+Provider-daemons and gateways need deterministic test hooks:
+
+1. Fail upload for selected `(deal_id, slot)`.
+2. Refuse reads for selected slots.
+3. Delay reads to simulate latency tiers.
+4. Return corrupt bytes for selected shards.
+5. Return invalid proof headers.
+6. Drop session state on restart only when explicitly configured.
+7. Simulate storage full or disk errors.
+
+These hooks must be dev/test-only and disabled by default.
+
+## 30. Observability and Operations
+
+Policing without observability will create opaque operator disputes. The system
+needs first-class reason codes and dashboards.
+
+Required event reason codes:
+
+1. `setup_bump_started`
+2. `setup_bump_completed`
+3. `quota_miss_recorded`
+4. `deputy_served_zero_direct`
+5. `hard_fault_invalid_proof`
+6. `hard_fault_wrong_data`
+7. `slot_repair_started`
+8. `slot_repair_ready`
+9. `slot_repair_completed`
+10. `provider_degraded`
+11. `provider_delinquent`
+12. `provider_jailed`
+13. `provider_promoted`
+14. `provider_demoted`
+15. `provider_draining`
+16. `elasticity_overlay_added`
+17. `repair_backoff_entered`
+
+Recommended dashboards:
+
+1. Retrieval success by service class.
+2. Provider health by tier and operator.
+3. Repair backlog and repair latency.
+4. Slots by state.
+5. Audit budget minted/spent/carryover.
+6. Evidence submissions and conviction ratio.
+7. Reward exclusions by reason.
+8. Hot-deal saturation and elasticity spend.
+9. Provider concentration and Sybil-risk indicators.
+10. False positive review queue for trusted devnet.
+
+## 31. Definition of Done for a Fully Functioning Implementation
+
+The policing milestone is not complete until all of these are true:
+
+1. The simulator covers canonical normal, degraded, malicious, and economic
+   grief scenarios with deterministic assertions.
+2. Chain keeper tests cover all consensus-state transitions represented in
+   those scenarios.
+3. Provider-daemon and user-gateway tests cover data-plane behavior and error
+   classification.
+4. A multi-provider e2e harness proves read availability under at least one
+   provider outage and one repair/promotion flow.
+5. Setup failure can be recovered without recreating the deal.
+6. A delinquent provider can be automatically demoted for an assignment.
+7. A replacement provider can catch up and be promoted.
+8. New providers can enter probation and be promoted based on measured
+   readiness.
+9. High-bandwidth providers can be promoted and later demoted based on measured
+   service.
+10. Reward exclusion works for soft non-compliance.
+11. Hard-fault evidence does not pay bad actors and can trigger punitive policy
+    when enabled.
+12. Soft-fault slashing remains disabled until threshold evidence and
+    false-positive monitoring are mature.
+13. Operators and users can inspect why a provider or slot changed state.
+14. Launch configs can choose measure-only, repair-only, reward-exclusion,
+    jail, or slash modes.
+
+## 32. Expanded Immediate Planning Tasks
+
+Before implementing the next large slice:
+
+1. Decide the canonical provider lifecycle states for devnet and which are only
+   derived/query states.
+2. Decide the canonical slot lifecycle states beyond `ACTIVE` and `REPAIRING`.
+3. Define the first version of `DELINQUENT` for a slot.
+4. Define the automatic repair/promotion state machine and readiness proof.
+5. Decide whether high-bandwidth promotion is a provider state, capability, or
+   score.
+6. Define assignment caps for probationary and high-bandwidth providers.
+7. Define which consequences are active in trusted devnet:
+   measure-only, repair, reward exclusion, jail, slash.
+8. Expand `tools/policy_sim` with scenario files and per-provider/per-slot
+   outputs.
+9. Map each canonical scenario to exact chain, gateway, provider, UI, and e2e
+   tests.
+10. Decide which process-level e2e tests are CI-grade versus nightly/manual.
+
+## 33. Open Questions
 
 1. Should hot and cold deals use separate missed-epoch thresholds from the start?
 2. What false-positive repair rate is acceptable during trusted devnet?
@@ -356,4 +1011,12 @@ Recommended first canonical scenarios:
 6. Should replacement cooldowns be per slot, per deal, per provider, or all three?
 7. What operator maintenance mode is needed before "draining" becomes the only clean exit path?
 8. Which degraded behaviors should affect placement priority before they affect economic penalties?
-
+9. What is the minimum proof of readiness before a pending provider can be
+   promoted?
+10. What are the promotion and demotion thresholds for high-bandwidth SPs?
+11. How should overlay elasticity be represented in `mode2_slots` or successor
+    state?
+12. How should provider lifecycle state interact with operator-level Sybil or
+    concentration limits?
+13. Which punitive policies are disabled, measure-only, or active for each
+    devnet/testnet/mainnet phase?
