@@ -342,21 +342,31 @@ Exit criteria:
 1. A user or operator can understand why a slot is `REPAIRING`.
 2. Maintainers can monitor threshold tuning before enabling stronger penalties.
 
-### Milestone 7: Punitive Policy Rollout
+### Milestone 7: Live Enforcement Rollout
+
+This milestone means enabling enforcement in live protocol/runtime
+configuration. It is not the first time these consequences are modeled. Every
+live mode below must be simulated first, then covered by keeper tests, then
+confirmed through the minimum relevant e2e path.
 
 Deliverables:
 
-1. Measure-only mode.
-2. Repair-only mode.
-3. Reward exclusion mode.
-4. Jail mode.
-5. Slash mode for hard or convicted faults.
+1. Live measure-only mode.
+2. Live repair-only mode.
+3. Live reward exclusion mode.
+4. Live jail mode.
+5. Live slash mode for hard or convicted faults.
 
 Exit criteria:
 
-1. False slash risk is acceptably low.
-2. Hard-fault evidence paths are deterministic and tested.
-3. Soft-fault conviction thresholds are calibrated against simulation and devnet data.
+1. The corresponding simulated enforcement mode has deterministic passing
+   assertions.
+2. Keeper tests cover the consensus state transition.
+3. Runtime or e2e tests cover the minimum data-plane behavior, if applicable.
+4. False slash risk is acceptably low.
+5. Hard-fault evidence paths are deterministic and tested.
+6. Soft-fault conviction thresholds are calibrated against simulation and
+   devnet data.
 
 ## 13. Graduation Criteria
 
@@ -910,8 +920,10 @@ For the next engineering milestone, prioritize:
 4. Add provider/slot lifecycle ledgers so policy outcomes are explainable.
 5. Add the first economic ledgers: escrow, retrieval settlement, reward pool,
    audit budget, provider P&L, and elasticity spend.
-6. Add scenario comparison reports for parameter changes.
-7. Produce a graduation map from simulator scenario to keeper/e2e test target.
+6. Add simulated enforcement modes for measure-only, repair-only, reward
+   exclusion, jail, slash, dynamic pricing, and elasticity rejection.
+7. Add scenario comparison reports for parameter changes.
+8. Produce a graduation map from simulator scenario to keeper/e2e test target.
 
 ### 27.1 Model Dimensions
 
@@ -1006,8 +1018,9 @@ repository with passing tests and useful outputs.
 | S1 | Fixture runner | Scenario parser, fixture discovery, seeded run command, JSON/CSV output paths, assertion runner. | Existing ideal/outage/corrupt/withholding scenarios run from fixtures. |
 | S2 | Reliability ledgers | Per-provider summary, per-slot history, evidence ledger, repair ledger, reward eligibility ledger. | Every repair, miss, hard fault, and reward exclusion has a reason in output. |
 | S3 | Economic ledgers | Escrow ledger, retrieval settlement ledger, base reward ledger, audit budget ledger, provider P&L ledger. | Economic scenarios can assert fee, burn, mint, payout, and provider-profit outcomes. |
-| S4 | Parameter comparison | Baseline vs candidate report, sensitivity sweeps, metric delta summaries. | A policy parameter change can be evaluated before keeper work begins. |
-| S5 | Graduation report | Scenario-to-chain/e2e mapping, missing implementation surfaces, recommended next keeper tests. | The team can choose the next keeper test slice from simulator evidence. |
+| S4 | Simulated enforcement modes | Scenario-level consequences for measure-only, repair-only, reward exclusion, jail, slash, dynamic pricing, and elasticity rejection. | Live rollout modes have simulator evidence before keeper or runtime enablement. |
+| S5 | Parameter comparison | Baseline vs candidate report, sensitivity sweeps, metric delta summaries. | A policy parameter change can be evaluated before keeper work begins. |
+| S6 | Graduation report | Scenario-to-chain/e2e mapping, missing implementation surfaces, recommended next keeper tests. | The team can choose the next keeper test slice from simulator evidence. |
 
 ### 27.6 Scenario Fixture Inventory
 
@@ -1057,11 +1070,32 @@ Recommended implementation order:
 5. Add reliability fixtures and regression tests.
 6. Add economic state to the model.
 7. Add economic fixtures and regression tests.
-8. Add comparison reports and parameter sweeps.
-9. Generate the first graduation report for keeper/e2e work.
+8. Add simulated enforcement mode switches and assertions.
+9. Add comparison reports and parameter sweeps.
+10. Generate the first graduation report for keeper/e2e work.
 
 Do not add new chain enforcement from this roadmap until at least S2 is done
-for reliability behavior and S3 is done for economic behavior.
+for reliability behavior, S3 is done for economic behavior, and the relevant
+S4 simulated enforcement mode passes.
+
+### 27.9 Simulated Enforcement Modes
+
+The simulator should model policy consequences before those consequences are
+enabled in live protocol/runtime configuration.
+
+| Mode | Simulator behavior | Live rollout prerequisite |
+|---|---|---|
+| `MEASURE_ONLY` | Record fault, evidence, health, and economic impact without changing slot/provider state. | Fixture assertions prove observability and no unintended consequence. |
+| `REPAIR_ONLY` | Start setup bump or slot repair when thresholds are crossed, but do not exclude rewards, jail, or slash. | Repair ledgers and route-around assertions pass. |
+| `REWARD_EXCLUSION` | Exclude non-compliant or hard-faulted slots from rewards while preserving no-slash behavior for soft faults. | Reward ledger proves bad-provider reward leakage is bounded or zero. |
+| `JAIL_SIMULATED` | Mark providers ineligible for new assignments after hard or convicted threshold faults. | Candidate-selection and false-positive assertions pass. |
+| `SLASH_SIMULATED` | Apply modeled bond loss only for hard or convicted evidence classes. | False-slash assertions pass and hard-fault evidence is deterministic. |
+| `DYNAMIC_PRICING_SIMULATED` | Update prices inside configured bounds and step clamps. | Price convergence and affordability assertions pass. |
+| `ELASTICITY_REJECTION_SIMULATED` | Reject unfunded scaling and emit rate-limit state when escrow or spend caps bind. | Viral-demand and cap-hit assertions pass. |
+
+Naming should make the distinction explicit: simulator modes use `_SIMULATED`
+for punitive or market-changing consequences, while live launch configs use
+separate protocol/runtime params.
 
 ## 28. Code Implementation Workstreams
 
@@ -1270,8 +1304,9 @@ For the current simulator-first milestone, the immediate punch list is:
 3. Define the output schemas listed in §27.7 and add tests that protect them.
 4. Implement reliability ledgers before adding new reliability behavior.
 5. Implement economic ledgers before attempting dynamic pricing calibration.
-6. Run the first canonical fixture set and review the output quality.
-7. Update this roadmap with what the simulator reveals before graduating keeper
+6. Add simulated enforcement mode switches before planning live rollout.
+7. Run the first canonical fixture set and review the output quality.
+8. Update this roadmap with what the simulator reveals before graduating keeper
    tests.
 
 ## 33. Financial Market and Self-Calibration
