@@ -1204,42 +1204,101 @@ def write_line_svg(
     secondary: list[float] | None = None,
     secondary_label: str = "",
 ) -> None:
-    width = 720
-    height = 280
-    pad = 36
+    width = 860
+    height = 420
+    left = 86
+    right = 36
+    top = 70
+    bottom = 78
+    plot_width = width - left - right
+    plot_height = height - top - bottom
     all_values = values + (secondary or [])
     if not all_values:
         all_values = [0.0]
-    lo = min(all_values)
-    hi = max(all_values)
+    lo_raw = min(all_values)
+    hi_raw = max(all_values)
+    lo = 0.0 if lo_raw >= 0 else lo_raw
+    hi = hi_raw
     if hi == lo:
         hi = lo + 1.0
+    padding = (hi - lo) * 0.06
+    if lo_raw < 0:
+        lo -= padding
+    hi += padding
 
     def points(series: list[float]) -> str:
         if len(series) == 1:
-            xs = [pad]
+            xs = [left]
         else:
-            xs = [pad + i * (width - 2 * pad) / (len(series) - 1) for i in range(len(series))]
+            xs = [left + i * plot_width / (len(series) - 1) for i in range(len(series))]
         pts = []
         for x, value in zip(xs, series):
-            y = height - pad - ((value - lo) / (hi - lo)) * (height - 2 * pad)
+            y = top + plot_height - ((value - lo) / (hi - lo)) * plot_height
             pts.append(f"{x:.1f},{y:.1f}")
         return " ".join(pts)
 
+    y_ticks = [lo + (hi - lo) * i / 4 for i in range(5)]
+    x_count = max(len(values), len(secondary or []), 1)
+    x_tick_indices = sorted({round(i * (x_count - 1) / min(5, max(1, x_count - 1))) for i in range(min(6, x_count))})
+    y_grid = []
+    for tick in y_ticks:
+        y = top + plot_height - ((tick - lo) / (hi - lo)) * plot_height
+        y_grid.append(
+            f'<line x1="{left}" y1="{y:.1f}" x2="{width - right}" y2="{y:.1f}" stroke="#e5e7eb" stroke-width="1"/>'
+        )
+        y_grid.append(
+            f'<text x="{left - 10}" y="{y + 4:.1f}" font-family="sans-serif" font-size="11" text-anchor="end" fill="#4b5563">{escape_xml(axis_tick(tick))}</text>'
+        )
+    x_grid = []
+    for idx in x_tick_indices:
+        x = left if x_count == 1 else left + idx * plot_width / (x_count - 1)
+        label = str(idx + 1)
+        x_grid.append(
+            f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{top + plot_height}" stroke="#f3f4f6" stroke-width="1"/>'
+        )
+        x_grid.append(
+            f'<text x="{x:.1f}" y="{top + plot_height + 22}" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#4b5563">{escape_xml(label)}</text>'
+        )
+
+    primary_label = title
     secondary_polyline = ""
+    secondary_legend = ""
     if secondary:
-        secondary_polyline = f'<polyline fill="none" stroke="#d97706" stroke-width="2" points="{points(secondary)}" />'
+        secondary_polyline = f'<polyline fill="none" stroke="#d97706" stroke-width="2.5" points="{points(secondary)}" />'
+        secondary_legend = f'''
+  <line x1="{left + 190}" y1="48" x2="{left + 220}" y2="48" stroke="#d97706" stroke-width="3"/>
+  <text x="{left + 226}" y="52" font-family="sans-serif" font-size="12" fill="#374151">{escape_xml(secondary_label or "Secondary")}</text>'''
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="{pad}" y="24" font-family="sans-serif" font-size="16" fill="#111827">{escape_xml(title)}</text>
-  <text x="{pad}" y="{height - 8}" font-family="sans-serif" font-size="11" fill="#6b7280">min={lo:.4f} max={hi:.4f} {escape_xml(secondary_label)}</text>
-  <line x1="{pad}" y1="{height - pad}" x2="{width - pad}" y2="{height - pad}" stroke="#d1d5db"/>
-  <line x1="{pad}" y1="{pad}" x2="{pad}" y2="{height - pad}" stroke="#d1d5db"/>
-  <polyline fill="none" stroke="#2563eb" stroke-width="2" points="{points(values)}" />
+  <text x="{left}" y="26" font-family="sans-serif" font-size="18" font-weight="700" fill="#111827">{escape_xml(title)}</text>
+  <text x="{left}" y="48" font-family="sans-serif" font-size="12" fill="#6b7280">Scale: x=epoch, y={escape_xml(title)}; displayed range {escape_xml(axis_tick(lo))} to {escape_xml(axis_tick(hi))}</text>
+  <line x1="{left}" y1="48" x2="{left + 30}" y2="48" stroke="#2563eb" stroke-width="3"/>
+  <text x="{left + 36}" y="52" font-family="sans-serif" font-size="12" fill="#374151">{escape_xml(primary_label)}</text>
+  {secondary_legend}
+  <rect x="{left}" y="{top}" width="{plot_width}" height="{plot_height}" fill="#ffffff" stroke="#d1d5db"/>
+  {"".join(y_grid)}
+  {"".join(x_grid)}
+  <line x1="{left}" y1="{top + plot_height}" x2="{width - right}" y2="{top + plot_height}" stroke="#111827" stroke-width="1.2"/>
+  <line x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_height}" stroke="#111827" stroke-width="1.2"/>
+  <text x="{left + plot_width / 2:.1f}" y="{height - 24}" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#111827">Epoch</text>
+  <text transform="translate(22 {top + plot_height / 2:.1f}) rotate(-90)" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#111827">{escape_xml(title)}</text>
+  <polyline fill="none" stroke="#2563eb" stroke-width="2.5" points="{points(values)}" />
   {secondary_polyline}
 </svg>
 '''
     path.write_text(svg, encoding="utf-8")
+
+
+def axis_tick(value: float) -> str:
+    if abs(value) >= 1000:
+        return f"{value:,.0f}"
+    if abs(value) >= 100:
+        return f"{value:.0f}"
+    if abs(value) >= 10:
+        return f"{value:.1f}"
+    if abs(value) >= 1:
+        return f"{value:.2f}"
+    return f"{value:.4f}"
 
 
 def escape_xml(value: str) -> str:
