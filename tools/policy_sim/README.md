@@ -75,6 +75,18 @@ Supported simulated enforcement modes:
 - `JAIL_SIMULATED`
 - `SLASH_SIMULATED`
 
+Population-scale fixtures can also model heterogeneous providers. These fields
+are supported in scenario files:
+
+- `provider_capacity_min` / `provider_capacity_max`
+- `provider_bandwidth_capacity_min` / `provider_bandwidth_capacity_max`
+- `provider_online_probability_min` / `provider_online_probability_max`
+- `provider_repair_probability_min` / `provider_repair_probability_max`
+- `provider_storage_cost_jitter_bps` / `provider_bandwidth_cost_jitter_bps`
+- `provider_regions`
+- `regional_outages`
+- `max_repairs_started_per_epoch`
+
 ## Model Scope
 
 The simulator mirrors current protocol concepts:
@@ -86,6 +98,8 @@ The simulator mirrors current protocol concepts:
 - Provider outage/withholding as soft faults that become quota/deputy misses.
 - Make-before-break repair with deterministic replacement provider selection.
 - Simulated enforcement modes before live chain/runtime rollout.
+- Large-scale heterogeneous-provider runs with regional outages, bandwidth
+  saturation, and repair coordination limits.
 - Basic economic accounting for retrieval fees, rewards, audit budget, provider
   P&L, slashing, and elasticity spend caps.
 
@@ -119,7 +133,8 @@ dumps. A run report explains scenario intent, expected behavior, what happened
 over the timeline, enforcement interpretation, economic interpretation, the
 assertion contract, evidence excerpts, generated graphs, and remaining review
 questions. The generated SVG graphs are embedded inline in `report.md` with
-relative Markdown image links.
+relative Markdown image links. Graphs include retrieval success, slot state,
+provider P&L, burn/mint ratio, price trajectory, and saturation/repair pressure.
 
 The simulator should remain deterministic and machine-output focused. Reporting
 and graph generation belong in `report.py`.

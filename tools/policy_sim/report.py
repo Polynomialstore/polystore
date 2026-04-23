@@ -117,6 +117,16 @@ SCENARIO_GUIDES = {
         "expected": "Elasticity rejections are visible and spend remains at or below the cap.",
         "review": "Confirm this matches product expectations for burst handling and user-funded capacity expansion.",
     },
+    "large-scale-regional-stress": {
+        "title": "Large-Scale Regional Stress",
+        "intent": (
+            "Model a population-scale network with more than one thousand storage providers and thousands of users. "
+            "Providers have heterogeneous capacity, bandwidth, reliability, cost, region, and repair coordination probability. "
+            "A correlated regional outage and dynamic pricing test whether network state, price, retrieval success, and healing remain stable under scale."
+        ),
+        "expected": "Availability should stay above the configured floor, price should remain bounded, saturation and repair backoffs should be visible, and no provider should be assigned above modeled capacity.",
+        "review": "Use this report to inspect aggregate network state rather than a single bad actor: utilization, price trajectory, bandwidth saturation, repair throughput, and provider P&L distribution.",
+    },
 }
 
 
@@ -243,7 +253,9 @@ def write_report_md(
         f"Observed result: retrieval success was `{fmt_pct(totals.get('success_rate'))}`, reward coverage was "
         f"`{fmt_pct(totals.get('reward_coverage'))}`, repairs started/completed were "
         f"`{fmt_num(totals.get('repairs_started'))}` / `{fmt_num(totals.get('repairs_completed'))}`, and "
-        f"`{len(negative_pnl)}` providers ended with negative modeled P&L.",
+        f"`{len(negative_pnl)}` providers ended with negative modeled P&L. The run also recorded "
+        f"`{fmt_num(totals.get('saturated_responses'))}` bandwidth saturation responses and "
+        f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs.",
         "",
         "## Review Focus",
         "",
@@ -267,8 +279,11 @@ def write_report_md(
         f"| Repair delay | `{config.get('repair_epochs')}` epochs |",
         f"| Dynamic pricing | `{str(config.get('dynamic_pricing')).lower()}` |",
         f"| Storage price | `{fmt_money(config.get('storage_price'))}` |",
-        f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
-        "",
+            f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
+            f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
+            f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
+            f"| Provider regions | `{', '.join(str(item) for item in config.get('provider_regions', []))}` |",
+            "",
         "## What Happened",
         "",
         build_behavior_narrative(totals, evidence, repairs, providers, economy),
@@ -300,6 +315,7 @@ def write_report_md(
             "",
             f"- Repairs started: `{len(repairs_started)}`",
             f"- Repairs completed: `{len(repairs_completed)}`",
+            f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Final active slots in last epoch: `{len(active_end_slots)}`",
             "",
             "### Repair Ledger Excerpt",
@@ -359,6 +375,18 @@ def write_report_md(
             "Shows whether burns are material relative to minted rewards and audit budget.",
             "",
             "![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)",
+            "",
+            "### Price Trajectory",
+            "",
+            "Shows storage price and retrieval price movement under dynamic pricing.",
+            "",
+            "![Price Trajectory](graphs/price_trajectory.svg)",
+            "",
+            "### Saturation And Repair Pressure",
+            "",
+            "Shows provider bandwidth saturation and repair backoffs, which are scale-specific stress signals.",
+            "",
+            "![Saturation And Repair Pressure](graphs/saturation_and_repair.svg)",
             "",
             "## Raw Artifacts",
             "",
@@ -427,6 +455,15 @@ def build_behavior_narrative(
         parts.append(
             f"Simulated slashing was active: providers lost `{fmt_money(totals.get('provider_slashed'))}` bond units in aggregate."
         )
+    if fnum(totals.get("saturated_responses")) > 0:
+        parts.append(
+            f"Provider bandwidth constraints mattered: the run recorded `{fmt_num(totals.get('saturated_responses'))}` saturated provider responses. "
+            "That is a scale signal, not necessarily malicious behavior."
+        )
+    if fnum(totals.get("repair_backoffs")) > 0:
+        parts.append(
+            f"Repair coordination was constrained: `{fmt_num(totals.get('repair_backoffs'))}` repair attempts backed off because no candidate or repair-start budget was available."
+        )
     if metric_sum(economy, "elasticity_rejections") > 0:
         parts.append(
             f"Elasticity spend failed closed: `{fmt_num(metric_sum(economy, 'elasticity_rejections'))}` expansion attempts were rejected rather than exceeding the cap."
@@ -454,6 +491,7 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             + fnum(row.get("withheld_responses"))
             + fnum(row.get("offline_responses"))
             + fnum(row.get("corrupt_responses"))
+            + fnum(row.get("saturated_responses"))
         )
         notes = []
         if fnum(row.get("offline_responses")):
@@ -462,8 +500,12 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('withheld_responses'))} withheld")
         if fnum(row.get("invalid_proofs")):
             notes.append(f"{fmt_num(row.get('invalid_proofs'))} invalid proofs")
+        if fnum(row.get("saturated_responses")):
+            notes.append(f"{fmt_num(row.get('saturated_responses'))} saturated")
         if fnum(row.get("quota_misses")):
             notes.append(f"{fmt_num(row.get('quota_misses'))} quota misses")
+        if fnum(row.get("repair_backoffs")):
+            notes.append(f"{fmt_num(row.get('repair_backoffs'))} repair backoffs")
         if fnum(row.get("repairing_slots")):
             notes.append(f"{fmt_num(row.get('repairing_slots'))} slots repairing")
         if not notes:
@@ -541,6 +583,11 @@ def assertion_meaning(name: str) -> str:
         "min_elasticity_rejections": "Spend cap must reject excess elasticity demand.",
         "max_elasticity_spent": "Elasticity spend must not exceed the configured cap.",
         "min_withheld_responses": "Withholding fixture must create visible withheld-response evidence.",
+        "min_saturated_responses": "Scale fixture must expose provider bandwidth saturation.",
+        "min_repair_backoffs": "Scale fixture must expose healing coordination pressure.",
+        "max_providers_over_capacity": "Assignment must respect modeled provider capacity.",
+        "min_final_storage_utilization_bps": "Network utilization should be high enough to make pricing/healing meaningful.",
+        "max_final_storage_utilization_bps": "Network utilization should remain below the capacity cliff.",
     }
     return meanings.get(name, "Custom assertion. Review the detail and fixture threshold.")
 
@@ -665,6 +712,26 @@ def write_risk_register(
                 "followup": "Decide whether this is acceptable UX or whether user-funded burst budgets need product controls.",
             }
         )
+    if fnum(totals.get("saturated_responses")):
+        rows.append(
+            {
+                "risk": "Provider bandwidth saturation",
+                "severity": "medium",
+                "evidence": f"{fmt_num(totals.get('saturated_responses'))} provider responses saturated before serving.",
+                "impact": "Retrieval demand may exceed heterogeneous provider bandwidth before the storage layer notices a hard fault.",
+                "followup": "Review bandwidth admission, route_attempt_limit, retrieval pricing, and elasticity policy.",
+            }
+        )
+    if fnum(totals.get("repair_backoffs")):
+        rows.append(
+            {
+                "risk": "Repair coordination bottleneck",
+                "severity": "medium",
+                "evidence": f"{fmt_num(totals.get('repair_backoffs'))} repair attempts backed off.",
+                "impact": "The network may detect bad slots faster than it can safely heal them.",
+                "followup": "Review max repair starts per epoch, replacement capacity, and catch-up probability assumptions.",
+            }
+        )
     if evidence and not repairs and str(config["scenario"]) not in {"ideal", "underpriced-storage", "wash-retrieval", "viral-public-retrieval", "elasticity-cap-hit"}:
         rows.append(
             {
@@ -718,6 +785,8 @@ def write_risk_register(
             f"- Failed assertions: `{len(failed)}`",
             f"- Providers with negative P&L: `{len(negative_pnl)}`",
             f"- Elasticity rejections: `{fmt_num(elasticity_rejections)}`",
+            f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
+            f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             "",
             "## Review Questions",
             "",
@@ -819,6 +888,20 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         graphs_dir / "burn_mint_ratio.svg",
         "Burn / Mint Ratio",
         [burn_mint_ratio(row) for row in economy],
+    )
+    write_line_svg(
+        graphs_dir / "price_trajectory.svg",
+        "Price Trajectory",
+        [fnum(row.get("storage_price")) for row in economy],
+        secondary=[fnum(row.get("retrieval_price_per_slot")) for row in economy],
+        secondary_label="Retrieval Price",
+    )
+    write_line_svg(
+        graphs_dir / "saturation_and_repair.svg",
+        "Saturation And Repair Pressure",
+        [fnum(row.get("saturated_responses")) for row in epochs],
+        secondary=[fnum(row.get("repair_backoffs")) for row in epochs],
+        secondary_label="Repair Backoffs",
     )
 
 
@@ -973,6 +1056,9 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("invalid_proofs", "Hard evidence created by the candidate."),
         ("paid_corrupt_bytes", "Corrupt data payment safety invariant."),
         ("providers_negative_pnl", "Economic sustainability/churn indicator."),
+        ("saturated_responses", "Whether heterogeneous provider bandwidth became a bottleneck."),
+        ("repair_backoffs", "Whether healing coordination or replacement capacity became constrained."),
+        ("final_storage_utilization_bps", "Final active-slot utilization against modeled provider capacity."),
     ]
     lines = []
     for key, meaning in metrics:
@@ -1007,6 +1093,16 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         return "Provider distress did not increase."
     if key in {"retrieval_base_burned", "retrieval_variable_burned", "retrieval_provider_payouts"}:
         return "Retrieval market accounting changed with demand volume or price settings."
+    if key == "saturated_responses":
+        if delta > 0:
+            return "Candidate exposed provider bandwidth saturation."
+        return "Bandwidth saturation did not increase."
+    if key == "repair_backoffs":
+        if delta > 0:
+            return "Candidate exposed repair coordination limits."
+        return "Repair backoffs did not increase."
+    if key == "final_storage_utilization_bps":
+        return "Final storage utilization changed against modeled provider capacity."
     return "Metric changed; inspect the full report for causal context."
 
 

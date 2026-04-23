@@ -73,6 +73,20 @@ class SimConfig:
     audit_budget_per_epoch: float = 1.0
     audit_cost_per_miss: float = 0.005
     provider_slot_capacity: int = 16
+    provider_capacity_min: int = 0
+    provider_capacity_max: int = 0
+    provider_bandwidth_capacity_per_epoch: int = 0
+    provider_bandwidth_capacity_min: int = 0
+    provider_bandwidth_capacity_max: int = 0
+    provider_online_probability_min: float = 1.0
+    provider_online_probability_max: float = 1.0
+    provider_repair_probability_min: float = 1.0
+    provider_repair_probability_max: float = 1.0
+    provider_storage_cost_jitter_bps: int = 0
+    provider_bandwidth_cost_jitter_bps: int = 0
+    provider_regions: tuple[str, ...] = ("global",)
+    regional_outages: tuple[dict[str, Any], ...] = ()
+    max_repairs_started_per_epoch: int = 0
     provider_storage_cost_per_slot_epoch: float = 0.01
     provider_bandwidth_cost_per_retrieval: float = 0.001
     provider_fixed_cost_per_epoch: float = 0.05
@@ -114,6 +128,24 @@ class SimConfig:
             raise ValueError(f"unknown enforcement_mode {self.enforcement_mode!r}")
         if self.retrieval_burn_bps < 0 or self.retrieval_burn_bps > 10_000:
             raise ValueError("retrieval_burn_bps must be in [0, 10000]")
+        if self.provider_capacity_min < 0 or self.provider_capacity_max < 0:
+            raise ValueError("provider capacity bounds must be non-negative")
+        if self.provider_capacity_min and self.provider_capacity_max and self.provider_capacity_min > self.provider_capacity_max:
+            raise ValueError("provider_capacity_min must be <= provider_capacity_max")
+        if self.provider_bandwidth_capacity_min < 0 or self.provider_bandwidth_capacity_max < 0:
+            raise ValueError("provider bandwidth capacity bounds must be non-negative")
+        if (
+            self.provider_bandwidth_capacity_min
+            and self.provider_bandwidth_capacity_max
+            and self.provider_bandwidth_capacity_min > self.provider_bandwidth_capacity_max
+        ):
+            raise ValueError("provider_bandwidth_capacity_min must be <= provider_bandwidth_capacity_max")
+        if not 0 <= self.provider_online_probability_min <= self.provider_online_probability_max <= 1:
+            raise ValueError("provider online probability bounds must be in [0, 1]")
+        if not 0 <= self.provider_repair_probability_min <= self.provider_repair_probability_max <= 1:
+            raise ValueError("provider repair probability bounds must be in [0, 1]")
+        if not self.provider_regions:
+            raise ValueError("provider_regions must not be empty")
 
 
 @dataclass
@@ -131,6 +163,12 @@ class ProviderBehavior:
 class Provider:
     provider_id: str
     initial_bond: float
+    region: str = "global"
+    capacity_slots: int = 16
+    bandwidth_capacity_per_epoch: int = 0
+    repair_success_probability: float = 1.0
+    storage_cost_multiplier: float = 1.0
+    bandwidth_cost_multiplier: float = 1.0
     behavior: ProviderBehavior = field(default_factory=ProviderBehavior)
     hard_faults: int = 0
     retrieval_attempts: int = 0
@@ -138,6 +176,7 @@ class Provider:
     corrupt_responses: int = 0
     withheld_responses: int = 0
     offline_responses: int = 0
+    saturated_responses: int = 0
     rewards_earned_slots: int = 0
     reward_revenue: float = 0.0
     retrieval_revenue: float = 0.0
@@ -220,6 +259,7 @@ class EpochMetrics:
     corrupt_responses: int = 0
     withheld_responses: int = 0
     offline_responses: int = 0
+    saturated_responses: int = 0
     invalid_proofs: int = 0
     quota_misses: int = 0
     deputy_misses: int = 0
@@ -229,6 +269,7 @@ class EpochMetrics:
     repairing_slots: int = 0
     repairs_started: int = 0
     repairs_completed: int = 0
+    repair_backoffs: int = 0
     paid_corrupt_bytes: int = 0
     retrieval_base_burned: float = 0.0
     retrieval_variable_burned: float = 0.0
@@ -299,10 +340,7 @@ class PolicySimulator:
         self.config = config
         self.extra_faults = list(extra_faults)
         self.rng = random.Random(config.seed)
-        self.providers: dict[str, Provider] = {
-            self.provider_id(i): Provider(self.provider_id(i), config.provider_initial_bond)
-            for i in range(config.providers)
-        }
+        self.providers = self._build_providers()
         self.deals = self._build_deals()
         self.metrics: list[EpochMetrics] = []
         self.evidence_rows: list[dict[str, Any]] = []
@@ -314,6 +352,7 @@ class PolicySimulator:
         self.elasticity_spent_total = 0.0
         self.storage_price = config.storage_price
         self.retrieval_price_per_slot = config.retrieval_price_per_slot
+        self.repairs_started_this_epoch = 0
         self._apply_builtin_scenario(config.scenario)
         for fault in self.extra_faults:
             self.apply_fault(fault)
@@ -324,6 +363,36 @@ class PolicySimulator:
 
     def mode_at_least(self, mode: str) -> bool:
         return ENFORCEMENT_ORDER[self.config.enforcement_mode] >= ENFORCEMENT_ORDER[mode]
+
+    def _build_providers(self) -> dict[str, Provider]:
+        rng = random.Random(f"{self.config.seed}:provider-profile")
+        regions = tuple(self.config.provider_regions)
+        providers: dict[str, Provider] = {}
+        capacity_min = self.config.provider_capacity_min or self.config.provider_slot_capacity
+        capacity_max = self.config.provider_capacity_max or self.config.provider_slot_capacity
+        bandwidth_min = self.config.provider_bandwidth_capacity_min or self.config.provider_bandwidth_capacity_per_epoch
+        bandwidth_max = self.config.provider_bandwidth_capacity_max or self.config.provider_bandwidth_capacity_per_epoch
+        for index in range(self.config.providers):
+            provider_id = self.provider_id(index)
+            provider = Provider(
+                provider_id,
+                self.config.provider_initial_bond,
+                region=regions[index % len(regions)],
+                capacity_slots=rng.randint(capacity_min, capacity_max) if capacity_max else self.config.provider_slot_capacity,
+                bandwidth_capacity_per_epoch=rng.randint(bandwidth_min, bandwidth_max) if bandwidth_max else 0,
+                repair_success_probability=rng.uniform(
+                    self.config.provider_repair_probability_min,
+                    self.config.provider_repair_probability_max,
+                ),
+                storage_cost_multiplier=jitter_multiplier(rng, self.config.provider_storage_cost_jitter_bps),
+                bandwidth_cost_multiplier=jitter_multiplier(rng, self.config.provider_bandwidth_cost_jitter_bps),
+            )
+            provider.behavior.online_probability = rng.uniform(
+                self.config.provider_online_probability_min,
+                self.config.provider_online_probability_max,
+            )
+            providers[provider_id] = provider
+        return providers
 
     def _build_deals(self) -> list[DealState]:
         deals: list[DealState] = []
@@ -347,7 +416,15 @@ class PolicySimulator:
         return deals
 
     def _apply_builtin_scenario(self, scenario: str) -> None:
-        if scenario in {"ideal", "setup-failure", "underpriced-storage", "wash-retrieval", "viral-public-retrieval", "elasticity-cap-hit"}:
+        if scenario in {
+            "ideal",
+            "setup-failure",
+            "underpriced-storage",
+            "wash-retrieval",
+            "viral-public-retrieval",
+            "elasticity-cap-hit",
+            "large-scale-regional-stress",
+        }:
             return
         if scenario == "single-outage":
             self.providers["sp-000"].behavior.offline_epochs.update(range(2, 6))
@@ -425,6 +502,7 @@ class PolicySimulator:
         metrics.storage_price = self.storage_price
         metrics.retrieval_price_per_slot = self.retrieval_price_per_slot
         self.provider_epoch_serves = {pid: 0 for pid in self.providers}
+        self.repairs_started_this_epoch = 0
         online = self._epoch_online_map(epoch)
 
         for _ in range(self.config.users * self.config.retrievals_per_user_per_epoch):
@@ -451,11 +529,24 @@ class PolicySimulator:
             behavior = provider.behavior
             if provider.jailed_until_epoch >= epoch:
                 out[provider_id] = False
+            elif self._region_offline(provider.region, epoch):
+                out[provider_id] = False
             elif epoch in behavior.offline_epochs:
                 out[provider_id] = False
             else:
                 out[provider_id] = self.rng.random() <= behavior.online_probability
         return out
+
+    def _region_offline(self, region: str, epoch: int) -> bool:
+        for outage in self.config.regional_outages:
+            if str(outage.get("region")) != region:
+                continue
+            epochs = outage.get("epochs", "")
+            if isinstance(epochs, str) and epoch in parse_epoch_range(epochs):
+                return True
+            if isinstance(epochs, list) and epoch in {int(item) for item in epochs}:
+                return True
+        return False
 
     def _simulate_retrieval(
         self,
@@ -502,6 +593,8 @@ class PolicySimulator:
                 self._start_repair(epoch, deal, slot, "corrupt_retrieval", metrics)
             elif outcome == "withheld":
                 metrics.withheld_responses += 1
+            elif outcome == "saturated":
+                metrics.saturated_responses += 1
             else:
                 metrics.offline_responses += 1
 
@@ -522,6 +615,12 @@ class PolicySimulator:
         if not online.get(provider_id, False):
             provider.offline_responses += 1
             return "offline"
+        if (
+            provider.bandwidth_capacity_per_epoch > 0
+            and self.provider_epoch_serves.get(provider_id, 0) >= provider.bandwidth_capacity_per_epoch
+        ):
+            provider.saturated_responses += 1
+            return "saturated"
 
         behavior = provider.behavior
         roll = self.rng.random()
@@ -622,7 +721,12 @@ class PolicySimulator:
         pending = slot.pending_provider_id
         if not pending:
             return
-        if online.get(pending, False) and slot.repair_remaining_epochs > 0:
+        provider = self.providers[pending]
+        can_coordinate_repair = (
+            online.get(pending, False)
+            and self.rng.random() <= provider.repair_success_probability
+        )
+        if can_coordinate_repair and slot.repair_remaining_epochs > 0:
             slot.repair_remaining_epochs -= 1
         if slot.repair_remaining_epochs > 0:
             return
@@ -673,8 +777,27 @@ class PolicySimulator:
                 }
             )
             return
+        if (
+            self.config.max_repairs_started_per_epoch > 0
+            and self.repairs_started_this_epoch >= self.config.max_repairs_started_per_epoch
+        ):
+            metrics.repair_backoffs += 1
+            self.repair_rows.append(
+                {
+                    "epoch": epoch,
+                    "event": "repair_backoff",
+                    "deal_id": deal.deal_id,
+                    "slot": slot.slot,
+                    "old_provider": slot.provider_id,
+                    "new_provider": "",
+                    "reason": "repair_coordination_limit",
+                    "generation": slot.current_gen,
+                }
+            )
+            return
         pending = self._select_replacement(epoch, deal, slot)
         if not pending:
+            metrics.repair_backoffs += 1
             self.repair_rows.append(
                 {
                     "epoch": epoch,
@@ -698,6 +821,7 @@ class PolicySimulator:
         }
         slot.last_reason = reason
         metrics.repairs_started += 1
+        self.repairs_started_this_epoch += 1
         self.repair_rows.append(
             {
                 "epoch": epoch,
@@ -714,23 +838,43 @@ class PolicySimulator:
     def _select_replacement(self, epoch: int, deal: DealState, slot: SlotState) -> str | None:
         excluded = {s.provider_id for s in deal.slots}
         excluded.update(s.pending_provider_id for s in deal.slots if s.pending_provider_id)
+        assigned_counts = self._assigned_counts(include_pending=True)
         candidates = [
             pid
             for pid, p in self.providers.items()
-            if pid not in excluded and not p.behavior.draining and p.jailed_until_epoch < epoch
+            if (
+                pid not in excluded
+                and not p.behavior.draining
+                and p.jailed_until_epoch < epoch
+                and assigned_counts.get(pid, 0) < p.capacity_slots
+            )
         ]
 
         if not candidates:
             candidates = [
                 pid
                 for pid, p in self.providers.items()
-                if pid != slot.provider_id and not p.behavior.draining and p.jailed_until_epoch < epoch
+                if (
+                    pid != slot.provider_id
+                    and not p.behavior.draining
+                    and p.jailed_until_epoch < epoch
+                    and assigned_counts.get(pid, 0) < p.capacity_slots
+                )
             ]
         if not candidates:
             return None
 
         seed = f"{self.config.seed}:{epoch}:{deal.deal_id}:{slot.slot}:{slot.current_gen}"
         return min(candidates, key=lambda pid: stable_digest(seed, pid))
+
+    def _assigned_counts(self, include_pending: bool = False) -> dict[str, int]:
+        assigned_counts = {pid: 0 for pid in self.providers}
+        for deal in self.deals:
+            for slot in deal.slots:
+                assigned_counts[slot.provider_id] += 1
+                if include_pending and slot.pending_provider_id:
+                    assigned_counts[slot.pending_provider_id] += 1
+        return assigned_counts
 
     def _required_blobs(self, deal: DealState) -> int:
         slot_bytes = deal.user_mdus * deal.rows * BLOB_SIZE_BYTES
@@ -810,10 +954,7 @@ class PolicySimulator:
         )
 
     def _settle_epoch_economy(self, epoch: int, metrics: EpochMetrics) -> None:
-        assigned_counts = {pid: 0 for pid in self.providers}
-        for deal in self.deals:
-            for slot in deal.slots:
-                assigned_counts[slot.provider_id] += 1
+        assigned_counts = self._assigned_counts()
 
         reward_pool = metrics.active_slots * self.config.base_reward_per_slot
         reward_paid = metrics.reward_eligible_slots * self.config.base_reward_per_slot
@@ -852,8 +993,12 @@ class PolicySimulator:
         for provider_id, provider in self.providers.items():
             cost = (
                 self.config.provider_fixed_cost_per_epoch
-                + assigned_counts[provider_id] * self.config.provider_storage_cost_per_slot_epoch
-                + self.provider_epoch_serves[provider_id] * self.config.provider_bandwidth_cost_per_retrieval
+                + assigned_counts[provider_id]
+                * self.config.provider_storage_cost_per_slot_epoch
+                * provider.storage_cost_multiplier
+                + self.provider_epoch_serves[provider_id]
+                * self.config.provider_bandwidth_cost_per_retrieval
+                * provider.bandwidth_cost_multiplier
             )
             provider.total_cost += cost
             provider_cost += cost
@@ -861,7 +1006,7 @@ class PolicySimulator:
         metrics.provider_cost = provider_cost
         metrics.provider_revenue = sum(p.revenue for p in self.providers.values())
         metrics.provider_pnl = sum(p.pnl for p in self.providers.values())
-        total_capacity = max(1, self.config.providers * self.config.provider_slot_capacity)
+        total_capacity = max(1, sum(p.capacity_slots for p in self.providers.values()))
         metrics.storage_utilization_bps = int(metrics.active_slots * 10_000 / total_capacity)
         self.economy_rows.append(
             {
@@ -914,6 +1059,7 @@ class PolicySimulator:
             "corrupt_responses",
             "withheld_responses",
             "offline_responses",
+            "saturated_responses",
             "invalid_proofs",
             "quota_misses",
             "deputy_misses",
@@ -923,6 +1069,7 @@ class PolicySimulator:
             "repairing_slots",
             "repairs_started",
             "repairs_completed",
+            "repair_backoffs",
             "paid_corrupt_bytes",
             "retrieval_base_burned",
             "retrieval_variable_burned",
@@ -951,26 +1098,41 @@ class PolicySimulator:
         totals["providers_negative_pnl"] = sum(1 for p in self.providers.values() if p.pnl < 0)
         totals["min_provider_pnl"] = min((p.pnl for p in self.providers.values()), default=0.0)
         totals["max_provider_pnl"] = max((p.pnl for p in self.providers.values()), default=0.0)
+        assigned_counts = self._assigned_counts()
+        totals["providers_over_capacity"] = sum(
+            1 for pid, provider in self.providers.items() if assigned_counts.get(pid, 0) > provider.capacity_slots
+        )
+        total_capacity = sum(p.capacity_slots for p in self.providers.values())
+        final_active_slots = self._final_slots()["active"]
+        totals["final_storage_utilization_bps"] = int(final_active_slots * 10_000 / max(1, total_capacity))
+        totals["min_provider_capacity"] = min((p.capacity_slots for p in self.providers.values()), default=0)
+        totals["max_provider_capacity"] = max((p.capacity_slots for p in self.providers.values()), default=0)
+        totals["min_provider_bandwidth_capacity"] = min((p.bandwidth_capacity_per_epoch for p in self.providers.values()), default=0)
+        totals["max_provider_bandwidth_capacity"] = max((p.bandwidth_capacity_per_epoch for p in self.providers.values()), default=0)
         totals["audit_budget_carryover"] = self.audit_budget_carryover
         return totals
 
     def _provider_rows(self) -> list[dict[str, Any]]:
-        assigned_counts = {pid: 0 for pid in self.providers}
-        for deal in self.deals:
-            for slot in deal.slots:
-                assigned_counts[slot.provider_id] += 1
+        assigned_counts = self._assigned_counts()
         rows = []
         for provider_id, provider in sorted(self.providers.items()):
             rows.append(
                 {
                     "provider_id": provider_id,
+                    "region": provider.region,
                     "assigned_slots": assigned_counts[provider_id],
+                    "capacity_slots": provider.capacity_slots,
+                    "capacity_utilization_bps": int(assigned_counts[provider_id] * 10_000 / max(1, provider.capacity_slots)),
+                    "bandwidth_capacity_per_epoch": provider.bandwidth_capacity_per_epoch,
+                    "repair_success_probability": provider.repair_success_probability,
+                    "online_probability": provider.behavior.online_probability,
                     "hard_faults": provider.hard_faults,
                     "retrieval_attempts": provider.retrieval_attempts,
                     "retrieval_successes": provider.retrieval_successes,
                     "corrupt_responses": provider.corrupt_responses,
                     "withheld_responses": provider.withheld_responses,
                     "offline_responses": provider.offline_responses,
+                    "saturated_responses": provider.saturated_responses,
                     "rewards_earned_slots": provider.rewards_earned_slots,
                     "reward_revenue": provider.reward_revenue,
                     "retrieval_revenue": provider.retrieval_revenue,
@@ -1116,6 +1278,13 @@ def bounded_step(current: float, direction: int, step_bps: int, min_value: float
     return max(min_value, min(max_value, next_value))
 
 
+def jitter_multiplier(rng: random.Random, jitter_bps: int) -> float:
+    if jitter_bps <= 0:
+        return 1.0
+    spread = jitter_bps / 10_000
+    return max(0.0, 1.0 + rng.uniform(-spread, spread))
+
+
 def parse_epoch_range(raw: str) -> set[int]:
     out: set[int] = set()
     for chunk in raw.split(","):
@@ -1250,7 +1419,8 @@ def print_summary(result: SimResult) -> None:
     )
     print(
         "quota_misses={quota_misses} deputy_misses={deputy_misses} "
-        "invalid_proofs={invalid_proofs} unavailable_reads={unavailable_reads}".format(**totals)
+        "invalid_proofs={invalid_proofs} unavailable_reads={unavailable_reads} "
+        "saturated_responses={saturated_responses}".format(**totals)
     )
     print(
         "provider_pnl={provider_pnl:.4f} negative_pnl={providers_negative_pnl} "
@@ -1294,6 +1464,7 @@ def build_parser() -> argparse.ArgumentParser:
             "wash-retrieval",
             "viral-public-retrieval",
             "elasticity-cap-hit",
+            "large-scale-regional-stress",
         ],
     )
     parser.add_argument("--scenario-file", type=Path)

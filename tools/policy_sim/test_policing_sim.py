@@ -78,6 +78,39 @@ class PolicySimulatorTests(unittest.TestCase):
 
         self.assertEqual(["min_success_rate"], [item.name for item in assertions])
 
+    def test_heterogeneous_scale_controls_surface_saturation_and_repair_backoff(self):
+        config = SimConfig(
+            scenario="large-scale-regional-stress",
+            seed=29,
+            providers=60,
+            users=240,
+            deals=40,
+            epochs=8,
+            retrievals_per_user_per_epoch=2,
+            provider_regions=("na", "eu", "apac"),
+            regional_outages=({"region": "eu", "epochs": "3-5"},),
+            provider_capacity_min=8,
+            provider_capacity_max=12,
+            provider_bandwidth_capacity_min=5,
+            provider_bandwidth_capacity_max=12,
+            provider_online_probability_min=0.98,
+            provider_online_probability_max=1.0,
+            provider_repair_probability_min=0.5,
+            provider_repair_probability_max=0.9,
+            max_repairs_started_per_epoch=3,
+            repair_epochs=2,
+            dynamic_pricing=True,
+            retrieval_target_per_epoch=300,
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertGreater(result.totals["saturated_responses"], 0)
+        self.assertGreater(result.totals["repair_backoffs"], 0)
+        self.assertEqual(0, result.totals["providers_over_capacity"])
+        self.assertLess(result.totals["final_storage_utilization_bps"], 10_000)
+        self.assertIn("capacity_slots", result.providers[0])
+        self.assertIn("bandwidth_capacity_per_epoch", result.providers[0])
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)
@@ -115,6 +148,8 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "risk_register.md").exists())
             self.assertTrue((report_dir / "graduation.md").exists())
             self.assertTrue((report_dir / "graphs" / "retrieval_success_rate.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "price_trajectory.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "saturation_and_repair.svg").exists())
             report_text = (report_dir / "report.md").read_text(encoding="utf-8")
             self.assertIn("## Executive Summary", report_text)
             self.assertIn("## What Happened", report_text)
@@ -125,6 +160,8 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Slot State Transitions](graphs/slot_states.svg)", report_text)
             self.assertIn("![Provider P&L](graphs/provider_pnl.svg)", report_text)
             self.assertIn("![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)", report_text)
+            self.assertIn("![Price Trajectory](graphs/price_trajectory.svg)", report_text)
+            self.assertIn("![Saturation And Repair Pressure](graphs/saturation_and_repair.svg)", report_text)
             risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")
             self.assertIn("## Material Risks", risk_text)
             graduation_text = (report_dir / "graduation.md").read_text(encoding="utf-8")
