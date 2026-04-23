@@ -115,6 +115,16 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "risk_register.md").exists())
             self.assertTrue((report_dir / "graduation.md").exists())
             self.assertTrue((report_dir / "graphs" / "retrieval_success_rate.svg").exists())
+            report_text = (report_dir / "report.md").read_text(encoding="utf-8")
+            self.assertIn("## Executive Summary", report_text)
+            self.assertIn("## What Happened", report_text)
+            self.assertIn("## Enforcement Interpretation", report_text)
+            self.assertIn("## Economic Interpretation", report_text)
+            self.assertIn("## Evidence Ledger Excerpt", report_text)
+            risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")
+            self.assertIn("## Material Risks", risk_text)
+            graduation_text = (report_dir / "graduation.md").read_text(encoding="utf-8")
+            self.assertIn("## Readiness Checklist", graduation_text)
 
     def test_policy_delta_report_compares_two_runs(self):
         ideal = load_scenario_spec(Path(__file__).with_name("scenarios") / "ideal.yaml")
@@ -133,6 +143,8 @@ class PolicySimulatorTests(unittest.TestCase):
             text = (report_dir / "policy_delta.md").read_text(encoding="utf-8")
             self.assertIn("success_rate", text)
             self.assertIn("repairs_started", text)
+            self.assertIn("## High-Signal Changes", text)
+            self.assertIn("## Human Review Questions", text)
 
 
 if __name__ == "__main__":

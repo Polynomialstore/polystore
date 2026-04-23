@@ -114,6 +114,12 @@ When `--out-dir` is supplied, the simulator emits:
 - `policy_delta.md` for baseline/candidate comparisons
 - `graphs/*.svg`
 
+The Markdown reports are intended to be human review artifacts, not just metric
+dumps. A run report explains scenario intent, expected behavior, what happened
+over the timeline, enforcement interpretation, economic interpretation, the
+assertion contract, evidence excerpts, generated graphs, and remaining review
+questions.
+
 The simulator should remain deterministic and machine-output focused. Reporting
 and graph generation belong in `report.py`.
 
