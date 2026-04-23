@@ -254,11 +254,18 @@ Deliverables:
 2. JSON and CSV outputs for metrics.
 3. Assertion presets for normal, degraded, and malicious conditions.
 4. Seeded deterministic runs that can be compared over time.
+5. Scenario fixture files that can be reviewed and versioned.
+6. Per-provider, per-slot, evidence, repair, and economic ledgers.
+7. A comparison command for policy parameter changes.
 
 Exit criteria:
 
 1. A policy change can be evaluated across at least ideal, outage, corrupt, withholding, and lazy-provider scenarios.
 2. The simulator identifies which chain/gateway behavior a scenario depends on.
+3. Canonical reliability and economic scenarios run from fixture files with
+   deterministic assertions.
+4. The simulator can produce enough evidence to decide which behavior should
+   graduate to keeper tests.
 
 ### Milestone 2: Policy Calibration
 
@@ -889,6 +896,23 @@ UX tests should cover:
 
 The current `tools/policy_sim` is a seed. It should become a policy workbench.
 
+The current active goal is to complete the simulator workbench before starting
+new punitive chain-policy implementation. Chain and e2e work should consume
+simulator outputs, not race ahead of them.
+
+### 27.0 Active Simulator Scope
+
+For the next engineering milestone, prioritize:
+
+1. Turn CLI-only scenarios into versioned scenario fixtures.
+2. Define stable output schemas for metrics and ledgers.
+3. Add deterministic assertion presets for each canonical scenario.
+4. Add provider/slot lifecycle ledgers so policy outcomes are explainable.
+5. Add the first economic ledgers: escrow, retrieval settlement, reward pool,
+   audit budget, provider P&L, and elasticity spend.
+6. Add scenario comparison reports for parameter changes.
+7. Produce a graduation map from simulator scenario to keeper/e2e test target.
+
 ### 27.1 Model Dimensions
 
 The simulator should model:
@@ -970,6 +994,74 @@ The simulator itself needs tests:
 9. Reward pool mint/pay/burn accounting tests.
 10. Sponsored retrieval and owner-escrow isolation tests.
 11. Provider P&L and churn-threshold tests.
+
+### 27.5 Simulator Milestone Plan
+
+The simulator should be developed in staged slices. Each slice should leave the
+repository with passing tests and useful outputs.
+
+| Stage | Name | Deliverables | Exit criteria |
+|---|---|---|---|
+| S0 | Planning contract | Final scenario list, metric names, assertion names, output file schema, fixture directory layout. | A future agent can add a scenario without inventing new conventions. |
+| S1 | Fixture runner | Scenario parser, fixture discovery, seeded run command, JSON/CSV output paths, assertion runner. | Existing ideal/outage/corrupt/withholding scenarios run from fixtures. |
+| S2 | Reliability ledgers | Per-provider summary, per-slot history, evidence ledger, repair ledger, reward eligibility ledger. | Every repair, miss, hard fault, and reward exclusion has a reason in output. |
+| S3 | Economic ledgers | Escrow ledger, retrieval settlement ledger, base reward ledger, audit budget ledger, provider P&L ledger. | Economic scenarios can assert fee, burn, mint, payout, and provider-profit outcomes. |
+| S4 | Parameter comparison | Baseline vs candidate report, sensitivity sweeps, metric delta summaries. | A policy parameter change can be evaluated before keeper work begins. |
+| S5 | Graduation report | Scenario-to-chain/e2e mapping, missing implementation surfaces, recommended next keeper tests. | The team can choose the next keeper test slice from simulator evidence. |
+
+### 27.6 Scenario Fixture Inventory
+
+Start with these fixture files under `tools/policy_sim/scenarios/`:
+
+| Fixture | Purpose | Required assertions |
+|---|---|---|
+| `ideal.yaml` | Cooperative baseline. | Full retrieval success, no repairs, no quota misses, no bad payouts. |
+| `single_outage.yaml` | One provider offline for several epochs. | Reads remain available, repair starts after threshold, no slash. |
+| `withholding.yaml` | Provider refuses retrievals and synthetic participation. | Route-around succeeds where possible, deputy/audit misses accrue, repair starts. |
+| `corrupt_provider.yaml` | Provider returns corrupt data or invalid proofs. | Corrupt bytes are unpaid, hard fault is recorded, repair starts. |
+| `lazy_provider.yaml` | Provider does not meet proof quota. | Reward exclusion occurs, soft-fault path does not slash. |
+| `setup_failure.yaml` | Initial upload to one slot fails. | Setup bump is bounded and replacement is system-selected. |
+| `underpriced_storage.yaml` | Storage price below provider cost. | Provider P&L turns negative and churn pressure is visible. |
+| `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
+| `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
+| `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
+
+### 27.7 Output Contract
+
+Each simulator run should be able to emit:
+
+1. `summary.json`: config, seed, assertion results, and top-level metrics.
+2. `epochs.csv`: one row per epoch with reliability and economic metrics.
+3. `providers.csv`: one row per provider with health, assignment, reward,
+   payout, P&L, and churn-risk metrics.
+4. `slots.csv`: one row per deal-slot with lifecycle, repair, provider, and
+   reward eligibility state.
+5. `evidence.csv`: hard faults, soft faults, threshold evidence, and source.
+6. `repairs.csv`: repair start, candidate selection, catch-up, promotion, and
+   backoff events.
+7. `economy.csv`: storage charges, retrieval burns, payouts, reward mint/burn,
+   audit budget, escrow runway, and elasticity spend.
+8. `comparison.json`: optional baseline-vs-candidate metric deltas.
+
+Schema stability matters. Once S1 lands, any schema change should update tests
+and a small fixture expectation.
+
+### 27.8 Implementation Order
+
+Recommended implementation order:
+
+1. Create fixture loading and preserve current built-in scenario behavior.
+2. Add stable output files without changing simulation semantics.
+3. Add per-provider and per-slot ledgers.
+4. Add scenario assertion presets.
+5. Add reliability fixtures and regression tests.
+6. Add economic state to the model.
+7. Add economic fixtures and regression tests.
+8. Add comparison reports and parameter sweeps.
+9. Generate the first graduation report for keeper/e2e work.
+
+Do not add new chain enforcement from this roadmap until at least S2 is done
+for reliability behavior and S3 is done for economic behavior.
 
 ## 28. Code Implementation Workstreams
 
@@ -1168,6 +1260,19 @@ Before implementing the next large slice:
     during trusted devnet.
 14. Decide the escrow close/refund semantics needed before fee-dominant
     equilibrium analysis is meaningful.
+
+For the current simulator-first milestone, the immediate punch list is:
+
+1. Freeze the S0 planning contract in this document or a linked simulator
+   design note.
+2. Create `tools/policy_sim/scenarios/` and move current built-in scenarios into
+   fixture-backed runs.
+3. Define the output schemas listed in §27.7 and add tests that protect them.
+4. Implement reliability ledgers before adding new reliability behavior.
+5. Implement economic ledgers before attempting dynamic pricing calibration.
+6. Run the first canonical fixture set and review the output quality.
+7. Update this roadmap with what the simulator reveals before graduating keeper
+   tests.
 
 ## 33. Financial Market and Self-Calibration
 
