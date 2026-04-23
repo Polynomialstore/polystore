@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Deterministic enforcement-policy simulator for PolyStore Mode 2 devnets.
 
-This is intentionally a policy harness, not a process-level devnet launcher. It
-models the same surfaces the chain/gateway enforce today: providers, Mode 2
-slots, retrieval sessions, organic credits, synthetic quota fill, deputy-served
-misses, hard faults, and make-before-break repair.
+This is intentionally a policy harness, not a process-level devnet launcher.
+It models the same conceptual surfaces the chain/gateway enforce today:
+providers, Mode 2 slots, retrieval sessions, organic credits, synthetic quota
+fill, deputy-served misses, hard faults, make-before-break repair, and basic
+market accounting.
 """
 
 from __future__ import annotations
@@ -24,6 +25,14 @@ BLOB_SIZE_BYTES = 128 * 1024
 BLOBS_PER_MDU = 64
 SLOT_ACTIVE = "ACTIVE"
 SLOT_REPAIRING = "REPAIRING"
+
+ENFORCEMENT_ORDER = {
+    "MEASURE_ONLY": 0,
+    "REPAIR_ONLY": 1,
+    "REWARD_EXCLUSION": 2,
+    "JAIL_SIMULATED": 3,
+    "SLASH_SIMULATED": 4,
+}
 
 
 @dataclass(frozen=True)
@@ -47,6 +56,32 @@ class SimConfig:
     deputy_evict_after_missed_epochs: int = 1
     repair_epochs: int = 2
     route_attempt_limit: int = 12
+    enforcement_mode: str = "REWARD_EXCLUSION"
+    dynamic_pricing: bool = False
+    storage_price: float = 1.0
+    storage_price_min: float = 0.1
+    storage_price_max: float = 20.0
+    storage_target_utilization_bps: int = 7000
+    retrieval_price_per_slot: float = 0.01
+    retrieval_price_min: float = 0.001
+    retrieval_price_max: float = 1.0
+    retrieval_target_per_epoch: int = 80
+    retrieval_base_fee: float = 0.001
+    retrieval_burn_bps: int = 500
+    dynamic_pricing_max_step_bps: int = 500
+    base_reward_per_slot: float = 0.02
+    audit_budget_per_epoch: float = 1.0
+    audit_cost_per_miss: float = 0.005
+    provider_slot_capacity: int = 16
+    provider_storage_cost_per_slot_epoch: float = 0.01
+    provider_bandwidth_cost_per_retrieval: float = 0.001
+    provider_fixed_cost_per_epoch: float = 0.05
+    provider_initial_bond: float = 100.0
+    slash_hard_fault: float = 1.0
+    jail_epochs: int = 3
+    elasticity_trigger_retrievals_per_epoch: int = 0
+    elasticity_base_cost: float = 1.0
+    elasticity_max_spend: float = 0.0
 
     @property
     def n(self) -> int:
@@ -75,6 +110,10 @@ class SimConfig:
             raise ValueError("providers must be >= k+m")
         if self.route_attempt_limit < self.k:
             raise ValueError("route_attempt_limit must be >= k")
+        if self.enforcement_mode not in ENFORCEMENT_ORDER:
+            raise ValueError(f"unknown enforcement_mode {self.enforcement_mode!r}")
+        if self.retrieval_burn_bps < 0 or self.retrieval_burn_bps > 10_000:
+            raise ValueError("retrieval_burn_bps must be in [0, 10000]")
 
 
 @dataclass
@@ -91,6 +130,7 @@ class ProviderBehavior:
 @dataclass
 class Provider:
     provider_id: str
+    initial_bond: float
     behavior: ProviderBehavior = field(default_factory=ProviderBehavior)
     hard_faults: int = 0
     retrieval_attempts: int = 0
@@ -99,10 +139,28 @@ class Provider:
     withheld_responses: int = 0
     offline_responses: int = 0
     rewards_earned_slots: int = 0
+    reward_revenue: float = 0.0
+    retrieval_revenue: float = 0.0
+    total_cost: float = 0.0
+    slashed: float = 0.0
+    bond: float = 0.0
+    jailed_until_epoch: int = 0
+
+    def __post_init__(self) -> None:
+        self.bond = self.initial_bond
+
+    @property
+    def revenue(self) -> float:
+        return self.reward_revenue + self.retrieval_revenue
+
+    @property
+    def pnl(self) -> float:
+        return self.revenue - self.total_cost - self.slashed
 
 
 @dataclass
 class SlotState:
+    deal_id: int
     slot: int
     provider_id: str
     status: str = SLOT_ACTIVE
@@ -117,6 +175,9 @@ class SlotState:
     direct_served: int = 0
     deputy_served: int = 0
     hard_faulted_this_epoch: bool = False
+    compliant_this_epoch: bool = False
+    reward_eligible_this_epoch: bool = False
+    last_reason: str = ""
 
     def reset_epoch(self) -> None:
         self.credits_raw = 0
@@ -125,6 +186,9 @@ class SlotState:
         self.direct_served = 0
         self.deputy_served = 0
         self.hard_faulted_this_epoch = False
+        self.compliant_this_epoch = False
+        self.reward_eligible_this_epoch = False
+        self.last_reason = ""
 
 
 @dataclass
@@ -166,6 +230,23 @@ class EpochMetrics:
     repairs_started: int = 0
     repairs_completed: int = 0
     paid_corrupt_bytes: int = 0
+    retrieval_base_burned: float = 0.0
+    retrieval_variable_burned: float = 0.0
+    retrieval_provider_payouts: float = 0.0
+    reward_pool_minted: float = 0.0
+    reward_paid: float = 0.0
+    reward_burned: float = 0.0
+    audit_budget_minted: float = 0.0
+    audit_budget_spent: float = 0.0
+    audit_budget_carryover: float = 0.0
+    provider_cost: float = 0.0
+    provider_revenue: float = 0.0
+    provider_pnl: float = 0.0
+    storage_price: float = 0.0
+    retrieval_price_per_slot: float = 0.0
+    storage_utilization_bps: int = 0
+    elasticity_spent: float = 0.0
+    elasticity_rejections: int = 0
 
 
 @dataclass
@@ -176,12 +257,26 @@ class AssertionResult:
 
 
 @dataclass
+class ScenarioSpec:
+    name: str
+    description: str = ""
+    config: dict[str, Any] = field(default_factory=dict)
+    faults: list[str] = field(default_factory=list)
+    assertions: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class SimResult:
     config: dict[str, Any]
     totals: dict[str, Any]
     epochs: list[dict[str, Any]]
     final_slots: dict[str, int]
     assertions: list[AssertionResult] = field(default_factory=list)
+    providers: list[dict[str, Any]] = field(default_factory=list)
+    slots: list[dict[str, Any]] = field(default_factory=list)
+    evidence: list[dict[str, Any]] = field(default_factory=list)
+    repairs: list[dict[str, Any]] = field(default_factory=list)
+    economy: list[dict[str, Any]] = field(default_factory=list)
 
     def to_jsonable(self) -> dict[str, Any]:
         return {
@@ -190,6 +285,11 @@ class SimResult:
             "epochs": self.epochs,
             "final_slots": self.final_slots,
             "assertions": [asdict(item) for item in self.assertions],
+            "providers": self.providers,
+            "slots": self.slots,
+            "evidence": self.evidence,
+            "repairs": self.repairs,
+            "economy": self.economy,
         }
 
 
@@ -200,10 +300,20 @@ class PolicySimulator:
         self.extra_faults = list(extra_faults)
         self.rng = random.Random(config.seed)
         self.providers: dict[str, Provider] = {
-            self.provider_id(i): Provider(self.provider_id(i)) for i in range(config.providers)
+            self.provider_id(i): Provider(self.provider_id(i), config.provider_initial_bond)
+            for i in range(config.providers)
         }
         self.deals = self._build_deals()
         self.metrics: list[EpochMetrics] = []
+        self.evidence_rows: list[dict[str, Any]] = []
+        self.repair_rows: list[dict[str, Any]] = []
+        self.slot_rows: list[dict[str, Any]] = []
+        self.economy_rows: list[dict[str, Any]] = []
+        self.provider_epoch_serves: dict[str, int] = {}
+        self.audit_budget_carryover = 0.0
+        self.elasticity_spent_total = 0.0
+        self.storage_price = config.storage_price
+        self.retrieval_price_per_slot = config.retrieval_price_per_slot
         self._apply_builtin_scenario(config.scenario)
         for fault in self.extra_faults:
             self.apply_fault(fault)
@@ -212,17 +322,21 @@ class PolicySimulator:
     def provider_id(index: int) -> str:
         return f"sp-{index:03d}"
 
+    def mode_at_least(self, mode: str) -> bool:
+        return ENFORCEMENT_ORDER[self.config.enforcement_mode] >= ENFORCEMENT_ORDER[mode]
+
     def _build_deals(self) -> list[DealState]:
         deals: list[DealState] = []
         for deal_idx in range(self.config.deals):
+            deal_id = deal_idx + 1
             start = (deal_idx * self.config.n) % self.config.providers
             slots = []
             for slot_idx in range(self.config.n):
                 pid = self.provider_id((start + slot_idx) % self.config.providers)
-                slots.append(SlotState(slot=slot_idx, provider_id=pid))
+                slots.append(SlotState(deal_id=deal_id, slot=slot_idx, provider_id=pid))
             deals.append(
                 DealState(
-                    deal_id=deal_idx + 1,
+                    deal_id=deal_id,
                     k=self.config.k,
                     m=self.config.m,
                     user_mdus=self.config.user_mdus_per_deal,
@@ -233,12 +347,12 @@ class PolicySimulator:
         return deals
 
     def _apply_builtin_scenario(self, scenario: str) -> None:
-        if scenario == "ideal":
+        if scenario in {"ideal", "setup-failure", "underpriced-storage", "wash-retrieval", "viral-public-retrieval", "elasticity-cap-hit"}:
             return
         if scenario == "single-outage":
             self.providers["sp-000"].behavior.offline_epochs.update(range(2, 6))
             return
-        if scenario == "malicious-corrupt":
+        if scenario in {"malicious-corrupt", "corrupt-provider"}:
             behavior = self.providers["sp-000"].behavior
             behavior.corrupt_rate = 1.0
             behavior.invalid_proof_rate = 1.0
@@ -295,6 +409,11 @@ class PolicySimulator:
             totals=totals,
             epochs=[asdict(m) for m in self.metrics],
             final_slots=self._final_slots(),
+            providers=self._provider_rows(),
+            slots=self.slot_rows,
+            evidence=self.evidence_rows,
+            repairs=self.repair_rows,
+            economy=self.economy_rows,
         )
 
     def _run_epoch(self, epoch: int) -> EpochMetrics:
@@ -303,6 +422,9 @@ class PolicySimulator:
                 slot.reset_epoch()
 
         metrics = EpochMetrics(epoch=epoch)
+        metrics.storage_price = self.storage_price
+        metrics.retrieval_price_per_slot = self.retrieval_price_per_slot
+        self.provider_epoch_serves = {pid: 0 for pid in self.providers}
         online = self._epoch_online_map(epoch)
 
         for _ in range(self.config.users * self.config.retrievals_per_user_per_epoch):
@@ -313,17 +435,23 @@ class PolicySimulator:
                 if slot.status == SLOT_REPAIRING:
                     metrics.repairing_slots += 1
                     self._advance_repair(epoch, online, deal, slot, metrics)
+                    self._record_slot_row(epoch, slot)
                     continue
                 metrics.active_slots += 1
                 self._settle_slot_epoch(epoch, online, deal, slot, metrics)
+                self._record_slot_row(epoch, slot)
 
+        self._settle_epoch_economy(epoch, metrics)
+        self._maybe_update_prices(metrics)
         return metrics
 
     def _epoch_online_map(self, epoch: int) -> dict[str, bool]:
         out: dict[str, bool] = {}
         for provider_id, provider in self.providers.items():
             behavior = provider.behavior
-            if epoch in behavior.offline_epochs:
+            if provider.jailed_until_epoch >= epoch:
+                out[provider_id] = False
+            elif epoch in behavior.offline_epochs:
                 out[provider_id] = False
             else:
                 out[provider_id] = self.rng.random() <= behavior.online_probability
@@ -336,12 +464,14 @@ class PolicySimulator:
         metrics: EpochMetrics,
     ) -> None:
         metrics.retrieval_attempts += 1
+        metrics.retrieval_base_burned += self.config.retrieval_base_fee
         deal = self.rng.choice(self.deals)
         order = list(range(deal.n))
         self.rng.shuffle(order)
         max_attempts = min(len(order), self.config.route_attempt_limit)
         successes = 0
         failed_slots: list[SlotState] = []
+        served_providers: list[str] = []
 
         for slot_idx in order[:max_attempts]:
             slot = deal.slots[slot_idx]
@@ -353,6 +483,8 @@ class PolicySimulator:
             outcome = self._serve_from_provider(provider_id, online)
             if outcome == "ok":
                 successes += 1
+                served_providers.append(provider_id)
+                self.provider_epoch_serves[provider_id] += 1
                 slot.credits_raw += 1
                 slot.direct_served += 1
                 metrics.direct_served += 1
@@ -365,6 +497,8 @@ class PolicySimulator:
                 metrics.corrupt_responses += 1
                 metrics.invalid_proofs += 1
                 self.providers[provider_id].hard_faults += 1
+                self._record_evidence(epoch, deal, slot, provider_id, "hard", "corrupt_retrieval")
+                self._hard_fault_consequence(epoch, provider_id, "corrupt_retrieval")
                 self._start_repair(epoch, deal, slot, "corrupt_retrieval", metrics)
             elif outcome == "withheld":
                 metrics.withheld_responses += 1
@@ -373,6 +507,7 @@ class PolicySimulator:
 
         if successes >= deal.k:
             metrics.retrieval_successes += 1
+            self._settle_retrieval_payment(served_providers[: deal.k], metrics)
             for slot in failed_slots:
                 if slot.direct_served == 0:
                     slot.deputy_served += 1
@@ -402,6 +537,18 @@ class PolicySimulator:
         provider.retrieval_successes += 1
         return "ok"
 
+    def _settle_retrieval_payment(self, provider_ids: list[str], metrics: EpochMetrics) -> None:
+        if not provider_ids:
+            return
+        variable = self.retrieval_price_per_slot * len(provider_ids)
+        burn = variable * self.config.retrieval_burn_bps / 10_000
+        payout = variable - burn
+        per_provider = payout / len(provider_ids)
+        metrics.retrieval_variable_burned += burn
+        metrics.retrieval_provider_payouts += payout
+        for provider_id in provider_ids:
+            self.providers[provider_id].retrieval_revenue += per_provider
+
     def _settle_slot_epoch(
         self,
         epoch: int,
@@ -426,6 +573,8 @@ class PolicySimulator:
                 metrics.invalid_proofs += 1
                 provider.hard_faults += 1
                 slot.hard_faulted_this_epoch = True
+                self._record_evidence(epoch, deal, slot, slot.provider_id, "hard", "invalid_synthetic_proof")
+                self._hard_fault_consequence(epoch, slot.provider_id, "invalid_synthetic_proof")
                 self._start_repair(epoch, deal, slot, "invalid_synthetic_proof", metrics)
             else:
                 slot.synthetic = needed_synthetic
@@ -435,6 +584,7 @@ class PolicySimulator:
         if slot.deputy_served > 0 and slot.direct_served == 0:
             slot.deputy_missed_epochs += 1
             metrics.deputy_misses += 1
+            self._record_evidence(epoch, deal, slot, slot.provider_id, "soft", "deputy_served_zero_direct")
             if slot.deputy_missed_epochs >= self.config.deputy_evict_after_missed_epochs:
                 self._start_repair(epoch, deal, slot, "deputy_served_zero_direct", metrics)
         elif slot.direct_served > 0:
@@ -443,13 +593,21 @@ class PolicySimulator:
         if total < quota:
             slot.missed_epochs += 1
             metrics.quota_misses += 1
+            slot.last_reason = "quota_shortfall"
+            self._record_evidence(epoch, deal, slot, slot.provider_id, "soft", "quota_shortfall")
             if slot.missed_epochs >= self.config.evict_after_missed_epochs:
                 self._start_repair(epoch, deal, slot, "quota_shortfall", metrics)
+            if not self.mode_at_least("REWARD_EXCLUSION"):
+                slot.reward_eligible_this_epoch = True
+                metrics.reward_eligible_slots += 1
+                provider.rewards_earned_slots += 1
             return
 
         slot.missed_epochs = 0
+        slot.compliant_this_epoch = True
         metrics.compliant_slots += 1
         if not slot.hard_faulted_this_epoch and slot.status == SLOT_ACTIVE:
+            slot.reward_eligible_this_epoch = True
             metrics.reward_eligible_slots += 1
             provider.rewards_earned_slots += 1
 
@@ -478,7 +636,18 @@ class PolicySimulator:
         slot.deputy_missed_epochs = 0
         slot.current_gen += 1
         metrics.repairs_completed += 1
-        _ = old_provider
+        self.repair_rows.append(
+            {
+                "epoch": epoch,
+                "event": "repair_completed",
+                "deal_id": deal.deal_id,
+                "slot": slot.slot,
+                "old_provider": old_provider,
+                "new_provider": slot.provider_id,
+                "reason": "catchup_complete",
+                "generation": slot.current_gen,
+            }
+        )
 
     def _start_repair(
         self,
@@ -490,9 +659,36 @@ class PolicySimulator:
     ) -> None:
         if slot.status == SLOT_REPAIRING:
             return
+        if not self.mode_at_least("REPAIR_ONLY"):
+            self.repair_rows.append(
+                {
+                    "epoch": epoch,
+                    "event": "repair_would_start",
+                    "deal_id": deal.deal_id,
+                    "slot": slot.slot,
+                    "old_provider": slot.provider_id,
+                    "new_provider": "",
+                    "reason": reason,
+                    "generation": slot.current_gen,
+                }
+            )
+            return
         pending = self._select_replacement(epoch, deal, slot)
         if not pending:
+            self.repair_rows.append(
+                {
+                    "epoch": epoch,
+                    "event": "repair_backoff",
+                    "deal_id": deal.deal_id,
+                    "slot": slot.slot,
+                    "old_provider": slot.provider_id,
+                    "new_provider": "",
+                    "reason": "no_candidate",
+                    "generation": slot.current_gen,
+                }
+            )
             return
+        old_provider = slot.provider_id
         slot.status = SLOT_REPAIRING
         slot.pending_provider_id = pending
         slot.repair_remaining_epochs = self.config.repair_epochs
@@ -500,7 +696,20 @@ class PolicySimulator:
             "corrupt_retrieval",
             "invalid_synthetic_proof",
         }
+        slot.last_reason = reason
         metrics.repairs_started += 1
+        self.repair_rows.append(
+            {
+                "epoch": epoch,
+                "event": "repair_started",
+                "deal_id": deal.deal_id,
+                "slot": slot.slot,
+                "old_provider": old_provider,
+                "new_provider": pending,
+                "reason": reason,
+                "generation": slot.current_gen,
+            }
+        )
 
     def _select_replacement(self, epoch: int, deal: DealState, slot: SlotState) -> str | None:
         excluded = {s.provider_id for s in deal.slots}
@@ -508,14 +717,14 @@ class PolicySimulator:
         candidates = [
             pid
             for pid, p in self.providers.items()
-            if pid not in excluded and not p.behavior.draining
+            if pid not in excluded and not p.behavior.draining and p.jailed_until_epoch < epoch
         ]
 
         if not candidates:
             candidates = [
                 pid
                 for pid, p in self.providers.items()
-                if pid != slot.provider_id and not p.behavior.draining
+                if pid != slot.provider_id and not p.behavior.draining and p.jailed_until_epoch < epoch
             ]
         if not candidates:
             return None
@@ -528,6 +737,172 @@ class PolicySimulator:
         target_bytes = ceil_div(slot_bytes * self.config.quota_bps_per_epoch, 10_000)
         target_blobs = max(1, ceil_div(target_bytes, BLOB_SIZE_BYTES))
         return max(self.config.quota_min_blobs, min(target_blobs, self.config.quota_max_blobs))
+
+    def _hard_fault_consequence(self, epoch: int, provider_id: str, reason: str) -> None:
+        provider = self.providers[provider_id]
+        if self.mode_at_least("JAIL_SIMULATED"):
+            provider.jailed_until_epoch = max(provider.jailed_until_epoch, epoch + self.config.jail_epochs)
+        if self.mode_at_least("SLASH_SIMULATED"):
+            slash = min(provider.bond, self.config.slash_hard_fault)
+            provider.bond -= slash
+            provider.slashed += slash
+            self.evidence_rows.append(
+                {
+                    "epoch": epoch,
+                    "deal_id": "",
+                    "slot": "",
+                    "provider_id": provider_id,
+                    "evidence_class": "economic",
+                    "reason": f"slash:{reason}",
+                    "consequence": "slash_simulated",
+                }
+            )
+
+    def _record_evidence(
+        self,
+        epoch: int,
+        deal: DealState,
+        slot: SlotState,
+        provider_id: str,
+        evidence_class: str,
+        reason: str,
+    ) -> None:
+        consequence = "measure"
+        if reason in {"corrupt_retrieval", "invalid_synthetic_proof"} and self.mode_at_least("SLASH_SIMULATED"):
+            consequence = "slash_simulated"
+        elif reason in {"corrupt_retrieval", "invalid_synthetic_proof"} and self.mode_at_least("JAIL_SIMULATED"):
+            consequence = "jail_simulated"
+        elif self.mode_at_least("REPAIR_ONLY"):
+            consequence = "repair_candidate"
+        self.evidence_rows.append(
+            {
+                "epoch": epoch,
+                "deal_id": deal.deal_id,
+                "slot": slot.slot,
+                "provider_id": provider_id,
+                "evidence_class": evidence_class,
+                "reason": reason,
+                "consequence": consequence,
+            }
+        )
+
+    def _record_slot_row(self, epoch: int, slot: SlotState) -> None:
+        self.slot_rows.append(
+            {
+                "epoch": epoch,
+                "deal_id": slot.deal_id,
+                "slot": slot.slot,
+                "provider_id": slot.provider_id,
+                "status": slot.status,
+                "pending_provider_id": slot.pending_provider_id or "",
+                "generation": slot.current_gen,
+                "missed_epochs": slot.missed_epochs,
+                "deputy_missed_epochs": slot.deputy_missed_epochs,
+                "credits_raw": slot.credits_raw,
+                "credits_applied": slot.credits_applied,
+                "synthetic": slot.synthetic,
+                "direct_served": slot.direct_served,
+                "deputy_served": slot.deputy_served,
+                "compliant": int(slot.compliant_this_epoch),
+                "reward_eligible": int(slot.reward_eligible_this_epoch),
+                "reason": slot.last_reason,
+            }
+        )
+
+    def _settle_epoch_economy(self, epoch: int, metrics: EpochMetrics) -> None:
+        assigned_counts = {pid: 0 for pid in self.providers}
+        for deal in self.deals:
+            for slot in deal.slots:
+                assigned_counts[slot.provider_id] += 1
+
+        reward_pool = metrics.active_slots * self.config.base_reward_per_slot
+        reward_paid = metrics.reward_eligible_slots * self.config.base_reward_per_slot
+        reward_burned = max(0.0, reward_pool - reward_paid)
+        metrics.reward_pool_minted = reward_pool
+        metrics.reward_paid = reward_paid
+        metrics.reward_burned = reward_burned
+
+        if metrics.reward_eligible_slots:
+            for deal in self.deals:
+                for slot in deal.slots:
+                    if slot.reward_eligible_this_epoch:
+                        self.providers[slot.provider_id].reward_revenue += self.config.base_reward_per_slot
+
+        audit_minted = self.config.audit_budget_per_epoch
+        audit_spent = min(
+            self.audit_budget_carryover + audit_minted,
+            (metrics.quota_misses + metrics.deputy_misses) * self.config.audit_cost_per_miss,
+        )
+        self.audit_budget_carryover = self.audit_budget_carryover + audit_minted - audit_spent
+        metrics.audit_budget_minted = audit_minted
+        metrics.audit_budget_spent = audit_spent
+        metrics.audit_budget_carryover = self.audit_budget_carryover
+
+        if (
+            self.config.elasticity_trigger_retrievals_per_epoch > 0
+            and metrics.retrieval_attempts >= self.config.elasticity_trigger_retrievals_per_epoch
+        ):
+            if self.elasticity_spent_total + self.config.elasticity_base_cost > self.config.elasticity_max_spend:
+                metrics.elasticity_rejections += 1
+            else:
+                self.elasticity_spent_total += self.config.elasticity_base_cost
+                metrics.elasticity_spent += self.config.elasticity_base_cost
+
+        provider_cost = 0.0
+        for provider_id, provider in self.providers.items():
+            cost = (
+                self.config.provider_fixed_cost_per_epoch
+                + assigned_counts[provider_id] * self.config.provider_storage_cost_per_slot_epoch
+                + self.provider_epoch_serves[provider_id] * self.config.provider_bandwidth_cost_per_retrieval
+            )
+            provider.total_cost += cost
+            provider_cost += cost
+
+        metrics.provider_cost = provider_cost
+        metrics.provider_revenue = sum(p.revenue for p in self.providers.values())
+        metrics.provider_pnl = sum(p.pnl for p in self.providers.values())
+        total_capacity = max(1, self.config.providers * self.config.provider_slot_capacity)
+        metrics.storage_utilization_bps = int(metrics.active_slots * 10_000 / total_capacity)
+        self.economy_rows.append(
+            {
+                "epoch": epoch,
+                "storage_price": metrics.storage_price,
+                "retrieval_price_per_slot": metrics.retrieval_price_per_slot,
+                "storage_utilization_bps": metrics.storage_utilization_bps,
+                "retrieval_base_burned": metrics.retrieval_base_burned,
+                "retrieval_variable_burned": metrics.retrieval_variable_burned,
+                "retrieval_provider_payouts": metrics.retrieval_provider_payouts,
+                "reward_pool_minted": metrics.reward_pool_minted,
+                "reward_paid": metrics.reward_paid,
+                "reward_burned": metrics.reward_burned,
+                "audit_budget_minted": metrics.audit_budget_minted,
+                "audit_budget_spent": metrics.audit_budget_spent,
+                "audit_budget_carryover": metrics.audit_budget_carryover,
+                "provider_cost": metrics.provider_cost,
+                "provider_revenue": metrics.provider_revenue,
+                "provider_pnl": metrics.provider_pnl,
+                "elasticity_spent": metrics.elasticity_spent,
+                "elasticity_rejections": metrics.elasticity_rejections,
+            }
+        )
+
+    def _maybe_update_prices(self, metrics: EpochMetrics) -> None:
+        if not self.config.dynamic_pricing:
+            return
+        self.storage_price = bounded_step(
+            current=self.storage_price,
+            direction=1 if metrics.storage_utilization_bps > self.config.storage_target_utilization_bps else -1,
+            step_bps=self.config.dynamic_pricing_max_step_bps,
+            min_value=self.config.storage_price_min,
+            max_value=self.config.storage_price_max,
+        )
+        self.retrieval_price_per_slot = bounded_step(
+            current=self.retrieval_price_per_slot,
+            direction=1 if metrics.retrieval_attempts > self.config.retrieval_target_per_epoch else -1,
+            step_bps=self.config.dynamic_pricing_max_step_bps,
+            min_value=self.config.retrieval_price_min,
+            max_value=self.config.retrieval_price_max,
+        )
 
     def _totals(self) -> dict[str, Any]:
         fields = [
@@ -549,6 +924,17 @@ class PolicySimulator:
             "repairs_started",
             "repairs_completed",
             "paid_corrupt_bytes",
+            "retrieval_base_burned",
+            "retrieval_variable_burned",
+            "retrieval_provider_payouts",
+            "reward_pool_minted",
+            "reward_paid",
+            "reward_burned",
+            "audit_budget_minted",
+            "audit_budget_spent",
+            "provider_cost",
+            "elasticity_spent",
+            "elasticity_rejections",
         ]
         totals = {name: sum(getattr(m, name) for m in self.metrics) for name in fields}
         attempts = totals["retrieval_attempts"]
@@ -559,7 +945,44 @@ class PolicySimulator:
             totals["reward_eligible_slots"] / active_slots if active_slots else 0.0
         )
         totals["provider_hard_faults"] = sum(p.hard_faults for p in self.providers.values())
+        totals["provider_revenue"] = sum(p.revenue for p in self.providers.values())
+        totals["provider_pnl"] = sum(p.pnl for p in self.providers.values())
+        totals["provider_slashed"] = sum(p.slashed for p in self.providers.values())
+        totals["providers_negative_pnl"] = sum(1 for p in self.providers.values() if p.pnl < 0)
+        totals["min_provider_pnl"] = min((p.pnl for p in self.providers.values()), default=0.0)
+        totals["max_provider_pnl"] = max((p.pnl for p in self.providers.values()), default=0.0)
+        totals["audit_budget_carryover"] = self.audit_budget_carryover
         return totals
+
+    def _provider_rows(self) -> list[dict[str, Any]]:
+        assigned_counts = {pid: 0 for pid in self.providers}
+        for deal in self.deals:
+            for slot in deal.slots:
+                assigned_counts[slot.provider_id] += 1
+        rows = []
+        for provider_id, provider in sorted(self.providers.items()):
+            rows.append(
+                {
+                    "provider_id": provider_id,
+                    "assigned_slots": assigned_counts[provider_id],
+                    "hard_faults": provider.hard_faults,
+                    "retrieval_attempts": provider.retrieval_attempts,
+                    "retrieval_successes": provider.retrieval_successes,
+                    "corrupt_responses": provider.corrupt_responses,
+                    "withheld_responses": provider.withheld_responses,
+                    "offline_responses": provider.offline_responses,
+                    "rewards_earned_slots": provider.rewards_earned_slots,
+                    "reward_revenue": provider.reward_revenue,
+                    "retrieval_revenue": provider.retrieval_revenue,
+                    "total_cost": provider.total_cost,
+                    "slashed": provider.slashed,
+                    "bond": provider.bond,
+                    "pnl": provider.pnl,
+                    "jailed_until_epoch": provider.jailed_until_epoch,
+                    "churn_risk": int(provider.pnl < 0),
+                }
+            )
+        return rows
 
     def _final_slots(self) -> dict[str, int]:
         active = 0
@@ -573,7 +996,11 @@ class PolicySimulator:
         return {"active": active, "repairing": repairing}
 
 
-def evaluate_assertions(result: SimResult, min_success_rate: float | None = None) -> list[AssertionResult]:
+def evaluate_assertions(
+    result: SimResult,
+    min_success_rate: float | None = None,
+    assertion_specs: dict[str, Any] | None = None,
+) -> list[AssertionResult]:
     scenario = result.config["scenario"]
     has_custom_faults = bool(result.config.get("faults"))
     totals = result.totals
@@ -588,6 +1015,12 @@ def evaluate_assertions(result: SimResult, min_success_rate: float | None = None
             totals["success_rate"] >= min_success_rate,
             f"success_rate={totals['success_rate']:.4f}, required={min_success_rate:.4f}",
         )
+
+    if assertion_specs:
+        for name, expected in assertion_specs.items():
+            add_generic_assertion(add, totals, name, expected)
+        result.assertions = checks
+        return checks
 
     if has_custom_faults:
         result.assertions = checks
@@ -612,7 +1045,7 @@ def evaluate_assertions(result: SimResult, min_success_rate: float | None = None
         add("outage_triggers_repair", totals["repairs_started"] >= 1, str(totals["repairs_started"]))
         add("outage_completes_repair", totals["repairs_completed"] >= 1, str(totals["repairs_completed"]))
         add("outage_no_corrupt_payment", totals["paid_corrupt_bytes"] == 0, str(totals["paid_corrupt_bytes"]))
-    elif scenario == "malicious-corrupt":
+    elif scenario in {"malicious-corrupt", "corrupt-provider"}:
         add("malicious_detected", totals["invalid_proofs"] >= 1, str(totals["invalid_proofs"]))
         add("malicious_triggers_repair", totals["repairs_started"] >= 1, str(totals["repairs_started"]))
         add(
@@ -641,6 +1074,26 @@ def evaluate_assertions(result: SimResult, min_success_rate: float | None = None
     return checks
 
 
+def add_generic_assertion(add, totals: dict[str, Any], name: str, expected: Any) -> None:
+    if name.startswith("min_"):
+        metric = name[4:]
+        actual = totals.get(metric)
+        add(name, actual is not None and actual >= expected, f"{metric}={actual}, required>={expected}")
+        return
+    if name.startswith("max_"):
+        metric = name[4:]
+        actual = totals.get(metric)
+        add(name, actual is not None and actual <= expected, f"{metric}={actual}, required<={expected}")
+        return
+    if name.startswith("exact_"):
+        metric = name[6:]
+        actual = totals.get(metric)
+        add(name, actual == expected, f"{metric}={actual}, required={expected}")
+        return
+    actual = totals.get(name)
+    add(name, actual == expected, f"{name}={actual}, required={expected}")
+
+
 def stable_digest(*parts: str) -> str:
     h = hashlib.sha256()
     for part in parts:
@@ -653,6 +1106,14 @@ def ceil_div(num: int, denom: int) -> int:
     if denom <= 0:
         raise ValueError("denom must be positive")
     return (num + denom - 1) // denom
+
+
+def bounded_step(current: float, direction: int, step_bps: int, min_value: float, max_value: float) -> float:
+    if direction == 0 or step_bps <= 0:
+        return current
+    factor = step_bps / 10_000
+    next_value = current * (1 + factor if direction > 0 else 1 - factor)
+    return max(min_value, min(max_value, next_value))
 
 
 def parse_epoch_range(raw: str) -> set[int]:
@@ -682,19 +1143,96 @@ def parse_probability(parts: list[str], raw: str) -> float:
     return value
 
 
+def load_scenario_spec(path: Path) -> ScenarioSpec:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"scenario fixture must be an object: {path}")
+    name = raw.get("name") or path.stem
+    return ScenarioSpec(
+        name=str(name),
+        description=str(raw.get("description", "")),
+        config=dict(raw.get("config", {})),
+        faults=list(raw.get("faults", [])),
+        assertions=dict(raw.get("assertions", {})),
+    )
+
+
+def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None) -> tuple[SimConfig, list[str], dict[str, Any]]:
+    data: dict[str, Any] = {}
+    faults: list[str] = []
+    assertions: dict[str, Any] = {}
+    if spec:
+        data.update(spec.config)
+        data.setdefault("scenario", spec.name)
+        faults.extend(spec.faults)
+        assertions.update(spec.assertions)
+    else:
+        data["scenario"] = args.scenario
+
+    cli_values = {
+        "seed": args.seed,
+        "providers": args.providers,
+        "users": args.users,
+        "deals": args.deals,
+        "epochs": args.epochs,
+        "k": args.k,
+        "m": args.m,
+        "user_mdus_per_deal": args.user_mdus_per_deal,
+        "retrievals_per_user_per_epoch": args.retrievals_per_user_per_epoch,
+        "quota_min_blobs": args.quota_min_blobs,
+        "quota_max_blobs": args.quota_max_blobs,
+        "credit_cap_bps": args.credit_cap_bps,
+        "evict_after_missed_epochs": args.evict_after_missed_epochs,
+        "repair_epochs": args.repair_epochs,
+        "enforcement_mode": args.enforcement_mode,
+    }
+    for key, value in cli_values.items():
+        if value is not None:
+            data[key] = value
+    if args.dynamic_pricing:
+        data["dynamic_pricing"] = True
+    faults.extend(args.fault or [])
+    return SimConfig(**data), faults, assertions
+
+
 def write_json(path: Path, result: SimResult) -> None:
     path.write_text(json.dumps(result.to_jsonable(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def write_csv(path: Path, result: SimResult) -> None:
-    epochs = result.epochs
-    if not epochs:
+def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    if not rows:
         path.write_text("", encoding="utf-8")
         return
+    fieldnames: list[str] = []
+    for row in rows:
+        for key in row.keys():
+            if key not in fieldnames:
+                fieldnames.append(key)
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(epochs[0].keys()))
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(epochs)
+        writer.writerows(rows)
+
+
+def write_output_dir(path: Path, result: SimResult) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "config": result.config,
+        "totals": result.totals,
+        "final_slots": result.final_slots,
+        "assertions": [asdict(item) for item in result.assertions],
+    }
+    (path / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (path / "assertions.json").write_text(
+        json.dumps([asdict(item) for item in result.assertions], indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    write_csv(path / "epochs.csv", result.epochs)
+    write_csv(path / "providers.csv", result.providers)
+    write_csv(path / "slots.csv", result.slots)
+    write_csv(path / "evidence.csv", result.evidence)
+    write_csv(path / "repairs.csv", result.repairs)
+    write_csv(path / "economy.csv", result.economy)
 
 
 def print_summary(result: SimResult) -> None:
@@ -702,7 +1240,7 @@ def print_summary(result: SimResult) -> None:
     print("PolyStore policy simulation")
     print(f"scenario={result.config['scenario']} seed={result.config['seed']}")
     print(
-        "providers={providers} users={users} deals={deals} epochs={epochs} rs={k}+{m}".format(
+        "providers={providers} users={users} deals={deals} epochs={epochs} rs={k}+{m} mode={enforcement_mode}".format(
             **result.config
         )
     )
@@ -714,6 +1252,10 @@ def print_summary(result: SimResult) -> None:
         "quota_misses={quota_misses} deputy_misses={deputy_misses} "
         "invalid_proofs={invalid_proofs} unavailable_reads={unavailable_reads}".format(**totals)
     )
+    print(
+        "provider_pnl={provider_pnl:.4f} negative_pnl={providers_negative_pnl} "
+        "reward_burned={reward_burned:.4f}".format(**totals)
+    )
     if result.assertions:
         failed = [item for item in result.assertions if not item.passed]
         status = "failed" if failed else "passed"
@@ -723,27 +1265,55 @@ def print_summary(result: SimResult) -> None:
             print(f"  {prefix} {item.name}: {item.detail}")
 
 
+def run_one(config: SimConfig, faults: list[str], assertion_specs: dict[str, Any], min_success_rate: float | None) -> SimResult:
+    sim = PolicySimulator(config, extra_faults=faults)
+    result = sim.run()
+    if assertion_specs or min_success_rate is not None:
+        evaluate_assertions(result, min_success_rate, assertion_specs)
+    return result
+
+
+def fixture_paths(directory: Path) -> list[Path]:
+    return sorted([*directory.glob("*.yaml"), *directory.glob("*.json")])
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scenario",
         default="ideal",
-        choices=["ideal", "single-outage", "malicious-corrupt", "withholding", "lazy-provider"],
+        choices=[
+            "ideal",
+            "single-outage",
+            "malicious-corrupt",
+            "corrupt-provider",
+            "withholding",
+            "lazy-provider",
+            "setup-failure",
+            "underpriced-storage",
+            "wash-retrieval",
+            "viral-public-retrieval",
+            "elasticity-cap-hit",
+        ],
     )
-    parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--providers", type=int, default=48)
-    parser.add_argument("--users", type=int, default=80)
-    parser.add_argument("--deals", type=int, default=24)
-    parser.add_argument("--epochs", type=int, default=12)
-    parser.add_argument("--k", type=int, default=8)
-    parser.add_argument("--m", type=int, default=4)
-    parser.add_argument("--user-mdus-per-deal", type=int, default=16)
-    parser.add_argument("--retrievals-per-user-per-epoch", type=int, default=1)
-    parser.add_argument("--quota-min-blobs", type=int, default=2)
-    parser.add_argument("--quota-max-blobs", type=int, default=8)
-    parser.add_argument("--credit-cap-bps", type=int, default=0)
-    parser.add_argument("--evict-after-missed-epochs", type=int, default=2)
-    parser.add_argument("--repair-epochs", type=int, default=2)
+    parser.add_argument("--scenario-file", type=Path)
+    parser.add_argument("--scenario-dir", type=Path)
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--providers", type=int)
+    parser.add_argument("--users", type=int)
+    parser.add_argument("--deals", type=int)
+    parser.add_argument("--epochs", type=int)
+    parser.add_argument("--k", type=int)
+    parser.add_argument("--m", type=int)
+    parser.add_argument("--user-mdus-per-deal", type=int)
+    parser.add_argument("--retrievals-per-user-per-epoch", type=int)
+    parser.add_argument("--quota-min-blobs", type=int)
+    parser.add_argument("--quota-max-blobs", type=int)
+    parser.add_argument("--credit-cap-bps", type=int)
+    parser.add_argument("--evict-after-missed-epochs", type=int)
+    parser.add_argument("--repair-epochs", type=int)
+    parser.add_argument("--enforcement-mode", choices=sorted(ENFORCEMENT_ORDER))
+    parser.add_argument("--dynamic-pricing", action="store_true")
     parser.add_argument(
         "--fault",
         action="append",
@@ -757,36 +1327,42 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-success-rate", type=float)
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--csv-out", type=Path)
+    parser.add_argument("--out-dir", type=Path)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    config = SimConfig(
-        scenario=args.scenario,
-        seed=args.seed,
-        providers=args.providers,
-        users=args.users,
-        deals=args.deals,
-        epochs=args.epochs,
-        k=args.k,
-        m=args.m,
-        user_mdus_per_deal=args.user_mdus_per_deal,
-        retrievals_per_user_per_epoch=args.retrievals_per_user_per_epoch,
-        quota_min_blobs=args.quota_min_blobs,
-        quota_max_blobs=args.quota_max_blobs,
-        credit_cap_bps=args.credit_cap_bps,
-        evict_after_missed_epochs=args.evict_after_missed_epochs,
-        repair_epochs=args.repair_epochs,
-    )
-    sim = PolicySimulator(config, extra_faults=args.fault)
-    result = sim.run()
-    if args.assertions or args.min_success_rate is not None:
+    if args.scenario_dir:
+        paths = fixture_paths(args.scenario_dir)
+        if not paths:
+            raise SystemExit(f"no scenario fixtures found in {args.scenario_dir}")
+        failures = 0
+        for path in paths:
+            spec = load_scenario_spec(path)
+            config, faults, assertion_specs = config_from_args(args, spec)
+            result = run_one(config, faults, assertion_specs, args.min_success_rate)
+            if args.assertions and not result.assertions:
+                evaluate_assertions(result, args.min_success_rate)
+            out_dir = args.out_dir / spec.name if args.out_dir else None
+            if out_dir:
+                write_output_dir(out_dir, result)
+            print_summary(result)
+            if result.assertions and any(not item.passed for item in result.assertions):
+                failures += 1
+        return 1 if failures else 0
+
+    spec = load_scenario_spec(args.scenario_file) if args.scenario_file else None
+    config, faults, assertion_specs = config_from_args(args, spec)
+    result = run_one(config, faults, assertion_specs, args.min_success_rate)
+    if args.assertions and not result.assertions:
         evaluate_assertions(result, args.min_success_rate)
     if args.json_out:
         write_json(args.json_out, result)
     if args.csv_out:
-        write_csv(args.csv_out, result)
+        write_csv(args.csv_out, result.epochs)
+    if args.out_dir:
+        write_output_dir(args.out_dir, result)
     print_summary(result)
     if result.assertions and any(not item.passed for item in result.assertions):
         return 1

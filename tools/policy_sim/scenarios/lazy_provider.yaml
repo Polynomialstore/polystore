@@ -1,0 +1,17 @@
+{
+  "name": "lazy-provider",
+  "description": "A provider fails to satisfy liveness quota.",
+  "config": {
+    "scenario": "lazy-provider",
+    "seed": 7,
+    "providers": 48,
+    "users": 80,
+    "deals": 24,
+    "epochs": 10
+  },
+  "assertions": {
+    "min_quota_misses": 1,
+    "min_repairs_started": 1,
+    "max_paid_corrupt_bytes": 0
+  }
+}

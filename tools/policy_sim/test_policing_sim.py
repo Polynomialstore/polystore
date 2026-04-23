@@ -1,9 +1,27 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 try:
-    from .policing_sim import PolicySimulator, SimConfig, evaluate_assertions
+    from .policing_sim import (
+        PolicySimulator,
+        SimConfig,
+        evaluate_assertions,
+        load_scenario_spec,
+        run_one,
+        write_output_dir,
+    )
+    from .report import generate_policy_delta, generate_run_report
 except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`.
-    from policing_sim import PolicySimulator, SimConfig, evaluate_assertions
+    from policing_sim import (
+        PolicySimulator,
+        SimConfig,
+        evaluate_assertions,
+        load_scenario_spec,
+        run_one,
+        write_output_dir,
+    )
+    from report import generate_policy_delta, generate_run_report
 
 
 class PolicySimulatorTests(unittest.TestCase):
@@ -59,6 +77,62 @@ class PolicySimulatorTests(unittest.TestCase):
         assertions = evaluate_assertions(result, min_success_rate=0.99)
 
         self.assertEqual(["min_success_rate"], [item.name for item in assertions])
+
+    def test_fixture_run_emits_output_contract(self):
+        fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
+        spec = load_scenario_spec(fixture)
+        config = SimConfig(**spec.config)
+        result = run_one(config, spec.faults, spec.assertions, None)
+
+        with TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            write_output_dir(out_dir, result)
+            expected = {
+                "summary.json",
+                "assertions.json",
+                "epochs.csv",
+                "providers.csv",
+                "slots.csv",
+                "evidence.csv",
+                "repairs.csv",
+                "economy.csv",
+            }
+            self.assertEqual(expected, {path.name for path in out_dir.iterdir()})
+
+    def test_report_generation_consumes_output_contract(self):
+        fixture = Path(__file__).with_name("scenarios") / "single_outage.yaml"
+        spec = load_scenario_spec(fixture)
+        config = SimConfig(**spec.config)
+        result = run_one(config, spec.faults, spec.assertions, None)
+
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            report_dir = Path(tmp) / "report"
+            write_output_dir(run_dir, result)
+            generate_run_report(run_dir, report_dir)
+
+            self.assertTrue((report_dir / "report.md").exists())
+            self.assertTrue((report_dir / "risk_register.md").exists())
+            self.assertTrue((report_dir / "graduation.md").exists())
+            self.assertTrue((report_dir / "graphs" / "retrieval_success_rate.svg").exists())
+
+    def test_policy_delta_report_compares_two_runs(self):
+        ideal = load_scenario_spec(Path(__file__).with_name("scenarios") / "ideal.yaml")
+        outage = load_scenario_spec(Path(__file__).with_name("scenarios") / "single_outage.yaml")
+        ideal_result = run_one(SimConfig(**ideal.config), ideal.faults, ideal.assertions, None)
+        outage_result = run_one(SimConfig(**outage.config), outage.faults, outage.assertions, None)
+
+        with TemporaryDirectory() as tmp:
+            base_dir = Path(tmp) / "base"
+            candidate_dir = Path(tmp) / "candidate"
+            report_dir = Path(tmp) / "delta"
+            write_output_dir(base_dir, ideal_result)
+            write_output_dir(candidate_dir, outage_result)
+            generate_policy_delta(base_dir, candidate_dir, report_dir)
+
+            text = (report_dir / "policy_delta.md").read_text(encoding="utf-8")
+            self.assertIn("success_rate", text)
+            self.assertIn("repairs_started", text)
 
 
 if __name__ == "__main__":

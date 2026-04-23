@@ -16,6 +16,33 @@ python3 tools/policy_sim/policing_sim.py --scenario single-outage --providers 96
 python3 tools/policy_sim/policing_sim.py --scenario malicious-corrupt --json-out /tmp/polystore-policing.json --csv-out /tmp/polystore-policing.csv --assert
 ```
 
+Run a versioned fixture and emit the full output contract:
+
+```bash
+python3 tools/policy_sim/policing_sim.py \
+  --scenario-file tools/policy_sim/scenarios/single_outage.yaml \
+  --out-dir /tmp/polystore-policy/single_outage
+```
+
+Fixture files use a YAML extension for the roadmap convention, but are written
+as JSON-compatible YAML so the simulator remains stdlib-only.
+
+Run the canonical fixture suite:
+
+```bash
+python3 tools/policy_sim/policing_sim.py \
+  --scenario-dir tools/policy_sim/scenarios \
+  --out-dir /tmp/polystore-policy/runs
+```
+
+Generate human-readable reports from raw simulator outputs:
+
+```bash
+python3 tools/policy_sim/report.py \
+  --run-dir /tmp/polystore-policy/runs/single-outage \
+  --out-dir /tmp/polystore-policy/reports/single-outage
+```
+
 Custom fault injections are repeatable:
 
 ```bash
@@ -40,6 +67,14 @@ Supported fault forms:
 - `lazy:sp-004`
 - `draining:sp-005`
 
+Supported simulated enforcement modes:
+
+- `MEASURE_ONLY`
+- `REPAIR_ONLY`
+- `REWARD_EXCLUSION`
+- `JAIL_SIMULATED`
+- `SLASH_SIMULATED`
+
 ## Model Scope
 
 The simulator mirrors current protocol concepts:
@@ -50,14 +85,40 @@ The simulator mirrors current protocol concepts:
 - Corrupt retrievals and invalid synthetic proofs as hard faults.
 - Provider outage/withholding as soft faults that become quota/deputy misses.
 - Make-before-break repair with deterministic replacement provider selection.
+- Simulated enforcement modes before live chain/runtime rollout.
+- Basic economic accounting for retrieval fees, rewards, audit budget, provider
+  P&L, slashing, and elasticity spend caps.
 
 The simulator deliberately does not run `polystorechaind`, gateways, or provider
 processes. Once a policy is stable here, add keeper tests or e2e scripts for the
 corresponding implementation path.
+
+## Output Contract
+
+When `--out-dir` is supplied, the simulator emits:
+
+- `summary.json`
+- `assertions.json`
+- `epochs.csv`
+- `providers.csv`
+- `slots.csv`
+- `evidence.csv`
+- `repairs.csv`
+- `economy.csv`
+
+`report.py` consumes those raw files and can emit:
+
+- `report.md`
+- `risk_register.md`
+- `graduation.md`
+- `policy_delta.md` for baseline/candidate comparisons
+- `graphs/*.svg`
+
+The simulator should remain deterministic and machine-output focused. Reporting
+and graph generation belong in `report.py`.
 
 ## Tests
 
 ```bash
 python3 -m unittest discover -s tools/policy_sim
 ```
-
