@@ -1037,6 +1037,22 @@ repository with passing tests and useful outputs.
 | S6 | Parameter comparison | Baseline vs candidate report, sensitivity sweeps, metric delta summaries. | A policy parameter change can be evaluated before keeper work begins. |
 | S7 | Graduation report | Scenario-to-chain/e2e mapping, missing implementation surfaces, recommended next keeper tests. | The team can choose the next keeper test slice from simulator evidence. |
 
+S6 must include population-scale dynamics, not only small fixed fixtures. The
+required scale/sensitivity work is:
+
+1. Run seeded scenarios with more than 1,000 SPs and thousands of data users.
+2. Model provider heterogeneity: region, capacity, bandwidth, reliability,
+   storage cost, bandwidth cost, and repair/catch-up probability.
+3. Model correlated failures: regional outages, partial fleet degradation, and
+   provider-class failures.
+4. Model healing throughput: repair-start caps, replacement capacity, and
+   catch-up probability so detection can outrun healing in bad cases.
+5. Track network-state trajectories: active slots, repairing slots, storage
+   utilization, retrieval success rate, bandwidth saturation, price, burn/mint,
+   provider P&L, churn risk, and repair backlog.
+6. Generate reports that explain not only "did the assertion pass", but how the
+   network state moved under stress and whether the policy recovered.
+
 ### 27.6 Scenario Fixture Inventory
 
 Start with these fixture files under `tools/policy_sim/scenarios/`:
@@ -1053,6 +1069,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
+| `large_scale_regional_stress.yaml` | More than 1,000 heterogeneous SPs and thousands of users experience a correlated regional outage, bandwidth saturation, dynamic pricing, and constrained repair coordination. | Availability remains above floor, saturation and repair backoffs are visible, price remains bounded, and no provider is assigned beyond modeled capacity. |
 
 ### 27.7 Output Contract
 
