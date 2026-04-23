@@ -13,6 +13,7 @@
     "min_success_rate": 0.95,
     "min_withheld_responses": 1,
     "min_repairs_started": 1,
+    "max_data_loss_events": 0,
     "max_paid_corrupt_bytes": 0
   }
 }

@@ -34,6 +34,34 @@ ENFORCEMENT_ORDER = {
     "SLASH_SIMULATED": 4,
 }
 
+BUILTIN_NOOP_SCENARIOS = {
+    "ideal",
+    "setup-failure",
+    "underpriced-storage",
+    "wash-retrieval",
+    "viral-public-retrieval",
+    "elasticity-cap-hit",
+    "large-scale-regional-stress",
+    "flapping-provider",
+    "sustained-non-response",
+    "audit-budget-exhaustion",
+    "price-controller-bounds",
+    "subsidy-farming",
+    "coordinated-regional-outage",
+    "repair-candidate-exhaustion",
+}
+
+CLI_SCENARIOS = sorted(
+    BUILTIN_NOOP_SCENARIOS
+    | {
+        "single-outage",
+        "malicious-corrupt",
+        "corrupt-provider",
+        "withholding",
+        "lazy-provider",
+    }
+)
+
 
 @dataclass(frozen=True)
 class SimConfig:
@@ -214,6 +242,7 @@ class SlotState:
     direct_served: int = 0
     deputy_served: int = 0
     hard_faulted_this_epoch: bool = False
+    durability_suspect: bool = False
     compliant_this_epoch: bool = False
     reward_eligible_this_epoch: bool = False
     last_reason: str = ""
@@ -254,6 +283,7 @@ class EpochMetrics:
     retrieval_attempts: int = 0
     retrieval_successes: int = 0
     unavailable_reads: int = 0
+    data_loss_events: int = 0
     direct_served: int = 0
     deputy_served: int = 0
     corrupt_responses: int = 0
@@ -416,15 +446,7 @@ class PolicySimulator:
         return deals
 
     def _apply_builtin_scenario(self, scenario: str) -> None:
-        if scenario in {
-            "ideal",
-            "setup-failure",
-            "underpriced-storage",
-            "wash-retrieval",
-            "viral-public-retrieval",
-            "elasticity-cap-hit",
-            "large-scale-regional-stress",
-        }:
+        if scenario in BUILTIN_NOOP_SCENARIOS:
             return
         if scenario == "single-outage":
             self.providers["sp-000"].behavior.offline_epochs.update(range(2, 6))
@@ -519,6 +541,7 @@ class PolicySimulator:
                 self._settle_slot_epoch(epoch, online, deal, slot, metrics)
                 self._record_slot_row(epoch, slot)
 
+        self._record_data_loss_events(metrics)
         self._settle_epoch_economy(epoch, metrics)
         self._maybe_update_prices(metrics)
         return metrics
@@ -738,6 +761,7 @@ class PolicySimulator:
         slot.repair_remaining_epochs = 0
         slot.missed_epochs = 0
         slot.deputy_missed_epochs = 0
+        slot.durability_suspect = False
         slot.current_gen += 1
         metrics.repairs_completed += 1
         self.repair_rows.append(
@@ -763,6 +787,9 @@ class PolicySimulator:
     ) -> None:
         if slot.status == SLOT_REPAIRING:
             return
+        is_hard_fault = reason in {"corrupt_retrieval", "invalid_synthetic_proof"}
+        slot.hard_faulted_this_epoch = slot.hard_faulted_this_epoch or is_hard_fault
+        slot.durability_suspect = slot.durability_suspect or is_hard_fault
         if not self.mode_at_least("REPAIR_ONLY"):
             self.repair_rows.append(
                 {
@@ -815,10 +842,6 @@ class PolicySimulator:
         slot.status = SLOT_REPAIRING
         slot.pending_provider_id = pending
         slot.repair_remaining_epochs = self.config.repair_epochs
-        slot.hard_faulted_this_epoch = slot.hard_faulted_this_epoch or reason in {
-            "corrupt_retrieval",
-            "invalid_synthetic_proof",
-        }
         slot.last_reason = reason
         metrics.repairs_started += 1
         self.repairs_started_this_epoch += 1
@@ -947,11 +970,18 @@ class PolicySimulator:
                 "synthetic": slot.synthetic,
                 "direct_served": slot.direct_served,
                 "deputy_served": slot.deputy_served,
+                "durability_suspect": int(slot.durability_suspect),
                 "compliant": int(slot.compliant_this_epoch),
                 "reward_eligible": int(slot.reward_eligible_this_epoch),
                 "reason": slot.last_reason,
             }
         )
+
+    def _record_data_loss_events(self, metrics: EpochMetrics) -> None:
+        for deal in self.deals:
+            trusted_slots = sum(1 for slot in deal.slots if not slot.durability_suspect)
+            if trusted_slots < deal.k:
+                metrics.data_loss_events += 1
 
     def _settle_epoch_economy(self, epoch: int, metrics: EpochMetrics) -> None:
         assigned_counts = self._assigned_counts()
@@ -1054,6 +1084,7 @@ class PolicySimulator:
             "retrieval_attempts",
             "retrieval_successes",
             "unavailable_reads",
+            "data_loss_events",
             "direct_served",
             "deputy_served",
             "corrupt_responses",
@@ -1110,6 +1141,15 @@ class PolicySimulator:
         totals["min_provider_bandwidth_capacity"] = min((p.bandwidth_capacity_per_epoch for p in self.providers.values()), default=0)
         totals["max_provider_bandwidth_capacity"] = max((p.bandwidth_capacity_per_epoch for p in self.providers.values()), default=0)
         totals["audit_budget_carryover"] = self.audit_budget_carryover
+        if self.economy_rows:
+            storage_prices = [row["storage_price"] for row in self.economy_rows]
+            retrieval_prices = [row["retrieval_price_per_slot"] for row in self.economy_rows]
+            totals["final_storage_price"] = storage_prices[-1]
+            totals["min_storage_price"] = min(storage_prices)
+            totals["max_storage_price"] = max(storage_prices)
+            totals["final_retrieval_price"] = retrieval_prices[-1]
+            totals["min_retrieval_price"] = min(retrieval_prices)
+            totals["max_retrieval_price"] = max(retrieval_prices)
         return totals
 
     def _provider_rows(self) -> list[dict[str, Any]]:
@@ -1420,7 +1460,7 @@ def print_summary(result: SimResult) -> None:
     print(
         "quota_misses={quota_misses} deputy_misses={deputy_misses} "
         "invalid_proofs={invalid_proofs} unavailable_reads={unavailable_reads} "
-        "saturated_responses={saturated_responses}".format(**totals)
+        "data_loss_events={data_loss_events} saturated_responses={saturated_responses}".format(**totals)
     )
     print(
         "provider_pnl={provider_pnl:.4f} negative_pnl={providers_negative_pnl} "
@@ -1452,20 +1492,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--scenario",
         default="ideal",
-        choices=[
-            "ideal",
-            "single-outage",
-            "malicious-corrupt",
-            "corrupt-provider",
-            "withholding",
-            "lazy-provider",
-            "setup-failure",
-            "underpriced-storage",
-            "wash-retrieval",
-            "viral-public-retrieval",
-            "elasticity-cap-hit",
-            "large-scale-regional-stress",
-        ],
+        choices=CLI_SCENARIOS,
     )
     parser.add_argument("--scenario-file", type=Path)
     parser.add_argument("--scenario-dir", type=Path)

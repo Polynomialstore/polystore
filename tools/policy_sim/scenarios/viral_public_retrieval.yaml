@@ -15,6 +15,7 @@
   "assertions": {
     "min_success_rate": 1.0,
     "min_retrieval_provider_payouts": 100.0,
+    "max_data_loss_events": 0,
     "min_retrieval_base_burned": 1.0
   }
 }

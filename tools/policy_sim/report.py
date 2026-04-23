@@ -36,6 +36,24 @@ SCENARIO_GUIDES = {
         "expected": "Retrievals remain available, soft evidence accumulates, affected slots are repaired, and the offline provider is not paid for missed work.",
         "review": "Check whether repair starts soon enough without overreacting to a short outage.",
     },
+    "flapping-provider": {
+        "title": "Flapping Provider",
+        "intent": (
+            "Model a provider with intermittent outages that recover before the delinquency threshold. "
+            "This is the anti-thrash fixture: normal infrastructure jitter should create evidence and operator visibility without needless slot churn."
+        ),
+        "expected": "Offline responses are visible, retrieval success stays high, no data loss occurs, and repair stays below the configured threshold.",
+        "review": "Use this case to tune missed-epoch windows before treating sustained non-response as delinquency.",
+    },
+    "sustained-non-response": {
+        "title": "Sustained Non-Response",
+        "intent": (
+            "Model a provider that remains unavailable long enough to cross soft-fault thresholds. "
+            "This validates that repeated non-response becomes repairable delinquency without requiring hard cryptographic fraud evidence."
+        ),
+        "expected": "Soft evidence accumulates, repair starts, replacement completes, corrupt bytes remain unpaid, and data-loss events stay at zero.",
+        "review": "Inspect this case before implementing per-slot delinquency, reward exclusion, and deterministic replacement selection in keeper tests.",
+    },
     "withholding": {
         "title": "Withholding Provider",
         "intent": (
@@ -116,6 +134,51 @@ SCENARIO_GUIDES = {
         ),
         "expected": "Elasticity rejections are visible and spend remains at or below the cap.",
         "review": "Confirm this matches product expectations for burst handling and user-funded capacity expansion.",
+    },
+    "audit-budget-exhaustion": {
+        "title": "Audit Budget Exhaustion",
+        "intent": (
+            "Model many soft failures with an intentionally tight audit budget. The policy concern is whether audit spending remains capped "
+            "instead of becoming an unbounded protocol subsidy."
+        ),
+        "expected": "Quota misses create audit demand, audit spend is capped by budget, repair starts where allowed, and data-loss events remain zero.",
+        "review": "Use this case to decide whether audit budget exhaustion should degrade into backlog, higher fees, or stronger admission control.",
+    },
+    "price-controller-bounds": {
+        "title": "Price Controller Bounds",
+        "intent": (
+            "Model dynamic storage and retrieval price movement under sustained demand. This is a controller-safety fixture, not a claim that "
+            "the current parameters are economically optimal."
+        ),
+        "expected": "Prices move in the expected direction, remain within configured bounds, preserve availability, and do not hide provider distress.",
+        "review": "Inspect the economic assumptions and decide whether the step size, floors, ceilings, and target utilization are credible.",
+    },
+    "subsidy-farming": {
+        "title": "Subsidy Farming",
+        "intent": (
+            "Model providers attempting to collect base rewards while skipping useful liveness work. "
+            "The policy concern is reward leakage, not retrieval correctness alone."
+        ),
+        "expected": "Quota misses are visible, reward coverage falls for non-compliant responsibility, and corrupt/data-loss safety invariants stay clean.",
+        "review": "Use this before implementing base-reward gating and subsidy-farming controls.",
+    },
+    "coordinated-regional-outage": {
+        "title": "Coordinated Regional Outage",
+        "intent": (
+            "Model a smaller correlated regional outage than the expensive scale case. This provides a cheaper fixture for placement diversity, "
+            "repair, and regional risk analysis."
+        ),
+        "expected": "Regional offline responses appear, repair starts, availability remains within contract, and data-loss events remain zero.",
+        "review": "Use this case to decide whether regional placement assumptions should become keeper parameters or simulator-only launch analysis.",
+    },
+    "repair-candidate-exhaustion": {
+        "title": "Repair Candidate Exhaustion",
+        "intent": (
+            "Model a network with no spare replacement capacity. The expected behavior is explicit repair backoff and operator visibility, "
+            "not silent over-assignment."
+        ),
+        "expected": "Repair backoffs are visible, provider capacity is respected, and data-loss events remain zero under the modeled fault.",
+        "review": "Use this case to tune assignment headroom, repair attempt caps, and launch-provider minimums.",
     },
     "large-scale-regional-stress": {
         "title": "Large-Scale Regional Stress",
@@ -202,6 +265,10 @@ def scenario_guide(name: str) -> dict[str, str]:
     )
 
 
+def scenario_allows_unavailable_reads(name: str) -> bool:
+    return name in {"large-scale-regional-stress", "coordinated-regional-outage"}
+
+
 def generate_run_report(run_dir: Path, out_dir: Path) -> None:
     summary = load_json(run_dir / "summary.json")
     epochs = load_csv(run_dir / "epochs.csv")
@@ -267,6 +334,7 @@ def compute_signals(
         "availability": {
             "success_rate": fnum(totals.get("success_rate")),
             "unavailable_reads": fnum(totals.get("unavailable_reads")),
+            "data_loss_events": fnum(totals.get("data_loss_events")),
             "worst_epoch": int(fnum(worst_epoch.get("epoch"))),
             "worst_epoch_success_rate": safe_rate(worst_epoch, "retrieval_successes", "retrieval_attempts") if worst_epoch else 0.0,
             "degraded_epochs": len(degraded_epochs),
@@ -426,7 +494,9 @@ def write_report_md(
         f"Observed result: retrieval success was `{fmt_pct(totals.get('success_rate'))}`, reward coverage was "
         f"`{fmt_pct(totals.get('reward_coverage'))}`, repairs started/completed were "
         f"`{fmt_num(totals.get('repairs_started'))}` / `{fmt_num(totals.get('repairs_completed'))}`, and "
-        f"`{len(negative_pnl)}` providers ended with negative modeled P&L. The run also recorded "
+        f"`{len(negative_pnl)}` providers ended with negative modeled P&L. The run recorded "
+        f"`{fmt_num(totals.get('unavailable_reads'))}` unavailable reads, "
+        f"`{fmt_num(totals.get('data_loss_events'))}` modeled data-loss events, "
         f"`{fmt_num(totals.get('saturated_responses'))}` bandwidth saturation responses and "
         f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs.",
         "",
@@ -457,6 +527,10 @@ def write_report_md(
             f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
             f"| Provider regions | `{', '.join(str(item) for item in config.get('provider_regions', []))}` |",
             "",
+        "## Economic Assumptions",
+        "",
+        *economic_assumption_lines(config),
+        "",
         "## What Happened",
         "",
         build_behavior_narrative(totals, evidence, repairs, providers, economy),
@@ -610,6 +684,11 @@ def build_behavior_narrative(
     economy: list[dict[str, str]],
 ) -> str:
     parts = []
+    if fnum(totals.get("data_loss_events")) > 0:
+        parts.append(
+            f"The run recorded `{fmt_num(totals.get('data_loss_events'))}` modeled data-loss events. "
+            "That is a durability failure and should block graduation even if some retrievals still succeeded."
+        )
     if fnum(totals.get("success_rate")) >= 1.0:
         if evidence or repairs:
             parts.append(
@@ -681,6 +760,25 @@ def build_behavior_narrative(
     return "\n\n".join(parts)
 
 
+def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
+    return [
+        "The economic model is intentionally simple and deterministic. It is useful for comparing policy directions, not for setting final token economics without external market data.",
+        "",
+        "| Assumption | Value | Interpretation |",
+        "|---|---:|---|",
+        f"| Storage price | `{fmt_money(config.get('storage_price'))}` | Unitless price applied by the controller; current simulator does not yet model user demand elasticity against this quote. |",
+        f"| Storage target utilization | `{fmt_bps(config.get('storage_target_utilization_bps'))}` | If dynamic pricing is enabled, utilization above this target steps storage price up, otherwise down. |",
+        f"| Retrieval price per slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` | Paid per successful provider slot served, before the configured variable burn. |",
+        f"| Retrieval target per epoch | `{fmt_num(config.get('retrieval_target_per_epoch'))}` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |",
+        f"| Dynamic pricing max step | `{fmt_bps(config.get('dynamic_pricing_max_step_bps'))}` | Per-epoch controller movement cap. Lower values are safer but slower to equilibrate. |",
+        f"| Base reward per slot | `{fmt_money(config.get('base_reward_per_slot'))}` | Modeled issuance/subsidy paid only to reward-eligible active slots. |",
+        f"| Provider storage cost/slot/epoch | `{fmt_money(config.get('provider_storage_cost_per_slot_epoch'))}` | Simplified provider cost basis; jitter may create marginal-provider distress. |",
+        f"| Provider bandwidth cost/retrieval | `{fmt_money(config.get('provider_bandwidth_cost_per_retrieval'))}` | Simplified egress cost basis for retrieval-heavy scenarios. |",
+        f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and miss-driven demand. |",
+        f"| Retrieval burn | `{fmt_bps(config.get('retrieval_burn_bps'))}` | Fraction of variable retrieval fees burned before provider payout. |",
+    ]
+
+
 def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
     availability = signals["availability"]
     saturation = signals["saturation"]
@@ -691,6 +789,8 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         "| Signal | Value | Why It Matters |",
         "|---|---:|---|",
         f"| Worst epoch success | `{fmt_pct(availability['worst_epoch_success_rate'])}` at epoch `{availability['worst_epoch']}` | Identifies the availability cliff instead of hiding it in aggregate success. |",
+        f"| Unavailable reads | `{fmt_num(availability['unavailable_reads'])}` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |",
+        f"| Modeled data-loss events | `{fmt_num(availability['data_loss_events'])}` | Durability-loss signal. This should remain zero for current scale fixtures. |",
         f"| Degraded epochs | `{fmt_num(availability['degraded_epochs'])}` | Counts epochs with unavailable reads or success below 99.9%. |",
         f"| Recovery epoch after worst | `{availability['recovery_epoch_after_worst'] or 'not recovered'}` | Shows whether the network returned to clean steady state after the worst point. |",
         f"| Saturation rate | `{fmt_pct(saturation['saturation_per_retrieval_attempt'])}` | Provider bandwidth saturation per retrieval attempt. |",
@@ -766,6 +866,8 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('quota_misses'))} quota misses")
         if fnum(row.get("repair_backoffs")):
             notes.append(f"{fmt_num(row.get('repair_backoffs'))} repair backoffs")
+        if fnum(row.get("data_loss_events")):
+            notes.append(f"{fmt_num(row.get('data_loss_events'))} data-loss events")
         if fnum(row.get("repairing_slots")):
             notes.append(f"{fmt_num(row.get('repairing_slots'))} slots repairing")
         if not notes:
@@ -826,6 +928,7 @@ def assertion_meaning(name: str) -> str:
     meanings = {
         "min_success_rate": "Availability floor: user-facing reads must stay above this success rate.",
         "max_success_rate": "Control bound: used when the scenario is not intended to prove availability loss.",
+        "max_data_loss_events": "Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero.",
         "max_repairs_started": "No-repair invariant for healthy baseline runs.",
         "min_repairs_started": "Repair liveness: policy must start reassignment when evidence warrants it.",
         "min_repairs_completed": "Repair completion: make-before-break reassignment must finish within the run.",
@@ -848,6 +951,12 @@ def assertion_meaning(name: str) -> str:
         "max_providers_over_capacity": "Assignment must respect modeled provider capacity.",
         "min_final_storage_utilization_bps": "Network utilization should be high enough to make pricing/healing meaningful.",
         "max_final_storage_utilization_bps": "Network utilization should remain below the capacity cliff.",
+        "min_final_storage_price": "Dynamic pricing should move storage price to or above this value by run end.",
+        "max_final_storage_price": "Dynamic pricing should keep storage price at or below this value by run end.",
+        "min_final_retrieval_price": "Dynamic pricing should move retrieval price to or above this value by run end.",
+        "max_final_retrieval_price": "Dynamic pricing should keep retrieval price at or below this value by run end.",
+        "max_audit_budget_carryover": "Tight audit-budget fixtures should not accumulate unused budget while misses remain.",
+        "min_audit_budget_spent": "Audit demand should spend at least this much budget in the fixture.",
     }
     return meanings.get(name, "Custom assertion. Review the detail and fixture threshold.")
 
@@ -942,14 +1051,25 @@ def write_risk_register(
                     "followup": "Fix simulator behavior or adjust the assertion only after explicit human policy approval.",
                 }
             )
+    if fnum(totals.get("data_loss_events")):
+        rows.append(
+            {
+                "risk": "Modeled data loss",
+                "severity": "critical",
+                "evidence": f"{fmt_num(totals.get('data_loss_events'))} data-loss events.",
+                "impact": "The network lost the durability invariant, which is not acceptable for scale thresholds.",
+                "followup": "Block graduation. Investigate placement diversity, hard-fault repair, and replacement capacity.",
+            }
+        )
     if fnum(totals.get("unavailable_reads")):
+        allows_scale_misses = scenario_allows_unavailable_reads(str(config["scenario"]))
         rows.append(
             {
                 "risk": "User-facing availability loss",
-                "severity": "critical",
+                "severity": "medium" if allows_scale_misses else "critical",
                 "evidence": f"{fmt_num(totals.get('unavailable_reads'))} unavailable reads; success rate {fmt_pct(totals.get('success_rate'))}.",
-                "impact": "The network failed the primary storage availability objective.",
-                "followup": "Do not graduate. Investigate routing, redundancy, repair timing, and provider selection.",
+                "impact": "Temporary read misses are acceptable only when explicitly allowed by the scenario contract and data loss remains zero.",
+                "followup": "If this is a scale fixture, track it as an availability tuning item. Otherwise block graduation and investigate routing, redundancy, repair timing, and provider selection.",
             }
         )
     if negative_pnl:
@@ -1045,6 +1165,7 @@ def write_risk_register(
             f"- Failed assertions: `{len(failed)}`",
             f"- Providers with negative P&L: `{len(negative_pnl)}`",
             f"- Elasticity rejections: `{fmt_num(elasticity_rejections)}`",
+            f"- Data-loss events: `{fmt_num(totals.get('data_loss_events'))}`",
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             "",
@@ -1058,6 +1179,29 @@ def write_risk_register(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def graduation_semantics(scenario: str) -> str:
+    semantics = {
+        "ideal": "This is a control fixture. Graduation means the simulator can stay quiet when no policy action is warranted.",
+        "flapping-provider": "Graduation means thresholds tolerate intermittent infra jitter without repair churn, jail, or slash.",
+        "single-outage": "Graduation means an honest outage triggers repair after threshold while preserving the durability invariant.",
+        "sustained-non-response": "Graduation means repeated soft failure can become per-slot delinquency and repair without treating soft evidence as slashable fraud.",
+        "withholding": "Graduation means routing and evidence capture handle refusal-to-serve before any stronger punishment is considered.",
+        "corrupt-provider": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
+        "malicious-corrupt": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
+        "lazy-provider": "Graduation means subsidy/reward gating catches useful-work failures even if user reads are still available.",
+        "audit-budget-exhaustion": "Graduation means audit demand is bounded by budget and turns into backlog or policy review instead of unbounded issuance.",
+        "price-controller-bounds": "Graduation means price movement is bounded and explainable, not that the economic parameters are final.",
+        "subsidy-farming": "Graduation means non-compliant responsibility is not profitably subsidized by base rewards.",
+        "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
+        "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
+        "large-scale-regional-stress": "Graduation means the scale model preserves durability, exposes bottlenecks, and gives humans enough context to tune availability and economics.",
+    }
+    return semantics.get(
+        scenario,
+        "Graduation is case-by-case: define which invariant is being proven, which threshold is merely diagnostic, and which implementation layer should receive the next test.",
+    )
+
+
 def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
     config = summary["config"]
     totals = summary["totals"]
@@ -1066,13 +1210,16 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
     scenario = config["scenario"]
     guide = scenario_guide(str(scenario))
     assertions_ready = bool(assertions) and not failed
-    availability_ready = fnum(totals.get("unavailable_reads")) == 0
+    data_loss_ready = fnum(totals.get("data_loss_events")) == 0
+    availability_ready = fnum(totals.get("unavailable_reads")) == 0 or (
+        scenario_allows_unavailable_reads(str(scenario)) and assertions_ready
+    )
     corrupt_ready = fnum(totals.get("paid_corrupt_bytes")) == 0
     repair_ready = True
     if scenario in {"single-outage", "withholding", "corrupt-provider", "malicious-corrupt", "lazy-provider", "setup-failure"}:
         repair_ready = fnum(totals.get("repairs_started")) > 0 and fnum(totals.get("repairs_completed")) > 0
     hard_enforcement_ready = scenario not in {"corrupt-provider", "malicious-corrupt"} or fnum(totals.get("provider_slashed")) > 0
-    ready = assertions_ready and availability_ready and corrupt_ready and repair_ready and hard_enforcement_ready
+    ready = assertions_ready and data_loss_ready and availability_ready and corrupt_ready and repair_ready and hard_enforcement_ready
 
     if ready and scenario in {"ideal", "single-outage", "withholding", "corrupt-provider", "malicious-corrupt", "lazy-provider", "setup-failure"}:
         recommendation = "Candidate for implementation planning."
@@ -1098,10 +1245,15 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "| Check | Result | Why It Matters |",
         "|---|---|---|",
         f"| Assertion contract passes | `{str(assertions_ready).lower()}` | The scenario must have explicit machine-readable policy expectations. |",
-        f"| No user-facing availability loss | `{str(availability_ready).lower()}` | Enforcement must not harm users while repairing or measuring faults. |",
+        f"| No modeled data loss | `{str(data_loss_ready).lower()}` | Temporary unavailable reads can be scenario-specific, but durability loss should block graduation. |",
+        f"| Availability within scenario contract | `{str(availability_ready).lower()}` | Enforcement must not harm users beyond the availability bounds chosen for this case. |",
         f"| Corrupt bytes not paid | `{str(corrupt_ready).lower()}` | Bad data must never be economically rewarded. |",
         f"| Repair path exercised when expected | `{str(repair_ready).lower()}` | Fault scenarios should prove recovery, not only detection. |",
         f"| Hard enforcement represented when expected | `{str(hard_enforcement_ready).lower()}` | Corruption fixtures should prove the simulated slash/jail accounting path before keeper work. |",
+        "",
+        "## Scenario-Specific Graduation Semantics",
+        "",
+        graduation_semantics(str(scenario)),
         "",
         "## Candidate Next Artifact",
         "",
@@ -1264,16 +1416,15 @@ def write_line_svg(
     secondary_polyline = ""
     secondary_legend = ""
     if secondary:
-        secondary_polyline = f'<polyline fill="none" stroke="#d97706" stroke-width="2.5" points="{points(secondary)}" />'
-        secondary_legend = f'''
-  <line x1="{left + 190}" y1="52" x2="{left + 220}" y2="52" stroke="#d97706" stroke-width="3"/>
+        secondary_polyline = f'  <polyline fill="none" stroke="#d97706" stroke-width="2.5" points="{points(secondary)}" />'
+        secondary_legend = f'''  <line x1="{left + 190}" y1="52" x2="{left + 220}" y2="52" stroke="#d97706" stroke-width="3"/>
   <text x="{left + 226}" y="56" font-family="sans-serif" font-size="12" fill="#374151">{escape_xml(secondary_label or "Secondary")}</text>'''
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <text x="{left}" y="26" font-family="sans-serif" font-size="18" font-weight="700" fill="#111827">{escape_xml(title)}</text>
   <line x1="{left}" y1="52" x2="{left + 30}" y2="52" stroke="#2563eb" stroke-width="3"/>
   <text x="{left + 36}" y="56" font-family="sans-serif" font-size="12" fill="#374151">{escape_xml(primary_label)}</text>
-  {secondary_legend}
+{secondary_legend}
   <rect x="{left}" y="{top}" width="{plot_width}" height="{plot_height}" fill="#ffffff" stroke="#d1d5db"/>
   {"".join(y_grid)}
   {"".join(x_grid)}
@@ -1282,7 +1433,7 @@ def write_line_svg(
   <text x="{left + plot_width / 2:.1f}" y="{height - 24}" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#111827">Epoch</text>
   <text transform="translate(22 {top + plot_height / 2:.1f}) rotate(-90)" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#111827">{escape_xml(title)}</text>
   <polyline fill="none" stroke="#2563eb" stroke-width="2.5" points="{points(values)}" />
-  {secondary_polyline}
+{secondary_polyline}
 </svg>
 '''
     path.write_text(svg, encoding="utf-8")
@@ -1386,6 +1537,8 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
     candidate_totals = candidate["totals"]
     metrics = [
         ("success_rate", "Availability invariant."),
+        ("unavailable_reads", "Temporary read failures; acceptable only in explicitly bounded stress cases."),
+        ("data_loss_events", "Durability invariant; should stay zero for current fixtures."),
         ("reward_coverage", "Whether compliant slots remain economically recognized."),
         ("repairs_started", "Whether the candidate exercised repair."),
         ("repairs_completed", "Whether repair finished within the modeled window."),
@@ -1410,6 +1563,14 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         if candidate >= baseline:
             return "Availability was preserved or improved."
         return "Availability degraded; this should block graduation unless intentional."
+    if key == "unavailable_reads":
+        if delta > 0:
+            return "Temporary read misses increased; acceptable only in explicitly bounded scale scenarios."
+        return "Temporary read misses did not increase."
+    if key == "data_loss_events":
+        if candidate > 0:
+            return "Durability invariant failed; this should block graduation."
+        return "Durability invariant remained clean."
     if key in {"repairs_started", "repairs_completed", "repairing_slots"}:
         if delta > 0:
             return "Repair path was exercised in the candidate scenario."

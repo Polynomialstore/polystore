@@ -1,0 +1,31 @@
+{
+  "name": "coordinated-regional-outage",
+  "description": "A smaller correlated regional outage fixture for diversity and repair calibration.",
+  "config": {
+    "scenario": "coordinated-regional-outage",
+    "seed": 36,
+    "providers": 120,
+    "users": 220,
+    "deals": 80,
+    "epochs": 12,
+    "retrievals_per_user_per_epoch": 1,
+    "provider_regions": ["na", "eu", "apac", "sa"],
+    "regional_outages": [
+      {"region": "eu", "epochs": "4-7"}
+    ],
+    "provider_capacity_min": 8,
+    "provider_capacity_max": 16,
+    "provider_bandwidth_capacity_min": 80,
+    "provider_bandwidth_capacity_max": 240,
+    "max_repairs_started_per_epoch": 24,
+    "repair_epochs": 2
+  },
+  "assertions": {
+    "min_success_rate": 0.98,
+    "min_offline_responses": 1,
+    "min_repairs_started": 1,
+    "min_repairs_completed": 1,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

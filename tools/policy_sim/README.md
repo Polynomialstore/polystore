@@ -35,6 +35,15 @@ python3 tools/policy_sim/policing_sim.py \
   --out-dir /tmp/polystore-policy/runs
 ```
 
+Generate the committed human-readable report corpus:
+
+```bash
+python3 tools/policy_sim/generate_report_corpus.py \
+  --scenario-dir tools/policy_sim/scenarios \
+  --out-dir docs/simulation-reports/policy-sim \
+  --work-dir /tmp/polystore-policy/runs
+```
+
 Generate human-readable reports from raw simulator outputs:
 
 ```bash
@@ -100,6 +109,9 @@ The simulator mirrors current protocol concepts:
 - Simulated enforcement modes before live chain/runtime rollout.
 - Large-scale heterogeneous-provider runs with regional outages, bandwidth
   saturation, and repair coordination limits.
+- Explicit distinction between temporary unavailable reads and modeled
+  data-loss events. Stress scenarios may allow bounded unavailable reads, but
+  current durability assertions expect data-loss events to remain zero.
 - Basic economic accounting for retrieval fees, rewards, audit budget, provider
   P&L, slashing, and elasticity spend caps.
 
@@ -129,6 +141,11 @@ When `--out-dir` is supplied, the simulator emits:
 - `signals.json`
 - `graphs/*.svg`
 
+`generate_report_corpus.py` runs the fixture suite and writes a committed report
+set under `docs/simulation-reports/policy-sim`. The corpus includes Markdown,
+graphs, `signals.json`, `summary.json`, and `assertions.json`; full CSV ledgers
+are generated as local/CI artifacts instead of being committed.
+
 The Markdown reports are intended to be human review artifacts, not just metric
 dumps. A run report explains scenario intent, expected behavior, what happened
 over the timeline, enforcement interpretation, economic interpretation, the
@@ -139,6 +156,11 @@ provider P&L, burn/mint ratio, price trajectory, capacity utilization,
 saturation/repair pressure, and repair backlog. `signals.json` records derived
 availability, saturation, repair, capacity, economic, regional, and provider
 bottleneck signals for downstream analysis.
+
+The economics in these reports are unitless simulator accounting. They are
+intended to make assumptions explicit: storage price, retrieval price, base
+reward, burns, audit budget, provider cost, and dynamic-pricing step behavior.
+They are not final token economics.
 
 The simulator should remain deterministic and machine-output focused. Reporting
 and graph generation belong in `report.py`.

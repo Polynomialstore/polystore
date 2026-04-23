@@ -1,0 +1,188 @@
+{
+  "assertions": [
+    {
+      "detail": "success_rate=0.9926041666666666, required>=0.985",
+      "name": "min_success_rate",
+      "passed": true
+    },
+    {
+      "detail": "saturated_responses=15482, required>=1",
+      "name": "min_saturated_responses",
+      "passed": true
+    },
+    {
+      "detail": "repairs_started=3624, required>=1",
+      "name": "min_repairs_started",
+      "passed": true
+    },
+    {
+      "detail": "repairs_completed=3050, required>=1",
+      "name": "min_repairs_completed",
+      "passed": true
+    },
+    {
+      "detail": "repair_backoffs=21150, required>=1",
+      "name": "min_repair_backoffs",
+      "passed": true
+    },
+    {
+      "detail": "providers_over_capacity=0, required<=0",
+      "name": "max_providers_over_capacity",
+      "passed": true
+    },
+    {
+      "detail": "final_storage_utilization_bps=5569, required>=4500",
+      "name": "min_final_storage_utilization_bps",
+      "passed": true
+    },
+    {
+      "detail": "final_storage_utilization_bps=5569, required<=8500",
+      "name": "max_final_storage_utilization_bps",
+      "passed": true
+    },
+    {
+      "detail": "data_loss_events=0, required<=0",
+      "name": "max_data_loss_events",
+      "passed": true
+    },
+    {
+      "detail": "paid_corrupt_bytes=0, required<=0",
+      "name": "max_paid_corrupt_bytes",
+      "passed": true
+    }
+  ],
+  "config": {
+    "audit_budget_per_epoch": 25.0,
+    "audit_cost_per_miss": 0.01,
+    "base_reward_per_slot": 0.018,
+    "credit_cap_bps": 0,
+    "deals": 1500,
+    "deputy_evict_after_missed_epochs": 1,
+    "dynamic_pricing": true,
+    "dynamic_pricing_max_step_bps": 350,
+    "elasticity_base_cost": 1.0,
+    "elasticity_max_spend": 0.0,
+    "elasticity_trigger_retrievals_per_epoch": 0,
+    "enforcement_mode": "REWARD_EXCLUSION",
+    "epochs": 24,
+    "evict_after_missed_epochs": 2,
+    "faults": [],
+    "jail_epochs": 3,
+    "k": 8,
+    "m": 4,
+    "max_repairs_started_per_epoch": 180,
+    "provider_bandwidth_capacity_max": 140,
+    "provider_bandwidth_capacity_min": 35,
+    "provider_bandwidth_capacity_per_epoch": 0,
+    "provider_bandwidth_cost_jitter_bps": 3000,
+    "provider_bandwidth_cost_per_retrieval": 0.0015,
+    "provider_capacity_max": 36,
+    "provider_capacity_min": 16,
+    "provider_fixed_cost_per_epoch": 0.04,
+    "provider_initial_bond": 100.0,
+    "provider_online_probability_max": 1.0,
+    "provider_online_probability_min": 0.985,
+    "provider_regions": [
+      "na",
+      "eu",
+      "apac",
+      "sa",
+      "af",
+      "oc"
+    ],
+    "provider_repair_probability_max": 1.0,
+    "provider_repair_probability_min": 0.65,
+    "provider_slot_capacity": 16,
+    "provider_storage_cost_jitter_bps": 2500,
+    "provider_storage_cost_per_slot_epoch": 0.012,
+    "providers": 1200,
+    "quota_bps_per_epoch": 50,
+    "quota_max_blobs": 8,
+    "quota_min_blobs": 2,
+    "regional_outages": [
+      {
+        "epochs": "8-12",
+        "region": "eu"
+      }
+    ],
+    "repair_epochs": 3,
+    "retrieval_base_fee": 0.002,
+    "retrieval_burn_bps": 750,
+    "retrieval_price_max": 1.0,
+    "retrieval_price_min": 0.001,
+    "retrieval_price_per_slot": 0.011,
+    "retrieval_target_per_epoch": 5000,
+    "retrievals_per_user_per_epoch": 2,
+    "route_attempt_limit": 12,
+    "scenario": "large-scale-regional-stress",
+    "seed": 29,
+    "slash_hard_fault": 1.0,
+    "storage_price": 1.0,
+    "storage_price_max": 20.0,
+    "storage_price_min": 0.1,
+    "storage_target_utilization_bps": 6500,
+    "user_mdus_per_deal": 16,
+    "users": 3000,
+    "witness_mdus": 1
+  },
+  "final_slots": {
+    "active": 17426,
+    "repairing": 574
+  },
+  "totals": {
+    "active_slots": 419232,
+    "audit_budget_carryover": 286.61999999999995,
+    "audit_budget_minted": 600.0,
+    "audit_budget_spent": 313.37999999999994,
+    "compliant_slots": 403378,
+    "corrupt_responses": 0,
+    "data_loss_events": 0,
+    "deputy_misses": 15484,
+    "deputy_served": 48885,
+    "direct_served": 1150383,
+    "elasticity_rejections": 0,
+    "elasticity_spent": 0.0,
+    "final_retrieval_price": 0.02426725928440564,
+    "final_storage_price": 0.44068493772270123,
+    "final_storage_utilization_bps": 5569,
+    "invalid_proofs": 0,
+    "max_provider_bandwidth_capacity": 140,
+    "max_provider_capacity": 36,
+    "max_provider_pnl": 21.9598206655129,
+    "max_retrieval_price": 0.02426725928440564,
+    "max_storage_price": 1.0,
+    "min_provider_bandwidth_capacity": 35,
+    "min_provider_capacity": 16,
+    "min_provider_pnl": -1.2046873872530555,
+    "min_retrieval_price": 0.011,
+    "min_storage_price": 0.44068493772270123,
+    "offline_responses": 50393,
+    "paid_corrupt_bytes": 0,
+    "provider_cost": 8050.740677724274,
+    "provider_hard_faults": 0,
+    "provider_pnl": 16990.955784461064,
+    "provider_revenue": 25041.696462185315,
+    "provider_slashed": 0.0,
+    "providers_negative_pnl": 4,
+    "providers_over_capacity": 0,
+    "quota_misses": 15854,
+    "repair_backoffs": 21150,
+    "repairing_slots": 12768,
+    "repairs_completed": 3050,
+    "repairs_started": 3624,
+    "retrieval_attempts": 144000,
+    "retrieval_base_burned": 288.0000000000163,
+    "retrieval_provider_payouts": 17788.506462185338,
+    "retrieval_successes": 142935,
+    "retrieval_variable_burned": 1442.311334771766,
+    "reward_burned": 292.986,
+    "reward_coverage": 0.9611742424242424,
+    "reward_eligible_slots": 402955,
+    "reward_paid": 7253.19,
+    "reward_pool_minted": 7546.1759999999995,
+    "saturated_responses": 15482,
+    "success_rate": 0.9926041666666666,
+    "unavailable_reads": 1065,
+    "withheld_responses": 0
+  }
+}

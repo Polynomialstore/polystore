@@ -1,0 +1,22 @@
+{
+  "committed_artifacts": [
+    "report.md",
+    "risk_register.md",
+    "graduation.md",
+    "signals.json",
+    "summary.json",
+    "assertions.json",
+    "graphs/*.svg"
+  ],
+  "description": "A provider stays offline long enough to become delinquent and require repair.",
+  "omission_reason": "CSV ledgers are generated in CI/local artifacts to keep the committed report corpus reviewable.",
+  "omitted_artifacts": [
+    "epochs.csv",
+    "providers.csv",
+    "slots.csv",
+    "evidence.csv",
+    "repairs.csv",
+    "economy.csv"
+  ],
+  "scenario_fixture": "tools/policy_sim/scenarios/sustained_non_response.yaml"
+}

@@ -14,6 +14,7 @@
     "max_repairs_started": 0,
     "max_quota_misses": 0,
     "max_invalid_proofs": 0,
+    "max_data_loss_events": 0,
     "max_paid_corrupt_bytes": 0,
     "min_reward_coverage": 1.0
   }

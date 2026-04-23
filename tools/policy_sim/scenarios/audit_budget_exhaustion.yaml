@@ -1,0 +1,27 @@
+{
+  "name": "audit-budget-exhaustion",
+  "description": "Many soft failures compete for a deliberately tight audit budget.",
+  "config": {
+    "scenario": "audit-budget-exhaustion",
+    "seed": 33,
+    "providers": 60,
+    "users": 120,
+    "deals": 36,
+    "epochs": 8,
+    "audit_budget_per_epoch": 0.05,
+    "audit_cost_per_miss": 0.25
+  },
+  "faults": [
+    "lazy:sp-000",
+    "lazy:sp-001",
+    "lazy:sp-002",
+    "lazy:sp-003"
+  ],
+  "assertions": {
+    "min_success_rate": 0.99,
+    "min_quota_misses": 1,
+    "min_audit_budget_spent": 0.1,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

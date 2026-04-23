@@ -1,0 +1,24 @@
+{
+  "name": "flapping-provider",
+  "description": "Intermittent provider outages should be visible without creating repair churn.",
+  "config": {
+    "scenario": "flapping-provider",
+    "seed": 31,
+    "providers": 48,
+    "users": 80,
+    "deals": 24,
+    "epochs": 10,
+    "evict_after_missed_epochs": 3,
+    "deputy_evict_after_missed_epochs": 3
+  },
+  "faults": [
+    "offline:sp-000:2,4,6,8"
+  ],
+  "assertions": {
+    "min_success_rate": 0.99,
+    "min_offline_responses": 1,
+    "max_repairs_started": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

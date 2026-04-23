@@ -51,6 +51,7 @@
     "max_providers_over_capacity": 0,
     "min_final_storage_utilization_bps": 4500,
     "max_final_storage_utilization_bps": 8500,
+    "max_data_loss_events": 0,
     "max_paid_corrupt_bytes": 0
   }
 }

@@ -155,6 +155,7 @@ The program should standardize metrics before adding more enforcement:
 |---|---|
 | Retrieval success rate | Primary user-facing availability metric. |
 | Unavailable reads | Measures when RS/routing failed to find `K` usable slots. |
+| Data-loss events | Measures when the simulator believes fewer than `K` trusted durable slots remain. This should stay at zero for current fixtures. |
 | Time to repair start | Measures detection speed. |
 | Time to repair completion | Measures healing speed. |
 | False repair rate | Avoids needless churn from transient noise. |
@@ -179,6 +180,15 @@ The program should standardize metrics before adding more enforcement:
 | Elasticity spend-window usage | Shows whether demand-funded scaling is useful or cap-bound. |
 
 Every scenario should define expected bounds for the metrics it exercises.
+
+Scale threshold policy:
+
+1. Temporary unavailable reads are acceptable in explicitly marked stress
+   fixtures while the system is still being tuned.
+2. Data-loss events are not acceptable for the current simulator milestone.
+3. Corrupt bytes paid must remain zero.
+4. Any scenario that allows unavailable reads must say so in its report and
+   still assert `max_data_loss_events = 0`.
 
 ## 10. Simulation Program
 
@@ -205,6 +215,70 @@ The logical simulator should remain anchored to real protocol state:
 11. Base reward pool, audit budget, burns, and provider payouts.
 12. Provider costs, capacity, bond requirements, and churn behavior.
 
+### 10.1 Report Corpus and CI Contract
+
+The simulator now has a committed report corpus generated from
+`tools/policy_sim/scenarios` into `docs/simulation-reports/policy-sim`.
+
+The committed corpus should include:
+
+1. `README.md` scenario index.
+2. One directory per scenario.
+3. `report.md`, `risk_register.md`, and `graduation.md`.
+4. `signals.json`, `summary.json`, and `assertions.json`.
+5. Inline SVG graph assets under `graphs/`.
+
+The committed corpus intentionally does not include full CSV ledgers for every
+scenario. Those ledgers are generated locally or uploaded as CI artifacts
+because scale scenarios can produce large slot/evidence/economy tables.
+
+CI should run the full fixture suite first, including the expensive
+`large-scale-regional-stress` scenario. If this proves too expensive, scale
+back only after observing real CI timing and failure modes. The current desired
+posture is:
+
+1. Unit-test simulator code.
+2. Run every scenario fixture.
+3. Regenerate `docs/simulation-reports/policy-sim`.
+4. Fail CI if the committed reports are stale.
+5. Upload raw simulator ledgers as artifacts for deeper review.
+
+### 10.2 Economic Assumptions in Current Reports
+
+The simulator's economic model is a deterministic control-system model, not a
+final token-economics model. Reports must make the assumptions visible so human
+review can decide whether they are credible before policy graduates.
+
+Current assumptions:
+
+1. Prices, rewards, costs, burns, and budgets are unitless accounting values.
+2. Storage price responds to modeled capacity utilization when dynamic pricing
+   is enabled.
+3. Retrieval price responds to retrieval attempts per epoch when dynamic
+   pricing is enabled.
+4. The controller uses bounded per-epoch steps, floors, and ceilings.
+5. Provider P&L is simplified as fixed cost plus storage responsibility cost
+   plus retrieval bandwidth cost, optionally with per-provider jitter.
+6. Base rewards are modeled as issuance/subsidy and paid only to
+   reward-eligible slots.
+7. Retrieval burns reduce requester/session payments before provider payout.
+8. Audit budget spending is capped by available budget and miss-driven demand.
+9. Elasticity spending fails closed when the configured spend cap is exceeded.
+10. The model does not yet include user demand elasticity, real fiat bandwidth
+    prices, operator-level concentration, capital cost of bonds, or secondary
+    market token volatility.
+
+Human decisions still required:
+
+1. Which cost assumptions should be anchored to real provider pricing data.
+2. Whether target utilization should differ by service class.
+3. Whether storage and retrieval controllers should share state or remain
+   separate.
+4. Whether audit budget exhaustion should create backlog, fee increases,
+   stronger admission control, or governance intervention.
+5. Which economic thresholds become governance params versus monitoring-only
+   launch metrics.
+
 ## 11. Scenario Matrix
 
 | Scenario | Primary question | First simulation assertion | Later implementation gate |
@@ -229,6 +303,8 @@ The logical simulator should remain anchored to real protocol state:
 | Viral public retrieval | Does public demand scale without draining owner escrow? | Sponsored sessions fund retrieval; owner escrow remains stable. | Sponsored-session e2e. |
 | Elasticity cap hit | What happens when demand exceeds user budget? | Scaling stops cleanly and service is rate-limited, not unbounded. | `MsgSignalSaturation` spend-window e2e. |
 | Subsidy farming | Can providers earn emissions without useful service? | Non-compliant or idle responsibility is unrewarded or uneconomic. | Base reward compliance tests. |
+| Repair candidate exhaustion | Does the network expose lack of spare capacity safely? | Repair backoffs occur, capacity is respected, no silent over-assignment. | Keeper candidate-selection and backoff tests. |
+| Price controller bounds | Does dynamic pricing stay bounded under sustained demand? | Prices move within configured floors/ceilings and reports expose provider P&L. | Epoch pricing keeper tests. |
 
 ## 12. Milestone Sequence
 

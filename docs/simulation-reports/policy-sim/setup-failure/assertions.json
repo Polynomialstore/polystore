@@ -1,0 +1,22 @@
+[
+  {
+    "detail": "success_rate=1.0, required>=0.99",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "repairs_started=6, required>=1",
+    "name": "min_repairs_started",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "paid_corrupt_bytes=0, required<=0",
+    "name": "max_paid_corrupt_bytes",
+    "passed": true
+  }
+]

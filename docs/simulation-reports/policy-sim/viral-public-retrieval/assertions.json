@@ -1,0 +1,22 @@
+[
+  {
+    "detail": "success_rate=1.0, required>=1.0",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "retrieval_provider_payouts=1026.0000000000205, required>=100.0",
+    "name": "min_retrieval_provider_payouts",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "retrieval_base_burned=44.999999999999176, required>=1.0",
+    "name": "min_retrieval_base_burned",
+    "passed": true
+  }
+]

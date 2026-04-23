@@ -107,6 +107,7 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertGreater(result.totals["saturated_responses"], 0)
         self.assertGreater(result.totals["repair_backoffs"], 0)
         self.assertEqual(0, result.totals["providers_over_capacity"])
+        self.assertEqual(0, result.totals["data_loss_events"])
         self.assertLess(result.totals["final_storage_utilization_bps"], 10_000)
         self.assertIn("capacity_slots", result.providers[0])
         self.assertIn("bandwidth_capacity_per_epoch", result.providers[0])

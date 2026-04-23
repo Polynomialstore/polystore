@@ -16,6 +16,7 @@
   "assertions": {
     "min_success_rate": 1.0,
     "min_elasticity_rejections": 1,
+    "max_data_loss_events": 0,
     "max_elasticity_spent": 0.0
   }
 }
