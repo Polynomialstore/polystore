@@ -1423,7 +1423,86 @@ The financial market portion is not complete until:
    minting.
 7. Elasticity can absorb demand when funded and fails closed when unfunded.
 
-## 34. Open Questions
+## 34. Branching and PR Strategy
+
+The simulator and policing work should move through reviewable branches and
+pull requests. The historical direct-to-`main` workflow was acceptable during
+rapid planning, but it is not appropriate for the simulator, keeper, gateway,
+or enforcement workstreams.
+
+### 34.1 Branch Policy
+
+1. Agents should branch from a fresh `origin/main` before starting non-trivial
+   work.
+2. Agents must not push implementation or planning changes directly to `main`.
+3. Work should land on topic branches and be reviewed through PRs.
+4. Human approval is required before merge.
+5. Agents may push branches and open or update PRs, but must not merge their
+   own PRs.
+6. Direct `main` pushes are reserved for documented emergency hotfixes
+   explicitly authorized by the user.
+
+Recommended branch prefixes:
+
+| Prefix | Use |
+|---|---|
+| `docs/` | Roadmaps, RFCs, runbooks, AGENTS.md policy, planning updates. |
+| `sim/` | `tools/policy_sim` scenarios, ledgers, output schemas, assertions. |
+| `chain/` | Keeper state, params, messages, epoch hooks, consensus tests. |
+| `gateway/` | user-gateway or provider-daemon behavior, routing, fault hooks. |
+| `website/` | UX surfaces, dashboards, operator/user visibility. |
+| `e2e/` | process-level scripts, fixtures, and devnet orchestration. |
+
+### 34.2 PR Sizing
+
+PRs should be small enough to review as one policy or implementation unit.
+Recommended slicing:
+
+1. One PR for S0 simulator planning contract.
+2. One PR for fixture loading and built-in scenario migration.
+3. One PR for reliability ledgers.
+4. One PR for economic ledgers.
+5. One PR for simulated enforcement modes.
+6. One PR per keeper policy graduation.
+7. One PR per process-level e2e scenario or tightly related scenario group.
+
+Avoid combining docs, simulator behavior, keeper state, gateway behavior, and
+website UX in one PR unless the change is a deliberate end-to-end slice.
+
+### 34.3 PR Review Requirements
+
+Every PR should state:
+
+1. Which roadmap stage or simulator milestone it advances.
+2. Which scenario fixtures or policy surfaces it changes.
+3. Which tests or smoke checks were run.
+4. Which output schemas changed, if any.
+5. Whether the PR is planning-only, simulator-only, keeper-level,
+   runtime/e2e, or live-enforcement related.
+
+For simulator PRs, include example output paths or summarized assertion results.
+For keeper or runtime PRs, identify the simulator scenario that justified
+graduation.
+
+### 34.4 Merge Gates
+
+Minimum merge gates:
+
+1. Human review and approval.
+2. Relevant tests pass, or failures are documented and accepted by a human.
+3. No direct `main` push by agents.
+4. No destructive git operations or history rewrites without explicit approval.
+5. For schema changes, fixtures and regression tests are updated in the same
+   PR.
+
+### 34.5 Agent Instruction Source
+
+The root `AGENTS.md` must encode this branch/PR policy so future agents follow
+it by default. If nested `AGENTS.md` files add local guidance, they should not
+weaken the repo-wide requirement that agent work uses branches, PRs, and human
+approval before merge.
+
+## 35. Open Questions
 
 1. Should hot and cold deals use separate missed-epoch thresholds from the start?
 2. What false-positive repair rate is acceptable during trusted devnet?
