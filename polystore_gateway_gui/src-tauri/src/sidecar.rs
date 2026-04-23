@@ -654,7 +654,7 @@ pub fn local_storage_summary(app: &AppHandle) -> Result<GatewayStorageSummary, S
             .then_with(|| a.deal_id.cmp(&b.deal_id))
     });
 
-    recent_files.sort_by_key(|file| std::cmp::Reverse(file.modified_unix));
+    recent_files.sort_unstable_by_key(|file| std::cmp::Reverse(file.modified_unix));
     recent_files.truncate(12);
 
     Ok(GatewayStorageSummary {
