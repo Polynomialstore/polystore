@@ -14,13 +14,16 @@ import argparse
 import csv
 import hashlib
 import json
-import os
 import random
 import sys
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
+
+try:
+    from .parallel import map_parallel
+except ImportError:  # Allows direct execution as a script.
+    from parallel import map_parallel
 
 
 BLOB_SIZE_BYTES = 128 * 1024
@@ -2378,15 +2381,6 @@ def run_scenario_dir_task(task: tuple[SimConfig, list[str], dict[str, Any], floa
     return result
 
 
-def resolve_jobs(requested: int, task_count: int) -> int:
-    if task_count <= 1:
-        return 1
-    if requested > 0:
-        return min(requested, task_count)
-    cpu_count = os.cpu_count() or 1
-    return max(1, min(task_count, cpu_count, 8))
-
-
 def fixture_paths(directory: Path) -> list[Path]:
     return sorted([*directory.glob("*.yaml"), *directory.glob("*.json")])
 
@@ -2429,7 +2423,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--assert", dest="assertions", action="store_true")
     parser.add_argument("--min-success-rate", type=float)
-    parser.add_argument("--jobs", type=int, default=1, help="parallel workers for --scenario-dir; 0 auto-detects CPU count capped at 8")
+    parser.add_argument("--jobs", type=int, default=0, help="parallel workers for --scenario-dir; 0 auto-detects CPU count capped at 8")
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--csv-out", type=Path)
     parser.add_argument("--out-dir", type=Path)
@@ -2448,12 +2442,7 @@ def main(argv: list[str] | None = None) -> int:
             config, faults, assertion_specs = config_from_args(args, spec)
             out_dir = args.out_dir / spec.name if args.out_dir else None
             tasks.append((config, faults, assertion_specs, args.min_success_rate, args.assertions, out_dir))
-        jobs = resolve_jobs(args.jobs, len(tasks))
-        if jobs == 1:
-            results = [run_scenario_dir_task(task) for task in tasks]
-        else:
-            with ProcessPoolExecutor(max_workers=jobs) as executor:
-                results = list(executor.map(run_scenario_dir_task, tasks))
+        results = map_parallel(run_scenario_dir_task, tasks, args.jobs)
 
         failures = 0
         for result in results:

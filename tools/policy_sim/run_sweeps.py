@@ -6,17 +6,17 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
-import os
 import shutil
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 try:
+    from .parallel import map_parallel, resolve_jobs
     from .policing_sim import SimConfig, load_scenario_spec, run_one, write_output_dir
     from .report import generate_sweep_report
 except ImportError:  # Allows direct execution as a script.
+    from parallel import map_parallel, resolve_jobs
     from policing_sim import SimConfig, load_scenario_spec, run_one, write_output_dir
     from report import generate_sweep_report
 
@@ -143,11 +143,7 @@ def run_sweep_specs(spec_paths: list[Path], run_root: Path, report_root: Path, c
         for index, case in enumerate(plan.spec.cases)
     ]
     jobs = resolve_jobs(jobs, len(tasks))
-    if jobs == 1:
-        results = [_run_sweep_case(task) for task in tasks]
-    else:
-        with ProcessPoolExecutor(max_workers=jobs) as executor:
-            results = list(executor.map(_run_sweep_case, tasks))
+    results = map_parallel(_run_sweep_case, tasks, jobs)
 
     grouped: dict[str, list[tuple[int, dict[str, Any], int]]] = {plan.spec.name: [] for plan in plans}
     for spec_name, case_index, row, failed_count in results:
@@ -216,15 +212,6 @@ def _run_sweep_case(task: tuple[str, int, SweepCase, Path]) -> tuple[str, int, d
         },
         int(bool(failed)),
     )
-
-
-def resolve_jobs(requested: int, task_count: int) -> int:
-    if task_count <= 1:
-        return 1
-    if requested > 0:
-        return min(requested, task_count)
-    cpu_count = os.cpu_count() or 1
-    return max(1, min(task_count, cpu_count, 8))
 
 
 def stable_repo_path(path: Path) -> str:

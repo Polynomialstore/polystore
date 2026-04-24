@@ -4,9 +4,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 try:
+    from .parallel import map_parallel, resolve_chunksize, resolve_jobs
     from .policing_sim import (
         PolicySimulator,
         SimConfig,
+        build_parser as build_sim_parser,
         evaluate_assertions,
         load_scenario_spec,
         run_one,
@@ -16,9 +18,11 @@ try:
     from .generate_report_corpus import write_graduation_map
     from .run_sweeps import load_sweep_spec, run_sweep_spec, run_sweep_specs
 except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`.
+    from parallel import map_parallel, resolve_chunksize, resolve_jobs
     from policing_sim import (
         PolicySimulator,
         SimConfig,
+        build_parser as build_sim_parser,
         evaluate_assertions,
         load_scenario_spec,
         run_one,
@@ -27,6 +31,10 @@ except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`
     from report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
     from generate_report_corpus import write_graduation_map
     from run_sweeps import load_sweep_spec, run_sweep_spec, run_sweep_specs
+
+
+def square_for_parallel_test(value):
+    return value * value
 
 
 class PolicySimulatorTests(unittest.TestCase):
@@ -39,6 +47,20 @@ class PolicySimulatorTests(unittest.TestCase):
     def assert_assertions_pass(self, result):
         failed = [item for item in result.assertions if not item.passed]
         self.assertEqual([], failed)
+
+    def test_parallel_helpers_bound_jobs_and_preserve_order(self):
+        self.assertEqual(1, resolve_jobs(0, 1))
+        self.assertEqual(3, resolve_jobs(3, 10))
+        self.assertLessEqual(resolve_jobs(0, 100), 8)
+        self.assertEqual(1, resolve_chunksize(1, 8))
+        self.assertEqual(32, resolve_chunksize(1000, 8))
+
+        result = map_parallel(square_for_parallel_test, [0, 1, 2, 3, 4], requested_jobs=2)
+        self.assertEqual([0, 1, 4, 9, 16], result)
+
+    def test_scenario_dir_defaults_to_auto_parallel_jobs(self):
+        args = build_sim_parser().parse_args(["--scenario-dir", "tools/policy_sim/scenarios"])
+        self.assertEqual(0, args.jobs)
 
     def test_ideal_scenario_has_no_repairs_or_failures(self):
         result = self.run_scenario("ideal", providers=48, deals=24, users=80, epochs=8)

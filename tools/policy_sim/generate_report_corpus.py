@@ -11,18 +11,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import tempfile
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 try:
+    from .parallel import map_parallel, resolve_jobs
     from .policing_sim import SimConfig, fixture_paths, load_scenario_spec, run_one, write_output_dir
     from .report import generate_run_report, stable_json_value
 except ImportError:  # Allows direct execution as a script.
+    from parallel import map_parallel, resolve_jobs
     from policing_sim import SimConfig, fixture_paths, load_scenario_spec, run_one, write_output_dir
     from report import generate_run_report, stable_json_value
 
@@ -199,11 +199,7 @@ def _generate(paths: list[Path], out_dir: Path, run_root: Path, jobs: int) -> in
     rows: list[dict[str, Any]] = []
     failures = 0
     tasks = [(path, out_dir, run_root) for path in paths]
-    if jobs == 1:
-        results = [_generate_one(task) for task in tasks]
-    else:
-        with ProcessPoolExecutor(max_workers=jobs) as executor:
-            results = list(executor.map(_generate_one, tasks))
+    results = map_parallel(_generate_one, tasks, jobs)
 
     for row, failed_count in sorted(results, key=lambda item: item[0]["scenario"]):
         rows.append(row)
@@ -258,15 +254,6 @@ def _generate_one(task: tuple[Path, Path, Path]) -> tuple[dict[str, Any], int]:
         encoding="utf-8",
     )
     return index_row(spec.name, result, failed), int(bool(failed))
-
-
-def resolve_jobs(requested: int, task_count: int) -> int:
-    if task_count <= 1:
-        return 1
-    if requested > 0:
-        return min(requested, task_count)
-    cpu_count = os.cpu_count() or 1
-    return max(1, min(task_count, cpu_count, 8))
 
 
 def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
