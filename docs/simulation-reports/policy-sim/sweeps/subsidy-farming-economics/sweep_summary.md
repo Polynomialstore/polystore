@@ -1,12 +1,12 @@
 # Policy Simulation Sensitivity Sweep
 
-This report aggregates `6` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.
+This report aggregates `7` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.
 
 ## Executive Summary
 
 - Mode: `Sensitivity Sweep`.
-- Runs analyzed: `6`.
-- Varied parameters: `6`.
+- Runs analyzed: `7`.
+- Varied parameters: `3`.
 - Critical-risk runs: `0`.
 - Assertion failures: `0`.
 - Runs with modeled data loss: `0`.
@@ -16,12 +16,13 @@ This report aggregates `6` completed simulator run output directories. It does n
 
 | Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
 |---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `baseline-duration4` | `storage-escrow-expiry` | `107` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `expiry-disabled-unsafe` | `storage-escrow-expiry` | `107` | `high` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `larger-escrow-book` | `storage-escrow-expiry` | `107` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `not-yet-mature-open-control` | `storage-escrow-expiry` | `107` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `one-epoch-duration-immediate-expiry` | `storage-escrow-expiry` | `107` | `low` | `PASS` | 100.00% | 0 | 160 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `short-duration2-post-expiry-rejections` | `storage-escrow-expiry` | `107` | `low` | `PASS` | 100.00% | 0 | 160 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `baseline-reward-exclusion` | `subsidy-farming` | `35` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 48/48 | 0 | 0 | 6 | 1.0000 | 0.0100 |
+| `delayed-eviction-reward-exclusion` | `subsidy-farming` | `35` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 48/48 | 0 | 0 | 6 | 1.0000 | 0.0100 |
+| `high-lazy-share-reward-exclusion` | `subsidy-farming` | `35` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 166/161 | 0 | 0 | 18 | 1.0000 | 0.0100 |
+| `high-subsidy-reward-exclusion` | `subsidy-farming` | `35` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 48/48 | 0 | 0 | 6 | 1.0000 | 0.0100 |
+| `low-subsidy-reward-exclusion` | `subsidy-farming` | `35` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 48/48 | 0 | 0 | 6 | 1.0000 | 0.0100 |
+| `measure-only-subsidy-leak-unsafe` | `subsidy-farming` | `35` | `high` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
+| `repair-only-subsidy-leak-unsafe` | `subsidy-farming` | `35` | `high` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 48/48 | 0 | 0 | 0 | 1.0000 | 0.0100 |
 
 ## Key Metric Ranges
 
@@ -29,17 +30,17 @@ This report aggregates `6` completed simulator run output directories. It does n
 |---|---:|---:|---:|---:|---|
 | `success_rate` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary user-facing misses; allowed only in explicit stress contracts. |
-| `expired_retrieval_attempts` | 0.000000 | 160.000000 | 160.000000 | 53.333333 | Post-expiry read requests rejected as expired content, not live availability misses. |
+| `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
 | `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
-| `reward_coverage` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Shows whether compliant responsibility remains economically recognized. |
-| `reward_pool_minted` | 2.880000 | 76.800000 | 73.920000 | 20.000000 | Modeled base subsidy made available to active slots. |
-| `reward_paid` | 2.880000 | 76.800000 | 73.920000 | 20.000000 | Base subsidy actually paid to reward-eligible slots. |
-| `reward_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Base subsidy withheld from non-compliant responsibility. |
-| `repairs_started` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Detection and repair activation pressure. |
-| `repairs_ready` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
-| `repairs_completed` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Healing throughput under the parameter set. |
-| `repair_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Repair retry pressure before starts or backoffs. |
+| `reward_coverage` | 0.938948 | 1.000000 | 0.061052 | 0.979172 | Shows whether compliant responsibility remains economically recognized. |
+| `reward_pool_minted` | 56.640000 | 1132.800000 | 1076.160000 | 371.277143 | Modeled base subsidy made available to active slots. |
+| `reward_paid` | 55.680000 | 1113.600000 | 1057.920000 | 363.968571 | Base subsidy actually paid to reward-eligible slots. |
+| `reward_burned` | 0.000000 | 19.200000 | 19.200000 | 7.308571 | Base subsidy withheld from non-compliant responsibility. |
+| `repairs_started` | 0.000000 | 166.000000 | 166.000000 | 58.000000 | Detection and repair activation pressure. |
+| `repairs_ready` | 0.000000 | 161.000000 | 161.000000 | 57.285714 | Review this metric against the scenario contract. |
+| `repairs_completed` | 0.000000 | 161.000000 | 161.000000 | 57.285714 | Healing throughput under the parameter set. |
+| `repair_attempts` | 0.000000 | 166.000000 | 166.000000 | 58.000000 | Repair retry pressure before starts or backoffs. |
 | `repair_backoffs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Replacement capacity or repair-start bottlenecks. |
 | `repair_cooldowns` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retry cooldowns that intentionally throttle repair churn. |
 | `repair_attempt_caps` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Per-slot attempt caps hit before a replacement could start. |
@@ -50,10 +51,10 @@ This report aggregates `6` completed simulator run output directories. It does n
 | `high_bandwidth_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves attributed to high-bandwidth providers. |
 | `hot_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Hot-service demand exercised by the run. |
 | `hot_high_bandwidth_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Hot retrieval serves handled by promoted high-bandwidth providers. |
-| `max_operator_assignment_share_bps` | 0.000000 | 208.000000 | 208.000000 | 147.333333 | Worst observed assignment share of any operator across epochs. |
-| `top_operator_assignment_share_bps` | 0.000000 | 208.000000 | 208.000000 | 69.333333 | Final assignment share of the largest operator. |
-| `top_operator_provider_share_bps` | 50.000000 | 208.000000 | 158.000000 | 181.666667 | Provider identity share controlled by the largest operator. |
-| `max_operator_deal_slots` | 0.000000 | 1.000000 | 1.000000 | 0.833333 | Maximum same-operator slots in any one deal. |
+| `max_operator_assignment_share_bps` | 138.000000 | 243.000000 | 105.000000 | 198.000000 | Worst observed assignment share of any operator across epochs. |
+| `top_operator_assignment_share_bps` | 138.000000 | 240.000000 | 102.000000 | 197.571429 | Final assignment share of the largest operator. |
+| `top_operator_provider_share_bps` | 138.000000 | 138.000000 | 0.000000 | 138.000000 | Provider identity share controlled by the largest operator. |
+| `max_operator_deal_slots` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Maximum same-operator slots in any one deal. |
 | `operator_deal_cap_violations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal/operator groups above the configured cap. |
 | `platinum_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves in the fastest latency tier. |
 | `gold_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves in the middle positive latency tier. |
@@ -63,27 +64,27 @@ This report aggregates `6` completed simulator run output directories. It does n
 | `performance_fail_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Share of tiered serves that landed in the Fail tier. |
 | `platinum_share` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Share of tiered serves that landed in the fastest performance tier. |
 | `performance_reward_paid` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Tiered QoS rewards paid separately from baseline storage and retrieval settlement. |
-| `storage_escrow_locked` | 115.200000 | 3072.000000 | 2956.800000 | 876.800000 | Storage escrow charged upfront for committed deals. |
-| `storage_escrow_earned` | 115.200000 | 3072.000000 | 2956.800000 | 800.000000 | Storage escrow earned over modeled service epochs. |
+| `storage_escrow_locked` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage escrow charged upfront for committed deals. |
+| `storage_escrow_earned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage escrow earned over modeled service epochs. |
 | `storage_escrow_refunded` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Unearned storage escrow returned by deal close/refund. |
-| `storage_escrow_outstanding` | 0.000000 | 460.800000 | 460.800000 | 76.800000 | Storage escrow still locked at run end. |
-| `storage_fee_provider_payouts` | 115.200000 | 3072.000000 | 2956.800000 | 800.000000 | Earned storage fees paid to eligible providers. |
+| `storage_escrow_outstanding` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage escrow still locked at run end. |
+| `storage_fee_provider_payouts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Earned storage fees paid to eligible providers. |
 | `storage_fee_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Earned storage fees withheld from non-compliant slots. |
-| `deals_closed` | 0.000000 | 80.000000 | 80.000000 | 19.333333 | Deal close events executed across the run. |
-| `deals_expired` | 0.000000 | 80.000000 | 80.000000 | 19.333333 | Deal expiry events executed across the run. |
-| `final_expired_deals` | 0.000000 | 80.000000 | 80.000000 | 19.333333 | Deals expired by run end. |
-| `final_open_deals` | 0.000000 | 12.000000 | 12.000000 | 4.000000 | Deals still active at run end. |
-| `final_closed_deals` | 0.000000 | 80.000000 | 80.000000 | 19.333333 | Deals closed by run end. |
-| `retrieval_base_burned` | 0.080000 | 2.000000 | 1.920000 | 0.533333 | Base retrieval fees burned across live retrieval attempts. |
-| `retrieval_variable_burned` | 0.320000 | 8.000000 | 7.680000 | 2.133333 | Variable retrieval fee burn withheld from provider payout. |
-| `retrieval_provider_payouts` | 6.080000 | 152.000000 | 145.920000 | 40.533333 | Retrieval fees paid to providers for served slots. |
+| `deals_closed` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal close events executed across the run. |
+| `deals_expired` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal expiry events executed across the run. |
+| `final_expired_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals expired by run end. |
+| `final_open_deals` | 48.000000 | 48.000000 | 0.000000 | 48.000000 | Deals still active at run end. |
+| `final_closed_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals closed by run end. |
+| `retrieval_base_burned` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Base retrieval fees burned across live retrieval attempts. |
+| `retrieval_variable_burned` | 4.000000 | 4.000000 | 0.000000 | 4.000000 | Variable retrieval fee burn withheld from provider payout. |
+| `retrieval_provider_payouts` | 76.000000 | 76.000000 | 0.000000 | 76.000000 | Retrieval fees paid to providers for served slots. |
 | `sponsored_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval attempts funded by requester/sponsor sessions. |
 | `sponsored_retrieval_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Total sponsored retrieval base plus variable spend. |
 | `owner_retrieval_escrow_debited` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal-owner escrow debited for non-sponsored retrievals. |
-| `retrieval_wash_accounted_spend` | 0.080000 | 2.000000 | 1.920000 | 0.533333 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
-| `retrieval_wash_net_gain` | 6.000000 | 150.000000 | 144.000000 | 40.000000 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
-| `retrieval_attempts` | 80.000000 | 2000.000000 | 1920.000000 | 533.333333 | Effective retrieval attempts after demand shock multipliers and inactive-content rejection. |
-| `retrieval_latent_attempts` | 240.000000 | 2000.000000 | 1760.000000 | 586.666667 | Baseline read demand before demand-shock multipliers. |
+| `retrieval_wash_accounted_spend` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
+| `retrieval_wash_net_gain` | 75.000000 | 75.000000 | 0.000000 | 75.000000 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
+| `retrieval_attempts` | 1000.000000 | 1000.000000 | 0.000000 | 1000.000000 | Effective retrieval attempts after demand shock multipliers and inactive-content rejection. |
+| `retrieval_latent_attempts` | 1000.000000 | 1000.000000 | 0.000000 | 1000.000000 | Baseline read demand before demand-shock multipliers. |
 | `retrieval_demand_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where read-demand shock multipliers were active. |
 | `max_retrieval_demand_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled read-demand multiplier. |
 | `new_deal_latent_requests` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
@@ -111,14 +112,14 @@ This report aggregates `6` completed simulator run output directories. It does n
 | `max_staged_upload_pending_generations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `final_staged_upload_pending_mdus` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `max_staged_upload_pending_mdus` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
-| `suspect_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Soft warning slot-epochs before thresholded delinquency. |
-| `delinquent_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Threshold-crossed slot-epochs that should be visible to operators. |
-| `quota_misses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Soft liveness evidence generated by the run. |
+| `suspect_slots` | 48.000000 | 166.000000 | 118.000000 | 78.571429 | Soft warning slot-epochs before thresholded delinquency. |
+| `delinquent_slots` | 96.000000 | 432.000000 | 336.000000 | 177.000000 | Threshold-crossed slot-epochs that should be visible to operators. |
+| `quota_misses` | 96.000000 | 480.000000 | 384.000000 | 198.285714 | Soft liveness evidence generated by the run. |
 | `invalid_proofs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Hard-fault evidence generated by the run. |
 | `paid_corrupt_bytes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Payment safety invariant; should remain zero. |
 | `provider_slashed` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
-| `audit_budget_demand` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Total audit work implied by soft-failure evidence and carried backlog. |
-| `audit_budget_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Audit budget actually consumed under the configured cap. |
+| `audit_budget_demand` | 0.480000 | 2.400000 | 1.920000 | 0.991429 | Total audit work implied by soft-failure evidence and carried backlog. |
+| `audit_budget_spent` | 0.480000 | 2.400000 | 1.920000 | 0.991429 | Audit budget actually consumed under the configured cap. |
 | `audit_budget_backlog` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Unmet audit demand remaining at run end. |
 | `audit_budget_exhausted` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where audit demand exceeded available budget. |
 | `evidence_spam_claims` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Low-quality deputy evidence submissions in the spam fixture. |
@@ -147,66 +148,63 @@ This report aggregates `6` completed simulator run output directories. It does n
 | `max_reserve_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers still outside normal placement as reserve supply. |
 | `max_probationary_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers simultaneously in onboarding probation. |
 | `entered_active_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers that entered from reserve and are active by run end. |
-| `churn_pressure_provider_epochs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider-epochs below the churn threshold. |
-| `max_churn_pressure_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers simultaneously eligible for churn. |
-| `final_active_provider_capacity` | 768.000000 | 3200.000000 | 2432.000000 | 1173.333333 | Provider capacity remaining after economic exits. |
+| `churn_pressure_provider_epochs` | 0.000000 | 180.000000 | 180.000000 | 60.285714 | Provider-epochs below the churn threshold. |
+| `max_churn_pressure_providers` | 0.000000 | 18.000000 | 18.000000 | 6.142857 | Peak providers simultaneously eligible for churn. |
+| `final_active_provider_capacity` | 1152.000000 | 1152.000000 | 0.000000 | 1152.000000 | Provider capacity remaining after economic exits. |
 | `final_exited_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity removed by economic exits. |
 | `final_reserve_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity still held outside normal placement as reserve supply. |
 | `final_probationary_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity in onboarding probation at run end. |
 | `max_churned_assigned_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak assigned slots on churned providers before repair catches up. |
-| `providers_negative_pnl` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Market sustainability and churn pressure. |
+| `providers_negative_pnl` | 0.000000 | 18.000000 | 18.000000 | 6.000000 | Market sustainability and churn pressure. |
 | `saturated_responses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider bandwidth bottleneck signal. |
 | `providers_over_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Placement/capacity invariant; should remain zero. |
-| `final_storage_utilization_bps` | 0.000000 | 1875.000000 | 1875.000000 | 625.000000 | Supply utilization against modeled capacity. |
-| `min_storage_price` | 0.050000 | 0.050000 | 0.000000 | 0.050000 | Lowest storage price observed during the run. |
-| `max_storage_price` | 0.050000 | 0.050000 | 0.000000 | 0.050000 | Highest storage price observed during the run. |
-| `final_storage_price` | 0.050000 | 0.050000 | 0.000000 | 0.050000 | Storage-controller endpoint under this run. |
+| `final_storage_utilization_bps` | 4956.000000 | 5000.000000 | 44.000000 | 4993.714286 | Supply utilization against modeled capacity. |
+| `min_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Lowest storage price observed during the run. |
+| `max_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Highest storage price observed during the run. |
+| `final_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Storage-controller endpoint under this run. |
 | `min_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Lowest retrieval price observed during the run. |
 | `max_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Highest retrieval price observed during the run. |
 | `final_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Retrieval-controller endpoint under this run. |
 | `storage_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage price controller direction changes across the run. |
 | `retrieval_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval price controller direction changes across the run. |
-| `provider_pnl` | 121.360000 | 3257.600000 | 3136.240000 | 848.413333 | Aggregate provider economics; inspect distribution before deciding. |
+| `provider_pnl` | 30.080000 | 1088.000000 | 1057.920000 | 338.368571 | Aggregate provider economics; inspect distribution before deciding. |
 
 ## Varied Parameters
 
 | Parameter | Values |
 |---|---|
-| `deal_duration_epochs` | `1`, `2`, `4`, `8` |
-| `deal_expiry_enabled` | `False`, `True` |
-| `deals` | `12`, `80` |
-| `epochs` | `3`, `4` |
-| `providers` | `200`, `48` |
-| `users` | `500`, `80` |
+| `base_reward_per_slot` | `0.01`, `0.05`, `0.2` |
+| `enforcement_mode` | `MEASURE_ONLY`, `REPAIR_ONLY`, `REWARD_EXCLUSION` |
+| `evict_after_missed_epochs` | `2`, `4` |
 
 ## Parameter Sensitivity
 
 | Parameter | Value | Runs | Avg Success | Total Unavailable | Total Data Loss | Avg Backoffs | Avg Negative P&L | Avg Final Storage Price |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| `deal_duration_epochs` | `1` | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `deal_duration_epochs` | `2` | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `deal_duration_epochs` | `4` | 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `deal_duration_epochs` | `8` | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `deal_expiry_enabled` | `False` | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `deal_expiry_enabled` | `True` | 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `deals` | `12` | 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `deals` | `80` | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `epochs` | `3` | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `epochs` | `4` | 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `providers` | `200` | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `providers` | `48` | 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `users` | `500` | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
-| `users` | `80` | 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0500 |
+| `base_reward_per_slot` | `0.01` | 1 | 100.00% | 0 | 0 | 0 | 6 | 1.0000 |
+| `base_reward_per_slot` | `0.05` | 5 | 100.00% | 0 | 0 | 0 | 6 | 1.0000 |
+| `base_reward_per_slot` | `0.2` | 1 | 100.00% | 0 | 0 | 0 | 6 | 1.0000 |
+| `enforcement_mode` | `MEASURE_ONLY` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `enforcement_mode` | `REPAIR_ONLY` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `enforcement_mode` | `REWARD_EXCLUSION` | 5 | 100.00% | 0 | 0 | 0 | 8.4000 | 1.0000 |
+| `evict_after_missed_epochs` | `2` | 6 | 100.00% | 0 | 0 | 0 | 6 | 1.0000 |
+| `evict_after_missed_epochs` | `4` | 1 | 100.00% | 0 | 0 | 0 | 6 | 1.0000 |
 
 ## High-Risk Runs
 
 | Run | Scenario | Risk | Reasons |
 |---|---|---|---|
-| `expiry-disabled-unsafe` | `storage-escrow-expiry` | `high` | matured storage deals remained open after configured duration |
+| `repair-only-subsidy-leak-unsafe` | `subsidy-farming` | `high` | quota-missing slots still received the full reward subsidy |
+| `measure-only-subsidy-leak-unsafe` | `subsidy-farming` | `high` | quota-missing slots still received the full reward subsidy |
+| `low-subsidy-reward-exclusion` | `subsidy-farming` | `medium` | some providers ended with negative modeled P&L |
+| `high-subsidy-reward-exclusion` | `subsidy-farming` | `medium` | some providers ended with negative modeled P&L |
+| `high-lazy-share-reward-exclusion` | `subsidy-farming` | `medium` | some providers ended with negative modeled P&L |
+| `delayed-eviction-reward-exclusion` | `subsidy-farming` | `medium` | some providers ended with negative modeled P&L |
+| `baseline-reward-exclusion` | `subsidy-farming` | `medium` | some providers ended with negative modeled P&L |
 
 ## Best Observed Run
 
-`baseline-duration4` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.
+`measure-only-subsidy-leak-unsafe` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.
 
 This is not an automatic policy choice. It is the run humans should inspect first when deciding which parameter set deserves keeper or e2e implementation work.
 

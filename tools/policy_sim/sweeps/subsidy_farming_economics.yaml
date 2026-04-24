@@ -1,0 +1,109 @@
+{
+  "name": "subsidy-farming-economics",
+  "description": "Sensitivity sweep for base reward leakage under lazy-provider subsidy farming, enforcement modes, lazy share, and subsidy size.",
+  "base_scenario": "../scenarios/subsidy_farming.yaml",
+  "cases": [
+    {
+      "name": "baseline-reward-exclusion"
+    },
+    {
+      "name": "repair-only-subsidy-leak-unsafe",
+      "config": {
+        "enforcement_mode": "REPAIR_ONLY"
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_quota_misses": 1,
+        "min_reward_coverage": 1.0,
+        "max_reward_coverage": 1.0,
+        "max_reward_burned": 0.0,
+        "min_repairs_started": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "measure-only-subsidy-leak-unsafe",
+      "config": {
+        "enforcement_mode": "MEASURE_ONLY"
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_quota_misses": 1,
+        "min_reward_coverage": 1.0,
+        "max_reward_coverage": 1.0,
+        "max_reward_burned": 0.0,
+        "max_repairs_started": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "high-lazy-share-reward-exclusion",
+      "faults": [
+        "lazy:sp-006",
+        "lazy:sp-007",
+        "lazy:sp-008",
+        "lazy:sp-009",
+        "lazy:sp-010",
+        "lazy:sp-011",
+        "lazy:sp-012",
+        "lazy:sp-013",
+        "lazy:sp-014",
+        "lazy:sp-015",
+        "lazy:sp-016",
+        "lazy:sp-017"
+      ],
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_quota_misses": 100,
+        "max_reward_coverage": 0.99,
+        "min_reward_burned": 5.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "delayed-eviction-reward-exclusion",
+      "config": {
+        "evict_after_missed_epochs": 4
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_quota_misses": 100,
+        "max_reward_coverage": 0.99,
+        "min_reward_burned": 5.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "low-subsidy-reward-exclusion",
+      "config": {
+        "base_reward_per_slot": 0.01
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_quota_misses": 1,
+        "max_reward_coverage": 0.995,
+        "min_reward_burned": 0.5,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "high-subsidy-reward-exclusion",
+      "config": {
+        "base_reward_per_slot": 0.2
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_quota_misses": 1,
+        "max_reward_coverage": 0.995,
+        "min_reward_burned": 15.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    }
+  ]
+}

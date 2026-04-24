@@ -492,6 +492,9 @@ SWEEP_METRICS = [
     "closed_retrieval_attempts",
     "data_loss_events",
     "reward_coverage",
+    "reward_pool_minted",
+    "reward_paid",
+    "reward_burned",
     "repairs_started",
     "repairs_ready",
     "repairs_completed",
@@ -2411,6 +2414,23 @@ def write_risk_register(
                 "followup": "Block graduation. Add keeper/gateway guards so closed deals are not selected for billable retrieval sessions.",
             }
         )
+    if (
+        str(config["scenario"]) == "subsidy-farming"
+        and fnum(totals.get("quota_misses")) > 0
+        and fnum(totals.get("reward_burned")) == 0
+    ):
+        rows.append(
+            {
+                "risk": "Subsidy farming paid full rewards",
+                "severity": "high",
+                "evidence": (
+                    f"{fmt_num(totals.get('quota_misses'))} quota misses occurred while reward burn remained "
+                    f"{fmt_money(totals.get('reward_burned'))}."
+                ),
+                "impact": "Providers can skip useful liveness work while still collecting the modeled base subsidy.",
+                "followup": "Block graduation. Require base-reward eligibility gates before subsidy defaults are accepted.",
+            }
+        )
     if negative_pnl:
         rows.append(
             {
@@ -3736,6 +3756,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
             raise_to("high", "unavailable reads outside an explicit stress allowance")
     if fnum(totals.get("success_rate"), 1.0) < 0.99:
         raise_to("high", "retrieval success fell below 99%")
+    if scenario == "subsidy-farming" and fnum(totals.get("quota_misses")) > 0 and fnum(totals.get("reward_burned")) == 0:
+        raise_to("high", "quota-missing slots still received the full reward subsidy")
     if fnum(totals.get("repair_backoffs")) > 0:
         raise_to("medium", "repair coordination backoffs occurred")
     if fnum(totals.get("repair_timeouts")) > 0:
@@ -3999,6 +4021,9 @@ def sweep_metric_meaning(key: str) -> str:
         "closed_retrieval_attempts": "Post-close read requests rejected as closed content, not live availability misses.",
         "data_loss_events": "Durability invariant; non-zero values block graduation.",
         "reward_coverage": "Shows whether compliant responsibility remains economically recognized.",
+        "reward_pool_minted": "Modeled base subsidy made available to active slots.",
+        "reward_paid": "Base subsidy actually paid to reward-eligible slots.",
+        "reward_burned": "Base subsidy withheld from non-compliant responsibility.",
         "repairs_started": "Detection and repair activation pressure.",
         "repairs_completed": "Healing throughput under the parameter set.",
         "repair_attempts": "Repair retry pressure before starts or backoffs.",

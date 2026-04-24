@@ -34,6 +34,9 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 0.970451 | 0.991837 | 0.021386 | 0.985166 | Shows whether compliant responsibility remains economically recognized. |
+| `reward_pool_minted` | 205.440000 | 206.400000 | 0.960000 | 205.674286 | Modeled base subsidy made available to active slots. |
+| `reward_paid` | 199.680000 | 204.120000 | 4.440000 | 202.622857 | Base subsidy actually paid to reward-eligible slots. |
+| `reward_burned` | 1.680000 | 6.080000 | 4.400000 | 3.051429 | Base subsidy withheld from non-compliant responsibility. |
 | `repairs_started` | 28.000000 | 48.000000 | 20.000000 | 43.142857 | Detection and repair activation pressure. |
 | `repairs_ready` | 24.000000 | 48.000000 | 24.000000 | 41.571429 | Review this metric against the scenario contract. |
 | `repairs_completed` | 24.000000 | 48.000000 | 24.000000 | 41.571429 | Healing throughput under the parameter set. |

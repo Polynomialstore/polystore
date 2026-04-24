@@ -1329,7 +1329,12 @@ keeper expiry semantics are chosen; and
 compare inactive-content retrieval timing, no-bill owner-escrow guards,
 partial close behavior, refund accounting, and larger read demand so expired
 and intentionally closed content fail explicitly instead of becoming live
-availability failures or billable retrieval sessions.
+availability failures or billable retrieval sessions; and
+`tools/policy_sim/sweeps/subsidy_farming_economics.yaml`, which compares
+reward-exclusion, repair-only, and measure-only enforcement against lazy
+providers, higher lazy share, delayed eviction, and subsidy size so base
+rewards do not leak to quota-missing responsibility before reward-eligibility
+keeper defaults are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models

@@ -43,6 +43,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `storage-escrow-close-refund` | 5 | 0 | Sensitivity sweep for storage lock-in, earned storage fees, early close refunds, and end-of-run outstanding escrow. | [summary](storage-escrow-close-refund/sweep_summary.md) |
 | `storage-escrow-expiry-controls` | 6 | 0 | Sensitivity sweep for committed-storage expiry timing, run length, disabled-expiry behavior, and larger escrow books. | [summary](storage-escrow-expiry-controls/sweep_summary.md) |
 | `storage-escrow-noncompliance-modes` | 3 | 0 | Sensitivity sweep for storage-fee payout and burn behavior across measure-only, repair-only, and reward-exclusion enforcement modes. | [summary](storage-escrow-noncompliance-modes/sweep_summary.md) |
+| `subsidy-farming-economics` | 7 | 0 | Sensitivity sweep for base reward leakage under lazy-provider subsidy farming, enforcement modes, lazy share, and subsidy size. | [summary](subsidy-farming-economics/sweep_summary.md) |
 | `wash-retrieval-economics` | 8 | 0 | Sensitivity sweep for requester-paid retrieval funding, burn rates, and wash-traffic profitability. | [summary](wash-retrieval-economics/sweep_summary.md) |
 
 ## Review Rule
