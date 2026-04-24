@@ -380,6 +380,24 @@ Shows whether operator assignment share is bounded despite provider identity con
 
 ![Operator Concentration](graphs/operator_concentration.svg)
 
+### Evidence Pressure
+
+Shows soft liveness evidence and hard invalid-proof evidence by epoch.
+
+![Evidence Pressure](graphs/evidence_pressure.svg)
+
+### Audit Budget
+
+Shows whether miss-driven audit demand is spending budget or accumulating carryover.
+
+![Audit Budget](graphs/audit_budget.svg)
+
+### Elasticity Spend
+
+Shows demand-funded elasticity spend and rejected expansion attempts.
+
+![Elasticity Spend](graphs/elasticity_spend.svg)
+
 ## Raw Artifacts
 
 - `summary.json`: compact machine-readable run summary.
