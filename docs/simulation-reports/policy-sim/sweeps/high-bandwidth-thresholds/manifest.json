@@ -1,0 +1,117 @@
+{
+  "assertion_failures": 5,
+  "base_scenario": "tools/policy_sim/scenarios/high_bandwidth_regression.yaml",
+  "case_count": 9,
+  "cases": [
+    {
+      "case": "high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-100",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-300",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-600",
+      "data_loss_events": 0,
+      "failed_assertions": [
+        "min_high_bandwidth_demotions"
+      ],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-100",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-300",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-600",
+      "data_loss_events": 0,
+      "failed_assertions": [
+        "min_high_bandwidth_demotions"
+      ],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-100",
+      "data_loss_events": 0,
+      "failed_assertions": [
+        "min_high_bandwidth_demotions"
+      ],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-300",
+      "data_loss_events": 0,
+      "failed_assertions": [
+        "min_high_bandwidth_demotions"
+      ],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-600",
+      "data_loss_events": 0,
+      "failed_assertions": [
+        "min_high_bandwidth_demotions"
+      ],
+      "scenario": "high-bandwidth-regression",
+      "seed": 44,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for high-bandwidth capacity and demotion-saturation thresholds under hot retrieval pressure.",
+  "name": "high-bandwidth-thresholds",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/high-bandwidth-thresholds"
+}

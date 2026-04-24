@@ -1,0 +1,53 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/large_scale_regional_stress.yaml",
+  "case_count": 3,
+  "cases": [
+    {
+      "case": "provider-online-probability-min-0p975",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "large-scale-regional-stress",
+      "seed": 29,
+      "success_rate": 0.9921388888888889,
+      "unavailable_reads": 1132
+    },
+    {
+      "case": "provider-online-probability-min-0p985",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "large-scale-regional-stress",
+      "seed": 29,
+      "success_rate": 0.9926041666666666,
+      "unavailable_reads": 1065
+    },
+    {
+      "case": "provider-online-probability-min-0p995",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "large-scale-regional-stress",
+      "seed": 29,
+      "success_rate": 0.9951597222222223,
+      "unavailable_reads": 697
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Population-scale sensitivity sweep for heterogeneous provider online-probability floors.",
+  "name": "provider-reliability-large-scale",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/provider-reliability-large-scale"
+}
