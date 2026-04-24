@@ -25,6 +25,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `provider-reliability-large-scale` | 3 | 0 | Population-scale sensitivity sweep for heterogeneous provider online-probability floors. | [summary](provider-reliability-large-scale/sweep_summary.md) |
 | `repair-throughput-large-scale` | 3 | 0 | Population-scale sensitivity sweep for repair-start throughput under the large regional stress fixture. | [summary](repair-throughput-large-scale/sweep_summary.md) |
 | `route-attempt-large-scale` | 3 | 1 | Population-scale sensitivity sweep for retrieval route-attempt limits during correlated regional stress. | [summary](route-attempt-large-scale/sweep_summary.md) |
+| `sponsored-retrieval-funding` | 3 | 2 | Sensitivity sweep for public retrieval demand funded by sponsor sessions versus owner deal escrow. | [summary](sponsored-retrieval-funding/sweep_summary.md) |
 
 ## Review Rule
 

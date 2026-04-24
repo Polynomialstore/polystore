@@ -1251,6 +1251,10 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `high_bandwidth_regression.yaml` | Promoted high-bandwidth providers experience sustained saturation under concentrated hot routing. | Demotion occurs, hot retrievals continue, capacity remains respected, and data-loss events stay zero. |
 | `large_scale_regional_stress.yaml` | More than 1,000 heterogeneous SPs and thousands of users experience a correlated regional outage, bandwidth saturation, dynamic pricing, and constrained repair coordination. | Availability remains above floor, saturation and repair backoffs are visible, price remains bounded, and no provider is assigned beyond modeled capacity. |
 
+Current S6 sweep specs include `tools/policy_sim/sweeps/sponsored_retrieval_funding.yaml`,
+which compares full, partial, and absent sponsored-session funding so owner
+escrow-drain risk is visible before keeper defaults are chosen.
+
 ### 27.7 Output Contract
 
 Each simulator run should be able to emit:
