@@ -127,6 +127,11 @@ are supported in scenario files:
 - `provider_cost_shocks`
 - `provider_regions`
 - `regional_outages`
+- `staged_upload_attempts_per_epoch`
+- `staged_upload_mdu_per_attempt`
+- `staged_upload_commit_rate_bps`
+- `staged_upload_retention_epochs`
+- `staged_upload_max_pending_generations`
 - `max_repairs_started_per_epoch`
 - `repair_attempt_cap_per_slot`
 - `repair_backoff_epochs`
@@ -206,6 +211,8 @@ The simulator mirrors current protocol concepts:
   become eligible for normal placement.
 - Provider bond-headroom checks that exclude undercollateralized SPs from new
   responsibility and can repair active slots away from underbonded providers.
+- Staged upload grief pressure where provisional generations are bounded by
+  retention TTL, preflight rejection, and pending-generation caps.
 - Demand-side storage admission accounting for latent new deal requests,
   price-elastic demand suppression, price rejections, capacity rejections, and
   effective/latent acceptance rates.
@@ -269,11 +276,11 @@ provider P&L, provider churn, burn/mint ratio, price trajectory, capacity
 utilization, saturation/repair pressure, repair backlog, repair readiness,
 provider supply entry, provider bond headroom, high-bandwidth promotion, and hot
 retrieval routing, performance tiers, operator concentration, evidence pressure,
-audit budget, and elasticity spend.
+audit budget, elasticity spend, and staged upload pressure.
 `signals.json` records derived
-availability, saturation, repair, capacity, economic, regional, high-bandwidth,
-performance-market, concentration, and provider bottleneck signals for
-downstream analysis.
+availability, saturation, repair, capacity, economic, staged-upload, regional,
+high-bandwidth, performance-market, concentration, and provider bottleneck
+signals for downstream analysis.
 
 The economics in these reports are unitless simulator accounting. They are
 intended to make assumptions explicit: storage price, retrieval price, base

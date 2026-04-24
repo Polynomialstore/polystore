@@ -86,6 +86,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "repair-candidate-exhaustion",
     "replacement-grinding",
     "invalid-synthetic-proof",
+    "staged-upload-grief",
     "high-bandwidth-promotion",
     "high-bandwidth-regression",
     "performance-market-latency",
@@ -219,6 +220,11 @@ class SimConfig:
     elasticity_trigger_retrievals_per_epoch: int = 0
     elasticity_base_cost: float = 1.0
     elasticity_max_spend: float = 0.0
+    staged_upload_attempts_per_epoch: int = 0
+    staged_upload_mdu_per_attempt: int = 1
+    staged_upload_commit_rate_bps: int = 10_000
+    staged_upload_retention_epochs: int = 0
+    staged_upload_max_pending_generations: int = 0
 
     @property
     def n(self) -> int:
@@ -400,6 +406,16 @@ class SimConfig:
             raise ValueError("provider_entry_trigger_storage_price must be non-negative")
         if self.provider_entry_probation_epochs < 0:
             raise ValueError("provider_entry_probation_epochs must be non-negative")
+        if self.staged_upload_attempts_per_epoch < 0:
+            raise ValueError("staged_upload_attempts_per_epoch must be non-negative")
+        if self.staged_upload_mdu_per_attempt <= 0:
+            raise ValueError("staged_upload_mdu_per_attempt must be positive")
+        if not 0 <= self.staged_upload_commit_rate_bps <= 10_000:
+            raise ValueError("staged_upload_commit_rate_bps must be in [0, 10000]")
+        if self.staged_upload_retention_epochs < 0:
+            raise ValueError("staged_upload_retention_epochs must be non-negative")
+        if self.staged_upload_max_pending_generations < 0:
+            raise ValueError("staged_upload_max_pending_generations must be non-negative")
 
 
 @dataclass
@@ -634,6 +650,13 @@ class EpochMetrics:
     storage_utilization_bps: int = 0
     elasticity_spent: float = 0.0
     elasticity_rejections: int = 0
+    staged_upload_attempts: int = 0
+    staged_upload_accepted: int = 0
+    staged_upload_committed: int = 0
+    staged_upload_rejections: int = 0
+    staged_upload_cleaned: int = 0
+    staged_upload_pending_generations: int = 0
+    staged_upload_pending_mdus: int = 0
 
 
 @dataclass
@@ -695,6 +718,7 @@ class PolicySimulator:
         self.repair_rows: list[dict[str, Any]] = []
         self.slot_rows: list[dict[str, Any]] = []
         self.economy_rows: list[dict[str, Any]] = []
+        self.staged_uploads: list[dict[str, int]] = []
         self.provider_epoch_serves: dict[str, int] = {}
         self.audit_budget_carryover = 0.0
         self.audit_budget_backlog = 0.0
@@ -916,6 +940,7 @@ class PolicySimulator:
         self._promote_probationary_providers(epoch, metrics)
         online = self._epoch_online_map(epoch)
         self._simulate_new_deal_demand(epoch, metrics)
+        self._simulate_staged_uploads(epoch, metrics)
 
         for _ in range(self._retrieval_attempts_for_epoch(epoch, metrics)):
             self._simulate_retrieval(epoch, online, metrics)
@@ -989,6 +1014,77 @@ class PolicySimulator:
             self.deals.append(deal)
             self.next_deal_id += 1
             metrics.new_deals_accepted += 1
+
+    def _simulate_staged_uploads(self, epoch: int, metrics: EpochMetrics) -> None:
+        if self.config.staged_upload_attempts_per_epoch <= 0 and not self.staged_uploads:
+            return
+
+        self._cleanup_staged_uploads(epoch, metrics)
+        max_pending = self.config.staged_upload_max_pending_generations
+        for _ in range(self.config.staged_upload_attempts_per_epoch):
+            metrics.staged_upload_attempts += 1
+            if max_pending > 0 and len(self.staged_uploads) >= max_pending:
+                metrics.staged_upload_rejections += 1
+                continue
+
+            metrics.staged_upload_accepted += 1
+            if self.rng.randrange(10_000) < self.config.staged_upload_commit_rate_bps:
+                metrics.staged_upload_committed += 1
+                continue
+
+            deal = self.rng.choice(self.deals)
+            self.staged_uploads.append(
+                {
+                    "created_epoch": epoch,
+                    "deal_id": deal.deal_id,
+                    "mdus": self.config.staged_upload_mdu_per_attempt,
+                }
+            )
+
+        self._record_staged_upload_snapshot(epoch, metrics)
+
+    def _cleanup_staged_uploads(self, epoch: int, metrics: EpochMetrics) -> None:
+        retention = self.config.staged_upload_retention_epochs
+        if retention <= 0 or not self.staged_uploads:
+            return
+
+        kept: list[dict[str, int]] = []
+        cleaned = 0
+        for item in self.staged_uploads:
+            if epoch - item["created_epoch"] >= retention:
+                cleaned += 1
+            else:
+                kept.append(item)
+        self.staged_uploads = kept
+        metrics.staged_upload_cleaned = cleaned
+
+    def _record_staged_upload_snapshot(self, epoch: int, metrics: EpochMetrics) -> None:
+        metrics.staged_upload_pending_generations = len(self.staged_uploads)
+        metrics.staged_upload_pending_mdus = sum(item["mdus"] for item in self.staged_uploads)
+        if metrics.staged_upload_rejections:
+            self.evidence_rows.append(
+                {
+                    "epoch": epoch,
+                    "deal_id": "",
+                    "slot": "",
+                    "provider_id": "user-gateway",
+                    "evidence_class": "operational",
+                    "reason": "staged_upload_preflight_rejected",
+                    "consequence": "retention_limit",
+                }
+            )
+        if metrics.staged_upload_cleaned:
+            self.evidence_rows.append(
+                {
+                    "epoch": epoch,
+                    "deal_id": "",
+                    "slot": "",
+                    "provider_id": "provider-daemon",
+                    "evidence_class": "operational",
+                    "reason": "staged_upload_retention_cleanup",
+                    "consequence": "local_gc",
+                }
+            )
 
     def _effective_new_deal_requests(self, latent_requests: int) -> int:
         multiplier_bps = self._storage_demand_multiplier_bps()
@@ -2047,6 +2143,13 @@ class PolicySimulator:
                 "average_latency_ms": metrics.total_latency_ms / metrics.latency_sample_count if metrics.latency_sample_count else 0.0,
                 "elasticity_spent": metrics.elasticity_spent,
                 "elasticity_rejections": metrics.elasticity_rejections,
+                "staged_upload_attempts": metrics.staged_upload_attempts,
+                "staged_upload_accepted": metrics.staged_upload_accepted,
+                "staged_upload_committed": metrics.staged_upload_committed,
+                "staged_upload_rejections": metrics.staged_upload_rejections,
+                "staged_upload_cleaned": metrics.staged_upload_cleaned,
+                "staged_upload_pending_generations": metrics.staged_upload_pending_generations,
+                "staged_upload_pending_mdus": metrics.staged_upload_pending_mdus,
             }
         )
 
@@ -2431,6 +2534,11 @@ class PolicySimulator:
             "provider_underbonded_repairs",
             "elasticity_spent",
             "elasticity_rejections",
+            "staged_upload_attempts",
+            "staged_upload_accepted",
+            "staged_upload_committed",
+            "staged_upload_rejections",
+            "staged_upload_cleaned",
         ]
         totals = {name: sum(getattr(m, name) for m in self.metrics) for name in fields}
         attempts = totals["retrieval_attempts"]
@@ -2512,6 +2620,20 @@ class PolicySimulator:
         totals["final_provider_bond_available"] = self.metrics[-1].provider_bond_available if self.metrics else 0.0
         totals["final_provider_bond_deficit"] = self.metrics[-1].provider_bond_deficit if self.metrics else 0.0
         totals["max_provider_bond_deficit"] = max((m.provider_bond_deficit for m in self.metrics), default=0.0)
+        totals["final_staged_upload_pending_generations"] = (
+            self.metrics[-1].staged_upload_pending_generations if self.metrics else 0
+        )
+        totals["max_staged_upload_pending_generations"] = max(
+            (m.staged_upload_pending_generations for m in self.metrics),
+            default=0,
+        )
+        totals["final_staged_upload_pending_mdus"] = (
+            self.metrics[-1].staged_upload_pending_mdus if self.metrics else 0
+        )
+        totals["max_staged_upload_pending_mdus"] = max(
+            (m.staged_upload_pending_mdus for m in self.metrics),
+            default=0,
+        )
         totals["reserve_providers"] = sum(
             1 for p in self.providers.values() if p.lifecycle_state == PROVIDER_RESERVE and not p.churned_epoch
         )
@@ -2962,6 +3084,11 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
         "repair_backoff_epochs": args.repair_backoff_epochs,
         "repair_pending_timeout_epochs": args.repair_pending_timeout_epochs,
         "enforcement_mode": args.enforcement_mode,
+        "staged_upload_attempts_per_epoch": args.staged_upload_attempts_per_epoch,
+        "staged_upload_mdu_per_attempt": args.staged_upload_mdu_per_attempt,
+        "staged_upload_commit_rate_bps": args.staged_upload_commit_rate_bps,
+        "staged_upload_retention_epochs": args.staged_upload_retention_epochs,
+        "staged_upload_max_pending_generations": args.staged_upload_max_pending_generations,
     }
     for key, value in cli_values.items():
         if value is not None:
@@ -3059,6 +3186,12 @@ def print_summary(result: SimResult) -> None:
         "provider_pnl={provider_pnl:.4f} negative_pnl={providers_negative_pnl} "
         "reward_burned={reward_burned:.4f} high_bandwidth_providers={high_bandwidth_providers}".format(**totals)
     )
+    if totals.get("staged_upload_attempts", 0):
+        print(
+            "staged_uploads attempts={staged_upload_attempts} accepted={staged_upload_accepted} "
+            "rejected={staged_upload_rejections} cleaned={staged_upload_cleaned} "
+            "final_pending={final_staged_upload_pending_generations}".format(**totals)
+        )
     if result.assertions:
         failed = [item for item in result.assertions if not item.passed]
         status = "failed" if failed else "passed"
@@ -3117,6 +3250,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-backoff-epochs", type=int)
     parser.add_argument("--repair-pending-timeout-epochs", type=int)
     parser.add_argument("--enforcement-mode", choices=sorted(ENFORCEMENT_ORDER))
+    parser.add_argument("--staged-upload-attempts-per-epoch", type=int)
+    parser.add_argument("--staged-upload-mdu-per-attempt", type=int)
+    parser.add_argument("--staged-upload-commit-rate-bps", type=int)
+    parser.add_argument("--staged-upload-retention-epochs", type=int)
+    parser.add_argument("--staged-upload-max-pending-generations", type=int)
     parser.add_argument("--dynamic-pricing", action="store_true")
     parser.add_argument(
         "--fault",

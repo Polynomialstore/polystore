@@ -1,0 +1,47 @@
+[
+  {
+    "detail": "success_rate=1, required>=1",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "repairs_started=0, required<=0",
+    "name": "max_repairs_started",
+    "passed": true
+  },
+  {
+    "detail": "staged_upload_attempts=240, required>=240",
+    "name": "min_staged_upload_attempts",
+    "passed": true
+  },
+  {
+    "detail": "staged_upload_rejections=96, required>=1",
+    "name": "min_staged_upload_rejections",
+    "passed": true
+  },
+  {
+    "detail": "staged_upload_cleaned=108, required>=1",
+    "name": "min_staged_upload_cleaned",
+    "passed": true
+  },
+  {
+    "detail": "max_staged_upload_pending_generations=36, required<=36",
+    "name": "max_max_staged_upload_pending_generations",
+    "passed": true
+  },
+  {
+    "detail": "max_staged_upload_pending_mdus=72, required<=72",
+    "name": "max_max_staged_upload_pending_mdus",
+    "passed": true
+  },
+  {
+    "detail": "final_staged_upload_pending_generations=36, required<=36",
+    "name": "max_final_staged_upload_pending_generations",
+    "passed": true
+  }
+]

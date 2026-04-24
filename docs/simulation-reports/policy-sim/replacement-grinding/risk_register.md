@@ -57,6 +57,10 @@ Model a repair path where pending replacement providers never prove readiness. T
 - New deals suppressed by price elasticity: `0`
 - New deals rejected by price: `0`
 - New deals rejected by capacity: `0`
+- Staged upload attempts/accepted/committed: `0` / `0` / `0`
+- Staged upload rejections/cleaned: `0` / `0`
+- Final/peak staged pending generations: `0` / `0`
+- Final/peak staged pending MDUs: `0` / `0`
 
 ## Review Questions
 

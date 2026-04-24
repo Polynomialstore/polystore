@@ -171,6 +171,19 @@
     "saturated_responses": 0.0,
     "saturation_per_retrieval_attempt": 0.0
   },
+  "staged_uploads": {
+    "accepted": 0.0,
+    "attempts": 0.0,
+    "cleaned": 0.0,
+    "cleanup_rate": 0.0,
+    "committed": 0.0,
+    "final_pending_generations": 0.0,
+    "final_pending_mdus": 0.0,
+    "max_pending_generations": 0.0,
+    "max_pending_mdus": 0.0,
+    "rejection_rate": 0.0,
+    "rejections": 0.0
+  },
   "top_bottleneck_providers": [
     {
       "assigned_slots": 9.0,

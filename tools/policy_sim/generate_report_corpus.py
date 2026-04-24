@@ -82,6 +82,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["setup slot state", "setup bump event", "candidate exclusion reasons"],
         "e2e": "Create deal with one failing provider upload and verify replacement before first content commit.",
     },
+    "staged-upload-grief": {
+        "target": "provider-daemon staged cleanup and gateway preflight",
+        "next_test": "Add provider-daemon and user-gateway tests proving abandoned provisional generations are capped, cleaned after TTL, and surfaced through dry-run/apply cleanup UX without affecting committed deal state.",
+        "missing_surfaces": ["staged generation TTL", "pending generation cap", "cleanup events", "gateway preflight rejection"],
+        "e2e": "Client repeatedly stages uploads without commit; assert provider-daemon cleanup bounds disk pressure and committed reads remain available.",
+    },
     "underpriced-storage": {
         "target": "economic policy calibration",
         "next_test": "Compare storage floors, base rewards, and provider cost assumptions before encoding governance defaults.",
@@ -356,6 +362,11 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "top_operator_assignment_share_bps": totals.get("top_operator_assignment_share_bps", 0),
         "max_operator_deal_slots": totals.get("max_operator_deal_slots", 0),
         "operator_deal_cap_violations": totals.get("operator_deal_cap_violations", 0),
+        "staged_upload_attempts": totals.get("staged_upload_attempts", 0),
+        "staged_upload_rejections": totals.get("staged_upload_rejections", 0),
+        "staged_upload_cleaned": totals.get("staged_upload_cleaned", 0),
+        "max_staged_upload_pending_generations": totals.get("max_staged_upload_pending_generations", 0),
+        "max_staged_upload_pending_mdus": totals.get("max_staged_upload_pending_mdus", 0),
         "suspect_slots": totals.get("suspect_slots", 0),
         "delinquent_slots": totals.get("delinquent_slots", 0),
         "providers_negative_pnl": totals.get("providers_negative_pnl", 0),
@@ -388,10 +399,10 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Churn` is `provider exits/final churned providers/exited capacity/peak assigned slots on churned providers`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Churn` is `provider exits/final churned providers/exited capacity/peak assigned slots on churned providers`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `Staged` is `attempts/rejections/cleaned/peak pending generations/peak pending MDUs`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Churn | ReadShock | Demand | OpCap | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Churn | ReadShock | Demand | Staged | OpCap | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
@@ -408,6 +419,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['provider_churn_events']}/{row['churned_providers']}/{row['final_exited_provider_capacity']}/{row['max_churned_assigned_slots']} | "
             f"{row['retrieval_demand_shock_active']}/{row['max_retrieval_demand_multiplier_bps']}/{row['retrieval_price_direction_changes']} | "
             f"{row['new_deal_latent_requests']}/{row['new_deal_requests']}/{row['new_deals_accepted']}/{row['new_deals_suppressed_price']}/{row['new_deals_rejected_price']}/{row['new_deals_rejected_capacity']} | "
+            f"{row['staged_upload_attempts']}/{row['staged_upload_rejections']}/{row['staged_upload_cleaned']}/{row['max_staged_upload_pending_generations']}/{row['max_staged_upload_pending_mdus']} | "
             f"{row['top_operator_assignment_share_bps']}/{row['max_operator_deal_slots']}/{row['operator_deal_cap_violations']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
             f"[report]({scenario}/report.md) |"
@@ -536,6 +548,11 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "new_deals_suppressed_price": row.get("new_deals_suppressed_price", 0),
             "new_deals_rejected_price": row.get("new_deals_rejected_price", 0),
             "new_deals_rejected_capacity": row.get("new_deals_rejected_capacity", 0),
+            "staged_upload_attempts": row.get("staged_upload_attempts", 0),
+            "staged_upload_rejections": row.get("staged_upload_rejections", 0),
+            "staged_upload_cleaned": row.get("staged_upload_cleaned", 0),
+            "max_staged_upload_pending_generations": row.get("max_staged_upload_pending_generations", 0),
+            "max_staged_upload_pending_mdus": row.get("max_staged_upload_pending_mdus", 0),
             "top_operator_provider_share_bps": row.get("top_operator_provider_share_bps", 0),
             "top_operator_assignment_share_bps": row.get("top_operator_assignment_share_bps", 0),
             "max_operator_deal_slots": row.get("max_operator_deal_slots", 0),
@@ -573,6 +590,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "subsidy-farming",
         "repair-candidate-exhaustion",
         "replacement-grinding",
+        "staged-upload-grief",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
@@ -604,6 +622,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "setup-failure",
         "repair-candidate-exhaustion",
         "replacement-grinding",
+        "staged-upload-grief",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",

@@ -292,6 +292,7 @@ Human decisions still required:
 | Withholding provider | Can users route around ransom behavior? | Retrieval success remains high, deputy/audit miss grows. | Router fallback and deputy evidence e2e. |
 | Lazy provider | Does no-synthetic/no-credit behavior lose rewards? | Quota miss and reward exclusion occur. | Base reward eligibility tests. |
 | Setup failure storm | Can new deals recover before first commit? | Bump count bounded, replacement not user-chosen. | Setup bump e2e with failed upload. |
+| Staged upload grief | Are abandoned provisional generations bounded before commit? | Retention cleanup and preflight rejection cap pending staged state without repair/slash. | Provider-daemon staged cleanup and gateway preflight tests. |
 | Replacement grinding | Are repeated replacements and failed pending catch-up attempts rate-limited? | Readiness timeouts, cooldowns, and attempt caps bind. | Keeper replacement cooldown and readiness-timeout tests. |
 | Deputy evidence spam | Is spam uneconomic? | Bond burn exceeds expected spam gain. | Evidence-market keeper tests. |
 | Audit budget exhaustion | Does the system degrade predictably? | Backlog grows, no unbounded mint. | Audit budget cap tests. |
@@ -1215,6 +1216,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `invalid_synthetic_proof.yaml` | Provider submits invalid synthetic/liveness proofs without corrupting retrieval bytes. | Invalid proofs are recorded, repair starts and completes, simulated slash accounting is visible, and corrupt byte payment remains zero. |
 | `lazy_provider.yaml` | Provider does not meet proof quota. | Reward exclusion occurs, soft-fault path does not slash. |
 | `setup_failure.yaml` | Initial upload to one slot fails. | Setup bump is bounded and replacement is system-selected. |
+| `staged_upload_grief.yaml` | User-gateway or client uploads provisional generations and never commits them. | Pending staged generations remain capped, preflight rejections and retention cleanup are visible, and committed data availability is unaffected. |
 | `repair_candidate_exhaustion.yaml` | Replacement capacity is unavailable or saturated. | Repair backoffs and candidate-exclusion reasons are visible, provider capacity is not over-assigned, and data-loss events remain zero. |
 | `replacement_grinding.yaml` | Pending replacement providers fail to prove readiness before promotion. | Repair readiness timeouts, cooldowns, and attempt caps are visible; no pending provider is promoted without readiness; data-loss events remain zero. |
 | `underpriced_storage.yaml` | Storage price below provider cost. | Provider P&L turns negative and churn pressure is visible. |

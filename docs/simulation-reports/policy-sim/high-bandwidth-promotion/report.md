@@ -39,6 +39,9 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Storage demand price ceiling | `0.0000` (`0` means disabled) |
 | Storage demand reference price | `0.0000` (`0` disables elasticity) |
 | Storage demand elasticity | `0.00%` |
+| Staged uploads/epoch | `0` provisional attempts |
+| Staged upload retention | `0` epochs (`0` disables age cleanup) |
+| Staged upload pending cap | `0` generations (`0` means unlimited) |
 | Retrieval price/slot | `0.0140` |
 | Provider capacity range | `16`-`16` slots |
 | Provider bandwidth range | `200`-`500` serves/epoch (`0` means unlimited) |
@@ -81,6 +84,9 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider supply entry | enabled `False`, reserve `0`, cap `1`/epoch, probation `1` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |
 | Supply entry triggers | utilization >= `0.00%` or storage price >= `disabled` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
+| Staged upload attempts/epoch | `0` | Provisional generations that consume local provider-daemon staging space before content commit. |
+| Staged upload commit rate | `100.00%` | Share of provisional uploads that become committed content instead of remaining abandoned local state. |
+| Staged upload retention/cap | `0` epochs / `0` generations | Local cleanup and preflight limits used to bound abandoned provisional-generation storage pressure. |
 | Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
 | Evidence spam claims/epoch | `0` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |
 | Evidence bond / bounty | `0.0000` / `0.0000` | Spam claims burn bond unless convicted; bounty is paid only on convicted evidence. |
@@ -127,6 +133,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | New deal latent/effective demand | `0` / `0` | Shows how much modeled write demand survived the price-elasticity curve. |
 | New deal demand accepted/rejected/suppressed | `0` / `0` / `0` | Shows whether modeled write demand is entering the network, blocked by price/capacity, or never arriving because quotes are unattractive. |
 | New deal effective/latent acceptance | `0.00%` / `0.00%` | Demand-side market health signal; a technically available network can still fail if users cannot afford storage. |
+| Staged upload attempts/accepted/committed | `0` / `0` / `0` | Shows provisional upload pressure separately from committed storage demand. |
+| Staged upload rejections/cleaned | `0` / `0` | Preflight rejection and retention cleanup should bound abandoned provisional generations. |
+| Staged pending generations/MDUs peak | `0` / `0` | Detects whether local staged storage pressure exceeded configured caps. |
 | Audit demand / spent | `0.0000` / `0.0000` | Shows whether enforcement evidence consumed the available audit budget. |
 | Audit backlog / exhausted epochs | `0.0000` / `0` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
 | Evidence spam claims / convictions | `0` / `0` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |
@@ -431,6 +440,12 @@ Shows demand-funded elasticity spend and rejected expansion attempts.
 
 ![Elasticity Spend](graphs/elasticity_spend.svg)
 
+### Staged Upload Pressure
+
+Shows provisional-generation preflight rejections and retention cleanup for abandoned staged uploads.
+
+![Staged Upload Pressure](graphs/staged_upload_pressure.svg)
+
 ## Raw Artifacts
 
 - `summary.json`: compact machine-readable run summary.
@@ -440,5 +455,5 @@ Shows demand-funded elasticity spend and rejected expansion attempts.
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
-- `economy.csv`: per-epoch market and accounting ledger.
-- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.
+- `economy.csv`: per-epoch market, staged upload, and accounting ledger.
+- `signals.json`: derived availability, saturation, repair, capacity, economic, staged upload, regional, concentration, and provider bottleneck signals.

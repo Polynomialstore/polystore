@@ -108,6 +108,15 @@ SCENARIO_GUIDES = {
         "expected": "Early evidence should trigger repair while preserving availability and not expanding on-chain enforcement beyond simulated mode.",
         "review": "Use this to design provider admission and initial-deal health checks.",
     },
+    "staged-upload-grief": {
+        "title": "Staged Upload Grief",
+        "intent": (
+            "Model a client or user-gateway repeatedly uploading provisional generations and never committing them. "
+            "This is an operational/accounting grief case: local provider-daemon storage pressure must be bounded by retention cleanup and preflight caps, not by repair or punitive provider enforcement."
+        ),
+        "expected": "Preflight rejections and retention cleanup are visible, pending provisional generations stay under the configured cap, no repair starts, and committed retrieval availability remains intact.",
+        "review": "Use this before implementing provider-daemon staged-generation GC, gateway preflight checks, and operator alerts for abandoned provisional data.",
+    },
     "underpriced-storage": {
         "title": "Underpriced Storage Market",
         "intent": (
@@ -459,6 +468,15 @@ SWEEP_METRICS = [
     "new_deals_rejected_capacity",
     "new_deal_acceptance_rate",
     "new_deal_latent_acceptance_rate",
+    "staged_upload_attempts",
+    "staged_upload_accepted",
+    "staged_upload_committed",
+    "staged_upload_rejections",
+    "staged_upload_cleaned",
+    "final_staged_upload_pending_generations",
+    "max_staged_upload_pending_generations",
+    "final_staged_upload_pending_mdus",
+    "max_staged_upload_pending_mdus",
     "suspect_slots",
     "delinquent_slots",
     "quota_misses",
@@ -594,6 +612,11 @@ SWEEP_CONFIG_KEYS = [
     "provider_entry_trigger_utilization_bps",
     "provider_entry_trigger_storage_price",
     "provider_entry_probation_epochs",
+    "staged_upload_attempts_per_epoch",
+    "staged_upload_mdu_per_attempt",
+    "staged_upload_commit_rate_bps",
+    "staged_upload_retention_epochs",
+    "staged_upload_max_pending_generations",
 ]
 
 
@@ -841,6 +864,25 @@ def compute_signals(
             "new_deal_acceptance_rate": fnum(totals.get("new_deal_acceptance_rate")),
             "new_deal_latent_acceptance_rate": fnum(totals.get("new_deal_latent_acceptance_rate")),
         },
+        "staged_uploads": {
+            "attempts": fnum(totals.get("staged_upload_attempts")),
+            "accepted": fnum(totals.get("staged_upload_accepted")),
+            "committed": fnum(totals.get("staged_upload_committed")),
+            "rejections": fnum(totals.get("staged_upload_rejections")),
+            "cleaned": fnum(totals.get("staged_upload_cleaned")),
+            "final_pending_generations": fnum(totals.get("final_staged_upload_pending_generations")),
+            "max_pending_generations": fnum(totals.get("max_staged_upload_pending_generations")),
+            "final_pending_mdus": fnum(totals.get("final_staged_upload_pending_mdus")),
+            "max_pending_mdus": fnum(totals.get("max_staged_upload_pending_mdus")),
+            "rejection_rate": (
+                fnum(totals.get("staged_upload_rejections"))
+                / max(1.0, fnum(totals.get("staged_upload_attempts")))
+            ),
+            "cleanup_rate": (
+                fnum(totals.get("staged_upload_cleaned"))
+                / max(1.0, fnum(totals.get("staged_upload_accepted")))
+            ),
+        },
         "concentration": {
             "operator_count": fnum(totals.get("operator_count")),
             "top_operator_id": top_operator.get("operator_id", ""),
@@ -1026,21 +1068,24 @@ def write_report_md(
         f"| Storage demand price ceiling | `{fmt_money(config.get('storage_demand_price_ceiling'))}` (`0` means disabled) |",
         f"| Storage demand reference price | `{fmt_money(config.get('storage_demand_reference_price'))}` (`0` disables elasticity) |",
         f"| Storage demand elasticity | `{fmt_bps(config.get('storage_demand_elasticity_bps'))}` |",
-            f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
-            f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
-            f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
-            f"| Service class | `{config.get('service_class')}` |",
-            f"| Performance market | `{str(config.get('performance_market_enabled')).lower()}` |",
-            f"| Provider latency range | `{fmt_num(config.get('provider_latency_ms_min'))}`-`{fmt_num(config.get('provider_latency_ms_max'))}` ms |",
-            f"| Latency tier windows | Platinum <= `{fmt_num(config.get('platinum_latency_ms'))}` ms, Gold <= `{fmt_num(config.get('gold_latency_ms'))}` ms, Silver <= `{fmt_num(config.get('silver_latency_ms'))}` ms |",
-            f"| High-bandwidth promotion | `{str(config.get('high_bandwidth_promotion_enabled')).lower()}` |",
-            f"| High-bandwidth capacity threshold | `{fmt_num(config.get('high_bandwidth_capacity_threshold'))}` serves/epoch |",
-            f"| Hot retrieval share | `{fmt_bps(config.get('hot_retrieval_bps'))}` |",
-            f"| Operators | `{config.get('operator_count') or config.get('providers')}` |",
-            f"| Dominant operator provider share | `{fmt_bps(config.get('dominant_operator_provider_bps'))}` |",
-            f"| Operator assignment cap/deal | `{fmt_num(config.get('operator_assignment_cap_per_deal'))}` (`0` means disabled) |",
-            f"| Provider regions | `{', '.join(str(item) for item in config.get('provider_regions', []))}` |",
-            "",
+        f"| Staged uploads/epoch | `{fmt_num(config.get('staged_upload_attempts_per_epoch'))}` provisional attempts |",
+        f"| Staged upload retention | `{fmt_num(config.get('staged_upload_retention_epochs'))}` epochs (`0` disables age cleanup) |",
+        f"| Staged upload pending cap | `{fmt_num(config.get('staged_upload_max_pending_generations'))}` generations (`0` means unlimited) |",
+        f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
+        f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
+        f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
+        f"| Service class | `{config.get('service_class')}` |",
+        f"| Performance market | `{str(config.get('performance_market_enabled')).lower()}` |",
+        f"| Provider latency range | `{fmt_num(config.get('provider_latency_ms_min'))}`-`{fmt_num(config.get('provider_latency_ms_max'))}` ms |",
+        f"| Latency tier windows | Platinum <= `{fmt_num(config.get('platinum_latency_ms'))}` ms, Gold <= `{fmt_num(config.get('gold_latency_ms'))}` ms, Silver <= `{fmt_num(config.get('silver_latency_ms'))}` ms |",
+        f"| High-bandwidth promotion | `{str(config.get('high_bandwidth_promotion_enabled')).lower()}` |",
+        f"| High-bandwidth capacity threshold | `{fmt_num(config.get('high_bandwidth_capacity_threshold'))}` serves/epoch |",
+        f"| Hot retrieval share | `{fmt_bps(config.get('hot_retrieval_bps'))}` |",
+        f"| Operators | `{config.get('operator_count') or config.get('providers')}` |",
+        f"| Dominant operator provider share | `{fmt_bps(config.get('dominant_operator_provider_bps'))}` |",
+        f"| Operator assignment cap/deal | `{fmt_num(config.get('operator_assignment_cap_per_deal'))}` (`0` means disabled) |",
+        f"| Provider regions | `{', '.join(str(item) for item in config.get('provider_regions', []))}` |",
+        "",
         "## Economic Assumptions",
         "",
         *economic_assumption_lines(config),
@@ -1286,6 +1331,12 @@ def write_report_md(
             "",
             "![Elasticity Spend](graphs/elasticity_spend.svg)",
             "",
+            "### Staged Upload Pressure",
+            "",
+            "Shows provisional-generation preflight rejections and retention cleanup for abandoned staged uploads.",
+            "",
+            "![Staged Upload Pressure](graphs/staged_upload_pressure.svg)",
+            "",
             "## Raw Artifacts",
             "",
             "- `summary.json`: compact machine-readable run summary.",
@@ -1295,8 +1346,8 @@ def write_report_md(
             "- `slots.csv`: per-slot epoch ledger, including health state and reason.",
             "- `evidence.csv`: policy evidence events.",
             "- `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
-            "- `economy.csv`: per-epoch market and accounting ledger.",
-            "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.",
+            "- `economy.csv`: per-epoch market, staged upload, and accounting ledger.",
+            "- `signals.json`: derived availability, saturation, repair, capacity, economic, staged upload, regional, concentration, and provider bottleneck signals.",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1334,7 +1385,7 @@ def build_behavior_narrative(
 
     if evidence:
         class_counts = Counter(row.get("evidence_class") or "unknown" for row in evidence)
-        known_classes = ["soft", "threshold", "hard", "economic", "market", "spam"]
+        known_classes = ["soft", "threshold", "hard", "economic", "market", "spam", "operational"]
         other_evidence = len(evidence) - sum(class_counts.get(name, 0) for name in known_classes)
         breakdown_parts = [f"`{class_counts.get(name, 0)}` {name}" for name in known_classes]
         if other_evidence:
@@ -1361,6 +1412,15 @@ def build_behavior_narrative(
             f"`{fmt_num(totals.get('new_deals_rejected_price'))}` price rejections, and "
             f"`{fmt_num(totals.get('new_deals_rejected_capacity'))}` capacity rejections. "
             f"The effective-request acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}` and latent-demand acceptance was `{fmt_pct(totals.get('new_deal_latent_acceptance_rate'))}`."
+        )
+    if fnum(totals.get("staged_upload_attempts")) > 0:
+        parts.append(
+            f"Staged upload grief was exercised: `{fmt_num(totals.get('staged_upload_attempts'))}` provisional upload attempts produced "
+            f"`{fmt_num(totals.get('staged_upload_rejections'))}` preflight rejections and "
+            f"`{fmt_num(totals.get('staged_upload_cleaned'))}` retention cleanup events. Peak pending provisional state was "
+            f"`{fmt_num(totals.get('max_staged_upload_pending_generations'))}` generations / "
+            f"`{fmt_num(totals.get('max_staged_upload_pending_mdus'))}` MDUs, ending at "
+            f"`{fmt_num(totals.get('final_staged_upload_pending_generations'))}` generations."
         )
 
     if repairs:
@@ -1465,6 +1525,9 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Provider supply entry | enabled `{bool(config.get('provider_entry_enabled'))}`, reserve `{fmt_num(config.get('provider_entry_reserve_count'))}`, cap `{fmt_num(config.get('provider_entry_max_per_epoch'))}`/epoch, probation `{fmt_num(config.get('provider_entry_probation_epochs'))}` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |",
         f"| Supply entry triggers | utilization >= `{fmt_bps(config.get('provider_entry_trigger_utilization_bps'))}` or storage price >= `{fmt_optional_money_threshold(config.get('provider_entry_trigger_storage_price'))}` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |",
         f"| Performance reward per serve | `{fmt_money(config.get('performance_reward_per_serve'))}` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |",
+        f"| Staged upload attempts/epoch | `{fmt_num(config.get('staged_upload_attempts_per_epoch'))}` | Provisional generations that consume local provider-daemon staging space before content commit. |",
+        f"| Staged upload commit rate | `{fmt_bps(config.get('staged_upload_commit_rate_bps'))}` | Share of provisional uploads that become committed content instead of remaining abandoned local state. |",
+        f"| Staged upload retention/cap | `{fmt_num(config.get('staged_upload_retention_epochs'))}` epochs / `{fmt_num(config.get('staged_upload_max_pending_generations'))}` generations | Local cleanup and preflight limits used to bound abandoned provisional-generation storage pressure. |",
         f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |",
         f"| Evidence spam claims/epoch | `{fmt_num(config.get('evidence_spam_claims_per_epoch'))}` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |",
         f"| Evidence bond / bounty | `{fmt_money(config.get('evidence_spam_bond'))}` / `{fmt_money(config.get('evidence_spam_bounty'))}` | Spam claims burn bond unless convicted; bounty is paid only on convicted evidence. |",
@@ -1481,6 +1544,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
     high_bandwidth = signals["high_bandwidth"]
     performance = signals["performance"]
     demand = signals["demand"]
+    staged = signals["staged_uploads"]
     concentration = signals["concentration"]
     return [
         "| Signal | Value | Why It Matters |",
@@ -1510,6 +1574,9 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| New deal latent/effective demand | `{fmt_num(demand['new_deal_latent_requests'])}` / `{fmt_num(demand['new_deal_requests'])}` | Shows how much modeled write demand survived the price-elasticity curve. |",
         f"| New deal demand accepted/rejected/suppressed | `{fmt_num(demand['new_deals_accepted'])}` / `{fmt_num(demand['new_deals_rejected_price'] + demand['new_deals_rejected_capacity'])}` / `{fmt_num(demand['new_deals_suppressed_price'])}` | Shows whether modeled write demand is entering the network, blocked by price/capacity, or never arriving because quotes are unattractive. |",
         f"| New deal effective/latent acceptance | `{fmt_pct(demand['new_deal_acceptance_rate'])}` / `{fmt_pct(demand['new_deal_latent_acceptance_rate'])}` | Demand-side market health signal; a technically available network can still fail if users cannot afford storage. |",
+        f"| Staged upload attempts/accepted/committed | `{fmt_num(staged['attempts'])}` / `{fmt_num(staged['accepted'])}` / `{fmt_num(staged['committed'])}` | Shows provisional upload pressure separately from committed storage demand. |",
+        f"| Staged upload rejections/cleaned | `{fmt_num(staged['rejections'])}` / `{fmt_num(staged['cleaned'])}` | Preflight rejection and retention cleanup should bound abandoned provisional generations. |",
+        f"| Staged pending generations/MDUs peak | `{fmt_num(staged['max_pending_generations'])}` / `{fmt_num(staged['max_pending_mdus'])}` | Detects whether local staged storage pressure exceeded configured caps. |",
         f"| Audit demand / spent | `{fmt_money(economics['audit_budget_demand'])}` / `{fmt_money(economics['audit_budget_spent'])}` | Shows whether enforcement evidence consumed the available audit budget. |",
         f"| Audit backlog / exhausted epochs | `{fmt_money(economics['audit_budget_backlog'])}` / `{fmt_num(economics['audit_budget_exhausted_epochs'])}` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |",
         f"| Evidence spam claims / convictions | `{fmt_num(economics['evidence_spam_claims'])}` / `{fmt_num(economics['evidence_spam_convictions'])}` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |",
@@ -1606,6 +1673,8 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             + fnum(row.get("new_deals_suppressed_price"))
             + fnum(row.get("new_deals_rejected_price"))
             + fnum(row.get("new_deals_rejected_capacity"))
+            + fnum(row.get("staged_upload_rejections"))
+            + fnum(row.get("staged_upload_cleaned"))
         )
         notes = []
         if fnum(row.get("offline_responses")):
@@ -1628,6 +1697,10 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('new_deals_rejected_price'))} price-rejected deals")
         if fnum(row.get("new_deals_rejected_capacity")):
             notes.append(f"{fmt_num(row.get('new_deals_rejected_capacity'))} capacity-rejected deals")
+        if fnum(row.get("staged_upload_rejections")):
+            notes.append(f"{fmt_num(row.get('staged_upload_rejections'))} staged preflight rejections")
+        if fnum(row.get("staged_upload_cleaned")):
+            notes.append(f"{fmt_num(row.get('staged_upload_cleaned'))} staged generations cleaned")
         if fnum(row.get("repair_backoffs")):
             notes.append(f"{fmt_num(row.get('repair_backoffs'))} repair backoffs")
         if fnum(row.get("repair_cooldowns")):
@@ -1776,6 +1849,14 @@ def assertion_meaning(name: str) -> str:
         "max_new_deal_acceptance_rate": "Demand collapse fixture should keep accepted demand below this ceiling.",
         "min_new_deal_acceptance_rate": "Healthy demand fixture should accept at least this share of requested new deals.",
         "min_new_deal_latent_acceptance_rate": "Recovery fixture should accept at least this share of latent demand after price response.",
+        "min_staged_upload_attempts": "Staged upload fixture must exercise provisional generation pressure.",
+        "min_staged_upload_rejections": "Staged upload grief must hit preflight rejection once pending provisional state reaches the cap.",
+        "max_staged_upload_rejections": "Healthy staged upload flows should keep preflight rejection bounded.",
+        "min_staged_upload_cleaned": "Staged upload retention must clean abandoned provisional generations.",
+        "max_staged_upload_cleaned": "Healthy staged upload flows should not rely on excessive cleanup churn.",
+        "max_max_staged_upload_pending_generations": "Staged upload pending generations must stay below the configured cap.",
+        "max_max_staged_upload_pending_mdus": "Staged upload pending MDU footprint must stay below the configured cap.",
+        "max_final_staged_upload_pending_generations": "Staged upload final pending generation count should remain bounded at run end.",
         "min_suspect_slots": "Health-state observability: soft failures should become suspect before punitive consequences.",
         "max_suspect_slots": "Healthy baseline should not produce suspect slot state.",
         "min_delinquent_slots": "Delinquency observability: threshold-crossed slots should expose delinquent state.",
@@ -1912,6 +1993,15 @@ def build_economic_narrative(
             f"`{fmt_num(totals.get('new_deals_accepted'))}`, suppressed `{fmt_num(totals.get('new_deals_suppressed_price'))}` by price response, rejected `{fmt_num(totals.get('new_deals_rejected_price'))}` on price, "
             f"and rejected `{fmt_num(totals.get('new_deals_rejected_capacity'))}` on capacity. "
             f"Effective-request acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}`."
+        )
+    if fnum(totals.get("staged_upload_attempts")) > 0:
+        parts.append(
+            f"Staged upload accounting saw `{fmt_num(totals.get('staged_upload_attempts'))}` provisional attempts, "
+            f"accepted `{fmt_num(totals.get('staged_upload_accepted'))}`, committed `{fmt_num(totals.get('staged_upload_committed'))}`, "
+            f"rejected `{fmt_num(totals.get('staged_upload_rejections'))}` at preflight, and cleaned "
+            f"`{fmt_num(totals.get('staged_upload_cleaned'))}` abandoned generations by retention policy. "
+            f"The peak local staged footprint was `{fmt_num(totals.get('max_staged_upload_pending_generations'))}` generations / "
+            f"`{fmt_num(totals.get('max_staged_upload_pending_mdus'))}` MDUs."
         )
     if fnum(totals.get("provider_cost_shock_active")) > 0:
         parts.append(
@@ -2208,6 +2298,21 @@ def write_risk_register(
                 "followup": "Review reference price, elasticity assumptions, price-step timing, quote telemetry, and whether demand should recover as utilization falls.",
             }
         )
+    if fnum(totals.get("staged_upload_rejections")) > 0 or fnum(totals.get("staged_upload_cleaned")) > 0:
+        rows.append(
+            {
+                "risk": "Staged upload retention pressure",
+                "severity": "medium",
+                "evidence": (
+                    f"{fmt_num(totals.get('staged_upload_rejections'))} provisional uploads were rejected at preflight and "
+                    f"{fmt_num(totals.get('staged_upload_cleaned'))} abandoned generations were cleaned; peak pending was "
+                    f"{fmt_num(totals.get('max_staged_upload_pending_generations'))} generations / "
+                    f"{fmt_num(totals.get('max_staged_upload_pending_mdus'))} MDUs."
+                ),
+                "impact": "Abandoned provisional generations can consume provider-daemon disk or operator attention if cleanup and preflight caps are missing.",
+                "followup": "Review staged-generation TTL, max pending cap, dry-run cleanup UX, and whether preflight rejection should be gateway-visible before upload.",
+            }
+        )
     if evidence and not repairs and str(config["scenario"]) not in {
         "ideal",
         "underpriced-storage",
@@ -2216,6 +2321,7 @@ def write_risk_register(
         "viral-public-retrieval",
         "elasticity-cap-hit",
         "deputy-evidence-spam",
+        "staged-upload-grief",
     }:
         rows.append(
             {
@@ -2309,6 +2415,10 @@ def write_risk_register(
             f"- New deals suppressed by price elasticity: `{fmt_num(totals.get('new_deals_suppressed_price'))}`",
             f"- New deals rejected by price: `{fmt_num(totals.get('new_deals_rejected_price'))}`",
             f"- New deals rejected by capacity: `{fmt_num(totals.get('new_deals_rejected_capacity'))}`",
+            f"- Staged upload attempts/accepted/committed: `{fmt_num(totals.get('staged_upload_attempts'))}` / `{fmt_num(totals.get('staged_upload_accepted'))}` / `{fmt_num(totals.get('staged_upload_committed'))}`",
+            f"- Staged upload rejections/cleaned: `{fmt_num(totals.get('staged_upload_rejections'))}` / `{fmt_num(totals.get('staged_upload_cleaned'))}`",
+            f"- Final/peak staged pending generations: `{fmt_num(totals.get('final_staged_upload_pending_generations'))}` / `{fmt_num(totals.get('max_staged_upload_pending_generations'))}`",
+            f"- Final/peak staged pending MDUs: `{fmt_num(totals.get('final_staged_upload_pending_mdus'))}` / `{fmt_num(totals.get('max_staged_upload_pending_mdus'))}`",
             "",
             "## Review Questions",
             "",
@@ -2331,6 +2441,7 @@ def graduation_semantics(scenario: str) -> str:
         "invalid-synthetic-proof": "Graduation means invalid liveness-proof evidence alone can trigger repair and simulated slash accounting without corrupt byte retrieval evidence.",
         "malicious-corrupt": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
         "lazy-provider": "Graduation means subsidy/reward gating catches useful-work failures even if user reads are still available.",
+        "staged-upload-grief": "Graduation means abandoned provisional generations are bounded by visible preflight rejection and retention cleanup without triggering repair, slash, or committed-data availability loss.",
         "overpriced-storage": "Graduation means demand-side affordability failures are visible as price rejections rather than being mistaken for healthy market equilibrium.",
         "demand-elasticity-recovery": "Graduation means price-sensitive demand suppression and recovery are visible before governance tunes storage-price defaults.",
         "provider-cost-shock": "Graduation means provider cost stress is visible as churn pressure and pricing mismatch before it is turned into live governance parameters.",
@@ -2405,6 +2516,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "high-bandwidth-regression",
         "performance-market-latency",
         "operator-concentration-cap",
+        "staged-upload-grief",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -2451,6 +2563,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a keeper/runtime planning ticket that names service-class params, latency-tier windows, reward multipliers, telemetry inputs, and which QoS tiers affect placement without becoming slashable evidence.")
     elif recommendation == "Candidate for implementation planning." and scenario == "operator-concentration-cap":
         lines.append("Create a keeper/runtime planning ticket that names operator identity source, per-deal assignment caps, replacement fallback behavior, and concentration alert thresholds.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "staged-upload-grief":
+        lines.append("Create a gateway/provider-daemon planning ticket that names staged-generation TTL, pending-generation caps, preflight rejection semantics, cleanup events, and operator dry-run/apply tooling.")
     elif recommendation == "Candidate for implementation planning." and scenario == "deputy-evidence-spam":
         lines.append("Create a keeper/runtime planning ticket that names evidence bond escrow, burn-on-expiry, conviction-gated bounty payout, spam throttles, and deputy reputation inputs.")
     elif recommendation == "Candidate for implementation planning.":
@@ -2634,6 +2748,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("elasticity_spent")) for row in economy],
         secondary=[fnum(row.get("elasticity_rejections")) for row in economy],
         secondary_label="Rejected Expansions",
+    )
+    write_line_svg(
+        graphs_dir / "staged_upload_pressure.svg",
+        "Staged Pending Generations",
+        [fnum(row.get("staged_upload_pending_generations")) for row in economy],
+        secondary=[fnum(row.get("staged_upload_rejections")) for row in economy],
+        secondary_label="Preflight Rejections",
     )
 
 
@@ -2894,6 +3015,11 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("new_deals_rejected_capacity", "How much demand was rejected because placement capacity was exhausted."),
         ("new_deal_acceptance_rate", "Demand-side market health among effective requests."),
         ("new_deal_latent_acceptance_rate", "Demand-side market health relative to latent demand."),
+        ("staged_upload_attempts", "How much provisional upload pressure was modeled."),
+        ("staged_upload_rejections", "Whether preflight caps rejected abandoned provisional generations."),
+        ("staged_upload_cleaned", "Whether retention cleanup removed abandoned provisional generations."),
+        ("max_staged_upload_pending_generations", "Peak local pending provisional-generation footprint."),
+        ("max_staged_upload_pending_mdus", "Peak local pending provisional MDU footprint."),
         ("top_operator_assignment_share_bps", "Whether one operator dominates assignments."),
         ("max_operator_deal_slots", "Whether per-deal operator blast radius is bounded."),
         ("operator_deal_cap_violations", "Whether operator assignment caps were violated."),
@@ -2976,6 +3102,18 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         "new_deal_latent_acceptance_rate",
     }:
         return "Storage demand changed; inspect price affordability and capacity admission assumptions."
+    if key in {
+        "staged_upload_attempts",
+        "staged_upload_accepted",
+        "staged_upload_committed",
+        "staged_upload_rejections",
+        "staged_upload_cleaned",
+        "final_staged_upload_pending_generations",
+        "max_staged_upload_pending_generations",
+        "final_staged_upload_pending_mdus",
+        "max_staged_upload_pending_mdus",
+    }:
+        return "Staged upload pressure changed; inspect retention TTL, preflight caps, and cleanup semantics."
     if key in {"top_operator_assignment_share_bps", "max_operator_assignment_share_bps", "max_operator_deal_slots", "operator_deal_cap_violations"}:
         return "Operator concentration changed; inspect placement diversity and cap semantics."
     if key == "saturated_responses":
@@ -3114,6 +3252,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "new storage demand was rejected by price")
     if fnum(totals.get("new_deals_suppressed_price")) > 0:
         raise_to("medium", "latent storage demand was suppressed by price elasticity")
+    if fnum(totals.get("staged_upload_rejections")) > 0:
+        raise_to("medium", "staged upload preflight rejections occurred")
     if not reasons:
         reasons.append("assertions passed and no material sweep risk surfaced")
     return level, reasons

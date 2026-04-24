@@ -1,0 +1,28 @@
+{
+  "name": "staged-upload-grief",
+  "description": "A user-gateway or client repeatedly uploads provisional generations and never commits them; retention cleanup and preflight caps should bound local storage pressure without repair, slash, or data loss.",
+  "config": {
+    "scenario": "staged-upload-grief",
+    "seed": 67,
+    "providers": 48,
+    "users": 80,
+    "deals": 24,
+    "epochs": 8,
+    "staged_upload_attempts_per_epoch": 30,
+    "staged_upload_mdu_per_attempt": 2,
+    "staged_upload_commit_rate_bps": 0,
+    "staged_upload_retention_epochs": 2,
+    "staged_upload_max_pending_generations": 36
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_data_loss_events": 0,
+    "max_repairs_started": 0,
+    "min_staged_upload_attempts": 240,
+    "min_staged_upload_rejections": 1,
+    "min_staged_upload_cleaned": 1,
+    "max_max_staged_upload_pending_generations": 36,
+    "max_max_staged_upload_pending_mdus": 72,
+    "max_final_staged_upload_pending_generations": 36
+  }
+}
