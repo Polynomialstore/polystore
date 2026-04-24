@@ -13,15 +13,15 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-func TestBeginBlock_MintsAuditBudgetAndDerivesAuditTasks(t *testing.T) {
-	bank := newTrackingBankKeeper()
-	f := initFixtureWithBankKeeper(t, bank)
+func setupAuditBudgetMode2Deal(t *testing.T, f *fixture, bank *trackingBankKeeper, label string, p types.Params) sdk.Context {
+	t.Helper()
+
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
 	// Register providers for deterministic placement.
 	for i := 0; i < 3; i++ {
 		addrBz := make([]byte, 20)
-		copy(addrBz, []byte(fmt.Sprintf("provider_audit_bb_%02d", i)))
+		copy(addrBz, []byte(fmt.Sprintf("%s_aud_%02d", label, i)))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
 		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      addr,
@@ -33,18 +33,10 @@ func TestBeginBlock_MintsAuditBudgetAndDerivesAuditTasks(t *testing.T) {
 	}
 
 	ctx2 := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(2)
-	p := types.DefaultParams()
-	p.EpochLenBlocks = 10
-	p.StoragePrice = math.LegacyMustNewDecFromStr("0.000001") // 1e-6 stake per byte per block
-	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
-	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
-	p.AuditBudgetBps = 10000
-	p.AuditBudgetCapBps = 10000
-	p.AuditBudgetCarryoverEpochs = 1
 	require.NoError(t, f.keeper.Params.Set(ctx2, p))
 
 	userBz := make([]byte, 20)
-	copy(userBz, []byte("user_audit_bb______"))
+	copy(userBz, []byte(label+"_user"))
 	user, _ := f.addressCodec.BytesToString(userBz)
 	userAddr, err := sdk.AccAddressFromBech32(user)
 	require.NoError(t, err)
@@ -69,6 +61,38 @@ func TestBeginBlock_MintsAuditBudgetAndDerivesAuditTasks(t *testing.T) {
 		WitnessMdus: 0,
 	})
 	require.NoError(t, err)
+	return ctx2
+}
+
+func countAuditTasks(t *testing.T, f *fixture, ctx sdk.Context, epochID uint64) int {
+	t.Helper()
+
+	taskCount := 0
+	require.NoError(t, f.keeper.AuditTasks.Walk(ctx, nil, func(key collections.Pair[uint64, uint64], task types.AuditTask) (stop bool, err error) {
+		if task.EpochId == epochID {
+			taskCount++
+		}
+		return false, nil
+	}))
+	return taskCount
+}
+
+func defaultAuditBudgetTestParams() types.Params {
+	p := types.DefaultParams()
+	p.EpochLenBlocks = 10
+	p.StoragePrice = math.LegacyMustNewDecFromStr("0.000001") // 1e-6 stake per byte per block
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
+	p.AuditBudgetBps = 10000
+	p.AuditBudgetCapBps = 10000
+	p.AuditBudgetCarryoverEpochs = 1
+	return p
+}
+
+func TestBeginBlock_MintsAuditBudgetAndDerivesAuditTasks(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	ctx2 := setupAuditBudgetMode2Deal(t, f, bank, "abb", defaultAuditBudgetTestParams())
 
 	// Epoch 2 starts at height 11 when epoch_len_blocks == 10.
 	ctx11 := ctx2.WithBlockHeight(11)
@@ -80,13 +104,39 @@ func TestBeginBlock_MintsAuditBudgetAndDerivesAuditTasks(t *testing.T) {
 	require.Equal(t, "126stake", bank.moduleBalances[types.ProtocolBudgetModuleName].String())
 
 	epochID := uint64(2)
-	taskCount := 0
-	require.NoError(t, f.keeper.AuditTasks.Walk(ctx11, nil, func(key collections.Pair[uint64, uint64], task types.AuditTask) (stop bool, err error) {
-		if task.EpochId == epochID {
-			taskCount++
-		}
-		return false, nil
-	}))
 	// Budget=126, cost/task=2 => 63 tasks (bounded by auditTasksMaxPerEpoch=64).
-	require.Equal(t, 63, taskCount)
+	require.Equal(t, 63, countAuditTasks(t, f, ctx11, epochID))
+}
+
+func TestBeginBlock_AuditTasksBoundedByAvailableBudget(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+
+	p := defaultAuditBudgetTestParams()
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 200)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
+	ctx2 := setupAuditBudgetMode2Deal(t, f, bank, "abound", p)
+
+	ctx11 := ctx2.WithBlockHeight(11)
+	require.NoError(t, f.keeper.BeginBlock(ctx11))
+
+	require.Equal(t, "126stake", bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+	require.Equal(t, 0, countAuditTasks(t, f, ctx11, 2))
+}
+
+func TestBeginBlock_AuditBudgetCarryoverCapBurnsExcess(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	ctx2 := setupAuditBudgetMode2Deal(t, f, bank, "acap", defaultAuditBudgetTestParams())
+
+	ctx11 := ctx2.WithBlockHeight(11)
+	require.NoError(t, f.keeper.BeginBlock(ctx11))
+	require.Equal(t, "126stake", bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+
+	ctx21 := ctx2.WithBlockHeight(21)
+	require.NoError(t, f.keeper.BeginBlock(ctx21))
+
+	require.Equal(t, "126stake", bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+	require.Equal(t, 63, countAuditTasks(t, f, ctx21, 2))
+	require.Equal(t, 63, countAuditTasks(t, f, ctx21, 3))
 }
