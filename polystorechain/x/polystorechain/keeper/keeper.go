@@ -300,6 +300,7 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 	if available < count {
 		count = available
 	}
+	candidateProviders = preferProvidersForServiceHint(candidateProviders, serviceHint, count)
 
 	assignedProviders := make([]string, count)
 	selectedIndices := make(map[int]struct{})      // To ensure unique providers from candidateProviders slice
