@@ -16,6 +16,46 @@ python3 tools/policy_sim/policing_sim.py --scenario single-outage --providers 96
 python3 tools/policy_sim/policing_sim.py --scenario malicious-corrupt --json-out /tmp/polystore-policing.json --csv-out /tmp/polystore-policing.csv --assert
 ```
 
+Run a versioned fixture and emit the full output contract:
+
+```bash
+python3 tools/policy_sim/policing_sim.py \
+  --scenario-file tools/policy_sim/scenarios/single_outage.yaml \
+  --out-dir /tmp/polystore-policy/single_outage
+```
+
+Fixture files use a YAML extension for the roadmap convention, but are written
+as JSON-compatible YAML so the simulator remains stdlib-only.
+
+Run the canonical fixture suite:
+
+```bash
+python3 tools/policy_sim/policing_sim.py \
+  --scenario-dir tools/policy_sim/scenarios \
+  --out-dir /tmp/polystore-policy/runs
+```
+
+Generate the committed human-readable report corpus:
+
+```bash
+python3 tools/policy_sim/generate_report_corpus.py \
+  --scenario-dir tools/policy_sim/scenarios \
+  --out-dir docs/simulation-reports/policy-sim \
+  --work-dir /tmp/polystore-policy/runs
+```
+
+Generate human-readable reports from raw simulator outputs:
+
+```bash
+python3 tools/policy_sim/report.py \
+  --run-dir /tmp/polystore-policy/runs/single-outage \
+  --out-dir /tmp/polystore-policy/reports/single-outage
+```
+
+If `--out-dir` is omitted, `report.py` writes to a dedicated subdirectory
+instead of polluting raw simulator outputs: `<run-dir>/report` for single-run
+reports and `<candidate-dir>/delta` for baseline/candidate comparisons.
+
 Custom fault injections are repeatable:
 
 ```bash
@@ -40,6 +80,26 @@ Supported fault forms:
 - `lazy:sp-004`
 - `draining:sp-005`
 
+Supported simulated enforcement modes:
+
+- `MEASURE_ONLY`
+- `REPAIR_ONLY`
+- `REWARD_EXCLUSION`
+- `JAIL_SIMULATED`
+- `SLASH_SIMULATED`
+
+Population-scale fixtures can also model heterogeneous providers. These fields
+are supported in scenario files:
+
+- `provider_capacity_min` / `provider_capacity_max`
+- `provider_bandwidth_capacity_min` / `provider_bandwidth_capacity_max`
+- `provider_online_probability_min` / `provider_online_probability_max`
+- `provider_repair_probability_min` / `provider_repair_probability_max`
+- `provider_storage_cost_jitter_bps` / `provider_bandwidth_cost_jitter_bps`
+- `provider_regions`
+- `regional_outages`
+- `max_repairs_started_per_epoch`
+
 ## Model Scope
 
 The simulator mirrors current protocol concepts:
@@ -50,14 +110,67 @@ The simulator mirrors current protocol concepts:
 - Corrupt retrievals and invalid synthetic proofs as hard faults.
 - Provider outage/withholding as soft faults that become quota/deputy misses.
 - Make-before-break repair with deterministic replacement provider selection.
+- Simulated enforcement modes before live chain/runtime rollout.
+- Large-scale heterogeneous-provider runs with regional outages, bandwidth
+  saturation, and repair coordination limits.
+- Explicit distinction between temporary unavailable reads and modeled
+  data-loss events. Stress scenarios may allow bounded unavailable reads, but
+  current durability assertions expect data-loss events to remain zero.
+- Basic economic accounting for retrieval fees, rewards, audit budget, provider
+  P&L, slashing, and elasticity spend caps.
 
 The simulator deliberately does not run `polystorechaind`, gateways, or provider
 processes. Once a policy is stable here, add keeper tests or e2e scripts for the
 corresponding implementation path.
+
+## Output Contract
+
+When `--out-dir` is supplied, the simulator emits:
+
+- `summary.json`
+- `assertions.json`
+- `epochs.csv`
+- `providers.csv`
+- `slots.csv`
+- `evidence.csv`
+- `repairs.csv`
+- `economy.csv`
+
+`report.py` consumes those raw files and can emit:
+
+- `report.md`
+- `risk_register.md`
+- `graduation.md`
+- `policy_delta.md` for baseline/candidate comparisons
+- `signals.json`
+- `graphs/*.svg`
+
+`generate_report_corpus.py` runs the fixture suite and writes a committed report
+set under `docs/simulation-reports/policy-sim`. The corpus includes Markdown,
+graphs, `signals.json`, `summary.json`, and `assertions.json`; full CSV ledgers
+are generated as local/CI artifacts instead of being committed.
+
+The Markdown reports are intended to be human review artifacts, not just metric
+dumps. A run report explains scenario intent, expected behavior, what happened
+over the timeline, enforcement interpretation, economic interpretation, the
+assertion contract, evidence excerpts, generated graphs, and remaining review
+questions. The generated SVG graphs are embedded inline in `report.md` with
+relative Markdown image links. Graphs include retrieval success, slot state,
+provider P&L, burn/mint ratio, price trajectory, capacity utilization,
+saturation/repair pressure, and repair backlog. `signals.json` records derived
+availability, saturation, repair, capacity, economic, regional, and provider
+bottleneck signals for downstream analysis.
+
+The economics in these reports are unitless simulator accounting. They are
+intended to make assumptions explicit: storage price, retrieval price, base
+reward, burns, audit budget, provider cost, and dynamic-pricing step behavior.
+They are not final token economics.
+
+The simulator should remain deterministic and machine-output focused. Reporting
+and graph generation belong in `report.py`.
 
 ## Tests
 
 ```bash
 python3 -m unittest discover -s tools/policy_sim
 ```
-

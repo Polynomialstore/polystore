@@ -1,0 +1,21 @@
+{
+  "name": "viral-public-retrieval",
+  "description": "Public demand spike funded by requester/session fees.",
+  "config": {
+    "scenario": "viral-public-retrieval",
+    "seed": 19,
+    "providers": 96,
+    "users": 500,
+    "deals": 48,
+    "epochs": 6,
+    "retrievals_per_user_per_epoch": 3,
+    "retrieval_base_fee": 0.005,
+    "retrieval_price_per_slot": 0.015
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "min_retrieval_provider_payouts": 100.0,
+    "max_data_loss_events": 0,
+    "min_retrieval_base_burned": 1.0
+  }
+}

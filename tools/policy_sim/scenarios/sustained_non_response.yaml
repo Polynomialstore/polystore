@@ -1,0 +1,23 @@
+{
+  "name": "sustained-non-response",
+  "description": "A provider stays offline long enough to become delinquent and require repair.",
+  "config": {
+    "scenario": "sustained-non-response",
+    "seed": 32,
+    "providers": 48,
+    "users": 80,
+    "deals": 24,
+    "epochs": 10
+  },
+  "faults": [
+    "offline:sp-000:2-8"
+  ],
+  "assertions": {
+    "min_success_rate": 0.99,
+    "min_offline_responses": 1,
+    "min_repairs_started": 1,
+    "min_repairs_completed": 1,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

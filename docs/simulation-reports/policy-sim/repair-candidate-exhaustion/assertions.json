@@ -1,0 +1,32 @@
+[
+  {
+    "detail": "success_rate=1, required>=0.95",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "offline_responses=280, required>=1",
+    "name": "min_offline_responses",
+    "passed": true
+  },
+  {
+    "detail": "repair_backoffs=72, required>=1",
+    "name": "min_repair_backoffs",
+    "passed": true
+  },
+  {
+    "detail": "providers_over_capacity=0, required<=0",
+    "name": "max_providers_over_capacity",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "paid_corrupt_bytes=0, required<=0",
+    "name": "max_paid_corrupt_bytes",
+    "passed": true
+  }
+]

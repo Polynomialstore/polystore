@@ -1,0 +1,37 @@
+[
+  {
+    "detail": "success_rate=1, required>=0.99",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "final_storage_price=1.44829817, required>=1",
+    "name": "min_final_storage_price",
+    "passed": true
+  },
+  {
+    "detail": "final_storage_price=1.44829817, required<=2",
+    "name": "max_final_storage_price",
+    "passed": true
+  },
+  {
+    "detail": "final_retrieval_price=0.0144829817, required>=0.01",
+    "name": "min_final_retrieval_price",
+    "passed": true
+  },
+  {
+    "detail": "final_retrieval_price=0.0144829817, required<=0.05",
+    "name": "max_final_retrieval_price",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "paid_corrupt_bytes=0, required<=0",
+    "name": "max_paid_corrupt_bytes",
+    "passed": true
+  }
+]

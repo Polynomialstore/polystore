@@ -107,6 +107,40 @@ jobs:
         working-directory: polystore-website
         run: npm run lint
 
+  policy-simulator:
+    name: Policy Simulator Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Run policy simulator unit tests
+        run: python3 -m unittest discover -s tools/policy_sim
+
+      - name: Run full policy fixture suite and regenerate reports
+        run: |
+          python3 tools/policy_sim/generate_report_corpus.py \
+            --scenario-dir tools/policy_sim/scenarios \
+            --out-dir docs/simulation-reports/policy-sim \
+            --work-dir _artifacts/policy_sim/runs
+
+      - name: Verify committed policy reports are current
+        run: git diff --exit-code docs/simulation-reports/policy-sim
+
+      - name: Upload policy simulator artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: policy-simulator-artifacts
+          path: |
+            _artifacts/policy_sim/runs/**
+            docs/simulation-reports/policy-sim/**
+          if-no-files-found: ignore
+
   e2e-sparse-browser:
     name: Browser Sparse Upload Proof
     runs-on: ubuntu-latest

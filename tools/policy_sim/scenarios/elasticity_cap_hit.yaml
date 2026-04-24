@@ -1,0 +1,22 @@
+{
+  "name": "elasticity-cap-hit",
+  "description": "Demand exceeds user-funded elasticity spend cap and fails closed.",
+  "config": {
+    "scenario": "elasticity-cap-hit",
+    "seed": 23,
+    "providers": 48,
+    "users": 250,
+    "deals": 24,
+    "epochs": 5,
+    "retrievals_per_user_per_epoch": 4,
+    "elasticity_trigger_retrievals_per_epoch": 500,
+    "elasticity_base_cost": 10.0,
+    "elasticity_max_spend": 0.0
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "min_elasticity_rejections": 1,
+    "max_data_loss_events": 0,
+    "max_elasticity_spent": 0.0
+  }
+}

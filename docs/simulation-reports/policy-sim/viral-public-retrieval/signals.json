@@ -1,0 +1,170 @@
+{
+  "availability": {
+    "data_loss_events": 0.0,
+    "degraded_epochs": 0,
+    "recovery_epoch_after_worst": 2,
+    "success_rate": 1.0,
+    "unavailable_reads": 0.0,
+    "worst_epoch": 1,
+    "worst_epoch_success_rate": 1.0
+  },
+  "capacity": {
+    "assigned_slots": 576.0,
+    "bandwidth_capacity_p10": 0.0,
+    "bandwidth_capacity_p50": 0.0,
+    "bandwidth_capacity_p90": 0.0,
+    "capacity_slots": 1536.0,
+    "final_utilization_bps": 3750.0,
+    "online_probability_p10": 1.0,
+    "online_probability_p50": 1.0,
+    "online_probability_p90": 1.0,
+    "provider_capacity_utilization_max_bps": 3750.0,
+    "provider_capacity_utilization_p50_bps": 3750.0,
+    "provider_capacity_utilization_p90_bps": 3750.0,
+    "providers_over_capacity": 0.0
+  },
+  "economics": {
+    "provider_pnl": 959.76,
+    "provider_pnl_p10": 9.547,
+    "provider_pnl_p50": 9.971,
+    "provider_pnl_p90": 10.554,
+    "providers_negative_pnl": 0.0,
+    "retrieval_price_end": 0.015,
+    "retrieval_price_max": 0.015,
+    "retrieval_price_min": 0.015,
+    "retrieval_price_start": 0.015,
+    "storage_price_end": 1.0,
+    "storage_price_max": 1.0,
+    "storage_price_min": 1.0,
+    "storage_price_start": 1.0
+  },
+  "regions": [
+    {
+      "assigned_slots": 576.0,
+      "avg_provider_pnl": 9.9975,
+      "capacity_slots": 1536.0,
+      "negative_pnl_providers": 0,
+      "offline_responses": 0.0,
+      "providers": 96,
+      "region": "global",
+      "saturated_responses": 0.0,
+      "utilization_bps": 3750
+    }
+  ],
+  "repair": {
+    "backoffs": 0.0,
+    "backoffs_per_started_repair": 0.0,
+    "completed": 0.0,
+    "completion_ratio": 1.0,
+    "final_repair_backlog": 0.0,
+    "peak_backoff_epoch": 1,
+    "peak_repair_backoffs": 0.0,
+    "peak_repairing_epoch": 1,
+    "peak_repairing_slots": 0.0,
+    "started": 0.0
+  },
+  "saturation": {
+    "peak_saturated_responses": 0.0,
+    "peak_saturation_epoch": 1,
+    "saturated_responses": 0.0,
+    "saturation_per_retrieval_attempt": 0.0
+  },
+  "top_bottleneck_providers": [
+    {
+      "assigned_slots": 6.0,
+      "bandwidth_capacity_per_epoch": 0.0,
+      "capacity_slots": 16.0,
+      "capacity_utilization_bps": 3750.0,
+      "offline_responses": 0.0,
+      "pnl": 11.296,
+      "provider_id": "sp-070",
+      "region": "global",
+      "retrieval_attempts": 848.0,
+      "saturated_responses": 0.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "bandwidth_capacity_per_epoch": 0.0,
+      "capacity_slots": 16.0,
+      "capacity_utilization_bps": 3750.0,
+      "offline_responses": 0.0,
+      "pnl": 11.25625,
+      "provider_id": "sp-062",
+      "region": "global",
+      "retrieval_attempts": 845.0,
+      "saturated_responses": 0.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "bandwidth_capacity_per_epoch": 0.0,
+      "capacity_slots": 16.0,
+      "capacity_utilization_bps": 3750.0,
+      "offline_responses": 0.0,
+      "pnl": 10.96475,
+      "provider_id": "sp-064",
+      "region": "global",
+      "retrieval_attempts": 823.0,
+      "saturated_responses": 0.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "bandwidth_capacity_per_epoch": 0.0,
+      "capacity_slots": 16.0,
+      "capacity_utilization_bps": 3750.0,
+      "offline_responses": 0.0,
+      "pnl": 10.819,
+      "provider_id": "sp-036",
+      "region": "global",
+      "retrieval_attempts": 812.0,
+      "saturated_responses": 0.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "bandwidth_capacity_per_epoch": 0.0,
+      "capacity_slots": 16.0,
+      "capacity_utilization_bps": 3750.0,
+      "offline_responses": 0.0,
+      "pnl": 10.80575,
+      "provider_id": "sp-066",
+      "region": "global",
+      "retrieval_attempts": 811.0,
+      "saturated_responses": 0.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "bandwidth_capacity_per_epoch": 0.0,
+      "capacity_slots": 16.0,
+      "capacity_utilization_bps": 3750.0,
+      "offline_responses": 0.0,
+      "pnl": 10.766,
+      "provider_id": "sp-067",
+      "region": "global",
+      "retrieval_attempts": 808.0,
+      "saturated_responses": 0.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "bandwidth_capacity_per_epoch": 0.0,
+      "capacity_slots": 16.0,
+      "capacity_utilization_bps": 3750.0,
+      "offline_responses": 0.0,
+      "pnl": 10.64675,
+      "provider_id": "sp-045",
+      "region": "global",
+      "retrieval_attempts": 799.0,
+      "saturated_responses": 0.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "bandwidth_capacity_per_epoch": 0.0,
+      "capacity_slots": 16.0,
+      "capacity_utilization_bps": 3750.0,
+      "offline_responses": 0.0,
+      "pnl": 10.62025,
+      "provider_id": "sp-042",
+      "region": "global",
+      "retrieval_attempts": 797.0,
+      "saturated_responses": 0.0
+    }
+  ]
+}

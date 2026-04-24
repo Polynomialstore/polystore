@@ -1,0 +1,32 @@
+{
+  "name": "price-controller-bounds",
+  "description": "Dynamic pricing responds to sustained utilization and retrieval demand without leaving configured bounds.",
+  "config": {
+    "scenario": "price-controller-bounds",
+    "seed": 34,
+    "providers": 96,
+    "users": 700,
+    "deals": 96,
+    "epochs": 16,
+    "retrievals_per_user_per_epoch": 2,
+    "provider_capacity_min": 12,
+    "provider_capacity_max": 16,
+    "dynamic_pricing": true,
+    "storage_target_utilization_bps": 6500,
+    "retrieval_target_per_epoch": 900,
+    "dynamic_pricing_max_step_bps": 250,
+    "storage_price": 1.0,
+    "retrieval_price_per_slot": 0.01,
+    "storage_price_max": 2.0,
+    "retrieval_price_max": 0.05
+  },
+  "assertions": {
+    "min_success_rate": 0.99,
+    "min_final_storage_price": 1.0,
+    "max_final_storage_price": 2.0,
+    "min_final_retrieval_price": 0.01,
+    "max_final_retrieval_price": 0.05,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

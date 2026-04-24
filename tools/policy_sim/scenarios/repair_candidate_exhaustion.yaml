@@ -1,0 +1,25 @@
+{
+  "name": "repair-candidate-exhaustion",
+  "description": "A saturated provider set exposes repair backoff instead of over-assigning replacement providers.",
+  "config": {
+    "scenario": "repair-candidate-exhaustion",
+    "seed": 37,
+    "providers": 12,
+    "users": 80,
+    "deals": 8,
+    "epochs": 8,
+    "provider_capacity_min": 8,
+    "provider_capacity_max": 8
+  },
+  "faults": [
+    "offline:sp-000:2-6"
+  ],
+  "assertions": {
+    "min_success_rate": 0.95,
+    "min_offline_responses": 1,
+    "min_repair_backoffs": 1,
+    "max_providers_over_capacity": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

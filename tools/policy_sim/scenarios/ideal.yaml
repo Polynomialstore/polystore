@@ -1,0 +1,21 @@
+{
+  "name": "ideal",
+  "description": "Cooperative baseline: no faults, no repairs, full reward coverage.",
+  "config": {
+    "scenario": "ideal",
+    "seed": 7,
+    "providers": 48,
+    "users": 80,
+    "deals": 24,
+    "epochs": 8
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_repairs_started": 0,
+    "max_quota_misses": 0,
+    "max_invalid_proofs": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0,
+    "min_reward_coverage": 1.0
+  }
+}

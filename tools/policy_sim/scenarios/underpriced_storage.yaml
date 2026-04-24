@@ -1,0 +1,21 @@
+{
+  "name": "underpriced-storage",
+  "description": "Provider costs exceed modeled storage/retrieval/reward revenue.",
+  "config": {
+    "scenario": "underpriced-storage",
+    "seed": 7,
+    "providers": 48,
+    "users": 40,
+    "deals": 24,
+    "epochs": 8,
+    "provider_storage_cost_per_slot_epoch": 0.25,
+    "provider_fixed_cost_per_epoch": 0.25,
+    "base_reward_per_slot": 0.005,
+    "retrieval_price_per_slot": 0.002
+  },
+  "assertions": {
+    "min_providers_negative_pnl": 1,
+    "max_data_loss_events": 0,
+    "max_success_rate": 1.0
+  }
+}
