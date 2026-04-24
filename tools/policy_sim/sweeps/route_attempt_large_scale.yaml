@@ -1,0 +1,8 @@
+{
+  "name": "route-attempt-large-scale",
+  "description": "Population-scale sensitivity sweep for retrieval route-attempt limits during correlated regional stress.",
+  "base_scenario": "../scenarios/large_scale_regional_stress.yaml",
+  "matrix": {
+    "route_attempt_limit": [8, 12, 16]
+  }
+}

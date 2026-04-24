@@ -1,0 +1,8 @@
+{
+  "name": "repair-throughput-large-scale",
+  "description": "Population-scale sensitivity sweep for repair-start throughput under the large regional stress fixture.",
+  "base_scenario": "../scenarios/large_scale_regional_stress.yaml",
+  "matrix": {
+    "max_repairs_started_per_epoch": [90, 180, 300]
+  }
+}

@@ -1207,6 +1207,12 @@ Outputs:
    scenario evidence to keeper tests, gateway/provider tests, e2e posture,
    missing implementation surfaces, and further simulation review.
 
+Sweep specs should be versioned under `tools/policy_sim/sweeps`. Each sweep
+should name a base scenario fixture and a small matrix of parameter overrides.
+The raw per-case ledgers should remain local/CI artifacts, while committed
+reports under `docs/simulation-reports/policy-sim/sweeps` should contain only
+the sweep summary, machine-readable summary, and manifest.
+
 The first report implementation must be stdlib-only and Markdown/CSV focused.
 Graph generation starts with SVG written directly by the report tool. Optional
 plotting dependencies can add richer assets later, but they must not be required

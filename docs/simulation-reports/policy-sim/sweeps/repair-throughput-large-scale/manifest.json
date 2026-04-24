@@ -1,0 +1,52 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "/home/mikers/dev/polynomialstore/polystore/tools/policy_sim/scenarios/large_scale_regional_stress.yaml",
+  "case_count": 3,
+  "cases": [
+    {
+      "case": "max-repairs-started-per-epoch-90",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "large-scale-regional-stress",
+      "seed": 29,
+      "success_rate": 0.9926875,
+      "unavailable_reads": 1053
+    },
+    {
+      "case": "max-repairs-started-per-epoch-180",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "large-scale-regional-stress",
+      "seed": 29,
+      "success_rate": 0.9926041666666666,
+      "unavailable_reads": 1065
+    },
+    {
+      "case": "max-repairs-started-per-epoch-300",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "large-scale-regional-stress",
+      "seed": 29,
+      "success_rate": 0.9930694444444444,
+      "unavailable_reads": 998
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Population-scale sensitivity sweep for repair-start throughput under the large regional stress fixture.",
+  "name": "repair-throughput-large-scale",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "/tmp/polystore-policy-sweep-runs/repair-throughput-large-scale"
+}
