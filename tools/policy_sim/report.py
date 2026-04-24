@@ -277,7 +277,10 @@ SWEEP_METRICS = [
     "repairs_started",
     "repairs_ready",
     "repairs_completed",
+    "repair_attempts",
     "repair_backoffs",
+    "repair_cooldowns",
+    "repair_attempt_caps",
     "quota_misses",
     "invalid_proofs",
     "paid_corrupt_bytes",
@@ -301,6 +304,8 @@ SWEEP_CONFIG_KEYS = [
     "evict_after_missed_epochs",
     "deputy_evict_after_missed_epochs",
     "repair_epochs",
+    "repair_attempt_cap_per_slot",
+    "repair_backoff_epochs",
     "max_repairs_started_per_epoch",
     "route_attempt_limit",
     "dynamic_pricing",
@@ -386,6 +391,8 @@ def compute_signals(
     repair_started = fnum(totals.get("repairs_started"))
     repair_ready = fnum(totals.get("repairs_ready"))
     repair_completed = fnum(totals.get("repairs_completed"))
+    repair_attempts = fnum(totals.get("repair_attempts"))
+    repair_backoffs = fnum(totals.get("repair_backoffs"))
     retrieval_attempts = max(1.0, fnum(totals.get("retrieval_attempts")))
     storage_prices = [fnum(row.get("storage_price")) for row in economy]
     retrieval_prices = [fnum(row.get("retrieval_price_per_slot")) for row in economy]
@@ -417,10 +424,14 @@ def compute_signals(
             "started": repair_started,
             "ready": repair_ready,
             "completed": repair_completed,
+            "attempts": repair_attempts,
             "readiness_ratio": repair_ready / repair_started if repair_started else 1.0,
             "completion_ratio": repair_completed / repair_started if repair_started else 1.0,
-            "backoffs": fnum(totals.get("repair_backoffs")),
-            "backoffs_per_started_repair": fnum(totals.get("repair_backoffs")) / max(1.0, repair_started),
+            "backoffs": repair_backoffs,
+            "cooldowns": fnum(totals.get("repair_cooldowns")),
+            "attempt_caps": fnum(totals.get("repair_attempt_caps")),
+            "backoffs_per_attempt": repair_backoffs / max(1.0, repair_attempts),
+            "backoffs_per_started_repair": repair_backoffs / max(1.0, repair_started),
             "peak_backoff_epoch": int(fnum(peak_repair_backoff_epoch.get("epoch"))),
             "peak_repair_backoffs": fnum(peak_repair_backoff_epoch.get("repair_backoffs")),
             "peak_repairing_epoch": int(fnum(peak_repairing_epoch.get("epoch"))),
@@ -568,7 +579,8 @@ def write_report_md(
         f"`{fmt_num(totals.get('unavailable_reads'))}` unavailable reads, "
         f"`{fmt_num(totals.get('data_loss_events'))}` modeled data-loss events, "
         f"`{fmt_num(totals.get('saturated_responses'))}` bandwidth saturation responses and "
-        f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs.",
+        f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs across "
+        f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts.",
         "",
         "## Review Focus",
         "",
@@ -590,6 +602,8 @@ def write_report_md(
         f"| Retrievals/user/epoch | `{config.get('retrievals_per_user_per_epoch')}` |",
         f"| Liveness quota | `{config.get('quota_min_blobs')}`-`{config.get('quota_max_blobs')}` blobs/slot/epoch |",
         f"| Repair delay | `{config.get('repair_epochs')}` epochs |",
+        f"| Repair attempt cap/slot | `{config.get('repair_attempt_cap_per_slot')}` (`0` means unlimited) |",
+        f"| Repair backoff window | `{config.get('repair_backoff_epochs')}` epochs |",
         f"| Dynamic pricing | `{str(config.get('dynamic_pricing')).lower()}` |",
         f"| Storage price | `{fmt_money(config.get('storage_price'))}` |",
             f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
@@ -647,7 +661,10 @@ def write_report_md(
             f"- Repairs started: `{len(repairs_started)}`",
             f"- Repairs marked ready: `{len(repairs_ready)}`",
             f"- Repairs completed: `{len(repairs_completed)}`",
+            f"- Repair attempts: `{fmt_num(totals.get('repair_attempts'))}`",
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
+            f"- Repair cooldown backoffs: `{fmt_num(totals.get('repair_cooldowns'))}`",
+            f"- Repair attempt-cap backoffs: `{fmt_num(totals.get('repair_attempt_caps'))}`",
             f"- Final active slots in last epoch: `{len(active_end_slots)}`",
             "",
             "### Repair Ledger Excerpt",
@@ -739,7 +756,7 @@ def write_report_md(
             "- `providers.csv`: final provider-level economics and fault counters.",
             "- `slots.csv`: per-slot epoch ledger.",
             "- `evidence.csv`: policy evidence events.",
-            "- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.",
+            "- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.",
             "- `economy.csv`: per-epoch market and accounting ledger.",
             "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.",
         ]
@@ -814,7 +831,10 @@ def build_behavior_narrative(
         )
     if fnum(totals.get("repair_backoffs")) > 0:
         parts.append(
-            f"Repair coordination was constrained: `{fmt_num(totals.get('repair_backoffs'))}` repair attempts backed off because no candidate or repair-start budget was available."
+            f"Repair coordination was constrained: `{fmt_num(totals.get('repair_backoffs'))}` repair backoffs occurred across "
+            f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts. Cooldown backoffs accounted for "
+            f"`{fmt_num(totals.get('repair_cooldowns'))}` events and attempt-cap backoffs accounted for "
+            f"`{fmt_num(totals.get('repair_attempt_caps'))}` events."
         )
     if metric_sum(economy, "elasticity_rejections") > 0:
         parts.append(
@@ -870,7 +890,10 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Peak saturation | `{fmt_num(saturation['peak_saturated_responses'])}` at epoch `{saturation['peak_saturation_epoch']}` | Reveals when bandwidth, not storage correctness, became the bottleneck. |",
         f"| Repair readiness ratio | `{fmt_pct(repair['readiness_ratio'])}` | Measures whether pending providers catch up before promotion. |",
         f"| Repair completion ratio | `{fmt_pct(repair['completion_ratio'])}` | Measures whether healing catches up with detection. |",
+        f"| Repair attempts | `{fmt_num(repair['attempts'])}` | Counts bounded attempts to open a repair or discover replacement pressure. |",
         f"| Repair backoff pressure | `{fmt_num(repair['backoffs_per_started_repair'])}` backoffs per started repair | Shows whether repair coordination is saturated. |",
+        f"| Repair backoffs per attempt | `{fmt_num(repair['backoffs_per_attempt'])}` | Distinguishes capacity/cooldown pressure from successful repair starts. |",
+        f"| Repair cooldowns / attempt caps | `{fmt_num(repair['cooldowns'])}` / `{fmt_num(repair['attempt_caps'])}` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |",
         f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed repairs at run end. |",
         f"| Final storage utilization | `{fmt_bps(capacity['final_utilization_bps'])}` | Active slots versus modeled provider capacity. |",
         f"| Provider utilization p50 / p90 / max | `{fmt_bps(capacity['provider_capacity_utilization_p50_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_p90_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_max_bps'])}` | Detects assignment concentration and capacity cliffs. |",
@@ -940,6 +963,10 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('quota_misses'))} quota misses")
         if fnum(row.get("repair_backoffs")):
             notes.append(f"{fmt_num(row.get('repair_backoffs'))} repair backoffs")
+        if fnum(row.get("repair_cooldowns")):
+            notes.append(f"{fmt_num(row.get('repair_cooldowns'))} repair cooldowns")
+        if fnum(row.get("repair_attempt_caps")):
+            notes.append(f"{fmt_num(row.get('repair_attempt_caps'))} attempt caps")
         if fnum(row.get("data_loss_events")):
             notes.append(f"{fmt_num(row.get('data_loss_events'))} data-loss events")
         if fnum(row.get("repairing_slots")):
@@ -971,14 +998,18 @@ def counter_lines(counter: Counter[str]) -> list[str]:
 def repair_excerpt_lines(repairs: list[dict[str, str]]) -> list[str]:
     if not repairs:
         return ["- No repair ledger events were recorded."]
-    lines = ["| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason |", "|---:|---|---:|---:|---|---|---|"]
+    lines = [
+        "| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason | Attempt | Cooldown Until |",
+        "|---:|---|---:|---:|---|---|---|---:|---:|",
+    ]
     for row in repairs[:12]:
         lines.append(
             f"| {row.get('epoch', '')} | `{row.get('event', '')}` | {row.get('deal_id', '')} | {row.get('slot', '')} | "
-            f"`{row.get('old_provider', '')}` | `{row.get('new_provider', '')}` | `{row.get('reason', '')}` |"
+            f"`{row.get('old_provider', '')}` | `{row.get('new_provider', '')}` | `{row.get('reason', '')}` | "
+            f"{row.get('attempt', '')} | {row.get('cooldown_until_epoch', '')} |"
         )
     if len(repairs) > 12:
-        lines.append(f"| ... | ... | ... | ... | ... | ... | `{len(repairs) - 12}` more events omitted |")
+        lines.append(f"| ... | ... | ... | ... | ... | ... | `{len(repairs) - 12}` more events omitted | ... | ... |")
     return lines
 
 
@@ -1008,6 +1039,12 @@ def assertion_meaning(name: str) -> str:
         "min_repairs_started": "Repair liveness: policy must start reassignment when evidence warrants it.",
         "min_repairs_ready": "Repair readiness: pending providers must produce catch-up evidence before promotion.",
         "min_repairs_completed": "Repair completion: make-before-break reassignment must finish within the run.",
+        "min_repair_attempts": "Repair attempt accounting: constrained fixtures must visibly attempt repair before backing off.",
+        "max_repair_attempts": "Repair attempt ceiling: repair retry loops must remain bounded.",
+        "min_repair_cooldowns": "Repair cooldown accounting: repeated retry pressure must be throttled and visible.",
+        "max_repair_cooldowns": "Repair cooldown ceiling: cooldown throttling must not dominate healthy recovery.",
+        "min_repair_attempt_caps": "Repair attempt-cap accounting: bounded retry fixtures must hit and report the cap.",
+        "max_repair_attempt_caps": "Repair attempt-cap ceiling: healthy repair paths should not exhaust attempts.",
         "max_quota_misses": "Healthy providers should not miss liveness quota.",
         "min_quota_misses": "Fault fixture must generate quota evidence.",
         "max_invalid_proofs": "Healthy providers should never produce invalid proofs.",
@@ -1183,9 +1220,14 @@ def write_risk_register(
             {
                 "risk": "Repair coordination bottleneck",
                 "severity": "medium",
-                "evidence": f"{fmt_num(totals.get('repair_backoffs'))} repair attempts backed off.",
+                "evidence": (
+                    f"{fmt_num(totals.get('repair_backoffs'))} repair backoffs across "
+                    f"{fmt_num(totals.get('repair_attempts'))} attempts; "
+                    f"{fmt_num(totals.get('repair_cooldowns'))} cooldowns and "
+                    f"{fmt_num(totals.get('repair_attempt_caps'))} attempt-cap events."
+                ),
                 "impact": "The network may detect bad slots faster than it can safely heal them.",
-                "followup": "Review max repair starts per epoch, replacement capacity, and catch-up probability assumptions.",
+                "followup": "Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions.",
             }
         )
     if evidence and not repairs and str(config["scenario"]) not in {"ideal", "underpriced-storage", "wash-retrieval", "viral-public-retrieval", "elasticity-cap-hit"}:
@@ -1243,7 +1285,10 @@ def write_risk_register(
             f"- Elasticity rejections: `{fmt_num(elasticity_rejections)}`",
             f"- Data-loss events: `{fmt_num(totals.get('data_loss_events'))}`",
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
+            f"- Repair attempts: `{fmt_num(totals.get('repair_attempts'))}`",
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
+            f"- Repair cooldowns: `{fmt_num(totals.get('repair_cooldowns'))}`",
+            f"- Repair attempt-cap events: `{fmt_num(totals.get('repair_attempt_caps'))}`",
             "",
             "## Review Questions",
             "",
@@ -1622,6 +1667,9 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("reward_coverage", "Whether compliant slots remain economically recognized."),
         ("repairs_started", "Whether the candidate exercised repair."),
         ("repairs_completed", "Whether repair finished within the modeled window."),
+        ("repair_attempts", "Whether repair retry/accounting pressure changed."),
+        ("repair_cooldowns", "Whether repair retry cooldown throttling was exercised."),
+        ("repair_attempt_caps", "Whether per-slot repair attempt caps were hit."),
         ("quota_misses", "Soft liveness evidence created by the candidate."),
         ("invalid_proofs", "Hard evidence created by the candidate."),
         ("paid_corrupt_bytes", "Corrupt data payment safety invariant."),
@@ -1675,10 +1723,10 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         if delta > 0:
             return "Candidate exposed provider bandwidth saturation."
         return "Bandwidth saturation did not increase."
-    if key == "repair_backoffs":
+    if key in {"repair_backoffs", "repair_cooldowns", "repair_attempt_caps"}:
         if delta > 0:
             return "Candidate exposed repair coordination limits."
-        return "Repair backoffs did not increase."
+        return "Repair coordination limits did not increase."
     if key == "final_storage_utilization_bps":
         return "Final storage utilization changed against modeled provider capacity."
     return "Metric changed; inspect the full report for causal context."
@@ -1966,7 +2014,10 @@ def sweep_metric_meaning(key: str) -> str:
         "reward_coverage": "Shows whether compliant responsibility remains economically recognized.",
         "repairs_started": "Detection and repair activation pressure.",
         "repairs_completed": "Healing throughput under the parameter set.",
+        "repair_attempts": "Repair retry pressure before starts or backoffs.",
         "repair_backoffs": "Replacement capacity or repair-start bottlenecks.",
+        "repair_cooldowns": "Retry cooldowns that intentionally throttle repair churn.",
+        "repair_attempt_caps": "Per-slot attempt caps hit before a replacement could start.",
         "quota_misses": "Soft liveness evidence generated by the run.",
         "invalid_proofs": "Hard-fault evidence generated by the run.",
         "paid_corrupt_bytes": "Payment safety invariant; should remain zero.",

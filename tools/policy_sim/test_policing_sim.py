@@ -130,6 +130,55 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertIn("capacity_slots", result.providers[0])
         self.assertIn("bandwidth_capacity_per_epoch", result.providers[0])
 
+    def test_repair_backoff_cooldown_suppresses_repeated_retries(self):
+        config = SimConfig(
+            scenario="repair-candidate-exhaustion",
+            seed=37,
+            providers=12,
+            users=80,
+            deals=8,
+            epochs=8,
+            provider_capacity_min=8,
+            provider_capacity_max=8,
+            repair_backoff_epochs=2,
+        )
+        result = PolicySimulator(config, extra_faults=["offline:sp-000:2-6"]).run()
+
+        self.assertGreater(result.totals["repair_attempts"], 0)
+        self.assertGreater(result.totals["repair_backoffs"], 0)
+        self.assertGreater(result.totals["repair_cooldowns"], 0)
+        self.assertEqual(0, result.totals["providers_over_capacity"])
+        self.assertTrue(
+            any(row["reason"] == "repair_cooldown" for row in result.repairs),
+            "cooldown backoff events should be explicit in repairs.csv",
+        )
+        self.assertIn("repair_attempts", result.slots[0])
+        self.assertIn("repair_backoff_until_epoch", result.slots[0])
+
+    def test_repair_attempt_cap_blocks_unbounded_replacement_retries(self):
+        config = SimConfig(
+            scenario="repair-candidate-exhaustion",
+            seed=37,
+            providers=12,
+            users=80,
+            deals=8,
+            epochs=8,
+            provider_capacity_min=8,
+            provider_capacity_max=8,
+            repair_attempt_cap_per_slot=1,
+            repair_backoff_epochs=2,
+        )
+        result = PolicySimulator(config, extra_faults=["offline:sp-000:2-6"]).run()
+
+        self.assertGreater(result.totals["repair_attempts"], 0)
+        self.assertGreater(result.totals["repair_attempt_caps"], 0)
+        self.assertEqual(0, result.totals["providers_over_capacity"])
+        self.assertTrue(any(row["reason"] == "repair_attempt_cap" for row in result.repairs))
+        self.assertLessEqual(
+            max(int(row["attempt"]) for row in result.repairs if row.get("attempt") != ""),
+            1,
+        )
+
     def test_jail_window_is_exclusive(self):
         simulator = PolicySimulator(
             SimConfig(

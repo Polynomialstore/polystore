@@ -8,7 +8,7 @@ Model a provider that stays nominally online but withholds retrieval responses a
 
 Expected policy behavior: The run should record withheld responses or deputy misses, exclude bad slots from rewards, and schedule repair without paying corrupt bytes.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `99.79%`, repairs started/ready/completed were `6` / `6` / `6`, and `1` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
+Observed result: retrieval success was `100.00%`, reward coverage was `99.79%`, repairs started/ready/completed were `6` / `6` / `6`, and `1` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `6` repair attempts.
 
 ## Review Focus
 
@@ -30,6 +30,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Retrievals/user/epoch | `1` |
 | Liveness quota | `2`-`8` blobs/slot/epoch |
 | Repair delay | `2` epochs |
+| Repair attempt cap/slot | `0` (`0` means unlimited) |
+| Repair backoff window | `0` epochs |
 | Dynamic pricing | `false` |
 | Storage price | `1.0000` |
 | Retrieval price/slot | `0.0100` |
@@ -81,7 +83,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Peak saturation | `0` at epoch `1` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
 | Repair readiness ratio | `100.00%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `100.00%` | Measures whether healing catches up with detection. |
+| Repair attempts | `6` | Counts bounded attempts to open a repair or discover replacement pressure. |
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair backoffs per attempt | `0` | Distinguishes capacity/cooldown pressure from successful repair starts. |
+| Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `37.50%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `37.50%` / `43.75%` / `43.75%` | Detects assignment concentration and capacity cliffs. |
@@ -141,26 +146,29 @@ Repair summary:
 - Repairs started: `6`
 - Repairs marked ready: `6`
 - Repairs completed: `6`
+- Repair attempts: `6`
 - Repair backoffs: `0`
+- Repair cooldown backoffs: `0`
+- Repair attempt-cap backoffs: `0`
 - Final active slots in last epoch: `288`
 
 ### Repair Ledger Excerpt
 
-| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason |
-|---:|---|---:|---:|---|---|---|
-| 1 | `repair_started` | 1 | 0 | `sp-000` | `sp-039` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 5 | 0 | `sp-000` | `sp-035` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 9 | 0 | `sp-000` | `sp-024` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 13 | 0 | `sp-000` | `sp-022` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 17 | 0 | `sp-000` | `sp-028` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 21 | 0 | `sp-000` | `sp-016` | `deputy_served_zero_direct` |
-| 3 | `repair_ready` | 1 | 0 | `sp-000` | `sp-039` | `catchup_ready` |
-| 3 | `repair_completed` | 1 | 0 | `sp-000` | `sp-039` | `catchup_complete` |
-| 3 | `repair_ready` | 5 | 0 | `sp-000` | `sp-035` | `catchup_ready` |
-| 3 | `repair_completed` | 5 | 0 | `sp-000` | `sp-035` | `catchup_complete` |
-| 3 | `repair_ready` | 9 | 0 | `sp-000` | `sp-024` | `catchup_ready` |
-| 3 | `repair_completed` | 9 | 0 | `sp-000` | `sp-024` | `catchup_complete` |
-| ... | ... | ... | ... | ... | ... | `6` more events omitted |
+| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason | Attempt | Cooldown Until |
+|---:|---|---:|---:|---|---|---|---:|---:|
+| 1 | `repair_started` | 1 | 0 | `sp-000` | `sp-039` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 5 | 0 | `sp-000` | `sp-035` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 9 | 0 | `sp-000` | `sp-024` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 13 | 0 | `sp-000` | `sp-022` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 17 | 0 | `sp-000` | `sp-028` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 21 | 0 | `sp-000` | `sp-016` | `deputy_served_zero_direct` | 1 | 0 |
+| 3 | `repair_ready` | 1 | 0 | `sp-000` | `sp-039` | `catchup_ready` | 1 | 0 |
+| 3 | `repair_completed` | 1 | 0 | `sp-000` | `sp-039` | `catchup_complete` | 1 | 0 |
+| 3 | `repair_ready` | 5 | 0 | `sp-000` | `sp-035` | `catchup_ready` | 1 | 0 |
+| 3 | `repair_completed` | 5 | 0 | `sp-000` | `sp-035` | `catchup_complete` | 1 | 0 |
+| 3 | `repair_ready` | 9 | 0 | `sp-000` | `sp-024` | `catchup_ready` | 1 | 0 |
+| 3 | `repair_completed` | 9 | 0 | `sp-000` | `sp-024` | `catchup_complete` | 1 | 0 |
+| ... | ... | ... | ... | ... | ... | `6` more events omitted | ... | ... |
 
 ## Economic Interpretation
 
@@ -275,6 +283,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

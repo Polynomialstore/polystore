@@ -17,7 +17,10 @@ Model a provider with intermittent outages that recover before the delinquency t
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Repair attempts: `0`
 - Repair backoffs: `0`
+- Repair cooldowns: `0`
+- Repair attempt-cap events: `0`
 
 ## Review Questions
 

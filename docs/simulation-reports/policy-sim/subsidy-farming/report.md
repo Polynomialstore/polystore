@@ -8,7 +8,7 @@ Model providers attempting to collect base rewards while skipping useful livenes
 
 Expected policy behavior: Quota misses are visible, reward coverage falls for non-compliant responsibility, and corrupt/data-loss safety invariants stay clean.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `98.31%`, repairs started/ready/completed were `48` / `48` / `48`, and `6` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
+Observed result: retrieval success was `100.00%`, reward coverage was `98.31%`, repairs started/ready/completed were `48` / `48` / `48`, and `6` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `48` repair attempts.
 
 ## Review Focus
 
@@ -30,6 +30,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Retrievals/user/epoch | `1` |
 | Liveness quota | `2`-`8` blobs/slot/epoch |
 | Repair delay | `2` epochs |
+| Repair attempt cap/slot | `0` (`0` means unlimited) |
+| Repair backoff window | `0` epochs |
 | Dynamic pricing | `false` |
 | Storage price | `1.0000` |
 | Retrieval price/slot | `0.0100` |
@@ -79,7 +81,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Peak saturation | `0` at epoch `1` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
 | Repair readiness ratio | `100.00%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `100.00%` | Measures whether healing catches up with detection. |
+| Repair attempts | `48` | Counts bounded attempts to open a repair or discover replacement pressure. |
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair backoffs per attempt | `0` | Distinguishes capacity/cooldown pressure from successful repair starts. |
+| Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `50.00%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `50.00%` / `62.50%` / `75.00%` | Detects assignment concentration and capacity cliffs. |
@@ -143,26 +148,29 @@ Repair summary:
 - Repairs started: `48`
 - Repairs marked ready: `48`
 - Repairs completed: `48`
+- Repair attempts: `48`
 - Repair backoffs: `0`
+- Repair cooldown backoffs: `0`
+- Repair attempt-cap backoffs: `0`
 - Final active slots in last epoch: `576`
 
 ### Repair Ledger Excerpt
 
-| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason |
-|---:|---|---:|---:|---|---|---|
-| 2 | `repair_started` | 1 | 0 | `sp-000` | `sp-031` | `quota_shortfall` |
-| 2 | `repair_started` | 1 | 1 | `sp-001` | `sp-027` | `quota_shortfall` |
-| 2 | `repair_started` | 1 | 2 | `sp-002` | `sp-028` | `quota_shortfall` |
-| 2 | `repair_started` | 1 | 3 | `sp-003` | `sp-055` | `quota_shortfall` |
-| 2 | `repair_started` | 1 | 4 | `sp-004` | `sp-022` | `quota_shortfall` |
-| 2 | `repair_started` | 1 | 5 | `sp-005` | `sp-039` | `quota_shortfall` |
-| 2 | `repair_started` | 7 | 0 | `sp-000` | `sp-025` | `quota_shortfall` |
-| 2 | `repair_started` | 7 | 1 | `sp-001` | `sp-048` | `quota_shortfall` |
-| 2 | `repair_started` | 7 | 2 | `sp-002` | `sp-021` | `quota_shortfall` |
-| 2 | `repair_started` | 7 | 3 | `sp-003` | `sp-067` | `quota_shortfall` |
-| 2 | `repair_started` | 7 | 4 | `sp-004` | `sp-058` | `quota_shortfall` |
-| 2 | `repair_started` | 7 | 5 | `sp-005` | `sp-023` | `quota_shortfall` |
-| ... | ... | ... | ... | ... | ... | `132` more events omitted |
+| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason | Attempt | Cooldown Until |
+|---:|---|---:|---:|---|---|---|---:|---:|
+| 2 | `repair_started` | 1 | 0 | `sp-000` | `sp-031` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 1 | 1 | `sp-001` | `sp-027` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 1 | 2 | `sp-002` | `sp-028` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 1 | 3 | `sp-003` | `sp-055` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 1 | 4 | `sp-004` | `sp-022` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 1 | 5 | `sp-005` | `sp-039` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 7 | 0 | `sp-000` | `sp-025` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 7 | 1 | `sp-001` | `sp-048` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 7 | 2 | `sp-002` | `sp-021` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 7 | 3 | `sp-003` | `sp-067` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 7 | 4 | `sp-004` | `sp-058` | `quota_shortfall` | 1 | 0 |
+| 2 | `repair_started` | 7 | 5 | `sp-005` | `sp-023` | `quota_shortfall` | 1 | 0 |
+| ... | ... | ... | ... | ... | ... | `132` more events omitted | ... | ... |
 
 ## Economic Interpretation
 
@@ -277,6 +285,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

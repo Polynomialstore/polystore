@@ -17,7 +17,10 @@ Model a technically healthy network whose prices do not cover provider costs. Th
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Repair attempts: `0`
 - Repair backoffs: `0`
+- Repair cooldowns: `0`
+- Repair attempt-cap events: `0`
 
 ## Review Questions
 

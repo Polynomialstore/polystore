@@ -25,7 +25,7 @@
     "passed": true
   },
   {
-    "detail": "repair_backoffs=21150, required>=1",
+    "detail": "repair_backoffs=12436, required>=1",
     "name": "min_repair_backoffs",
     "passed": true
   },

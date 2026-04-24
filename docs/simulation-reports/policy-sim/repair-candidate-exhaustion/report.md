@@ -8,7 +8,7 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 
 Expected policy behavior: Repair backoffs are visible, provider capacity is respected, and data-loss events remain zero under the modeled fault.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `94.79%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `72` repair backoffs.
+Observed result: retrieval success was `100.00%`, reward coverage was `94.79%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `40` repair backoffs across `8` repair attempts.
 
 ## Review Focus
 
@@ -30,6 +30,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Retrievals/user/epoch | `1` |
 | Liveness quota | `2`-`8` blobs/slot/epoch |
 | Repair delay | `2` epochs |
+| Repair attempt cap/slot | `1` (`0` means unlimited) |
+| Repair backoff window | `2` epochs |
 | Dynamic pricing | `false` |
 | Storage price | `1.0000` |
 | Retrieval price/slot | `0.0100` |
@@ -64,7 +66,7 @@ Repair was exercised: `0` repair operations started, `0` produced pending-provid
 
 Reward exclusion was active: `0.8000` modeled reward units were burned instead of paid to non-compliant slots.
 
-Repair coordination was constrained: `72` repair attempts backed off because no candidate or repair-start budget was available.
+Repair coordination was constrained: `40` repair backoffs occurred across `8` repair attempts. Cooldown backoffs accounted for `16` events and attempt-cap backoffs accounted for `16` events.
 
 The directly implicated provider set begins with: `sp-000`.
 
@@ -83,7 +85,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Peak saturation | `0` at epoch `1` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
 | Repair readiness ratio | `100.00%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `100.00%` | Measures whether healing catches up with detection. |
-| Repair backoff pressure | `72` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair attempts | `8` | Counts bounded attempts to open a repair or discover replacement pressure. |
+| Repair backoff pressure | `40` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair backoffs per attempt | `5` | Distinguishes capacity/cooldown pressure from successful repair starts. |
+| Repair cooldowns / attempt caps | `16` / `16` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `100.00%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `100.00%` / `100.00%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
@@ -116,16 +121,16 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 |---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.8000 | steady state |
 | 2 | 100.00% | 77 | 0 | 0 | 0 | 0.1600 | 5.6400 | 61 offline responses, 8 quota misses, 8 repair backoffs |
-| 3 | 100.00% | 74 | 0 | 0 | 0 | 0.1600 | 5.6400 | 58 offline responses, 8 quota misses, 16 repair backoffs |
-| 4 | 100.00% | 73 | 0 | 0 | 0 | 0.1600 | 5.6400 | 57 offline responses, 8 quota misses, 16 repair backoffs |
-| 5 | 100.00% | 63 | 0 | 0 | 0 | 0.1600 | 5.6400 | 47 offline responses, 8 quota misses, 16 repair backoffs |
-| 6 | 100.00% | 73 | 0 | 0 | 0 | 0.1600 | 5.6400 | 57 offline responses, 8 quota misses, 16 repair backoffs |
+| 3 | 100.00% | 74 | 0 | 0 | 0 | 0.1600 | 5.6400 | 58 offline responses, 8 quota misses, 8 repair backoffs, 8 repair cooldowns |
+| 4 | 100.00% | 73 | 0 | 0 | 0 | 0.1600 | 5.6400 | 57 offline responses, 8 quota misses, 8 repair backoffs, 8 attempt caps |
+| 5 | 100.00% | 63 | 0 | 0 | 0 | 0.1600 | 5.6400 | 47 offline responses, 8 quota misses, 8 repair backoffs, 8 repair cooldowns |
+| 6 | 100.00% | 73 | 0 | 0 | 0 | 0.1600 | 5.6400 | 57 offline responses, 8 quota misses, 8 repair backoffs, 8 attempt caps |
 | 7 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.8000 | steady state |
 | 8 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.8000 | steady state |
 
 ## Enforcement Interpretation
 
-The simulator recorded `80` evidence events and `72` repair ledger events. The first evidence epoch was `2` and the first repair-start epoch was `none`.
+The simulator recorded `80` evidence events and `40` repair ledger events. The first evidence epoch was `2` and the first repair-start epoch was `none`.
 
 Evidence by reason:
 
@@ -141,26 +146,29 @@ Repair summary:
 - Repairs started: `0`
 - Repairs marked ready: `0`
 - Repairs completed: `0`
-- Repair backoffs: `72`
+- Repair attempts: `8`
+- Repair backoffs: `40`
+- Repair cooldown backoffs: `16`
+- Repair attempt-cap backoffs: `16`
 - Final active slots in last epoch: `96`
 
 ### Repair Ledger Excerpt
 
-| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason |
-|---:|---|---:|---:|---|---|---|
-| 2 | `repair_backoff` | 1 | 0 | `sp-000` | `` | `no_candidate` |
-| 2 | `repair_backoff` | 2 | 0 | `sp-000` | `` | `no_candidate` |
-| 2 | `repair_backoff` | 3 | 0 | `sp-000` | `` | `no_candidate` |
-| 2 | `repair_backoff` | 4 | 0 | `sp-000` | `` | `no_candidate` |
-| 2 | `repair_backoff` | 5 | 0 | `sp-000` | `` | `no_candidate` |
-| 2 | `repair_backoff` | 6 | 0 | `sp-000` | `` | `no_candidate` |
-| 2 | `repair_backoff` | 7 | 0 | `sp-000` | `` | `no_candidate` |
-| 2 | `repair_backoff` | 8 | 0 | `sp-000` | `` | `no_candidate` |
-| 3 | `repair_backoff` | 1 | 0 | `sp-000` | `` | `no_candidate` |
-| 3 | `repair_backoff` | 1 | 0 | `sp-000` | `` | `no_candidate` |
-| 3 | `repair_backoff` | 2 | 0 | `sp-000` | `` | `no_candidate` |
-| 3 | `repair_backoff` | 2 | 0 | `sp-000` | `` | `no_candidate` |
-| ... | ... | ... | ... | ... | ... | `60` more events omitted |
+| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason | Attempt | Cooldown Until |
+|---:|---|---:|---:|---|---|---|---:|---:|
+| 2 | `repair_backoff` | 1 | 0 | `sp-000` | `` | `no_candidate` | 1 | 4 |
+| 2 | `repair_backoff` | 2 | 0 | `sp-000` | `` | `no_candidate` | 1 | 4 |
+| 2 | `repair_backoff` | 3 | 0 | `sp-000` | `` | `no_candidate` | 1 | 4 |
+| 2 | `repair_backoff` | 4 | 0 | `sp-000` | `` | `no_candidate` | 1 | 4 |
+| 2 | `repair_backoff` | 5 | 0 | `sp-000` | `` | `no_candidate` | 1 | 4 |
+| 2 | `repair_backoff` | 6 | 0 | `sp-000` | `` | `no_candidate` | 1 | 4 |
+| 2 | `repair_backoff` | 7 | 0 | `sp-000` | `` | `no_candidate` | 1 | 4 |
+| 2 | `repair_backoff` | 8 | 0 | `sp-000` | `` | `no_candidate` | 1 | 4 |
+| 3 | `repair_backoff` | 1 | 0 | `sp-000` | `` | `repair_cooldown` | 1 | 4 |
+| 3 | `repair_backoff` | 2 | 0 | `sp-000` | `` | `repair_cooldown` | 1 | 4 |
+| 3 | `repair_backoff` | 3 | 0 | `sp-000` | `` | `repair_cooldown` | 1 | 4 |
+| 3 | `repair_backoff` | 4 | 0 | `sp-000` | `` | `repair_cooldown` | 1 | 4 |
+| ... | ... | ... | ... | ... | ... | `28` more events omitted | ... | ... |
 
 ## Economic Interpretation
 
@@ -192,7 +200,10 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 |---|---|---|---|
 | `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.95 |
 | `min_offline_responses` | `PASS` | Custom assertion. Review the detail and fixture threshold. | offline_responses=280, required>=1 |
-| `min_repair_backoffs` | `PASS` | Scale fixture must expose healing coordination pressure. | repair_backoffs=72, required>=1 |
+| `min_repair_attempts` | `PASS` | Repair attempt accounting: constrained fixtures must visibly attempt repair before backing off. | repair_attempts=8, required>=1 |
+| `min_repair_backoffs` | `PASS` | Scale fixture must expose healing coordination pressure. | repair_backoffs=40, required>=1 |
+| `min_repair_cooldowns` | `PASS` | Repair cooldown accounting: repeated retry pressure must be throttled and visible. | repair_cooldowns=16, required>=1 |
+| `min_repair_attempt_caps` | `PASS` | Repair attempt-cap accounting: bounded retry fixtures must hit and report the cap. | repair_attempt_caps=16, required>=1 |
 | `max_providers_over_capacity` | `PASS` | Assignment must respect modeled provider capacity. | providers_over_capacity=0, required<=0 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `max_paid_corrupt_bytes` | `PASS` | Corrupt data must not earn payment. | paid_corrupt_bytes=0, required<=0 |
@@ -276,6 +287,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

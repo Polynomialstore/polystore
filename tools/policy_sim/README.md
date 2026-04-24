@@ -118,6 +118,8 @@ are supported in scenario files:
 - `provider_regions`
 - `regional_outages`
 - `max_repairs_started_per_epoch`
+- `repair_attempt_cap_per_slot`
+- `repair_backoff_epochs`
 
 Versioned sweep specs live in `tools/policy_sim/sweeps`. They are strict JSON
 documents with a `.yaml` extension, matching scenario fixture conventions. A
@@ -135,6 +137,7 @@ The simulator mirrors current protocol concepts:
 - Corrupt retrievals and invalid synthetic proofs as hard faults.
 - Provider outage/withholding as soft faults that become quota/deputy misses.
 - Make-before-break repair with deterministic replacement provider selection.
+- Repair attempt caps and cooldown windows for constrained replacement markets.
 - Simulated enforcement modes before live chain/runtime rollout.
 - Large-scale heterogeneous-provider runs with regional outages, bandwidth
   saturation, and repair coordination limits.
@@ -160,6 +163,10 @@ When `--out-dir` is supplied, the simulator emits:
 - `evidence.csv`
 - `repairs.csv`
 - `economy.csv`
+
+`slots.csv` includes per-slot repair attempt and cooldown state. `repairs.csv`
+includes start, pending-provider readiness, completion, attempt-count, cooldown,
+attempt-cap, and backoff events.
 
 `report.py` consumes those raw files and can emit:
 
