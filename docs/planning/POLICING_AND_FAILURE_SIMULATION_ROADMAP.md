@@ -1334,7 +1334,13 @@ availability failures or billable retrieval sessions; and
 reward-exclusion, repair-only, and measure-only enforcement against lazy
 providers, higher lazy share, delayed eviction, and subsidy size so base
 rewards do not leak to quota-missing responsibility before reward-eligibility
-keeper defaults are chosen.
+keeper defaults are chosen; and
+`tools/policy_sim/sweeps/underpriced_storage_economics.yaml` plus
+`tools/policy_sim/sweeps/overpriced_storage_affordability.yaml`, which compare
+provider P&L under storage underpricing, user-funded storage fee floors,
+reward/retrieval buffers, willingness-to-pay ceilings, dynamic price movement,
+and capacity-limited acceptance before storage quote and price-floor defaults
+are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models

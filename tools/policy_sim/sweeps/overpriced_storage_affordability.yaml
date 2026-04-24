@@ -1,0 +1,100 @@
+{
+  "name": "overpriced-storage-affordability",
+  "description": "Sensitivity sweep for overpriced storage demand rejection, willingness-to-pay ceilings, dynamic price movement, and capacity-limited acceptance.",
+  "base_scenario": "../scenarios/overpriced_storage.yaml",
+  "cases": [
+    {
+      "name": "baseline-price-rejected"
+    },
+    {
+      "name": "at-ceiling-capacity-limited",
+      "config": {
+        "storage_price": 1.25
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_new_deal_requests": 96,
+        "min_new_deals_accepted": 30,
+        "exact_new_deals_accepted": 34,
+        "min_new_deals_rejected_price": 0,
+        "max_new_deals_rejected_price": 0,
+        "min_new_deals_rejected_capacity": 50,
+        "max_new_deals_rejected_capacity": 100,
+        "max_new_deal_acceptance_rate": 1.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "below-ceiling-capacity-limited",
+      "config": {
+        "storage_price": 1.0
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_new_deal_requests": 96,
+        "min_new_deals_accepted": 30,
+        "exact_new_deals_accepted": 34,
+        "min_new_deals_rejected_price": 0,
+        "max_new_deals_rejected_price": 0,
+        "min_new_deals_rejected_capacity": 50,
+        "max_new_deals_rejected_capacity": 100,
+        "max_new_deal_acceptance_rate": 1.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "higher-willingness-to-pay-allows-demand",
+      "config": {
+        "storage_demand_price_ceiling": 6.0
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_new_deal_requests": 96,
+        "min_new_deals_accepted": 30,
+        "exact_new_deals_accepted": 34,
+        "min_new_deals_rejected_price": 0,
+        "max_new_deals_rejected_price": 0,
+        "min_new_deals_rejected_capacity": 50,
+        "max_new_deals_rejected_capacity": 100,
+        "max_new_deal_acceptance_rate": 1.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "dynamic-pricing-too-slow-for-window",
+      "config": {
+        "dynamic_pricing": true
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_new_deal_requests": 96,
+        "exact_new_deals_accepted": 0,
+        "min_new_deals_rejected_price": 96,
+        "max_new_deals_rejected_capacity": 0,
+        "max_final_storage_price": 4.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "capacity-limited-not-price-limited",
+      "config": {
+        "storage_price": 1.0,
+        "new_deal_requests_per_epoch": 100,
+        "provider_capacity_min": 5,
+        "provider_capacity_max": 5
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_new_deal_requests": 800,
+        "min_new_deals_accepted": 1,
+        "exact_new_deals_accepted": 2,
+        "min_new_deals_rejected_price": 0,
+        "max_new_deals_rejected_price": 0,
+        "min_new_deals_rejected_capacity": 700,
+        "max_new_deals_rejected_capacity": 800,
+        "max_new_deal_acceptance_rate": 0.01,
+        "max_data_loss_events": 0
+      }
+    }
+  ]
+}

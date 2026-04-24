@@ -25,6 +25,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `expired-retrieval-rejection-controls` | 5 | 0 | Sensitivity sweep for post-expiry retrieval rejection timing, no-bill accounting, and larger expired-content read demand. | [summary](expired-retrieval-rejection-controls/sweep_summary.md) |
 | `high-bandwidth-thresholds` | 9 | 5 | Sensitivity sweep for high-bandwidth capacity and demotion-saturation thresholds under hot retrieval pressure. | [summary](high-bandwidth-thresholds/sweep_summary.md) |
 | `operator-concentration-controls` | 7 | 0 | Sensitivity sweep for per-deal operator assignment caps under dominant-operator Sybil pressure. | [summary](operator-concentration-controls/sweep_summary.md) |
+| `overpriced-storage-affordability` | 6 | 0 | Sensitivity sweep for overpriced storage demand rejection, willingness-to-pay ceilings, dynamic price movement, and capacity-limited acceptance. | [summary](overpriced-storage-affordability/sweep_summary.md) |
 | `performance-market-latency-controls` | 9 | 0 | Sensitivity sweep for Hot-service latency tier windows, reward multipliers, jitter, routing, and slow-provider tails. | [summary](performance-market-latency-controls/sweep_summary.md) |
 | `price-step-controller` | 4 | 0 | Controller sensitivity sweep for dynamic pricing max-step parameters in the pricing-bounds fixture. | [summary](price-step-controller/sweep_summary.md) |
 | `provider-bond-headroom-controls` | 7 | 0 | Sensitivity sweep for provider minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing. | [summary](provider-bond-headroom-controls/sweep_summary.md) |
@@ -44,6 +45,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `storage-escrow-expiry-controls` | 6 | 0 | Sensitivity sweep for committed-storage expiry timing, run length, disabled-expiry behavior, and larger escrow books. | [summary](storage-escrow-expiry-controls/sweep_summary.md) |
 | `storage-escrow-noncompliance-modes` | 3 | 0 | Sensitivity sweep for storage-fee payout and burn behavior across measure-only, repair-only, and reward-exclusion enforcement modes. | [summary](storage-escrow-noncompliance-modes/sweep_summary.md) |
 | `subsidy-farming-economics` | 7 | 0 | Sensitivity sweep for base reward leakage under lazy-provider subsidy farming, enforcement modes, lazy share, and subsidy size. | [summary](subsidy-farming-economics/sweep_summary.md) |
+| `underpriced-storage-economics` | 6 | 0 | Sensitivity sweep for provider P&L under storage underpricing, user-funded storage fees, reward-only buffers, and storage-price floors. | [summary](underpriced-storage-economics/sweep_summary.md) |
 | `wash-retrieval-economics` | 8 | 0 | Sensitivity sweep for requester-paid retrieval funding, burn rates, and wash-traffic profitability. | [summary](wash-retrieval-economics/sweep_summary.md) |
 
 ## Review Rule
