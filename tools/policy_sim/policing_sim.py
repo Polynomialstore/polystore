@@ -83,6 +83,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "retrieval-demand-shock",
     "price-controller-bounds",
     "subsidy-farming",
+    "storage-escrow-close-refund",
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
     "replacement-grinding",
@@ -133,6 +134,11 @@ class SimConfig:
     enforcement_mode: str = "REWARD_EXCLUSION"
     dynamic_pricing: bool = False
     storage_price: float = 1.0
+    storage_lockin_enabled: bool = False
+    deal_duration_epochs: int = 0
+    deal_close_epoch: int = 0
+    deal_close_count: int = 0
+    deal_close_bps: int = 0
     storage_price_min: float = 0.1
     storage_price_max: float = 20.0
     storage_target_utilization_bps: int = 7000
@@ -281,6 +287,14 @@ class SimConfig:
             raise ValueError("storage demand bps bounds must be non-negative")
         if self.storage_demand_min_bps > self.storage_demand_max_bps:
             raise ValueError("storage_demand_min_bps must be <= storage_demand_max_bps")
+        if self.deal_duration_epochs < 0:
+            raise ValueError("deal_duration_epochs must be non-negative")
+        if self.deal_close_epoch < 0:
+            raise ValueError("deal_close_epoch must be non-negative")
+        if self.deal_close_count < 0:
+            raise ValueError("deal_close_count must be non-negative")
+        if self.deal_close_bps < 0 or self.deal_close_bps > 10_000:
+            raise ValueError("deal_close_bps must be in [0, 10000]")
         if not isinstance(self.retrieval_demand_shocks, (list, tuple)):
             raise ValueError("retrieval_demand_shocks must be a list")
         for shock in self.retrieval_demand_shocks:
@@ -492,6 +506,7 @@ class Provider:
     total_latency_ms: float = 0.0
     rewards_earned_slots: int = 0
     reward_revenue: float = 0.0
+    storage_fee_revenue: float = 0.0
     retrieval_revenue: float = 0.0
     performance_reward_revenue: float = 0.0
     total_cost: float = 0.0
@@ -506,7 +521,12 @@ class Provider:
 
     @property
     def revenue(self) -> float:
-        return self.reward_revenue + self.retrieval_revenue + self.performance_reward_revenue
+        return (
+            self.reward_revenue
+            + self.storage_fee_revenue
+            + self.retrieval_revenue
+            + self.performance_reward_revenue
+        )
 
     @property
     def pnl(self) -> float:
@@ -562,6 +582,12 @@ class DealState:
     user_mdus: int
     witness_mdus: int
     slots: list[SlotState]
+    opened_epoch: int = 1
+    closed_epoch: int = 0
+    storage_escrow_locked: float = 0.0
+    storage_fee_per_epoch: float = 0.0
+    storage_fee_earned: float = 0.0
+    storage_escrow_refunded: float = 0.0
 
     @property
     def n(self) -> int:
@@ -637,6 +663,14 @@ class EpochMetrics:
     retrieval_base_burned: float = 0.0
     retrieval_variable_burned: float = 0.0
     retrieval_provider_payouts: float = 0.0
+    storage_escrow_locked: float = 0.0
+    storage_escrow_earned: float = 0.0
+    storage_escrow_refunded: float = 0.0
+    storage_escrow_outstanding: float = 0.0
+    storage_fee_provider_payouts: float = 0.0
+    storage_fee_burned: float = 0.0
+    open_deals: int = 0
+    deals_closed: int = 0
     sponsored_retrieval_attempts: int = 0
     owner_funded_retrieval_attempts: int = 0
     sponsored_retrieval_base_spent: float = 0.0
@@ -974,15 +1008,16 @@ class PolicySimulator:
         )
 
     def _run_epoch(self, epoch: int) -> EpochMetrics:
-        for deal in self.deals:
+        for deal in self._open_deals():
             for slot in deal.slots:
                 slot.reset_epoch()
 
         metrics = EpochMetrics(epoch=epoch)
+        metrics.open_deals = len(self._open_deals())
         metrics.storage_price = self.storage_price
         metrics.retrieval_price_per_slot = self.retrieval_price_per_slot
         self.provider_epoch_serves = {pid: 0 for pid in self.providers}
-        self.deal_epoch_retrievals = {deal.deal_id: 0 for deal in self.deals}
+        self.deal_epoch_retrievals = {deal.deal_id: 0 for deal in self._open_deals()}
         self.repairs_started_this_epoch = 0
         self._expire_elasticity_overlays(epoch, metrics)
         self._promote_probationary_providers(epoch, metrics)
@@ -993,7 +1028,7 @@ class PolicySimulator:
         for _ in range(self._retrieval_attempts_for_epoch(epoch, metrics)):
             self._simulate_retrieval(epoch, online, metrics)
 
-        for deal in self.deals:
+        for deal in self._open_deals():
             for slot in deal.slots:
                 if slot.status == SLOT_REPAIRING:
                     metrics.repairing_slots += 1
@@ -1022,6 +1057,9 @@ class PolicySimulator:
         metrics.retrieval_demand_multiplier_bps = multiplier_bps
         metrics.retrieval_demand_shock_active = self._active_retrieval_demand_shocks(epoch)
         return int(latent_attempts * multiplier_bps / 10_000)
+
+    def _open_deals(self) -> list[DealState]:
+        return [deal for deal in self.deals if deal.closed_epoch == 0]
 
     def _retrieval_demand_multiplier_bps(self, epoch: int) -> int:
         multiplier_bps = 10_000
@@ -1080,7 +1118,11 @@ class PolicySimulator:
                 metrics.staged_upload_committed += 1
                 continue
 
-            deal = self.rng.choice(self.deals)
+            open_deals = self._open_deals()
+            if not open_deals:
+                metrics.staged_upload_rejections += 1
+                continue
+            deal = self.rng.choice(open_deals)
             self.staged_uploads.append(
                 {
                     "created_epoch": epoch,
@@ -1179,6 +1221,7 @@ class PolicySimulator:
             user_mdus=self.config.user_mdus_per_deal,
             witness_mdus=self.config.witness_mdus,
             slots=slots,
+            opened_epoch=epoch,
         )
 
     def _select_dynamic_provider(
@@ -1221,8 +1264,11 @@ class PolicySimulator:
             return
         kept: list[ElasticityOverlay] = []
         expired = 0
+        closed_deal_ids = {deal.deal_id for deal in self.deals if deal.closed_epoch}
         for overlay in self.elasticity_overlays:
-            if overlay.expire_epoch > 0 and epoch >= overlay.expire_epoch:
+            if overlay.deal_id in closed_deal_ids:
+                expired += 1
+            elif overlay.expire_epoch > 0 and epoch >= overlay.expire_epoch:
                 expired += 1
             else:
                 kept.append(overlay)
@@ -1240,7 +1286,7 @@ class PolicySimulator:
             return
 
         target_deals = sorted(
-            self.deals,
+            self._open_deals(),
             key=lambda deal: (-self.deal_epoch_retrievals.get(deal.deal_id, 0), deal.deal_id),
         )
         activations = 0
@@ -1439,7 +1485,11 @@ class PolicySimulator:
             metrics.owner_retrieval_escrow_debited += (
                 self.config.retrieval_base_fee * self.config.owner_retrieval_debit_bps / 10_000
             )
-        deal = self.rng.choice(self.deals)
+        open_deals = self._open_deals()
+        if not open_deals:
+            metrics.unavailable_reads += 1
+            return
+        deal = self.rng.choice(open_deals)
         self.deal_epoch_retrievals[deal.deal_id] = self.deal_epoch_retrievals.get(deal.deal_id, 0) + 1
         order = list(range(deal.n))
         self.rng.shuffle(order)
@@ -1950,7 +2000,7 @@ class PolicySimulator:
             return
 
         assigned_counts = self._assigned_counts()
-        for deal in self.deals:
+        for deal in self._open_deals():
             for slot in deal.slots:
                 if slot.status == SLOT_REPAIRING:
                     continue
@@ -2123,7 +2173,7 @@ class PolicySimulator:
 
     def _assigned_counts(self, include_pending: bool = False) -> dict[str, int]:
         assigned_counts = {pid: 0 for pid in self.providers}
-        for deal in self.deals:
+        for deal in self._open_deals():
             for slot in deal.slots:
                 assigned_counts[slot.provider_id] += 1
                 if include_pending and slot.pending_provider_id:
@@ -2145,7 +2195,7 @@ class PolicySimulator:
 
         max_deal_slots = 0
         cap_violations = 0
-        for deal in self.deals:
+        for deal in self._open_deals():
             deal_counts = self._deal_operator_counts(deal)
             if deal_counts:
                 max_deal_slots = max(max_deal_slots, max(deal_counts.values()))
@@ -2262,10 +2312,92 @@ class PolicySimulator:
         )
 
     def _record_data_loss_events(self, metrics: EpochMetrics) -> None:
-        for deal in self.deals:
+        for deal in self._open_deals():
             trusted_slots = sum(1 for slot in deal.slots if not slot.durability_suspect)
             if trusted_slots < deal.k:
                 metrics.data_loss_events += 1
+
+    def _settle_storage_escrow(self, epoch: int, metrics: EpochMetrics) -> None:
+        if self.config.storage_lockin_enabled and self.config.deal_duration_epochs > 0:
+            for deal in self._open_deals():
+                self._ensure_deal_storage_lock(deal, metrics)
+                self._earn_deal_storage_fee(deal, metrics)
+
+        self._close_configured_deals(epoch, metrics)
+        metrics.open_deals = len(self._open_deals())
+        metrics.storage_escrow_outstanding = self._storage_escrow_outstanding()
+
+    def _ensure_deal_storage_lock(self, deal: DealState, metrics: EpochMetrics) -> None:
+        if deal.storage_escrow_locked > 0:
+            return
+        deal.storage_fee_per_epoch = self.storage_price * deal.user_mdus * deal.n
+        deal.storage_escrow_locked = deal.storage_fee_per_epoch * self.config.deal_duration_epochs
+        metrics.storage_escrow_locked += deal.storage_escrow_locked
+        self.evidence_rows.append(
+            {
+                "epoch": deal.opened_epoch,
+                "deal_id": deal.deal_id,
+                "slot": "",
+                "provider_id": "user-gateway",
+                "evidence_class": "market",
+                "reason": "storage_escrow_locked",
+                "consequence": "storage_lockin",
+            }
+        )
+
+    def _earn_deal_storage_fee(self, deal: DealState, metrics: EpochMetrics) -> None:
+        remaining = max(0.0, deal.storage_escrow_locked - deal.storage_fee_earned)
+        earned = min(deal.storage_fee_per_epoch, remaining)
+        if earned <= 0:
+            return
+        deal.storage_fee_earned += earned
+        metrics.storage_escrow_earned += earned
+
+        eligible_slots = [slot for slot in deal.slots if slot.reward_eligible_this_epoch]
+        payout = earned * len(eligible_slots) / max(1, deal.n)
+        burned = max(0.0, earned - payout)
+        metrics.storage_fee_provider_payouts += payout
+        metrics.storage_fee_burned += burned
+        if not eligible_slots:
+            return
+        per_provider = payout / len(eligible_slots)
+        for slot in eligible_slots:
+            self.providers[slot.provider_id].storage_fee_revenue += per_provider
+
+    def _close_configured_deals(self, epoch: int, metrics: EpochMetrics) -> None:
+        if self.config.deal_close_epoch <= 0 or epoch != self.config.deal_close_epoch:
+            return
+        candidates = sorted(self._open_deals(), key=lambda deal: deal.deal_id)
+        close_count = self.config.deal_close_count
+        if close_count <= 0 and self.config.deal_close_bps > 0:
+            close_count = int(len(candidates) * self.config.deal_close_bps / 10_000)
+        if close_count <= 0:
+            return
+        for deal in candidates[:close_count]:
+            if self.config.storage_lockin_enabled and self.config.deal_duration_epochs > 0:
+                self._ensure_deal_storage_lock(deal, metrics)
+            refundable = max(0.0, deal.storage_escrow_locked - deal.storage_fee_earned - deal.storage_escrow_refunded)
+            deal.storage_escrow_refunded += refundable
+            deal.closed_epoch = epoch
+            metrics.storage_escrow_refunded += refundable
+            metrics.deals_closed += 1
+            self.evidence_rows.append(
+                {
+                    "epoch": epoch,
+                    "deal_id": deal.deal_id,
+                    "slot": "",
+                    "provider_id": "chain",
+                    "evidence_class": "market",
+                    "reason": "deal_storage_escrow_closed",
+                    "consequence": "refund_unearned",
+                }
+            )
+
+    def _storage_escrow_outstanding(self) -> float:
+        return sum(
+            max(0.0, deal.storage_escrow_locked - deal.storage_fee_earned - deal.storage_escrow_refunded)
+            for deal in self.deals
+        )
 
     def _settle_epoch_economy(self, epoch: int, metrics: EpochMetrics) -> None:
         assigned_counts = self._assigned_counts()
@@ -2278,10 +2410,12 @@ class PolicySimulator:
         metrics.reward_burned = reward_burned
 
         if metrics.reward_eligible_slots:
-            for deal in self.deals:
+            for deal in self._open_deals():
                 for slot in deal.slots:
                     if slot.reward_eligible_this_epoch:
                         self.providers[slot.provider_id].reward_revenue += self.config.base_reward_per_slot
+
+        self._settle_storage_escrow(epoch, metrics)
 
         audit_minted = self.config.audit_budget_per_epoch
         current_audit_demand = (metrics.quota_misses + metrics.deputy_misses) * self.config.audit_cost_per_miss
@@ -2347,7 +2481,12 @@ class PolicySimulator:
         self.provider_slashed_total_last_epoch = provider_slashed_total
 
         metrics.provider_cost = provider_cost
-        metrics.provider_revenue = metrics.retrieval_provider_payouts + metrics.reward_paid + metrics.performance_reward_paid
+        metrics.provider_revenue = (
+            metrics.retrieval_provider_payouts
+            + metrics.storage_fee_provider_payouts
+            + metrics.reward_paid
+            + metrics.performance_reward_paid
+        )
         metrics.provider_pnl = metrics.provider_revenue - metrics.provider_cost - provider_slashed_delta
         total_capacity = max(1, metrics.active_provider_capacity)
         metrics.storage_utilization_bps = int(metrics.active_slots * 10_000 / total_capacity)
@@ -2360,6 +2499,14 @@ class PolicySimulator:
                 "retrieval_base_burned": metrics.retrieval_base_burned,
                 "retrieval_variable_burned": metrics.retrieval_variable_burned,
                 "retrieval_provider_payouts": metrics.retrieval_provider_payouts,
+                "storage_escrow_locked": metrics.storage_escrow_locked,
+                "storage_escrow_earned": metrics.storage_escrow_earned,
+                "storage_escrow_refunded": metrics.storage_escrow_refunded,
+                "storage_escrow_outstanding": metrics.storage_escrow_outstanding,
+                "storage_fee_provider_payouts": metrics.storage_fee_provider_payouts,
+                "storage_fee_burned": metrics.storage_fee_burned,
+                "open_deals": metrics.open_deals,
+                "deals_closed": metrics.deals_closed,
                 "sponsored_retrieval_attempts": metrics.sponsored_retrieval_attempts,
                 "owner_funded_retrieval_attempts": metrics.owner_funded_retrieval_attempts,
                 "sponsored_retrieval_base_spent": metrics.sponsored_retrieval_base_spent,
@@ -2794,6 +2941,12 @@ class PolicySimulator:
             "retrieval_base_burned",
             "retrieval_variable_burned",
             "retrieval_provider_payouts",
+            "storage_escrow_locked",
+            "storage_escrow_earned",
+            "storage_escrow_refunded",
+            "storage_fee_provider_payouts",
+            "storage_fee_burned",
+            "deals_closed",
             "sponsored_retrieval_attempts",
             "owner_funded_retrieval_attempts",
             "sponsored_retrieval_base_spent",
@@ -2848,6 +3001,13 @@ class PolicySimulator:
             else 0.0
         )
         totals["final_deals"] = len(self.deals)
+        totals["final_open_deals"] = len(self._open_deals())
+        totals["final_closed_deals"] = sum(1 for deal in self.deals if deal.closed_epoch)
+        totals["storage_escrow_outstanding"] = self._storage_escrow_outstanding()
+        totals["max_storage_escrow_outstanding"] = max(
+            (m.storage_escrow_outstanding for m in self.metrics),
+            default=0.0,
+        )
         totals["provider_hard_faults"] = sum(p.hard_faults for p in self.providers.values())
         totals["provider_revenue"] = sum(p.revenue for p in self.providers.values())
         totals["provider_pnl"] = sum(p.pnl for p in self.providers.values())
@@ -3054,6 +3214,7 @@ class PolicySimulator:
                     "latency_sample_count": provider.latency_sample_count,
                     "rewards_earned_slots": provider.rewards_earned_slots,
                     "reward_revenue": provider.reward_revenue,
+                    "storage_fee_revenue": provider.storage_fee_revenue,
                     "retrieval_revenue": provider.retrieval_revenue,
                     "performance_reward_revenue": provider.performance_reward_revenue,
                     "total_cost": provider.total_cost,
@@ -3110,7 +3271,7 @@ class PolicySimulator:
     def _final_slots(self) -> dict[str, int]:
         active = 0
         repairing = 0
-        for deal in self.deals:
+        for deal in self._open_deals():
             for slot in deal.slots:
                 if slot.status == SLOT_REPAIRING:
                     repairing += 1
@@ -3380,6 +3541,10 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
         "repair_backoff_epochs": args.repair_backoff_epochs,
         "repair_pending_timeout_epochs": args.repair_pending_timeout_epochs,
         "enforcement_mode": args.enforcement_mode,
+        "deal_duration_epochs": args.deal_duration_epochs,
+        "deal_close_epoch": args.deal_close_epoch,
+        "deal_close_count": args.deal_close_count,
+        "deal_close_bps": args.deal_close_bps,
         "sponsored_retrieval_bps": args.sponsored_retrieval_bps,
         "owner_retrieval_debit_bps": args.owner_retrieval_debit_bps,
         "elasticity_overlay_providers_per_epoch": args.elasticity_overlay_providers_per_epoch,
@@ -3397,6 +3562,8 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
             data[key] = value
     if args.dynamic_pricing:
         data["dynamic_pricing"] = True
+    if args.storage_lockin:
+        data["storage_lockin_enabled"] = True
     if args.elasticity_overlay:
         data["elasticity_overlay_enabled"] = True
     faults.extend(args.fault or [])
@@ -3507,6 +3674,12 @@ def print_summary(result: SimResult) -> None:
             "sponsored_retrievals attempts={sponsored_retrieval_attempts} "
             "spent={sponsored_retrieval_spent:.4f} owner_escrow_debited={owner_retrieval_escrow_debited:.4f}".format(**totals)
         )
+    if totals.get("storage_escrow_locked", 0) or totals.get("storage_escrow_refunded", 0):
+        print(
+            "storage_escrow locked={storage_escrow_locked:.4f} earned={storage_escrow_earned:.4f} "
+            "refunded={storage_escrow_refunded:.4f} outstanding={storage_escrow_outstanding:.4f} "
+            "closed_deals={final_closed_deals}".format(**totals)
+        )
     if result.assertions:
         failed = [item for item in result.assertions if not item.passed]
         status = "failed" if failed else "passed"
@@ -3565,6 +3738,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-backoff-epochs", type=int)
     parser.add_argument("--repair-pending-timeout-epochs", type=int)
     parser.add_argument("--enforcement-mode", choices=sorted(ENFORCEMENT_ORDER))
+    parser.add_argument("--storage-lockin", action="store_true")
+    parser.add_argument("--deal-duration-epochs", type=int)
+    parser.add_argument("--deal-close-epoch", type=int)
+    parser.add_argument("--deal-close-count", type=int)
+    parser.add_argument("--deal-close-bps", type=int)
     parser.add_argument("--sponsored-retrieval-bps", type=int)
     parser.add_argument("--owner-retrieval-debit-bps", type=int)
     parser.add_argument("--elasticity-overlay", action="store_true")

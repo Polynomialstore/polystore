@@ -54,6 +54,15 @@ This report aggregates `3` completed simulator run output directories. It does n
 | `average_latency_ms` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `performance_fail_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `performance_reward_paid` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `storage_escrow_locked` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage escrow charged upfront for committed deals. |
+| `storage_escrow_earned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage escrow earned over modeled service epochs. |
+| `storage_escrow_refunded` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Unearned storage escrow returned by deal close/refund. |
+| `storage_escrow_outstanding` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage escrow still locked at run end. |
+| `storage_fee_provider_payouts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Earned storage fees paid to eligible providers. |
+| `storage_fee_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Earned storage fees withheld from non-compliant slots. |
+| `deals_closed` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal close events executed across the run. |
+| `final_open_deals` | 48.000000 | 48.000000 | 0.000000 | 48.000000 | Deals still active at run end. |
+| `final_closed_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals closed by run end. |
 | `sponsored_retrieval_attempts` | 0.000000 | 9000.000000 | 9000.000000 | 4471.333333 | Retrieval attempts funded by requester/sponsor sessions. |
 | `sponsored_retrieval_spent` | 0.000000 | 1125.000000 | 1125.000000 | 558.916667 | Total sponsored retrieval base plus variable spend. |
 | `owner_retrieval_escrow_debited` | 0.000000 | 1125.000000 | 1125.000000 | 566.083333 | Deal-owner escrow debited for non-sponsored retrievals. |

@@ -305,6 +305,7 @@ Human decisions still required:
 | Retrieval demand shock | Does burst read demand move retrieval price without oscillating or harming availability? | Retrieval price reacts within bounds, direction changes stay limited, and reads remain available. | Retrieval pricing keeper tests. |
 | Wash traffic | Can fake retrievals profit from rewards or credits? | Burn and fees exceed expected reward or credit value. | Session fee, credit cap, and anomaly tests. |
 | Viral public retrieval | Does public demand scale without draining owner escrow? | Sponsored sessions fund retrieval; owner escrow remains stable. | Sponsored-session e2e. |
+| Storage escrow close/refund | Does committed storage escrow lock, earn, and refund deterministically? | Storage escrow locks upfront, pays earned fees, refunds unearned close balance, and leaves no outstanding escrow. | Quote-to-charge, close/refund, and expiry keeper tests. |
 | Elasticity cap hit | What happens when demand exceeds user budget? | Scaling stops cleanly and service is rate-limited, not unbounded. | `MsgSignalSaturation` spend-window e2e. |
 | Elasticity overlay scale-up | Does funded overflow capacity become useful and temporary? | Overlay routes activate, become ready, serve reads, and expire without data loss. | Overlay readiness, routing expansion, and TTL e2e. |
 | Subsidy farming | Can providers earn emissions without useful service? | Non-compliant or idle responsibility is unrewarded or uneconomic. | Base reward compliance tests. |
@@ -1245,6 +1246,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `retrieval_demand_shock.yaml` | Temporary read-demand spike tests retrieval-price response and oscillation bounds. | Retrieval shock windows are visible, price direction changes stay bounded, reads remain available, and price remains within configured limits. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost, sponsor spend is visible, and owner escrow remains stable. |
+| `storage_escrow_close_refund.yaml` | Committed storage locks escrow, earns provider storage fees, then closes a subset of deals early. | Locked, earned, refunded, outstanding, provider-payout, and burned storage-fee values are visible; outstanding escrow reaches zero by run end. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
 | `elasticity_overlay_scaleup.yaml` | Sustained hot retrieval demand buys temporary overflow routes. | Overlay activations, serves, and TTL expirations are visible; spend caps are respected and durability is unaffected. |
 | `high_bandwidth_promotion.yaml` | Hot retrieval demand is routed across heterogeneous providers after measured high-bandwidth promotion. | Providers promote only after success/capacity/saturation checks, hot traffic uses promoted providers, no demotion or over-capacity assignment occurs. |
@@ -1254,6 +1256,12 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 Current S6 sweep specs include `tools/policy_sim/sweeps/sponsored_retrieval_funding.yaml`,
 which compares full, partial, and absent sponsored-session funding so owner
 escrow-drain risk is visible before keeper defaults are chosen.
+
+Current storage-escrow coverage includes
+`tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
+upfront lock-in, per-epoch earned storage fees, provider payout, early
+close/refund, and run-end outstanding escrow before keeper close/refund
+semantics are chosen.
 
 ### 27.7 Output Contract
 
@@ -1435,7 +1443,9 @@ CI should cover:
 7. Upload quote matches storage lock-in charge on commit.
 8. Retrieval open/complete burns and pays exactly as quoted.
 9. Sponsored retrieval does not debit owner deal escrow.
-10. Elasticity spend-window rejection is deterministic when cap is exhausted.
+10. Early deal close refunds unearned storage escrow and leaves no hidden
+    outstanding balance.
+11. Elasticity spend-window rejection is deterministic when cap is exhausted.
 
 ### 29.2 Nightly or Manual E2E
 
@@ -1595,8 +1605,10 @@ Before implementing the next large slice:
 12. Define provider cost assumptions for devnet/testnet simulation.
 13. Decide whether dynamic pricing remains disabled, measure-only, or active
     during trusted devnet.
-14. Decide the escrow close/refund semantics needed before fee-dominant
-    equilibrium analysis is meaningful.
+14. Decide the production escrow close/refund semantics needed before
+    fee-dominant equilibrium analysis is meaningful; the simulator now has a
+    first-pass lock/earn/refund fixture, but keeper rounding, expiry auto-close,
+    and quote-signing semantics still need human approval.
 
 For the current simulator-first milestone, the immediate punch list is:
 
@@ -1835,7 +1847,9 @@ approval before merge.
     simulation?
 16. What fee-vs-issuance target defines "healthy enough" before incentives are
     tightened?
-17. What are the end-of-deal escrow close/refund semantics?
+17. What are the production end-of-deal escrow close/refund semantics now that
+    the simulator can model lock-in, earned fees, early close refunds, and
+    outstanding escrow?
 18. Should reward remainders always burn, or can any phase route them to a
     protocol sink without creating cartel incentives?
 19. What storage and retrieval price bounds preserve affordability while

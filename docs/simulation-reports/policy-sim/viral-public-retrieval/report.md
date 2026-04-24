@@ -35,6 +35,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Repair pending timeout | `0` epochs (`0` means disabled) |
 | Dynamic pricing | `false` |
 | Storage price | `1.0000` |
+| Storage lock-in | `false`; duration `0` epochs |
+| Deal close policy | epoch `0`; count `0`; share `0.00%` |
 | New deal requests/epoch | `0` |
 | Storage demand price ceiling | `0.0000` (`0` means disabled) |
 | Storage demand reference price | `0.0000` (`0` disables elasticity) |
@@ -70,6 +72,8 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Assumption | Value | Interpretation |
 |---|---:|---|
 | Storage price | `1.0000` | Unitless price applied by the controller, demand-elasticity curve, and optional affordability gate. |
+| Storage lock-in | enabled `False`, duration `0` epochs | If enabled, committed deals lock storage escrow upfront at the quoted storage price and earn it over the modeled duration. |
+| Deal close/refund | epoch `0`, count `0`, share `0.00%` | Optional early close refunds unearned storage escrow and removes closed deals from active responsibility. |
 | New deal requests/epoch | `0` | Latent modeled write demand before optional price elasticity suppression. Effective requests are accepted only when price and capacity gates pass. |
 | Storage demand price ceiling | `0.0000` | If non-zero, new deal demand above this storage price is rejected as unaffordable. |
 | Storage demand reference price | `0.0000` | If non-zero with elasticity enabled, demand scales around this price before hard affordability rejection. |
@@ -150,6 +154,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Elasticity overlay ready/active peak | `0` / `0` | Shows catch-up/readiness lag and total temporary routing footprint. |
 | Sponsored retrieval attempts/spend | `9000` / `1125.0000` | Shows public or requester-funded demand separately from owner-funded deal escrow. |
 | Owner-funded attempts / owner escrow debit | `0` / `0.0000` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |
+| Storage escrow locked/earned/refunded | `0.0000` / `0.0000` / `0.0000` | Shows quote-to-lock, provider earning, and close/refund accounting for committed storage. |
+| Storage escrow outstanding | `0.0000` final; peak `0.0000` | Detects funds left locked after close/expiry semantics should have released them. |
+| Storage fee provider payout/burned | `0.0000` / `0.0000` | Separates earned storage fees paid to eligible providers from fees withheld from non-compliant responsibility. |
+| Deals open/closed | `48` / `0` | Confirms close/refund semantics remove deals from active responsibility instead of continuing to accrue rewards. |
 | Audit demand / spent | `0.0000` / `0.0000` | Shows whether enforcement evidence consumed the available audit budget. |
 | Audit backlog / exhausted epochs | `0.0000` / `0` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
 | Evidence spam claims / convictions | `0` / `0` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |
@@ -264,6 +272,8 @@ Retrieval accounting paid providers `1026.0000`, burned `45.0000` in base fees, 
 
 Sponsored retrieval accounting spent `1125.0000` across `9000` sponsor-funded attempts; owner retrieval escrow debit was `0.0000`.
 
+Storage escrow accounting locked `0.0000`, earned `0.0000`, refunded `0.0000`, paid providers `0.0000`, burned `0.0000`, and ended with outstanding escrow `0.0000`.
+
 Performance-tier accounting paid `0.0000` in QoS rewards.
 
 Audit accounting saw `0.0000` of demand, spent `0.0000`, and ended with `0.0000` backlog after `0` exhausted epochs.
@@ -355,6 +365,12 @@ Shows underbonded providers and repairs triggered by insufficient assignment col
 Shows whether burns are material relative to minted rewards and audit budget.
 
 ![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)
+
+### Storage Escrow Lifecycle
+
+Shows storage escrow locked, earned, refunded, and still outstanding after close/refund semantics.
+
+![Storage Escrow Lifecycle](graphs/storage_escrow_lifecycle.svg)
 
 ### Price Trajectory
 

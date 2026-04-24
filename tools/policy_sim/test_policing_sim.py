@@ -658,6 +658,23 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(0.0, result.totals["owner_retrieval_escrow_debited"])
         self.assertIn("sponsored_retrieval_base_spent", result.economy[0])
 
+    def test_storage_escrow_close_refunds_unearned_lockin(self):
+        fixture = Path(__file__).with_name("scenarios") / "storage_escrow_close_refund.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreater(result.totals["storage_escrow_locked"], 0)
+        self.assertGreater(result.totals["storage_escrow_earned"], 0)
+        self.assertGreater(result.totals["storage_escrow_refunded"], 0)
+        self.assertEqual(0.0, result.totals["storage_escrow_outstanding"])
+        self.assertEqual(4, result.totals["final_closed_deals"])
+        self.assertEqual(4, result.totals["deals_closed"])
+        self.assertGreater(result.totals["storage_fee_provider_payouts"], 0)
+        self.assertEqual(0.0, result.totals["storage_fee_burned"])
+        self.assertTrue(any(row["reason"] == "deal_storage_escrow_closed" for row in result.evidence))
+        self.assertIn("storage_escrow_outstanding", result.economy[0])
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)
@@ -714,6 +731,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "provider_churn.svg").exists())
             self.assertTrue((report_dir / "graphs" / "provider_supply.svg").exists())
             self.assertTrue((report_dir / "graphs" / "provider_bond_headroom.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "storage_escrow_lifecycle.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_readiness.svg").exists())
             self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
@@ -750,6 +768,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Provider Churn](graphs/provider_churn.svg)", report_text)
             self.assertIn("![Provider Supply Entry](graphs/provider_supply.svg)", report_text)
             self.assertIn("![Provider Bond Headroom](graphs/provider_bond_headroom.svg)", report_text)
+            self.assertIn("![Storage Escrow Lifecycle](graphs/storage_escrow_lifecycle.svg)", report_text)
             self.assertIn("![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)", report_text)
             self.assertIn("![Price Trajectory](graphs/price_trajectory.svg)", report_text)
             self.assertIn("![Retrieval Demand](graphs/retrieval_demand.svg)", report_text)

@@ -163,6 +163,11 @@ are supported in scenario files:
 - `retrieval_demand_shocks`
 - `sponsored_retrieval_bps`
 - `owner_retrieval_debit_bps`
+- `storage_lockin_enabled`
+- `deal_duration_epochs`
+- `deal_close_epoch`
+- `deal_close_count`
+- `deal_close_bps`
 - `new_deal_requests_per_epoch`
 - `storage_demand_price_ceiling`
 - `storage_demand_reference_price`
@@ -175,8 +180,8 @@ sweep chooses a base scenario and a matrix of config overrides; raw per-case
 ledgers are generated locally while committed reports contain only
 `sweep_summary.md`, `sweep_summary.json`, and `manifest.json`. Current sweeps
 cover repair throughput, route attempts, provider reliability, price-controller
-steps, high-bandwidth capability thresholds, elasticity overlay controls, and
-sponsored retrieval funding.
+steps, high-bandwidth capability thresholds, elasticity overlay controls,
+sponsored retrieval funding, and storage escrow close/refund accounting.
 
 ## Model Scope
 
@@ -224,6 +229,9 @@ The simulator mirrors current protocol concepts:
   base durable slots.
 - Sponsored retrieval sessions that separate requester-funded public demand
   from deal-owner escrow debit.
+- Storage lock-in accounting that charges committed deals upfront, earns
+  storage fees over service epochs, pays eligible providers, and refunds
+  unearned escrow on early close.
 - Staged upload grief pressure where provisional generations are bounded by
   retention TTL, preflight rejection, and pending-generation caps.
 - Demand-side storage admission accounting for latent new deal requests,

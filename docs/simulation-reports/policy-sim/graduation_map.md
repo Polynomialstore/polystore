@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 22 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 23 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 12 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -42,6 +42,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`setup-failure`](setup-failure/report.md) | `implementation planning` | setup bump and deterministic replacement | Add setup-phase replacement tests proving failed initial upload selects a system provider and does not imply fraud. | `setup slot state`, `setup bump event`, `candidate exclusion reasons` | Create deal with one failing provider upload and verify replacement before first content commit. |
 | [`single-outage`](single-outage/report.md) | `implementation planning` | keeper repair and gateway route-around | Add a keeper test where a slot crosses missed-epoch threshold, enters repair, selects a deterministic pending provider, and later promotes. | `slot health state`, `repair attempt ledger`, `promotion readiness proof`, `gateway repair-aware routing` | Kill one provider-daemon during retrieval and assert reads stay available while repair starts. |
 | [`staged-upload-grief`](staged-upload-grief/report.md) | `implementation planning` | provider-daemon staged cleanup and gateway preflight | Add provider-daemon and user-gateway tests proving abandoned provisional generations are capped, cleaned after TTL, and surfaced through dry-run/apply cleanup UX without affecting committed deal state. | `staged generation TTL`, `pending generation cap`, `cleanup events`, `gateway preflight rejection` | Client repeatedly stages uploads without commit; assert provider-daemon cleanup bounds disk pressure and committed reads remain available. |
+| [`storage-escrow-close-refund`](storage-escrow-close-refund/report.md) | `implementation planning` | storage escrow close/refund accounting | Add keeper and gateway tests proving storage quote parity, upfront lock-in, earned-fee payout, early close refund, expiry auto-close, and zero hidden outstanding escrow. | `storage escrow state`, `deal close message`, `earned-fee payout ledger`, `refund rounding`, `expiry auto-close` | Create, commit, close early, and assert unearned storage escrow is refunded while earned fees remain paid to eligible providers. |
 | [`subsidy-farming`](subsidy-farming/report.md) | `implementation planning` | base reward compliance tests | Add tests proving idle or non-compliant responsibility cannot farm base rewards profitably. | `compliance-gated base rewards`, `subsidy leakage metrics`, `operator concentration checks` | No process e2e until keeper reward gating is complete. |
 | [`sustained-non-response`](sustained-non-response/report.md) | `implementation planning` | keeper delinquency repair | Add per-slot delinquency tests for repeated non-response, reward exclusion, repair start, and replacement selection. | `non-response accumulator`, `delinquency reason codes`, `reward exclusion event` | Provider timeout/blackhole e2e after keeper state is deterministic. |
 | [`underpriced-storage`](underpriced-storage/report.md) | `further simulation review` | economic policy calibration | Compare storage floors, base rewards, and provider cost assumptions before encoding governance defaults. | `dynamic pricing state`, `provider cost assumptions`, `profitability dashboards` | No process e2e yet; this is a parameter-calibration fixture. |
@@ -92,6 +93,7 @@ This report converts the committed simulator corpus into implementation planning
 | `conviction state` | 1 |
 | `corrupt-byte reward exclusion` | 1 |
 | `credit cap enforcement` | 1 |
+| `deal close message` | 1 |
 | `deal spend window` | 1 |
 | `delinquency reason codes` | 1 |
 | `demand forecasting` | 1 |
@@ -100,9 +102,11 @@ This report converts the committed simulator corpus into implementation planning
 | `draining provider state` | 1 |
 | `dynamic pricing params` | 1 |
 | `dynamic pricing state` | 1 |
+| `earned-fee payout ledger` | 1 |
 | `entry and promotion caps` | 1 |
 | `evidence bond escrow` | 1 |
 | `evidence bounty accounting` | 1 |
+| `expiry auto-close` | 1 |
 | `failed catch-up reputation signal` | 1 |
 | `gateway fallback telemetry` | 1 |
 | `gateway preflight rejection` | 1 |
@@ -142,6 +146,7 @@ This report converts the committed simulator corpus into implementation planning
 | `provider exit telemetry` | 1 |
 | `provider lifecycle state` | 1 |
 | `quota miss ledger` | 1 |
+| `refund rounding` | 1 |
 | `regional/provider-class placement metadata` | 1 |
 | `repair attempt caps` | 1 |
 | `repair attempt ledger` | 1 |
@@ -165,6 +170,7 @@ This report converts the committed simulator corpus into implementation planning
 | `spend-window accounting` | 1 |
 | `sponsored session funding` | 1 |
 | `staged generation TTL` | 1 |
+| `storage escrow state` | 1 |
 | `storage utilization accumulator` | 1 |
 | `subsidy leakage metrics` | 1 |
 | `threshold evidence case` | 1 |
