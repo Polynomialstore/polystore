@@ -269,6 +269,58 @@ def scenario_allows_unavailable_reads(name: str) -> bool:
     return name in {"large-scale-regional-stress", "coordinated-regional-outage"}
 
 
+SWEEP_METRICS = [
+    "success_rate",
+    "unavailable_reads",
+    "data_loss_events",
+    "reward_coverage",
+    "repairs_started",
+    "repairs_completed",
+    "repair_backoffs",
+    "quota_misses",
+    "invalid_proofs",
+    "paid_corrupt_bytes",
+    "providers_negative_pnl",
+    "saturated_responses",
+    "providers_over_capacity",
+    "final_storage_utilization_bps",
+    "final_storage_price",
+    "final_retrieval_price",
+    "provider_pnl",
+]
+
+SWEEP_CONFIG_KEYS = [
+    "scenario",
+    "seed",
+    "providers",
+    "users",
+    "deals",
+    "epochs",
+    "enforcement_mode",
+    "evict_after_missed_epochs",
+    "deputy_evict_after_missed_epochs",
+    "repair_epochs",
+    "max_repairs_started_per_epoch",
+    "route_attempt_limit",
+    "dynamic_pricing",
+    "dynamic_pricing_max_step_bps",
+    "storage_target_utilization_bps",
+    "retrieval_target_per_epoch",
+    "storage_price",
+    "retrieval_price_per_slot",
+    "base_reward_per_slot",
+    "audit_budget_per_epoch",
+    "provider_capacity_min",
+    "provider_capacity_max",
+    "provider_bandwidth_capacity_min",
+    "provider_bandwidth_capacity_max",
+    "provider_online_probability_min",
+    "provider_online_probability_max",
+    "provider_repair_probability_min",
+    "provider_repair_probability_max",
+]
+
+
 def generate_run_report(run_dir: Path, out_dir: Path) -> None:
     summary = load_json(run_dir / "summary.json")
     epochs = load_csv(run_dir / "epochs.csv")
@@ -1617,11 +1669,363 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
     return "Metric changed; inspect the full report for causal context."
 
 
+def generate_sweep_report(sweep_dir: Path, out_dir: Path) -> None:
+    run_dirs = discover_run_dirs(sweep_dir)
+    rows = [sweep_row(run_dir) for run_dir in run_dirs]
+    varied = varied_parameters(rows)
+    metric_ranges = sweep_metric_ranges(rows)
+    high_risk = sorted(
+        [row for row in rows if risk_rank(str(row["risk_level"])) >= risk_rank("medium")],
+        key=lambda row: (risk_rank(str(row["risk_level"])), str(row["label"])),
+        reverse=True,
+    )
+    mode = sweep_mode(rows, varied)
+    payload = {
+        "mode": mode,
+        "run_count": len(rows),
+        "runs": rows,
+        "varied_parameters": varied,
+        "metric_ranges": metric_ranges,
+        "high_risk_runs": high_risk,
+        "best_observed_run": best_observed_run(rows),
+    }
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "sweep_summary.json").write_text(
+        json.dumps(stable_json_value(payload), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    write_sweep_summary_md(out_dir / "sweep_summary.md", payload)
+
+
+def discover_run_dirs(sweep_dir: Path) -> list[Path]:
+    if sweep_dir.joinpath("summary.json").exists():
+        return [sweep_dir]
+    dirs = sorted(path.parent for path in sweep_dir.glob("*/summary.json"))
+    if not dirs:
+        raise SystemExit(f"no simulator run directories found in {sweep_dir}")
+    return dirs
+
+
+def sweep_row(run_dir: Path) -> dict[str, Any]:
+    summary = load_json(run_dir / "summary.json")
+    config = summary.get("config", {})
+    totals = summary.get("totals", {})
+    assertions = summary.get("assertions", [])
+    failed_assertions = [str(item.get("name", "")) for item in assertions if not item.get("passed")]
+    risk_level, risk_reasons = sweep_risk(summary)
+    return {
+        "label": run_dir.name,
+        "run_dir": str(run_dir),
+        "scenario": str(config.get("scenario", run_dir.name)),
+        "seed": config.get("seed"),
+        "assertions_passed": bool(assertions) and not failed_assertions,
+        "failed_assertions": failed_assertions,
+        "risk_level": risk_level,
+        "risk_reasons": risk_reasons,
+        "config": {key: config.get(key) for key in SWEEP_CONFIG_KEYS if key in config},
+        "totals": {key: fnum(totals.get(key)) for key in SWEEP_METRICS if key in totals},
+    }
+
+
+def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
+    config = summary.get("config", {})
+    totals = summary.get("totals", {})
+    scenario = str(config.get("scenario", ""))
+    assertions = summary.get("assertions", [])
+    failed = [item for item in assertions if not item.get("passed")]
+    reasons = []
+    level = "low"
+
+    def raise_to(candidate: str, reason: str) -> None:
+        nonlocal level
+        if risk_rank(candidate) > risk_rank(level):
+            level = candidate
+        reasons.append(reason)
+
+    if failed:
+        raise_to("critical", f"{len(failed)} assertion contract failures")
+    if fnum(totals.get("data_loss_events")) > 0:
+        raise_to("critical", "modeled data loss occurred")
+    if fnum(totals.get("paid_corrupt_bytes")) > 0:
+        raise_to("critical", "corrupt bytes were paid")
+    if fnum(totals.get("providers_over_capacity")) > 0:
+        raise_to("critical", "providers were assigned above modeled capacity")
+    if fnum(totals.get("unavailable_reads")) > 0:
+        if scenario_allows_unavailable_reads(scenario):
+            raise_to("medium", "temporary unavailable reads are present in an allowed stress fixture")
+        else:
+            raise_to("high", "unavailable reads outside an explicit stress allowance")
+    if fnum(totals.get("success_rate"), 1.0) < 0.99:
+        raise_to("high", "retrieval success fell below 99%")
+    if fnum(totals.get("repair_backoffs")) > 0:
+        raise_to("medium", "repair coordination backoffs occurred")
+    if fnum(totals.get("saturated_responses")) > 0:
+        raise_to("medium", "provider bandwidth saturation occurred")
+    if fnum(totals.get("providers_negative_pnl")) > 0:
+        raise_to("medium", "some providers ended with negative modeled P&L")
+    if not reasons:
+        reasons.append("assertions passed and no material sweep risk surfaced")
+    return level, reasons
+
+
+def risk_rank(level: str) -> int:
+    return {"low": 0, "medium": 1, "high": 2, "critical": 3}.get(level, 0)
+
+
+def varied_parameters(rows: list[dict[str, Any]]) -> dict[str, list[str]]:
+    keys = sorted({key for row in rows for key in row["config"].keys()})
+    varied = {}
+    for key in keys:
+        values = sorted({stable_param(row["config"].get(key)) for row in rows})
+        if len(values) > 1:
+            varied[key] = values
+    return varied
+
+
+def stable_param(value: Any) -> str:
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, sort_keys=True)
+    return str(value)
+
+
+def sweep_metric_ranges(rows: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    ranges = {}
+    for key in SWEEP_METRICS:
+        values = [fnum(row["totals"].get(key)) for row in rows if key in row["totals"]]
+        if not values:
+            continue
+        ranges[key] = {
+            "min": min(values),
+            "max": max(values),
+            "delta": max(values) - min(values),
+            "mean": sum(values) / len(values),
+        }
+    return ranges
+
+
+def sweep_mode(rows: list[dict[str, Any]], varied: dict[str, list[str]]) -> str:
+    policy_keys = [key for key in varied if key not in {"scenario", "seed"}]
+    scenarios = {row["scenario"] for row in rows}
+    if policy_keys:
+        return "Sensitivity Sweep"
+    if len(scenarios) > 1:
+        return "Regression Suite Summary"
+    return "Run Set Summary"
+
+
+def best_observed_run(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return {}
+    return min(
+        rows,
+        key=lambda row: (
+            fnum(row["totals"].get("data_loss_events")),
+            -fnum(row["totals"].get("success_rate")),
+            fnum(row["totals"].get("unavailable_reads")),
+            fnum(row["totals"].get("providers_over_capacity")),
+            fnum(row["totals"].get("providers_negative_pnl")),
+            fnum(row["totals"].get("repair_backoffs")),
+            str(row["label"]),
+        ),
+    )
+
+
+def write_sweep_summary_md(path: Path, payload: dict[str, Any]) -> None:
+    rows = payload["runs"]
+    varied = payload["varied_parameters"]
+    best = payload["best_observed_run"]
+    high_risk = payload["high_risk_runs"]
+    lines = [
+        f"# Policy Simulation {payload['mode']}",
+        "",
+        f"This report aggregates `{payload['run_count']}` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.",
+        "",
+        "## Executive Summary",
+        "",
+        *sweep_decision_lines(payload),
+        "",
+        "## Run Matrix",
+        "",
+        "| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |",
+        "|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in sorted(rows, key=lambda item: (item["scenario"], stable_param(item.get("seed")), item["label"])):
+        totals = row["totals"]
+        lines.append(
+            f"| `{row['label']}` | `{row['scenario']}` | `{row.get('seed')}` | `{row['risk_level']}` | "
+            f"`{'PASS' if row['assertions_passed'] else 'FAIL'}` | {fmt_pct(totals.get('success_rate'))} | "
+            f"{fmt_num(totals.get('unavailable_reads'))} | {fmt_num(totals.get('data_loss_events'))} | "
+            f"{fmt_num(totals.get('repairs_started'))}/{fmt_num(totals.get('repairs_completed'))} | "
+            f"{fmt_num(totals.get('repair_backoffs'))} | {fmt_num(totals.get('saturated_responses'))} | "
+            f"{fmt_num(totals.get('providers_negative_pnl'))} | {fmt_money(totals.get('final_storage_price'))} | "
+            f"{fmt_money(totals.get('final_retrieval_price'))} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Key Metric Ranges",
+            "",
+            "| Metric | Min | Max | Delta | Mean | Review Meaning |",
+            "|---|---:|---:|---:|---:|---|",
+            *sweep_metric_range_lines(payload["metric_ranges"]),
+            "",
+            "## Varied Parameters",
+            "",
+            *varied_parameter_lines(varied),
+            "",
+            "## Parameter Sensitivity",
+            "",
+            *parameter_sensitivity_lines(rows, varied),
+            "",
+            "## High-Risk Runs",
+            "",
+            *high_risk_lines(high_risk),
+            "",
+            "## Best Observed Run",
+            "",
+            f"`{best.get('label', 'n/a')}` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.",
+            "",
+            "This is not an automatic policy choice. It is the run humans should inspect first when deciding which parameter set deserves keeper or e2e implementation work.",
+            "",
+            "## Review Questions",
+            "",
+            "- Which changed parameter plausibly caused the largest movement in availability, repair pressure, and provider economics?",
+            "- Did any run improve availability by hiding economic distress, capacity over-assignment, or repair backlog?",
+            "- Are unavailable reads explicitly allowed by the scenario contract, and did modeled data loss remain zero?",
+            "- Which parameter set should become the baseline for the next keeper/e2e planning slice?",
+        ]
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def sweep_decision_lines(payload: dict[str, Any]) -> list[str]:
+    rows = payload["runs"]
+    critical = [row for row in rows if row["risk_level"] == "critical"]
+    failed = [row for row in rows if not row["assertions_passed"]]
+    data_loss = [row for row in rows if fnum(row["totals"].get("data_loss_events")) > 0]
+    lines = [
+        f"- Mode: `{payload['mode']}`.",
+        f"- Runs analyzed: `{len(rows)}`.",
+        f"- Varied parameters: `{len(payload['varied_parameters'])}`.",
+        f"- Critical-risk runs: `{len(critical)}`.",
+        f"- Assertion failures: `{len(failed)}`.",
+        f"- Runs with modeled data loss: `{len(data_loss)}`.",
+    ]
+    if data_loss:
+        lines.append("- Decision posture: block graduation until durability failure is understood and fixed.")
+    elif failed:
+        lines.append("- Decision posture: do not promote parameters from failing assertion contracts without explicit human approval.")
+    elif critical:
+        lines.append("- Decision posture: inspect critical runs before selecting a parameter baseline.")
+    else:
+        lines.append("- Decision posture: safe to use this report for policy-parameter review before keeper work.")
+    return lines
+
+
+def sweep_metric_range_lines(ranges: dict[str, dict[str, float]]) -> list[str]:
+    if not ranges:
+        return ["| n/a | n/a | n/a | n/a | n/a | No comparable metrics were present. |"]
+    lines = []
+    for key in SWEEP_METRICS:
+        row = ranges.get(key)
+        if not row:
+            continue
+        lines.append(
+            f"| `{key}` | {row['min']:.6f} | {row['max']:.6f} | {row['delta']:.6f} | {row['mean']:.6f} | {sweep_metric_meaning(key)} |"
+        )
+    return lines
+
+
+def sweep_metric_meaning(key: str) -> str:
+    meanings = {
+        "success_rate": "Primary availability outcome; should not regress silently.",
+        "unavailable_reads": "Temporary user-facing misses; allowed only in explicit stress contracts.",
+        "data_loss_events": "Durability invariant; non-zero values block graduation.",
+        "reward_coverage": "Shows whether compliant responsibility remains economically recognized.",
+        "repairs_started": "Detection and repair activation pressure.",
+        "repairs_completed": "Healing throughput under the parameter set.",
+        "repair_backoffs": "Replacement capacity or repair-start bottlenecks.",
+        "quota_misses": "Soft liveness evidence generated by the run.",
+        "invalid_proofs": "Hard-fault evidence generated by the run.",
+        "paid_corrupt_bytes": "Payment safety invariant; should remain zero.",
+        "providers_negative_pnl": "Market sustainability and churn pressure.",
+        "saturated_responses": "Provider bandwidth bottleneck signal.",
+        "providers_over_capacity": "Placement/capacity invariant; should remain zero.",
+        "final_storage_utilization_bps": "Supply utilization against modeled capacity.",
+        "final_storage_price": "Storage-controller endpoint under this run.",
+        "final_retrieval_price": "Retrieval-controller endpoint under this run.",
+        "provider_pnl": "Aggregate provider economics; inspect distribution before deciding.",
+    }
+    return meanings.get(key, "Review this metric against the scenario contract.")
+
+
+def varied_parameter_lines(varied: dict[str, list[str]]) -> list[str]:
+    if not varied:
+        return ["- No parameters varied across the discovered runs."]
+    lines = ["| Parameter | Values |", "|---|---|"]
+    for key, values in varied.items():
+        rendered = ", ".join(f"`{value}`" for value in values[:8])
+        if len(values) > 8:
+            rendered += f", ... `{len(values) - 8}` more"
+        lines.append(f"| `{key}` | {rendered} |")
+    return lines
+
+
+def parameter_sensitivity_lines(rows: list[dict[str, Any]], varied: dict[str, list[str]]) -> list[str]:
+    keys = [key for key in varied if key not in {"scenario", "seed"}]
+    if not keys:
+        return ["- No non-scenario policy or scale parameter varied, so this run set is best read as a regression suite."]
+    lines = [
+        "| Parameter | Value | Runs | Avg Success | Total Unavailable | Total Data Loss | Avg Backoffs | Avg Negative P&L | Avg Final Storage Price |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for key in keys[:8]:
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            grouped[stable_param(row["config"].get(key))].append(row)
+        for value, group in sorted(grouped.items()):
+            count = len(group)
+            lines.append(
+                f"| `{key}` | `{value}` | {count} | {fmt_pct(avg_metric(group, 'success_rate'))} | "
+                f"{fmt_num(sum_metric(group, 'unavailable_reads'))} | {fmt_num(sum_metric(group, 'data_loss_events'))} | "
+                f"{fmt_num(avg_metric(group, 'repair_backoffs'))} | {fmt_num(avg_metric(group, 'providers_negative_pnl'))} | "
+                f"{fmt_money(avg_metric(group, 'final_storage_price'))} |"
+            )
+    if len(keys) > 8:
+        lines.append(f"| ... | ... | ... | ... | ... | ... | ... | ... | `{len(keys) - 8}` more varied parameters omitted |")
+    return lines
+
+
+def avg_metric(rows: list[dict[str, Any]], key: str) -> float:
+    if not rows:
+        return 0.0
+    return sum_metric(rows, key) / len(rows)
+
+
+def sum_metric(rows: list[dict[str, Any]], key: str) -> float:
+    return sum(fnum(row["totals"].get(key)) for row in rows)
+
+
+def high_risk_lines(rows: list[dict[str, Any]]) -> list[str]:
+    if not rows:
+        return ["- No medium, high, or critical risk runs were detected."]
+    lines = ["| Run | Scenario | Risk | Reasons |", "|---|---|---|---|"]
+    for row in rows[:12]:
+        lines.append(
+            f"| `{row['label']}` | `{row['scenario']}` | `{row['risk_level']}` | "
+            f"{'; '.join(str(reason) for reason in row['risk_reasons'])} |"
+        )
+    if len(rows) > 12:
+        lines.append(f"| ... | ... | ... | `{len(rows) - 12}` more risk runs omitted |")
+    return lines
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, help="single simulator output directory")
     parser.add_argument("--baseline-dir", type=Path)
     parser.add_argument("--candidate-dir", type=Path)
+    parser.add_argument("--sweep-dir", type=Path, help="directory containing one or more simulator run output directories")
     parser.add_argument("--out-dir", type=Path)
     return parser
 
@@ -1633,7 +2037,9 @@ def default_out_dir(args: argparse.Namespace) -> Path:
         return args.run_dir / "report"
     if args.candidate_dir:
         return args.candidate_dir / "delta"
-    raise SystemExit("--out-dir is required unless --run-dir or --candidate-dir is set")
+    if args.sweep_dir:
+        return args.sweep_dir / "sweep_report"
+    raise SystemExit("--out-dir is required unless --run-dir, --candidate-dir, or --sweep-dir is set")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1643,6 +2049,8 @@ def main(argv: list[str] | None = None) -> int:
         generate_run_report(args.run_dir, out_dir)
     if args.baseline_dir and args.candidate_dir:
         generate_policy_delta(args.baseline_dir, args.candidate_dir, out_dir)
+    if args.sweep_dir:
+        generate_sweep_report(args.sweep_dir, out_dir)
     return 0
 
 

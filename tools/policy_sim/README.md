@@ -52,9 +52,19 @@ python3 tools/policy_sim/report.py \
   --out-dir /tmp/polystore-policy/reports/single-outage
 ```
 
+Generate a sensitivity sweep or regression-suite summary from many completed
+runs:
+
+```bash
+python3 tools/policy_sim/report.py \
+  --sweep-dir /tmp/polystore-policy/runs \
+  --out-dir /tmp/polystore-policy/reports/sweep
+```
+
 If `--out-dir` is omitted, `report.py` writes to a dedicated subdirectory
 instead of polluting raw simulator outputs: `<run-dir>/report` for single-run
-reports and `<candidate-dir>/delta` for baseline/candidate comparisons.
+reports, `<candidate-dir>/delta` for baseline/candidate comparisons, and
+`<sweep-dir>/sweep_report` for sweep/regression summaries.
 
 Custom fault injections are repeatable:
 
@@ -142,6 +152,8 @@ When `--out-dir` is supplied, the simulator emits:
 - `risk_register.md`
 - `graduation.md`
 - `policy_delta.md` for baseline/candidate comparisons
+- `sweep_summary.md` and `sweep_summary.json` for parameter sweeps or fixture
+  regression summaries
 - `signals.json`
 - `graphs/*.svg`
 

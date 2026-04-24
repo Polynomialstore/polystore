@@ -11,7 +11,7 @@ try:
         run_one,
         write_output_dir,
     )
-    from .report import generate_policy_delta, generate_run_report, main as report_main
+    from .report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
 except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`.
     from policing_sim import (
         PolicySimulator,
@@ -21,7 +21,7 @@ except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`
         run_one,
         write_output_dir,
     )
-    from report import generate_policy_delta, generate_run_report, main as report_main
+    from report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
 
 
 class PolicySimulatorTests(unittest.TestCase):
@@ -249,6 +249,32 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("repairs_started", text)
             self.assertIn("## High-Signal Changes", text)
             self.assertIn("## Human Review Questions", text)
+
+    def test_sweep_report_summarizes_run_directories(self):
+        ideal = load_scenario_spec(Path(__file__).with_name("scenarios") / "ideal.yaml")
+        outage = load_scenario_spec(Path(__file__).with_name("scenarios") / "single_outage.yaml")
+        ideal_result = run_one(SimConfig(**ideal.config), ideal.faults, ideal.assertions, None)
+        outage_result = run_one(SimConfig(**outage.config), outage.faults, outage.assertions, None)
+
+        with TemporaryDirectory() as tmp:
+            sweep_dir = Path(tmp) / "sweep"
+            report_dir = Path(tmp) / "report"
+            write_output_dir(sweep_dir / "ideal", ideal_result)
+            write_output_dir(sweep_dir / "single-outage", outage_result)
+            generate_sweep_report(sweep_dir, report_dir)
+
+            self.assertTrue((report_dir / "sweep_summary.md").exists())
+            self.assertTrue((report_dir / "sweep_summary.json").exists())
+            text = (report_dir / "sweep_summary.md").read_text(encoding="utf-8")
+            self.assertIn("Policy Simulation", text)
+            self.assertIn("## Run Matrix", text)
+            self.assertIn("## Key Metric Ranges", text)
+            self.assertIn("## High-Risk Runs", text)
+            self.assertIn("single-outage", text)
+            self.assertIn("success_rate", text)
+            payload = (report_dir / "sweep_summary.json").read_text(encoding="utf-8")
+            self.assertIn('"metric_ranges"', payload)
+            self.assertIn('"high_risk_runs"', payload)
 
 
 if __name__ == "__main__":

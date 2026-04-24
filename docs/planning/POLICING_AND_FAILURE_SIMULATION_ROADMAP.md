@@ -1200,6 +1200,9 @@ Outputs:
 6. `signals.json`: derived diagnostic signals for availability cliffs, recovery
    epoch, saturation rate, repair backlog, capacity utilization percentiles,
    price movement, regional concentration, and bottleneck providers.
+7. `sweep_summary.md` and `sweep_summary.json`: parameter-sweep or
+   regression-suite summaries with run matrices, varied parameters,
+   metric ranges, high-risk runs, and human review questions.
 
 The first report implementation must be stdlib-only and Markdown/CSV focused.
 Graph generation starts with SVG written directly by the report tool. Optional
