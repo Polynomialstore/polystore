@@ -836,9 +836,11 @@ Current simulator coverage:
 
 ## 22. Elasticity and Overflow Scaling
 
-The spec describes user-funded elasticity and saturation signaling. The current
-gap report notes that striped overlay elasticity is not yet fully modeled
-end-to-end. The implementation roadmap should explicitly include it.
+The spec describes user-funded elasticity and saturation signaling. Current
+keeper work persists funded overlay route state and exposes it through deal
+queries, but striped overlay elasticity is not yet fully modeled end-to-end.
+The implementation roadmap should explicitly include the remaining runtime
+semantics.
 
 Desired behavior:
 
