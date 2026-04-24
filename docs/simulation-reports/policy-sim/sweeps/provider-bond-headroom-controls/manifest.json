@@ -1,0 +1,89 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/provider_bond_headroom.yaml",
+  "case_count": 7,
+  "cases": [
+    {
+      "case": "baseline-min15-slot005-slash1",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-bond-headroom",
+      "seed": 103,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "low-min-bond",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-bond-headroom",
+      "seed": 103,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "unsafe-high-min-bond",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-bond-headroom",
+      "seed": 103,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "low-slot-bond",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-bond-headroom",
+      "seed": 103,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-slot-bond",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-bond-headroom",
+      "seed": 103,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "small-slash",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-bond-headroom",
+      "seed": 103,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "higher-initial-high-min",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-bond-headroom",
+      "seed": 103,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for provider minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing.",
+  "name": "provider-bond-headroom-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/provider-bond-headroom-controls"
+}

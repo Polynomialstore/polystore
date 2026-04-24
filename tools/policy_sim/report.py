@@ -565,6 +565,7 @@ SWEEP_METRICS = [
     "quota_misses",
     "invalid_proofs",
     "paid_corrupt_bytes",
+    "provider_slashed",
     "audit_budget_demand",
     "audit_budget_spent",
     "audit_budget_backlog",
@@ -690,6 +691,7 @@ SWEEP_CONFIG_KEYS = [
     "provider_initial_bond",
     "provider_min_bond",
     "provider_bond_per_slot",
+    "slash_hard_fault",
     "provider_cost_shocks",
     "provider_churn_enabled",
     "provider_churn_pnl_threshold",
@@ -3716,6 +3718,10 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "storage escrow remained outstanding after deal close")
     if fnum(totals.get("storage_fee_burned")) > 0:
         raise_to("medium", "storage fees were burned instead of paid")
+    if fnum(totals.get("final_underbonded_assigned_slots")) > 0:
+        raise_to("high", "underbonded assigned slots remained at run end")
+    elif fnum(totals.get("max_underbonded_providers")) > 0:
+        raise_to("medium", "provider bond headroom became constrained")
     if fnum(totals.get("staged_upload_rejections")) > 0:
         raise_to("medium", "staged upload preflight rejections occurred")
     if not reasons:

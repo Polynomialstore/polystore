@@ -1283,7 +1283,10 @@ compares pending-provider readiness timeout, repair cooldown, and per-slot
 attempt-cap assumptions before keeper replacement retry defaults are chosen;
 and `tools/policy_sim/sweeps/repair_candidate_exhaustion_controls.yaml`,
 which compares replacement capacity, attempt caps, and cooldowns before
-candidate-selection fallback and capacity-guard defaults are chosen.
+candidate-selection fallback and capacity-guard defaults are chosen; and
+`tools/policy_sim/sweeps/provider_bond_headroom_controls.yaml`, which compares
+minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing
+before collateral and underbonded-repair defaults are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
