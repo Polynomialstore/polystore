@@ -167,7 +167,7 @@ When `--out-dir` is supplied, the simulator emits:
 
 `slots.csv` includes per-slot health reason, repair attempt, and cooldown state.
 `repairs.csv` includes start, pending-provider readiness, completion,
-attempt-count, cooldown, attempt-cap, and backoff events.
+attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
 
 `report.py` consumes those raw files and can emit:
 

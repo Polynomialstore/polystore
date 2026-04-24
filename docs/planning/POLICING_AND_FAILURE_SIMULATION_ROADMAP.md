@@ -608,7 +608,7 @@ desired-state pieces include:
 2. Keeper/runtime repair attempt counters and cooldown windows. The simulator
    now models these with `repair_attempt_cap_per_slot`,
    `repair_backoff_epochs`, per-slot attempt state, cooldown backoff events,
-   and attempt-cap backoff events.
+   attempt-cap backoff events, and candidate-exclusion diagnostics.
 3. Full catch-up proofs for all data/generation ranges, beyond the current
    readiness marker.
 4. Per-slot health queries for UI and operator tooling.
@@ -1193,7 +1193,8 @@ Each simulator run should be able to emit:
    provider, and reward eligibility state.
 5. `evidence.csv`: hard faults, soft faults, threshold evidence, and source.
 6. `repairs.csv`: repair start, candidate selection, catch-up, promotion,
-   attempt-count, cooldown, attempt-cap, and backoff events.
+   attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff
+   events.
 7. `economy.csv`: storage charges, retrieval burns, payouts, reward mint/burn,
    audit budget, escrow runway, and elasticity spend.
 8. No `comparison.json` or other precomputed baseline-vs-candidate artifact in

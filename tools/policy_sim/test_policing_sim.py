@@ -178,6 +178,11 @@ class PolicySimulatorTests(unittest.TestCase):
             max(int(row["attempt"]) for row in result.repairs if row.get("attempt") != ""),
             1,
         )
+        no_candidate_rows = [row for row in result.repairs if row["reason"] == "no_candidate"]
+        self.assertTrue(no_candidate_rows)
+        self.assertTrue(all(row["candidate_mode"] == "fallback" for row in no_candidate_rows))
+        self.assertTrue(all(row["eligible_candidates"] == 0 for row in no_candidate_rows))
+        self.assertTrue(any(row["excluded_capacity"] > 0 for row in no_candidate_rows))
 
     def test_flapping_provider_marks_suspect_without_delinquent_repair_churn(self):
         config = SimConfig(

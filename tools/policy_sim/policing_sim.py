@@ -913,9 +913,9 @@ class PolicySimulator:
         ):
             self._record_repair_backoff(epoch, deal, slot, "repair_coordination_limit", metrics)
             return
-        pending = self._select_replacement(epoch, deal, slot)
+        pending, candidate_diagnostics = self._select_replacement(epoch, deal, slot)
         if not pending:
-            self._record_repair_backoff(epoch, deal, slot, "no_candidate", metrics)
+            self._record_repair_backoff(epoch, deal, slot, "no_candidate", metrics, candidate_diagnostics)
             return
         old_provider = slot.provider_id
         slot.status = SLOT_REPAIRING
@@ -938,6 +938,7 @@ class PolicySimulator:
                 "generation": slot.current_gen,
                 "attempt": slot.repair_attempts,
                 "cooldown_until_epoch": slot.repair_backoff_until_epoch,
+                **candidate_diagnostics,
             }
         )
 
@@ -948,6 +949,7 @@ class PolicySimulator:
         slot: SlotState,
         reason: str,
         metrics: EpochMetrics,
+        candidate_diagnostics: dict[str, Any] | None = None,
     ) -> None:
         metrics.repair_backoffs += 1
         if reason == "repair_cooldown":
@@ -972,40 +974,65 @@ class PolicySimulator:
                 "generation": slot.current_gen,
                 "attempt": slot.repair_attempts,
                 "cooldown_until_epoch": slot.repair_backoff_until_epoch,
+                **(candidate_diagnostics or empty_candidate_diagnostics()),
             }
         )
 
-    def _select_replacement(self, epoch: int, deal: DealState, slot: SlotState) -> str | None:
+    def _select_replacement(self, epoch: int, deal: DealState, slot: SlotState) -> tuple[str | None, dict[str, Any]]:
         excluded = {s.provider_id for s in deal.slots}
         excluded.update(s.pending_provider_id for s in deal.slots if s.pending_provider_id)
         assigned_counts = self._assigned_counts(include_pending=True)
-        candidates = [
-            pid
-            for pid, p in self.providers.items()
-            if (
-                pid not in excluded
-                and not p.behavior.draining
-                and not self._is_jailed(p, epoch)
-                and assigned_counts.get(pid, 0) < p.capacity_slots
+        candidates, diagnostics = self._replacement_candidates(
+            epoch,
+            assigned_counts,
+            excluded,
+            slot.provider_id,
+            allow_same_deal=False,
+        )
+        if not candidates:
+            candidates, diagnostics = self._replacement_candidates(
+                epoch,
+                assigned_counts,
+                excluded,
+                slot.provider_id,
+                allow_same_deal=True,
             )
-        ]
-
         if not candidates:
-            candidates = [
-                pid
-                for pid, p in self.providers.items()
-                if (
-                    pid != slot.provider_id
-                    and not p.behavior.draining
-                    and not self._is_jailed(p, epoch)
-                    and assigned_counts.get(pid, 0) < p.capacity_slots
-                )
-            ]
-        if not candidates:
-            return None
+            return None, diagnostics
 
         seed = f"{self.config.seed}:{epoch}:{deal.deal_id}:{slot.slot}:{slot.current_gen}"
-        return min(candidates, key=lambda pid: stable_digest(seed, pid))
+        return min(candidates, key=lambda pid: stable_digest(seed, pid)), diagnostics
+
+    def _replacement_candidates(
+        self,
+        epoch: int,
+        assigned_counts: dict[str, int],
+        current_deal_providers: set[str | None],
+        current_provider_id: str,
+        allow_same_deal: bool,
+    ) -> tuple[list[str], dict[str, Any]]:
+        candidates = []
+        diagnostics = empty_candidate_diagnostics()
+        diagnostics["candidate_mode"] = "fallback" if allow_same_deal else "primary"
+        for pid, provider in self.providers.items():
+            if pid == current_provider_id:
+                diagnostics["excluded_current_provider"] += 1
+                continue
+            if not allow_same_deal and pid in current_deal_providers:
+                diagnostics["excluded_current_deal"] += 1
+                continue
+            if provider.behavior.draining:
+                diagnostics["excluded_draining"] += 1
+                continue
+            if self._is_jailed(provider, epoch):
+                diagnostics["excluded_jailed"] += 1
+                continue
+            if assigned_counts.get(pid, 0) >= provider.capacity_slots:
+                diagnostics["excluded_capacity"] += 1
+                continue
+            candidates.append(pid)
+        diagnostics["eligible_candidates"] = len(candidates)
+        return candidates, diagnostics
 
     @staticmethod
     def _is_jailed(provider: Provider, epoch: int) -> bool:
@@ -1478,6 +1505,18 @@ def bounded_step(current: float, direction: int, step_bps: int, min_value: float
     factor = step_bps / 10_000
     next_value = current * (1 + factor if direction > 0 else 1 - factor)
     return max(min_value, min(max_value, next_value))
+
+
+def empty_candidate_diagnostics() -> dict[str, Any]:
+    return {
+        "candidate_mode": "",
+        "eligible_candidates": 0,
+        "excluded_current_deal": 0,
+        "excluded_current_provider": 0,
+        "excluded_draining": 0,
+        "excluded_jailed": 0,
+        "excluded_capacity": 0,
+    }
 
 
 def jitter_multiplier(rng: random.Random, jitter_bps: int) -> float:
