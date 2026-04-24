@@ -173,7 +173,7 @@ sweep chooses a base scenario and a matrix of config overrides; raw per-case
 ledgers are generated locally while committed reports contain only
 `sweep_summary.md`, `sweep_summary.json`, and `manifest.json`. Current sweeps
 cover repair throughput, route attempts, provider reliability, price-controller
-steps, and high-bandwidth capability thresholds.
+steps, high-bandwidth capability thresholds, and elasticity overlay controls.
 
 ## Model Scope
 

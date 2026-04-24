@@ -873,6 +873,20 @@ Economic invariants:
 4. Elasticity should degrade into rate limiting when unfunded, not into
    unbounded protocol subsidy.
 
+Current simulator coverage:
+
+1. `tools/policy_sim/scenarios/elasticity_overlay_scaleup.yaml` models funded
+   hot-demand overflow capacity.
+2. Overlay routes activate only after the retrieval trigger, wait for readiness,
+   serve reads as temporary routes, and expire by TTL.
+3. Overlay providers do not become durable base slots, and corrupt overlay
+   responses produce evidence without automatically repairing base slots.
+4. Reports expose overlay activations, ready routes, active routes, serves,
+   expirations, rejections, and spend.
+5. `tools/policy_sim/sweeps/elasticity_overlay_controls.yaml` compares
+   readiness delay, TTL, spend cap, per-deal route cap, and aggressive scale-up
+   variants before keeper/runtime defaults are chosen.
+
 ## 23. Chain and Consensus Implementation Scope
 
 The chain is responsible for deterministic state transitions and economic
