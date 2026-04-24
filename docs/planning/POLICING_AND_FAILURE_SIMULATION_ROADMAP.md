@@ -1255,13 +1255,19 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 
 Current S6 sweep specs include `tools/policy_sim/sweeps/sponsored_retrieval_funding.yaml`,
 which compares full, partial, and absent sponsored-session funding so owner
-escrow-drain risk is visible before keeper defaults are chosen.
+escrow-drain risk is visible before keeper defaults are chosen, and
+`tools/policy_sim/sweeps/storage_escrow_close_refund.yaml`, which compares
+full-duration service, early close timing, close count, and close-by-bps
+storage escrow outcomes.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
 upfront lock-in, per-epoch earned storage fees, provider payout, early
 close/refund, and run-end outstanding escrow before keeper close/refund
-semantics are chosen.
+semantics are chosen. The paired sweep keeps the production question concrete:
+human review should decide exact keeper rounding, expiry auto-close, and
+quote-signing semantics only after looking at how earned/refunded/outstanding
+balances move under close timing and close fraction.
 
 ### 27.7 Output Contract
 
