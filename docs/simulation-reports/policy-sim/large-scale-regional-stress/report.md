@@ -67,6 +67,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Storage target utilization | `65.00%` | If dynamic pricing is enabled, utilization above this target steps storage price up, otherwise down. |
 | Retrieval price per slot | `0.0110` | Paid per successful provider slot served, before the configured variable burn. |
 | Retrieval target per epoch | `5000` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |
+| Retrieval demand shocks | `[]` | Optional epoch-scoped retrieval demand multipliers used to test price shock response and oscillation. |
 | Dynamic pricing max step | `3.50%` | Per-epoch controller movement cap. Lower values are safer but slower to equilibrate. |
 | Base reward per slot | `0.0180` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
 | Provider storage cost/slot/epoch | `0.0120` | Simplified provider cost basis; jitter may create marginal-provider distress. |
@@ -140,6 +141,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Max cost shock fixed/storage/bandwidth | `100.00%` / `100.00%` / `100.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
 | Storage price start/end/range | `1.0000` -> `0.4407` (`0.4407`-`1.0000`) | Shows dynamic pricing movement and bounds. |
 | Retrieval price start/end/range | `0.0110` -> `0.0243` (`0.0110`-`0.0243`) | Shows whether demand pressure moved retrieval pricing. |
+| Retrieval latent/effective attempts | `144000` / `144000` | Shows how much retrieval load was added by demand-shock multipliers. |
+| Retrieval demand shock epochs/multiplier | `0` / `100.00%` | Shows the size and duration of the modeled read-demand shock. |
+| Price direction changes storage/retrieval | `0` / `0` | Detects controller oscillation rather than relying on visual inspection. |
 
 ### Regional Signals
 
@@ -365,6 +369,12 @@ Shows whether burns are material relative to minted rewards and audit budget.
 Shows storage price and retrieval price movement under dynamic pricing.
 
 ![Price Trajectory](graphs/price_trajectory.svg)
+
+### Retrieval Demand
+
+Shows effective retrieval attempts against latent baseline demand.
+
+![Retrieval Demand](graphs/retrieval_demand.svg)
 
 ### Storage Demand
 

@@ -149,6 +149,7 @@ are supported in scenario files:
 - `operator_count`
 - `dominant_operator_provider_bps`
 - `operator_assignment_cap_per_deal`
+- `retrieval_demand_shocks`
 - `new_deal_requests_per_epoch`
 - `storage_demand_price_ceiling`
 - `storage_demand_reference_price`
@@ -183,6 +184,8 @@ The simulator mirrors current protocol concepts:
   without bypassing capacity and availability assertions.
 - Performance-market service tiers that classify modeled retrieval latency into
   Platinum/Gold/Silver/Fail and pay optional tiered QoS rewards.
+- Epoch-scoped retrieval demand shocks that exercise pricing response and
+  oscillation bounds.
 - Operator identity concentration and per-deal assignment caps for Sybil-shaped
   provider populations.
 - Simulated enforcement modes before live chain/runtime rollout.

@@ -73,6 +73,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "overpriced-storage",
     "demand-elasticity-recovery",
     "provider-cost-shock",
+    "retrieval-demand-shock",
     "price-controller-bounds",
     "subsidy-farming",
     "coordinated-regional-outage",
@@ -134,6 +135,7 @@ class SimConfig:
     storage_demand_elasticity_bps: int = 0
     storage_demand_min_bps: int = 0
     storage_demand_max_bps: int = 10_000
+    retrieval_demand_shocks: tuple[dict[str, Any], ...] = ()
     retrieval_base_fee: float = 0.001
     retrieval_burn_bps: int = 500
     dynamic_pricing_max_step_bps: int = 500
@@ -237,6 +239,19 @@ class SimConfig:
             raise ValueError("storage demand bps bounds must be non-negative")
         if self.storage_demand_min_bps > self.storage_demand_max_bps:
             raise ValueError("storage_demand_min_bps must be <= storage_demand_max_bps")
+        if not isinstance(self.retrieval_demand_shocks, (list, tuple)):
+            raise ValueError("retrieval_demand_shocks must be a list")
+        for shock in self.retrieval_demand_shocks:
+            if not isinstance(shock, dict):
+                raise ValueError("retrieval demand shock entries must be objects")
+            start_epoch = int(shock.get("start_epoch", shock.get("epoch", 0)))
+            if start_epoch <= 0:
+                raise ValueError("retrieval demand shocks require positive start_epoch")
+            end_epoch = int(shock.get("end_epoch", self.epochs))
+            if end_epoch < start_epoch:
+                raise ValueError("retrieval demand shock end_epoch must be >= start_epoch")
+            if int(shock.get("multiplier_bps", 10_000)) < 0:
+                raise ValueError("retrieval demand shock multiplier_bps must be non-negative")
         if self.provider_capacity_min < 0 or self.provider_capacity_max < 0:
             raise ValueError("provider capacity bounds must be non-negative")
         if self.provider_capacity_min and self.provider_capacity_max and self.provider_capacity_min > self.provider_capacity_max:
@@ -354,6 +369,9 @@ class Provider:
     behavior: ProviderBehavior = field(default_factory=ProviderBehavior)
     hard_faults: int = 0
     retrieval_attempts: int = 0
+    retrieval_latent_attempts: int = 0
+    retrieval_demand_shock_active: int = 0
+    retrieval_demand_multiplier_bps: int = 10_000
     retrieval_successes: int = 0
     corrupt_responses: int = 0
     withheld_responses: int = 0
@@ -801,7 +819,7 @@ class PolicySimulator:
         online = self._epoch_online_map(epoch)
         self._simulate_new_deal_demand(epoch, metrics)
 
-        for _ in range(self.config.users * self.config.retrievals_per_user_per_epoch):
+        for _ in range(self._retrieval_attempts_for_epoch(epoch, metrics)):
             self._simulate_retrieval(epoch, online, metrics)
 
         for deal in self.deals:
@@ -824,6 +842,30 @@ class PolicySimulator:
         self._record_concentration_metrics(metrics)
         self._maybe_update_prices(metrics)
         return metrics
+
+    def _retrieval_attempts_for_epoch(self, epoch: int, metrics: EpochMetrics) -> int:
+        latent_attempts = self.config.users * self.config.retrievals_per_user_per_epoch
+        multiplier_bps = self._retrieval_demand_multiplier_bps(epoch)
+        metrics.retrieval_latent_attempts = latent_attempts
+        metrics.retrieval_demand_multiplier_bps = multiplier_bps
+        metrics.retrieval_demand_shock_active = self._active_retrieval_demand_shocks(epoch)
+        return int(latent_attempts * multiplier_bps / 10_000)
+
+    def _retrieval_demand_multiplier_bps(self, epoch: int) -> int:
+        multiplier_bps = 10_000
+        for shock in self.config.retrieval_demand_shocks:
+            if not self._demand_shock_epoch_applies(shock, epoch):
+                continue
+            multiplier_bps = multiplier_bps * int(shock.get("multiplier_bps", 10_000)) // 10_000
+        return multiplier_bps
+
+    def _active_retrieval_demand_shocks(self, epoch: int) -> int:
+        return sum(1 for shock in self.config.retrieval_demand_shocks if self._demand_shock_epoch_applies(shock, epoch))
+
+    def _demand_shock_epoch_applies(self, shock: dict[str, Any], epoch: int) -> bool:
+        start_epoch = int(shock.get("start_epoch", shock.get("epoch", 1)))
+        end_epoch = int(shock.get("end_epoch", self.config.epochs))
+        return start_epoch <= epoch <= end_epoch
 
     def _simulate_new_deal_demand(self, epoch: int, metrics: EpochMetrics) -> None:
         latent_requests = self.config.new_deal_requests_per_epoch
@@ -1913,6 +1955,8 @@ class PolicySimulator:
     def _totals(self) -> dict[str, Any]:
         fields = [
             "retrieval_attempts",
+            "retrieval_latent_attempts",
+            "retrieval_demand_shock_active",
             "retrieval_successes",
             "unavailable_reads",
             "data_loss_events",
@@ -2007,6 +2051,10 @@ class PolicySimulator:
         totals["average_latency_ms"] = (
             totals["total_latency_ms"] / totals["latency_sample_count"] if totals["latency_sample_count"] else 0.0
         )
+        totals["max_retrieval_demand_multiplier_bps"] = max(
+            (m.retrieval_demand_multiplier_bps for m in self.metrics),
+            default=10_000,
+        )
         tiered_serves = (
             totals["platinum_serves"]
             + totals["gold_serves"]
@@ -2078,6 +2126,8 @@ class PolicySimulator:
             totals["final_retrieval_price"] = retrieval_prices[-1]
             totals["min_retrieval_price"] = min(retrieval_prices)
             totals["max_retrieval_price"] = max(retrieval_prices)
+            totals["storage_price_direction_changes"] = direction_change_count(storage_prices)
+            totals["retrieval_price_direction_changes"] = direction_change_count(retrieval_prices)
         return totals
 
     def _provider_rows(self) -> list[dict[str, Any]]:
@@ -2319,6 +2369,20 @@ def bounded_step(current: float, direction: int, step_bps: int, min_value: float
     factor = step_bps / 10_000
     next_value = current * (1 + factor if direction > 0 else 1 - factor)
     return max(min_value, min(max_value, next_value))
+
+
+def direction_change_count(values: list[float]) -> int:
+    changes = 0
+    previous_sign = 0
+    for before, after in zip(values, values[1:]):
+        delta = after - before
+        if abs(delta) < 1e-12:
+            continue
+        sign = 1 if delta > 0 else -1
+        if previous_sign and sign != previous_sign:
+            changes += 1
+        previous_sign = sign
+    return changes
 
 
 def empty_candidate_diagnostics() -> dict[str, Any]:

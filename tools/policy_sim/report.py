@@ -135,6 +135,15 @@ SCENARIO_GUIDES = {
         "expected": "Retrieval success remains high, the cost-shock window is visible, provider P&L falls, and negative-P&L churn risk appears.",
         "review": "Use this fixture to calibrate cost assumptions, price floors, reward buffers, and whether pricing should react to provider cost telemetry.",
     },
+    "retrieval-demand-shock": {
+        "title": "Retrieval Demand Shock",
+        "intent": (
+            "Model a temporary retrieval demand spike and verify the retrieval-price controller reacts within configured bounds "
+            "without creating repeated oscillation or availability loss."
+        ),
+        "expected": "Retrieval demand shock epochs are visible, retrieval price rises and settles within bounds, reads stay available, and direction changes remain limited.",
+        "review": "Use this fixture to tune retrieval-demand targets, step size, price floors/ceilings, and shock dampening before keeper defaults.",
+    },
     "wash-retrieval": {
         "title": "Wash Retrieval Demand",
         "intent": (
@@ -388,6 +397,9 @@ SWEEP_METRICS = [
     "average_latency_ms",
     "performance_fail_rate",
     "performance_reward_paid",
+    "retrieval_latent_attempts",
+    "retrieval_demand_shock_active",
+    "max_retrieval_demand_multiplier_bps",
     "new_deal_latent_requests",
     "new_deal_requests",
     "new_deals_accepted",
@@ -421,6 +433,8 @@ SWEEP_METRICS = [
     "final_storage_utilization_bps",
     "final_storage_price",
     "final_retrieval_price",
+    "storage_price_direction_changes",
+    "retrieval_price_direction_changes",
     "provider_pnl",
 ]
 
@@ -443,6 +457,7 @@ SWEEP_CONFIG_KEYS = [
     "dynamic_pricing_max_step_bps",
     "storage_target_utilization_bps",
     "retrieval_target_per_epoch",
+    "retrieval_demand_shocks",
     "new_deal_requests_per_epoch",
     "storage_demand_price_ceiling",
     "storage_demand_reference_price",
@@ -656,6 +671,12 @@ def compute_signals(
             "retrieval_price_end": retrieval_prices[-1] if retrieval_prices else 0.0,
             "retrieval_price_min": min(retrieval_prices, default=0.0),
             "retrieval_price_max": max(retrieval_prices, default=0.0),
+            "retrieval_attempts": fnum(totals.get("retrieval_attempts")),
+            "retrieval_latent_attempts": fnum(totals.get("retrieval_latent_attempts")),
+            "retrieval_demand_shock_epochs": fnum(totals.get("retrieval_demand_shock_active")),
+            "max_retrieval_demand_multiplier_bps": fnum(totals.get("max_retrieval_demand_multiplier_bps")),
+            "storage_price_direction_changes": fnum(totals.get("storage_price_direction_changes")),
+            "retrieval_price_direction_changes": fnum(totals.get("retrieval_price_direction_changes")),
         },
         "high_bandwidth": {
             "providers": fnum(totals.get("high_bandwidth_providers")),
@@ -1030,6 +1051,12 @@ def write_report_md(
             "",
             "![Price Trajectory](graphs/price_trajectory.svg)",
             "",
+            "### Retrieval Demand",
+            "",
+            "Shows effective retrieval attempts against latent baseline demand.",
+            "",
+            "![Retrieval Demand](graphs/retrieval_demand.svg)",
+            "",
             "### Storage Demand",
             "",
             "Shows modeled new deal demand accepted versus rejected by price.",
@@ -1271,6 +1298,7 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Storage target utilization | `{fmt_bps(config.get('storage_target_utilization_bps'))}` | If dynamic pricing is enabled, utilization above this target steps storage price up, otherwise down. |",
         f"| Retrieval price per slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` | Paid per successful provider slot served, before the configured variable burn. |",
         f"| Retrieval target per epoch | `{fmt_num(config.get('retrieval_target_per_epoch'))}` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |",
+        f"| Retrieval demand shocks | `{json.dumps(config.get('retrieval_demand_shocks') or [])}` | Optional epoch-scoped retrieval demand multipliers used to test price shock response and oscillation. |",
         f"| Dynamic pricing max step | `{fmt_bps(config.get('dynamic_pricing_max_step_bps'))}` | Per-epoch controller movement cap. Lower values are safer but slower to equilibrate. |",
         f"| Base reward per slot | `{fmt_money(config.get('base_reward_per_slot'))}` | Modeled issuance/subsidy paid only to reward-eligible active slots. |",
         f"| Provider storage cost/slot/epoch | `{fmt_money(config.get('provider_storage_cost_per_slot_epoch'))}` | Simplified provider cost basis; jitter may create marginal-provider distress. |",
@@ -1337,6 +1365,9 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Max cost shock fixed/storage/bandwidth | `{fmt_bps(economics['max_provider_cost_shock_fixed_multiplier_bps'])}` / `{fmt_bps(economics['max_provider_cost_shock_storage_multiplier_bps'])}` / `{fmt_bps(economics['max_provider_cost_shock_bandwidth_multiplier_bps'])}` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |",
         f"| Storage price start/end/range | `{fmt_money(economics['storage_price_start'])}` -> `{fmt_money(economics['storage_price_end'])}` (`{fmt_money(economics['storage_price_min'])}`-`{fmt_money(economics['storage_price_max'])}`) | Shows dynamic pricing movement and bounds. |",
         f"| Retrieval price start/end/range | `{fmt_money(economics['retrieval_price_start'])}` -> `{fmt_money(economics['retrieval_price_end'])}` (`{fmt_money(economics['retrieval_price_min'])}`-`{fmt_money(economics['retrieval_price_max'])}`) | Shows whether demand pressure moved retrieval pricing. |",
+        f"| Retrieval latent/effective attempts | `{fmt_num(economics['retrieval_latent_attempts'])}` / `{fmt_num(economics['retrieval_attempts'])}` | Shows how much retrieval load was added by demand-shock multipliers. |",
+        f"| Retrieval demand shock epochs/multiplier | `{fmt_num(economics['retrieval_demand_shock_epochs'])}` / `{fmt_bps(economics['max_retrieval_demand_multiplier_bps'])}` | Shows the size and duration of the modeled read-demand shock. |",
+        f"| Price direction changes storage/retrieval | `{fmt_num(economics['storage_price_direction_changes'])}` / `{fmt_num(economics['retrieval_price_direction_changes'])}` | Detects controller oscillation rather than relying on visual inspection. |",
     ]
 
 
@@ -1586,6 +1617,12 @@ def assertion_meaning(name: str) -> str:
         "min_max_provider_cost_shocked_providers": "Cost-shock fixture must affect at least this many providers.",
         "min_max_provider_cost_shock_storage_multiplier_bps": "Cost-shock fixture must raise modeled storage cost by at least this multiplier.",
         "min_max_provider_cost_shock_bandwidth_multiplier_bps": "Cost-shock fixture must raise modeled bandwidth cost by at least this multiplier.",
+        "min_retrieval_demand_shock_active": "Retrieval-demand fixture must activate the configured demand-shock window.",
+        "min_max_retrieval_demand_multiplier_bps": "Retrieval-demand fixture must apply at least this read-demand multiplier.",
+        "min_retrieval_latent_attempts": "Retrieval-demand fixture must record baseline latent demand.",
+        "min_retrieval_attempts": "Retrieval-demand fixture must produce elevated effective retrieval attempts.",
+        "min_max_retrieval_price": "Retrieval-demand shock should move the retrieval price above this observed maximum.",
+        "max_retrieval_price_direction_changes": "Retrieval price should not repeatedly oscillate under the configured shock.",
         "min_retrieval_base_burned": "Requester/session demand must pay a non-zero base burn.",
         "min_retrieval_variable_burned": "Variable retrieval activity must contribute non-zero burn.",
         "min_retrieval_provider_payouts": "Legitimate high demand must pay providers for bandwidth.",
@@ -1690,6 +1727,12 @@ def build_economic_narrative(
             f"affecting up to `{fmt_num(totals.get('max_provider_cost_shocked_providers'))}` providers. "
             f"The maximum modeled storage-cost multiplier reached `{fmt_bps(totals.get('max_provider_cost_shock_storage_multiplier_bps'))}`."
         )
+    if fnum(totals.get("retrieval_demand_shock_active")) > 0:
+        parts.append(
+            f"Retrieval demand shocks were active for `{fmt_num(totals.get('retrieval_demand_shock_active'))}` shock-epochs. "
+            f"Latent retrieval attempts `{fmt_num(totals.get('retrieval_latent_attempts'))}` became `{fmt_num(totals.get('retrieval_attempts'))}` effective attempts, "
+            f"and retrieval price changed direction `{fmt_num(totals.get('retrieval_price_direction_changes'))}` times."
+        )
     if negative_pnl:
         parts.append(
             f"`{len(negative_pnl)}` providers ended with negative P&L and `{len(churn_risk)}` were marked as churn risk. "
@@ -1778,6 +1821,20 @@ def write_risk_register(
                 ),
                 "impact": "A technically healthy network may have delayed economic instability if prices and rewards do not react to operator cost pressure.",
                 "followup": "Review provider cost telemetry assumptions, pricing floors, reward buffers, and whether cost shocks should remain monitoring-only or feed governance recommendations.",
+            }
+        )
+    if fnum(totals.get("retrieval_demand_shock_active")) > 0:
+        severity = "medium" if fnum(totals.get("retrieval_price_direction_changes")) > 2 else "low"
+        rows.append(
+            {
+                "risk": "Retrieval demand shock response",
+                "severity": severity,
+                "evidence": (
+                    f"Retrieval demand shocks were active for {fmt_num(totals.get('retrieval_demand_shock_active'))} shock-epochs; "
+                    f"retrieval price changed direction {fmt_num(totals.get('retrieval_price_direction_changes'))} times."
+                ),
+                "impact": "A controller that overreacts to burst reads can create unstable quotes or provider incentives even when reads remain available.",
+                "followup": "Review retrieval demand targets, step clamps, EMA windows, and whether shock handling should be smoothed before keeper defaults.",
             }
         )
     if elasticity_rejections:
@@ -1971,6 +2028,8 @@ def write_risk_register(
             f"- Evidence spam net gain: `{fmt_money(totals.get('evidence_spam_net_gain'))}`",
             f"- Provider cost shock active epochs: `{fmt_num(totals.get('provider_cost_shock_active'))}`",
             f"- Max cost-shocked providers: `{fmt_num(totals.get('max_provider_cost_shocked_providers'))}`",
+            f"- Retrieval demand shock active epochs: `{fmt_num(totals.get('retrieval_demand_shock_active'))}`",
+            f"- Retrieval price direction changes: `{fmt_num(totals.get('retrieval_price_direction_changes'))}`",
             f"- Latent new deal requests: `{fmt_num(totals.get('new_deal_latent_requests'))}`",
             f"- Effective new deal requests: `{fmt_num(totals.get('new_deal_requests'))}`",
             f"- New deals accepted: `{fmt_num(totals.get('new_deals_accepted'))}`",
@@ -2001,6 +2060,7 @@ def graduation_semantics(scenario: str) -> str:
         "overpriced-storage": "Graduation means demand-side affordability failures are visible as price rejections rather than being mistaken for healthy market equilibrium.",
         "demand-elasticity-recovery": "Graduation means price-sensitive demand suppression and recovery are visible before governance tunes storage-price defaults.",
         "provider-cost-shock": "Graduation means provider cost stress is visible as churn pressure and pricing mismatch before it is turned into live governance parameters.",
+        "retrieval-demand-shock": "Graduation means burst read demand and retrieval-price response are measurable, bounded, and reviewable before dynamic pricing keeper defaults are chosen.",
         "audit-budget-exhaustion": "Graduation means audit demand is bounded by budget and turns into backlog or policy review instead of unbounded issuance.",
         "deputy-evidence-spam": "Graduation means low-quality deputy evidence is economically negative-EV and cannot trigger live provider punishment without conviction.",
         "price-controller-bounds": "Graduation means price movement is bounded and explainable, not that the economic parameters are final.",
@@ -2159,6 +2219,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("storage_price")) for row in economy],
         secondary=[fnum(row.get("retrieval_price_per_slot")) for row in economy],
         secondary_label="Retrieval Price",
+    )
+    write_line_svg(
+        graphs_dir / "retrieval_demand.svg",
+        "Retrieval Attempts",
+        [fnum(row.get("retrieval_attempts")) for row in epochs],
+        secondary=[fnum(row.get("retrieval_latent_attempts")) for row in epochs],
+        secondary_label="Latent Retrieval Attempts",
     )
     write_line_svg(
         graphs_dir / "storage_demand.svg",
@@ -2492,6 +2559,10 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("platinum_serves", "Whether the fastest performance tier was exercised."),
         ("fail_serves", "Whether slow/failed QoS service appeared."),
         ("performance_reward_paid", "Whether tiered performance rewards were paid."),
+        ("retrieval_latent_attempts", "Baseline retrieval demand before shock multipliers."),
+        ("retrieval_demand_shock_active", "Whether a retrieval demand shock was active."),
+        ("max_retrieval_demand_multiplier_bps", "Peak modeled retrieval-demand multiplier."),
+        ("retrieval_price_direction_changes", "Whether retrieval pricing oscillated."),
         ("new_deal_latent_requests", "How much write demand existed before price elasticity."),
         ("new_deal_requests", "How much modeled write demand remained after price elasticity."),
         ("new_deals_accepted", "How much new storage demand entered the network."),
@@ -2554,6 +2625,14 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         return "Provider distress did not increase."
     if key in {"retrieval_base_burned", "retrieval_variable_burned", "retrieval_provider_payouts"}:
         return "Retrieval market accounting changed with demand volume or price settings."
+    if key in {
+        "retrieval_latent_attempts",
+        "retrieval_demand_shock_active",
+        "max_retrieval_demand_multiplier_bps",
+        "retrieval_price_direction_changes",
+        "storage_price_direction_changes",
+    }:
+        return "Retrieval demand or pricing control changed; inspect price trajectory and oscillation bounds."
     if key in {"platinum_serves", "gold_serves", "silver_serves", "fail_serves", "performance_reward_paid"}:
         return "Performance-market tiering changed; inspect service-class latency and reward assumptions."
     if key in {
@@ -2916,6 +2995,11 @@ def sweep_metric_meaning(key: str) -> str:
         "max_provider_cost_shock_fixed_multiplier_bps": "Peak modeled fixed-cost multiplier during cost shock.",
         "max_provider_cost_shock_storage_multiplier_bps": "Peak modeled storage-cost multiplier during cost shock.",
         "max_provider_cost_shock_bandwidth_multiplier_bps": "Peak modeled bandwidth-cost multiplier during cost shock.",
+        "retrieval_latent_attempts": "Baseline read demand before demand-shock multipliers.",
+        "retrieval_demand_shock_active": "Epochs where read-demand shock multipliers were active.",
+        "max_retrieval_demand_multiplier_bps": "Peak modeled read-demand multiplier.",
+        "storage_price_direction_changes": "Storage price controller direction changes across the run.",
+        "retrieval_price_direction_changes": "Retrieval price controller direction changes across the run.",
         "providers_negative_pnl": "Market sustainability and churn pressure.",
         "saturated_responses": "Provider bandwidth bottleneck signal.",
         "providers_over_capacity": "Placement/capacity invariant; should remain zero.",

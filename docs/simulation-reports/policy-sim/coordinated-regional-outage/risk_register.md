@@ -38,6 +38,8 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 - Evidence spam net gain: `0.0000`
 - Provider cost shock active epochs: `0`
 - Max cost-shocked providers: `0`
+- Retrieval demand shock active epochs: `0`
+- Retrieval price direction changes: `0`
 - Latent new deal requests: `0`
 - Effective new deal requests: `0`
 - New deals accepted: `0`

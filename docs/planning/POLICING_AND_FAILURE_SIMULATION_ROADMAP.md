@@ -300,6 +300,7 @@ Human decisions still required:
 | Provider cost shock | Does a sudden operator cost increase create churn pressure before availability fails? | Cost-shock epochs are visible, provider P&L turns negative, and retrievals remain available. | Provider cost telemetry and price-floor governance review. |
 | Overpriced demand collapse | Does high price suppress useful demand? | New deal creation and retrieval demand fall below target. | Quote UX and pricing-bound tests. |
 | Price oscillation | Does the controller converge after demand shocks? | Price remains within bounds and settles without repeated overshoot. | Epoch pricing keeper tests. |
+| Retrieval demand shock | Does burst read demand move retrieval price without oscillating or harming availability? | Retrieval price reacts within bounds, direction changes stay limited, and reads remain available. | Retrieval pricing keeper tests. |
 | Wash traffic | Can fake retrievals profit from rewards or credits? | Burn and fees exceed expected reward or credit value. | Session fee, credit cap, and anomaly tests. |
 | Viral public retrieval | Does public demand scale without draining owner escrow? | Sponsored sessions fund retrieval; owner escrow remains stable. | Sponsored-session e2e. |
 | Elasticity cap hit | What happens when demand exceeds user budget? | Scaling stops cleanly and service is rate-limited, not unbounded. | `MsgSignalSaturation` spend-window e2e. |
@@ -1217,6 +1218,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `overpriced_storage.yaml` | Storage price above modeled user willingness to pay. | Existing reads remain healthy while new deal demand is rejected by price, not capacity. |
 | `demand_elasticity_recovery.yaml` | Latent storage demand is suppressed by high price and recovers as dynamic pricing moves down. | Suppressed demand, recovered effective requests, accepted deals, bounded final price, and no capacity rejection. |
 | `provider_cost_shock.yaml` | Provider operating costs jump after launch while technical availability remains healthy. | Cost-shock windows are visible, provider P&L turns negative, churn pressure appears, and no availability or durability loss occurs. |
+| `retrieval_demand_shock.yaml` | Temporary read-demand spike tests retrieval-price response and oscillation bounds. | Retrieval shock windows are visible, price direction changes stay bounded, reads remain available, and price remains within configured limits. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |

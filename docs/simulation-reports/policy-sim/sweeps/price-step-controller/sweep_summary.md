@@ -54,6 +54,9 @@ This report aggregates `4` completed simulator run output directories. It does n
 | `average_latency_ms` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `performance_fail_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `performance_reward_paid` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `retrieval_latent_attempts` | 22400.000000 | 22400.000000 | 0.000000 | 22400.000000 | Baseline read demand before demand-shock multipliers. |
+| `retrieval_demand_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where read-demand shock multipliers were active. |
+| `max_retrieval_demand_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled read-demand multiplier. |
 | `new_deal_latent_requests` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `new_deal_requests` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `new_deals_accepted` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
@@ -87,6 +90,8 @@ This report aggregates `4` completed simulator run output directories. It does n
 | `final_storage_utilization_bps` | 8681.000000 | 8681.000000 | 0.000000 | 8681.000000 | Supply utilization against modeled capacity. |
 | `final_storage_price` | 1.160969 | 2.000000 | 0.839031 | 1.709079 | Storage-controller endpoint under this run. |
 | `final_retrieval_price` | 0.011610 | 0.050000 | 0.038390 | 0.027521 | Retrieval-controller endpoint under this run. |
+| `storage_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage price controller direction changes across the run. |
+| `retrieval_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval price controller direction changes across the run. |
 | `provider_pnl` | 1764.556782 | 4426.881640 | 2662.324858 | 2876.474925 | Aggregate provider economics; inspect distribution before deciding. |
 
 ## Varied Parameters

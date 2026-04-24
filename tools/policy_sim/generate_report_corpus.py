@@ -100,6 +100,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["provider cost telemetry", "profitability dashboards", "price-floor governance policy"],
         "e2e": "No process e2e yet; this is a parameter-calibration fixture.",
     },
+    "retrieval-demand-shock": {
+        "target": "dynamic pricing calibration",
+        "next_test": "Compare retrieval demand targets, price-step clamps, smoothing windows, and burst response before encoding retrieval pricing defaults.",
+        "missing_surfaces": ["retrieval demand accumulator", "pricing smoothing params", "burst-demand dashboards"],
+        "e2e": "No process e2e yet; validate with keeper pricing tests and simulator sweeps first.",
+    },
     "wash-retrieval": {
         "target": "session fee and credit-cap keeper tests",
         "next_test": "Add retrieval fee, burn, credit-cap, and requester-paid session accounting tests.",
@@ -303,6 +309,9 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "provider_cost_shock_active": totals.get("provider_cost_shock_active", 0),
         "max_provider_cost_shocked_providers": totals.get("max_provider_cost_shocked_providers", 0),
         "max_provider_cost_shock_storage_multiplier_bps": totals.get("max_provider_cost_shock_storage_multiplier_bps", 10_000),
+        "retrieval_demand_shock_active": totals.get("retrieval_demand_shock_active", 0),
+        "max_retrieval_demand_multiplier_bps": totals.get("max_retrieval_demand_multiplier_bps", 10_000),
+        "retrieval_price_direction_changes": totals.get("retrieval_price_direction_changes", 0),
         "new_deal_latent_requests": totals.get("new_deal_latent_requests", 0),
         "new_deal_requests": totals.get("new_deal_requests", 0),
         "new_deals_accepted": totals.get("new_deals_accepted", 0),
@@ -345,10 +354,10 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Demand | OpCap | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | ReadShock | Demand | OpCap | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
@@ -362,6 +371,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['audit_budget_demand']:.2f}/{row['audit_budget_spent']:.2f}/{row['audit_budget_backlog']:.2f}/{row['audit_budget_exhausted']} | "
             f"{row['evidence_spam_claims']}/{row['evidence_spam_bond_burned']:.2f}/{row['evidence_spam_net_gain']:.2f} | "
             f"{row['provider_cost_shock_active']}/{row['max_provider_cost_shocked_providers']}/{row['max_provider_cost_shock_storage_multiplier_bps']} | "
+            f"{row['retrieval_demand_shock_active']}/{row['max_retrieval_demand_multiplier_bps']}/{row['retrieval_price_direction_changes']} | "
             f"{row['new_deal_latent_requests']}/{row['new_deal_requests']}/{row['new_deals_accepted']}/{row['new_deals_suppressed_price']}/{row['new_deals_rejected_price']}/{row['new_deals_rejected_capacity']} | "
             f"{row['top_operator_assignment_share_bps']}/{row['max_operator_deal_slots']}/{row['operator_deal_cap_violations']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
@@ -482,6 +492,9 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "provider_cost_shock_active": row.get("provider_cost_shock_active", 0),
             "max_provider_cost_shocked_providers": row.get("max_provider_cost_shocked_providers", 0),
             "max_provider_cost_shock_storage_multiplier_bps": row.get("max_provider_cost_shock_storage_multiplier_bps", 10_000),
+            "retrieval_demand_shock_active": row.get("retrieval_demand_shock_active", 0),
+            "max_retrieval_demand_multiplier_bps": row.get("max_retrieval_demand_multiplier_bps", 10_000),
+            "retrieval_price_direction_changes": row.get("retrieval_price_direction_changes", 0),
             "new_deal_latent_requests": row.get("new_deal_latent_requests", 0),
             "new_deal_requests": row.get("new_deal_requests", 0),
             "new_deals_accepted": row.get("new_deals_accepted", 0),

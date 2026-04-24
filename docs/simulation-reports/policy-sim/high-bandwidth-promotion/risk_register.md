@@ -38,6 +38,8 @@ Model hot retrieval demand with heterogeneous provider bandwidth. The policy que
 - Evidence spam net gain: `0.0000`
 - Provider cost shock active epochs: `0`
 - Max cost-shocked providers: `0`
+- Retrieval demand shock active epochs: `0`
+- Retrieval price direction changes: `0`
 - Latent new deal requests: `0`
 - Effective new deal requests: `0`
 - New deals accepted: `0`
