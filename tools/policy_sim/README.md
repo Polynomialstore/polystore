@@ -150,6 +150,9 @@ are supported in scenario files:
 - `operator_assignment_cap_per_deal`
 - `new_deal_requests_per_epoch`
 - `storage_demand_price_ceiling`
+- `storage_demand_reference_price`
+- `storage_demand_elasticity_bps`
+- `storage_demand_min_bps` / `storage_demand_max_bps`
 
 Versioned sweep specs live in `tools/policy_sim/sweeps`. They are strict JSON
 documents with a `.yaml` extension, matching scenario fixture conventions. A
@@ -189,8 +192,9 @@ The simulator mirrors current protocol concepts:
   current durability assertions expect data-loss events to remain zero.
 - Basic economic accounting for retrieval fees, rewards, audit budget, provider
   P&L, slashing, and elasticity spend caps.
-- Demand-side storage admission accounting for new deal requests, price
-  rejections, capacity rejections, and acceptance rate.
+- Demand-side storage admission accounting for latent new deal requests,
+  price-elastic demand suppression, price rejections, capacity rejections, and
+  effective/latent acceptance rates.
 
 The simulator deliberately does not run `polystorechaind`, gateways, or provider
 processes. Once a policy is stable here, add keeper tests or e2e scripts for the

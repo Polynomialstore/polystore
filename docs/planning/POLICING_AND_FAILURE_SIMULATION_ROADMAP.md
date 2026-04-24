@@ -1214,6 +1214,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `setup_failure.yaml` | Initial upload to one slot fails. | Setup bump is bounded and replacement is system-selected. |
 | `underpriced_storage.yaml` | Storage price below provider cost. | Provider P&L turns negative and churn pressure is visible. |
 | `overpriced_storage.yaml` | Storage price above modeled user willingness to pay. | Existing reads remain healthy while new deal demand is rejected by price, not capacity. |
+| `demand_elasticity_recovery.yaml` | Latent storage demand is suppressed by high price and recovers as dynamic pricing moves down. | Suppressed demand, recovered effective requests, accepted deals, bounded final price, and no capacity rejection. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
@@ -1236,7 +1237,8 @@ Each simulator run should be able to emit:
    attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff
    events.
 7. `economy.csv`: storage charges, retrieval burns, payouts, reward mint/burn,
-   audit budget, escrow runway, and elasticity spend.
+   audit budget, escrow runway, elasticity spend, and latent/effective storage
+   demand admission.
 8. No `comparison.json` or other precomputed baseline-vs-candidate artifact in
    single-run simulator outputs.
 

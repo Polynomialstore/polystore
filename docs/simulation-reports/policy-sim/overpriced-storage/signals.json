@@ -37,10 +37,13 @@
   },
   "demand": {
     "new_deal_acceptance_rate": 0.0,
+    "new_deal_latent_acceptance_rate": 0.0,
+    "new_deal_latent_requests": 96.0,
     "new_deal_requests": 96.0,
     "new_deals_accepted": 0.0,
     "new_deals_rejected_capacity": 0.0,
-    "new_deals_rejected_price": 96.0
+    "new_deals_rejected_price": 96.0,
+    "new_deals_suppressed_price": 0.0
   },
   "economics": {
     "audit_budget_backlog": 0.0,

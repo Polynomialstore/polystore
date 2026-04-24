@@ -85,7 +85,13 @@ GRADUATION_TARGETS = {
     "overpriced-storage": {
         "target": "economic policy calibration",
         "next_test": "Compare quote affordability bounds, price-step timing, and demand rejection semantics before encoding governance defaults.",
-        "missing_surfaces": ["demand elasticity model", "quote rejection telemetry", "affordability dashboards"],
+        "missing_surfaces": ["quote rejection telemetry", "affordability dashboards"],
+        "e2e": "No process e2e yet; this is a parameter-calibration fixture.",
+    },
+    "demand-elasticity-recovery": {
+        "target": "economic policy calibration",
+        "next_test": "Compare elasticity slope, reference price, price-step timing, and demand recovery before encoding governance defaults.",
+        "missing_surfaces": ["quote rejection telemetry", "affordability dashboards", "demand forecasting"],
         "e2e": "No process e2e yet; this is a parameter-calibration fixture.",
     },
     "wash-retrieval": {
@@ -288,8 +294,10 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "evidence_spam_claims": totals.get("evidence_spam_claims", 0),
         "evidence_spam_bond_burned": totals.get("evidence_spam_bond_burned", 0),
         "evidence_spam_net_gain": totals.get("evidence_spam_net_gain", 0),
+        "new_deal_latent_requests": totals.get("new_deal_latent_requests", 0),
         "new_deal_requests": totals.get("new_deal_requests", 0),
         "new_deals_accepted": totals.get("new_deals_accepted", 0),
+        "new_deals_suppressed_price": totals.get("new_deals_suppressed_price", 0),
         "new_deals_rejected_price": totals.get("new_deals_rejected_price", 0),
         "new_deals_rejected_capacity": totals.get("new_deals_rejected_capacity", 0),
         "top_operator_provider_share_bps": totals.get("top_operator_provider_share_bps", 0),
@@ -328,7 +336,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `Demand` is `new requests/accepted/price rejects/capacity rejects`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
         "",
         "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | Demand | OpCap | Saturated | Negative P&L | Report |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
@@ -344,7 +352,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['platinum_serves']}/{row['gold_serves']}/{row['silver_serves']}/{row['fail_serves']} | "
             f"{row['audit_budget_demand']:.2f}/{row['audit_budget_spent']:.2f}/{row['audit_budget_backlog']:.2f}/{row['audit_budget_exhausted']} | "
             f"{row['evidence_spam_claims']}/{row['evidence_spam_bond_burned']:.2f}/{row['evidence_spam_net_gain']:.2f} | "
-            f"{row['new_deal_requests']}/{row['new_deals_accepted']}/{row['new_deals_rejected_price']}/{row['new_deals_rejected_capacity']} | "
+            f"{row['new_deal_latent_requests']}/{row['new_deal_requests']}/{row['new_deals_accepted']}/{row['new_deals_suppressed_price']}/{row['new_deals_rejected_price']}/{row['new_deals_rejected_capacity']} | "
             f"{row['top_operator_assignment_share_bps']}/{row['max_operator_deal_slots']}/{row['operator_deal_cap_violations']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
             f"[report]({scenario}/report.md) |"
@@ -461,8 +469,10 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "evidence_spam_claims": row.get("evidence_spam_claims", 0),
             "evidence_spam_bond_burned": row.get("evidence_spam_bond_burned", 0),
             "evidence_spam_net_gain": row.get("evidence_spam_net_gain", 0),
+            "new_deal_latent_requests": row.get("new_deal_latent_requests", 0),
             "new_deal_requests": row.get("new_deal_requests", 0),
             "new_deals_accepted": row.get("new_deals_accepted", 0),
+            "new_deals_suppressed_price": row.get("new_deals_suppressed_price", 0),
             "new_deals_rejected_price": row.get("new_deals_rejected_price", 0),
             "new_deals_rejected_capacity": row.get("new_deals_rejected_capacity", 0),
             "top_operator_provider_share_bps": row.get("top_operator_provider_share_bps", 0),

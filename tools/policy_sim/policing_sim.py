@@ -71,6 +71,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "audit-budget-exhaustion",
     "deputy-evidence-spam",
     "overpriced-storage",
+    "demand-elasticity-recovery",
     "price-controller-bounds",
     "subsidy-farming",
     "coordinated-regional-outage",
@@ -128,6 +129,10 @@ class SimConfig:
     retrieval_target_per_epoch: int = 80
     new_deal_requests_per_epoch: int = 0
     storage_demand_price_ceiling: float = 0.0
+    storage_demand_reference_price: float = 0.0
+    storage_demand_elasticity_bps: int = 0
+    storage_demand_min_bps: int = 0
+    storage_demand_max_bps: int = 10_000
     retrieval_base_fee: float = 0.001
     retrieval_burn_bps: int = 500
     dynamic_pricing_max_step_bps: int = 500
@@ -222,6 +227,14 @@ class SimConfig:
             raise ValueError("new_deal_requests_per_epoch must be non-negative")
         if self.storage_demand_price_ceiling < 0:
             raise ValueError("storage_demand_price_ceiling must be non-negative")
+        if self.storage_demand_reference_price < 0:
+            raise ValueError("storage_demand_reference_price must be non-negative")
+        if self.storage_demand_elasticity_bps < 0:
+            raise ValueError("storage_demand_elasticity_bps must be non-negative")
+        if self.storage_demand_min_bps < 0 or self.storage_demand_max_bps < 0:
+            raise ValueError("storage demand bps bounds must be non-negative")
+        if self.storage_demand_min_bps > self.storage_demand_max_bps:
+            raise ValueError("storage_demand_min_bps must be <= storage_demand_max_bps")
         if self.provider_capacity_min < 0 or self.provider_capacity_max < 0:
             raise ValueError("provider capacity bounds must be non-negative")
         if self.provider_capacity_min and self.provider_capacity_max and self.provider_capacity_min > self.provider_capacity_max:
@@ -456,8 +469,10 @@ class EpochMetrics:
     latency_sample_count: int = 0
     total_latency_ms: float = 0.0
     performance_reward_paid: float = 0.0
+    new_deal_latent_requests: int = 0
     new_deal_requests: int = 0
     new_deals_accepted: int = 0
+    new_deals_suppressed_price: int = 0
     new_deals_rejected_price: int = 0
     new_deals_rejected_capacity: int = 0
     paid_corrupt_bytes: int = 0
@@ -786,11 +801,14 @@ class PolicySimulator:
         return metrics
 
     def _simulate_new_deal_demand(self, epoch: int, metrics: EpochMetrics) -> None:
-        requests = self.config.new_deal_requests_per_epoch
-        if requests <= 0:
+        latent_requests = self.config.new_deal_requests_per_epoch
+        if latent_requests <= 0:
             return
 
+        requests = self._effective_new_deal_requests(latent_requests)
+        metrics.new_deal_latent_requests = latent_requests
         metrics.new_deal_requests = requests
+        metrics.new_deals_suppressed_price = latent_requests - requests
         for _ in range(requests):
             if (
                 self.config.storage_demand_price_ceiling > 0
@@ -805,6 +823,21 @@ class PolicySimulator:
             self.deals.append(deal)
             self.next_deal_id += 1
             metrics.new_deals_accepted += 1
+
+    def _effective_new_deal_requests(self, latent_requests: int) -> int:
+        multiplier_bps = self._storage_demand_multiplier_bps()
+        return int(latent_requests * multiplier_bps / 10_000)
+
+    def _storage_demand_multiplier_bps(self) -> int:
+        if (
+            self.config.storage_demand_reference_price <= 0
+            or self.config.storage_demand_elasticity_bps <= 0
+        ):
+            return 10_000
+
+        price_delta = (self.config.storage_demand_reference_price - self.storage_price) / self.config.storage_demand_reference_price
+        raw_bps = 10_000 + int(round(price_delta * self.config.storage_demand_elasticity_bps))
+        return max(self.config.storage_demand_min_bps, min(self.config.storage_demand_max_bps, raw_bps))
 
     def _try_create_dynamic_deal(self, epoch: int) -> DealState | None:
         deal_id = self.next_deal_id
@@ -1693,8 +1726,10 @@ class PolicySimulator:
                 "audit_budget_carryover": metrics.audit_budget_carryover,
                 "audit_budget_backlog": metrics.audit_budget_backlog,
                 "audit_budget_exhausted": metrics.audit_budget_exhausted,
+                "new_deal_latent_requests": metrics.new_deal_latent_requests,
                 "new_deal_requests": metrics.new_deal_requests,
                 "new_deals_accepted": metrics.new_deals_accepted,
+                "new_deals_suppressed_price": metrics.new_deals_suppressed_price,
                 "new_deals_rejected_price": metrics.new_deals_rejected_price,
                 "new_deals_rejected_capacity": metrics.new_deals_rejected_capacity,
                 "evidence_spam_claims": metrics.evidence_spam_claims,
@@ -1814,8 +1849,10 @@ class PolicySimulator:
             "latency_sample_count",
             "total_latency_ms",
             "performance_reward_paid",
+            "new_deal_latent_requests",
             "new_deal_requests",
             "new_deals_accepted",
+            "new_deals_suppressed_price",
             "new_deals_rejected_price",
             "new_deals_rejected_capacity",
             "paid_corrupt_bytes",
@@ -1849,6 +1886,11 @@ class PolicySimulator:
         totals["new_deal_acceptance_rate"] = (
             totals["new_deals_accepted"] / totals["new_deal_requests"]
             if totals["new_deal_requests"]
+            else 0.0
+        )
+        totals["new_deal_latent_acceptance_rate"] = (
+            totals["new_deals_accepted"] / totals["new_deal_latent_requests"]
+            if totals["new_deal_latent_requests"]
             else 0.0
         )
         totals["final_deals"] = len(self.deals)

@@ -39,8 +39,10 @@ Model a population-scale network with more than one thousand storage providers a
 - Evidence spam bond burned: `0.0000`
 - Evidence spam bounty paid: `0.0000`
 - Evidence spam net gain: `0.0000`
-- New deal requests: `0`
+- Latent new deal requests: `0`
+- Effective new deal requests: `0`
 - New deals accepted: `0`
+- New deals suppressed by price elasticity: `0`
 - New deals rejected by price: `0`
 - New deals rejected by capacity: `0`
 

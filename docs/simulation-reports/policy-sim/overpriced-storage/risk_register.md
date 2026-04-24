@@ -36,8 +36,10 @@ Model a technically healthy network whose storage quote exceeds modeled user wil
 - Evidence spam bond burned: `0.0000`
 - Evidence spam bounty paid: `0.0000`
 - Evidence spam net gain: `0.0000`
-- New deal requests: `96`
+- Latent new deal requests: `96`
+- Effective new deal requests: `96`
 - New deals accepted: `0`
+- New deals suppressed by price elasticity: `0`
 - New deals rejected by price: `96`
 - New deals rejected by capacity: `0`
 

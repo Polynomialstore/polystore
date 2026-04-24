@@ -154,11 +154,28 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assert_assertions_pass(result)
         self.assertEqual(96, result.totals["new_deal_requests"])
         self.assertEqual(0, result.totals["new_deals_accepted"])
+        self.assertEqual(0, result.totals["new_deals_suppressed_price"])
         self.assertEqual(96, result.totals["new_deals_rejected_price"])
         self.assertEqual(0, result.totals["new_deals_rejected_capacity"])
         self.assertEqual(0.0, result.totals["new_deal_acceptance_rate"])
         self.assertEqual(spec.config["deals"], result.totals["final_deals"])
+        self.assertIn("new_deal_latent_requests", result.economy[0])
+        self.assertIn("new_deals_suppressed_price", result.economy[0])
         self.assertIn("new_deals_rejected_price", result.economy[0])
+
+    def test_storage_demand_elasticity_suppresses_and_recovers_requests(self):
+        fixture = Path(__file__).with_name("scenarios") / "demand_elasticity_recovery.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(200, result.totals["new_deal_latent_requests"])
+        self.assertGreater(result.totals["new_deals_suppressed_price"], 0)
+        self.assertGreater(result.totals["new_deal_requests"], 0)
+        self.assertEqual(result.totals["new_deal_requests"], result.totals["new_deals_accepted"])
+        self.assertEqual(0, result.totals["new_deals_rejected_price"])
+        self.assertEqual(0, result.totals["new_deals_rejected_capacity"])
+        self.assertLess(result.totals["final_storage_price"], spec.config["storage_price"])
 
     def test_heterogeneous_scale_controls_surface_saturation_and_repair_backoff(self):
         config = SimConfig(
