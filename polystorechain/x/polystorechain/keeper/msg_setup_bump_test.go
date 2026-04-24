@@ -36,8 +36,13 @@ func registerGeneralProvidersForSetupBump(t *testing.T, f *fixture, prefix strin
 
 func createMode2SetupDeal(t *testing.T, f *fixture, prefix string) (user string, deal types.Deal) {
 	t.Helper()
+	return createMode2SetupDealWithProviderCount(t, f, prefix, 6)
+}
 
-	registerGeneralProvidersForSetupBump(t, f, prefix, 6)
+func createMode2SetupDealWithProviderCount(t *testing.T, f *fixture, prefix string, providerCount int) (user string, deal types.Deal) {
+	t.Helper()
+
+	registerGeneralProvidersForSetupBump(t, f, prefix, providerCount)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
 	userBz := []byte(fmt.Sprintf("%s_user__________", prefix))
@@ -65,6 +70,8 @@ func TestBumpDealSetupSlot_ReplacesProviderAndTracksNonce(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 	user, deal := createMode2SetupDeal(t, f, "setup_bump_replace____")
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithEventManager(sdk.NewEventManager())
+	f.ctx = sdkCtx
 
 	oldProvider := deal.Mode2Slots[0].Provider
 	require.NotEmpty(t, oldProvider)
@@ -86,6 +93,17 @@ func TestBumpDealSetupSlot_ReplacesProviderAndTracksNonce(t *testing.T) {
 	require.Equal(t, res.NewProvider, updated.Providers[0])
 	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, updated.Mode2Slots[0].Status)
 	require.Equal(t, "", updated.Mode2Slots[0].PendingProvider)
+	require.Empty(t, evidenceSummaries(t, f, sdkCtx, ""), "setup bump should not create punitive or hard-fault evidence")
+
+	oldProviderState, err := f.keeper.Providers.Get(sdkCtx, oldProvider)
+	require.NoError(t, err)
+	require.Equal(t, "Active", oldProviderState.Status)
+	require.False(t, oldProviderState.Draining)
+
+	newProviderState, err := f.keeper.Providers.Get(sdkCtx, res.NewProvider)
+	require.NoError(t, err)
+	require.Equal(t, "Active", newProviderState.Status)
+	require.False(t, newProviderState.Draining)
 
 	nonce, err := f.keeper.SetupBumpNonce.Get(sdk.UnwrapSDKContext(f.ctx), collections.Join(deal.Id, uint32(0)))
 	require.NoError(t, err)
@@ -97,6 +115,24 @@ func TestBumpDealSetupSlot_ReplacesProviderAndTracksNonce(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.True(t, tried)
+
+	foundEvent := false
+	for _, event := range sdkCtx.EventManager().Events() {
+		if event.Type != types.TypeMsgBumpDealSetupSlot {
+			continue
+		}
+		foundEvent = true
+		attrs := map[string]string{}
+		for _, attr := range event.Attributes {
+			attrs[attr.Key] = attr.Value
+		}
+		require.Equal(t, fmt.Sprintf("%d", deal.Id), attrs[types.AttributeKeyDealID])
+		require.Equal(t, "0", attrs["slot"])
+		require.Equal(t, oldProvider, attrs["old_provider"])
+		require.Equal(t, res.NewProvider, attrs["new_provider"])
+		require.Equal(t, "1", attrs["bump_nonce"])
+	}
+	require.True(t, foundEvent, "missing setup bump event")
 }
 
 func TestBumpDealSetupSlot_IsDeterministicForSameInitialState(t *testing.T) {
@@ -123,6 +159,45 @@ func TestBumpDealSetupSlot_IsDeterministicForSameInitialState(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, res1.NewProvider, res2.NewProvider)
+}
+
+func TestBumpDealSetupSlot_NoCandidateLeavesSlotAndDoesNotPunish(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	user, deal := createMode2SetupDealWithProviderCount(t, f, "setup_bump_no_cand__", 3)
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithEventManager(sdk.NewEventManager())
+	f.ctx = sdkCtx
+
+	oldProvider := deal.Mode2Slots[0].Provider
+	_, err := msgServer.BumpDealSetupSlot(f.ctx, &types.MsgBumpDealSetupSlot{
+		Creator:          user,
+		DealId:           deal.Id,
+		Slot:             0,
+		ExpectedProvider: oldProvider,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no setup bump provider candidates available")
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, deal.Id)
+	require.NoError(t, err)
+	require.Equal(t, oldProvider, updated.Mode2Slots[0].Provider)
+	require.Equal(t, oldProvider, updated.Providers[0])
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, updated.Mode2Slots[0].Status)
+	require.Empty(t, updated.Mode2Slots[0].PendingProvider)
+	require.Empty(t, evidenceSummaries(t, f, sdkCtx, ""), "failed setup bump should not create punitive or hard-fault evidence")
+
+	oldProviderState, err := f.keeper.Providers.Get(sdkCtx, oldProvider)
+	require.NoError(t, err)
+	require.Equal(t, "Active", oldProviderState.Status)
+	require.False(t, oldProviderState.Draining)
+
+	_, err = f.keeper.SetupBumpNonce.Get(sdkCtx, collections.Join(deal.Id, uint32(0)))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	_, err = f.keeper.SetupTriedProvider.Get(
+		sdkCtx,
+		collections.Join(collections.Join(deal.Id, uint32(0)), oldProvider),
+	)
+	require.ErrorIs(t, err, collections.ErrNotFound)
 }
 
 func TestBumpDealSetupSlot_RejectsWrongOwnerAndExpectedProvider(t *testing.T) {
