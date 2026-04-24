@@ -254,6 +254,12 @@ func TestResolveProviderForRetrievalPlan_Mode2UsesPendingProvider(t *testing.T) 
 	if res.Source != "mode2_slot_pending_provider" {
 		t.Fatalf("unexpected source: %q", res.Source)
 	}
+	if res.Mode2Slot != 0 || res.SlotStatus != 2 {
+		t.Fatalf("unexpected mode2 context: slot=%d status=%d", res.Mode2Slot, res.SlotStatus)
+	}
+	if res.ActiveProvider != "providerA" || res.PendingProvider != "providerPending" {
+		t.Fatalf("unexpected repair context: active=%q pending=%q", res.ActiveProvider, res.PendingProvider)
+	}
 }
 
 func TestResolveProviderForRetrievalPlan_FallsBackToLocalWhenMetadataUnavailable(t *testing.T) {

@@ -1429,13 +1429,17 @@ func TestGatewayPlanRetrievalSession_UsesMetadataProviderWithoutLocalProvider(t 
 	}
 
 	var resp struct {
-		Provider string `json:"provider"`
+		Provider       string `json:"provider"`
+		ProviderSource string `json:"provider_source"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if resp.Provider != metadataProvider {
 		t.Fatalf("expected metadata provider %q, got %q", metadataProvider, resp.Provider)
+	}
+	if resp.ProviderSource != "deal_metadata_provider" {
+		t.Fatalf("expected provider source deal_metadata_provider, got %q", resp.ProviderSource)
 	}
 }
 
@@ -1510,6 +1514,97 @@ func setPlanResolverForTest(t *testing.T, resolver func(context.Context, uint64,
 	prev := resolveProviderForRetrievalPlanFn
 	resolveProviderForRetrievalPlanFn = resolver
 	t.Cleanup(func() { resolveProviderForRetrievalPlanFn = prev })
+}
+
+func TestGatewayPlanRetrievalSession_ExposesRepairAwareProviderContext(t *testing.T) {
+	useTempUploadDir(t)
+	resetProviderAddressCacheForTest(t)
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+
+	dealID := uint64(14)
+	owner := testDealOwner(t)
+	manifestRoot := mustTestManifestRoot(t, "plan-repair-context")
+	preparePlanRetrievalTestSlab(t, dealID, manifestRoot, "plan.txt", 512)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/14" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"deal": map[string]any{
+				"id":           "14",
+				"owner":        owner,
+				"cid":          manifestRoot.Canonical,
+				"service_hint": "General:rs=2+1",
+				"providers":    []string{"nil1activeprovider"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	defer func() { lcdBase = oldLCD }()
+
+	setPlanResolverForTest(t, func(_ context.Context, gotDealID uint64, stripe stripeParams, mode2Slot uint64) (retrievalProviderResolution, error) {
+		if gotDealID != dealID {
+			t.Fatalf("resolver got deal_id=%d", gotDealID)
+		}
+		if stripe.mode != 2 {
+			t.Fatalf("expected Mode2 stripe, got mode=%d", stripe.mode)
+		}
+		if mode2Slot != 0 {
+			t.Fatalf("expected slot 0, got %d", mode2Slot)
+		}
+		return retrievalProviderResolution{
+			Provider:        "nil1pendingprovider",
+			Source:          "mode2_slot_pending_provider",
+			Mode2Slot:       0,
+			SlotStatus:      2,
+			ActiveProvider:  "nil1activeprovider",
+			PendingProvider: "nil1pendingprovider",
+		}, nil
+	})
+
+	r := testRouter()
+	q := url.Values{}
+	q.Set("deal_id", "14")
+	q.Set("owner", owner)
+	q.Set("file_path", "plan.txt")
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/plan-retrieval-session/"+manifestRoot.Canonical+"?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GatewayPlanRetrievalSession failed: %d, body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Provider             string  `json:"provider"`
+		ProviderSource       string  `json:"provider_source"`
+		Mode2Slot            *uint64 `json:"mode2_slot"`
+		Mode2SlotStatus      *int    `json:"mode2_slot_status"`
+		Mode2ActiveProvider  string  `json:"mode2_active_provider"`
+		Mode2PendingProvider string  `json:"mode2_pending_provider"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Provider != "nil1pendingprovider" || resp.ProviderSource != "mode2_slot_pending_provider" {
+		t.Fatalf("unexpected provider context: provider=%q source=%q", resp.Provider, resp.ProviderSource)
+	}
+	if resp.Mode2Slot == nil || *resp.Mode2Slot != 0 {
+		t.Fatalf("expected mode2_slot=0, got %#v", resp.Mode2Slot)
+	}
+	if resp.Mode2SlotStatus == nil || *resp.Mode2SlotStatus != 2 {
+		t.Fatalf("expected mode2_slot_status=2, got %#v", resp.Mode2SlotStatus)
+	}
+	if resp.Mode2ActiveProvider != "nil1activeprovider" || resp.Mode2PendingProvider != "nil1pendingprovider" {
+		t.Fatalf("unexpected repair providers: active=%q pending=%q", resp.Mode2ActiveProvider, resp.Mode2PendingProvider)
+	}
 }
 
 func TestGatewayPlanRetrievalSession_ProviderResolutionStatusMapping(t *testing.T) {
