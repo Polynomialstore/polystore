@@ -62,6 +62,11 @@ This report aggregates `3` completed simulator run output directories. It does n
 | `audit_budget_spent` | 290.470000 | 341.010000 | 50.540000 | 314.953333 | Audit budget actually consumed under the configured cap. |
 | `audit_budget_backlog` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Unmet audit demand remaining at run end. |
 | `audit_budget_exhausted` | 0.000000 | 1.000000 | 1.000000 | 0.333333 | Epochs where audit demand exceeded available budget. |
+| `evidence_spam_claims` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Low-quality deputy evidence submissions in the spam fixture. |
+| `evidence_spam_convictions` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Spam claims that still reached conviction and earned bounty. |
+| `evidence_spam_bond_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Evidence bond burned for unconvicted spam claims. |
+| `evidence_spam_bounty_paid` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Conviction-gated bounty paid to the evidence spammer. |
+| `evidence_spam_net_gain` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Spammer net economics; positive values indicate an abuse risk. |
 | `providers_negative_pnl` | 0.000000 | 4.000000 | 4.000000 | 2.666667 | Market sustainability and churn pressure. |
 | `saturated_responses` | 14854.000000 | 16409.000000 | 1555.000000 | 15581.666667 | Provider bandwidth bottleneck signal. |
 | `providers_over_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Placement/capacity invariant; should remain zero. |

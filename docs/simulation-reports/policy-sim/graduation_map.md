@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 16 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 17 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 6 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -17,6 +17,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`audit-budget-exhaustion`](audit-budget-exhaustion/report.md) | `implementation planning` | audit budget keeper tests | Add audit-budget demand/spend/backlog tests proving audit demand is capped and backlog is explicit. | `audit budget state`, `audit backlog query`, `evidence bounty accounting` | No process e2e until audit sessions are wired through provider-daemon. |
 | [`coordinated-regional-outage`](coordinated-regional-outage/report.md) | `further simulation review` | placement diversity and nightly stress | Keep as simulator calibration until placement-diversity params exist, then add keeper candidate-selection tests. | `regional/provider-class placement metadata`, `operator concentration limits`, `nightly stress harness` | Manual or nightly multi-provider outage, not PR-blocking CI. |
 | [`corrupt-provider`](corrupt-provider/report.md) | `implementation planning` | hard-fault keeper path | Add invalid-proof or wrong-data keeper tests proving no corrupt payment, repair start, and slash/jail simulation gates. | `hard evidence submission`, `corrupt-byte reward exclusion`, `jail/slash params` | Provider returns corrupt bytes or invalid proof and user-gateway rejects the response. |
+| [`deputy-evidence-spam`](deputy-evidence-spam/report.md) | `implementation planning` | evidence-market keeper tests | Add evidence-bond escrow, burn-on-expiry, conviction gating, bounty payout, spam-throttle, and deputy-reputation tests. | `evidence bond escrow`, `conviction state`, `bounty payout ledger`, `deputy reputation` | No process e2e until MsgSubmitEvidence and protocol retrieval sessions exist. |
 | [`elasticity-cap-hit`](elasticity-cap-hit/report.md) | `further simulation review` | elasticity spend-window tests | Add spend-window tests for saturation signaling, fail-closed expansion, TTL, and cap-bound rejection. | `MsgSignalSaturation hardening`, `overlay accountability`, `deal spend window` | Burst traffic e2e after overlay semantics are implemented. |
 | [`flapping-provider`](flapping-provider/report.md) | `implementation planning` | keeper soft-fault window | Add missed-epoch window tests proving intermittent failures create health evidence without triggering repair churn. | `soft-fault decay`, `per-slot suspect state`, `operator health query` | Optional provider restart e2e; keeper coverage should be the first artifact. |
 | [`high-bandwidth-promotion`](high-bandwidth-promotion/report.md) | `implementation planning` | provider capability and hot-route policy tests | Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment. | `provider capability tier state`, `bandwidth probe telemetry`, `hot-route preference query`, `capability demotion rule` | Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression. |
@@ -61,16 +62,20 @@ This report converts the committed simulator corpus into implementation planning
 | `audit backlog query` | 1 |
 | `audit budget state` | 1 |
 | `bandwidth probe telemetry` | 1 |
+| `bounty payout ledger` | 1 |
 | `burn ledger` | 1 |
 | `candidate diversity diagnostics` | 1 |
 | `compliance-gated base rewards` | 1 |
+| `conviction state` | 1 |
 | `corrupt-byte reward exclusion` | 1 |
 | `credit cap enforcement` | 1 |
 | `deal spend window` | 1 |
 | `delinquency reason codes` | 1 |
+| `deputy reputation` | 1 |
 | `deputy transcript accounting` | 1 |
 | `dynamic pricing params` | 1 |
 | `dynamic pricing state` | 1 |
+| `evidence bond escrow` | 1 |
 | `evidence bounty accounting` | 1 |
 | `gateway fallback telemetry` | 1 |
 | `gateway repair-aware routing` | 1 |

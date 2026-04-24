@@ -181,6 +181,15 @@ SCENARIO_GUIDES = {
         "expected": "Quota misses create audit demand, audit spend is capped by budget, repair starts where allowed, and data-loss events remain zero.",
         "review": "Use this case to decide whether audit budget exhaustion should degrade into backlog, higher fees, or stronger admission control.",
     },
+    "deputy-evidence-spam": {
+        "title": "Deputy Evidence Spam",
+        "intent": (
+            "Model a deputy submitting low-quality failure claims. The policy question is whether evidence bonds and conviction-gated "
+            "bounties make spam uneconomic before evidence-market keeper code exists."
+        ),
+        "expected": "Spam claims burn bond, unconvicted claims earn no bounty, net spam gain is non-positive, and no real provider is repaired or slashed.",
+        "review": "Use this before implementing evidence bonds, burn-on-expiry, bounty payout, or deputy reputation state.",
+    },
     "price-controller-bounds": {
         "title": "Price Controller Bounds",
         "intent": (
@@ -361,6 +370,11 @@ SWEEP_METRICS = [
     "audit_budget_spent",
     "audit_budget_backlog",
     "audit_budget_exhausted",
+    "evidence_spam_claims",
+    "evidence_spam_convictions",
+    "evidence_spam_bond_burned",
+    "evidence_spam_bounty_paid",
+    "evidence_spam_net_gain",
     "providers_negative_pnl",
     "saturated_responses",
     "providers_over_capacity",
@@ -393,6 +407,10 @@ SWEEP_CONFIG_KEYS = [
     "retrieval_price_per_slot",
     "base_reward_per_slot",
     "audit_budget_per_epoch",
+    "evidence_spam_claims_per_epoch",
+    "evidence_spam_bond",
+    "evidence_spam_bounty",
+    "evidence_spam_conviction_bps",
     "provider_capacity_min",
     "provider_capacity_max",
     "provider_bandwidth_capacity_min",
@@ -573,6 +591,11 @@ def compute_signals(
             "audit_budget_carryover": fnum(totals.get("audit_budget_carryover")),
             "audit_budget_backlog": fnum(totals.get("audit_budget_backlog")),
             "audit_budget_exhausted_epochs": fnum(totals.get("audit_budget_exhausted")),
+            "evidence_spam_claims": fnum(totals.get("evidence_spam_claims")),
+            "evidence_spam_convictions": fnum(totals.get("evidence_spam_convictions")),
+            "evidence_spam_bond_burned": fnum(totals.get("evidence_spam_bond_burned")),
+            "evidence_spam_bounty_paid": fnum(totals.get("evidence_spam_bounty_paid")),
+            "evidence_spam_net_gain": fnum(totals.get("evidence_spam_net_gain")),
             "storage_price_start": storage_prices[0] if storage_prices else 0.0,
             "storage_price_end": storage_prices[-1] if storage_prices else 0.0,
             "storage_price_min": min(storage_prices, default=0.0),
@@ -983,6 +1006,12 @@ def write_report_md(
             "",
             "![Evidence Pressure](graphs/evidence_pressure.svg)",
             "",
+            "### Evidence Spam Economics",
+            "",
+            "Shows bond burn and bounty payout for low-quality deputy evidence claims.",
+            "",
+            "![Evidence Spam Economics](graphs/evidence_spam.svg)",
+            "",
             "### Audit Budget",
             "",
             "Shows whether miss-driven audit demand is spending budget or accumulating carryover.",
@@ -1049,13 +1078,22 @@ def build_behavior_narrative(
 
     soft_evidence = sum(1 for row in evidence if row.get("evidence_class") == "soft")
     hard_evidence = sum(1 for row in evidence if row.get("evidence_class") == "hard")
+    threshold_evidence = sum(1 for row in evidence if row.get("evidence_class") == "threshold")
+    spam_evidence = sum(1 for row in evidence if row.get("evidence_class") == "spam")
     if evidence:
         parts.append(
-            f"The policy layer recorded `{len(evidence)}` evidence events: `{soft_evidence}` soft events and `{hard_evidence}` hard events. "
-            "Soft evidence is suitable for repair and reward exclusion; hard evidence is the category that can later justify slashing or stronger sanctions."
+            f"The policy layer recorded `{len(evidence)}` evidence events: `{soft_evidence}` soft, `{threshold_evidence}` threshold, "
+            f"`{hard_evidence}` hard, and `{spam_evidence}` spam events. Soft evidence is suitable for repair and reward exclusion; "
+            "hard or convicted threshold evidence is the category that can later justify slashing or stronger sanctions."
         )
     else:
         parts.append("The policy layer recorded no evidence events, which is expected only for cooperative or pure-market control scenarios.")
+    if fnum(totals.get("evidence_spam_claims")) > 0:
+        parts.append(
+            f"Deputy evidence spam was exercised: `{fmt_num(totals.get('evidence_spam_claims'))}` low-quality claims burned "
+            f"`{fmt_money(totals.get('evidence_spam_bond_burned'))}` in bond and paid `{fmt_money(totals.get('evidence_spam_bounty_paid'))}` in bounties, "
+            f"for spammer net gain `{fmt_money(totals.get('evidence_spam_net_gain'))}`."
+        )
 
     if repairs:
         started = sum(1 for row in repairs if row.get("event") == "repair_started")
@@ -1147,6 +1185,8 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Provider bandwidth cost/retrieval | `{fmt_money(config.get('provider_bandwidth_cost_per_retrieval'))}` | Simplified egress cost basis for retrieval-heavy scenarios. |",
         f"| Performance reward per serve | `{fmt_money(config.get('performance_reward_per_serve'))}` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |",
         f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |",
+        f"| Evidence spam claims/epoch | `{fmt_num(config.get('evidence_spam_claims_per_epoch'))}` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |",
+        f"| Evidence bond / bounty | `{fmt_money(config.get('evidence_spam_bond'))}` / `{fmt_money(config.get('evidence_spam_bounty'))}` | Spam claims burn bond unless convicted; bounty is paid only on convicted evidence. |",
         f"| Retrieval burn | `{fmt_bps(config.get('retrieval_burn_bps'))}` | Fraction of variable retrieval fees burned before provider payout. |",
     ]
 
@@ -1187,6 +1227,8 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Provider latency p10 / p50 / p90 | `{fmt_num(performance['provider_latency_p10_ms'])}` / `{fmt_num(performance['provider_latency_p50_ms'])}` / `{fmt_num(performance['provider_latency_p90_ms'])}` ms | Shows whether aggregate averages hide slow provider tails. |",
         f"| Audit demand / spent | `{fmt_money(economics['audit_budget_demand'])}` / `{fmt_money(economics['audit_budget_spent'])}` | Shows whether enforcement evidence consumed the available audit budget. |",
         f"| Audit backlog / exhausted epochs | `{fmt_money(economics['audit_budget_backlog'])}` / `{fmt_num(economics['audit_budget_exhausted_epochs'])}` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |",
+        f"| Evidence spam claims / convictions | `{fmt_num(economics['evidence_spam_claims'])}` / `{fmt_num(economics['evidence_spam_convictions'])}` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |",
+        f"| Evidence spam bond / net gain | `{fmt_money(economics['evidence_spam_bond_burned'])}` / `{fmt_money(economics['evidence_spam_net_gain'])}` | Spam should be negative-EV unless conviction-gated bounties justify the claim volume. |",
         f"| Top operator provider share | `{fmt_bps(concentration['top_operator_provider_share_bps'])}` | Shows whether many SP identities are controlled by one operator. |",
         f"| Top operator assignment share | `{fmt_bps(concentration['top_operator_assignment_share_bps'])}` | Shows whether placement caps translate identity concentration into slot concentration. |",
         f"| Max operator slots/deal | `{fmt_num(concentration['max_operator_deal_slots'])}` | Checks per-deal blast-radius limits against operator Sybil concentration. |",
@@ -1262,6 +1304,7 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             + fnum(row.get("offline_responses"))
             + fnum(row.get("corrupt_responses"))
             + fnum(row.get("saturated_responses"))
+            + fnum(row.get("evidence_spam_claims"))
         )
         notes = []
         if fnum(row.get("offline_responses")):
@@ -1274,6 +1317,8 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('saturated_responses'))} saturated")
         if fnum(row.get("quota_misses")):
             notes.append(f"{fmt_num(row.get('quota_misses'))} quota misses")
+        if fnum(row.get("evidence_spam_claims")):
+            notes.append(f"{fmt_num(row.get('evidence_spam_claims'))} evidence spam claims")
         if fnum(row.get("repair_backoffs")):
             notes.append(f"{fmt_num(row.get('repair_backoffs'))} repair backoffs")
         if fnum(row.get("repair_cooldowns")):
@@ -1440,6 +1485,10 @@ def assertion_meaning(name: str) -> str:
         "min_audit_budget_spent": "Audit demand should spend at least this much budget in the fixture.",
         "min_audit_budget_backlog": "Tight audit-budget fixtures should expose unmet audit demand instead of hiding capped spend.",
         "min_audit_budget_exhausted": "Tight audit-budget fixtures should record at least this many budget-exhausted epochs.",
+        "min_evidence_spam_claims": "Evidence-market spam fixture must submit low-quality claims.",
+        "min_evidence_spam_bond_burned": "Unconvicted evidence spam should burn a non-zero bond.",
+        "max_evidence_spam_bounty_paid": "Low-quality spam should not receive conviction-gated bounty payout.",
+        "max_evidence_spam_net_gain": "Spam should be uneconomic or at least non-profitable under the modeled bond/bounty parameters.",
     }
     return meanings.get(name, "Custom assertion. Review the detail and fixture threshold.")
 
@@ -1482,7 +1531,7 @@ def build_economic_narrative(
         + fnum(totals.get("audit_budget_minted"))
         + fnum(totals.get("performance_reward_paid"))
     )
-    burned = retrieval_burned + fnum(totals.get("reward_burned"))
+    burned = retrieval_burned + fnum(totals.get("reward_burned")) + fnum(totals.get("evidence_spam_bond_burned"))
     burn_ratio = burned / minted if minted else 0.0
     parts = [
         f"The run minted `{fmt_money(minted)}` reward/audit units and burned `{fmt_money(burned)}` units, "
@@ -1495,6 +1544,12 @@ def build_economic_narrative(
         f"Audit accounting saw `{fmt_money(totals.get('audit_budget_demand'))}` of demand, spent `{fmt_money(totals.get('audit_budget_spent'))}`, "
         f"and ended with `{fmt_money(totals.get('audit_budget_backlog'))}` backlog after `{fmt_num(totals.get('audit_budget_exhausted'))}` exhausted epochs.",
     ]
+    if fnum(totals.get("evidence_spam_claims")) > 0:
+        parts.append(
+            f"Evidence-spam accounting burned `{fmt_money(totals.get('evidence_spam_bond_burned'))}` in claim bonds, "
+            f"paid `{fmt_money(totals.get('evidence_spam_bounty_paid'))}` in conviction-gated bounties, "
+            f"and left the spammer with net gain `{fmt_money(totals.get('evidence_spam_net_gain'))}`."
+        )
     if negative_pnl:
         parts.append(
             f"`{len(negative_pnl)}` providers ended with negative P&L and `{len(churn_risk)}` were marked as churn risk. "
@@ -1640,7 +1695,27 @@ def write_risk_register(
                 "followup": "Review audit budget per epoch, audit cost per miss, escalation semantics, and whether backlog should trigger governance review.",
             }
         )
-    if evidence and not repairs and str(config["scenario"]) not in {"ideal", "underpriced-storage", "wash-retrieval", "viral-public-retrieval", "elasticity-cap-hit"}:
+    if fnum(totals.get("evidence_spam_net_gain")) > 0:
+        rows.append(
+            {
+                "risk": "Profitable evidence spam",
+                "severity": "high",
+                "evidence": (
+                    f"{fmt_money(totals.get('evidence_spam_net_gain'))} net spam gain from "
+                    f"{fmt_num(totals.get('evidence_spam_claims'))} claims."
+                ),
+                "impact": "A deputy can profit by flooding low-quality evidence instead of producing useful enforcement work.",
+                "followup": "Increase evidence bond, reduce bounty, add spam throttles, or require stronger conviction gating before keeper work.",
+            }
+        )
+    if evidence and not repairs and str(config["scenario"]) not in {
+        "ideal",
+        "underpriced-storage",
+        "wash-retrieval",
+        "viral-public-retrieval",
+        "elasticity-cap-hit",
+        "deputy-evidence-spam",
+    }:
         rows.append(
             {
                 "risk": "Evidence without repair",
@@ -1710,6 +1785,10 @@ def write_risk_register(
             f"- Audit budget spent: `{fmt_money(totals.get('audit_budget_spent'))}`",
             f"- Audit budget backlog: `{fmt_money(totals.get('audit_budget_backlog'))}`",
             f"- Audit budget exhausted epochs: `{fmt_num(totals.get('audit_budget_exhausted'))}`",
+            f"- Evidence spam claims: `{fmt_num(totals.get('evidence_spam_claims'))}`",
+            f"- Evidence spam bond burned: `{fmt_money(totals.get('evidence_spam_bond_burned'))}`",
+            f"- Evidence spam bounty paid: `{fmt_money(totals.get('evidence_spam_bounty_paid'))}`",
+            f"- Evidence spam net gain: `{fmt_money(totals.get('evidence_spam_net_gain'))}`",
             "",
             "## Review Questions",
             "",
@@ -1732,6 +1811,7 @@ def graduation_semantics(scenario: str) -> str:
         "malicious-corrupt": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
         "lazy-provider": "Graduation means subsidy/reward gating catches useful-work failures even if user reads are still available.",
         "audit-budget-exhaustion": "Graduation means audit demand is bounded by budget and turns into backlog or policy review instead of unbounded issuance.",
+        "deputy-evidence-spam": "Graduation means low-quality deputy evidence is economically negative-EV and cannot trigger live provider punishment without conviction.",
         "price-controller-bounds": "Graduation means price movement is bounded and explainable, not that the economic parameters are final.",
         "subsidy-farming": "Graduation means non-compliant responsibility is not profitably subsidized by base rewards.",
         "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
@@ -1779,6 +1859,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "malicious-corrupt",
         "lazy-provider",
         "setup-failure",
+        "deputy-evidence-spam",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
@@ -1829,6 +1910,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a keeper/runtime planning ticket that names service-class params, latency-tier windows, reward multipliers, telemetry inputs, and which QoS tiers affect placement without becoming slashable evidence.")
     elif recommendation == "Candidate for implementation planning." and scenario == "operator-concentration-cap":
         lines.append("Create a keeper/runtime planning ticket that names operator identity source, per-deal assignment caps, replacement fallback behavior, and concentration alert thresholds.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "deputy-evidence-spam":
+        lines.append("Create a keeper/runtime planning ticket that names evidence bond escrow, burn-on-expiry, conviction-gated bounty payout, spam throttles, and deputy reputation inputs.")
     elif recommendation == "Candidate for implementation planning.":
         lines.append("Create a keeper/e2e planning ticket that names the exact evidence rows, reward-accounting rule, and repair transition this fixture should enforce.")
     elif recommendation == "Candidate for further simulation review.":
@@ -1932,6 +2015,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         secondary_label="Invalid Proofs",
     )
     write_line_svg(
+        graphs_dir / "evidence_spam.svg",
+        "Evidence Spam Bond Burn",
+        [fnum(row.get("evidence_spam_bond_burned")) for row in economy],
+        secondary=[fnum(row.get("evidence_spam_bounty_paid")) for row in economy],
+        secondary_label="Bounty Paid",
+    )
+    write_line_svg(
         graphs_dir / "audit_budget.svg",
         "Audit Budget Spent",
         [fnum(row.get("audit_budget_spent")) for row in economy],
@@ -1962,7 +2052,12 @@ def safe_rate(row: dict[str, str], num: str, denom: str) -> float:
 
 
 def burn_mint_ratio(row: dict[str, str]) -> float:
-    burned = fnum(row.get("retrieval_base_burned")) + fnum(row.get("retrieval_variable_burned")) + fnum(row.get("reward_burned"))
+    burned = (
+        fnum(row.get("retrieval_base_burned"))
+        + fnum(row.get("retrieval_variable_burned"))
+        + fnum(row.get("reward_burned"))
+        + fnum(row.get("evidence_spam_bond_burned"))
+    )
     minted = fnum(row.get("reward_pool_minted")) + fnum(row.get("audit_budget_minted"))
     return burned / minted if minted else 0.0
 
@@ -2362,6 +2457,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "some providers ended with negative modeled P&L")
     if fnum(totals.get("audit_budget_backlog")) > 0:
         raise_to("medium", "audit budget backlog remained at run end")
+    if fnum(totals.get("evidence_spam_net_gain")) > 0:
+        raise_to("high", "evidence spam was profitable")
     if not reasons:
         reasons.append("assertions passed and no material sweep risk surfaced")
     return level, reasons
@@ -2567,6 +2664,11 @@ def sweep_metric_meaning(key: str) -> str:
         "audit_budget_spent": "Audit budget actually consumed under the configured cap.",
         "audit_budget_backlog": "Unmet audit demand remaining at run end.",
         "audit_budget_exhausted": "Epochs where audit demand exceeded available budget.",
+        "evidence_spam_claims": "Low-quality deputy evidence submissions in the spam fixture.",
+        "evidence_spam_convictions": "Spam claims that still reached conviction and earned bounty.",
+        "evidence_spam_bond_burned": "Evidence bond burned for unconvicted spam claims.",
+        "evidence_spam_bounty_paid": "Conviction-gated bounty paid to the evidence spammer.",
+        "evidence_spam_net_gain": "Spammer net economics; positive values indicate an abuse risk.",
         "providers_negative_pnl": "Market sustainability and churn pressure.",
         "saturated_responses": "Provider bandwidth bottleneck signal.",
         "providers_over_capacity": "Placement/capacity invariant; should remain zero.",

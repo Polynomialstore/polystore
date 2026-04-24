@@ -32,6 +32,10 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 - Audit budget spent: `7.7000`
 - Audit budget backlog: `0.0000`
 - Audit budget exhausted epochs: `2`
+- Evidence spam claims: `0`
+- Evidence spam bond burned: `0.0000`
+- Evidence spam bounty paid: `0.0000`
+- Evidence spam net gain: `0.0000`
 
 ## Review Questions
 

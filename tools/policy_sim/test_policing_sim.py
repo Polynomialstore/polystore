@@ -109,6 +109,21 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertIn("audit_budget_backlog", result.economy[0])
         self.assertTrue(any(row["audit_budget_exhausted"] for row in result.economy))
 
+    def test_deputy_evidence_spam_burns_bonds_without_bounty(self):
+        fixture = Path(__file__).with_name("scenarios") / "deputy_evidence_spam.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(240, result.totals["evidence_spam_claims"])
+        self.assertEqual(0, result.totals["evidence_spam_convictions"])
+        self.assertGreater(result.totals["evidence_spam_bond_burned"], 0)
+        self.assertEqual(0, result.totals["evidence_spam_bounty_paid"])
+        self.assertLessEqual(result.totals["evidence_spam_net_gain"], 0)
+        self.assertEqual(0, result.totals["repairs_started"])
+        self.assertEqual(0, result.totals["provider_slashed"])
+        self.assertTrue(any(row["reason"] == "deputy_evidence_spam" for row in result.evidence))
+
     def test_heterogeneous_scale_controls_surface_saturation_and_repair_backoff(self):
         config = SimConfig(
             scenario="large-scale-regional-stress",
@@ -429,6 +444,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "performance_tiers.svg").exists())
             self.assertTrue((report_dir / "graphs" / "operator_concentration.svg").exists())
             self.assertTrue((report_dir / "graphs" / "evidence_pressure.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "evidence_spam.svg").exists())
             self.assertTrue((report_dir / "graphs" / "audit_budget.svg").exists())
             self.assertTrue((report_dir / "graphs" / "audit_backlog.svg").exists())
             self.assertTrue((report_dir / "graphs" / "elasticity_spend.svg").exists())
@@ -460,6 +476,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Performance Tiers](graphs/performance_tiers.svg)", report_text)
             self.assertIn("![Operator Concentration](graphs/operator_concentration.svg)", report_text)
             self.assertIn("![Evidence Pressure](graphs/evidence_pressure.svg)", report_text)
+            self.assertIn("![Evidence Spam Economics](graphs/evidence_spam.svg)", report_text)
             self.assertIn("![Audit Budget](graphs/audit_budget.svg)", report_text)
             self.assertIn("![Audit Backlog](graphs/audit_backlog.svg)", report_text)
             self.assertIn("![Elasticity Spend](graphs/elasticity_spend.svg)", report_text)
