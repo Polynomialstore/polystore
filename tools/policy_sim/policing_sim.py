@@ -14,8 +14,10 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import random
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -71,6 +73,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "high-bandwidth-promotion",
     "high-bandwidth-regression",
     "performance-market-latency",
+    "operator-concentration-cap",
 }
 
 CLI_SCENARIOS = sorted(
@@ -151,6 +154,9 @@ class SimConfig:
     high_bandwidth_demotion_saturation_bps: int = 0
     high_bandwidth_routing_enabled: bool = False
     hot_retrieval_bps: int = 0
+    operator_count: int = 0
+    dominant_operator_provider_bps: int = 0
+    operator_assignment_cap_per_deal: int = 0
     provider_online_probability_min: float = 1.0
     provider_online_probability_max: float = 1.0
     provider_repair_probability_min: float = 1.0
@@ -252,9 +258,16 @@ class SimConfig:
             "high_bandwidth_max_saturation_bps": self.high_bandwidth_max_saturation_bps,
             "high_bandwidth_demotion_saturation_bps": self.high_bandwidth_demotion_saturation_bps,
             "hot_retrieval_bps": self.hot_retrieval_bps,
+            "dominant_operator_provider_bps": self.dominant_operator_provider_bps,
         }.items():
             if value < 0 or value > 10_000:
                 raise ValueError(f"{key} must be in [0, 10000]")
+        if self.operator_count < 0:
+            raise ValueError("operator_count must be non-negative")
+        if self.operator_count > self.providers:
+            raise ValueError("operator_count must be <= providers")
+        if self.operator_assignment_cap_per_deal < 0:
+            raise ValueError("operator_assignment_cap_per_deal must be non-negative")
 
 
 @dataclass
@@ -272,6 +285,7 @@ class ProviderBehavior:
 class Provider:
     provider_id: str
     initial_bond: float
+    operator_id: str
     region: str = "global"
     capacity_slots: int = 16
     bandwidth_capacity_per_epoch: int = 0
@@ -411,6 +425,9 @@ class EpochMetrics:
     high_bandwidth_serves: int = 0
     hot_retrieval_attempts: int = 0
     hot_high_bandwidth_serves: int = 0
+    max_operator_assignment_share_bps: int = 0
+    max_operator_deal_slots: int = 0
+    operator_deal_cap_violations: int = 0
     platinum_serves: int = 0
     gold_serves: int = 0
     silver_serves: int = 0
@@ -466,6 +483,7 @@ class SimResult:
     evidence: list[dict[str, Any]] = field(default_factory=list)
     repairs: list[dict[str, Any]] = field(default_factory=list)
     economy: list[dict[str, Any]] = field(default_factory=list)
+    operators: list[dict[str, Any]] = field(default_factory=list)
 
     def to_jsonable(self) -> dict[str, Any]:
         return {
@@ -479,6 +497,7 @@ class SimResult:
             "evidence": self.evidence,
             "repairs": self.repairs,
             "economy": self.economy,
+            "operators": self.operators,
         }
 
 
@@ -510,6 +529,10 @@ class PolicySimulator:
     def provider_id(index: int) -> str:
         return f"sp-{index:03d}"
 
+    @staticmethod
+    def operator_id(index: int) -> str:
+        return f"op-{index:03d}"
+
     def mode_at_least(self, mode: str) -> bool:
         return ENFORCEMENT_ORDER[self.config.enforcement_mode] >= ENFORCEMENT_ORDER[mode]
 
@@ -523,11 +546,13 @@ class PolicySimulator:
         bandwidth_max = self.config.provider_bandwidth_capacity_max or self.config.provider_bandwidth_capacity_per_epoch
         latency_min = self.config.provider_latency_ms_min
         latency_max = self.config.provider_latency_ms_max
+        operator_count = self.config.operator_count or self.config.providers
         for index in range(self.config.providers):
             provider_id = self.provider_id(index)
             provider = Provider(
                 provider_id,
                 self.config.provider_initial_bond,
+                self._operator_id_for_provider(index, operator_count),
                 region=regions[index % len(regions)],
                 capacity_slots=rng.randint(capacity_min, capacity_max) if capacity_max else self.config.provider_slot_capacity,
                 bandwidth_capacity_per_epoch=rng.randint(bandwidth_min, bandwidth_max) if bandwidth_max else 0,
@@ -546,15 +571,37 @@ class PolicySimulator:
             providers[provider_id] = provider
         return providers
 
+    def _operator_id_for_provider(self, provider_index: int, operator_count: int) -> str:
+        if self.config.dominant_operator_provider_bps > 0 and operator_count > 1:
+            dominant_count = ceil_div(self.config.providers * self.config.dominant_operator_provider_bps, 10_000)
+            dominant_count = max(1, min(self.config.providers, dominant_count))
+            if provider_index < dominant_count:
+                return self.operator_id(0)
+            return self.operator_id(1 + ((provider_index - dominant_count) % (operator_count - 1)))
+        return self.operator_id(provider_index % operator_count)
+
     def _build_deals(self) -> list[DealState]:
         deals: list[DealState] = []
+        assigned_counts = {pid: 0 for pid in self.providers}
         for deal_idx in range(self.config.deals):
             deal_id = deal_idx + 1
             start = (deal_idx * self.config.n) % self.config.providers
             slots = []
+            deal_provider_ids: set[str] = set()
+            deal_operator_counts: dict[str, int] = {}
             for slot_idx in range(self.config.n):
-                pid = self.provider_id((start + slot_idx) % self.config.providers)
+                pid = self._select_initial_provider(
+                    start,
+                    slot_idx,
+                    assigned_counts,
+                    deal_provider_ids,
+                    deal_operator_counts,
+                )
                 slots.append(SlotState(deal_id=deal_id, slot=slot_idx, provider_id=pid))
+                assigned_counts[pid] += 1
+                deal_provider_ids.add(pid)
+                operator_id = self.providers[pid].operator_id
+                deal_operator_counts[operator_id] = deal_operator_counts.get(operator_id, 0) + 1
             deals.append(
                 DealState(
                     deal_id=deal_id,
@@ -566,6 +613,34 @@ class PolicySimulator:
                 )
             )
         return deals
+
+    def _select_initial_provider(
+        self,
+        start: int,
+        slot_idx: int,
+        assigned_counts: dict[str, int],
+        deal_provider_ids: set[str],
+        deal_operator_counts: dict[str, int],
+    ) -> str:
+        ordered_provider_ids = [
+            self.provider_id((start + slot_idx + offset) % self.config.providers)
+            for offset in range(self.config.providers)
+        ]
+        for enforce_operator_cap, enforce_capacity in ((True, True), (False, True), (False, False)):
+            for provider_id in ordered_provider_ids:
+                if provider_id in deal_provider_ids:
+                    continue
+                provider = self.providers[provider_id]
+                if enforce_capacity and assigned_counts.get(provider_id, 0) >= provider.capacity_slots:
+                    continue
+                if (
+                    enforce_operator_cap
+                    and self.config.operator_assignment_cap_per_deal > 0
+                    and deal_operator_counts.get(provider.operator_id, 0) >= self.config.operator_assignment_cap_per_deal
+                ):
+                    continue
+                return provider_id
+        raise RuntimeError("no provider candidate available for initial placement")
 
     def _apply_builtin_scenario(self, scenario: str) -> None:
         if scenario in BUILTIN_NOOP_SCENARIOS:
@@ -635,6 +710,7 @@ class PolicySimulator:
             evidence=self.evidence_rows,
             repairs=self.repair_rows,
             economy=self.economy_rows,
+            operators=self._operator_rows(),
         )
 
     def _run_epoch(self, epoch: int) -> EpochMetrics:
@@ -668,6 +744,7 @@ class PolicySimulator:
         self._record_data_loss_events(metrics)
         self._settle_epoch_economy(epoch, metrics)
         self._update_provider_capabilities(epoch, metrics)
+        self._record_concentration_metrics(metrics)
         self._maybe_update_prices(metrics)
         return metrics
 
@@ -1169,20 +1246,35 @@ class PolicySimulator:
         excluded = {s.provider_id for s in deal.slots}
         excluded.update(s.pending_provider_id for s in deal.slots if s.pending_provider_id)
         assigned_counts = self._assigned_counts(include_pending=True)
+        deal_operator_counts = self._deal_operator_counts(deal, excluded_slot=slot)
         candidates, diagnostics = self._replacement_candidates(
             epoch,
             assigned_counts,
             excluded,
+            deal_operator_counts,
             slot.provider_id,
             allow_same_deal=False,
+            enforce_operator_cap=True,
         )
         if not candidates:
             candidates, diagnostics = self._replacement_candidates(
                 epoch,
                 assigned_counts,
                 excluded,
+                deal_operator_counts,
                 slot.provider_id,
                 allow_same_deal=True,
+                enforce_operator_cap=True,
+            )
+        if not candidates and self.config.operator_assignment_cap_per_deal > 0:
+            candidates, diagnostics = self._replacement_candidates(
+                epoch,
+                assigned_counts,
+                excluded,
+                deal_operator_counts,
+                slot.provider_id,
+                allow_same_deal=False,
+                enforce_operator_cap=False,
             )
         if not candidates:
             return None, diagnostics
@@ -1190,17 +1282,31 @@ class PolicySimulator:
         seed = f"{self.config.seed}:{epoch}:{deal.deal_id}:{slot.slot}:{slot.current_gen}"
         return min(candidates, key=lambda pid: stable_digest(seed, pid)), diagnostics
 
+    def _deal_operator_counts(self, deal: DealState, excluded_slot: SlotState | None = None) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for slot in deal.slots:
+            if excluded_slot is slot:
+                continue
+            provider_id = slot.pending_provider_id if slot.status == SLOT_REPAIRING and slot.pending_provider_id else slot.provider_id
+            operator_id = self.providers[provider_id].operator_id
+            counts[operator_id] = counts.get(operator_id, 0) + 1
+        return counts
+
     def _replacement_candidates(
         self,
         epoch: int,
         assigned_counts: dict[str, int],
         current_deal_providers: set[str | None],
+        current_deal_operator_counts: dict[str, int],
         current_provider_id: str,
         allow_same_deal: bool,
+        enforce_operator_cap: bool,
     ) -> tuple[list[str], dict[str, Any]]:
         candidates = []
         diagnostics = empty_candidate_diagnostics()
         diagnostics["candidate_mode"] = "fallback" if allow_same_deal else "primary"
+        if not enforce_operator_cap:
+            diagnostics["candidate_mode"] = "operator_cap_fallback"
         for pid, provider in self.providers.items():
             if pid == current_provider_id:
                 diagnostics["excluded_current_provider"] += 1
@@ -1216,6 +1322,13 @@ class PolicySimulator:
                 continue
             if assigned_counts.get(pid, 0) >= provider.capacity_slots:
                 diagnostics["excluded_capacity"] += 1
+                continue
+            if (
+                enforce_operator_cap
+                and self.config.operator_assignment_cap_per_deal > 0
+                and current_deal_operator_counts.get(provider.operator_id, 0) >= self.config.operator_assignment_cap_per_deal
+            ):
+                diagnostics["excluded_operator_cap"] += 1
                 continue
             candidates.append(pid)
         diagnostics["eligible_candidates"] = len(candidates)
@@ -1233,6 +1346,32 @@ class PolicySimulator:
                 if include_pending and slot.pending_provider_id:
                     assigned_counts[slot.pending_provider_id] += 1
         return assigned_counts
+
+    def _operator_assignment_counts(self, include_pending: bool = False) -> dict[str, int]:
+        counts = {provider.operator_id: 0 for provider in self.providers.values()}
+        for provider_id, assigned in self._assigned_counts(include_pending=include_pending).items():
+            operator_id = self.providers[provider_id].operator_id
+            counts[operator_id] = counts.get(operator_id, 0) + assigned
+        return counts
+
+    def _record_concentration_metrics(self, metrics: EpochMetrics) -> None:
+        operator_counts = self._operator_assignment_counts(include_pending=True)
+        total_assignments = sum(operator_counts.values())
+        top_assignment_count = max(operator_counts.values(), default=0)
+        metrics.max_operator_assignment_share_bps = int(top_assignment_count * 10_000 / max(1, total_assignments))
+
+        max_deal_slots = 0
+        cap_violations = 0
+        for deal in self.deals:
+            deal_counts = self._deal_operator_counts(deal)
+            if deal_counts:
+                max_deal_slots = max(max_deal_slots, max(deal_counts.values()))
+            if self.config.operator_assignment_cap_per_deal > 0:
+                cap_violations += sum(
+                    1 for count in deal_counts.values() if count > self.config.operator_assignment_cap_per_deal
+                )
+        metrics.max_operator_deal_slots = max_deal_slots
+        metrics.operator_deal_cap_violations = cap_violations
 
     def _required_blobs(self, deal: DealState) -> int:
         slot_bytes = deal.user_mdus * deal.rows * BLOB_SIZE_BYTES
@@ -1555,6 +1694,29 @@ class PolicySimulator:
         totals["providers_over_capacity"] = sum(
             1 for pid, provider in self.providers.items() if assigned_counts.get(pid, 0) > provider.capacity_slots
         )
+        operator_provider_counts: dict[str, int] = {}
+        for provider in self.providers.values():
+            operator_provider_counts[provider.operator_id] = operator_provider_counts.get(provider.operator_id, 0) + 1
+        operator_assignment_counts = self._operator_assignment_counts(include_pending=True)
+        total_operator_assignments = sum(operator_assignment_counts.values())
+        totals["operator_count"] = len(operator_provider_counts)
+        totals["top_operator_provider_count"] = max(operator_provider_counts.values(), default=0)
+        totals["top_operator_provider_share_bps"] = int(
+            totals["top_operator_provider_count"] * 10_000 / max(1, len(self.providers))
+        )
+        totals["top_operator_assigned_slots"] = max(operator_assignment_counts.values(), default=0)
+        totals["max_operator_assignment_share_bps"] = max(
+            (m.max_operator_assignment_share_bps for m in self.metrics),
+            default=0,
+        )
+        totals["max_operator_deal_slots"] = max((m.max_operator_deal_slots for m in self.metrics), default=0)
+        totals["operator_deal_cap_violations"] = max(
+            (m.operator_deal_cap_violations for m in self.metrics),
+            default=0,
+        )
+        totals["top_operator_assignment_share_bps"] = int(
+            totals["top_operator_assigned_slots"] * 10_000 / max(1, total_operator_assignments)
+        )
         total_capacity = sum(p.capacity_slots for p in self.providers.values())
         final_active_slots = self._final_slots()["active"]
         totals["final_storage_utilization_bps"] = int(final_active_slots * 10_000 / max(1, total_capacity))
@@ -1581,6 +1743,7 @@ class PolicySimulator:
             rows.append(
                 {
                     "provider_id": provider_id,
+                    "operator_id": provider.operator_id,
                     "region": provider.region,
                     "capability_tier": provider.capability_tier,
                     "capability_reason": provider.capability_reason,
@@ -1619,6 +1782,40 @@ class PolicySimulator:
                 }
             )
         return rows
+
+    def _operator_rows(self) -> list[dict[str, Any]]:
+        assigned_counts = self._assigned_counts()
+        by_operator: dict[str, dict[str, Any]] = {}
+        for provider_id, provider in sorted(self.providers.items()):
+            row = by_operator.setdefault(
+                provider.operator_id,
+                {
+                    "operator_id": provider.operator_id,
+                    "provider_count": 0,
+                    "assigned_slots": 0,
+                    "high_bandwidth_providers": 0,
+                    "retrieval_attempts": 0,
+                    "retrieval_successes": 0,
+                    "revenue": 0.0,
+                    "pnl": 0.0,
+                },
+            )
+            row["provider_count"] += 1
+            row["assigned_slots"] += assigned_counts[provider_id]
+            row["high_bandwidth_providers"] += int(provider.capability_tier == CAPABILITY_HIGH_BANDWIDTH)
+            row["retrieval_attempts"] += provider.retrieval_attempts
+            row["retrieval_successes"] += provider.retrieval_successes
+            row["revenue"] += provider.revenue
+            row["pnl"] += provider.pnl
+
+        total_providers = max(1, len(self.providers))
+        total_assignments = max(1, sum(row["assigned_slots"] for row in by_operator.values()))
+        for row in by_operator.values():
+            row["provider_share_bps"] = int(row["provider_count"] * 10_000 / total_providers)
+            row["assignment_share_bps"] = int(row["assigned_slots"] * 10_000 / total_assignments)
+            attempts = row["retrieval_attempts"]
+            row["success_rate"] = row["retrieval_successes"] / attempts if attempts else 0.0
+        return sorted(by_operator.values(), key=lambda row: (-row["assigned_slots"], row["operator_id"]))
 
     def _final_slots(self) -> dict[str, int]:
         active = 0
@@ -1787,6 +1984,7 @@ def empty_candidate_diagnostics() -> dict[str, Any]:
         "excluded_draining": 0,
         "excluded_jailed": 0,
         "excluded_capacity": 0,
+        "excluded_operator_cap": 0,
     }
 
 
@@ -1940,6 +2138,7 @@ def write_output_dir(path: Path, result: SimResult) -> None:
     )
     write_csv(path / "epochs.csv", result.epochs)
     write_csv(path / "providers.csv", result.providers)
+    write_csv(path / "operators.csv", result.operators)
     write_csv(path / "slots.csv", result.slots)
     write_csv(path / "evidence.csv", result.evidence)
     write_csv(path / "repairs.csv", result.repairs)
@@ -1988,6 +2187,25 @@ def run_one(config: SimConfig, faults: list[str], assertion_specs: dict[str, Any
     return result
 
 
+def run_scenario_dir_task(task: tuple[SimConfig, list[str], dict[str, Any], float | None, bool, Path | None]) -> SimResult:
+    config, faults, assertion_specs, min_success_rate, force_assertions, out_dir = task
+    result = run_one(config, faults, assertion_specs, min_success_rate)
+    if force_assertions and not result.assertions:
+        evaluate_assertions(result, min_success_rate)
+    if out_dir:
+        write_output_dir(out_dir, result)
+    return result
+
+
+def resolve_jobs(requested: int, task_count: int) -> int:
+    if task_count <= 1:
+        return 1
+    if requested > 0:
+        return min(requested, task_count)
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(task_count, cpu_count, 8))
+
+
 def fixture_paths(directory: Path) -> list[Path]:
     return sorted([*directory.glob("*.yaml"), *directory.glob("*.json")])
 
@@ -2030,6 +2248,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--assert", dest="assertions", action="store_true")
     parser.add_argument("--min-success-rate", type=float)
+    parser.add_argument("--jobs", type=int, default=1, help="parallel workers for --scenario-dir; 0 auto-detects CPU count capped at 8")
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--csv-out", type=Path)
     parser.add_argument("--out-dir", type=Path)
@@ -2042,16 +2261,21 @@ def main(argv: list[str] | None = None) -> int:
         paths = fixture_paths(args.scenario_dir)
         if not paths:
             raise SystemExit(f"no scenario fixtures found in {args.scenario_dir}")
-        failures = 0
+        tasks = []
         for path in paths:
             spec = load_scenario_spec(path)
             config, faults, assertion_specs = config_from_args(args, spec)
-            result = run_one(config, faults, assertion_specs, args.min_success_rate)
-            if args.assertions and not result.assertions:
-                evaluate_assertions(result, args.min_success_rate)
             out_dir = args.out_dir / spec.name if args.out_dir else None
-            if out_dir:
-                write_output_dir(out_dir, result)
+            tasks.append((config, faults, assertion_specs, args.min_success_rate, args.assertions, out_dir))
+        jobs = resolve_jobs(args.jobs, len(tasks))
+        if jobs == 1:
+            results = [run_scenario_dir_task(task) for task in tasks]
+        else:
+            with ProcessPoolExecutor(max_workers=jobs) as executor:
+                results = list(executor.map(run_scenario_dir_task, tasks))
+
+        failures = 0
+        for result in results:
             print_summary(result)
             if result.assertions and any(not item.passed for item in result.assertions):
                 failures += 1

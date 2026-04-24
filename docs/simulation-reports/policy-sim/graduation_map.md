@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 15 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 16 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 6 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -24,6 +24,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`ideal`](ideal/report.md) | `implementation planning` | keeper control tests | Add no-op epoch tests proving healthy providers do not accrue evidence, repair, reward exclusion, jail, or slash state. | `keeper epoch hooks`, `reward eligibility queries` | Gateway happy-path smoke remains sufficient; do not add a slow failure e2e for the control case. |
 | [`large-scale-regional-stress`](large-scale-regional-stress/report.md) | `further simulation review` | scale calibration and regression reporting | Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults. | `scale sweep corpus`, `placement diversity params`, `operator concentration analysis`, `CI artifact retention` | Do not mirror this as process e2e; keep it as simulator/CI artifact work. |
 | [`lazy-provider`](lazy-provider/report.md) | `implementation planning` | reward eligibility keeper tests | Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing. | `quota miss ledger`, `reward exclusion reason query`, `soft fault consequence ceiling` | Slow-path only after keeper reward accounting is stable. |
+| [`operator-concentration-cap`](operator-concentration-cap/report.md) | `implementation planning` | operator identity and assignment cap keeper tests | Add keeper/runtime tests proving deterministic placement and repair candidate selection respect per-deal operator caps while surfacing fallback reasons. | `operator identity registry`, `per-deal operator cap params`, `candidate diversity diagnostics`, `Sybil concentration alerts` | Provider set with one dominant operator; assert hot and normal deal placement stay within operator caps and replacement falls back only with explicit evidence. |
 | [`performance-market-latency`](performance-market-latency/report.md) | `implementation planning` | service-class and latency-tier keeper tests | Add keeper/runtime tests proving retrieval telemetry maps to Platinum/Gold/Silver/Fail tiers, tiered rewards are deterministic, and Fail-tier QoS does not become slashable hard evidence. | `service-class params`, `latency telemetry accumulator`, `tiered reward multipliers`, `QoS-only health notes` | Hot-service retrieval burst after telemetry exists; assert tier counts and provider payouts reflect latency without breaking read availability. |
 | [`price-controller-bounds`](price-controller-bounds/report.md) | `implementation planning` | dynamic pricing keeper tests | Add epoch pricing tests for floors, ceilings, utilization target, retrieval-demand target, and max step bps. | `dynamic pricing params`, `storage utilization accumulator`, `retrieval demand accumulator` | No process e2e; validate with keeper tests and simulator sweeps first. |
 | [`repair-candidate-exhaustion`](repair-candidate-exhaustion/report.md) | `implementation planning` | candidate selection and repair backoff keeper tests | Add tests proving no eligible replacement emits backoff, preserves capacity constraints, and does not over-assign providers. | `candidate exclusion reasons`, `repair attempt caps`, `replacement capacity query` | Small devnet with no spare provider capacity after keeper behavior is stable. |
@@ -56,10 +57,12 @@ This report converts the committed simulator corpus into implementation planning
 | `CI artifact retention` | 1 |
 | `MsgSignalSaturation hardening` | 1 |
 | `QoS-only health notes` | 1 |
+| `Sybil concentration alerts` | 1 |
 | `audit backlog query` | 1 |
 | `audit budget state` | 1 |
 | `bandwidth probe telemetry` | 1 |
 | `burn ledger` | 1 |
+| `candidate diversity diagnostics` | 1 |
 | `compliance-gated base rewards` | 1 |
 | `corrupt-byte reward exclusion` | 1 |
 | `credit cap enforcement` | 1 |
@@ -84,9 +87,11 @@ This report converts the committed simulator corpus into implementation planning
 | `operator concentration checks` | 1 |
 | `operator concentration limits` | 1 |
 | `operator health query` | 1 |
+| `operator identity registry` | 1 |
 | `operator regression alert` | 1 |
 | `overlay accountability` | 1 |
 | `owner escrow isolation` | 1 |
+| `per-deal operator cap params` | 1 |
 | `per-slot suspect state` | 1 |
 | `placement diversity params` | 1 |
 | `profitability dashboards` | 1 |

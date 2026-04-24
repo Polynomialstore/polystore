@@ -6,6 +6,7 @@
       "base_reward_per_slot": 0.018,
       "deals": 1500,
       "deputy_evict_after_missed_epochs": 1,
+      "dominant_operator_provider_bps": 0,
       "dynamic_pricing": true,
       "dynamic_pricing_max_step_bps": 350,
       "enforcement_mode": "REWARD_EXCLUSION",
@@ -23,6 +24,8 @@
       "high_bandwidth_routing_enabled": false,
       "hot_retrieval_bps": 0,
       "max_repairs_started_per_epoch": 300,
+      "operator_assignment_cap_per_deal": 0,
+      "operator_count": 0,
       "performance_market_enabled": false,
       "performance_reward_per_serve": 0.0,
       "platinum_latency_ms": 100.0,
@@ -82,6 +85,9 @@
       "hot_high_bandwidth_serves": 0.0,
       "hot_retrieval_attempts": 0.0,
       "invalid_proofs": 0.0,
+      "max_operator_assignment_share_bps": 13.0,
+      "max_operator_deal_slots": 1.0,
+      "operator_deal_cap_violations": 0.0,
       "paid_corrupt_bytes": 0.0,
       "performance_fail_rate": 0.0,
       "performance_reward_paid": 0.0,
@@ -102,6 +108,8 @@
       "silver_serves": 0.0,
       "success_rate": 0.993069444,
       "suspect_slots": 350.0,
+      "top_operator_assignment_share_bps": 13.0,
+      "top_operator_provider_share_bps": 8.0,
       "unavailable_reads": 998.0
     }
   },
@@ -113,6 +121,7 @@
         "base_reward_per_slot": 0.018,
         "deals": 1500,
         "deputy_evict_after_missed_epochs": 1,
+        "dominant_operator_provider_bps": 0,
         "dynamic_pricing": true,
         "dynamic_pricing_max_step_bps": 350,
         "enforcement_mode": "REWARD_EXCLUSION",
@@ -130,6 +139,8 @@
         "high_bandwidth_routing_enabled": false,
         "hot_retrieval_bps": 0,
         "max_repairs_started_per_epoch": 90,
+        "operator_assignment_cap_per_deal": 0,
+        "operator_count": 0,
         "performance_market_enabled": false,
         "performance_reward_per_serve": 0.0,
         "platinum_latency_ms": 100.0,
@@ -188,6 +199,9 @@
         "hot_high_bandwidth_serves": 0.0,
         "hot_retrieval_attempts": 0.0,
         "invalid_proofs": 0.0,
+        "max_operator_assignment_share_bps": 12.0,
+        "max_operator_deal_slots": 1.0,
+        "operator_deal_cap_violations": 0.0,
         "paid_corrupt_bytes": 0.0,
         "performance_fail_rate": 0.0,
         "performance_reward_paid": 0.0,
@@ -208,6 +222,8 @@
         "silver_serves": 0.0,
         "success_rate": 0.9926875,
         "suspect_slots": 385.0,
+        "top_operator_assignment_share_bps": 12.0,
+        "top_operator_provider_share_bps": 8.0,
         "unavailable_reads": 1053.0
       }
     },
@@ -218,6 +234,7 @@
         "base_reward_per_slot": 0.018,
         "deals": 1500,
         "deputy_evict_after_missed_epochs": 1,
+        "dominant_operator_provider_bps": 0,
         "dynamic_pricing": true,
         "dynamic_pricing_max_step_bps": 350,
         "enforcement_mode": "REWARD_EXCLUSION",
@@ -235,6 +252,8 @@
         "high_bandwidth_routing_enabled": false,
         "hot_retrieval_bps": 0,
         "max_repairs_started_per_epoch": 300,
+        "operator_assignment_cap_per_deal": 0,
+        "operator_count": 0,
         "performance_market_enabled": false,
         "performance_reward_per_serve": 0.0,
         "platinum_latency_ms": 100.0,
@@ -294,6 +313,9 @@
         "hot_high_bandwidth_serves": 0.0,
         "hot_retrieval_attempts": 0.0,
         "invalid_proofs": 0.0,
+        "max_operator_assignment_share_bps": 13.0,
+        "max_operator_deal_slots": 1.0,
+        "operator_deal_cap_violations": 0.0,
         "paid_corrupt_bytes": 0.0,
         "performance_fail_rate": 0.0,
         "performance_reward_paid": 0.0,
@@ -314,6 +336,8 @@
         "silver_serves": 0.0,
         "success_rate": 0.993069444,
         "suspect_slots": 350.0,
+        "top_operator_assignment_share_bps": 13.0,
+        "top_operator_provider_share_bps": 8.0,
         "unavailable_reads": 998.0
       }
     },
@@ -324,6 +348,7 @@
         "base_reward_per_slot": 0.018,
         "deals": 1500,
         "deputy_evict_after_missed_epochs": 1,
+        "dominant_operator_provider_bps": 0,
         "dynamic_pricing": true,
         "dynamic_pricing_max_step_bps": 350,
         "enforcement_mode": "REWARD_EXCLUSION",
@@ -341,6 +366,8 @@
         "high_bandwidth_routing_enabled": false,
         "hot_retrieval_bps": 0,
         "max_repairs_started_per_epoch": 180,
+        "operator_assignment_cap_per_deal": 0,
+        "operator_count": 0,
         "performance_market_enabled": false,
         "performance_reward_per_serve": 0.0,
         "platinum_latency_ms": 100.0,
@@ -400,6 +427,9 @@
         "hot_high_bandwidth_serves": 0.0,
         "hot_retrieval_attempts": 0.0,
         "invalid_proofs": 0.0,
+        "max_operator_assignment_share_bps": 13.0,
+        "max_operator_deal_slots": 1.0,
+        "operator_deal_cap_violations": 0.0,
         "paid_corrupt_bytes": 0.0,
         "performance_fail_rate": 0.0,
         "performance_reward_paid": 0.0,
@@ -420,6 +450,8 @@
         "silver_serves": 0.0,
         "success_rate": 0.992604167,
         "suspect_slots": 361.0,
+        "top_operator_assignment_share_bps": 13.0,
+        "top_operator_provider_share_bps": 8.0,
         "unavailable_reads": 1065.0
       }
     }
@@ -510,6 +542,24 @@
       "min": 0.0
     },
     "invalid_proofs": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "max_operator_assignment_share_bps": {
+      "delta": 1.0,
+      "max": 13.0,
+      "mean": 12.666666667,
+      "min": 12.0
+    },
+    "max_operator_deal_slots": {
+      "delta": 0.0,
+      "max": 1.0,
+      "mean": 1.0,
+      "min": 1.0
+    },
+    "operator_deal_cap_violations": {
       "delta": 0.0,
       "max": 0.0,
       "mean": 0.0,
@@ -635,6 +685,18 @@
       "mean": 365.333333333,
       "min": 350.0
     },
+    "top_operator_assignment_share_bps": {
+      "delta": 1.0,
+      "max": 13.0,
+      "mean": 12.666666667,
+      "min": 12.0
+    },
+    "top_operator_provider_share_bps": {
+      "delta": 0.0,
+      "max": 8.0,
+      "mean": 8.0,
+      "min": 8.0
+    },
     "unavailable_reads": {
       "delta": 67.0,
       "max": 1065.0,
@@ -652,6 +714,7 @@
         "base_reward_per_slot": 0.018,
         "deals": 1500,
         "deputy_evict_after_missed_epochs": 1,
+        "dominant_operator_provider_bps": 0,
         "dynamic_pricing": true,
         "dynamic_pricing_max_step_bps": 350,
         "enforcement_mode": "REWARD_EXCLUSION",
@@ -669,6 +732,8 @@
         "high_bandwidth_routing_enabled": false,
         "hot_retrieval_bps": 0,
         "max_repairs_started_per_epoch": 180,
+        "operator_assignment_cap_per_deal": 0,
+        "operator_count": 0,
         "performance_market_enabled": false,
         "performance_reward_per_serve": 0.0,
         "platinum_latency_ms": 100.0,
@@ -728,6 +793,9 @@
         "hot_high_bandwidth_serves": 0.0,
         "hot_retrieval_attempts": 0.0,
         "invalid_proofs": 0.0,
+        "max_operator_assignment_share_bps": 13.0,
+        "max_operator_deal_slots": 1.0,
+        "operator_deal_cap_violations": 0.0,
         "paid_corrupt_bytes": 0.0,
         "performance_fail_rate": 0.0,
         "performance_reward_paid": 0.0,
@@ -748,6 +816,8 @@
         "silver_serves": 0.0,
         "success_rate": 0.992604167,
         "suspect_slots": 361.0,
+        "top_operator_assignment_share_bps": 13.0,
+        "top_operator_provider_share_bps": 8.0,
         "unavailable_reads": 1065.0
       }
     },
@@ -758,6 +828,7 @@
         "base_reward_per_slot": 0.018,
         "deals": 1500,
         "deputy_evict_after_missed_epochs": 1,
+        "dominant_operator_provider_bps": 0,
         "dynamic_pricing": true,
         "dynamic_pricing_max_step_bps": 350,
         "enforcement_mode": "REWARD_EXCLUSION",
@@ -775,6 +846,8 @@
         "high_bandwidth_routing_enabled": false,
         "hot_retrieval_bps": 0,
         "max_repairs_started_per_epoch": 300,
+        "operator_assignment_cap_per_deal": 0,
+        "operator_count": 0,
         "performance_market_enabled": false,
         "performance_reward_per_serve": 0.0,
         "platinum_latency_ms": 100.0,
@@ -834,6 +907,9 @@
         "hot_high_bandwidth_serves": 0.0,
         "hot_retrieval_attempts": 0.0,
         "invalid_proofs": 0.0,
+        "max_operator_assignment_share_bps": 13.0,
+        "max_operator_deal_slots": 1.0,
+        "operator_deal_cap_violations": 0.0,
         "paid_corrupt_bytes": 0.0,
         "performance_fail_rate": 0.0,
         "performance_reward_paid": 0.0,
@@ -854,6 +930,8 @@
         "silver_serves": 0.0,
         "success_rate": 0.993069444,
         "suspect_slots": 350.0,
+        "top_operator_assignment_share_bps": 13.0,
+        "top_operator_provider_share_bps": 8.0,
         "unavailable_reads": 998.0
       }
     },
@@ -864,6 +942,7 @@
         "base_reward_per_slot": 0.018,
         "deals": 1500,
         "deputy_evict_after_missed_epochs": 1,
+        "dominant_operator_provider_bps": 0,
         "dynamic_pricing": true,
         "dynamic_pricing_max_step_bps": 350,
         "enforcement_mode": "REWARD_EXCLUSION",
@@ -881,6 +960,8 @@
         "high_bandwidth_routing_enabled": false,
         "hot_retrieval_bps": 0,
         "max_repairs_started_per_epoch": 90,
+        "operator_assignment_cap_per_deal": 0,
+        "operator_count": 0,
         "performance_market_enabled": false,
         "performance_reward_per_serve": 0.0,
         "platinum_latency_ms": 100.0,
@@ -939,6 +1020,9 @@
         "hot_high_bandwidth_serves": 0.0,
         "hot_retrieval_attempts": 0.0,
         "invalid_proofs": 0.0,
+        "max_operator_assignment_share_bps": 12.0,
+        "max_operator_deal_slots": 1.0,
+        "operator_deal_cap_violations": 0.0,
         "paid_corrupt_bytes": 0.0,
         "performance_fail_rate": 0.0,
         "performance_reward_paid": 0.0,
@@ -959,6 +1043,8 @@
         "silver_serves": 0.0,
         "success_rate": 0.9926875,
         "suspect_slots": 385.0,
+        "top_operator_assignment_share_bps": 12.0,
+        "top_operator_provider_share_bps": 8.0,
         "unavailable_reads": 1053.0
       }
     }

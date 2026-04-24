@@ -19,6 +19,9 @@ Model Hot-service retrieval demand across providers with heterogeneous latency. 
 - Saturated responses: `0`
 - Performance Fail-tier serves: `7779`
 - Performance reward paid: `76.8790`
+- Top operator provider share: `1.04%`
+- Top operator assignment share: `1.04%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `0`
 - Delinquent slot-epochs: `0`
 - Repair attempts: `0`

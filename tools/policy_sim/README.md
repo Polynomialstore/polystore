@@ -32,7 +32,8 @@ Run the canonical fixture suite:
 ```bash
 python3 tools/policy_sim/policing_sim.py \
   --scenario-dir tools/policy_sim/scenarios \
-  --out-dir /tmp/polystore-policy/runs
+  --out-dir /tmp/polystore-policy/runs \
+  --jobs 0
 ```
 
 Generate the committed human-readable report corpus:
@@ -41,7 +42,8 @@ Generate the committed human-readable report corpus:
 python3 tools/policy_sim/generate_report_corpus.py \
   --scenario-dir tools/policy_sim/scenarios \
   --out-dir docs/simulation-reports/policy-sim \
-  --work-dir /tmp/polystore-policy/runs
+  --work-dir /tmp/polystore-policy/runs \
+  --jobs 0
 ```
 
 Generate human-readable reports from raw simulator outputs:
@@ -67,8 +69,12 @@ Run the versioned sweep specs and generate committed sweep reports:
 python3 tools/policy_sim/run_sweeps.py \
   --sweep-dir tools/policy_sim/sweeps \
   --run-dir /tmp/polystore-policy-sweep-runs \
-  --out-dir docs/simulation-reports/policy-sim/sweeps
+  --out-dir docs/simulation-reports/policy-sim/sweeps \
+  --jobs 0
 ```
+
+`--jobs 0` auto-detects CPU count and caps parallel workers at 8. Use
+`--jobs 1` for single-process debugging or exact profiler traces.
 
 If `--out-dir` is omitted, `report.py` writes to a dedicated subdirectory
 instead of polluting raw simulator outputs: `<run-dir>/report` for single-run
@@ -136,6 +142,9 @@ are supported in scenario files:
 - `performance_reward_per_serve`
 - `platinum_reward_multiplier_bps` / `gold_reward_multiplier_bps` /
   `silver_reward_multiplier_bps` / `fail_reward_multiplier_bps`
+- `operator_count`
+- `dominant_operator_provider_bps`
+- `operator_assignment_cap_per_deal`
 
 Versioned sweep specs live in `tools/policy_sim/sweeps`. They are strict JSON
 documents with a `.yaml` extension, matching scenario fixture conventions. A
@@ -165,6 +174,8 @@ The simulator mirrors current protocol concepts:
   without bypassing capacity and availability assertions.
 - Performance-market service tiers that classify modeled retrieval latency into
   Platinum/Gold/Silver/Fail and pay optional tiered QoS rewards.
+- Operator identity concentration and per-deal assignment caps for Sybil-shaped
+  provider populations.
 - Simulated enforcement modes before live chain/runtime rollout.
 - Large-scale heterogeneous-provider runs with regional outages, bandwidth
   saturation, and repair coordination limits.
@@ -186,12 +197,15 @@ When `--out-dir` is supplied, the simulator emits:
 - `assertions.json`
 - `epochs.csv`
 - `providers.csv`
+- `operators.csv`
 - `slots.csv`
 - `evidence.csv`
 - `repairs.csv`
 - `economy.csv`
 
 `slots.csv` includes per-slot health reason, repair attempt, and cooldown state.
+`operators.csv` groups provider identities by operator and records provider
+share, assignment share, success, and P&L.
 `repairs.csv` includes start, pending-provider readiness, completion,
 attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
 
@@ -227,9 +241,9 @@ questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
 provider P&L, burn/mint ratio, price trajectory, capacity utilization,
 saturation/repair pressure, repair backlog, high-bandwidth promotion, and hot
-retrieval routing, and performance tiers. `signals.json` records derived
+retrieval routing, performance tiers, and operator concentration. `signals.json` records derived
 availability, saturation, repair, capacity, economic, regional,
-high-bandwidth, performance-market, and provider bottleneck signals for
+high-bandwidth, performance-market, concentration, and provider bottleneck signals for
 downstream analysis.
 
 The economics in these reports are unitless simulator accounting. They are

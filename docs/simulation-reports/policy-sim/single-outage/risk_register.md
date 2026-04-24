@@ -19,6 +19,9 @@ Model an honest provider that becomes unavailable for several epochs. The policy
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `2.08%`
+- Top operator assignment share: `2.43%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `1`
 - Delinquent slot-epochs: `12`
 - Repair attempts: `6`

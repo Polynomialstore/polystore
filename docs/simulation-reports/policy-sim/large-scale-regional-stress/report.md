@@ -44,6 +44,9 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | High-bandwidth promotion | `false` |
 | High-bandwidth capacity threshold | `0` serves/epoch |
 | Hot retrieval share | `0.00%` |
+| Operators | `1200` |
+| Dominant operator provider share | `0.00%` |
+| Operator assignment cap/deal | `0` (`0` means disabled) |
 | Provider regions | `na, eu, apac, sa, af, oc` |
 
 ## Economic Assumptions
@@ -108,6 +111,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Platinum / Gold / Silver / Fail serves | `0` / `0` / `0` / `0` | Shows the latency-tier distribution for performance-market policy. |
 | Performance reward paid | `0.0000` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |
 | Provider latency p10 / p50 / p90 | `0` / `0` / `0` ms | Shows whether aggregate averages hide slow provider tails. |
+| Top operator provider share | `0.08%` | Shows whether many SP identities are controlled by one operator. |
+| Top operator assignment share | `0.13%` | Shows whether placement caps translate identity concentration into slot concentration. |
+| Max operator slots/deal | `1` | Checks per-deal blast-radius limits against operator Sybil concentration. |
+| Operator cap violations | `0` | Counts deals where operator slot concentration exceeded the configured cap. |
 | Final storage utilization | `55.69%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `61.11%` / `94.44%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
 | Provider P&L p10 / p50 / p90 | `8.4821` / `15.7663` / `18.1663` | Shows whether aggregate P&L hides marginal-provider distress. |
@@ -137,6 +144,19 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | `sp-751` | `eu` | 22/26 | 84.61% | 110 | 1280 | 284 | 0 | 13.6805 |
 | `sp-997` | `eu` | 14/31 | 45.16% | 38 | 944 | 206 | 70 | 9.0333 |
 | `sp-949` | `eu` | 17/20 | 85.00% | 121 | 1129 | 272 | 0 | 12.2693 |
+
+### Top Operators
+
+| Operator | Providers | Provider Share | Assigned Slots | Assignment Share | Retrieval Attempts | Success | P&L |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `op-616` | 1 | 0.08% | 25 | 0.13% | 1402 | 100.00% | 21.9598 |
+| `op-1043` | 1 | 0.08% | 23 | 0.12% | 1277 | 100.00% | 18.6942 |
+| `op-368` | 1 | 0.08% | 23 | 0.12% | 1363 | 99.71% | 21.0388 |
+| `op-670` | 1 | 0.08% | 23 | 0.12% | 1263 | 98.65% | 19.6036 |
+| `op-928` | 1 | 0.08% | 23 | 0.12% | 1239 | 100.00% | 19.3200 |
+| `op-056` | 1 | 0.08% | 22 | 0.12% | 1260 | 100.00% | 19.5548 |
+| `op-1029` | 1 | 0.08% | 22 | 0.12% | 1259 | 100.00% | 18.7013 |
+| `op-258` | 1 | 0.08% | 22 | 0.12% | 1351 | 100.00% | 21.2566 |
 
 ### Timeline
 
@@ -354,13 +374,20 @@ Shows the fast positive tier and Fail-tier service counts under the performance 
 
 ![Performance Tiers](graphs/performance_tiers.svg)
 
+### Operator Concentration
+
+Shows whether operator assignment share is bounded despite provider identity concentration.
+
+![Operator Concentration](graphs/operator_concentration.svg)
+
 ## Raw Artifacts
 
 - `summary.json`: compact machine-readable run summary.
 - `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.
 - `providers.csv`: final provider-level economics, fault counters, and capability tier.
+- `operators.csv`: final operator-level provider count, assignment share, success, and P&L metrics.
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
-- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.
+- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.

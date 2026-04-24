@@ -126,11 +126,13 @@ jobs:
           python3 tools/policy_sim/generate_report_corpus.py \
             --scenario-dir tools/policy_sim/scenarios \
             --out-dir docs/simulation-reports/policy-sim \
-            --work-dir _artifacts/policy_sim/runs
+            --work-dir _artifacts/policy_sim/runs \
+            --jobs 0
           python3 tools/policy_sim/run_sweeps.py \
             --sweep-dir tools/policy_sim/sweeps \
             --run-dir _artifacts/policy_sim/sweeps \
-            --out-dir docs/simulation-reports/policy-sim/sweeps
+            --out-dir docs/simulation-reports/policy-sim/sweeps \
+            --jobs 0
 
       - name: Verify committed policy reports are current
         run: git diff --exit-code docs/simulation-reports/policy-sim

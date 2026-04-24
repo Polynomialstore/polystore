@@ -10,7 +10,8 @@ Regenerate this corpus with:
 python3 tools/policy_sim/run_sweeps.py \
   --sweep-dir tools/policy_sim/sweeps \
   --run-dir /tmp/polystore-policy-sweep-runs \
-  --out-dir docs/simulation-reports/policy-sim/sweeps
+  --out-dir docs/simulation-reports/policy-sim/sweeps \
+  --jobs 0
 ```
 
 ## Sweep Index

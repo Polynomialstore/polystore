@@ -19,6 +19,9 @@ Model a technically healthy network whose prices do not cover provider costs. Th
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `2.08%`
+- Top operator assignment share: `2.08%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `0`
 - Delinquent slot-epochs: `0`
 - Repair attempts: `0`

@@ -19,6 +19,9 @@ Model hot retrieval demand after providers have become high-bandwidth eligible. 
 - Saturated responses: `21`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `1.38%`
+- Top operator assignment share: `1.38%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `0`
 - Delinquent slot-epochs: `0`
 - Repair attempts: `0`

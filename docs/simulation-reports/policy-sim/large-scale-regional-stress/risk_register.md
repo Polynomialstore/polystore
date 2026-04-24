@@ -22,6 +22,9 @@ Model a population-scale network with more than one thousand storage providers a
 - Saturated responses: `15482`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `0.08%`
+- Top operator assignment share: `0.13%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `361`
 - Delinquent slot-epochs: `25634`
 - Repair attempts: `16060`
