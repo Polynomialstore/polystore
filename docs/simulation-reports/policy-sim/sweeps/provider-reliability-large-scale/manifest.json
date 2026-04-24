@@ -1,6 +1,6 @@
 {
   "assertion_failures": 0,
-  "base_scenario": "/home/mikers/dev/polynomialstore/polystore/tools/policy_sim/scenarios/large_scale_regional_stress.yaml",
+  "base_scenario": "tools/policy_sim/scenarios/large_scale_regional_stress.yaml",
   "case_count": 3,
   "cases": [
     {
@@ -48,5 +48,5 @@
     "*/repairs.csv",
     "*/economy.csv"
   ],
-  "raw_run_dir": "/tmp/polystore-policy-sweep-runs/provider-reliability-large-scale"
+  "raw_run_dir": "sweep-artifacts/provider-reliability-large-scale"
 }

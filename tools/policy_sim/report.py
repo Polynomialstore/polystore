@@ -1715,7 +1715,7 @@ def sweep_row(run_dir: Path) -> dict[str, Any]:
     risk_level, risk_reasons = sweep_risk(summary)
     return {
         "label": run_dir.name,
-        "run_dir": str(run_dir),
+        "run_dir": stable_sweep_artifact_path(run_dir),
         "scenario": str(config.get("scenario", run_dir.name)),
         "seed": config.get("seed"),
         "assertions_passed": bool(assertions) and not failed_assertions,
@@ -1725,6 +1725,13 @@ def sweep_row(run_dir: Path) -> dict[str, Any]:
         "config": {key: config.get(key) for key in SWEEP_CONFIG_KEYS if key in config},
         "totals": {key: fnum(totals.get(key)) for key in SWEEP_METRICS if key in totals},
     }
+
+
+def stable_sweep_artifact_path(run_dir: Path) -> str:
+    parts = [run_dir.name]
+    if run_dir.parent.name:
+        parts.insert(0, run_dir.parent.name)
+    return "sweep-artifacts/" + "/".join(parts)
 
 
 def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:

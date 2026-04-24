@@ -40,7 +40,7 @@
       "provider bandwidth saturation occurred",
       "some providers ended with negative modeled P&L"
     ],
-    "run_dir": "/tmp/polystore-policy-sweep-runs/route-attempt-large-scale/route-attempt-limit-12",
+    "run_dir": "sweep-artifacts/route-attempt-large-scale/route-attempt-limit-12",
     "scenario": "large-scale-regional-stress",
     "seed": 29,
     "totals": {
@@ -108,7 +108,7 @@
         "repair coordination backoffs occurred",
         "provider bandwidth saturation occurred"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/route-attempt-large-scale/route-attempt-limit-8",
+      "run_dir": "sweep-artifacts/route-attempt-large-scale/route-attempt-limit-8",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -172,7 +172,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/route-attempt-large-scale/route-attempt-limit-16",
+      "run_dir": "sweep-artifacts/route-attempt-large-scale/route-attempt-limit-16",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -236,7 +236,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/route-attempt-large-scale/route-attempt-limit-12",
+      "run_dir": "sweep-artifacts/route-attempt-large-scale/route-attempt-limit-12",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -408,7 +408,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/route-attempt-large-scale/route-attempt-limit-12",
+      "run_dir": "sweep-artifacts/route-attempt-large-scale/route-attempt-limit-12",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -472,7 +472,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/route-attempt-large-scale/route-attempt-limit-16",
+      "run_dir": "sweep-artifacts/route-attempt-large-scale/route-attempt-limit-16",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -539,7 +539,7 @@
         "repair coordination backoffs occurred",
         "provider bandwidth saturation occurred"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/route-attempt-large-scale/route-attempt-limit-8",
+      "run_dir": "sweep-artifacts/route-attempt-large-scale/route-attempt-limit-8",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
