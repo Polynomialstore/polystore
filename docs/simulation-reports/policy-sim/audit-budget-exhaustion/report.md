@@ -110,13 +110,13 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 32 | 0 | 0 | 0.6400 | 8.8400 | 32 quota misses |
-| 2 | 100.00% | 32 | 32 | 0 | 0.6400 | 17.6800 | 32 quota misses |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 26.5200 | 32 slots repairing |
-| 4 | 100.00% | 0 | 0 | 32 | 0.0000 | 35.3600 | 32 slots repairing |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 44.8400 | steady state |
-| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 54.3200 | steady state |
-| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 63.8000 | steady state |
-| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 73.2800 | steady state |
+| 2 | 100.00% | 32 | 32 | 0 | 0.6400 | 8.8400 | 32 quota misses |
+| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 8.8400 | 32 slots repairing |
+| 4 | 100.00% | 0 | 0 | 32 | 0.0000 | 8.8400 | 32 slots repairing |
+| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
+| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
+| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
+| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
 
 ## Enforcement Interpretation
 

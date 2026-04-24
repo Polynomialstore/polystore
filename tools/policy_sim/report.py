@@ -1626,11 +1626,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def default_out_dir(args: argparse.Namespace) -> Path:
+    if args.out_dir:
+        return args.out_dir
+    if args.run_dir:
+        return args.run_dir / "report"
+    if args.candidate_dir:
+        return args.candidate_dir / "delta"
+    raise SystemExit("--out-dir is required unless --run-dir or --candidate-dir is set")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    out_dir = args.out_dir or args.run_dir or args.candidate_dir
-    if out_dir is None:
-        raise SystemExit("--out-dir is required unless --run-dir or --candidate-dir is set")
+    out_dir = default_out_dir(args)
     if args.run_dir:
         generate_run_report(args.run_dir, out_dir)
     if args.baseline_dir and args.candidate_dir:

@@ -112,15 +112,15 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 2 | 100.00% | 25 | 0 | 0 | 0.1200 | 11.7200 | 14 offline responses, 6 quota misses |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 17.6400 | steady state |
-| 4 | 100.00% | 21 | 0 | 0 | 0.1200 | 23.4400 | 9 offline responses, 6 quota misses |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 29.3600 | steady state |
-| 6 | 100.00% | 21 | 0 | 0 | 0.1200 | 35.1600 | 9 offline responses, 6 quota misses |
-| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 41.0800 | steady state |
-| 8 | 100.00% | 23 | 0 | 0 | 0.1200 | 46.8800 | 12 offline responses, 6 quota misses |
-| 9 | 100.00% | 0 | 0 | 0 | 0.0000 | 52.8000 | steady state |
-| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 58.7200 | steady state |
+| 2 | 100.00% | 25 | 0 | 0 | 0.1200 | 5.8000 | 14 offline responses, 6 quota misses |
+| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 4 | 100.00% | 21 | 0 | 0 | 0.1200 | 5.8000 | 9 offline responses, 6 quota misses |
+| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 6 | 100.00% | 21 | 0 | 0 | 0.1200 | 5.8000 | 9 offline responses, 6 quota misses |
+| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 8 | 100.00% | 23 | 0 | 0 | 0.1200 | 5.8000 | 12 offline responses, 6 quota misses |
+| 9 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
 
 ## Enforcement Interpretation
 

@@ -110,10 +110,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 0 | 0 | 0 | 0.0000 | 68.4800 | steady state |
-| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 136.9600 | steady state |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 205.4400 | steady state |
-| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 273.9200 | steady state |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 342.4000 | steady state |
+| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 68.4800 | steady state |
+| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 68.4800 | steady state |
+| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 68.4800 | steady state |
+| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 68.4800 | steady state |
 
 ## Enforcement Interpretation
 

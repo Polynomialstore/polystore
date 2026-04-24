@@ -52,6 +52,10 @@ python3 tools/policy_sim/report.py \
   --out-dir /tmp/polystore-policy/reports/single-outage
 ```
 
+If `--out-dir` is omitted, `report.py` writes to a dedicated subdirectory
+instead of polluting raw simulator outputs: `<run-dir>/report` for single-run
+reports and `<candidate-dir>/delta` for baseline/candidate comparisons.
+
 Custom fault injections are repeatable:
 
 ```bash

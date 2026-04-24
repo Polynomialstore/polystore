@@ -117,17 +117,17 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
-| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 37.1200 | steady state |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 55.6800 | steady state |
-| 4 | 100.00% | 983 | 24 | 0 | 4.8000 | 69.4400 | 525 offline responses, 240 quota misses, 194 repair backoffs |
-| 5 | 100.00% | 878 | 24 | 0 | 4.3200 | 83.2000 | 482 offline responses, 216 quota misses, 353 repair backoffs, 24 slots repairing |
-| 6 | 100.00% | 818 | 24 | 18 | 3.8400 | 96.9600 | 456 offline responses, 192 quota misses, 318 repair backoffs, 48 slots repairing |
-| 7 | 100.00% | 748 | 24 | 18 | 3.3600 | 111.0800 | 424 offline responses, 168 quota misses, 279 repair backoffs, 54 slots repairing |
-| 8 | 100.00% | 0 | 0 | 19 | 0.0000 | 128.4400 | 60 slots repairing |
-| 9 | 100.00% | 0 | 0 | 41 | 0.0000 | 146.1800 | 41 slots repairing |
-| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 164.7400 | steady state |
-| 11 | 100.00% | 0 | 0 | 0 | 0.0000 | 183.3000 | steady state |
-| 12 | 100.00% | 0 | 0 | 0 | 0.0000 | 201.8600 | steady state |
+| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
+| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
+| 4 | 100.00% | 983 | 24 | 0 | 4.8000 | 13.7600 | 525 offline responses, 240 quota misses, 194 repair backoffs |
+| 5 | 100.00% | 878 | 24 | 0 | 4.3200 | 13.7600 | 482 offline responses, 216 quota misses, 353 repair backoffs, 24 slots repairing |
+| 6 | 100.00% | 818 | 24 | 18 | 3.8400 | 13.7600 | 456 offline responses, 192 quota misses, 318 repair backoffs, 48 slots repairing |
+| 7 | 100.00% | 748 | 24 | 18 | 3.3600 | 14.1200 | 424 offline responses, 168 quota misses, 279 repair backoffs, 54 slots repairing |
+| 8 | 100.00% | 0 | 0 | 19 | 0.0000 | 17.3600 | 60 slots repairing |
+| 9 | 100.00% | 0 | 0 | 41 | 0.0000 | 17.7400 | 41 slots repairing |
+| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
+| 11 | 100.00% | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
+| 12 | 100.00% | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
 
 ## Enforcement Interpretation
 

@@ -108,13 +108,13 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 11.8400 | steady state |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 17.7600 | steady state |
-| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 23.6800 | steady state |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 29.6000 | steady state |
-| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 35.5200 | steady state |
-| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 41.4400 | steady state |
-| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 47.3600 | steady state |
+| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
 
 ## Enforcement Interpretation
 

@@ -114,13 +114,13 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.8000 | steady state |
-| 2 | 100.00% | 77 | 0 | 0 | 0.1600 | 11.4400 | 61 offline responses, 8 quota misses, 8 repair backoffs |
-| 3 | 100.00% | 74 | 0 | 0 | 0.1600 | 17.0800 | 58 offline responses, 8 quota misses, 16 repair backoffs |
-| 4 | 100.00% | 73 | 0 | 0 | 0.1600 | 22.7200 | 57 offline responses, 8 quota misses, 16 repair backoffs |
-| 5 | 100.00% | 63 | 0 | 0 | 0.1600 | 28.3600 | 47 offline responses, 8 quota misses, 16 repair backoffs |
-| 6 | 100.00% | 73 | 0 | 0 | 0.1600 | 34.0000 | 57 offline responses, 8 quota misses, 16 repair backoffs |
-| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 39.8000 | steady state |
-| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 45.6000 | steady state |
+| 2 | 100.00% | 77 | 0 | 0 | 0.1600 | 5.6400 | 61 offline responses, 8 quota misses, 8 repair backoffs |
+| 3 | 100.00% | 74 | 0 | 0 | 0.1600 | 5.6400 | 58 offline responses, 8 quota misses, 16 repair backoffs |
+| 4 | 100.00% | 73 | 0 | 0 | 0.1600 | 5.6400 | 57 offline responses, 8 quota misses, 16 repair backoffs |
+| 5 | 100.00% | 63 | 0 | 0 | 0.1600 | 5.6400 | 47 offline responses, 8 quota misses, 16 repair backoffs |
+| 6 | 100.00% | 73 | 0 | 0 | 0.1600 | 5.6400 | 57 offline responses, 8 quota misses, 16 repair backoffs |
+| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.8000 | steady state |
+| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.8000 | steady state |
 
 ## Enforcement Interpretation
 

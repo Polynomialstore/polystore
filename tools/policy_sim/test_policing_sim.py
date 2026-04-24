@@ -11,7 +11,7 @@ try:
         run_one,
         write_output_dir,
     )
-    from .report import generate_policy_delta, generate_run_report
+    from .report import generate_policy_delta, generate_run_report, main as report_main
 except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`.
     from policing_sim import (
         PolicySimulator,
@@ -21,7 +21,7 @@ except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`
         run_one,
         write_output_dir,
     )
-    from report import generate_policy_delta, generate_run_report
+    from report import generate_policy_delta, generate_run_report, main as report_main
 
 
 class PolicySimulatorTests(unittest.TestCase):
@@ -112,6 +112,31 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertIn("capacity_slots", result.providers[0])
         self.assertIn("bandwidth_capacity_per_epoch", result.providers[0])
 
+    def test_jail_window_is_exclusive(self):
+        simulator = PolicySimulator(
+            SimConfig(
+                scenario="ideal",
+                providers=12,
+                deals=1,
+                users=1,
+                epochs=1,
+                retrievals_per_user_per_epoch=0,
+            )
+        )
+        provider = simulator.providers["sp-000"]
+        provider.jailed_until_epoch = 8
+
+        self.assertTrue(simulator._is_jailed(provider, 7))
+        self.assertFalse(simulator._is_jailed(provider, 8))
+
+    def test_economy_provider_pnl_is_per_epoch_not_cumulative(self):
+        result = self.run_scenario("ideal", providers=48, deals=24, users=80, epochs=4)
+        epoch_pnls = [row["provider_pnl"] for row in result.economy]
+
+        self.assertEqual(4, len(epoch_pnls))
+        self.assertAlmostEqual(epoch_pnls[0], epoch_pnls[1])
+        self.assertAlmostEqual(result.totals["provider_pnl"], sum(epoch_pnls))
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)
@@ -132,6 +157,14 @@ class PolicySimulatorTests(unittest.TestCase):
                 "economy.csv",
             }
             self.assertEqual(expected, {path.name for path in out_dir.iterdir()})
+
+    def test_scenario_fixture_parse_error_explains_strict_json_contract(self):
+        with TemporaryDirectory() as tmp:
+            fixture = Path(tmp) / "not-json.yaml"
+            fixture.write_text("name: yaml-only\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "strict JSON"):
+                load_scenario_spec(fixture)
 
     def test_report_generation_consumes_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "single_outage.yaml"
@@ -183,6 +216,19 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("## Material Risks", risk_text)
             graduation_text = (report_dir / "graduation.md").read_text(encoding="utf-8")
             self.assertIn("## Readiness Checklist", graduation_text)
+
+    def test_report_cli_default_keeps_raw_run_directory_clean(self):
+        fixture = Path(__file__).with_name("scenarios") / "single_outage.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            write_output_dir(run_dir, result)
+            report_main(["--run-dir", str(run_dir)])
+
+            self.assertTrue((run_dir / "report" / "report.md").exists())
+            self.assertFalse((run_dir / "report.md").exists())
 
     def test_policy_delta_report_compares_two_runs(self):
         ideal = load_scenario_spec(Path(__file__).with_name("scenarios") / "ideal.yaml")

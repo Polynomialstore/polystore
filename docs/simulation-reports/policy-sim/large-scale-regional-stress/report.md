@@ -121,29 +121,29 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 99.78% | 1379 | 180 | 0 | 3.6900 | 472.3180 | 511 offline responses, 497 saturated, 180 quota misses, 11 repair backoffs |
-| 2 | 100.00% | 1085 | 138 | 0 | 2.6640 | 960.5062 | 391 offline responses, 421 saturated, 135 quota misses, 180 slots repairing |
-| 3 | 100.00% | 1009 | 126 | 0 | 2.3940 | 1464.1662 | 316 offline responses, 459 saturated, 108 quota misses, 318 slots repairing |
-| 4 | 100.00% | 958 | 121 | 102 | 2.3220 | 1984.0406 | 267 offline responses, 468 saturated, 102 quota misses, 444 slots repairing |
-| 5 | 99.90% | 1204 | 168 | 121 | 3.1500 | 2521.0771 | 452 offline responses, 434 saturated, 150 quota misses, 463 slots repairing |
-| 6 | 99.97% | 907 | 113 | 139 | 2.1960 | 3078.0323 | 306 offline responses, 378 saturated, 110 quota misses, 510 slots repairing |
-| 7 | 99.75% | 1230 | 168 | 117 | 3.3120 | 3653.4452 | 461 offline responses, 436 saturated, 165 quota misses, 484 slots repairing |
-| 8 | 96.65% | 16790 | 180 | 114 | 54.4680 | 4178.8892 | 9595 offline responses, 1288 saturated, 3025 quota misses, 2708 repair backoffs, 535 slots repairing |
-| 9 | 96.35% | 16131 | 180 | 108 | 51.1200 | 4725.6918 | 9148 offline responses, 1413 saturated, 2836 quota misses, 5095 repair backoffs, 601 slots repairing |
-| 10 | 96.33% | 15270 | 180 | 134 | 47.5380 | 5296.2514 | 8585 offline responses, 1534 saturated, 2635 quota misses, 4725 repair backoffs, 673 slots repairing |
-| 11 | 97.47% | 14159 | 180 | 127 | 44.7660 | 5898.8889 | 7982 offline responses, 1340 saturated, 2475 quota misses, 4423 repair backoffs, 719 slots repairing |
-| 12 | 97.65% | 13782 | 180 | 150 | 42.4800 | 6527.5540 | 7827 offline responses, 1378 saturated, 2342 quota misses, 4166 repair backoffs, 772 slots repairing |
-| 13 | 99.92% | 950 | 119 | 175 | 2.2140 | 7236.6308 | 296 offline responses, 432 saturated, 105 quota misses, 802 slots repairing |
-| 14 | 99.25% | 1385 | 152 | 180 | 2.8620 | 7966.9712 | 434 offline responses, 664 saturated, 135 quota misses, 746 slots repairing |
-| 15 | 99.93% | 1186 | 170 | 267 | 3.2760 | 8729.3283 | 434 offline responses, 425 saturated, 157 quota misses, 718 slots repairing |
-| 16 | 99.87% | 952 | 111 | 168 | 2.2140 | 9521.5242 | 283 offline responses, 451 saturated, 107 quota misses, 621 slots repairing |
-| 17 | 99.83% | 917 | 99 | 173 | 1.8540 | 10343.2408 | 256 offline responses, 479 saturated, 83 quota misses, 564 slots repairing |
-| 18 | 100.00% | 971 | 153 | 157 | 2.8980 | 11196.4035 | 388 offline responses, 287 saturated, 143 quota misses, 490 slots repairing |
-| 19 | 99.82% | 1285 | 157 | 138 | 3.0420 | 12078.5717 | 420 offline responses, 562 saturated, 146 quota misses, 486 slots repairing |
-| 20 | 99.97% | 1239 | 164 | 111 | 3.0960 | 12993.3706 | 455 offline responses, 461 saturated, 159 quota misses, 505 slots repairing |
-| 21 | 99.97% | 965 | 123 | 137 | 2.3760 | 13940.7664 | 323 offline responses, 402 saturated, 117 quota misses, 558 slots repairing |
-| 22 | 99.88% | 893 | 118 | 156 | 2.1960 | 14921.7138 | 268 offline responses, 411 saturated, 96 quota misses, 544 slots repairing |
-| 23 | 100.00% | 1137 | 164 | 141 | 3.1140 | 15938.7664 | 445 offline responses, 374 saturated, 154 quota misses, 506 slots repairing |
-| 24 | 99.97% | 1429 | 180 | 135 | 3.7440 | 16990.9558 | 550 offline responses, 488 saturated, 189 quota misses, 22 repair backoffs, 529 slots repairing |
+| 2 | 100.00% | 1085 | 138 | 0 | 2.6640 | 488.1882 | 391 offline responses, 421 saturated, 135 quota misses, 180 slots repairing |
+| 3 | 100.00% | 1009 | 126 | 0 | 2.3940 | 503.6600 | 316 offline responses, 459 saturated, 108 quota misses, 318 slots repairing |
+| 4 | 100.00% | 958 | 121 | 102 | 2.3220 | 519.8743 | 267 offline responses, 468 saturated, 102 quota misses, 444 slots repairing |
+| 5 | 99.90% | 1204 | 168 | 121 | 3.1500 | 537.0365 | 452 offline responses, 434 saturated, 150 quota misses, 463 slots repairing |
+| 6 | 99.97% | 907 | 113 | 139 | 2.1960 | 556.9552 | 306 offline responses, 378 saturated, 110 quota misses, 510 slots repairing |
+| 7 | 99.75% | 1230 | 168 | 117 | 3.3120 | 575.4129 | 461 offline responses, 436 saturated, 165 quota misses, 484 slots repairing |
+| 8 | 96.65% | 16790 | 180 | 114 | 54.4680 | 525.4441 | 9595 offline responses, 1288 saturated, 3025 quota misses, 2708 repair backoffs, 535 slots repairing |
+| 9 | 96.35% | 16131 | 180 | 108 | 51.1200 | 546.8025 | 9148 offline responses, 1413 saturated, 2836 quota misses, 5095 repair backoffs, 601 slots repairing |
+| 10 | 96.33% | 15270 | 180 | 134 | 47.5380 | 570.5596 | 8585 offline responses, 1534 saturated, 2635 quota misses, 4725 repair backoffs, 673 slots repairing |
+| 11 | 97.47% | 14159 | 180 | 127 | 44.7660 | 602.6376 | 7982 offline responses, 1340 saturated, 2475 quota misses, 4423 repair backoffs, 719 slots repairing |
+| 12 | 97.65% | 13782 | 180 | 150 | 42.4800 | 628.6651 | 7827 offline responses, 1378 saturated, 2342 quota misses, 4166 repair backoffs, 772 slots repairing |
+| 13 | 99.92% | 950 | 119 | 175 | 2.2140 | 709.0768 | 296 offline responses, 432 saturated, 105 quota misses, 802 slots repairing |
+| 14 | 99.25% | 1385 | 152 | 180 | 2.8620 | 730.3403 | 434 offline responses, 664 saturated, 135 quota misses, 746 slots repairing |
+| 15 | 99.93% | 1186 | 170 | 267 | 3.2760 | 762.3572 | 434 offline responses, 425 saturated, 157 quota misses, 718 slots repairing |
+| 16 | 99.87% | 952 | 111 | 168 | 2.2140 | 792.1959 | 283 offline responses, 451 saturated, 107 quota misses, 621 slots repairing |
+| 17 | 99.83% | 917 | 99 | 173 | 1.8540 | 821.7166 | 256 offline responses, 479 saturated, 83 quota misses, 564 slots repairing |
+| 18 | 100.00% | 971 | 153 | 157 | 2.8980 | 853.1627 | 388 offline responses, 287 saturated, 143 quota misses, 490 slots repairing |
+| 19 | 99.82% | 1285 | 157 | 138 | 3.0420 | 882.1683 | 420 offline responses, 562 saturated, 146 quota misses, 486 slots repairing |
+| 20 | 99.97% | 1239 | 164 | 111 | 3.0960 | 914.7988 | 455 offline responses, 461 saturated, 159 quota misses, 505 slots repairing |
+| 21 | 99.97% | 965 | 123 | 137 | 2.3760 | 947.3959 | 323 offline responses, 402 saturated, 117 quota misses, 558 slots repairing |
+| 22 | 99.88% | 893 | 118 | 156 | 2.1960 | 980.9474 | 268 offline responses, 411 saturated, 96 quota misses, 544 slots repairing |
+| 23 | 100.00% | 1137 | 164 | 141 | 3.1140 | 1017.0526 | 445 offline responses, 374 saturated, 154 quota misses, 506 slots repairing |
+| 24 | 99.97% | 1429 | 180 | 135 | 3.7440 | 1052.1894 | 550 offline responses, 488 saturated, 189 quota misses, 22 repair backoffs, 529 slots repairing |
 
 ## Enforcement Interpretation
 

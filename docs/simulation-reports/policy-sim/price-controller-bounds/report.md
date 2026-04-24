@@ -108,21 +108,21 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 0 | 0 | 0 | 0.0000 | 101.9200 | steady state |
-| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 206.5000 | steady state |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 313.8065 | steady state |
-| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 423.9077 | steady state |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 536.8734 | steady state |
-| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 652.7752 | steady state |
-| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 771.6866 | steady state |
-| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 893.6827 | steady state |
-| 9 | 100.00% | 0 | 0 | 0 | 0.0000 | 1018.8408 | steady state |
-| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 1147.2398 | steady state |
-| 11 | 100.00% | 0 | 0 | 0 | 0.0000 | 1278.9608 | steady state |
-| 12 | 100.00% | 0 | 0 | 0 | 0.0000 | 1414.0868 | steady state |
-| 13 | 100.00% | 0 | 0 | 0 | 0.0000 | 1552.7030 | steady state |
-| 14 | 100.00% | 0 | 0 | 0 | 0.0000 | 1694.8966 | steady state |
-| 15 | 100.00% | 0 | 0 | 0 | 0.0000 | 1840.7570 | steady state |
-| 16 | 100.00% | 0 | 0 | 0 | 0.0000 | 1990.3759 | steady state |
+| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 104.5800 | steady state |
+| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 107.3065 | steady state |
+| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 110.1012 | steady state |
+| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 112.9657 | steady state |
+| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 115.9018 | steady state |
+| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 118.9114 | steady state |
+| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 121.9962 | steady state |
+| 9 | 100.00% | 0 | 0 | 0 | 0.0000 | 125.1581 | steady state |
+| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 128.3990 | steady state |
+| 11 | 100.00% | 0 | 0 | 0 | 0.0000 | 131.7210 | steady state |
+| 12 | 100.00% | 0 | 0 | 0 | 0.0000 | 135.1260 | steady state |
+| 13 | 100.00% | 0 | 0 | 0 | 0.0000 | 138.6162 | steady state |
+| 14 | 100.00% | 0 | 0 | 0 | 0.0000 | 142.1936 | steady state |
+| 15 | 100.00% | 0 | 0 | 0 | 0.0000 | 145.8604 | steady state |
+| 16 | 100.00% | 0 | 0 | 0 | 0.0000 | 149.6189 | steady state |
 
 ## Enforcement Interpretation
 

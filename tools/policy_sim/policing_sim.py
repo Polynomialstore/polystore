@@ -383,6 +383,7 @@ class PolicySimulator:
         self.storage_price = config.storage_price
         self.retrieval_price_per_slot = config.retrieval_price_per_slot
         self.repairs_started_this_epoch = 0
+        self.provider_slashed_total_last_epoch = 0.0
         self._apply_builtin_scenario(config.scenario)
         for fault in self.extra_faults:
             self.apply_fault(fault)
@@ -550,7 +551,7 @@ class PolicySimulator:
         out: dict[str, bool] = {}
         for provider_id, provider in self.providers.items():
             behavior = provider.behavior
-            if provider.jailed_until_epoch >= epoch:
+            if self._is_jailed(provider, epoch):
                 out[provider_id] = False
             elif self._region_offline(provider.region, epoch):
                 out[provider_id] = False
@@ -868,7 +869,7 @@ class PolicySimulator:
             if (
                 pid not in excluded
                 and not p.behavior.draining
-                and p.jailed_until_epoch < epoch
+                and not self._is_jailed(p, epoch)
                 and assigned_counts.get(pid, 0) < p.capacity_slots
             )
         ]
@@ -880,7 +881,7 @@ class PolicySimulator:
                 if (
                     pid != slot.provider_id
                     and not p.behavior.draining
-                    and p.jailed_until_epoch < epoch
+                    and not self._is_jailed(p, epoch)
                     and assigned_counts.get(pid, 0) < p.capacity_slots
                 )
             ]
@@ -889,6 +890,10 @@ class PolicySimulator:
 
         seed = f"{self.config.seed}:{epoch}:{deal.deal_id}:{slot.slot}:{slot.current_gen}"
         return min(candidates, key=lambda pid: stable_digest(seed, pid))
+
+    @staticmethod
+    def _is_jailed(provider: Provider, epoch: int) -> bool:
+        return epoch < provider.jailed_until_epoch
 
     def _assigned_counts(self, include_pending: bool = False) -> dict[str, int]:
         assigned_counts = {pid: 0 for pid in self.providers}
@@ -1033,9 +1038,13 @@ class PolicySimulator:
             provider.total_cost += cost
             provider_cost += cost
 
+        provider_slashed_total = sum(p.slashed for p in self.providers.values())
+        provider_slashed_delta = provider_slashed_total - self.provider_slashed_total_last_epoch
+        self.provider_slashed_total_last_epoch = provider_slashed_total
+
         metrics.provider_cost = provider_cost
-        metrics.provider_revenue = sum(p.revenue for p in self.providers.values())
-        metrics.provider_pnl = sum(p.pnl for p in self.providers.values())
+        metrics.provider_revenue = metrics.retrieval_provider_payouts + metrics.reward_paid
+        metrics.provider_pnl = metrics.provider_revenue - metrics.provider_cost - provider_slashed_delta
         total_capacity = max(1, sum(p.capacity_slots for p in self.providers.values()))
         metrics.storage_utilization_bps = int(metrics.active_slots * 10_000 / total_capacity)
         self.economy_rows.append(
@@ -1375,7 +1384,14 @@ def parse_probability(parts: list[str], raw: str) -> float:
 
 
 def load_scenario_spec(path: Path) -> ScenarioSpec:
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "scenario fixtures must be strict JSON, even when using the .yaml "
+            f"extension because JSON is a YAML subset: {path}: "
+            f"{exc.msg} at line {exc.lineno}, column {exc.colno}"
+        ) from exc
     if not isinstance(raw, dict):
         raise ValueError(f"scenario fixture must be an object: {path}")
     name = raw.get("name") or path.stem

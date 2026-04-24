@@ -84,7 +84,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `37.50%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `37.50%` / `43.75%` / `43.75%` | Detects assignment concentration and capacity cliffs. |
-| Provider P&L p10 / p50 / p90 | `1.1455` / `1.2475` / `1.3750` | Shows whether aggregate P&L hides marginal-provider distress. |
+| Provider P&L p10 / p50 / p90 | `1.1030` / `1.2305` / `1.4345` | Shows whether aggregate P&L hides marginal-provider distress. |
 | Storage price start/end/range | `1.0000` -> `1.0000` (`1.0000`-`1.0000`) | Shows dynamic pricing movement and bounds. |
 | Retrieval price start/end/range | `0.0100` -> `0.0100` (`0.0100`-`0.0100`) | Shows whether demand pressure moved retrieval pricing. |
 
@@ -98,29 +98,29 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 | Provider | Region | Slots/Capacity | Utilization | Bandwidth Cap | Attempts | Offline | Saturated | P&L |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| `sp-035` | `global` | 7/16 | 43.75% | 0 | 167 | 0 | 0 | 1.5895 |
-| `sp-024` | `global` | 7/16 | 43.75% | 0 | 163 | 0 | 0 | 1.5555 |
-| `sp-028` | `global` | 7/16 | 43.75% | 0 | 157 | 0 | 0 | 1.5045 |
-| `sp-039` | `global` | 7/16 | 43.75% | 0 | 151 | 0 | 0 | 1.4535 |
-| `sp-030` | `global` | 6/16 | 37.50% | 0 | 150 | 0 | 0 | 1.3750 |
-| `sp-031` | `global` | 6/16 | 37.50% | 0 | 148 | 0 | 0 | 1.3580 |
-| `sp-033` | `global` | 6/16 | 37.50% | 0 | 147 | 0 | 0 | 1.3495 |
-| `sp-029` | `global` | 6/16 | 37.50% | 0 | 146 | 0 | 0 | 1.3410 |
+| `sp-035` | `global` | 7/16 | 43.75% | 0 | 183 | 0 | 0 | 1.7255 |
+| `sp-028` | `global` | 7/16 | 43.75% | 0 | 169 | 0 | 0 | 1.6065 |
+| `sp-024` | `global` | 7/16 | 43.75% | 0 | 166 | 0 | 0 | 1.5810 |
+| `sp-031` | `global` | 6/16 | 37.50% | 0 | 159 | 0 | 0 | 1.4515 |
+| `sp-030` | `global` | 6/16 | 37.50% | 0 | 158 | 0 | 0 | 1.4430 |
+| `sp-026` | `global` | 6/16 | 37.50% | 0 | 157 | 0 | 0 | 1.4345 |
+| `sp-033` | `global` | 6/16 | 37.50% | 0 | 156 | 0 | 0 | 1.4260 |
+| `sp-029` | `global` | 6/16 | 37.50% | 0 | 155 | 0 | 0 | 1.4175 |
 
 ### Timeline
 
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 12 | 6 | 0 | 0.0000 | -0.2000 | 6 invalid proofs, 6 slots repairing |
-| 2 | 100.00% | 0 | 0 | 6 | 0.0000 | 5.6000 | 6 slots repairing |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 11.5200 | steady state |
-| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 17.4400 | steady state |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 23.3600 | steady state |
-| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 29.2800 | steady state |
-| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 35.2000 | steady state |
-| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 41.1200 | steady state |
-| 9 | 100.00% | 0 | 0 | 0 | 0.0000 | 47.0400 | steady state |
-| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 52.9600 | steady state |
+| 2 | 100.00% | 0 | 0 | 6 | 0.0000 | 5.8000 | 6 slots repairing |
+| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 9 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
 
 ## Enforcement Interpretation
 
@@ -176,10 +176,10 @@ Final modeled storage price was `1.0000` and retrieval price per slot was `0.010
 | Provider | Assigned Slots | Revenue | Cost | Slashed | P&L | Churn Risk |
 |---|---:|---:|---:|---:|---:|---:|
 | `sp-000` | 0 | 0.0000 + 0.0000 | 0.5600 | 6.0000 | -6.5600 | yes |
-| `sp-008` | 6 | 1.2000 + 1.0925 | 1.2150 | 0.0000 | 1.0775 | no |
-| `sp-004` | 6 | 1.2000 + 1.1210 | 1.2180 | 0.0000 | 1.1030 | no |
-| `sp-005` | 6 | 1.2000 + 1.1400 | 1.2200 | 0.0000 | 1.1200 | no |
-| `sp-011` | 6 | 1.2000 + 1.1495 | 1.2210 | 0.0000 | 1.1285 | no |
+| `sp-020` | 6 | 1.2000 + 1.1020 | 1.2160 | 0.0000 | 1.0860 | no |
+| `sp-008` | 6 | 1.2000 + 1.1020 | 1.2160 | 0.0000 | 1.0860 | no |
+| `sp-004` | 6 | 1.2000 + 1.1115 | 1.2170 | 0.0000 | 1.0945 | no |
+| `sp-005` | 6 | 1.2000 + 1.1210 | 1.2180 | 0.0000 | 1.1030 | no |
 
 ## Assertion Contract
 
