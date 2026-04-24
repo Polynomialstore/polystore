@@ -40,7 +40,7 @@
       "provider bandwidth saturation occurred",
       "some providers ended with negative modeled P&L"
     ],
-    "run_dir": "/tmp/polystore-policy-sweep-runs/repair-throughput-large-scale/max-repairs-started-per-epoch-300",
+    "run_dir": "sweep-artifacts/repair-throughput-large-scale/max-repairs-started-per-epoch-300",
     "scenario": "large-scale-regional-stress",
     "seed": 29,
     "totals": {
@@ -104,7 +104,7 @@
         "repair coordination backoffs occurred",
         "provider bandwidth saturation occurred"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/repair-throughput-large-scale/max-repairs-started-per-epoch-90",
+      "run_dir": "sweep-artifacts/repair-throughput-large-scale/max-repairs-started-per-epoch-90",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -168,7 +168,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/repair-throughput-large-scale/max-repairs-started-per-epoch-300",
+      "run_dir": "sweep-artifacts/repair-throughput-large-scale/max-repairs-started-per-epoch-300",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -232,7 +232,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/repair-throughput-large-scale/max-repairs-started-per-epoch-180",
+      "run_dir": "sweep-artifacts/repair-throughput-large-scale/max-repairs-started-per-epoch-180",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -404,7 +404,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/repair-throughput-large-scale/max-repairs-started-per-epoch-180",
+      "run_dir": "sweep-artifacts/repair-throughput-large-scale/max-repairs-started-per-epoch-180",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -468,7 +468,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/repair-throughput-large-scale/max-repairs-started-per-epoch-300",
+      "run_dir": "sweep-artifacts/repair-throughput-large-scale/max-repairs-started-per-epoch-300",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -531,7 +531,7 @@
         "repair coordination backoffs occurred",
         "provider bandwidth saturation occurred"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/repair-throughput-large-scale/max-repairs-started-per-epoch-90",
+      "run_dir": "sweep-artifacts/repair-throughput-large-scale/max-repairs-started-per-epoch-90",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {

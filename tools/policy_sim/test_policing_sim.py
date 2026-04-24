@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -279,6 +280,8 @@ class PolicySimulatorTests(unittest.TestCase):
             payload = (report_dir / "sweep_summary.json").read_text(encoding="utf-8")
             self.assertIn('"metric_ranges"', payload)
             self.assertIn('"high_risk_runs"', payload)
+            rows = json.loads(payload)["runs"]
+            self.assertIn("sweep-artifacts/sweep/ideal", {row["run_dir"] for row in rows})
 
     def test_graduation_map_links_scenarios_to_implementation_targets(self):
         rows = [
@@ -368,6 +371,7 @@ class PolicySimulatorTests(unittest.TestCase):
             manifest = run_sweep_spec(sweep, root / "runs", root / "reports")
 
             self.assertEqual(2, manifest["case_count"])
+            self.assertEqual("sweep-artifacts/test-sweep", manifest["raw_run_dir"])
             self.assertTrue((root / "reports" / "test-sweep" / "sweep_summary.md").exists())
             self.assertTrue((root / "reports" / "test-sweep" / "sweep_summary.json").exists())
             self.assertTrue((root / "reports" / "test-sweep" / "manifest.json").exists())

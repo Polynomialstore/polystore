@@ -1,6 +1,6 @@
 {
   "assertion_failures": 0,
-  "base_scenario": "/home/mikers/dev/polynomialstore/polystore/tools/policy_sim/scenarios/price_controller_bounds.yaml",
+  "base_scenario": "tools/policy_sim/scenarios/price_controller_bounds.yaml",
   "case_count": 4,
   "cases": [
     {
@@ -57,5 +57,5 @@
     "*/repairs.csv",
     "*/economy.csv"
   ],
-  "raw_run_dir": "/tmp/polystore-policy-sweep-runs/price-step-controller"
+  "raw_run_dir": "sweep-artifacts/price-step-controller"
 }

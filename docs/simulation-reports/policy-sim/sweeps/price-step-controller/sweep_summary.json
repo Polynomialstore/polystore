@@ -37,7 +37,7 @@
     "risk_reasons": [
       "assertions passed and no material sweep risk surfaced"
     ],
-    "run_dir": "/tmp/polystore-policy-sweep-runs/price-step-controller/dynamic-pricing-max-step-bps-100",
+    "run_dir": "sweep-artifacts/price-step-controller/dynamic-pricing-max-step-bps-100",
     "scenario": "price-controller-bounds",
     "seed": 34,
     "totals": {
@@ -206,7 +206,7 @@
       "risk_reasons": [
         "assertions passed and no material sweep risk surfaced"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/price-step-controller/dynamic-pricing-max-step-bps-100",
+      "run_dir": "sweep-artifacts/price-step-controller/dynamic-pricing-max-step-bps-100",
       "scenario": "price-controller-bounds",
       "seed": 34,
       "totals": {
@@ -267,7 +267,7 @@
       "risk_reasons": [
         "assertions passed and no material sweep risk surfaced"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/price-step-controller/dynamic-pricing-max-step-bps-1200",
+      "run_dir": "sweep-artifacts/price-step-controller/dynamic-pricing-max-step-bps-1200",
       "scenario": "price-controller-bounds",
       "seed": 34,
       "totals": {
@@ -328,7 +328,7 @@
       "risk_reasons": [
         "assertions passed and no material sweep risk surfaced"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/price-step-controller/dynamic-pricing-max-step-bps-350",
+      "run_dir": "sweep-artifacts/price-step-controller/dynamic-pricing-max-step-bps-350",
       "scenario": "price-controller-bounds",
       "seed": 34,
       "totals": {
@@ -389,7 +389,7 @@
       "risk_reasons": [
         "assertions passed and no material sweep risk surfaced"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/price-step-controller/dynamic-pricing-max-step-bps-800",
+      "run_dir": "sweep-artifacts/price-step-controller/dynamic-pricing-max-step-bps-800",
       "scenario": "price-controller-bounds",
       "seed": 34,
       "totals": {

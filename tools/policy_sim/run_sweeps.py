@@ -158,10 +158,10 @@ def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bo
     manifest = {
         "name": spec.name,
         "description": spec.description,
-        "base_scenario": str(spec.base_scenario),
+        "base_scenario": stable_repo_path(spec.base_scenario),
         "case_count": len(spec.cases),
         "assertion_failures": failures,
-        "raw_run_dir": str(sweep_run_dir),
+        "raw_run_dir": f"sweep-artifacts/{spec.name}",
         "committed_artifacts": ["sweep_summary.md", "sweep_summary.json", "manifest.json"],
         "omitted_artifacts": ["*/summary.json", "*/epochs.csv", "*/providers.csv", "*/slots.csv", "*/evidence.csv", "*/repairs.csv", "*/economy.csv"],
         "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
@@ -172,6 +172,13 @@ def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bo
         encoding="utf-8",
     )
     return manifest
+
+
+def stable_repo_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def sweep_paths(path: Path) -> list[Path]:

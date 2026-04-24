@@ -40,7 +40,7 @@
       "provider bandwidth saturation occurred",
       "some providers ended with negative modeled P&L"
     ],
-    "run_dir": "/tmp/polystore-policy-sweep-runs/provider-reliability-large-scale/provider-online-probability-min-0p995",
+    "run_dir": "sweep-artifacts/provider-reliability-large-scale/provider-online-probability-min-0p995",
     "scenario": "large-scale-regional-stress",
     "seed": 29,
     "totals": {
@@ -105,7 +105,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/provider-reliability-large-scale/provider-online-probability-min-0p995",
+      "run_dir": "sweep-artifacts/provider-reliability-large-scale/provider-online-probability-min-0p995",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -169,7 +169,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/provider-reliability-large-scale/provider-online-probability-min-0p985",
+      "run_dir": "sweep-artifacts/provider-reliability-large-scale/provider-online-probability-min-0p985",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -232,7 +232,7 @@
         "repair coordination backoffs occurred",
         "provider bandwidth saturation occurred"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/provider-reliability-large-scale/provider-online-probability-min-0p975",
+      "run_dir": "sweep-artifacts/provider-reliability-large-scale/provider-online-probability-min-0p975",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -403,7 +403,7 @@
         "repair coordination backoffs occurred",
         "provider bandwidth saturation occurred"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/provider-reliability-large-scale/provider-online-probability-min-0p975",
+      "run_dir": "sweep-artifacts/provider-reliability-large-scale/provider-online-probability-min-0p975",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -467,7 +467,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/provider-reliability-large-scale/provider-online-probability-min-0p985",
+      "run_dir": "sweep-artifacts/provider-reliability-large-scale/provider-online-probability-min-0p985",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
@@ -531,7 +531,7 @@
         "provider bandwidth saturation occurred",
         "some providers ended with negative modeled P&L"
       ],
-      "run_dir": "/tmp/polystore-policy-sweep-runs/provider-reliability-large-scale/provider-online-probability-min-0p995",
+      "run_dir": "sweep-artifacts/provider-reliability-large-scale/provider-online-probability-min-0p995",
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
