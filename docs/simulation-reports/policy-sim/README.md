@@ -19,28 +19,29 @@ The corpus-level [graduation map](graduation_map.md) translates these simulator 
 
 The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.
 
-`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events.
+`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`.
 
-| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | Saturated | Negative P&L | Report |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `audit-budget-exhaustion` | `PASS` | 1.0000 | 0 | 0 | 32/32/32 | 32/64 | 32 | 0 | 0 | 4 | [report](audit-budget-exhaustion/report.md) |
-| `coordinated-regional-outage` | `PASS` | 1.0000 | 0 | 0 | 96/96/96 | 22/925 | 794 | 698 | 0 | 0 | [report](coordinated-regional-outage/report.md) |
-| `corrupt-provider` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 0/6 | 6 | 0 | 0 | 1 | [report](corrupt-provider/report.md) |
-| `elasticity-cap-hit` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0 | 0 | [report](elasticity-cap-hit/report.md) |
-| `flapping-provider` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 24/0 | 0 | 0 | 0 | 0 | [report](flapping-provider/report.md) |
-| `ideal` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0 | 0 | [report](ideal/report.md) |
-| `large-scale-regional-stress` | `PASS` | 0.9926 | 1065 | 0 | 3624/3050/3050 | 361/25634 | 16060 | 12436 | 15482 | 4 | [report](large-scale-regional-stress/report.md) |
-| `lazy-provider` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 6/12 | 6 | 0 | 0 | 1 | [report](lazy-provider/report.md) |
-| `price-controller-bounds` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0 | 0 | [report](price-controller-bounds/report.md) |
-| `repair-candidate-exhaustion` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/40 | 8 | 40 | 0 | 0 | [report](repair-candidate-exhaustion/report.md) |
-| `setup-failure` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 0/12 | 6 | 0 | 0 | 1 | [report](setup-failure/report.md) |
-| `single-outage` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 1/12 | 6 | 0 | 0 | 1 | [report](single-outage/report.md) |
-| `subsidy-farming` | `PASS` | 1.0000 | 0 | 0 | 48/48/48 | 48/96 | 48 | 0 | 0 | 6 | [report](subsidy-farming/report.md) |
-| `sustained-non-response` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 0/12 | 6 | 0 | 0 | 1 | [report](sustained-non-response/report.md) |
-| `underpriced-storage` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0 | 48 | [report](underpriced-storage/report.md) |
-| `viral-public-retrieval` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0 | 0 | [report](viral-public-retrieval/report.md) |
-| `wash-retrieval` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0 | 0 | [report](wash-retrieval/report.md) |
-| `withholding` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 0/12 | 6 | 0 | 0 | 1 | [report](withholding/report.md) |
+| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Saturated | Negative P&L | Report |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `audit-budget-exhaustion` | `PASS` | 1.0000 | 0 | 0 | 32/32/32 | 32/64 | 32 | 0 | 0/0 | 0 | 4 | [report](audit-budget-exhaustion/report.md) |
+| `coordinated-regional-outage` | `PASS` | 1.0000 | 0 | 0 | 96/96/96 | 22/925 | 794 | 698 | 0/0 | 0 | 0 | [report](coordinated-regional-outage/report.md) |
+| `corrupt-provider` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 0/6 | 6 | 0 | 0/0 | 0 | 1 | [report](corrupt-provider/report.md) |
+| `elasticity-cap-hit` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0/0 | 0 | 0 | [report](elasticity-cap-hit/report.md) |
+| `flapping-provider` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 24/0 | 0 | 0 | 0/0 | 0 | 0 | [report](flapping-provider/report.md) |
+| `high-bandwidth-promotion` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 55/55 | 0 | 0 | [report](high-bandwidth-promotion/report.md) |
+| `ideal` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0/0 | 0 | 0 | [report](ideal/report.md) |
+| `large-scale-regional-stress` | `PASS` | 0.9926 | 1065 | 0 | 3624/3050/3050 | 361/25634 | 16060 | 12436 | 0/0 | 15482 | 4 | [report](large-scale-regional-stress/report.md) |
+| `lazy-provider` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 6/12 | 6 | 0 | 0/0 | 0 | 1 | [report](lazy-provider/report.md) |
+| `price-controller-bounds` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0/0 | 0 | 0 | [report](price-controller-bounds/report.md) |
+| `repair-candidate-exhaustion` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/40 | 8 | 40 | 0/0 | 0 | 0 | [report](repair-candidate-exhaustion/report.md) |
+| `setup-failure` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 0/12 | 6 | 0 | 0/0 | 0 | 1 | [report](setup-failure/report.md) |
+| `single-outage` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 1/12 | 6 | 0 | 0/0 | 0 | 1 | [report](single-outage/report.md) |
+| `subsidy-farming` | `PASS` | 1.0000 | 0 | 0 | 48/48/48 | 48/96 | 48 | 0 | 0/0 | 0 | 6 | [report](subsidy-farming/report.md) |
+| `sustained-non-response` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 0/12 | 6 | 0 | 0/0 | 0 | 1 | [report](sustained-non-response/report.md) |
+| `underpriced-storage` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0/0 | 0 | 48 | [report](underpriced-storage/report.md) |
+| `viral-public-retrieval` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0/0 | 0 | 0 | [report](viral-public-retrieval/report.md) |
+| `wash-retrieval` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0/0 | 0 | 0 | [report](wash-retrieval/report.md) |
+| `withholding` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 0/12 | 6 | 0 | 0/0 | 0 | 1 | [report](withholding/report.md) |
 
 ## Review Rule
 

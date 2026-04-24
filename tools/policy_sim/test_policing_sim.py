@@ -213,6 +213,34 @@ class PolicySimulatorTests(unittest.TestCase):
             "sustained outage should expose delinquent reason codes before or during repair",
         )
 
+    def test_high_bandwidth_promotion_routes_hot_retrievals(self):
+        config = SimConfig(
+            scenario="high-bandwidth-promotion",
+            seed=41,
+            providers=72,
+            users=220,
+            deals=36,
+            epochs=6,
+            retrievals_per_user_per_epoch=3,
+            provider_bandwidth_capacity_min=30,
+            provider_bandwidth_capacity_max=180,
+            high_bandwidth_promotion_enabled=True,
+            high_bandwidth_capacity_threshold=120,
+            high_bandwidth_min_retrievals=12,
+            high_bandwidth_min_success_rate_bps=9900,
+            high_bandwidth_max_saturation_bps=500,
+            high_bandwidth_routing_enabled=True,
+            hot_retrieval_bps=8000,
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertGreater(result.totals["high_bandwidth_promotions"], 0)
+        self.assertGreater(result.totals["high_bandwidth_providers"], 0)
+        self.assertGreater(result.totals["hot_retrieval_attempts"], 0)
+        self.assertGreater(result.totals["hot_high_bandwidth_serves"], 0)
+        self.assertEqual(0, result.totals["high_bandwidth_demotions"])
+        self.assertTrue(any(row["capability_tier"] == "HIGH_BANDWIDTH" for row in result.providers))
+
     def test_jail_window_is_exclusive(self):
         simulator = PolicySimulator(
             SimConfig(

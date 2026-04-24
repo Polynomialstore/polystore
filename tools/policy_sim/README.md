@@ -120,6 +120,14 @@ are supported in scenario files:
 - `max_repairs_started_per_epoch`
 - `repair_attempt_cap_per_slot`
 - `repair_backoff_epochs`
+- `high_bandwidth_promotion_enabled`
+- `high_bandwidth_capacity_threshold`
+- `high_bandwidth_min_retrievals`
+- `high_bandwidth_min_success_rate_bps`
+- `high_bandwidth_max_saturation_bps`
+- `high_bandwidth_demotion_saturation_bps`
+- `high_bandwidth_routing_enabled`
+- `hot_retrieval_bps`
 
 Versioned sweep specs live in `tools/policy_sim/sweeps`. They are strict JSON
 documents with a `.yaml` extension, matching scenario fixture conventions. A
@@ -139,6 +147,10 @@ The simulator mirrors current protocol concepts:
 - Make-before-break repair with deterministic replacement provider selection.
 - Repair attempt caps and cooldown windows for constrained replacement markets.
 - Per-slot `HEALTHY` / `SUSPECT` / `DELINQUENT` health state with reason codes.
+- Provider capability promotion to `HIGH_BANDWIDTH` based on measured capacity,
+  retrieval success, saturation, and hard-fault history.
+- Hot retrieval routing that can prefer promoted high-bandwidth providers
+  without bypassing capacity and availability assertions.
 - Simulated enforcement modes before live chain/runtime rollout.
 - Large-scale heterogeneous-provider runs with regional outages, bandwidth
   saturation, and repair coordination limits.
@@ -200,9 +212,10 @@ assertion contract, evidence excerpts, generated graphs, and remaining review
 questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
 provider P&L, burn/mint ratio, price trajectory, capacity utilization,
-saturation/repair pressure, and repair backlog. `signals.json` records derived
-availability, saturation, repair, capacity, economic, regional, and provider
-bottleneck signals for downstream analysis.
+saturation/repair pressure, repair backlog, high-bandwidth promotion, and hot
+retrieval routing. `signals.json` records derived availability, saturation,
+repair, capacity, economic, regional, high-bandwidth, and provider bottleneck
+signals for downstream analysis.
 
 The economics in these reports are unitless simulator accounting. They are
 intended to make assumptions explicit: storage price, retrieval price, base

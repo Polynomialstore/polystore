@@ -128,6 +128,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["candidate exclusion reasons", "repair attempt caps", "replacement capacity query"],
         "e2e": "Small devnet with no spare provider capacity after keeper behavior is stable.",
     },
+    "high-bandwidth-promotion": {
+        "target": "provider capability and hot-route policy tests",
+        "next_test": "Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment.",
+        "missing_surfaces": ["provider capability tier state", "bandwidth probe telemetry", "hot-route preference query", "capability demotion rule"],
+        "e2e": "Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression.",
+    },
     "large-scale-regional-stress": {
         "target": "scale calibration and regression reporting",
         "next_test": "Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults.",
@@ -224,6 +230,11 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "repair_backoffs": totals.get("repair_backoffs", 0),
         "repair_cooldowns": totals.get("repair_cooldowns", 0),
         "repair_attempt_caps": totals.get("repair_attempt_caps", 0),
+        "high_bandwidth_promotions": totals.get("high_bandwidth_promotions", 0),
+        "high_bandwidth_demotions": totals.get("high_bandwidth_demotions", 0),
+        "high_bandwidth_providers": totals.get("high_bandwidth_providers", 0),
+        "hot_retrieval_attempts": totals.get("hot_retrieval_attempts", 0),
+        "hot_high_bandwidth_serves": totals.get("hot_high_bandwidth_serves", 0),
         "suspect_slots": totals.get("suspect_slots", 0),
         "delinquent_slots": totals.get("delinquent_slots", 0),
         "providers_negative_pnl": totals.get("providers_negative_pnl", 0),
@@ -255,10 +266,10 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
@@ -267,6 +278,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['unavailable_reads']} | {row['data_loss_events']} | "
             f"{row['repairs_started']}/{row['repairs_ready']}/{row['repairs_completed']} | "
             f"{row['suspect_slots']}/{row['delinquent_slots']} | {row['repair_attempts']} | {row['repair_backoffs']} | "
+            f"{row['high_bandwidth_promotions']}/{row['high_bandwidth_providers']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
             f"[report]({scenario}/report.md) |"
         )
@@ -369,6 +381,11 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "repair_backoffs": row["repair_backoffs"],
             "repair_cooldowns": row.get("repair_cooldowns", 0),
             "repair_attempt_caps": row.get("repair_attempt_caps", 0),
+            "high_bandwidth_promotions": row.get("high_bandwidth_promotions", 0),
+            "high_bandwidth_demotions": row.get("high_bandwidth_demotions", 0),
+            "high_bandwidth_providers": row.get("high_bandwidth_providers", 0),
+            "hot_retrieval_attempts": row.get("hot_retrieval_attempts", 0),
+            "hot_high_bandwidth_serves": row.get("hot_high_bandwidth_serves", 0),
             "suspect_slots": row.get("suspect_slots", 0),
             "delinquent_slots": row.get("delinquent_slots", 0),
             "providers_negative_pnl": row["providers_negative_pnl"],
@@ -399,6 +416,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "price-controller-bounds",
         "subsidy-farming",
         "repair-candidate-exhaustion",
+        "high-bandwidth-promotion",
     }
     if scenario in implementation_ready:
         return "implementation planning", []
@@ -424,6 +442,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "lazy-provider",
         "setup-failure",
         "repair-candidate-exhaustion",
+        "high-bandwidth-promotion",
         "price-controller-bounds",
     ]
     ready.sort(key=lambda row: (priority.index(row["scenario"]) if row["scenario"] in priority else 99, row["scenario"]))

@@ -28,6 +28,8 @@ SLOT_REPAIRING = "REPAIRING"
 HEALTH_HEALTHY = "HEALTHY"
 HEALTH_SUSPECT = "SUSPECT"
 HEALTH_DELINQUENT = "DELINQUENT"
+CAPABILITY_ACTIVE = "ACTIVE"
+CAPABILITY_HIGH_BANDWIDTH = "HIGH_BANDWIDTH"
 
 ENFORCEMENT_ORDER = {
     "MEASURE_ONLY": 0,
@@ -52,6 +54,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "subsidy-farming",
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
+    "high-bandwidth-promotion",
 }
 
 CLI_SCENARIOS = sorted(
@@ -111,6 +114,14 @@ class SimConfig:
     provider_bandwidth_capacity_per_epoch: int = 0
     provider_bandwidth_capacity_min: int = 0
     provider_bandwidth_capacity_max: int = 0
+    high_bandwidth_promotion_enabled: bool = False
+    high_bandwidth_capacity_threshold: int = 0
+    high_bandwidth_min_retrievals: int = 0
+    high_bandwidth_min_success_rate_bps: int = 9900
+    high_bandwidth_max_saturation_bps: int = 500
+    high_bandwidth_demotion_saturation_bps: int = 0
+    high_bandwidth_routing_enabled: bool = False
+    hot_retrieval_bps: int = 0
     provider_online_probability_min: float = 1.0
     provider_online_probability_max: float = 1.0
     provider_repair_probability_min: float = 1.0
@@ -183,6 +194,18 @@ class SimConfig:
             raise ValueError("repair_attempt_cap_per_slot must be non-negative")
         if self.repair_backoff_epochs < 0:
             raise ValueError("repair_backoff_epochs must be non-negative")
+        if self.high_bandwidth_capacity_threshold < 0:
+            raise ValueError("high_bandwidth_capacity_threshold must be non-negative")
+        if self.high_bandwidth_min_retrievals < 0:
+            raise ValueError("high_bandwidth_min_retrievals must be non-negative")
+        for key, value in {
+            "high_bandwidth_min_success_rate_bps": self.high_bandwidth_min_success_rate_bps,
+            "high_bandwidth_max_saturation_bps": self.high_bandwidth_max_saturation_bps,
+            "high_bandwidth_demotion_saturation_bps": self.high_bandwidth_demotion_saturation_bps,
+            "hot_retrieval_bps": self.hot_retrieval_bps,
+        }.items():
+            if value < 0 or value > 10_000:
+                raise ValueError(f"{key} must be in [0, 10000]")
 
 
 @dataclass
@@ -204,6 +227,10 @@ class Provider:
     capacity_slots: int = 16
     bandwidth_capacity_per_epoch: int = 0
     repair_success_probability: float = 1.0
+    capability_tier: str = CAPABILITY_ACTIVE
+    capability_reason: str = ""
+    high_bandwidth_promoted_epoch: int = 0
+    high_bandwidth_demoted_epoch: int = 0
     storage_cost_multiplier: float = 1.0
     bandwidth_cost_multiplier: float = 1.0
     behavior: ProviderBehavior = field(default_factory=ProviderBehavior)
@@ -321,6 +348,12 @@ class EpochMetrics:
     repair_backoffs: int = 0
     repair_cooldowns: int = 0
     repair_attempt_caps: int = 0
+    high_bandwidth_promotions: int = 0
+    high_bandwidth_demotions: int = 0
+    high_bandwidth_providers: int = 0
+    high_bandwidth_serves: int = 0
+    hot_retrieval_attempts: int = 0
+    hot_high_bandwidth_serves: int = 0
     paid_corrupt_bytes: int = 0
     retrieval_base_burned: float = 0.0
     retrieval_variable_burned: float = 0.0
@@ -567,6 +600,7 @@ class PolicySimulator:
 
         self._record_data_loss_events(metrics)
         self._settle_epoch_economy(epoch, metrics)
+        self._update_provider_capabilities(epoch, metrics)
         self._maybe_update_prices(metrics)
         return metrics
 
@@ -613,6 +647,18 @@ class PolicySimulator:
         deal = self.rng.choice(self.deals)
         order = list(range(deal.n))
         self.rng.shuffle(order)
+        is_hot = self.config.hot_retrieval_bps > 0 and self.rng.randrange(10_000) < self.config.hot_retrieval_bps
+        if is_hot:
+            metrics.hot_retrieval_attempts += 1
+        if is_hot and self.config.high_bandwidth_routing_enabled:
+            order.sort(
+                key=lambda idx: (
+                    0
+                    if self.providers[self._slot_route_provider_id(deal.slots[idx])].capability_tier
+                    == CAPABILITY_HIGH_BANDWIDTH
+                    else 1
+                )
+            )
         max_attempts = min(len(order), self.config.route_attempt_limit)
         successes = 0
         failed_slots: list[SlotState] = []
@@ -620,15 +666,16 @@ class PolicySimulator:
 
         for slot_idx in order[:max_attempts]:
             slot = deal.slots[slot_idx]
-            if slot.status == SLOT_REPAIRING and slot.pending_provider_id:
-                provider_id = slot.pending_provider_id
-            else:
-                provider_id = slot.provider_id
+            provider_id = self._slot_route_provider_id(slot)
 
             outcome = self._serve_from_provider(provider_id, online)
             if outcome == "ok":
                 successes += 1
                 served_providers.append(provider_id)
+                if self.providers[provider_id].capability_tier == CAPABILITY_HIGH_BANDWIDTH:
+                    metrics.high_bandwidth_serves += 1
+                    if is_hot:
+                        metrics.hot_high_bandwidth_serves += 1
                 self.provider_epoch_serves[provider_id] += 1
                 slot.credits_raw += 1
                 slot.direct_served += 1
@@ -662,6 +709,12 @@ class PolicySimulator:
             return
 
         metrics.unavailable_reads += 1
+
+    @staticmethod
+    def _slot_route_provider_id(slot: SlotState) -> str:
+        if slot.status == SLOT_REPAIRING and slot.pending_provider_id:
+            return slot.pending_provider_id
+        return slot.provider_id
 
     def _serve_from_provider(self, provider_id: str, online: dict[str, bool]) -> str:
         provider = self.providers[provider_id]
@@ -1218,6 +1271,49 @@ class PolicySimulator:
             }
         )
 
+    def _update_provider_capabilities(self, epoch: int, metrics: EpochMetrics) -> None:
+        if not self.config.high_bandwidth_promotion_enabled:
+            metrics.high_bandwidth_providers = sum(
+                1 for provider in self.providers.values() if provider.capability_tier == CAPABILITY_HIGH_BANDWIDTH
+            )
+            return
+
+        for provider in self.providers.values():
+            attempts = provider.retrieval_attempts
+            success_rate_bps = int(provider.retrieval_successes * 10_000 / attempts) if attempts else 0
+            saturation_bps = int(provider.saturated_responses * 10_000 / attempts) if attempts else 0
+            if provider.capability_tier == CAPABILITY_HIGH_BANDWIDTH:
+                if (
+                    self.config.high_bandwidth_demotion_saturation_bps > 0
+                    and attempts >= self.config.high_bandwidth_min_retrievals
+                    and saturation_bps > self.config.high_bandwidth_demotion_saturation_bps
+                ):
+                    provider.capability_tier = CAPABILITY_ACTIVE
+                    provider.capability_reason = "demoted:saturation_regression"
+                    provider.high_bandwidth_demoted_epoch = epoch
+                    metrics.high_bandwidth_demotions += 1
+                continue
+
+            if provider.bandwidth_capacity_per_epoch < self.config.high_bandwidth_capacity_threshold:
+                continue
+            if attempts < self.config.high_bandwidth_min_retrievals:
+                continue
+            if success_rate_bps < self.config.high_bandwidth_min_success_rate_bps:
+                continue
+            if saturation_bps > self.config.high_bandwidth_max_saturation_bps:
+                continue
+            if provider.hard_faults > 0:
+                continue
+
+            provider.capability_tier = CAPABILITY_HIGH_BANDWIDTH
+            provider.capability_reason = "promoted:capacity_success_saturation"
+            provider.high_bandwidth_promoted_epoch = epoch
+            metrics.high_bandwidth_promotions += 1
+
+        metrics.high_bandwidth_providers = sum(
+            1 for provider in self.providers.values() if provider.capability_tier == CAPABILITY_HIGH_BANDWIDTH
+        )
+
     def _maybe_update_prices(self, metrics: EpochMetrics) -> None:
         if not self.config.dynamic_pricing:
             return
@@ -1264,6 +1360,11 @@ class PolicySimulator:
             "repair_backoffs",
             "repair_cooldowns",
             "repair_attempt_caps",
+            "high_bandwidth_promotions",
+            "high_bandwidth_demotions",
+            "high_bandwidth_serves",
+            "hot_retrieval_attempts",
+            "hot_high_bandwidth_serves",
             "paid_corrupt_bytes",
             "retrieval_base_burned",
             "retrieval_variable_burned",
@@ -1290,6 +1391,9 @@ class PolicySimulator:
         totals["provider_pnl"] = sum(p.pnl for p in self.providers.values())
         totals["provider_slashed"] = sum(p.slashed for p in self.providers.values())
         totals["providers_negative_pnl"] = sum(1 for p in self.providers.values() if p.pnl < 0)
+        totals["high_bandwidth_providers"] = sum(
+            1 for p in self.providers.values() if p.capability_tier == CAPABILITY_HIGH_BANDWIDTH
+        )
         totals["min_provider_pnl"] = min((p.pnl for p in self.providers.values()), default=0.0)
         totals["max_provider_pnl"] = max((p.pnl for p in self.providers.values()), default=0.0)
         assigned_counts = self._assigned_counts()
@@ -1323,6 +1427,10 @@ class PolicySimulator:
                 {
                     "provider_id": provider_id,
                     "region": provider.region,
+                    "capability_tier": provider.capability_tier,
+                    "capability_reason": provider.capability_reason,
+                    "high_bandwidth_promoted_epoch": provider.high_bandwidth_promoted_epoch,
+                    "high_bandwidth_demoted_epoch": provider.high_bandwidth_demoted_epoch,
                     "assigned_slots": assigned_counts[provider_id],
                     "capacity_slots": provider.capacity_slots,
                     "capacity_utilization_bps": int(assigned_counts[provider_id] * 10_000 / max(1, provider.capacity_slots)),
@@ -1698,7 +1806,7 @@ def print_summary(result: SimResult) -> None:
     )
     print(
         "provider_pnl={provider_pnl:.4f} negative_pnl={providers_negative_pnl} "
-        "reward_burned={reward_burned:.4f}".format(**totals)
+        "reward_burned={reward_burned:.4f} high_bandwidth_providers={high_bandwidth_providers}".format(**totals)
     )
     if result.assertions:
         failed = [item for item in result.assertions if not item.passed]

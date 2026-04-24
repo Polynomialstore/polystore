@@ -746,6 +746,21 @@ can answer:
 3. How sensitive should hot-deal routing be to transient latency?
 4. What happens when a high-bandwidth SP fails suddenly?
 
+Current simulator coverage:
+
+1. `tools/policy_sim/scenarios/high_bandwidth_promotion.yaml` models a
+   heterogeneous provider population with hot retrieval demand.
+2. Providers promote to `HIGH_BANDWIDTH` only after satisfying configured
+   bandwidth capacity, retrieval-count, success-rate, saturation, and
+   hard-fault checks.
+3. Hot retrieval routing can prefer promoted providers while retaining the
+   existing route-attempt, availability, and over-capacity assertions.
+4. Reports expose promotion count, final high-bandwidth provider count,
+   demotions, hot retrieval attempts, and hot serves by high-bandwidth
+   providers.
+5. The missing live surfaces are provider capability state, probe telemetry,
+   hot-route preference queries, and demotion policy.
+
 ## 21. Performance Market and Service Classes
 
 `spec.md` defines a performance market with service hints and reward tiers. The
@@ -1179,6 +1194,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
+| `high_bandwidth_promotion.yaml` | Hot retrieval demand is routed across heterogeneous providers after measured high-bandwidth promotion. | Providers promote only after success/capacity/saturation checks, hot traffic uses promoted providers, no demotion or over-capacity assignment occurs. |
 | `large_scale_regional_stress.yaml` | More than 1,000 heterogeneous SPs and thousands of users experience a correlated regional outage, bandwidth saturation, dynamic pricing, and constrained repair coordination. | Availability remains above floor, saturation and repair backoffs are visible, price remains bounded, and no provider is assigned beyond modeled capacity. |
 
 ### 27.7 Output Contract
@@ -1331,7 +1347,7 @@ This program should be split into workstreams that can land independently.
 | Chain health state | Add provider/slot health and evidence state. | `polystorechain/x/polystorechain/keeper` |
 | Automatic repair | Automate delinquency to repair to promotion. | Chain keeper, provider-daemon, gateway |
 | Provider lifecycle | Track readiness, probation, promotion, demotion, jail, exit. | Chain keeper, provider admin, website |
-| High-bandwidth promotion | Measure and promote capable SPs for hot/overflow work. | Simulator, chain params/state, gateway probes |
+| High-bandwidth promotion | Measure and promote capable SPs for hot/overflow work. | Simulator fixture and reports now exist; next surfaces are chain params/state and gateway probes |
 | Evidence/deputies | Add threshold evidence and incentives. | Chain keeper, gateway/provider proof paths |
 | Bonding/slashing | Make penalties economically meaningful. | Chain keeper/bank/staking integration |
 | Elasticity overlays | Add user-funded overflow capacity. | Chain state, gateway routing, provider storage |
