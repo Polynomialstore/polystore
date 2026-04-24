@@ -1,0 +1,107 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/demand_elasticity_recovery.yaml",
+  "case_count": 9,
+  "cases": [
+    {
+      "case": "baseline-elastic-recovery",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "slow-250bps-price-step",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "fast-2000bps-price-step",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "low-elasticity-muted-suppression",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-elasticity-hard-suppression",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "minimum-demand-floor",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "higher-reference-price",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "controller-disabled-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "elasticity-disabled-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "demand-elasticity-recovery",
+      "seed": 59,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for storage-price demand elasticity, price-step speed, reference price, and disabled-controller recovery.",
+  "name": "storage-demand-elasticity-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/storage-demand-elasticity-controls"
+}

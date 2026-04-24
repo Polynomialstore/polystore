@@ -152,6 +152,8 @@ This report aggregates `3` completed simulator run output directories. It does n
 | `saturated_responses` | 14854.000000 | 16409.000000 | 1555.000000 | 15581.666667 | Provider bandwidth bottleneck signal. |
 | `providers_over_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Placement/capacity invariant; should remain zero. |
 | `final_storage_utilization_bps` | 5569.000000 | 5647.000000 | 78.000000 | 5611.333333 | Supply utilization against modeled capacity. |
+| `min_storage_price` | 0.440685 | 0.440685 | 0.000000 | 0.440685 | Lowest storage price observed during the run. |
+| `max_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Highest storage price observed during the run. |
 | `final_storage_price` | 0.440685 | 0.440685 | 0.000000 | 0.440685 | Storage-controller endpoint under this run. |
 | `min_retrieval_price` | 0.011000 | 0.011000 | 0.000000 | 0.011000 | Lowest retrieval price observed during the run. |
 | `max_retrieval_price` | 0.024267 | 0.024267 | 0.000000 | 0.024267 | Highest retrieval price observed during the run. |

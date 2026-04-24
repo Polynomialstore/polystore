@@ -614,6 +614,8 @@ SWEEP_METRICS = [
     "saturated_responses",
     "providers_over_capacity",
     "final_storage_utilization_bps",
+    "min_storage_price",
+    "max_storage_price",
     "final_storage_price",
     "min_retrieval_price",
     "max_retrieval_price",
@@ -3760,8 +3762,19 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "unconvicted evidence spam carried no burn cost")
     if fnum(totals.get("new_deals_rejected_price")) > 0:
         raise_to("medium", "new storage demand was rejected by price")
-    if fnum(totals.get("new_deals_suppressed_price")) > 0:
+    if fnum(totals.get("new_deals_suppressed_price")) > 0 and not (
+        scenario == "demand-elasticity-recovery" and fnum(totals.get("new_deals_accepted")) > 0
+    ):
         raise_to("medium", "latent storage demand was suppressed by price elasticity")
+    if scenario == "demand-elasticity-recovery" and fnum(totals.get("new_deal_latent_requests")) > 0:
+        if (
+            fnum(config.get("storage_demand_reference_price")) > 0
+            and fnum(config.get("storage_price")) > fnum(config.get("storage_demand_reference_price"))
+            and fnum(totals.get("new_deals_suppressed_price")) == 0
+        ):
+            raise_to("medium", "storage demand did not respond to high initial price")
+        if fnum(totals.get("new_deals_accepted")) == 0:
+            raise_to("high", "storage demand never recovered into accepted deals")
     if (
         scenario == "retrieval-demand-shock"
         and fnum(totals.get("retrieval_demand_shock_active")) > 0
@@ -4076,6 +4089,8 @@ def sweep_metric_meaning(key: str) -> str:
         "saturated_responses": "Provider bandwidth bottleneck signal.",
         "providers_over_capacity": "Placement/capacity invariant; should remain zero.",
         "final_storage_utilization_bps": "Supply utilization against modeled capacity.",
+        "min_storage_price": "Lowest storage price observed during the run.",
+        "max_storage_price": "Highest storage price observed during the run.",
         "final_storage_price": "Storage-controller endpoint under this run.",
         "min_retrieval_price": "Lowest retrieval price observed during the run.",
         "max_retrieval_price": "Highest retrieval price observed during the run.",
