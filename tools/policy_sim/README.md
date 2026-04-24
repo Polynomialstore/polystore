@@ -133,7 +133,9 @@ Versioned sweep specs live in `tools/policy_sim/sweeps`. They are strict JSON
 documents with a `.yaml` extension, matching scenario fixture conventions. A
 sweep chooses a base scenario and a matrix of config overrides; raw per-case
 ledgers are generated locally while committed reports contain only
-`sweep_summary.md`, `sweep_summary.json`, and `manifest.json`.
+`sweep_summary.md`, `sweep_summary.json`, and `manifest.json`. Current sweeps
+cover repair throughput, route attempts, provider reliability, price-controller
+steps, and high-bandwidth capability thresholds.
 
 ## Model Scope
 
