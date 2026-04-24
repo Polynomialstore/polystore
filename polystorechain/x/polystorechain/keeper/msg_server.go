@@ -1283,17 +1283,6 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		// For valid but too slow proofs, no reward, potentially still a small slash based on spec.
 	}
 
-	// Update reputation for success
-	if tier < 3 {
-		provider, errGet := k.Providers.Get(ctx, creator)
-		if errGet == nil {
-			provider.ReputationScore += 1
-			if errSet := k.Providers.Set(ctx, creator, provider); errSet != nil {
-				ctx.Logger().Error("Failed to update provider reputation", "error", errSet)
-			}
-		}
-	}
-
 	// --- INFLATIONARY DECAY ---
 	// BaseReward = 1 NIL * (1 / 2^(Height/Interval))
 	initialReward := math.NewInt(1000000)
@@ -1669,6 +1658,18 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 	default:
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid proof type")
+	}
+
+	// Update reputation only after proof validation succeeds. Invalid proofs can
+	// still be recorded as evidence, but they must not earn reputation.
+	if tier < 3 {
+		provider, errGet := k.Providers.Get(ctx, creator)
+		if errGet == nil {
+			provider.ReputationScore += 1
+			if errSet := k.Providers.Set(ctx, creator, provider); errSet != nil {
+				ctx.Logger().Error("Failed to update provider reputation", "error", errSet)
+			}
+		}
 	}
 
 	var bandwidthPayment math.Int
