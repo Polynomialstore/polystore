@@ -133,6 +133,12 @@ func TestBaseRewardPool_ExcludesQuotaShortfallSlot(t *testing.T) {
 	requireProviderBalance(t, bank, deal.Mode2Slots[0].Provider, "63stake")
 	requireProviderBalance(t, bank, deal.Mode2Slots[1].Provider, "63stake")
 	requireProviderBalance(t, bank, deal.Mode2Slots[2].Provider, "0stake")
+
+	excludedProvider, err := f.keeper.Providers.Get(ctx10, deal.Mode2Slots[2].Provider)
+	require.NoError(t, err)
+	require.Equal(t, "Active", excludedProvider.Status)
+	require.True(t, hasEvidenceSummary(t, f, ctx10, "quota_miss_recorded"))
+	require.False(t, hasEvidenceSummary(t, f, ctx10, "quota_miss_repair_started"))
 }
 
 func TestBaseRewardPool_ExcludesRepairingSlotResponsibility(t *testing.T) {

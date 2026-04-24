@@ -210,6 +210,16 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					if err := k.Mode2DeputyMissedEpochs.Set(ctx, missedKey, nextMissed); err != nil {
 						return false, err
 					}
+					if err := k.recordMode2SoftFaultEvidence(sdkCtx, deal, dealID, slot, epochID, "deputy_served_zero_direct", nextMissed); err != nil {
+						return false, err
+					}
+					healthKind := "provider_degraded"
+					if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
+						healthKind = "provider_delinquent"
+					}
+					if err := k.recordMode2SoftFaultEvidence(sdkCtx, deal, dealID, slot, epochID, healthKind, nextMissed); err != nil {
+						return false, err
+					}
 
 					sdkCtx.Logger().Info(
 						"deputy-served slot had zero retrieval service",
@@ -289,6 +299,16 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					}
 					nextMissed := prev + 1
 					if err := k.Mode2MissedEpochs.Set(ctx, missedKey, nextMissed); err != nil {
+						return false, err
+					}
+					if err := k.recordMode2SoftFaultEvidence(sdkCtx, deal, dealID, slot, epochID, "quota_miss_recorded", nextMissed); err != nil {
+						return false, err
+					}
+					healthKind := "provider_degraded"
+					if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
+						healthKind = "provider_delinquent"
+					}
+					if err := k.recordMode2SoftFaultEvidence(sdkCtx, deal, dealID, slot, epochID, healthKind, nextMissed); err != nil {
 						return false, err
 					}
 					sdkCtx.Logger().Info(
@@ -393,4 +413,33 @@ func (k Keeper) recordRepairBackoff(ctx sdk.Context, dealID uint64, provider str
 	extra = append(extra, []byte(reason)...)
 	eid := deriveEvidenceID("repair_backoff_entered", dealID, epochID, extra)
 	return k.recordEvidenceSummary(ctx, dealID, provider, "repair_backoff_entered", eid[:], "chain:"+reason, false)
+}
+
+func (k Keeper) recordMode2SoftFaultEvidence(
+	ctx sdk.Context,
+	deal types.Deal,
+	dealID uint64,
+	slot uint32,
+	epochID uint64,
+	kind string,
+	missedEpochs uint64,
+) error {
+	if int(slot) >= len(deal.Mode2Slots) {
+		return nil
+	}
+	entry := deal.Mode2Slots[slot]
+	if entry == nil {
+		return nil
+	}
+	provider := strings.TrimSpace(entry.Provider)
+	if provider == "" {
+		return nil
+	}
+
+	extra := make([]byte, 0, 4+8)
+	extra = binary.BigEndian.AppendUint32(extra, slot)
+	extra = binary.BigEndian.AppendUint64(extra, missedEpochs)
+	eid := deriveEvidenceID(kind, dealID, epochID, extra)
+	reporter := fmt.Sprintf("chain:slot=%d:missed_epochs=%d", slot, missedEpochs)
+	return k.recordEvidenceSummary(ctx, dealID, provider, kind, eid[:], reporter, false)
 }
