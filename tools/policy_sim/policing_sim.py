@@ -73,6 +73,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "overpriced-storage",
     "demand-elasticity-recovery",
     "provider-cost-shock",
+    "provider-economic-churn",
     "retrieval-demand-shock",
     "price-controller-bounds",
     "subsidy-farming",
@@ -183,6 +184,11 @@ class SimConfig:
     provider_storage_cost_jitter_bps: int = 0
     provider_bandwidth_cost_jitter_bps: int = 0
     provider_cost_shocks: tuple[dict[str, Any], ...] = ()
+    provider_churn_enabled: bool = False
+    provider_churn_pnl_threshold: float = 0.0
+    provider_churn_after_epochs: int = 1
+    provider_churn_max_providers_per_epoch: int = 0
+    provider_churn_min_remaining_providers: int = 0
     provider_regions: tuple[str, ...] = ("global",)
     regional_outages: tuple[dict[str, Any], ...] = ()
     max_repairs_started_per_epoch: int = 0
@@ -337,6 +343,14 @@ class SimConfig:
             }:
                 if int(shock.get(key, 10_000)) < 0:
                     raise ValueError(f"{key} must be non-negative")
+        if self.provider_churn_after_epochs <= 0:
+            raise ValueError("provider_churn_after_epochs must be positive")
+        if self.provider_churn_max_providers_per_epoch < 0:
+            raise ValueError("provider_churn_max_providers_per_epoch must be non-negative")
+        if self.provider_churn_min_remaining_providers < 0:
+            raise ValueError("provider_churn_min_remaining_providers must be non-negative")
+        if self.provider_churn_min_remaining_providers > self.providers:
+            raise ValueError("provider_churn_min_remaining_providers must be <= providers")
 
 
 @dataclass
@@ -391,6 +405,8 @@ class Provider:
     slashed: float = 0.0
     bond: float = 0.0
     jailed_until_epoch: int = 0
+    churn_pressure_epochs: int = 0
+    churned_epoch: int = 0
 
     def __post_init__(self) -> None:
         self.bond = self.initial_bond
@@ -539,6 +555,12 @@ class EpochMetrics:
     provider_cost_shock_fixed_multiplier_bps: int = 10_000
     provider_cost_shock_storage_multiplier_bps: int = 10_000
     provider_cost_shock_bandwidth_multiplier_bps: int = 10_000
+    churn_pressure_providers: int = 0
+    provider_churn_events: int = 0
+    churned_providers: int = 0
+    active_provider_capacity: int = 0
+    exited_provider_capacity: int = 0
+    churned_assigned_slots: int = 0
     storage_price: float = 0.0
     retrieval_price_per_slot: float = 0.0
     storage_utilization_bps: int = 0
@@ -1777,6 +1799,8 @@ class PolicySimulator:
             provider.total_cost += cost
             provider_cost += cost
 
+        self._apply_provider_economic_churn(epoch, metrics, assigned_counts)
+
         provider_slashed_total = sum(p.slashed for p in self.providers.values())
         provider_slashed_delta = provider_slashed_total - self.provider_slashed_total_last_epoch
         self.provider_slashed_total_last_epoch = provider_slashed_total
@@ -1784,7 +1808,7 @@ class PolicySimulator:
         metrics.provider_cost = provider_cost
         metrics.provider_revenue = metrics.retrieval_provider_payouts + metrics.reward_paid + metrics.performance_reward_paid
         metrics.provider_pnl = metrics.provider_revenue - metrics.provider_cost - provider_slashed_delta
-        total_capacity = max(1, sum(p.capacity_slots for p in self.providers.values()))
+        total_capacity = max(1, metrics.active_provider_capacity)
         metrics.storage_utilization_bps = int(metrics.active_slots * 10_000 / total_capacity)
         self.economy_rows.append(
             {
@@ -1823,6 +1847,12 @@ class PolicySimulator:
                 "provider_cost_shock_fixed_multiplier_bps": metrics.provider_cost_shock_fixed_multiplier_bps,
                 "provider_cost_shock_storage_multiplier_bps": metrics.provider_cost_shock_storage_multiplier_bps,
                 "provider_cost_shock_bandwidth_multiplier_bps": metrics.provider_cost_shock_bandwidth_multiplier_bps,
+                "churn_pressure_providers": metrics.churn_pressure_providers,
+                "provider_churn_events": metrics.provider_churn_events,
+                "churned_providers": metrics.churned_providers,
+                "active_provider_capacity": metrics.active_provider_capacity,
+                "exited_provider_capacity": metrics.exited_provider_capacity,
+                "churned_assigned_slots": metrics.churned_assigned_slots,
                 "performance_reward_paid": metrics.performance_reward_paid,
                 "latency_sample_count": metrics.latency_sample_count,
                 "average_latency_ms": metrics.total_latency_ms / metrics.latency_sample_count if metrics.latency_sample_count else 0.0,
@@ -1830,6 +1860,66 @@ class PolicySimulator:
                 "elasticity_rejections": metrics.elasticity_rejections,
             }
         )
+
+    def _apply_provider_economic_churn(
+        self,
+        epoch: int,
+        metrics: EpochMetrics,
+        assigned_counts: dict[str, int],
+    ) -> None:
+        threshold = self.config.provider_churn_pnl_threshold
+        for provider in self.providers.values():
+            if provider.churned_epoch:
+                continue
+            if provider.pnl < threshold:
+                provider.churn_pressure_epochs += 1
+            else:
+                provider.churn_pressure_epochs = 0
+
+        pressure_candidates = [
+            provider
+            for provider in self.providers.values()
+            if not provider.churned_epoch
+            and provider.churn_pressure_epochs >= self.config.provider_churn_after_epochs
+        ]
+        metrics.churn_pressure_providers = len(pressure_candidates)
+
+        if self.config.provider_churn_enabled and pressure_candidates:
+            active_providers = sum(1 for provider in self.providers.values() if not provider.churned_epoch)
+            max_exits_by_floor = max(0, active_providers - self.config.provider_churn_min_remaining_providers)
+            max_exits_by_config = self.config.provider_churn_max_providers_per_epoch or len(pressure_candidates)
+            exit_limit = min(len(pressure_candidates), max_exits_by_floor, max_exits_by_config)
+            pressure_candidates.sort(key=lambda provider: (provider.pnl, provider.provider_id))
+            for provider in pressure_candidates[:exit_limit]:
+                provider.churned_epoch = epoch
+                provider.behavior.draining = True
+                provider.behavior.offline_epochs.update(range(epoch + 1, self.config.epochs + 1))
+                metrics.provider_churn_events += 1
+                self.evidence_rows.append(
+                    {
+                        "epoch": epoch,
+                        "deal_id": "",
+                        "slot": "",
+                        "provider_id": provider.provider_id,
+                        "evidence_class": "market",
+                        "reason": "provider_economic_churn",
+                        "consequence": "draining_exit",
+                    }
+                )
+
+        self._record_provider_capacity_snapshot(metrics, assigned_counts)
+
+    def _record_provider_capacity_snapshot(
+        self,
+        metrics: EpochMetrics,
+        assigned_counts: dict[str, int],
+    ) -> None:
+        churned = [provider for provider in self.providers.values() if provider.churned_epoch]
+        active = [provider for provider in self.providers.values() if not provider.churned_epoch]
+        metrics.churned_providers = len(churned)
+        metrics.active_provider_capacity = sum(provider.capacity_slots for provider in active)
+        metrics.exited_provider_capacity = sum(provider.capacity_slots for provider in churned)
+        metrics.churned_assigned_slots = sum(assigned_counts[provider.provider_id] for provider in churned)
 
     def _provider_cost_multipliers(self, provider: Provider, epoch: int) -> tuple[float, float, float]:
         fixed_bps = 10_000
@@ -2018,6 +2108,7 @@ class PolicySimulator:
             "evidence_spam_net_gain",
             "provider_cost",
             "provider_cost_shock_active",
+            "provider_churn_events",
             "elasticity_spent",
             "elasticity_rejections",
         ]
@@ -2081,6 +2172,20 @@ class PolicySimulator:
             (m.provider_cost_shock_bandwidth_multiplier_bps for m in self.metrics),
             default=10_000,
         )
+        totals["churn_pressure_provider_epochs"] = sum(m.churn_pressure_providers for m in self.metrics)
+        totals["max_churn_pressure_providers"] = max(
+            (m.churn_pressure_providers for m in self.metrics),
+            default=0,
+        )
+        totals["churned_providers"] = sum(1 for p in self.providers.values() if p.churned_epoch)
+        totals["max_churned_providers"] = max((m.churned_providers for m in self.metrics), default=0)
+        totals["final_active_provider_capacity"] = sum(
+            p.capacity_slots for p in self.providers.values() if not p.churned_epoch
+        )
+        totals["final_exited_provider_capacity"] = sum(
+            p.capacity_slots for p in self.providers.values() if p.churned_epoch
+        )
+        totals["max_churned_assigned_slots"] = max((m.churned_assigned_slots for m in self.metrics), default=0)
         assigned_counts = self._assigned_counts()
         totals["providers_over_capacity"] = sum(
             1 for pid, provider in self.providers.items() if assigned_counts.get(pid, 0) > provider.capacity_slots
@@ -2108,7 +2213,7 @@ class PolicySimulator:
         totals["top_operator_assignment_share_bps"] = int(
             totals["top_operator_assigned_slots"] * 10_000 / max(1, total_operator_assignments)
         )
-        total_capacity = sum(p.capacity_slots for p in self.providers.values())
+        total_capacity = totals["final_active_provider_capacity"] or sum(p.capacity_slots for p in self.providers.values())
         final_active_slots = self._final_slots()["active"]
         totals["final_storage_utilization_bps"] = int(final_active_slots * 10_000 / max(1, total_capacity))
         totals["min_provider_capacity"] = min((p.capacity_slots for p in self.providers.values()), default=0)
@@ -2174,6 +2279,10 @@ class PolicySimulator:
                     "bond": provider.bond,
                     "pnl": provider.pnl,
                     "jailed_until_epoch": provider.jailed_until_epoch,
+                    "draining": int(provider.behavior.draining),
+                    "churn_pressure_epochs": provider.churn_pressure_epochs,
+                    "churned_epoch": provider.churned_epoch,
+                    "churned": int(provider.churned_epoch > 0),
                     "churn_risk": int(provider.pnl < 0),
                 }
             )

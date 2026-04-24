@@ -73,6 +73,8 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
 | Provider cost shocks | `[]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
+| Provider churn policy | enabled `False`, threshold `0.0000`, after `1` epochs, cap `0`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |
+| Provider churn floor | `0` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
 | Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
 | Evidence spam claims/epoch | `0` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |
@@ -135,6 +137,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Provider P&L p10 / p50 / p90 | `0.9130` / `1.0065` / `1.1230` | Shows whether aggregate P&L hides marginal-provider distress. |
 | Provider cost shock epochs/providers | `0` / `0` | Shows when external cost pressure was active and how much of the provider population it affected. |
 | Max cost shock fixed/storage/bandwidth | `100.00%` / `100.00%` / `100.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
+| Provider churn events / final churned | `0` / `0` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |
+| Churn pressure provider-epochs / peak | `8` / `1` | Shows the breadth and duration of providers below the configured churn threshold. |
+| Active / exited provider capacity | `768` / `0` slots | Measures supply actually remaining after modeled exits. |
+| Peak assigned slots on churned providers | `0` | Shows the maximum repair burden created by economic exits. |
 | Storage price start/end/range | `1.0000` -> `1.0000` (`1.0000`-`1.0000`) | Shows dynamic pricing movement and bounds. |
 | Retrieval price start/end/range | `0.0100` -> `0.0100` (`0.0100`-`0.0100`) | Shows whether demand pressure moved retrieval pricing. |
 | Retrieval latent/effective attempts | `640` / `640` | Shows how much retrieval load was added by demand-shock multipliers. |
@@ -319,6 +325,12 @@ Shows aggregate provider economics over time.
 Shows modeled provider cost pressure against provider revenue.
 
 ![Provider Cost Shock](graphs/provider_cost_shock.svg)
+
+### Provider Churn
+
+Shows modeled provider exits and per-epoch churn events.
+
+![Provider Churn](graphs/provider_churn.svg)
 
 ### Burn / Mint Ratio
 

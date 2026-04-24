@@ -7,7 +7,7 @@ This report converts the committed simulator corpus into implementation planning
 | Status | Count | Meaning |
 |---|---:|---|
 | `implementation planning` | 17 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
-| `further simulation review` | 10 | The fixture passed but should inform parameter or product policy before implementation work. |
+| `further simulation review` | 11 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
 ## Scenario-to-Implementation Map
@@ -31,6 +31,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`performance-market-latency`](performance-market-latency/report.md) | `implementation planning` | service-class and latency-tier keeper tests | Add keeper/runtime tests proving retrieval telemetry maps to Platinum/Gold/Silver/Fail tiers, tiered rewards are deterministic, and Fail-tier QoS does not become slashable hard evidence. | `service-class params`, `latency telemetry accumulator`, `tiered reward multipliers`, `QoS-only health notes` | Hot-service retrieval burst after telemetry exists; assert tier counts and provider payouts reflect latency without breaking read availability. |
 | [`price-controller-bounds`](price-controller-bounds/report.md) | `implementation planning` | dynamic pricing keeper tests | Add epoch pricing tests for floors, ceilings, utilization target, retrieval-demand target, and max step bps. | `dynamic pricing params`, `storage utilization accumulator`, `retrieval demand accumulator` | No process e2e; validate with keeper tests and simulator sweeps first. |
 | [`provider-cost-shock`](provider-cost-shock/report.md) | `further simulation review` | economic policy calibration | Compare provider cost assumptions, price floors, reward buffers, and whether cost telemetry should trigger governance review before encoding market defaults. | `provider cost telemetry`, `profitability dashboards`, `price-floor governance policy` | No process e2e yet; this is a parameter-calibration fixture. |
+| [`provider-economic-churn`](provider-economic-churn/report.md) | `further simulation review` | economic churn and replacement calibration | Compare churn caps, minimum active-provider floor, draining notice, replacement throughput, and price-floor response before keeper drain semantics are implemented. | `draining provider state`, `provider exit telemetry`, `churn caps`, `replacement capacity dashboards` | No process e2e yet; validate churn policy with simulator sweeps and then add keeper drain/replacement tests. |
 | [`repair-candidate-exhaustion`](repair-candidate-exhaustion/report.md) | `implementation planning` | candidate selection and repair backoff keeper tests | Add tests proving no eligible replacement emits backoff, preserves capacity constraints, and does not over-assign providers. | `candidate exclusion reasons`, `repair attempt caps`, `replacement capacity query` | Small devnet with no spare provider capacity after keeper behavior is stable. |
 | [`retrieval-demand-shock`](retrieval-demand-shock/report.md) | `further simulation review` | dynamic pricing calibration | Compare retrieval demand targets, price-step clamps, smoothing windows, and burst response before encoding retrieval pricing defaults. | `retrieval demand accumulator`, `pricing smoothing params`, `burst-demand dashboards` | No process e2e yet; validate with keeper pricing tests and simulator sweeps first. |
 | [`setup-failure`](setup-failure/report.md) | `implementation planning` | setup bump and deterministic replacement | Add setup-phase replacement tests proving failed initial upload selects a system provider and does not imply fraud. | `setup slot state`, `setup bump event`, `candidate exclusion reasons` | Create deal with one failing provider upload and verify replacement before first content commit. |
@@ -74,6 +75,7 @@ This report converts the committed simulator corpus into implementation planning
 | `burn ledger` | 1 |
 | `burst-demand dashboards` | 1 |
 | `candidate diversity diagnostics` | 1 |
+| `churn caps` | 1 |
 | `compliance-gated base rewards` | 1 |
 | `conviction state` | 1 |
 | `corrupt-byte reward exclusion` | 1 |
@@ -83,6 +85,7 @@ This report converts the committed simulator corpus into implementation planning
 | `demand forecasting` | 1 |
 | `deputy reputation` | 1 |
 | `deputy transcript accounting` | 1 |
+| `draining provider state` | 1 |
 | `dynamic pricing params` | 1 |
 | `dynamic pricing state` | 1 |
 | `evidence bond escrow` | 1 |
@@ -115,10 +118,12 @@ This report converts the committed simulator corpus into implementation planning
 | `provider capability tier state` | 1 |
 | `provider cost assumptions` | 1 |
 | `provider cost telemetry` | 1 |
+| `provider exit telemetry` | 1 |
 | `quota miss ledger` | 1 |
 | `regional/provider-class placement metadata` | 1 |
 | `repair attempt caps` | 1 |
 | `repair attempt ledger` | 1 |
+| `replacement capacity dashboards` | 1 |
 | `replacement capacity query` | 1 |
 | `requester-paid session accounting` | 1 |
 | `reward eligibility queries` | 1 |

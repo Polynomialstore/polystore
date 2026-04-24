@@ -1,0 +1,69 @@
+{
+  "name": "provider-economic-churn",
+  "description": "Sustained negative provider economics should cause bounded provider exits, visible capacity loss, and repair pressure without durability loss.",
+  "config": {
+    "scenario": "provider-economic-churn",
+    "seed": 91,
+    "providers": 80,
+    "users": 100,
+    "deals": 36,
+    "epochs": 12,
+    "retrievals_per_user_per_epoch": 1,
+    "provider_capacity_min": 10,
+    "provider_capacity_max": 14,
+    "provider_bandwidth_capacity_min": 120,
+    "provider_bandwidth_capacity_max": 220,
+    "evict_after_missed_epochs": 1,
+    "repair_epochs": 1,
+    "max_repairs_started_per_epoch": 16,
+    "repair_backoff_epochs": 1,
+    "repair_attempt_cap_per_slot": 4,
+    "provider_storage_cost_per_slot_epoch": 0.01,
+    "provider_bandwidth_cost_per_retrieval": 0.001,
+    "provider_fixed_cost_per_epoch": 0.02,
+    "base_reward_per_slot": 0.04,
+    "retrieval_price_per_slot": 0.01,
+    "dynamic_pricing": true,
+    "storage_target_utilization_bps": 4500,
+    "dynamic_pricing_max_step_bps": 250,
+    "provider_churn_enabled": true,
+    "provider_churn_pnl_threshold": 0.0,
+    "provider_churn_after_epochs": 2,
+    "provider_churn_max_providers_per_epoch": 2,
+    "provider_churn_min_remaining_providers": 72,
+    "provider_cost_shocks": [
+      {
+        "start_epoch": 3,
+        "end_epoch": 12,
+        "provider_ids": [
+          "sp-000",
+          "sp-001",
+          "sp-002",
+          "sp-003",
+          "sp-004",
+          "sp-005",
+          "sp-006",
+          "sp-007"
+        ],
+        "fixed_cost_multiplier_bps": 80000,
+        "storage_cost_multiplier_bps": 80000,
+        "bandwidth_cost_multiplier_bps": 40000
+      }
+    ]
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_unavailable_reads": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0,
+    "min_provider_cost_shock_active": 10,
+    "min_max_provider_cost_shocked_providers": 8,
+    "min_provider_churn_events": 8,
+    "min_churned_providers": 8,
+    "min_churn_pressure_provider_epochs": 20,
+    "min_max_churned_assigned_slots": 1,
+    "min_final_active_provider_capacity": 800,
+    "min_repairs_started": 1,
+    "min_repairs_completed": 1
+  }
+}

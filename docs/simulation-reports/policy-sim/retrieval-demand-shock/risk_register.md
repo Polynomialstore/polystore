@@ -38,6 +38,9 @@ Model a temporary retrieval demand spike and verify the retrieval-price controll
 - Evidence spam net gain: `0.0000`
 - Provider cost shock active epochs: `0`
 - Max cost-shocked providers: `0`
+- Provider churn events: `0`
+- Churned providers: `0`
+- Final active/exited provider capacity: `1536` / `0`
 - Retrieval demand shock active epochs: `4`
 - Retrieval price direction changes: `2`
 - Latent new deal requests: `0`

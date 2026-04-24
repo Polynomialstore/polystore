@@ -1009,6 +1009,66 @@
     },
     {
       "blockers": [],
+      "e2e": "No process e2e yet; validate churn policy with simulator sweeps and then add keeper drain/replacement tests.",
+      "metrics": {
+        "data_loss_events": 0,
+        "delinquent_slots": 48,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
+        "fail_serves": 0,
+        "gold_serves": 0,
+        "high_bandwidth_demotions": 0,
+        "high_bandwidth_promotions": 0,
+        "high_bandwidth_providers": 0,
+        "hot_high_bandwidth_serves": 0,
+        "hot_retrieval_attempts": 0,
+        "max_operator_deal_slots": 1,
+        "max_provider_cost_shock_storage_multiplier_bps": 80000,
+        "max_provider_cost_shocked_providers": 8,
+        "max_retrieval_demand_multiplier_bps": 10000,
+        "new_deal_latent_requests": 0,
+        "new_deal_requests": 0,
+        "new_deals_accepted": 0,
+        "new_deals_rejected_capacity": 0,
+        "new_deals_rejected_price": 0,
+        "new_deals_suppressed_price": 0,
+        "operator_deal_cap_violations": 0,
+        "performance_reward_paid": 0.0,
+        "platinum_serves": 0,
+        "provider_cost_shock_active": 10,
+        "providers_negative_pnl": 8,
+        "repair_attempt_caps": 0,
+        "repair_attempts": 48,
+        "repair_backoffs": 0,
+        "repair_cooldowns": 0,
+        "repairs_completed": 48,
+        "repairs_ready": 48,
+        "repairs_started": 48,
+        "retrieval_demand_shock_active": 0,
+        "retrieval_price_direction_changes": 0,
+        "saturated_responses": 0,
+        "silver_serves": 0,
+        "success_rate": 1.0,
+        "suspect_slots": 0,
+        "top_operator_assignment_share_bps": 185,
+        "top_operator_provider_share_bps": 125,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "draining provider state",
+        "provider exit telemetry",
+        "churn caps",
+        "replacement capacity dashboards"
+      ],
+      "next_test": "Compare churn caps, minimum active-provider floor, draining notice, replacement throughput, and price-floor response before keeper drain semantics are implemented.",
+      "scenario": "provider-economic-churn",
+      "status": "further simulation review",
+      "target": "economic churn and replacement calibration"
+    },
+    {
+      "blockers": [],
       "e2e": "Small devnet with no spare provider capacity after keeper behavior is stable.",
       "metrics": {
         "data_loss_events": 0,
@@ -1600,7 +1660,7 @@
     }
   ],
   "status_counts": {
-    "further simulation review": 10,
+    "further simulation review": 11,
     "implementation planning": 17
   }
 }

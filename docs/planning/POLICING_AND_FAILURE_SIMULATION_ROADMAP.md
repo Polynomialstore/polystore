@@ -1218,6 +1218,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `overpriced_storage.yaml` | Storage price above modeled user willingness to pay. | Existing reads remain healthy while new deal demand is rejected by price, not capacity. |
 | `demand_elasticity_recovery.yaml` | Latent storage demand is suppressed by high price and recovers as dynamic pricing moves down. | Suppressed demand, recovered effective requests, accepted deals, bounded final price, and no capacity rejection. |
 | `provider_cost_shock.yaml` | Provider operating costs jump after launch while technical availability remains healthy. | Cost-shock windows are visible, provider P&L turns negative, churn pressure appears, and no availability or durability loss occurs. |
+| `provider_economic_churn.yaml` | Sustained negative provider economics causes bounded active-set exits. | Churn events are capped per epoch, exited capacity is visible, affected slots are repaired, reads remain available, and no data-loss events occur. |
 | `retrieval_demand_shock.yaml` | Temporary read-demand spike tests retrieval-price response and oscillation bounds. | Retrieval shock windows are visible, price direction changes stay bounded, reads remain available, and price remains within configured limits. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |

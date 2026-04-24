@@ -470,6 +470,49 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertGreater(result.economy[3]["provider_cost"], result.economy[0]["provider_cost"])
         self.assertGreater(result.totals["providers_negative_pnl"], 0)
 
+    def test_provider_economic_churn_exits_capacity_and_repairs(self):
+        config = SimConfig(
+            scenario="provider-economic-churn",
+            seed=91,
+            providers=80,
+            users=100,
+            deals=36,
+            epochs=12,
+            provider_capacity_min=10,
+            provider_capacity_max=14,
+            evict_after_missed_epochs=1,
+            repair_epochs=1,
+            max_repairs_started_per_epoch=16,
+            provider_storage_cost_per_slot_epoch=0.01,
+            provider_bandwidth_cost_per_retrieval=0.001,
+            provider_fixed_cost_per_epoch=0.02,
+            base_reward_per_slot=0.04,
+            provider_churn_enabled=True,
+            provider_churn_after_epochs=2,
+            provider_churn_max_providers_per_epoch=2,
+            provider_churn_min_remaining_providers=72,
+            provider_cost_shocks=(
+                {
+                    "start_epoch": 3,
+                    "end_epoch": 12,
+                    "provider_ids": [f"sp-{index:03d}" for index in range(8)],
+                    "fixed_cost_multiplier_bps": 80000,
+                    "storage_cost_multiplier_bps": 80000,
+                    "bandwidth_cost_multiplier_bps": 40000,
+                },
+            ),
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertEqual(8, result.totals["provider_churn_events"])
+        self.assertEqual(8, result.totals["churned_providers"])
+        self.assertGreater(result.totals["final_exited_provider_capacity"], 0)
+        self.assertGreater(result.totals["max_churned_assigned_slots"], 0)
+        self.assertGreater(result.totals["repairs_started"], 0)
+        self.assertEqual(0, result.totals["data_loss_events"])
+        self.assertEqual(1.0, result.totals["success_rate"])
+        self.assertEqual([2, 2, 2, 2], [row["provider_churn_events"] for row in result.economy if row["provider_churn_events"]])
+
     def test_retrieval_demand_shock_tracks_price_oscillation(self):
         config = SimConfig(
             scenario="retrieval-demand-shock",
@@ -553,6 +596,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "saturation_and_repair.svg").exists())
             self.assertTrue((report_dir / "graphs" / "capacity_utilization.svg").exists())
             self.assertTrue((report_dir / "graphs" / "provider_cost_shock.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "provider_churn.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
             self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
             self.assertTrue((report_dir / "graphs" / "hot_retrieval_routing.svg").exists())
@@ -582,6 +626,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Slot State Transitions](graphs/slot_states.svg)", report_text)
             self.assertIn("![Provider P&L](graphs/provider_pnl.svg)", report_text)
             self.assertIn("![Provider Cost Shock](graphs/provider_cost_shock.svg)", report_text)
+            self.assertIn("![Provider Churn](graphs/provider_churn.svg)", report_text)
             self.assertIn("![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)", report_text)
             self.assertIn("![Price Trajectory](graphs/price_trajectory.svg)", report_text)
             self.assertIn("![Retrieval Demand](graphs/retrieval_demand.svg)", report_text)
@@ -601,6 +646,7 @@ class PolicySimulatorTests(unittest.TestCase):
             signal_text = (report_dir / "signals.json").read_text(encoding="utf-8")
             self.assertIn("availability", signal_text)
             self.assertIn("concentration", signal_text)
+            self.assertIn("churned_providers", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)
             risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")
             self.assertIn("## Material Risks", risk_text)

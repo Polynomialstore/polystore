@@ -196,8 +196,9 @@ The simulator mirrors current protocol concepts:
   current durability assertions expect data-loss events to remain zero.
 - Basic economic accounting for retrieval fees, rewards, audit budget, provider
   P&L, slashing, and elasticity spend caps.
-- Epoch-scoped provider cost shocks that surface churn pressure before actual
-  provider exits are modeled.
+- Epoch-scoped provider cost shocks that surface churn pressure.
+- Bounded provider economic churn that turns sustained negative P&L into
+  draining exits, active-capacity loss, and repair pressure.
 - Demand-side storage admission accounting for latent new deal requests,
   price-elastic demand suppression, price rejections, capacity rejections, and
   effective/latent acceptance rates.
@@ -256,10 +257,11 @@ over the timeline, enforcement interpretation, economic interpretation, the
 assertion contract, evidence excerpts, generated graphs, and remaining review
 questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
-provider P&L, burn/mint ratio, price trajectory, capacity utilization,
-saturation/repair pressure, repair backlog, high-bandwidth promotion, and hot
-retrieval routing, performance tiers, operator concentration, evidence
-pressure, audit budget, and elasticity spend. `signals.json` records derived
+provider P&L, provider churn, burn/mint ratio, price trajectory, capacity
+utilization, saturation/repair pressure, repair backlog, high-bandwidth
+promotion, and hot retrieval routing, performance tiers, operator
+concentration, evidence pressure, audit budget, and elasticity spend.
+`signals.json` records derived
 availability, saturation, repair, capacity, economic, regional, high-bandwidth,
 performance-market, concentration, and provider bottleneck signals for
 downstream analysis.

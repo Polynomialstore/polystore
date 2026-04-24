@@ -38,6 +38,9 @@ Model a provider that stays nominally online but withholds retrieval responses a
 - Evidence spam net gain: `0.0000`
 - Provider cost shock active epochs: `0`
 - Max cost-shocked providers: `0`
+- Provider churn events: `0`
+- Churned providers: `0`
+- Final active/exited provider capacity: `768` / `0`
 - Retrieval demand shock active epochs: `0`
 - Retrieval price direction changes: `0`
 - Latent new deal requests: `0`
