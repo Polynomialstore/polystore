@@ -46,6 +46,7 @@
     "min_success_rate": 0.985,
     "min_saturated_responses": 1,
     "min_repairs_started": 1,
+    "min_repairs_ready": 1,
     "min_repairs_completed": 1,
     "min_repair_backoffs": 1,
     "max_providers_over_capacity": 0,

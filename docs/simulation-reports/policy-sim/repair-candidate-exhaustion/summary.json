@@ -141,6 +141,7 @@
     "repair_backoffs": 72,
     "repairing_slots": 0,
     "repairs_completed": 0,
+    "repairs_ready": 0,
     "repairs_started": 0,
     "retrieval_attempts": 640,
     "retrieval_base_burned": 0.64,

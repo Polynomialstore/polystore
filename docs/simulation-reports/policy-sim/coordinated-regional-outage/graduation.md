@@ -14,7 +14,7 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 | No modeled data loss | `true` | Temporary unavailable reads can be scenario-specific, but durability loss should block graduation. |
 | Availability within scenario contract | `true` | Enforcement must not harm users beyond the availability bounds chosen for this case. |
 | Corrupt bytes not paid | `true` | Bad data must never be economically rewarded. |
-| Repair path exercised when expected | `true` | Fault scenarios should prove recovery, not only detection. |
+| Repair path exercised when expected | `true` | Fault scenarios should prove detection, pending-provider readiness, and promotion. |
 | Hard enforcement represented when expected | `true` | Corruption fixtures should prove the simulated slash/jail accounting path before keeper work. |
 
 ## Scenario-Specific Graduation Semantics

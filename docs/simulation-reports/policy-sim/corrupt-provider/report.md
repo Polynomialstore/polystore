@@ -8,7 +8,7 @@ Model a provider returning bad data or invalid synthetic proofs. This is the har
 
 Expected policy behavior: Invalid proofs appear, corrupt bytes are not paid, repairs start, and simulated slash accounting is non-zero in slash mode.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/completed were `6` / `6`, and `1` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
+Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `6` / `6` / `6`, and `1` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
 
 ## Review Focus
 
@@ -60,7 +60,7 @@ User-facing retrieval availability stayed intact: every modeled retrieval comple
 
 The policy layer recorded `12` evidence events: `0` soft events and `6` hard events. Soft evidence is suitable for repair and reward exclusion; hard evidence is the category that can later justify slashing or stronger sanctions.
 
-Repair was exercised: `6` repair operations started and `6` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible while replacement work catches up.
+Repair was exercised: `6` repair operations started, `6` produced pending-provider readiness evidence, and `6` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible until replacement work catches up and the readiness gate is satisfied.
 
 Simulated slashing was active: providers lost `6.0000` bond units in aggregate.
 
@@ -79,6 +79,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Recovery epoch after worst | `2` | Shows whether the network returned to clean steady state after the worst point. |
 | Saturation rate | `0.00%` | Provider bandwidth saturation per retrieval attempt. |
 | Peak saturation | `0` at epoch `1` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
+| Repair readiness ratio | `100.00%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `100.00%` | Measures whether healing catches up with detection. |
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
@@ -109,22 +110,22 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 ### Timeline
 
-| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
-|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | 100.00% | 12 | 6 | 0 | 0.0000 | -0.2000 | 6 invalid proofs, 6 slots repairing |
-| 2 | 100.00% | 0 | 0 | 6 | 0.0000 | 5.8000 | 6 slots repairing |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 9 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 10 | 100.00% | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |
+|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | 100.00% | 12 | 6 | 0 | 0 | 0.0000 | -0.2000 | 6 invalid proofs, 6 slots repairing |
+| 2 | 100.00% | 0 | 0 | 6 | 6 | 0.0000 | 5.8000 | 6 slots repairing |
+| 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 4 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 6 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 7 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 8 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 9 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
+| 10 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
 
 ## Enforcement Interpretation
 
-The simulator recorded `12` evidence events and `12` repair ledger events. The first evidence epoch was `1` and the first repair-start epoch was `1`.
+The simulator recorded `12` evidence events and `18` repair ledger events. The first evidence epoch was `1` and the first repair-start epoch was `1`.
 
 Evidence by reason:
 
@@ -138,6 +139,7 @@ Evidence by provider:
 Repair summary:
 
 - Repairs started: `6`
+- Repairs marked ready: `6`
 - Repairs completed: `6`
 - Repair backoffs: `0`
 - Final active slots in last epoch: `288`
@@ -152,12 +154,13 @@ Repair summary:
 | 1 | `repair_started` | 17 | 0 | `sp-000` | `sp-028` | `corrupt_retrieval` |
 | 1 | `repair_started` | 5 | 0 | `sp-000` | `sp-035` | `corrupt_retrieval` |
 | 1 | `repair_started` | 9 | 0 | `sp-000` | `sp-024` | `corrupt_retrieval` |
+| 2 | `repair_ready` | 1 | 0 | `sp-000` | `sp-039` | `catchup_ready` |
 | 2 | `repair_completed` | 1 | 0 | `sp-000` | `sp-039` | `catchup_complete` |
+| 2 | `repair_ready` | 5 | 0 | `sp-000` | `sp-035` | `catchup_ready` |
 | 2 | `repair_completed` | 5 | 0 | `sp-000` | `sp-035` | `catchup_complete` |
+| 2 | `repair_ready` | 9 | 0 | `sp-000` | `sp-024` | `catchup_ready` |
 | 2 | `repair_completed` | 9 | 0 | `sp-000` | `sp-024` | `catchup_complete` |
-| 2 | `repair_completed` | 13 | 0 | `sp-000` | `sp-022` | `catchup_complete` |
-| 2 | `repair_completed` | 17 | 0 | `sp-000` | `sp-028` | `catchup_complete` |
-| 2 | `repair_completed` | 21 | 0 | `sp-000` | `sp-016` | `catchup_complete` |
+| ... | ... | ... | ... | ... | ... | `6` more events omitted |
 
 ## Economic Interpretation
 
@@ -190,6 +193,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 | `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.95 |
 | `min_invalid_proofs` | `PASS` | Hard-fault fixture must generate invalid-proof evidence. | invalid_proofs=6, required>=1 |
 | `min_repairs_started` | `PASS` | Repair liveness: policy must start reassignment when evidence warrants it. | repairs_started=6, required>=1 |
+| `min_repairs_ready` | `PASS` | Repair readiness: pending providers must produce catch-up evidence before promotion. | repairs_ready=6, required>=1 |
 | `min_provider_slashed` | `PASS` | Simulated slashing must affect hard-fault providers. | provider_slashed=6, required>=1 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `max_paid_corrupt_bytes` | `PASS` | Corrupt data must not earn payment. | paid_corrupt_bytes=0, required<=0 |
@@ -272,6 +276,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start/completion events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

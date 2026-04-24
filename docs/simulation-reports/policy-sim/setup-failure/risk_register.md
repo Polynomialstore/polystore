@@ -11,7 +11,7 @@ Model a provider failing during early placement/upload setup. The policy concern
 ## Evidence Counters
 
 - Evidence events: `12`
-- Repair events: `12`
+- Repair events: `18`
 - Failed assertions: `0`
 - Providers with negative P&L: `1`
 - Elasticity rejections: `0`

@@ -54,8 +54,20 @@ class PolicySimulatorTests(unittest.TestCase):
 
         self.assert_assertions_pass(result)
         self.assertGreaterEqual(result.totals["repairs_started"], 1)
+        self.assertGreaterEqual(result.totals["repairs_ready"], 1)
         self.assertGreaterEqual(result.totals["repairs_completed"], 1)
         self.assertEqual(0, result.totals["unavailable_reads"])
+
+        seen_ready = set()
+        saw_completion = False
+        for row in result.repairs:
+            key = (row["deal_id"], row["slot"])
+            if row["event"] == "repair_ready":
+                seen_ready.add(key)
+            if row["event"] == "repair_completed":
+                saw_completion = True
+                self.assertIn(key, seen_ready)
+        self.assertTrue(saw_completion)
 
     def test_malicious_corrupt_provider_gets_repaired_and_not_paid_for_corrupt_bytes(self):
         result = self.run_scenario("malicious-corrupt", providers=48, deals=24, users=80, epochs=10)
@@ -63,6 +75,7 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assert_assertions_pass(result)
         self.assertGreaterEqual(result.totals["invalid_proofs"], 1)
         self.assertGreaterEqual(result.totals["repairs_started"], 1)
+        self.assertGreaterEqual(result.totals["repairs_ready"], 1)
         self.assertEqual(0, result.totals["paid_corrupt_bytes"])
 
     def test_custom_fault_injection(self):

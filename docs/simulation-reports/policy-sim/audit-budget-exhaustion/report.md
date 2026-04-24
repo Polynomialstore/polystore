@@ -8,7 +8,7 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 
 Expected policy behavior: Quota misses create audit demand, audit spend is capped by budget, repair starts where allowed, and data-loss events remain zero.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `98.11%`, repairs started/completed were `32` / `32`, and `4` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
+Observed result: retrieval success was `100.00%`, reward coverage was `98.11%`, repairs started/ready/completed were `32` / `32` / `32`, and `4` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
 
 ## Review Focus
 
@@ -60,7 +60,7 @@ User-facing retrieval availability stayed intact: every modeled retrieval comple
 
 The policy layer recorded `64` evidence events: `64` soft events and `0` hard events. Soft evidence is suitable for repair and reward exclusion; hard evidence is the category that can later justify slashing or stronger sanctions.
 
-Repair was exercised: `32` repair operations started and `32` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible while replacement work catches up.
+Repair was exercised: `32` repair operations started, `32` produced pending-provider readiness evidence, and `32` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible until replacement work catches up and the readiness gate is satisfied.
 
 Reward exclusion was active: `1.2800` modeled reward units were burned instead of paid to non-compliant slots.
 
@@ -77,6 +77,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Recovery epoch after worst | `2` | Shows whether the network returned to clean steady state after the worst point. |
 | Saturation rate | `0.00%` | Provider bandwidth saturation per retrieval attempt. |
 | Peak saturation | `0` at epoch `1` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
+| Repair readiness ratio | `100.00%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `100.00%` | Measures whether healing catches up with detection. |
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
@@ -107,20 +108,20 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 ### Timeline
 
-| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
-|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | 100.00% | 32 | 0 | 0 | 0.6400 | 8.8400 | 32 quota misses |
-| 2 | 100.00% | 32 | 32 | 0 | 0.6400 | 8.8400 | 32 quota misses |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 8.8400 | 32 slots repairing |
-| 4 | 100.00% | 0 | 0 | 32 | 0.0000 | 8.8400 | 32 slots repairing |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
-| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
-| 7 | 100.00% | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
-| 8 | 100.00% | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
+| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |
+|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | 100.00% | 32 | 0 | 0 | 0 | 0.6400 | 8.8400 | 32 quota misses |
+| 2 | 100.00% | 32 | 32 | 0 | 0 | 0.6400 | 8.8400 | 32 quota misses |
+| 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 8.8400 | 32 slots repairing |
+| 4 | 100.00% | 0 | 0 | 32 | 32 | 0.0000 | 8.8400 | 32 slots repairing |
+| 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
+| 6 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
+| 7 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
+| 8 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
 
 ## Enforcement Interpretation
 
-The simulator recorded `64` evidence events and `64` repair ledger events. The first evidence epoch was `1` and the first repair-start epoch was `2`.
+The simulator recorded `64` evidence events and `96` repair ledger events. The first evidence epoch was `1` and the first repair-start epoch was `2`.
 
 Evidence by reason:
 
@@ -136,6 +137,7 @@ Evidence by provider:
 Repair summary:
 
 - Repairs started: `32`
+- Repairs marked ready: `32`
 - Repairs completed: `32`
 - Repair backoffs: `0`
 - Final active slots in last epoch: `432`
@@ -156,7 +158,7 @@ Repair summary:
 | 2 | `repair_started` | 11 | 1 | `sp-001` | `sp-041` | `quota_shortfall` |
 | 2 | `repair_started` | 11 | 2 | `sp-002` | `sp-037` | `quota_shortfall` |
 | 2 | `repair_started` | 11 | 3 | `sp-003` | `sp-034` | `quota_shortfall` |
-| ... | ... | ... | ... | ... | ... | `52` more events omitted |
+| ... | ... | ... | ... | ... | ... | `84` more events omitted |
 
 ## Economic Interpretation
 
@@ -271,6 +273,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start/completion events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

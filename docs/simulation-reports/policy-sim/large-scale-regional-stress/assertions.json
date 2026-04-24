@@ -15,6 +15,11 @@
     "passed": true
   },
   {
+    "detail": "repairs_ready=3050, required>=1",
+    "name": "min_repairs_ready",
+    "passed": true
+  },
+  {
     "detail": "repairs_completed=3050, required>=1",
     "name": "min_repairs_completed",
     "passed": true

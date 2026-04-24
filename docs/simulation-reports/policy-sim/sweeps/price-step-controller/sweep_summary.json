@@ -53,6 +53,7 @@
       "quota_misses": 0.0,
       "repair_backoffs": 0.0,
       "repairs_completed": 0.0,
+      "repairs_ready": 0.0,
       "repairs_started": 0.0,
       "reward_coverage": 1.0,
       "saturated_responses": 0.0,
@@ -129,6 +130,12 @@
       "min": 0.0
     },
     "repairs_completed": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "repairs_ready": {
       "delta": 0.0,
       "max": 0.0,
       "mean": 0.0,
@@ -222,6 +229,7 @@
         "quota_misses": 0.0,
         "repair_backoffs": 0.0,
         "repairs_completed": 0.0,
+        "repairs_ready": 0.0,
         "repairs_started": 0.0,
         "reward_coverage": 1.0,
         "saturated_responses": 0.0,
@@ -283,6 +291,7 @@
         "quota_misses": 0.0,
         "repair_backoffs": 0.0,
         "repairs_completed": 0.0,
+        "repairs_ready": 0.0,
         "repairs_started": 0.0,
         "reward_coverage": 1.0,
         "saturated_responses": 0.0,
@@ -344,6 +353,7 @@
         "quota_misses": 0.0,
         "repair_backoffs": 0.0,
         "repairs_completed": 0.0,
+        "repairs_ready": 0.0,
         "repairs_started": 0.0,
         "reward_coverage": 1.0,
         "saturated_responses": 0.0,
@@ -405,6 +415,7 @@
         "quota_misses": 0.0,
         "repair_backoffs": 0.0,
         "repairs_completed": 0.0,
+        "repairs_ready": 0.0,
         "repairs_started": 0.0,
         "reward_coverage": 1.0,
         "saturated_responses": 0.0,

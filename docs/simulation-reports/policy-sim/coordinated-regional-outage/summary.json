@@ -16,6 +16,11 @@
       "passed": true
     },
     {
+      "detail": "repairs_ready=96, required>=1",
+      "name": "min_repairs_ready",
+      "passed": true
+    },
+    {
       "detail": "repairs_completed=96, required>=1",
       "name": "min_repairs_completed",
       "passed": true
@@ -147,6 +152,7 @@
     "repair_backoffs": 1144,
     "repairing_slots": 227,
     "repairs_completed": 96,
+    "repairs_ready": 96,
     "repairs_started": 96,
     "retrieval_attempts": 2640,
     "retrieval_base_burned": 2.64,
