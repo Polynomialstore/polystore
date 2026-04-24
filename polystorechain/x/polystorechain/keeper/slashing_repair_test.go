@@ -187,6 +187,9 @@ func TestCheckMissedProofs_Mode2QuotaMissWaitsForThreshold(t *testing.T) {
 	missed, err := f.keeper.Mode2MissedEpochs.Get(sdkCtx, missedKey)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), missed)
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_recorded"))
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "provider_degraded"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "provider_delinquent"))
 	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_repair_started"))
 
 	sdkCtx = sdkCtx.WithBlockHeight(10)
@@ -207,6 +210,7 @@ func TestCheckMissedProofs_Mode2QuotaMissWaitsForThreshold(t *testing.T) {
 
 	_, err = f.keeper.Mode2MissedEpochs.Get(sdkCtx, missedKey)
 	require.ErrorIs(t, err, collections.ErrNotFound)
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "provider_delinquent"))
 	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_repair_started"))
 
 	// Soft quota-miss repair is make-before-break: the outgoing provider remains
@@ -215,6 +219,45 @@ func TestCheckMissedProofs_Mode2QuotaMissWaitsForThreshold(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Active", registeredProvider.Status)
 	require.False(t, registeredProvider.Draining)
+}
+
+func TestCheckMissedProofs_Mode2QuotaMissMeasureOnlyRecordsEvidenceWithoutRepair(t *testing.T) {
+	f := initFixture(t)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	params.EvictAfterMissedEpochs = 0
+	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	providerD := makePolicyTestAddr(t, f, 0xD4)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC, providerD)
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	epochID := uint64(1)
+	setMode2EpochCredits(t, f, sdkCtx, dealID, epochID, 1, 2)
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, updated.Mode2Slots[0].Status)
+	require.Empty(t, updated.Mode2Slots[0].PendingProvider)
+
+	missed, err := f.keeper.Mode2MissedEpochs.Get(sdkCtx, collections.Join(dealID, uint32(0)))
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), missed)
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_recorded"))
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "provider_degraded"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "provider_delinquent"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_repair_started"))
 }
 
 func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
@@ -680,4 +723,46 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 	activity, err := f.keeper.DealActivityStates.Get(sdkCtx, dealID)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, activity.FailedChallengesTotal, uint64(1))
+}
+
+func TestCheckMissedProofs_DeputyServedRecordsSoftEvidenceBeforeThreshold(t *testing.T) {
+	f := initFixture(t)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	params.EvictAfterMissedEpochs = 2
+	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	providerD := makePolicyTestAddr(t, f, 0xD4)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC, providerD)
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	epochID := uint64(1)
+	key := collections.Join(collections.Join(dealID, uint32(0)), epochID)
+	require.NoError(t, f.keeper.Mode2EpochCredits.Set(sdkCtx, key, 10))
+	require.NoError(t, f.keeper.Mode2EpochSynthetic.Set(sdkCtx, key, 10))
+	require.NoError(t, f.keeper.Mode2EpochDeputyServed.Set(sdkCtx, key, 1))
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, updated.Mode2Slots[0].Status)
+	require.Empty(t, updated.Mode2Slots[0].PendingProvider)
+
+	missed, err := f.keeper.Mode2DeputyMissedEpochs.Get(sdkCtx, collections.Join(dealID, uint32(0)))
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), missed)
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "deputy_served_zero_direct"))
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "provider_degraded"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "provider_delinquent"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "deputy_miss_repair_started"))
 }
