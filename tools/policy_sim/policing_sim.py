@@ -78,6 +78,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "provider-cost-shock",
     "provider-economic-churn",
     "provider-supply-entry",
+    "provider-bond-headroom",
     "retrieval-demand-shock",
     "price-controller-bounds",
     "subsidy-farming",
@@ -208,6 +209,8 @@ class SimConfig:
     provider_bandwidth_cost_per_retrieval: float = 0.001
     provider_fixed_cost_per_epoch: float = 0.05
     provider_initial_bond: float = 100.0
+    provider_min_bond: float = 0.0
+    provider_bond_per_slot: float = 0.0
     slash_hard_fault: float = 1.0
     jail_epochs: int = 3
     elasticity_trigger_retrievals_per_epoch: int = 0
@@ -363,6 +366,12 @@ class SimConfig:
             raise ValueError("provider_churn_min_remaining_providers must be non-negative")
         if self.provider_churn_min_remaining_providers > self.providers:
             raise ValueError("provider_churn_min_remaining_providers must be <= providers")
+        if self.provider_initial_bond < 0:
+            raise ValueError("provider_initial_bond must be non-negative")
+        if self.provider_min_bond < 0:
+            raise ValueError("provider_min_bond must be non-negative")
+        if self.provider_bond_per_slot < 0:
+            raise ValueError("provider_bond_per_slot must be non-negative")
         if self.provider_entry_reserve_count < 0:
             raise ValueError("provider_entry_reserve_count must be non-negative")
         if self.provider_entry_reserve_count > self.providers:
@@ -599,6 +608,12 @@ class EpochMetrics:
     churned_providers: int = 0
     provider_entries: int = 0
     provider_probation_promotions: int = 0
+    provider_underbonded_repairs: int = 0
+    underbonded_providers: int = 0
+    underbonded_assigned_slots: int = 0
+    provider_bond_required: float = 0.0
+    provider_bond_available: float = 0.0
+    provider_bond_deficit: float = 0.0
     reserve_providers: int = 0
     probationary_providers: int = 0
     entered_active_providers: int = 0
@@ -797,6 +812,8 @@ class PolicySimulator:
                 provider = self.providers[provider_id]
                 if not self._provider_lifecycle_assignable(provider):
                     continue
+                if not self._provider_has_bond_headroom(provider, assigned_counts.get(provider_id, 0), additional_slots=1):
+                    continue
                 if enforce_capacity and assigned_counts.get(provider_id, 0) >= provider.capacity_slots:
                     continue
                 if (
@@ -910,6 +927,7 @@ class PolicySimulator:
                 self._record_slot_row(epoch, slot)
 
         self._simulate_evidence_spam(epoch, metrics)
+        self._repair_underbonded_assignments(epoch, metrics)
         self._record_data_loss_events(metrics)
         self._settle_epoch_economy(epoch, metrics)
         self._update_provider_capabilities(epoch, metrics)
@@ -1031,6 +1049,8 @@ class PolicySimulator:
                     continue
                 provider = self.providers[provider_id]
                 if not self._provider_lifecycle_assignable(provider):
+                    continue
+                if not self._provider_has_bond_headroom(provider, assigned_counts.get(provider_id, 0), additional_slots=1):
                     continue
                 if provider.behavior.draining or self._is_jailed(provider, epoch):
                     continue
@@ -1534,6 +1554,25 @@ class PolicySimulator:
             }
         )
 
+    def _repair_underbonded_assignments(self, epoch: int, metrics: EpochMetrics) -> None:
+        if self.config.provider_min_bond <= 0 and self.config.provider_bond_per_slot <= 0:
+            return
+
+        assigned_counts = self._assigned_counts()
+        for deal in self.deals:
+            for slot in deal.slots:
+                if slot.status == SLOT_REPAIRING:
+                    continue
+                provider = self.providers[slot.provider_id]
+                if not self._provider_underbonded(provider, assigned_counts.get(slot.provider_id, 0)):
+                    continue
+                self._mark_suspect(slot, "provider_underbonded")
+                self._record_evidence(epoch, deal, slot, slot.provider_id, "economic", "provider_underbonded")
+                repairs_before = metrics.repairs_started
+                self._start_repair(epoch, deal, slot, "provider_underbonded", metrics)
+                if metrics.repairs_started > repairs_before:
+                    metrics.provider_underbonded_repairs += 1
+
     def _record_repair_backoff(
         self,
         epoch: int,
@@ -1645,6 +1684,9 @@ class PolicySimulator:
             if not self._provider_lifecycle_assignable(provider):
                 diagnostics["excluded_ineligible_lifecycle"] = diagnostics.get("excluded_ineligible_lifecycle", 0) + 1
                 continue
+            if not self._provider_has_bond_headroom(provider, assigned_counts.get(pid, 0), additional_slots=1):
+                diagnostics["excluded_bond_headroom"] += 1
+                continue
             if provider.behavior.draining:
                 diagnostics["excluded_draining"] += 1
                 continue
@@ -1672,6 +1714,21 @@ class PolicySimulator:
     @staticmethod
     def _provider_lifecycle_assignable(provider: Provider) -> bool:
         return provider.lifecycle_state == PROVIDER_ACTIVE and not provider.churned_epoch
+
+    def _provider_required_bond(self, assigned_slots: int) -> float:
+        return self.config.provider_min_bond + assigned_slots * self.config.provider_bond_per_slot
+
+    def _provider_has_bond_headroom(
+        self,
+        provider: Provider,
+        assigned_slots: int,
+        additional_slots: int = 0,
+    ) -> bool:
+        required = self._provider_required_bond(assigned_slots + additional_slots)
+        return provider.bond + 1e-12 >= required
+
+    def _provider_underbonded(self, provider: Provider, assigned_slots: int) -> bool:
+        return not self._provider_has_bond_headroom(provider, assigned_slots)
 
     def _assigned_counts(self, include_pending: bool = False) -> dict[str, int]:
         assigned_counts = {pid: 0 for pid in self.providers}
@@ -1866,6 +1923,7 @@ class PolicySimulator:
 
         self._apply_provider_economic_churn(epoch, metrics, assigned_counts)
         self._apply_provider_supply_entry(epoch, metrics)
+        self._record_provider_bond_snapshot(metrics, assigned_counts)
         self._record_provider_capacity_snapshot(metrics, assigned_counts)
 
         provider_slashed_total = sum(p.slashed for p in self.providers.values())
@@ -1919,6 +1977,12 @@ class PolicySimulator:
                 "churned_providers": metrics.churned_providers,
                 "provider_entries": metrics.provider_entries,
                 "provider_probation_promotions": metrics.provider_probation_promotions,
+                "provider_underbonded_repairs": metrics.provider_underbonded_repairs,
+                "underbonded_providers": metrics.underbonded_providers,
+                "underbonded_assigned_slots": metrics.underbonded_assigned_slots,
+                "provider_bond_required": metrics.provider_bond_required,
+                "provider_bond_available": metrics.provider_bond_available,
+                "provider_bond_deficit": metrics.provider_bond_deficit,
                 "reserve_providers": metrics.reserve_providers,
                 "probationary_providers": metrics.probationary_providers,
                 "entered_active_providers": metrics.entered_active_providers,
@@ -2066,6 +2130,26 @@ class PolicySimulator:
         if price_threshold > 0 and self.storage_price >= price_threshold:
             return True
         return False
+
+    def _record_provider_bond_snapshot(
+        self,
+        metrics: EpochMetrics,
+        assigned_counts: dict[str, int],
+    ) -> None:
+        for provider in self.providers.values():
+            if provider.churned_epoch:
+                continue
+            if provider.lifecycle_state not in {PROVIDER_ACTIVE, PROVIDER_PROBATION}:
+                continue
+            assigned = assigned_counts.get(provider.provider_id, 0)
+            required = self._provider_required_bond(assigned)
+            metrics.provider_bond_required += required
+            metrics.provider_bond_available += provider.bond
+            if provider.bond + 1e-12 >= required:
+                continue
+            metrics.underbonded_providers += 1
+            metrics.underbonded_assigned_slots += assigned
+            metrics.provider_bond_deficit += required - provider.bond
 
     def _record_provider_capacity_snapshot(
         self,
@@ -2292,6 +2376,7 @@ class PolicySimulator:
             "provider_churn_events",
             "provider_entries",
             "provider_probation_promotions",
+            "provider_underbonded_repairs",
             "elasticity_spent",
             "elasticity_rejections",
         ]
@@ -2362,6 +2447,19 @@ class PolicySimulator:
         )
         totals["churned_providers"] = sum(1 for p in self.providers.values() if p.churned_epoch)
         totals["max_churned_providers"] = max((m.churned_providers for m in self.metrics), default=0)
+        totals["final_underbonded_providers"] = self.metrics[-1].underbonded_providers if self.metrics else 0
+        totals["max_underbonded_providers"] = max((m.underbonded_providers for m in self.metrics), default=0)
+        totals["final_underbonded_assigned_slots"] = (
+            self.metrics[-1].underbonded_assigned_slots if self.metrics else 0
+        )
+        totals["max_underbonded_assigned_slots"] = max(
+            (m.underbonded_assigned_slots for m in self.metrics),
+            default=0,
+        )
+        totals["final_provider_bond_required"] = self.metrics[-1].provider_bond_required if self.metrics else 0.0
+        totals["final_provider_bond_available"] = self.metrics[-1].provider_bond_available if self.metrics else 0.0
+        totals["final_provider_bond_deficit"] = self.metrics[-1].provider_bond_deficit if self.metrics else 0.0
+        totals["max_provider_bond_deficit"] = max((m.provider_bond_deficit for m in self.metrics), default=0.0)
         totals["reserve_providers"] = sum(
             1 for p in self.providers.values() if p.lifecycle_state == PROVIDER_RESERVE and not p.churned_epoch
         )
@@ -2447,6 +2545,8 @@ class PolicySimulator:
         assigned_counts = self._assigned_counts()
         rows = []
         for provider_id, provider in sorted(self.providers.items()):
+            assigned = assigned_counts[provider_id]
+            bond_required = self._provider_required_bond(assigned)
             rows.append(
                 {
                     "provider_id": provider_id,
@@ -2460,9 +2560,9 @@ class PolicySimulator:
                     "capability_reason": provider.capability_reason,
                     "high_bandwidth_promoted_epoch": provider.high_bandwidth_promoted_epoch,
                     "high_bandwidth_demoted_epoch": provider.high_bandwidth_demoted_epoch,
-                    "assigned_slots": assigned_counts[provider_id],
+                    "assigned_slots": assigned,
                     "capacity_slots": provider.capacity_slots,
-                    "capacity_utilization_bps": int(assigned_counts[provider_id] * 10_000 / max(1, provider.capacity_slots)),
+                    "capacity_utilization_bps": int(assigned * 10_000 / max(1, provider.capacity_slots)),
                     "bandwidth_capacity_per_epoch": provider.bandwidth_capacity_per_epoch,
                     "latency_ms": provider.latency_ms,
                     "average_latency_ms": provider.total_latency_ms / provider.latency_sample_count if provider.latency_sample_count else 0.0,
@@ -2489,6 +2589,9 @@ class PolicySimulator:
                     "total_cost": provider.total_cost,
                     "slashed": provider.slashed,
                     "bond": provider.bond,
+                    "bond_required": bond_required,
+                    "bond_headroom": provider.bond - bond_required,
+                    "underbonded": int(provider.bond + 1e-12 < bond_required),
                     "pnl": provider.pnl,
                     "jailed_until_epoch": provider.jailed_until_epoch,
                     "draining": int(provider.behavior.draining),
@@ -2713,6 +2816,7 @@ def empty_candidate_diagnostics() -> dict[str, Any]:
         "excluded_current_deal": 0,
         "excluded_current_provider": 0,
         "excluded_ineligible_lifecycle": 0,
+        "excluded_bond_headroom": 0,
         "excluded_draining": 0,
         "excluded_jailed": 0,
         "excluded_capacity": 0,

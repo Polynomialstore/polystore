@@ -153,6 +153,15 @@ SCENARIO_GUIDES = {
         "expected": "Cost-shocked providers churn, reserve providers enter probation, probationary providers promote to active supply, repair completes, and durability remains intact.",
         "review": "Use this fixture to tune onboarding caps, probation length, utilization or price triggers, and whether new SPs should receive normal placement immediately or only after readiness evidence.",
     },
+    "provider-bond-headroom": {
+        "title": "Provider Bond Headroom",
+        "intent": (
+            "Model provider assignment collateral as a first-class placement constraint. The policy question is whether a provider that "
+            "falls below required bond is visible, excluded from new responsibility, and repaired away without treating every economic fault as slashable fraud."
+        ),
+        "expected": "A slashed provider becomes underbonded, underbonded slots trigger repair, new assignments exclude insufficient-bond providers, and durability remains intact.",
+        "review": "Use this fixture to tune minimum bond, per-slot collateral, slash sizing, and whether underbonding should create repair, throttling, or only placement exclusion.",
+    },
     "retrieval-demand-shock": {
         "title": "Retrieval Demand Shock",
         "intent": (
@@ -454,6 +463,13 @@ SWEEP_METRICS = [
     "churned_providers",
     "provider_entries",
     "provider_probation_promotions",
+    "provider_underbonded_repairs",
+    "final_underbonded_providers",
+    "max_underbonded_providers",
+    "final_underbonded_assigned_slots",
+    "max_underbonded_assigned_slots",
+    "final_provider_bond_deficit",
+    "max_provider_bond_deficit",
     "reserve_providers",
     "probationary_providers",
     "entered_active_providers",
@@ -541,6 +557,9 @@ SWEEP_CONFIG_KEYS = [
     "provider_online_probability_max",
     "provider_repair_probability_min",
     "provider_repair_probability_max",
+    "provider_initial_bond",
+    "provider_min_bond",
+    "provider_bond_per_slot",
     "provider_cost_shocks",
     "provider_churn_enabled",
     "provider_churn_pnl_threshold",
@@ -734,6 +753,13 @@ def compute_signals(
             "provider_probation_promotions": fnum(totals.get("provider_probation_promotions")),
             "max_probationary_providers": fnum(totals.get("max_probationary_providers")),
             "max_reserve_providers": fnum(totals.get("max_reserve_providers")),
+            "provider_underbonded_repairs": fnum(totals.get("provider_underbonded_repairs")),
+            "final_underbonded_providers": fnum(totals.get("final_underbonded_providers")),
+            "max_underbonded_providers": fnum(totals.get("max_underbonded_providers")),
+            "final_underbonded_assigned_slots": fnum(totals.get("final_underbonded_assigned_slots")),
+            "max_underbonded_assigned_slots": fnum(totals.get("max_underbonded_assigned_slots")),
+            "final_provider_bond_deficit": fnum(totals.get("final_provider_bond_deficit")),
+            "max_provider_bond_deficit": fnum(totals.get("max_provider_bond_deficit")),
             "churn_pressure_provider_epochs": fnum(totals.get("churn_pressure_provider_epochs")),
             "max_churn_pressure_providers": fnum(totals.get("max_churn_pressure_providers")),
             "final_active_provider_capacity": fnum(totals.get("final_active_provider_capacity")),
@@ -1127,6 +1153,12 @@ def write_report_md(
             "",
             "![Provider Supply Entry](graphs/provider_supply.svg)",
             "",
+            "### Provider Bond Headroom",
+            "",
+            "Shows underbonded providers and repairs triggered by insufficient assignment collateral.",
+            "",
+            "![Provider Bond Headroom](graphs/provider_bond_headroom.svg)",
+            "",
             "### Burn / Mint Ratio",
             "",
             "Shows whether burns are material relative to minted rewards and audit budget.",
@@ -1269,14 +1301,16 @@ def build_behavior_narrative(
             f"`{fmt_num(totals.get('unavailable_reads'))}` unavailable reads."
         )
 
-    soft_evidence = sum(1 for row in evidence if row.get("evidence_class") == "soft")
-    hard_evidence = sum(1 for row in evidence if row.get("evidence_class") == "hard")
-    threshold_evidence = sum(1 for row in evidence if row.get("evidence_class") == "threshold")
-    spam_evidence = sum(1 for row in evidence if row.get("evidence_class") == "spam")
     if evidence:
+        class_counts = Counter(row.get("evidence_class") or "unknown" for row in evidence)
+        known_classes = ["soft", "threshold", "hard", "economic", "market", "spam"]
+        other_evidence = len(evidence) - sum(class_counts.get(name, 0) for name in known_classes)
+        breakdown_parts = [f"`{class_counts.get(name, 0)}` {name}" for name in known_classes]
+        if other_evidence:
+            breakdown_parts.append(f"`{other_evidence}` other")
         parts.append(
-            f"The policy layer recorded `{len(evidence)}` evidence events: `{soft_evidence}` soft, `{threshold_evidence}` threshold, "
-            f"`{hard_evidence}` hard, and `{spam_evidence}` spam events. Soft evidence is suitable for repair and reward exclusion; "
+            f"The policy layer recorded `{len(evidence)}` evidence events: {', '.join(breakdown_parts[:-1])}, "
+            f"and {breakdown_parts[-1]} events. Soft and economic evidence are suitable for repair and reward exclusion; "
             "hard or convicted threshold evidence is the category that can later justify slashing or stronger sanctions."
         )
     else:
@@ -1391,6 +1425,8 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Base reward per slot | `{fmt_money(config.get('base_reward_per_slot'))}` | Modeled issuance/subsidy paid only to reward-eligible active slots. |",
         f"| Provider storage cost/slot/epoch | `{fmt_money(config.get('provider_storage_cost_per_slot_epoch'))}` | Simplified provider cost basis; jitter may create marginal-provider distress. |",
         f"| Provider bandwidth cost/retrieval | `{fmt_money(config.get('provider_bandwidth_cost_per_retrieval'))}` | Simplified egress cost basis for retrieval-heavy scenarios. |",
+        f"| Provider initial/min bond | `{fmt_money(config.get('provider_initial_bond'))}` / `{fmt_money(config.get('provider_min_bond'))}` | Simplified collateral model. Providers below the required bond are excluded from new responsibility and can trigger repair. |",
+        f"| Provider bond per assigned slot | `{fmt_money(config.get('provider_bond_per_slot'))}` | Additional modeled collateral required for each assigned storage slot. |",
         f"| Provider cost shocks | `{json.dumps(config.get('provider_cost_shocks') or [])}` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |",
         f"| Provider churn policy | enabled `{bool(config.get('provider_churn_enabled'))}`, threshold `{fmt_money(config.get('provider_churn_pnl_threshold'))}`, after `{fmt_num(config.get('provider_churn_after_epochs'))}` epochs, cap `{fmt_num(config.get('provider_churn_max_providers_per_epoch'))}`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |",
         f"| Provider churn floor | `{fmt_num(config.get('provider_churn_min_remaining_providers'))}` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |",
@@ -1458,6 +1494,8 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Provider churn events / final churned | `{fmt_num(economics['provider_churn_events'])}` / `{fmt_num(economics['churned_providers'])}` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |",
         f"| Provider entries / probation promotions | `{fmt_num(economics['provider_entries'])}` / `{fmt_num(economics['provider_probation_promotions'])}` | Shows whether reserve supply entered and cleared readiness gating before receiving normal placement. |",
         f"| Reserve / probationary / entered-active providers | `{fmt_num(capacity['reserve_providers'])}` / `{fmt_num(capacity['probationary_providers'])}` / `{fmt_num(capacity['entered_active_providers'])}` | Separates unused reserve supply, in-flight onboarding, and newly promoted active supply. |",
+        f"| Underbonded repairs / peak underbonded providers | `{fmt_num(economics['provider_underbonded_repairs'])}` / `{fmt_num(economics['max_underbonded_providers'])}` | Shows whether insufficient provider collateral became placement/repair pressure. |",
+        f"| Final underbonded assigned slots / bond deficit | `{fmt_num(economics['final_underbonded_assigned_slots'])}` / `{fmt_money(economics['final_provider_bond_deficit'])}` | Checks whether repair removed responsibility from undercollateralized providers by run end. |",
         f"| Churn pressure provider-epochs / peak | `{fmt_num(economics['churn_pressure_provider_epochs'])}` / `{fmt_num(economics['max_churn_pressure_providers'])}` | Shows the breadth and duration of providers below the configured churn threshold. |",
         f"| Active / exited / reserve provider capacity | `{fmt_num(economics['final_active_provider_capacity'])}` / `{fmt_num(economics['final_exited_provider_capacity'])}` / `{fmt_num(capacity['final_reserve_provider_capacity'])}` slots | Measures supply remaining, removed, and still waiting outside normal placement. |",
         f"| Peak assigned slots on churned providers | `{fmt_num(economics['max_churned_assigned_slots'])}` | Shows the maximum repair burden created by economic exits. |",
@@ -1604,20 +1642,23 @@ def candidate_exclusion_lines(repairs: list[dict[str, str]]) -> list[str]:
         ("eligible_candidates", "Eligible candidates"),
         ("excluded_current_deal", "Excluded current deal providers"),
         ("excluded_current_provider", "Excluded current provider"),
+        ("excluded_bond_headroom", "Excluded providers lacking bond headroom"),
         ("excluded_draining", "Excluded draining providers"),
         ("excluded_jailed", "Excluded jailed providers"),
         ("excluded_capacity", "Excluded capacity-bound providers"),
     ]
     lines = [
-        "| Candidate Mode | No-Candidate Events | Eligible | Current Deal | Current Provider | Draining | Jailed | Capacity-Bound |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Candidate Mode | No-Candidate Events | Eligible | Current Deal | Current Provider | Bond Headroom | Draining | Jailed | Capacity-Bound |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for mode in sorted({row.get("candidate_mode", "") or "unknown" for row in rows}):
         mode_rows = [row for row in rows if (row.get("candidate_mode", "") or "unknown") == mode]
         sums = {key: sum(fnum(row.get(key)) for row in mode_rows) for key, _ in fields}
+        sums["excluded_bond_headroom"] += sum(fnum(row.get("excluded_underbonded")) for row in mode_rows)
         lines.append(
             f"| `{mode}` | {len(mode_rows)} | {fmt_num(sums['eligible_candidates'])} | "
             f"{fmt_num(sums['excluded_current_deal'])} | {fmt_num(sums['excluded_current_provider'])} | "
+            f"{fmt_num(sums['excluded_bond_headroom'])} | "
             f"{fmt_num(sums['excluded_draining'])} | {fmt_num(sums['excluded_jailed'])} | "
             f"{fmt_num(sums['excluded_capacity'])} |"
         )
@@ -1723,6 +1764,11 @@ def assertion_meaning(name: str) -> str:
         "exact_reserve_providers": "Provider supply fixture should consume the configured reserve by run end.",
         "exact_probationary_providers": "Provider supply fixture should not leave providers stuck in probation by run end.",
         "max_max_probationary_providers": "Provider supply fixture should bound simultaneous probationary onboarding.",
+        "min_provider_underbonded_repairs": "Bond-headroom fixture must trigger repair away from undercollateralized providers.",
+        "min_max_underbonded_providers": "Bond-headroom fixture must expose at least this many underbonded providers.",
+        "min_max_underbonded_assigned_slots": "Bond-headroom fixture must expose assigned responsibility on underbonded providers.",
+        "max_final_underbonded_assigned_slots": "Bond-headroom fixture should repair away all underbonded active responsibility by run end.",
+        "min_max_provider_bond_deficit": "Bond-headroom fixture must expose non-zero collateral deficit.",
         "min_churn_pressure_provider_epochs": "Economic churn fixture must expose sustained below-threshold provider pressure.",
         "min_max_churned_assigned_slots": "Economic churn fixture must create assigned-slot repair pressure after exits.",
         "min_final_active_provider_capacity": "Economic churn fixture must retain enough active replacement capacity.",
@@ -1840,7 +1886,7 @@ def build_economic_narrative(
         parts.append(
             f"Provider churn policy executed `{fmt_num(totals.get('provider_churn_events'))}` exits, leaving "
             f"`{fmt_num(totals.get('churned_providers'))}` churned providers and `{fmt_num(totals.get('final_active_provider_capacity'))}` active capacity slots. "
-            f"At peak, `{fmt_num(totals.get('max_churned_assigned_slots'))}` assigned slots sat on churned providers and needed repair/rerouting pressure."
+        f"At peak, `{fmt_num(totals.get('max_churned_assigned_slots'))}` assigned slots sat on churned providers and needed repair/rerouting pressure."
         )
     if fnum(totals.get("provider_entries")) > 0 or fnum(totals.get("provider_probation_promotions")) > 0:
         parts.append(
@@ -1848,6 +1894,13 @@ def build_economic_narrative(
             f"`{fmt_num(totals.get('provider_probation_promotions'))}` providers into active supply. "
             f"The run ended with `{fmt_num(totals.get('entered_active_providers'))}` newly entered active providers, "
             f"`{fmt_num(totals.get('reserve_providers'))}` reserve providers, and `{fmt_num(totals.get('probationary_providers'))}` probationary providers."
+        )
+    if fnum(totals.get("max_underbonded_providers")) > 0:
+        parts.append(
+            f"Bond-headroom accounting observed up to `{fmt_num(totals.get('max_underbonded_providers'))}` underbonded providers and "
+            f"`{fmt_num(totals.get('max_underbonded_assigned_slots'))}` assigned slots on underbonded providers. "
+            f"The policy triggered `{fmt_num(totals.get('provider_underbonded_repairs'))}` underbonded-slot repairs and ended with "
+            f"`{fmt_num(totals.get('final_underbonded_assigned_slots'))}` assigned slots still underbonded."
         )
     if fnum(totals.get("retrieval_demand_shock_active")) > 0:
         parts.append(
@@ -1957,6 +2010,20 @@ def write_risk_register(
                 ),
                 "impact": "Economic exits can turn a pricing problem into repair pressure and capacity scarcity.",
                 "followup": "Review churn caps, minimum replacement capacity, price-floor response, and whether draining exits need longer notice periods.",
+            }
+        )
+    if fnum(totals.get("max_underbonded_providers")) > 0:
+        rows.append(
+            {
+                "risk": "Provider bond headroom exhausted",
+                "severity": "medium" if fnum(totals.get("final_underbonded_assigned_slots")) == 0 else "high",
+                "evidence": (
+                    f"Peak underbonded providers {fmt_num(totals.get('max_underbonded_providers'))}; "
+                    f"peak assigned slots on underbonded providers {fmt_num(totals.get('max_underbonded_assigned_slots'))}; "
+                    f"final bond deficit {fmt_money(totals.get('final_provider_bond_deficit'))}."
+                ),
+                "impact": "Undercollateralized providers should not continue accumulating responsibility, especially after hard-fault slashing.",
+                "followup": "Review minimum bond, per-slot collateral, repair urgency, top-up UX, and whether underbonding should degrade placement before repair.",
             }
         )
     if fnum(totals.get("provider_entries")) > fnum(totals.get("provider_probation_promotions")):
@@ -2181,6 +2248,9 @@ def write_risk_register(
             f"- Churned providers: `{fmt_num(totals.get('churned_providers'))}`",
             f"- Provider entries/promotions: `{fmt_num(totals.get('provider_entries'))}` / `{fmt_num(totals.get('provider_probation_promotions'))}`",
             f"- Reserve/probationary/entered-active providers: `{fmt_num(totals.get('reserve_providers'))}` / `{fmt_num(totals.get('probationary_providers'))}` / `{fmt_num(totals.get('entered_active_providers'))}`",
+            f"- Underbonded repairs: `{fmt_num(totals.get('provider_underbonded_repairs'))}`",
+            f"- Final/peak underbonded providers: `{fmt_num(totals.get('final_underbonded_providers'))}` / `{fmt_num(totals.get('max_underbonded_providers'))}`",
+            f"- Final/peak underbonded assigned slots: `{fmt_num(totals.get('final_underbonded_assigned_slots'))}` / `{fmt_num(totals.get('max_underbonded_assigned_slots'))}`",
             f"- Final active/exited/reserve provider capacity: `{fmt_num(totals.get('final_active_provider_capacity'))}` / `{fmt_num(totals.get('final_exited_provider_capacity'))}` / `{fmt_num(totals.get('final_reserve_provider_capacity'))}`",
             f"- Retrieval demand shock active epochs: `{fmt_num(totals.get('retrieval_demand_shock_active'))}`",
             f"- Retrieval price direction changes: `{fmt_num(totals.get('retrieval_price_direction_changes'))}`",
@@ -2216,6 +2286,7 @@ def graduation_semantics(scenario: str) -> str:
         "provider-cost-shock": "Graduation means provider cost stress is visible as churn pressure and pricing mismatch before it is turned into live governance parameters.",
         "provider-economic-churn": "Graduation means bounded economic exits create visible capacity and repair pressure without violating durability.",
         "provider-supply-entry": "Graduation means reserve-provider onboarding and probationary promotion are explicit enough to tune replacement supply before keeper lifecycle state is implemented.",
+        "provider-bond-headroom": "Graduation means minimum bond and per-slot collateral constraints are explicit enough to exclude or repair undercollateralized providers before keeper bond state is implemented.",
         "retrieval-demand-shock": "Graduation means burst read demand and retrieval-price response are measurable, bounded, and reviewable before dynamic pricing keeper defaults are chosen.",
         "audit-budget-exhaustion": "Graduation means audit demand is bounded by budget and turns into backlog or policy review instead of unbounded issuance.",
         "deputy-evidence-spam": "Graduation means low-quality deputy evidence is economically negative-EV and cannot trigger live provider punishment without conviction.",
@@ -2377,6 +2448,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("provider_entries")) for row in economy],
         secondary=[fnum(row.get("provider_probation_promotions")) for row in economy],
         secondary_label="Probation Promotions",
+    )
+    write_line_svg(
+        graphs_dir / "provider_bond_headroom.svg",
+        "Underbonded Providers",
+        [fnum(row.get("underbonded_providers")) for row in economy],
+        secondary=[fnum(row.get("provider_underbonded_repairs")) for row in economy],
+        secondary_label="Underbonded Repairs",
     )
     write_line_svg(
         graphs_dir / "burn_mint_ratio.svg",
@@ -3181,6 +3259,13 @@ def sweep_metric_meaning(key: str) -> str:
         "reserve_providers": "Providers still outside normal placement as reserve supply.",
         "probationary_providers": "Providers in onboarding probation and not yet eligible for normal placement.",
         "entered_active_providers": "Providers that entered from reserve and are active by run end.",
+        "provider_underbonded_repairs": "Repairs started because a provider lacked required bond headroom.",
+        "final_underbonded_providers": "Providers below the configured bond requirement at run end.",
+        "max_underbonded_providers": "Peak providers below the configured bond requirement.",
+        "final_underbonded_assigned_slots": "Assigned slots still held by underbonded providers at run end.",
+        "max_underbonded_assigned_slots": "Peak assigned slots held by underbonded providers.",
+        "final_provider_bond_deficit": "Run-end aggregate provider bond deficit under configured collateral rules.",
+        "max_provider_bond_deficit": "Peak aggregate provider bond deficit under configured collateral rules.",
         "churn_pressure_provider_epochs": "Provider-epochs below the churn threshold.",
         "max_churn_pressure_providers": "Peak providers simultaneously eligible for churn.",
         "final_active_provider_capacity": "Provider capacity remaining after economic exits.",

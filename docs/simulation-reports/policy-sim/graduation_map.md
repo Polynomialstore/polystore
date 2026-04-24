@@ -7,7 +7,7 @@ This report converts the committed simulator corpus into implementation planning
 | Status | Count | Meaning |
 |---|---:|---|
 | `implementation planning` | 17 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
-| `further simulation review` | 12 | The fixture passed but should inform parameter or product policy before implementation work. |
+| `further simulation review` | 13 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
 ## Scenario-to-Implementation Map
@@ -30,6 +30,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`overpriced-storage`](overpriced-storage/report.md) | `further simulation review` | economic policy calibration | Compare quote affordability bounds, price-step timing, and demand rejection semantics before encoding governance defaults. | `quote rejection telemetry`, `affordability dashboards` | No process e2e yet; this is a parameter-calibration fixture. |
 | [`performance-market-latency`](performance-market-latency/report.md) | `implementation planning` | service-class and latency-tier keeper tests | Add keeper/runtime tests proving retrieval telemetry maps to Platinum/Gold/Silver/Fail tiers, tiered rewards are deterministic, and Fail-tier QoS does not become slashable hard evidence. | `service-class params`, `latency telemetry accumulator`, `tiered reward multipliers`, `QoS-only health notes` | Hot-service retrieval burst after telemetry exists; assert tier counts and provider payouts reflect latency without breaking read availability. |
 | [`price-controller-bounds`](price-controller-bounds/report.md) | `implementation planning` | dynamic pricing keeper tests | Add epoch pricing tests for floors, ceilings, utilization target, retrieval-demand target, and max step bps. | `dynamic pricing params`, `storage utilization accumulator`, `retrieval demand accumulator` | No process e2e; validate with keeper tests and simulator sweeps first. |
+| [`provider-bond-headroom`](provider-bond-headroom/report.md) | `further simulation review` | provider bond and assignment collateral calibration | Compare minimum bond, per-slot collateral, slash sizing, and underbonded repair urgency before keeper bond state or provider top-up UX is implemented. | `provider bond state`, `assignment collateral formula`, `underbonded provider events`, `bond top-up flow` | No process e2e yet; validate collateral policy with simulator scenarios before provider bond keeper tests. |
 | [`provider-cost-shock`](provider-cost-shock/report.md) | `further simulation review` | economic policy calibration | Compare provider cost assumptions, price floors, reward buffers, and whether cost telemetry should trigger governance review before encoding market defaults. | `provider cost telemetry`, `profitability dashboards`, `price-floor governance policy` | No process e2e yet; this is a parameter-calibration fixture. |
 | [`provider-economic-churn`](provider-economic-churn/report.md) | `further simulation review` | economic churn and replacement calibration | Compare churn caps, minimum active-provider floor, draining notice, replacement throughput, and price-floor response before keeper drain semantics are implemented. | `draining provider state`, `provider exit telemetry`, `churn caps`, `replacement capacity dashboards` | No process e2e yet; validate churn policy with simulator sweeps and then add keeper drain/replacement tests. |
 | [`provider-supply-entry`](provider-supply-entry/report.md) | `further simulation review` | provider lifecycle and supply recovery calibration | Compare reserve sizing, entry caps, probation windows, utilization triggers, and readiness semantics before keeper provider lifecycle state is implemented. | `provider lifecycle state`, `probation readiness checks`, `reserve supply telemetry`, `entry and promotion caps` | No process e2e yet; validate supply recovery with simulator scenarios before provider registration or promotion keeper tests. |
@@ -69,9 +70,11 @@ This report converts the committed simulator corpus into implementation planning
 | `MsgSignalSaturation hardening` | 1 |
 | `QoS-only health notes` | 1 |
 | `Sybil concentration alerts` | 1 |
+| `assignment collateral formula` | 1 |
 | `audit backlog query` | 1 |
 | `audit budget state` | 1 |
 | `bandwidth probe telemetry` | 1 |
+| `bond top-up flow` | 1 |
 | `bounty payout ledger` | 1 |
 | `burn ledger` | 1 |
 | `burst-demand dashboards` | 1 |
@@ -118,6 +121,7 @@ This report converts the committed simulator corpus into implementation planning
 | `pricing smoothing params` | 1 |
 | `probation readiness checks` | 1 |
 | `promotion readiness proof` | 1 |
+| `provider bond state` | 1 |
 | `provider capability tier state` | 1 |
 | `provider cost assumptions` | 1 |
 | `provider cost telemetry` | 1 |
@@ -147,6 +151,7 @@ This report converts the committed simulator corpus into implementation planning
 | `subsidy leakage metrics` | 1 |
 | `threshold evidence case` | 1 |
 | `tiered reward multipliers` | 1 |
+| `underbonded provider events` | 1 |
 
 ## Review Rule
 

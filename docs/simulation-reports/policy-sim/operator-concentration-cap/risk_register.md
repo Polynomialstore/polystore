@@ -42,6 +42,9 @@ Model a Sybil-shaped provider set where one operator controls many SP identities
 - Churned providers: `0`
 - Provider entries/promotions: `0` / `0`
 - Reserve/probationary/entered-active providers: `0` / `0` / `0`
+- Underbonded repairs: `0`
+- Final/peak underbonded providers: `0` / `0`
+- Final/peak underbonded assigned slots: `0` / `0`
 - Final active/exited/reserve provider capacity: `1280` / `0` / `0`
 - Retrieval demand shock active epochs: `0`
 - Retrieval price direction changes: `0`

@@ -72,6 +72,8 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Base reward per slot | `0.0200` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
+| Provider initial/min bond | `100.0000` / `0.0000` | Simplified collateral model. Providers below the required bond are excluded from new responsibility and can trigger repair. |
+| Provider bond per assigned slot | `0.0000` | Additional modeled collateral required for each assigned storage slot. |
 | Provider cost shocks | `[]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
 | Provider churn policy | enabled `False`, threshold `0.0000`, after `1` epochs, cap `0`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |
 | Provider churn floor | `0` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |
@@ -138,6 +140,8 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Provider churn events / final churned | `0` / `0` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |
 | Provider entries / probation promotions | `0` / `0` | Shows whether reserve supply entered and cleared readiness gating before receiving normal placement. |
 | Reserve / probationary / entered-active providers | `0` / `0` / `0` | Separates unused reserve supply, in-flight onboarding, and newly promoted active supply. |
+| Underbonded repairs / peak underbonded providers | `0` / `0` | Shows whether insufficient provider collateral became placement/repair pressure. |
+| Final underbonded assigned slots / bond deficit | `0` / `0.0000` | Checks whether repair removed responsibility from undercollateralized providers by run end. |
 | Churn pressure provider-epochs / peak | `0` / `0` | Shows the breadth and duration of providers below the configured churn threshold. |
 | Active / exited / reserve provider capacity | `768` / `0` / `0` slots | Measures supply remaining, removed, and still waiting outside normal placement. |
 | Peak assigned slots on churned providers | `0` | Shows the maximum repair burden created by economic exits. |
@@ -307,6 +311,12 @@ Shows modeled provider exits and per-epoch churn events.
 Shows reserve provider entry and probationary promotion into active supply.
 
 ![Provider Supply Entry](graphs/provider_supply.svg)
+
+### Provider Bond Headroom
+
+Shows underbonded providers and repairs triggered by insufficient assignment collateral.
+
+![Provider Bond Headroom](graphs/provider_bond_headroom.svg)
 
 ### Burn / Mint Ratio
 

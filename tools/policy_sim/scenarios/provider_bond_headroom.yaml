@@ -1,0 +1,35 @@
+{
+  "name": "provider-bond-headroom",
+  "description": "Provider collateral should constrain assignment and trigger repair when hard-fault slashing leaves a provider underbonded.",
+  "config": {
+    "scenario": "provider-bond-headroom",
+    "seed": 103,
+    "providers": 48,
+    "users": 80,
+    "deals": 24,
+    "epochs": 10,
+    "enforcement_mode": "SLASH_SIMULATED",
+    "evict_after_missed_epochs": 1,
+    "repair_epochs": 1,
+    "max_repairs_started_per_epoch": 12,
+    "provider_initial_bond": 2.0,
+    "provider_min_bond": 1.5,
+    "provider_bond_per_slot": 0.05,
+    "slash_hard_fault": 1.0
+  },
+  "faults": [
+    "corrupt:sp-000:1.0"
+  ],
+  "assertions": {
+    "min_success_rate": 0.95,
+    "min_provider_slashed": 1.0,
+    "min_invalid_proofs": 1,
+    "min_provider_underbonded_repairs": 1,
+    "min_max_underbonded_providers": 1,
+    "min_max_underbonded_assigned_slots": 1,
+    "min_max_provider_bond_deficit": 0.1,
+    "max_final_underbonded_assigned_slots": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

@@ -44,6 +44,9 @@ Model reserve providers entering the active set after churn reduces supply. The 
 - Churned providers: `8`
 - Provider entries/promotions: `8` / `8`
 - Reserve/probationary/entered-active providers: `0` / `0` / `8`
+- Underbonded repairs: `0`
+- Final/peak underbonded providers: `0` / `0`
+- Final/peak underbonded assigned slots: `0` / `0`
 - Final active/exited/reserve provider capacity: `983` / `96` / `0`
 - Retrieval demand shock active epochs: `0`
 - Retrieval price direction changes: `0`

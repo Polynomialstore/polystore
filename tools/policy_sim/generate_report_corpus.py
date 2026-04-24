@@ -112,6 +112,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["provider lifecycle state", "probation readiness checks", "reserve supply telemetry", "entry and promotion caps"],
         "e2e": "No process e2e yet; validate supply recovery with simulator scenarios before provider registration or promotion keeper tests.",
     },
+    "provider-bond-headroom": {
+        "target": "provider bond and assignment collateral calibration",
+        "next_test": "Compare minimum bond, per-slot collateral, slash sizing, and underbonded repair urgency before keeper bond state or provider top-up UX is implemented.",
+        "missing_surfaces": ["provider bond state", "assignment collateral formula", "underbonded provider events", "bond top-up flow"],
+        "e2e": "No process e2e yet; validate collateral policy with simulator scenarios before provider bond keeper tests.",
+    },
     "retrieval-demand-shock": {
         "target": "dynamic pricing calibration",
         "next_test": "Compare retrieval demand targets, price-step clamps, smoothing windows, and burst response before encoding retrieval pricing defaults.",

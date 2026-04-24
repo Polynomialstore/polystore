@@ -201,6 +201,8 @@ The simulator mirrors current protocol concepts:
   draining exits, active-capacity loss, and repair pressure.
 - Reserve-provider supply entry with probationary promotion before new SPs
   become eligible for normal placement.
+- Provider bond-headroom checks that exclude undercollateralized SPs from new
+  responsibility and can repair active slots away from underbonded providers.
 - Demand-side storage admission accounting for latent new deal requests,
   price-elastic demand suppression, price rejections, capacity rejections, and
   effective/latent acceptance rates.
@@ -261,8 +263,9 @@ questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
 provider P&L, provider churn, burn/mint ratio, price trajectory, capacity
 utilization, saturation/repair pressure, repair backlog, provider supply entry,
-high-bandwidth promotion, and hot retrieval routing, performance tiers, operator
-concentration, evidence pressure, audit budget, and elasticity spend.
+provider bond headroom, high-bandwidth promotion, and hot retrieval routing,
+performance tiers, operator concentration, evidence pressure, audit budget, and
+elasticity spend.
 `signals.json` records derived
 availability, saturation, repair, capacity, economic, regional, high-bandwidth,
 performance-market, concentration, and provider bottleneck signals for

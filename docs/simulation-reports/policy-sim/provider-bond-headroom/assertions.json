@@ -1,0 +1,52 @@
+[
+  {
+    "detail": "success_rate=1, required>=0.95",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "provider_slashed=2, required>=1",
+    "name": "min_provider_slashed",
+    "passed": true
+  },
+  {
+    "detail": "invalid_proofs=5, required>=1",
+    "name": "min_invalid_proofs",
+    "passed": true
+  },
+  {
+    "detail": "provider_underbonded_repairs=1, required>=1",
+    "name": "min_provider_underbonded_repairs",
+    "passed": true
+  },
+  {
+    "detail": "max_underbonded_providers=1, required>=1",
+    "name": "min_max_underbonded_providers",
+    "passed": true
+  },
+  {
+    "detail": "max_underbonded_assigned_slots=1, required>=1",
+    "name": "min_max_underbonded_assigned_slots",
+    "passed": true
+  },
+  {
+    "detail": "max_provider_bond_deficit=1.55, required>=0.1",
+    "name": "min_max_provider_bond_deficit",
+    "passed": true
+  },
+  {
+    "detail": "final_underbonded_assigned_slots=0, required<=0",
+    "name": "max_final_underbonded_assigned_slots",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "paid_corrupt_bytes=0, required<=0",
+    "name": "max_paid_corrupt_bytes",
+    "passed": true
+  }
+]
