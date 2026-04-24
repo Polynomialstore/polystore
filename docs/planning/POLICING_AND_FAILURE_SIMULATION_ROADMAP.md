@@ -1345,6 +1345,11 @@ plus `tools/policy_sim/sweeps/sustained_non_response_thresholds.yaml`, which
 compare intermittent outage thresholds, repair-churn risk, sustained
 non-response repair timing, and repair-readiness timeouts before liveness
 threshold defaults are chosen; and
+`tools/policy_sim/sweeps/setup_failure_repair_controls.yaml`, which compares
+early setup-phase provider failure across measure-only, repair-only,
+threshold-delay, multi-provider, and repair-throughput-constrained cases before
+provider admission, initial health check, and setup-bump keeper semantics are
+chosen; and
 `tools/policy_sim/sweeps/withholding_enforcement_controls.yaml` plus
 `tools/policy_sim/sweeps/lazy_provider_quota_controls.yaml`, which compare
 soft-failure evidence across measure-only, repair-only, reward-exclusion,

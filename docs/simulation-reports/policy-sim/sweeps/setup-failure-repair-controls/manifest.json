@@ -1,0 +1,89 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/setup_failure.yaml",
+  "case_count": 7,
+  "cases": [
+    {
+      "case": "baseline-reward-exclusion",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "setup-failure",
+      "seed": 11,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "repair-only-setup-repair",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "setup-failure",
+      "seed": 11,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "measure-only-detects-but-does-not-repair",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "setup-failure",
+      "seed": 11,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "aggressive-setup-threshold",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "setup-failure",
+      "seed": 11,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "delayed-setup-threshold",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "setup-failure",
+      "seed": 11,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "multi-provider-setup-failure",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "setup-failure",
+      "seed": 11,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "repair-throughput-limited-setup-failure",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "setup-failure",
+      "seed": 11,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for setup-phase provider failures across observation mode, repair-only mode, threshold timing, multi-provider setup failure, and repair-start throttles.",
+  "name": "setup-failure-repair-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/setup-failure-repair-controls"
+}

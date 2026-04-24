@@ -3816,6 +3816,14 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         and fnum(totals.get("repairs_started")) == 0
     ):
         raise_to("high", "sustained non-response did not start repair")
+    if scenario == "setup-failure" and fnum(totals.get("offline_responses")) > 0:
+        enforcement_mode = str(config.get("enforcement_mode", ""))
+        if fnum(totals.get("provider_slashed")) > 0:
+            raise_to("high", "setup-phase soft failure reduced provider bond")
+        if enforcement_mode != "MEASURE_ONLY" and fnum(totals.get("repairs_started")) == 0:
+            raise_to("high", "setup-phase failure did not start active repair")
+        if enforcement_mode == "MEASURE_ONLY" and fnum(totals.get("repairs_started")) == 0:
+            raise_to("medium", "setup-phase failure is measure-only and did not start repair")
     if fnum(totals.get("saturated_responses")) > 0:
         raise_to("medium", "provider bandwidth saturation occurred")
     if fnum(totals.get("performance_fail_rate")) > 0.25:
