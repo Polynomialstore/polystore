@@ -39,6 +39,28 @@ later PR explicitly changes enforcement parameters after human review.
 | P4 | High-bandwidth promotion, performance market, and elasticity overlays | These need telemetry and routing surfaces, so they should follow core health/accounting. |
 | P5 | Evidence market, operator concentration, bonding, and punitive rollout | These require more governance, collateral, or identity decisions. |
 
+## Current Implementation Status
+
+This table tracks the implementation-ticket bridge at the time this document
+was refreshed. It is intentionally conservative: a keeper test or one state
+surface can advance a ticket without completing the full runtime/e2e goal.
+
+| Ticket | Current status | Notes |
+|---|---|---|
+| T0. Keeper No-Op Control | Landed | Healthy-control, repair, and reward no-op invariants are covered by the keeper graduation stack. |
+| T1. Slot Health and Soft-Fault Accumulator | Landed, first pass | Soft-fault counters and repair-trigger behavior are covered; richer query/UX state remains later observability work. |
+| T2. Automatic Repair and Promotion Readiness | Landed, first pass | Repair readiness guards now prevent promotion without pending-provider proof activity; full data-plane catch-up proofs remain future runtime work. |
+| T3. Reward Exclusion for Soft Non-Compliance | Landed, first pass | Keeper coverage distinguishes reward exclusion from slash/jail for soft non-compliance. |
+| T4. Setup Failure Bump Before First Commit | Landed, first pass | Setup bump replacement, deterministic selection, and no-punitive-evidence behavior are covered at keeper level. |
+| T5. Repair Candidate Exhaustion and Backoff | Landed, first pass | Keeper coverage now emits explicit repair-backoff evidence instead of silently over-assigning. |
+| T6. Hard Evidence: Corrupt Data and Invalid Proofs | Landed, first pass | Invalid proof paths reject bad work, record hard evidence, and avoid rewarding invalid liveness proofs. |
+| T7. Provider and Gateway Fault Injection Harness | Landed, first pass | Dev/test fault injection hooks exist; the next gap is selecting the smallest stable e2e that should be CI-grade. |
+| T8. Storage Escrow Lifecycle Accounting | Not ready for full implementation | Simulator evidence exists, but keeper close/refund/expiry semantics still need human decisions on rounding, quote signing, and close authority. |
+| T9. Retrieval Session Accounting and Sponsored Reads | Landed, first pass | Keeper tests cover owner-funded and requester/sponsor-funded settlement, burn, payout, and owner-escrow isolation. |
+| T10. High-Bandwidth Promotion and Demotion | Partial, in PR stack | Current work uses existing `Edge` capability as the Hot-placement/high-bandwidth proxy; telemetry, explicit promotion/demotion, and operator UX remain open. |
+| T11. Performance Market Latency Tiers | Partial | Latency tier boundaries are covered; telemetry accumulation and tiered payout integration remain broader performance-market work. |
+| T12. Elasticity Overlay Spend Window | Partial, in PR stack | Spend-cap/escrow fail-closed behavior and funded overlay route state are covered; readiness, service accounting, TTL cleanup, and gateway routing remain open. |
+
 ## Ready Tickets
 
 ### T0. Keeper No-Op Control
