@@ -1930,6 +1930,7 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 	}
 
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
+	newStripeIndex := uint32((deal.CurrentReplication / types.DealBaseReplication) + 1)
 	derivedID := deal.Id + (deal.CurrentReplication * 1000)
 
 	newProviders, err := k.AssignProviders(ctx, derivedID, blockHash, "Hot", types.DealBaseReplication)
@@ -1945,12 +1946,19 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal with new stripe: %w", err)
 	}
+	if err := k.VirtualStripes.Set(ctx, collections.Join(deal.Id, newStripeIndex), types.VirtualStripe{
+		DealId:           deal.Id,
+		StripeIndex:      newStripeIndex,
+		OverlayProviders: newProviders,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to record virtual stripe: %w", err)
+	}
 
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(
 			types.TypeMsgSignalSaturation,
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
-			sdk.NewAttribute("new_stripe_index", fmt.Sprintf("%d", (deal.CurrentReplication/types.DealBaseReplication))),
+			sdk.NewAttribute("new_stripe_index", fmt.Sprintf("%d", newStripeIndex)),
 			sdk.NewAttribute("new_providers", fmt.Sprintf("%v", newProviders)),
 			sdk.NewAttribute("elasticity_cost", elasticityCost.String()),
 			sdk.NewAttribute("spend_window_spent", deal.SpendWindowSpent.String()),
