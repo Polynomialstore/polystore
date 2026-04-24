@@ -1,0 +1,80 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/elasticity_cap_hit.yaml",
+  "case_count": 6,
+  "cases": [
+    {
+      "case": "baseline-zero-spend-cap",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-cap-hit",
+      "seed": 23,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "small-spend-window",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-cap-hit",
+      "seed": 23,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "expensive-overflow-rejected-before-spend",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-cap-hit",
+      "seed": 23,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "larger-viral-pressure-zero-cap",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-cap-hit",
+      "seed": 23,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "no-trigger-control",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-cap-hit",
+      "seed": 23,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "larger-budget-still-bounded",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-cap-hit",
+      "seed": 23,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for non-overlay elasticity spend-cap behavior across zero budget, small spend windows, expensive overflow, disabled demand triggers, and larger viral retrieval pressure.",
+  "name": "elasticity-cap-hit-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/elasticity-cap-hit-controls"
+}

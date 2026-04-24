@@ -1,0 +1,107 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/performance_market_latency.yaml",
+  "case_count": 9,
+  "cases": [
+    {
+      "case": "baseline-hot-latency",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "tight-latency-tiers",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "loose-latency-tiers",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "slow-provider-tail",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-jitter-latency",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "higher-qos-reward",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "fail-tier-pays-small",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bandwidth-routing-disabled",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "low-route-attempt-limit",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "performance-market-latency",
+      "seed": 47,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for Hot-service latency tier windows, reward multipliers, jitter, routing, and slow-provider tails.",
+  "name": "performance-market-latency-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/performance-market-latency-controls"
+}

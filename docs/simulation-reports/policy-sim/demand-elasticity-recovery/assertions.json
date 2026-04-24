@@ -1,0 +1,52 @@
+[
+  {
+    "detail": "success_rate=1, required>=1",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "new_deal_latent_requests=200, required>=200",
+    "name": "min_new_deal_latent_requests",
+    "passed": true
+  },
+  {
+    "detail": "new_deals_suppressed_price=72, required>=1",
+    "name": "min_new_deals_suppressed_price",
+    "passed": true
+  },
+  {
+    "detail": "new_deal_requests=128, required>=1",
+    "name": "min_new_deal_requests",
+    "passed": true
+  },
+  {
+    "detail": "new_deals_accepted=128, required>=1",
+    "name": "min_new_deals_accepted",
+    "passed": true
+  },
+  {
+    "detail": "new_deal_latent_acceptance_rate=0.64, required>=0.05",
+    "name": "min_new_deal_latent_acceptance_rate",
+    "passed": true
+  },
+  {
+    "detail": "new_deals_rejected_price=0, required<=0",
+    "name": "max_new_deals_rejected_price",
+    "passed": true
+  },
+  {
+    "detail": "new_deals_rejected_capacity=0, required<=0",
+    "name": "max_new_deals_rejected_capacity",
+    "passed": true
+  },
+  {
+    "detail": "final_storage_price=0.774840978, required<=1",
+    "name": "max_final_storage_price",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  }
+]

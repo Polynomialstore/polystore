@@ -1,0 +1,41 @@
+{
+  "name": "elasticity-overlay-controls",
+  "description": "Sensitivity sweep for user-funded elasticity overlay readiness, TTL, spend cap, and per-deal route caps.",
+  "base_scenario": "../scenarios/elasticity_overlay_scaleup.yaml",
+  "cases": [
+    {
+      "name": "baseline"
+    },
+    {
+      "name": "slow-readiness",
+      "config": {
+        "elasticity_overlay_ready_delay_epochs": 2
+      }
+    },
+    {
+      "name": "short-ttl",
+      "config": {
+        "elasticity_overlay_ttl_epochs": 3
+      }
+    },
+    {
+      "name": "low-spend-cap",
+      "config": {
+        "elasticity_max_spend": 12.0
+      }
+    },
+    {
+      "name": "tight-per-deal-cap",
+      "config": {
+        "elasticity_overlay_max_providers_per_deal": 3
+      }
+    },
+    {
+      "name": "aggressive-scaleup",
+      "config": {
+        "elasticity_overlay_providers_per_epoch": 10,
+        "elasticity_max_spend": 80.0
+      }
+    }
+  ]
+}

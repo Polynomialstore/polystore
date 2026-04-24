@@ -4,9 +4,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 try:
+    from .parallel import map_parallel, resolve_chunksize, resolve_jobs
     from .policing_sim import (
         PolicySimulator,
         SimConfig,
+        build_parser as build_sim_parser,
         evaluate_assertions,
         load_scenario_spec,
         run_one,
@@ -16,9 +18,11 @@ try:
     from .generate_report_corpus import write_graduation_map
     from .run_sweeps import load_sweep_spec, run_sweep_spec, run_sweep_specs
 except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`.
+    from parallel import map_parallel, resolve_chunksize, resolve_jobs
     from policing_sim import (
         PolicySimulator,
         SimConfig,
+        build_parser as build_sim_parser,
         evaluate_assertions,
         load_scenario_spec,
         run_one,
@@ -27,6 +31,10 @@ except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`
     from report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
     from generate_report_corpus import write_graduation_map
     from run_sweeps import load_sweep_spec, run_sweep_spec, run_sweep_specs
+
+
+def square_for_parallel_test(value):
+    return value * value
 
 
 class PolicySimulatorTests(unittest.TestCase):
@@ -39,6 +47,20 @@ class PolicySimulatorTests(unittest.TestCase):
     def assert_assertions_pass(self, result):
         failed = [item for item in result.assertions if not item.passed]
         self.assertEqual([], failed)
+
+    def test_parallel_helpers_bound_jobs_and_preserve_order(self):
+        self.assertEqual(1, resolve_jobs(0, 1))
+        self.assertEqual(3, resolve_jobs(3, 10))
+        self.assertLessEqual(resolve_jobs(0, 100), 8)
+        self.assertEqual(1, resolve_chunksize(1, 8))
+        self.assertEqual(32, resolve_chunksize(1000, 8))
+
+        result = map_parallel(square_for_parallel_test, [0, 1, 2, 3, 4], requested_jobs=2)
+        self.assertEqual([0, 1, 4, 9, 16], result)
+
+    def test_scenario_dir_defaults_to_auto_parallel_jobs(self):
+        args = build_sim_parser().parse_args(["--scenario-dir", "tools/policy_sim/scenarios"])
+        self.assertEqual(0, args.jobs)
 
     def test_ideal_scenario_has_no_repairs_or_failures(self):
         result = self.run_scenario("ideal", providers=48, deals=24, users=80, epochs=8)
@@ -76,6 +98,18 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertGreaterEqual(result.totals["invalid_proofs"], 1)
         self.assertGreaterEqual(result.totals["repairs_started"], 1)
         self.assertGreaterEqual(result.totals["repairs_ready"], 1)
+        self.assertEqual(0, result.totals["paid_corrupt_bytes"])
+
+    def test_invalid_synthetic_proof_isolated_from_corrupt_retrieval(self):
+        fixture = Path(__file__).with_name("scenarios") / "invalid_synthetic_proof.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreaterEqual(result.totals["invalid_proofs"], 1)
+        self.assertGreaterEqual(result.totals["repairs_completed"], 1)
+        self.assertGreaterEqual(result.totals["provider_slashed"], 1)
+        self.assertEqual(0, result.totals["corrupt_responses"])
         self.assertEqual(0, result.totals["paid_corrupt_bytes"])
 
     def test_custom_fault_injection(self):
@@ -123,6 +157,37 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(0, result.totals["repairs_started"])
         self.assertEqual(0, result.totals["provider_slashed"])
         self.assertTrue(any(row["reason"] == "deputy_evidence_spam" for row in result.evidence))
+
+    def test_overpriced_storage_rejects_new_demand_without_capacity_pressure(self):
+        fixture = Path(__file__).with_name("scenarios") / "overpriced_storage.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(96, result.totals["new_deal_requests"])
+        self.assertEqual(0, result.totals["new_deals_accepted"])
+        self.assertEqual(0, result.totals["new_deals_suppressed_price"])
+        self.assertEqual(96, result.totals["new_deals_rejected_price"])
+        self.assertEqual(0, result.totals["new_deals_rejected_capacity"])
+        self.assertEqual(0.0, result.totals["new_deal_acceptance_rate"])
+        self.assertEqual(spec.config["deals"], result.totals["final_deals"])
+        self.assertIn("new_deal_latent_requests", result.economy[0])
+        self.assertIn("new_deals_suppressed_price", result.economy[0])
+        self.assertIn("new_deals_rejected_price", result.economy[0])
+
+    def test_storage_demand_elasticity_suppresses_and_recovers_requests(self):
+        fixture = Path(__file__).with_name("scenarios") / "demand_elasticity_recovery.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(200, result.totals["new_deal_latent_requests"])
+        self.assertGreater(result.totals["new_deals_suppressed_price"], 0)
+        self.assertGreater(result.totals["new_deal_requests"], 0)
+        self.assertEqual(result.totals["new_deal_requests"], result.totals["new_deals_accepted"])
+        self.assertEqual(0, result.totals["new_deals_rejected_price"])
+        self.assertEqual(0, result.totals["new_deals_rejected_capacity"])
+        self.assertLess(result.totals["final_storage_price"], spec.config["storage_price"])
 
     def test_heterogeneous_scale_controls_surface_saturation_and_repair_backoff(self):
         config = SimConfig(
@@ -211,6 +276,33 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertTrue(all(row["candidate_mode"] == "fallback" for row in no_candidate_rows))
         self.assertTrue(all(row["eligible_candidates"] == 0 for row in no_candidate_rows))
         self.assertTrue(any(row["excluded_capacity"] > 0 for row in no_candidate_rows))
+
+    def test_pending_repair_timeout_reopens_bounded_retry(self):
+        config = SimConfig(
+            scenario="replacement-grinding",
+            seed=41,
+            providers=36,
+            users=80,
+            deals=18,
+            epochs=10,
+            evict_after_missed_epochs=1,
+            repair_epochs=2,
+            repair_pending_timeout_epochs=1,
+            repair_backoff_epochs=2,
+            repair_attempt_cap_per_slot=3,
+            provider_repair_probability_min=0.0,
+            provider_repair_probability_max=0.0,
+        )
+        result = PolicySimulator(config, extra_faults=["offline:sp-000:1-10"]).run()
+
+        self.assertGreater(result.totals["repairs_started"], 0)
+        self.assertEqual(0, result.totals["repairs_ready"])
+        self.assertEqual(0, result.totals["repairs_completed"])
+        self.assertGreater(result.totals["repair_timeouts"], 0)
+        self.assertGreater(result.totals["repair_cooldowns"], 0)
+        self.assertGreater(result.totals["repair_attempt_caps"], 0)
+        self.assertTrue(any(row["event"] == "repair_timeout" for row in result.repairs))
+        self.assertIn("repair_started_epoch", result.slots[0])
 
     def test_flapping_provider_marks_suspect_without_delinquent_repair_churn(self):
         config = SimConfig(
@@ -388,6 +480,254 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertAlmostEqual(epoch_pnls[0], epoch_pnls[1])
         self.assertAlmostEqual(result.totals["provider_pnl"], sum(epoch_pnls))
 
+    def test_provider_cost_shock_surfaces_churn_pressure(self):
+        config = SimConfig(
+            scenario="provider-cost-shock",
+            seed=71,
+            providers=32,
+            users=40,
+            deals=20,
+            epochs=6,
+            provider_storage_cost_per_slot_epoch=0.01,
+            provider_fixed_cost_per_epoch=0.05,
+            base_reward_per_slot=0.03,
+            provider_cost_shocks=(
+                {
+                    "start_epoch": 4,
+                    "end_epoch": 6,
+                    "fixed_cost_multiplier_bps": 30000,
+                    "storage_cost_multiplier_bps": 50000,
+                },
+            ),
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertEqual(0, result.economy[0]["provider_cost_shock_active"])
+        self.assertEqual(1, result.economy[3]["provider_cost_shock_active"])
+        self.assertEqual(32, result.economy[3]["provider_cost_shocked_providers"])
+        self.assertEqual(50000, result.totals["max_provider_cost_shock_storage_multiplier_bps"])
+        self.assertGreater(result.economy[3]["provider_cost"], result.economy[0]["provider_cost"])
+        self.assertGreater(result.totals["providers_negative_pnl"], 0)
+
+    def test_provider_economic_churn_exits_capacity_and_repairs(self):
+        config = SimConfig(
+            scenario="provider-economic-churn",
+            seed=91,
+            providers=80,
+            users=100,
+            deals=36,
+            epochs=12,
+            provider_capacity_min=10,
+            provider_capacity_max=14,
+            evict_after_missed_epochs=1,
+            repair_epochs=1,
+            max_repairs_started_per_epoch=16,
+            provider_storage_cost_per_slot_epoch=0.01,
+            provider_bandwidth_cost_per_retrieval=0.001,
+            provider_fixed_cost_per_epoch=0.02,
+            base_reward_per_slot=0.04,
+            provider_churn_enabled=True,
+            provider_churn_after_epochs=2,
+            provider_churn_max_providers_per_epoch=2,
+            provider_churn_min_remaining_providers=72,
+            provider_cost_shocks=(
+                {
+                    "start_epoch": 3,
+                    "end_epoch": 12,
+                    "provider_ids": [f"sp-{index:03d}" for index in range(8)],
+                    "fixed_cost_multiplier_bps": 80000,
+                    "storage_cost_multiplier_bps": 80000,
+                    "bandwidth_cost_multiplier_bps": 40000,
+                },
+            ),
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertEqual(8, result.totals["provider_churn_events"])
+        self.assertEqual(8, result.totals["churned_providers"])
+        self.assertGreater(result.totals["final_exited_provider_capacity"], 0)
+        self.assertGreater(result.totals["max_churned_assigned_slots"], 0)
+        self.assertGreater(result.totals["repairs_started"], 0)
+        self.assertEqual(0, result.totals["data_loss_events"])
+        self.assertEqual(1.0, result.totals["success_rate"])
+        self.assertEqual([2, 2, 2, 2], [row["provider_churn_events"] for row in result.economy if row["provider_churn_events"]])
+
+    def test_provider_supply_entry_promotes_reserve_capacity(self):
+        fixture = Path(__file__).with_name("scenarios") / "provider_supply_entry.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(8, result.totals["provider_entries"])
+        self.assertEqual(8, result.totals["provider_probation_promotions"])
+        self.assertEqual(8, result.totals["entered_active_providers"])
+        self.assertEqual(0, result.totals["reserve_providers"])
+        self.assertEqual(0, result.totals["probationary_providers"])
+        self.assertGreater(result.totals["final_active_provider_capacity"], 850)
+        self.assertTrue(any(row["provider_entries"] for row in result.economy))
+        self.assertTrue(any(row["provider_probation_promotions"] for row in result.economy))
+        self.assertTrue(any(row["lifecycle_state"] == "ACTIVE" and row["entered_epoch"] > 0 for row in result.providers))
+
+    def test_provider_bond_headroom_repairs_underbonded_slots(self):
+        fixture = Path(__file__).with_name("scenarios") / "provider_bond_headroom.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreaterEqual(result.totals["provider_underbonded_repairs"], 1)
+        self.assertGreaterEqual(result.totals["max_underbonded_providers"], 1)
+        self.assertGreaterEqual(result.totals["max_underbonded_assigned_slots"], 1)
+        self.assertEqual(0, result.totals["final_underbonded_assigned_slots"])
+        provider = next(row for row in result.providers if row["provider_id"] == "sp-000")
+        self.assertEqual(0, provider["assigned_slots"])
+        self.assertEqual(1, provider["underbonded"])
+        self.assertLess(provider["bond_headroom"], 0)
+        self.assertTrue(any(row["reason"] == "provider_underbonded" for row in result.evidence))
+
+    def test_staged_upload_grief_bounds_provisional_generation_pressure(self):
+        fixture = Path(__file__).with_name("scenarios") / "staged_upload_grief.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(240, result.totals["staged_upload_attempts"])
+        self.assertGreater(result.totals["staged_upload_rejections"], 0)
+        self.assertGreater(result.totals["staged_upload_cleaned"], 0)
+        self.assertLessEqual(result.totals["max_staged_upload_pending_generations"], 36)
+        self.assertLessEqual(result.totals["max_staged_upload_pending_mdus"], 72)
+        self.assertEqual(0, result.totals["repairs_started"])
+        self.assertEqual(0, result.totals["data_loss_events"])
+        self.assertTrue(any(row["reason"] == "staged_upload_preflight_rejected" for row in result.evidence))
+        self.assertTrue(any(row["reason"] == "staged_upload_retention_cleanup" for row in result.evidence))
+        self.assertIn("staged_upload_pending_generations", result.economy[0])
+
+    def test_elasticity_overlay_scaleup_adds_temporary_overflow_routes(self):
+        fixture = Path(__file__).with_name("scenarios") / "elasticity_overlay_scaleup.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreater(result.totals["elasticity_overlay_activations"], 0)
+        self.assertGreater(result.totals["elasticity_overlay_serves"], 0)
+        self.assertGreater(result.totals["elasticity_overlay_expired"], 0)
+        self.assertGreater(result.totals["max_elasticity_overlay_ready"], 0)
+        self.assertEqual(0, result.totals["elasticity_overlay_rejections"])
+        self.assertEqual(0, result.totals["data_loss_events"])
+        self.assertTrue(any(row["reason"] == "elasticity_overlay_activated" for row in result.evidence))
+        self.assertIn("elasticity_overlay_active", result.economy[0])
+
+    def test_retrieval_demand_shock_tracks_price_oscillation(self):
+        config = SimConfig(
+            scenario="retrieval-demand-shock",
+            seed=83,
+            providers=64,
+            users=80,
+            deals=32,
+            epochs=6,
+            dynamic_pricing=True,
+            retrieval_target_per_epoch=100,
+            retrieval_price_per_slot=0.01,
+            provider_bandwidth_capacity_min=200,
+            provider_bandwidth_capacity_max=250,
+            retrieval_demand_shocks=(
+                {
+                    "start_epoch": 2,
+                    "end_epoch": 4,
+                    "multiplier_bps": 30000,
+                },
+            ),
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertEqual(480, result.totals["retrieval_latent_attempts"])
+        self.assertEqual(960, result.totals["retrieval_attempts"])
+        self.assertEqual(3, result.totals["retrieval_demand_shock_active"])
+        self.assertEqual(30000, result.totals["max_retrieval_demand_multiplier_bps"])
+        self.assertGreater(result.totals["max_retrieval_price"], result.totals["min_retrieval_price"])
+        self.assertLessEqual(result.totals["retrieval_price_direction_changes"], 2)
+
+    def test_viral_public_retrieval_uses_sponsored_session_accounting(self):
+        fixture = Path(__file__).with_name("scenarios") / "viral_public_retrieval.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(result.totals["retrieval_attempts"], result.totals["sponsored_retrieval_attempts"])
+        self.assertGreater(result.totals["sponsored_retrieval_spent"], 0)
+        self.assertEqual(0, result.totals["owner_funded_retrieval_attempts"])
+        self.assertEqual(0.0, result.totals["owner_retrieval_escrow_debited"])
+        self.assertIn("sponsored_retrieval_base_spent", result.economy[0])
+
+    def test_storage_escrow_close_refunds_unearned_lockin(self):
+        fixture = Path(__file__).with_name("scenarios") / "storage_escrow_close_refund.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreater(result.totals["storage_escrow_locked"], 0)
+        self.assertGreater(result.totals["storage_escrow_earned"], 0)
+        self.assertGreater(result.totals["storage_escrow_refunded"], 0)
+        self.assertEqual(0.0, result.totals["storage_escrow_outstanding"])
+        self.assertEqual(4, result.totals["final_closed_deals"])
+        self.assertEqual(4, result.totals["deals_closed"])
+        self.assertGreater(result.totals["closed_retrieval_attempts"], 0)
+        self.assertEqual(0, result.totals["unavailable_reads"])
+        self.assertGreater(result.totals["storage_fee_provider_payouts"], 0)
+        self.assertEqual(0.0, result.totals["storage_fee_burned"])
+        self.assertTrue(any(row["reason"] == "deal_storage_escrow_closed" for row in result.evidence))
+        self.assertIn("storage_escrow_outstanding", result.economy[0])
+
+    def test_storage_escrow_burns_noncompliant_slot_share(self):
+        fixture = Path(__file__).with_name("scenarios") / "storage_escrow_noncompliance_burn.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreater(result.totals["storage_fee_burned"], 0)
+        self.assertGreater(result.totals["storage_fee_provider_payouts"], result.totals["storage_fee_burned"])
+        self.assertEqual(0.0, result.totals["storage_escrow_outstanding"])
+        self.assertGreater(result.totals["quota_misses"], 0)
+        self.assertTrue(any(row["reason"] == "quota_shortfall" for row in result.evidence))
+
+    def test_storage_escrow_auto_expires_fully_earned_deals(self):
+        fixture = Path(__file__).with_name("scenarios") / "storage_escrow_expiry.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(0, result.totals["final_open_deals"])
+        self.assertEqual(result.config["deals"], result.totals["final_expired_deals"])
+        self.assertEqual(result.config["deals"], result.totals["deals_expired"])
+        self.assertEqual(0.0, result.totals["storage_escrow_outstanding"])
+        self.assertTrue(any(row["reason"] == "deal_storage_escrow_expired" for row in result.evidence))
+
+    def test_expired_retrievals_are_rejected_without_availability_loss(self):
+        fixture = Path(__file__).with_name("scenarios") / "expired_retrieval_rejection.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(320, result.totals["retrieval_attempts"])
+        self.assertEqual(160, result.totals["expired_retrieval_attempts"])
+        self.assertEqual(0, result.totals["unavailable_reads"])
+        self.assertEqual(0.0, result.totals["owner_retrieval_escrow_debited"])
+        self.assertEqual(result.config["deals"], result.totals["final_expired_deals"])
+        self.assertTrue(any(row["reason"] == "deal_storage_escrow_expired" for row in result.evidence))
+
+    def test_closed_retrievals_are_rejected_without_availability_loss(self):
+        fixture = Path(__file__).with_name("scenarios") / "closed_retrieval_rejection.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(320, result.totals["retrieval_attempts"])
+        self.assertEqual(160, result.totals["closed_retrieval_attempts"])
+        self.assertEqual(0, result.totals["unavailable_reads"])
+        self.assertEqual(0.0, result.totals["owner_retrieval_escrow_debited"])
+        self.assertEqual(result.config["deals"], result.totals["final_closed_deals"])
+        self.assertGreater(result.totals["storage_escrow_refunded"], 0)
+        self.assertTrue(any(row["reason"] == "deal_storage_escrow_closed" for row in result.evidence))
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)
@@ -436,9 +776,17 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "signals.json").exists())
             self.assertTrue((report_dir / "graphs" / "retrieval_success_rate.svg").exists())
             self.assertTrue((report_dir / "graphs" / "price_trajectory.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "storage_demand.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "retrieval_demand.svg").exists())
             self.assertTrue((report_dir / "graphs" / "saturation_and_repair.svg").exists())
             self.assertTrue((report_dir / "graphs" / "capacity_utilization.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "provider_cost_shock.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "provider_churn.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "provider_supply.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "provider_bond_headroom.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "storage_escrow_lifecycle.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "repair_readiness.svg").exists())
             self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
             self.assertTrue((report_dir / "graphs" / "hot_retrieval_routing.svg").exists())
             self.assertTrue((report_dir / "graphs" / "performance_tiers.svg").exists())
@@ -447,7 +795,10 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "evidence_spam.svg").exists())
             self.assertTrue((report_dir / "graphs" / "audit_budget.svg").exists())
             self.assertTrue((report_dir / "graphs" / "audit_backlog.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "sponsored_retrieval_accounting.svg").exists())
             self.assertTrue((report_dir / "graphs" / "elasticity_spend.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "elasticity_overlay_routes.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "staged_upload_pressure.svg").exists())
             graph_text = (report_dir / "graphs" / "retrieval_success_rate.svg").read_text(encoding="utf-8")
             self.assertNotIn("Scale: x=epoch", graph_text)
             self.assertIn('y1="52"', graph_text)
@@ -466,11 +817,19 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Retrieval Success Rate](graphs/retrieval_success_rate.svg)", report_text)
             self.assertIn("![Slot State Transitions](graphs/slot_states.svg)", report_text)
             self.assertIn("![Provider P&L](graphs/provider_pnl.svg)", report_text)
+            self.assertIn("![Provider Cost Shock](graphs/provider_cost_shock.svg)", report_text)
+            self.assertIn("![Provider Churn](graphs/provider_churn.svg)", report_text)
+            self.assertIn("![Provider Supply Entry](graphs/provider_supply.svg)", report_text)
+            self.assertIn("![Provider Bond Headroom](graphs/provider_bond_headroom.svg)", report_text)
+            self.assertIn("![Storage Escrow Lifecycle](graphs/storage_escrow_lifecycle.svg)", report_text)
             self.assertIn("![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)", report_text)
             self.assertIn("![Price Trajectory](graphs/price_trajectory.svg)", report_text)
+            self.assertIn("![Retrieval Demand](graphs/retrieval_demand.svg)", report_text)
+            self.assertIn("![Storage Demand](graphs/storage_demand.svg)", report_text)
             self.assertIn("![Saturation And Repair Pressure](graphs/saturation_and_repair.svg)", report_text)
             self.assertIn("![Capacity Utilization](graphs/capacity_utilization.svg)", report_text)
             self.assertIn("![Repair Backlog](graphs/repair_backlog.svg)", report_text)
+            self.assertIn("![Repair Readiness](graphs/repair_readiness.svg)", report_text)
             self.assertIn("![High-Bandwidth Promotion](graphs/high_bandwidth_promotion.svg)", report_text)
             self.assertIn("![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)", report_text)
             self.assertIn("![Performance Tiers](graphs/performance_tiers.svg)", report_text)
@@ -479,11 +838,21 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Evidence Spam Economics](graphs/evidence_spam.svg)", report_text)
             self.assertIn("![Audit Budget](graphs/audit_budget.svg)", report_text)
             self.assertIn("![Audit Backlog](graphs/audit_backlog.svg)", report_text)
+            self.assertIn("![Sponsored Retrieval Accounting](graphs/sponsored_retrieval_accounting.svg)", report_text)
             self.assertIn("![Elasticity Spend](graphs/elasticity_spend.svg)", report_text)
+            self.assertIn("![Elasticity Overlay Routes](graphs/elasticity_overlay_routes.svg)", report_text)
+            self.assertIn("![Staged Upload Pressure](graphs/staged_upload_pressure.svg)", report_text)
             signal_text = (report_dir / "signals.json").read_text(encoding="utf-8")
             self.assertIn("availability", signal_text)
             self.assertIn("concentration", signal_text)
+            self.assertIn("churned_providers", signal_text)
+            self.assertIn("entered_active_providers", signal_text)
+            self.assertIn("max_underbonded_providers", signal_text)
+            self.assertIn("repair_timeouts", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)
+            self.assertIn("sponsored_retrieval_spent", signal_text)
+            self.assertIn("elasticity_overlay_activations", signal_text)
+            self.assertIn("staged_uploads", signal_text)
             risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")
             self.assertIn("## Material Risks", risk_text)
             graduation_text = (report_dir / "graduation.md").read_text(encoding="utf-8")

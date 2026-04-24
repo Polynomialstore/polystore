@@ -1,0 +1,135 @@
+{
+  "name": "provider-cost-shock-controls",
+  "description": "Sensitivity sweep for provider cost-shock severity, reward buffer, and dynamic-pricing response.",
+  "base_scenario": "../scenarios/provider_cost_shock.yaml",
+  "cases": [
+    {
+      "name": "baseline-cost-shock"
+    },
+    {
+      "name": "mild-shock-with-buffer",
+      "config": {
+        "base_reward_per_slot": 0.04,
+        "provider_cost_shocks": [
+          {
+            "start_epoch": 5,
+            "end_epoch": 10,
+            "fixed_cost_multiplier_bps": 18000,
+            "storage_cost_multiplier_bps": 25000,
+            "bandwidth_cost_multiplier_bps": 15000
+          }
+        ]
+      },
+      "assertions": {
+        "min_provider_cost_shock_active": 6,
+        "min_max_provider_cost_shocked_providers": 64,
+        "min_max_provider_cost_shock_storage_multiplier_bps": 25000,
+        "min_providers_negative_pnl": 0,
+        "max_data_loss_events": 0,
+        "max_unavailable_reads": 0
+      }
+    },
+    {
+      "name": "severe-storage-cost-shock",
+      "config": {
+        "provider_cost_shocks": [
+          {
+            "start_epoch": 5,
+            "end_epoch": 10,
+            "fixed_cost_multiplier_bps": 30000,
+            "storage_cost_multiplier_bps": 90000,
+            "bandwidth_cost_multiplier_bps": 20000
+          }
+        ]
+      },
+      "assertions": {
+        "min_provider_cost_shock_active": 6,
+        "min_max_provider_cost_shocked_providers": 64,
+        "min_max_provider_cost_shock_storage_multiplier_bps": 90000,
+        "min_providers_negative_pnl": 1,
+        "max_data_loss_events": 0,
+        "max_unavailable_reads": 0
+      }
+    },
+    {
+      "name": "bandwidth-heavy-cost-shock",
+      "config": {
+        "retrievals_per_user_per_epoch": 3,
+        "provider_bandwidth_cost_per_retrieval": 0.002,
+        "provider_cost_shocks": [
+          {
+            "start_epoch": 5,
+            "end_epoch": 10,
+            "fixed_cost_multiplier_bps": 25000,
+            "storage_cost_multiplier_bps": 35000,
+            "bandwidth_cost_multiplier_bps": 80000
+          }
+        ]
+      },
+      "assertions": {
+        "min_provider_cost_shock_active": 6,
+        "min_max_provider_cost_shocked_providers": 64,
+        "min_max_provider_cost_shock_storage_multiplier_bps": 35000,
+        "min_max_provider_cost_shock_bandwidth_multiplier_bps": 80000,
+        "min_providers_negative_pnl": 1,
+        "max_data_loss_events": 0,
+        "max_unavailable_reads": 0
+      }
+    },
+    {
+      "name": "weak-reward-buffer",
+      "config": {
+        "base_reward_per_slot": 0.012
+      },
+      "assertions": {
+        "min_provider_cost_shock_active": 6,
+        "min_max_provider_cost_shocked_providers": 64,
+        "min_max_provider_cost_shock_storage_multiplier_bps": 50000,
+        "min_providers_negative_pnl": 1,
+        "max_data_loss_events": 0,
+        "max_unavailable_reads": 0
+      }
+    },
+    {
+      "name": "stronger-reward-buffer",
+      "config": {
+        "base_reward_per_slot": 0.055
+      },
+      "assertions": {
+        "min_provider_cost_shock_active": 6,
+        "min_max_provider_cost_shocked_providers": 64,
+        "min_max_provider_cost_shock_storage_multiplier_bps": 50000,
+        "min_providers_negative_pnl": 0,
+        "max_data_loss_events": 0,
+        "max_unavailable_reads": 0
+      }
+    },
+    {
+      "name": "slow-price-response",
+      "config": {
+        "dynamic_pricing_max_step_bps": 50
+      },
+      "assertions": {
+        "min_provider_cost_shock_active": 6,
+        "min_max_provider_cost_shocked_providers": 64,
+        "min_max_provider_cost_shock_storage_multiplier_bps": 50000,
+        "min_providers_negative_pnl": 1,
+        "max_data_loss_events": 0,
+        "max_unavailable_reads": 0
+      }
+    },
+    {
+      "name": "faster-price-response",
+      "config": {
+        "dynamic_pricing_max_step_bps": 800
+      },
+      "assertions": {
+        "min_provider_cost_shock_active": 6,
+        "min_max_provider_cost_shocked_providers": 64,
+        "min_max_provider_cost_shock_storage_multiplier_bps": 50000,
+        "max_data_loss_events": 0,
+        "max_unavailable_reads": 0
+      }
+    }
+  ]
+}

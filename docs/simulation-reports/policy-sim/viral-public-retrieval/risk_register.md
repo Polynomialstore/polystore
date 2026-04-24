@@ -1,6 +1,6 @@
 # Risk Register: Viral Public Retrieval Spike
 
-Model a legitimate public-demand spike. The system should pay providers for real bandwidth, burn the configured fees, and avoid treating popularity as misbehavior.
+Model a legitimate public-demand spike. The system should pay providers for real bandwidth, burn the configured fees, avoid treating popularity as misbehavior, and isolate deal-owner escrow from sponsored public demand.
 
 ## Material Risks
 
@@ -15,6 +15,14 @@ Model a legitimate public-demand spike. The system should pay providers for real
 - Failed assertions: `0`
 - Providers with negative P&L: `0`
 - Elasticity rejections: `0`
+- Elasticity overlay activations/serves/expired: `0` / `0` / `0`
+- Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
+- Sponsored retrieval attempts/spend: `9000` / `1125.0000`
+- Owner retrieval escrow debited: `0.0000`
+- Wash retrieval accounted spend/net gain: `1125.0000` / `-99.0000`
+- Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
+- Storage fee provider payout/burned: `0.0000` / `0.0000`
+- Final open/closed/expired deals: `48` / `0` / `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
@@ -28,6 +36,7 @@ Model a legitimate public-demand spike. The system should pay providers for real
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Repair readiness timeouts: `0`
 - Audit budget demand: `0.0000`
 - Audit budget spent: `0.0000`
 - Audit budget backlog: `0.0000`
@@ -36,6 +45,28 @@ Model a legitimate public-demand spike. The system should pay providers for real
 - Evidence spam bond burned: `0.0000`
 - Evidence spam bounty paid: `0.0000`
 - Evidence spam net gain: `0.0000`
+- Provider cost shock active epochs: `0`
+- Max cost-shocked providers: `0`
+- Provider churn events: `0`
+- Churned providers: `0`
+- Provider entries/promotions: `0` / `0`
+- Reserve/probationary/entered-active providers: `0` / `0` / `0`
+- Underbonded repairs: `0`
+- Final/peak underbonded providers: `0` / `0`
+- Final/peak underbonded assigned slots: `0` / `0`
+- Final active/exited/reserve provider capacity: `1536` / `0` / `0`
+- Retrieval demand shock active epochs: `0`
+- Retrieval price direction changes: `0`
+- Latent new deal requests: `0`
+- Effective new deal requests: `0`
+- New deals accepted: `0`
+- New deals suppressed by price elasticity: `0`
+- New deals rejected by price: `0`
+- New deals rejected by capacity: `0`
+- Staged upload attempts/accepted/committed: `0` / `0` / `0`
+- Staged upload rejections/cleaned: `0` / `0`
+- Final/peak staged pending generations: `0` / `0`
+- Final/peak staged pending MDUs: `0` / `0`
 
 ## Review Questions
 

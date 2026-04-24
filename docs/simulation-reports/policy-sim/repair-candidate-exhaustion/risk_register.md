@@ -6,7 +6,7 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 
 | Risk | Severity | Evidence | Impact | Recommended Follow-Up |
 |---|---|---|---|---|
-| Repair coordination bottleneck | `medium` | 40 repair backoffs across 8 attempts; 16 cooldowns and 16 attempt-cap events. | The network may detect bad slots faster than it can safely heal them. | Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions. |
+| Repair coordination bottleneck | `medium` | 40 repair backoffs across 8 attempts; 16 cooldowns and 16 attempt-cap events; 0 readiness timeouts. | The network may detect bad slots faster than it can safely heal them. | Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions. |
 
 ## Evidence Counters
 
@@ -15,6 +15,14 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 - Failed assertions: `0`
 - Providers with negative P&L: `0`
 - Elasticity rejections: `0`
+- Elasticity overlay activations/serves/expired: `0` / `0` / `0`
+- Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
+- Sponsored retrieval attempts/spend: `0` / `0.0000`
+- Owner retrieval escrow debited: `0.0000`
+- Wash retrieval accounted spend/net gain: `0.6400` / `48.0000`
+- Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
+- Storage fee provider payout/burned: `0.0000` / `0.0000`
+- Final open/closed/expired deals: `8` / `0` / `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
@@ -28,6 +36,7 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 - Repair backoffs: `40`
 - Repair cooldowns: `16`
 - Repair attempt-cap events: `16`
+- Repair readiness timeouts: `0`
 - Audit budget demand: `0.4000`
 - Audit budget spent: `0.4000`
 - Audit budget backlog: `0.0000`
@@ -36,6 +45,28 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 - Evidence spam bond burned: `0.0000`
 - Evidence spam bounty paid: `0.0000`
 - Evidence spam net gain: `0.0000`
+- Provider cost shock active epochs: `0`
+- Max cost-shocked providers: `0`
+- Provider churn events: `0`
+- Churned providers: `0`
+- Provider entries/promotions: `0` / `0`
+- Reserve/probationary/entered-active providers: `0` / `0` / `0`
+- Underbonded repairs: `0`
+- Final/peak underbonded providers: `0` / `0`
+- Final/peak underbonded assigned slots: `0` / `0`
+- Final active/exited/reserve provider capacity: `96` / `0` / `0`
+- Retrieval demand shock active epochs: `0`
+- Retrieval price direction changes: `0`
+- Latent new deal requests: `0`
+- Effective new deal requests: `0`
+- New deals accepted: `0`
+- New deals suppressed by price elasticity: `0`
+- New deals rejected by price: `0`
+- New deals rejected by capacity: `0`
+- Staged upload attempts/accepted/committed: `0` / `0` / `0`
+- Staged upload rejections/cleaned: `0` / `0`
+- Final/peak staged pending generations: `0` / `0`
+- Final/peak staged pending MDUs: `0` / `0`
 
 ## Review Questions
 

@@ -1,0 +1,41 @@
+{
+  "name": "elasticity-overlay-scaleup",
+  "description": "User-funded overflow overlays add ready retrieval routes under sustained hot demand and age out after the spend window.",
+  "config": {
+    "scenario": "elasticity-overlay-scaleup",
+    "seed": 71,
+    "providers": 36,
+    "users": 120,
+    "deals": 3,
+    "epochs": 8,
+    "retrievals_per_user_per_epoch": 2,
+    "route_attempt_limit": 20,
+    "provider_bandwidth_capacity_min": 45,
+    "provider_bandwidth_capacity_max": 65,
+    "hot_retrieval_bps": 8000,
+    "high_bandwidth_promotion_enabled": true,
+    "high_bandwidth_capacity_threshold": 60,
+    "high_bandwidth_min_retrievals": 8,
+    "high_bandwidth_min_success_rate_bps": 9500,
+    "high_bandwidth_max_saturation_bps": 4000,
+    "high_bandwidth_routing_enabled": true,
+    "elasticity_trigger_retrievals_per_epoch": 200,
+    "elasticity_base_cost": 1.0,
+    "elasticity_max_spend": 60.0,
+    "elasticity_overlay_enabled": true,
+    "elasticity_overlay_providers_per_epoch": 6,
+    "elasticity_overlay_max_providers_per_deal": 10,
+    "elasticity_overlay_ready_delay_epochs": 1,
+    "elasticity_overlay_ttl_epochs": 5
+  },
+  "assertions": {
+    "min_success_rate": 0.9,
+    "min_elasticity_overlay_activations": 1,
+    "min_elasticity_overlay_serves": 1,
+    "min_elasticity_overlay_expired": 1,
+    "min_elasticity_spent": 1.0,
+    "max_elasticity_overlay_rejections": 0,
+    "max_data_loss_events": 0,
+    "max_providers_over_capacity": 0
+  }
+}

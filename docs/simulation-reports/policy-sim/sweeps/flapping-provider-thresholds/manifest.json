@@ -1,0 +1,71 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/flapping_provider.yaml",
+  "case_count": 5,
+  "cases": [
+    {
+      "case": "baseline-threshold3",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "flapping-provider",
+      "seed": 31,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "long-threshold5-no-repair",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "flapping-provider",
+      "seed": 31,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "threshold2-repair-churn-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "flapping-provider",
+      "seed": 31,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "threshold1-aggressive-repair-churn-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "flapping-provider",
+      "seed": 31,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "two-flapping-providers-threshold3",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "flapping-provider",
+      "seed": 31,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for intermittent provider outage thresholds, repair-churn risk, and suspect evidence visibility.",
+  "name": "flapping-provider-thresholds",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/flapping-provider-thresholds"
+}

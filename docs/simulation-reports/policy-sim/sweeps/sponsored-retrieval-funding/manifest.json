@@ -1,0 +1,59 @@
+{
+  "assertion_failures": 2,
+  "base_scenario": "tools/policy_sim/scenarios/viral_public_retrieval.yaml",
+  "case_count": 3,
+  "cases": [
+    {
+      "case": "full-sponsored",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "viral-public-retrieval",
+      "seed": 19,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "half-sponsored-owner-debit",
+      "data_loss_events": 0,
+      "failed_assertions": [
+        "exact_owner_retrieval_escrow_debited"
+      ],
+      "scenario": "viral-public-retrieval",
+      "seed": 19,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "unsponsored-owner-debit",
+      "data_loss_events": 0,
+      "failed_assertions": [
+        "min_sponsored_retrieval_attempts",
+        "min_sponsored_retrieval_spent",
+        "exact_owner_retrieval_escrow_debited"
+      ],
+      "scenario": "viral-public-retrieval",
+      "seed": 19,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for public retrieval demand funded by sponsor sessions versus owner deal escrow.",
+  "name": "sponsored-retrieval-funding",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/sponsored-retrieval-funding"
+}

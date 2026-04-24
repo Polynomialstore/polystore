@@ -1,0 +1,46 @@
+{
+  "name": "retrieval-demand-shock",
+  "description": "A temporary retrieval demand spike tests retrieval-price response and oscillation bounds.",
+  "config": {
+    "scenario": "retrieval-demand-shock",
+    "seed": 83,
+    "providers": 96,
+    "users": 300,
+    "deals": 72,
+    "epochs": 12,
+    "retrievals_per_user_per_epoch": 1,
+    "dynamic_pricing": true,
+    "retrieval_target_per_epoch": 350,
+    "dynamic_pricing_max_step_bps": 1000,
+    "storage_price": 1.0,
+    "retrieval_price_per_slot": 0.01,
+    "retrieval_price_min": 0.005,
+    "retrieval_price_max": 0.05,
+    "provider_bandwidth_capacity_min": 300,
+    "provider_bandwidth_capacity_max": 400,
+    "provider_storage_cost_per_slot_epoch": 0.008,
+    "provider_bandwidth_cost_per_retrieval": 0.001,
+    "provider_fixed_cost_per_epoch": 0.03,
+    "base_reward_per_slot": 0.025,
+    "retrieval_demand_shocks": [
+      {
+        "start_epoch": 2,
+        "end_epoch": 5,
+        "multiplier_bps": 40000
+      }
+    ]
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_unavailable_reads": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0,
+    "min_retrieval_demand_shock_active": 4,
+    "min_max_retrieval_demand_multiplier_bps": 40000,
+    "min_retrieval_latent_attempts": 3600,
+    "min_retrieval_attempts": 7000,
+    "min_max_retrieval_price": 0.011,
+    "max_retrieval_price_direction_changes": 2,
+    "max_final_retrieval_price": 0.05
+  }
+}

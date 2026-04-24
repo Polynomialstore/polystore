@@ -1,0 +1,27 @@
+{
+  "name": "invalid-synthetic-proof",
+  "description": "A provider submits invalid synthetic/liveness proofs without also corrupting retrieval bytes.",
+  "config": {
+    "scenario": "invalid-synthetic-proof",
+    "seed": 47,
+    "providers": 48,
+    "users": 80,
+    "deals": 24,
+    "epochs": 10,
+    "enforcement_mode": "SLASH_SIMULATED"
+  },
+  "faults": [
+    "invalid-proof:sp-000:1.0"
+  ],
+  "assertions": {
+    "min_success_rate": 0.95,
+    "min_invalid_proofs": 1,
+    "min_repairs_started": 1,
+    "min_repairs_ready": 1,
+    "min_repairs_completed": 1,
+    "min_provider_slashed": 1.0,
+    "exact_corrupt_responses": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

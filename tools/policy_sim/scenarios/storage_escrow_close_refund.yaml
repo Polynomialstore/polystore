@@ -1,0 +1,34 @@
+{
+  "name": "storage-escrow-close-refund",
+  "description": "Committed storage locks upfront escrow, earns provider storage fees over service epochs, and refunds unearned escrow when a subset of deals closes early.",
+  "config": {
+    "scenario": "storage-escrow-close-refund",
+    "seed": 101,
+    "providers": 48,
+    "users": 80,
+    "deals": 12,
+    "epochs": 8,
+    "retrievals_per_user_per_epoch": 1,
+    "storage_price": 0.05,
+    "storage_lockin_enabled": true,
+    "deal_duration_epochs": 8,
+    "deal_close_epoch": 4,
+    "deal_close_count": 4,
+    "base_reward_per_slot": 0.02,
+    "provider_storage_cost_per_slot_epoch": 0.005,
+    "provider_fixed_cost_per_epoch": 0.01
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_data_loss_events": 0,
+    "min_storage_escrow_locked": 900.0,
+    "min_storage_escrow_earned": 760.0,
+    "min_storage_escrow_refunded": 150.0,
+    "max_storage_escrow_outstanding": 0.0,
+    "min_storage_fee_provider_payouts": 760.0,
+    "max_storage_fee_burned": 0.0,
+    "min_closed_retrieval_attempts": 100,
+    "exact_final_closed_deals": 4,
+    "exact_deals_closed": 4
+  }
+}

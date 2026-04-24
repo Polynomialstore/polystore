@@ -1,0 +1,76 @@
+{
+  "name": "storage-escrow-close-refund",
+  "description": "Sensitivity sweep for storage lock-in, earned storage fees, early close refunds, and end-of-run outstanding escrow.",
+  "base_scenario": "../scenarios/storage_escrow_close_refund.yaml",
+  "cases": [
+    {
+      "name": "full-duration-no-close",
+      "config": {
+        "deal_close_epoch": 0,
+        "deal_close_count": 0,
+        "deal_close_bps": 0
+      },
+      "assertions": {
+        "min_storage_escrow_locked": 900.0,
+        "min_storage_escrow_earned": 900.0,
+        "min_storage_escrow_refunded": 0.0,
+        "max_storage_escrow_refunded": 0.0,
+        "max_storage_escrow_outstanding": 0.0,
+        "min_storage_fee_provider_payouts": 900.0,
+        "min_closed_retrieval_attempts": 0,
+        "max_closed_retrieval_attempts": 0,
+        "exact_final_closed_deals": 0,
+        "exact_deals_closed": 0
+      }
+    },
+    {
+      "name": "baseline-count4-close-epoch4"
+    },
+    {
+      "name": "early-count4-close-epoch2",
+      "config": {
+        "deal_close_epoch": 2
+      },
+      "assertions": {
+        "min_storage_escrow_earned": 680.0,
+        "min_storage_escrow_refunded": 220.0,
+        "max_storage_escrow_outstanding": 0.0,
+        "min_storage_fee_provider_payouts": 680.0,
+        "exact_final_closed_deals": 4,
+        "exact_deals_closed": 4
+      }
+    },
+    {
+      "name": "half-close-bps-epoch4",
+      "config": {
+        "deal_close_epoch": 4,
+        "deal_close_count": 0,
+        "deal_close_bps": 5000
+      },
+      "assertions": {
+        "min_storage_escrow_earned": 680.0,
+        "min_storage_escrow_refunded": 220.0,
+        "max_storage_escrow_outstanding": 0.0,
+        "min_storage_fee_provider_payouts": 680.0,
+        "exact_final_closed_deals": 6,
+        "exact_deals_closed": 6
+      }
+    },
+    {
+      "name": "late-close-bps-epoch6",
+      "config": {
+        "deal_close_epoch": 6,
+        "deal_close_count": 0,
+        "deal_close_bps": 2500
+      },
+      "assertions": {
+        "min_storage_escrow_earned": 850.0,
+        "min_storage_escrow_refunded": 50.0,
+        "max_storage_escrow_outstanding": 0.0,
+        "min_closed_retrieval_attempts": 30,
+        "exact_final_closed_deals": 3,
+        "exact_deals_closed": 3
+      }
+    }
+  ]
+}

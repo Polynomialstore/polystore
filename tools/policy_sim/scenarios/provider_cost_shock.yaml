@@ -1,0 +1,40 @@
+{
+  "name": "provider-cost-shock",
+  "description": "Provider operating costs jump mid-run while the network remains technically available.",
+  "config": {
+    "scenario": "provider-cost-shock",
+    "seed": 71,
+    "providers": 64,
+    "users": 80,
+    "deals": 40,
+    "epochs": 10,
+    "retrievals_per_user_per_epoch": 1,
+    "provider_storage_cost_per_slot_epoch": 0.01,
+    "provider_bandwidth_cost_per_retrieval": 0.001,
+    "provider_fixed_cost_per_epoch": 0.05,
+    "base_reward_per_slot": 0.03,
+    "retrieval_price_per_slot": 0.01,
+    "dynamic_pricing": true,
+    "storage_target_utilization_bps": 4500,
+    "dynamic_pricing_max_step_bps": 250,
+    "provider_cost_shocks": [
+      {
+        "start_epoch": 5,
+        "end_epoch": 10,
+        "fixed_cost_multiplier_bps": 30000,
+        "storage_cost_multiplier_bps": 50000,
+        "bandwidth_cost_multiplier_bps": 20000
+      }
+    ]
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_unavailable_reads": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0,
+    "min_provider_cost_shock_active": 6,
+    "min_max_provider_cost_shocked_providers": 64,
+    "min_max_provider_cost_shock_storage_multiplier_bps": 50000,
+    "min_providers_negative_pnl": 1
+  }
+}

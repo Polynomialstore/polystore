@@ -1,0 +1,83 @@
+{
+  "name": "underpriced-storage-economics",
+  "description": "Sensitivity sweep for provider P&L under storage underpricing, user-funded storage fees, reward-only buffers, and storage-price floors.",
+  "base_scenario": "../scenarios/underpriced_storage.yaml",
+  "cases": [
+    {
+      "name": "baseline-no-storage-fee"
+    },
+    {
+      "name": "low-storage-fee-still-negative",
+      "config": {
+        "storage_lockin_enabled": true,
+        "deal_duration_epochs": 8,
+        "storage_price": 0.005
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_providers_negative_pnl": 1,
+        "max_data_loss_events": 0,
+        "min_storage_fee_provider_payouts": 100.0,
+        "max_storage_fee_burned": 0.0
+      }
+    },
+    {
+      "name": "near-floor-storage-fee-recovers",
+      "config": {
+        "storage_lockin_enabled": true,
+        "deal_duration_epochs": 8,
+        "storage_price": 0.02
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_providers_negative_pnl": 0,
+        "max_providers_negative_pnl": 0,
+        "max_data_loss_events": 0,
+        "min_storage_fee_provider_payouts": 700.0,
+        "max_storage_fee_burned": 0.0
+      }
+    },
+    {
+      "name": "higher-storage-fee-positive-pnl",
+      "config": {
+        "storage_lockin_enabled": true,
+        "deal_duration_epochs": 8,
+        "storage_price": 0.03
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_providers_negative_pnl": 0,
+        "max_providers_negative_pnl": 0,
+        "max_data_loss_events": 0,
+        "min_storage_fee_provider_payouts": 1000.0,
+        "max_storage_fee_burned": 0.0
+      }
+    },
+    {
+      "name": "reward-buffer-alone-insufficient",
+      "config": {
+        "base_reward_per_slot": 0.08
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_providers_negative_pnl": 1,
+        "max_data_loss_events": 0,
+        "min_reward_paid": 100.0,
+        "max_storage_fee_provider_payouts": 0.0
+      }
+    },
+    {
+      "name": "retrieval-fee-buffer-alone-insufficient",
+      "config": {
+        "retrieval_price_per_slot": 0.05
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_providers_negative_pnl": 1,
+        "max_data_loss_events": 0,
+        "min_retrieval_provider_payouts": 100.0,
+        "max_storage_fee_provider_payouts": 0.0
+      }
+    }
+  ]
+}

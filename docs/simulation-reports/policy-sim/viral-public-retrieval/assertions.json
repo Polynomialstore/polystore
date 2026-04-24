@@ -18,5 +18,20 @@
     "detail": "retrieval_base_burned=45, required>=1",
     "name": "min_retrieval_base_burned",
     "passed": true
+  },
+  {
+    "detail": "sponsored_retrieval_attempts=9000, required>=1",
+    "name": "min_sponsored_retrieval_attempts",
+    "passed": true
+  },
+  {
+    "detail": "sponsored_retrieval_spent=1125, required>=1",
+    "name": "min_sponsored_retrieval_spent",
+    "passed": true
+  },
+  {
+    "detail": "owner_retrieval_escrow_debited=0, required=0",
+    "name": "exact_owner_retrieval_escrow_debited",
+    "passed": true
   }
 ]

@@ -1,0 +1,42 @@
+[
+  {
+    "detail": "success_rate=0.943229167, required>=0.9",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "elasticity_overlay_activations=48, required>=1",
+    "name": "min_elasticity_overlay_activations",
+    "passed": true
+  },
+  {
+    "detail": "elasticity_overlay_serves=393, required>=1",
+    "name": "min_elasticity_overlay_serves",
+    "passed": true
+  },
+  {
+    "detail": "elasticity_overlay_expired=18, required>=1",
+    "name": "min_elasticity_overlay_expired",
+    "passed": true
+  },
+  {
+    "detail": "elasticity_spent=48, required>=1",
+    "name": "min_elasticity_spent",
+    "passed": true
+  },
+  {
+    "detail": "elasticity_overlay_rejections=0, required<=0",
+    "name": "max_elasticity_overlay_rejections",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "providers_over_capacity=0, required<=0",
+    "name": "max_providers_over_capacity",
+    "passed": true
+  }
+]

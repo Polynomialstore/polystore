@@ -1,0 +1,98 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/wash_retrieval.yaml",
+  "case_count": 8,
+  "cases": [
+    {
+      "case": "baseline-sponsored-variable-funded",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "wash-retrieval",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "unsponsored-no-variable-funding-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "wash-retrieval",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "partial-owner-variable-funding-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "wash-retrieval",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "full-owner-variable-funded",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "wash-retrieval",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "zero-burn-sponsored-still-costly",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "wash-retrieval",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "zero-base-zero-burn-no-cost-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "wash-retrieval",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-burn-sponsored",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "wash-retrieval",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-volume-sponsored",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "wash-retrieval",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for requester-paid retrieval funding, burn rates, and wash-traffic profitability.",
+  "name": "wash-retrieval-economics",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/wash-retrieval-economics"
+}

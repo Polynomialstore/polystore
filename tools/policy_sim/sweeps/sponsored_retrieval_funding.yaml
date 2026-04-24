@@ -1,0 +1,22 @@
+{
+  "name": "sponsored-retrieval-funding",
+  "description": "Sensitivity sweep for public retrieval demand funded by sponsor sessions versus owner deal escrow.",
+  "base_scenario": "../scenarios/viral_public_retrieval.yaml",
+  "cases": [
+    {
+      "name": "full-sponsored"
+    },
+    {
+      "name": "half-sponsored-owner-debit",
+      "config": {
+        "sponsored_retrieval_bps": 5000
+      }
+    },
+    {
+      "name": "unsponsored-owner-debit",
+      "config": {
+        "sponsored_retrieval_bps": 0
+      }
+    }
+  ]
+}

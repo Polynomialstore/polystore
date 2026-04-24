@@ -1,0 +1,167 @@
+{
+  "name": "performance-market-latency-controls",
+  "description": "Sensitivity sweep for Hot-service latency tier windows, reward multipliers, jitter, routing, and slow-provider tails.",
+  "base_scenario": "../scenarios/performance_market_latency.yaml",
+  "cases": [
+    {
+      "name": "baseline-hot-latency"
+    },
+    {
+      "name": "tight-latency-tiers",
+      "config": {
+        "platinum_latency_ms": 60,
+        "gold_latency_ms": 140,
+        "silver_latency_ms": 250
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "max_data_loss_events": 0,
+        "min_platinum_serves": 1,
+        "min_gold_serves": 1,
+        "min_silver_serves": 1,
+        "min_fail_serves": 1,
+        "min_performance_reward_paid": 1,
+        "max_performance_fail_rate": 0.45,
+        "max_providers_over_capacity": 0,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1
+      }
+    },
+    {
+      "name": "loose-latency-tiers",
+      "config": {
+        "platinum_latency_ms": 120,
+        "gold_latency_ms": 240,
+        "silver_latency_ms": 360
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "max_data_loss_events": 0,
+        "min_platinum_serves": 1,
+        "min_gold_serves": 1,
+        "min_silver_serves": 1,
+        "max_fail_serves": 2000,
+        "min_performance_reward_paid": 1,
+        "max_performance_fail_rate": 0.04,
+        "max_providers_over_capacity": 0,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1
+      }
+    },
+    {
+      "name": "slow-provider-tail",
+      "config": {
+        "provider_latency_ms_max": 520,
+        "silver_latency_ms": 320
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "max_data_loss_events": 0,
+        "min_platinum_serves": 1,
+        "min_gold_serves": 1,
+        "min_silver_serves": 1,
+        "min_fail_serves": 1,
+        "min_performance_reward_paid": 1,
+        "max_performance_fail_rate": 0.5,
+        "max_providers_over_capacity": 0,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1
+      }
+    },
+    {
+      "name": "high-jitter-latency",
+      "config": {
+        "provider_latency_jitter_bps": 3000
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "max_data_loss_events": 0,
+        "min_platinum_serves": 1,
+        "min_gold_serves": 1,
+        "min_silver_serves": 1,
+        "min_fail_serves": 1,
+        "min_performance_reward_paid": 1,
+        "max_performance_fail_rate": 0.4,
+        "max_providers_over_capacity": 0,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1
+      }
+    },
+    {
+      "name": "higher-qos-reward",
+      "config": {
+        "performance_reward_per_serve": 0.006
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "max_data_loss_events": 0,
+        "min_platinum_serves": 1,
+        "min_gold_serves": 1,
+        "min_silver_serves": 1,
+        "min_fail_serves": 1,
+        "min_performance_reward_paid": 10,
+        "max_performance_fail_rate": 0.35,
+        "max_providers_over_capacity": 0,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1
+      }
+    },
+    {
+      "name": "fail-tier-pays-small",
+      "config": {
+        "fail_reward_multiplier_bps": 2500
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "max_data_loss_events": 0,
+        "min_platinum_serves": 1,
+        "min_gold_serves": 1,
+        "min_silver_serves": 1,
+        "min_fail_serves": 1,
+        "min_performance_reward_paid": 1,
+        "max_performance_fail_rate": 0.35,
+        "max_providers_over_capacity": 0,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1
+      }
+    },
+    {
+      "name": "high-bandwidth-routing-disabled",
+      "config": {
+        "high_bandwidth_routing_enabled": false
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "max_data_loss_events": 0,
+        "min_platinum_serves": 1,
+        "min_gold_serves": 1,
+        "min_silver_serves": 1,
+        "min_fail_serves": 1,
+        "min_performance_reward_paid": 1,
+        "max_performance_fail_rate": 0.35,
+        "max_providers_over_capacity": 0,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 0
+      }
+    },
+    {
+      "name": "low-route-attempt-limit",
+      "config": {
+        "route_attempt_limit": 8
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "max_data_loss_events": 0,
+        "min_platinum_serves": 1,
+        "min_gold_serves": 1,
+        "min_silver_serves": 1,
+        "min_fail_serves": 1,
+        "min_performance_reward_paid": 1,
+        "max_performance_fail_rate": 0.35,
+        "max_providers_over_capacity": 0,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1
+      }
+    }
+  ]
+}

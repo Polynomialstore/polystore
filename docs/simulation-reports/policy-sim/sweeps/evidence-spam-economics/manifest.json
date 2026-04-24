@@ -1,0 +1,98 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/deputy_evidence_spam.yaml",
+  "case_count": 8,
+  "cases": [
+    {
+      "case": "baseline-bond-burn-no-conviction",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "deputy-evidence-spam",
+      "seed": 41,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "low-bond-no-conviction",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "deputy-evidence-spam",
+      "seed": 41,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-bond-no-conviction",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "deputy-evidence-spam",
+      "seed": 41,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "sparse-convictions-still-negative",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "deputy-evidence-spam",
+      "seed": 41,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "profitable-bounty-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "deputy-evidence-spam",
+      "seed": 41,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "zero-bond-no-conviction-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "deputy-evidence-spam",
+      "seed": 41,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-volume-bond-burn",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "deputy-evidence-spam",
+      "seed": 41,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "throttled-low-volume",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "deputy-evidence-spam",
+      "seed": 41,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for deputy evidence-spam bond, bounty, conviction, and claim-volume economics.",
+  "name": "evidence-spam-economics",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/evidence-spam-economics"
+}

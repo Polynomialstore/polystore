@@ -1,0 +1,39 @@
+{
+  "name": "demand-elasticity-recovery",
+  "description": "Latent write demand is suppressed while storage price is above a reference price, then recovers as dynamic pricing steps storage price down under low utilization.",
+  "config": {
+    "scenario": "demand-elasticity-recovery",
+    "seed": 59,
+    "providers": 80,
+    "users": 100,
+    "deals": 8,
+    "epochs": 10,
+    "provider_slot_capacity": 64,
+    "retrievals_per_user_per_epoch": 1,
+    "dynamic_pricing": true,
+    "dynamic_pricing_max_step_bps": 1000,
+    "storage_target_utilization_bps": 6500,
+    "storage_price": 2.0,
+    "storage_price_min": 0.75,
+    "storage_price_max": 2.0,
+    "storage_demand_reference_price": 1.0,
+    "storage_demand_elasticity_bps": 10000,
+    "storage_demand_min_bps": 0,
+    "storage_demand_max_bps": 10000,
+    "new_deal_requests_per_epoch": 20,
+    "retrieval_price_per_slot": 0.01
+  },
+  "faults": [],
+  "assertions": {
+    "min_success_rate": 1.0,
+    "min_new_deal_latent_requests": 200,
+    "min_new_deals_suppressed_price": 1,
+    "min_new_deal_requests": 1,
+    "min_new_deals_accepted": 1,
+    "min_new_deal_latent_acceptance_rate": 0.05,
+    "max_new_deals_rejected_price": 0,
+    "max_new_deals_rejected_capacity": 0,
+    "max_final_storage_price": 1.0,
+    "max_data_loss_events": 0
+  }
+}

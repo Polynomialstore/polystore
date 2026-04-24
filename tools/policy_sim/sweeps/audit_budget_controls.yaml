@@ -1,0 +1,78 @@
+{
+  "name": "audit-budget-controls",
+  "description": "Sensitivity sweep for protocol audit-budget funding versus miss-driven audit demand, backlog, and carryover.",
+  "base_scenario": "../scenarios/audit_budget_exhaustion.yaml",
+  "cases": [
+    {
+      "name": "tight-budget-baseline",
+      "assertions": {
+        "min_audit_budget_backlog": 15.0,
+        "min_audit_budget_exhausted": 8,
+        "max_audit_budget_carryover": 0.0
+      }
+    },
+    {
+      "name": "moderate-budget-backlog",
+      "config": {
+        "audit_budget_per_epoch": 1.0
+      },
+      "assertions": {
+        "min_audit_budget_spent": 8.0,
+        "min_audit_budget_backlog": 7.5,
+        "max_audit_budget_backlog": 8.5,
+        "min_audit_budget_exhausted": 8,
+        "max_audit_budget_carryover": 0.0
+      }
+    },
+    {
+      "name": "clears-by-run-end",
+      "config": {
+        "audit_budget_per_epoch": 2.0
+      },
+      "assertions": {
+        "min_audit_budget_spent": 16.0,
+        "min_audit_budget_backlog": 0.0,
+        "max_audit_budget_backlog": 0.0,
+        "min_audit_budget_exhausted": 1,
+        "max_audit_budget_carryover": 0.0
+      }
+    },
+    {
+      "name": "reserve-no-exhaustion",
+      "config": {
+        "audit_budget_per_epoch": 8.0
+      },
+      "assertions": {
+        "min_audit_budget_spent": 16.0,
+        "min_audit_budget_backlog": 0.0,
+        "max_audit_budget_backlog": 0.0,
+        "min_audit_budget_exhausted": 0,
+        "max_audit_budget_exhausted": 0,
+        "min_audit_budget_carryover": 40.0
+      }
+    },
+    {
+      "name": "high-cost-tight-budget",
+      "config": {
+        "audit_cost_per_miss": 0.5
+      },
+      "assertions": {
+        "min_audit_budget_backlog": 31.0,
+        "min_audit_budget_exhausted": 8,
+        "max_audit_budget_carryover": 0.0
+      }
+    },
+    {
+      "name": "low-cost-tight-budget",
+      "config": {
+        "audit_cost_per_miss": 0.05
+      },
+      "assertions": {
+        "min_audit_budget_backlog": 2.5,
+        "max_audit_budget_backlog": 3.0,
+        "min_audit_budget_exhausted": 8,
+        "max_audit_budget_carryover": 0.0
+      }
+    }
+  ]
+}

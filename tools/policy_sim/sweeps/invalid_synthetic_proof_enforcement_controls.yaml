@@ -1,0 +1,125 @@
+{
+  "name": "invalid-synthetic-proof-enforcement-controls",
+  "description": "Sensitivity sweep for invalid synthetic/liveness proof hard faults without corrupt retrieval bytes across enforcement modes, slash size, and multi-provider proof abuse.",
+  "base_scenario": "../scenarios/invalid_synthetic_proof.yaml",
+  "cases": [
+    {
+      "name": "baseline-slash-simulated"
+    },
+    {
+      "name": "jail-without-slash",
+      "config": {
+        "enforcement_mode": "JAIL_SIMULATED"
+      },
+      "assertions": {
+        "min_success_rate": 0.95,
+        "min_invalid_proofs": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_provider_slashed": 0.0,
+        "max_provider_slashed": 0.0,
+        "exact_corrupt_responses": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "repair-only-no-slash",
+      "config": {
+        "enforcement_mode": "REPAIR_ONLY"
+      },
+      "assertions": {
+        "min_success_rate": 0.95,
+        "min_invalid_proofs": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_provider_slashed": 0.0,
+        "max_provider_slashed": 0.0,
+        "exact_corrupt_responses": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "measure-only-detects-but-does-not-repair",
+      "config": {
+        "enforcement_mode": "MEASURE_ONLY"
+      },
+      "assertions": {
+        "min_success_rate": 0.95,
+        "min_invalid_proofs": 1,
+        "min_repairs_started": 0,
+        "min_repairs_ready": 0,
+        "max_repairs_started": 0,
+        "min_repairs_completed": 0,
+        "max_repairs_completed": 0,
+        "min_provider_slashed": 0.0,
+        "max_provider_slashed": 0.0,
+        "exact_corrupt_responses": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "low-slash-invalid-proof",
+      "config": {
+        "slash_hard_fault": 0.1
+      },
+      "assertions": {
+        "min_success_rate": 0.95,
+        "min_invalid_proofs": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_provider_slashed": 0.1,
+        "exact_corrupt_responses": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "multi-invalid-proof-provider-slash",
+      "faults": [
+        "invalid-proof:sp-001:1.0",
+        "invalid-proof:sp-002:1.0",
+        "invalid-proof:sp-003:1.0"
+      ],
+      "assertions": {
+        "min_success_rate": 0.95,
+        "min_invalid_proofs": 3,
+        "min_repairs_started": 3,
+        "min_repairs_ready": 3,
+        "min_repairs_completed": 3,
+        "min_provider_slashed": 3.0,
+        "exact_corrupt_responses": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "repair-throughput-limited-invalid-proof",
+      "config": {
+        "max_repairs_started_per_epoch": 1,
+        "repair_epochs": 2,
+        "repair_backoff_epochs": 1
+      },
+      "faults": [
+        "invalid-proof:sp-001:1.0",
+        "invalid-proof:sp-002:1.0",
+        "invalid-proof:sp-003:1.0"
+      ],
+      "assertions": {
+        "min_success_rate": 0.95,
+        "min_invalid_proofs": 3,
+        "min_repairs_started": 1,
+        "min_repair_backoffs": 1,
+        "min_provider_slashed": 3.0,
+        "exact_corrupt_responses": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    }
+  ]
+}

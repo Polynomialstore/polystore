@@ -1,0 +1,67 @@
+[
+  {
+    "detail": "success_rate=1, required>=1",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "unavailable_reads=0, required<=0",
+    "name": "max_unavailable_reads",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "paid_corrupt_bytes=0, required<=0",
+    "name": "max_paid_corrupt_bytes",
+    "passed": true
+  },
+  {
+    "detail": "provider_cost_shock_active=10, required>=10",
+    "name": "min_provider_cost_shock_active",
+    "passed": true
+  },
+  {
+    "detail": "max_provider_cost_shocked_providers=8, required>=8",
+    "name": "min_max_provider_cost_shocked_providers",
+    "passed": true
+  },
+  {
+    "detail": "provider_churn_events=8, required>=8",
+    "name": "min_provider_churn_events",
+    "passed": true
+  },
+  {
+    "detail": "churned_providers=8, required>=8",
+    "name": "min_churned_providers",
+    "passed": true
+  },
+  {
+    "detail": "churn_pressure_provider_epochs=20, required>=20",
+    "name": "min_churn_pressure_provider_epochs",
+    "passed": true
+  },
+  {
+    "detail": "max_churned_assigned_slots=24, required>=1",
+    "name": "min_max_churned_assigned_slots",
+    "passed": true
+  },
+  {
+    "detail": "final_active_provider_capacity=854, required>=800",
+    "name": "min_final_active_provider_capacity",
+    "passed": true
+  },
+  {
+    "detail": "repairs_started=48, required>=1",
+    "name": "min_repairs_started",
+    "passed": true
+  },
+  {
+    "detail": "repairs_completed=48, required>=1",
+    "name": "min_repairs_completed",
+    "passed": true
+  }
+]

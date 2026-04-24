@@ -1,0 +1,77 @@
+{
+  "name": "provider-bond-headroom-controls",
+  "description": "Sensitivity sweep for provider minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing.",
+  "base_scenario": "../scenarios/provider_bond_headroom.yaml",
+  "cases": [
+    {
+      "name": "baseline-min15-slot005-slash1"
+    },
+    {
+      "name": "low-min-bond",
+      "config": {
+        "provider_min_bond": 0.5
+      },
+      "assertions": {
+        "min_max_provider_bond_deficit": 0.5,
+        "max_final_underbonded_assigned_slots": 0
+      }
+    },
+    {
+      "name": "unsafe-high-min-bond",
+      "config": {
+        "provider_min_bond": 1.7
+      },
+      "assertions": {
+        "min_provider_underbonded_repairs": 0,
+        "max_provider_underbonded_repairs": 0,
+        "min_max_underbonded_assigned_slots": 6,
+        "min_final_underbonded_assigned_slots": 6,
+        "max_final_underbonded_assigned_slots": 6,
+        "min_max_provider_bond_deficit": 1.9
+      }
+    },
+    {
+      "name": "low-slot-bond",
+      "config": {
+        "provider_bond_per_slot": 0.01
+      },
+      "assertions": {
+        "min_max_provider_bond_deficit": 0.5,
+        "max_final_underbonded_assigned_slots": 0
+      }
+    },
+    {
+      "name": "high-slot-bond",
+      "config": {
+        "provider_bond_per_slot": 0.07
+      },
+      "assertions": {
+        "min_max_provider_bond_deficit": 1.5,
+        "max_final_underbonded_assigned_slots": 0
+      }
+    },
+    {
+      "name": "small-slash",
+      "config": {
+        "slash_hard_fault": 0.25
+      },
+      "assertions": {
+        "min_provider_slashed": 1.0,
+        "min_max_provider_bond_deficit": 0.5,
+        "max_final_underbonded_assigned_slots": 0
+      }
+    },
+    {
+      "name": "higher-initial-high-min",
+      "config": {
+        "provider_initial_bond": 3.0,
+        "provider_min_bond": 2.0
+      },
+      "assertions": {
+        "min_provider_slashed": 3.0,
+        "min_max_provider_bond_deficit": 2.0,
+        "max_final_underbonded_assigned_slots": 0
+      }
+    }
+  ]
+}

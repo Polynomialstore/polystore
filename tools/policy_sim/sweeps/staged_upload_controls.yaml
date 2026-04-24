@@ -1,0 +1,92 @@
+{
+  "name": "staged-upload-controls",
+  "description": "Sensitivity sweep for staged upload retention, pending-generation caps, and partial commit pressure under abandoned provisional uploads.",
+  "base_scenario": "../scenarios/staged_upload_grief.yaml",
+  "cases": [
+    {
+      "name": "baseline-cap36-ttl2"
+    },
+    {
+      "name": "tight-cap12-ttl2",
+      "config": {
+        "staged_upload_max_pending_generations": 12
+      },
+      "assertions": {
+        "min_staged_upload_rejections": 180,
+        "min_staged_upload_cleaned": 30,
+        "max_max_staged_upload_pending_generations": 12,
+        "max_max_staged_upload_pending_mdus": 24,
+        "max_final_staged_upload_pending_generations": 12
+      }
+    },
+    {
+      "name": "wide-cap96-ttl2",
+      "config": {
+        "staged_upload_max_pending_generations": 96
+      },
+      "assertions": {
+        "min_staged_upload_rejections": 0,
+        "max_staged_upload_rejections": 0,
+        "min_staged_upload_cleaned": 180,
+        "max_max_staged_upload_pending_generations": 60,
+        "max_max_staged_upload_pending_mdus": 120,
+        "max_final_staged_upload_pending_generations": 60
+      }
+    },
+    {
+      "name": "no-cap-ttl2",
+      "config": {
+        "staged_upload_max_pending_generations": 0
+      },
+      "assertions": {
+        "min_staged_upload_rejections": 0,
+        "max_staged_upload_rejections": 0,
+        "min_staged_upload_cleaned": 180,
+        "max_max_staged_upload_pending_generations": 60,
+        "max_max_staged_upload_pending_mdus": 120,
+        "max_final_staged_upload_pending_generations": 60
+      }
+    },
+    {
+      "name": "cap36-ttl1",
+      "config": {
+        "staged_upload_retention_epochs": 1
+      },
+      "assertions": {
+        "min_staged_upload_rejections": 0,
+        "max_staged_upload_rejections": 0,
+        "min_staged_upload_cleaned": 200,
+        "max_max_staged_upload_pending_generations": 30,
+        "max_max_staged_upload_pending_mdus": 60,
+        "max_final_staged_upload_pending_generations": 30
+      }
+    },
+    {
+      "name": "cap36-ttl4",
+      "config": {
+        "staged_upload_retention_epochs": 4
+      },
+      "assertions": {
+        "min_staged_upload_rejections": 160,
+        "min_staged_upload_cleaned": 30,
+        "max_max_staged_upload_pending_generations": 36,
+        "max_max_staged_upload_pending_mdus": 72,
+        "max_final_staged_upload_pending_generations": 36
+      }
+    },
+    {
+      "name": "cap36-commit25",
+      "config": {
+        "staged_upload_commit_rate_bps": 2500
+      },
+      "assertions": {
+        "min_staged_upload_committed": 40,
+        "min_staged_upload_rejections": 50,
+        "min_staged_upload_cleaned": 100,
+        "max_max_staged_upload_pending_generations": 36,
+        "max_max_staged_upload_pending_mdus": 72,
+        "max_final_staged_upload_pending_generations": 36
+      }
+    }
+  ]
+}

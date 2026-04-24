@@ -1,0 +1,89 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/operator_concentration_cap.yaml",
+  "case_count": 7,
+  "cases": [
+    {
+      "case": "baseline-cap2-dominant50",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "operator-concentration-cap",
+      "seed": 53,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "strict-cap1-dominant50",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "operator-concentration-cap",
+      "seed": 53,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "loose-cap3-dominant50",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "operator-concentration-cap",
+      "seed": 53,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "no-cap-dominant50",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "operator-concentration-cap",
+      "seed": 53,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "cap2-dominant70",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "operator-concentration-cap",
+      "seed": 53,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "cap2-dominant80",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "operator-concentration-cap",
+      "seed": 53,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "cap2-five-operators",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "operator-concentration-cap",
+      "seed": 53,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for per-deal operator assignment caps under dominant-operator Sybil pressure.",
+  "name": "operator-concentration-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/operator-concentration-controls"
+}

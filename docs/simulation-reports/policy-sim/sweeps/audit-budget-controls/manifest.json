@@ -1,0 +1,80 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/audit_budget_exhaustion.yaml",
+  "case_count": 6,
+  "cases": [
+    {
+      "case": "tight-budget-baseline",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "audit-budget-exhaustion",
+      "seed": 33,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "moderate-budget-backlog",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "audit-budget-exhaustion",
+      "seed": 33,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "clears-by-run-end",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "audit-budget-exhaustion",
+      "seed": 33,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "reserve-no-exhaustion",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "audit-budget-exhaustion",
+      "seed": 33,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-cost-tight-budget",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "audit-budget-exhaustion",
+      "seed": 33,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "low-cost-tight-budget",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "audit-budget-exhaustion",
+      "seed": 33,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for protocol audit-budget funding versus miss-driven audit demand, backlog, and carryover.",
+  "name": "audit-budget-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/audit-budget-controls"
+}

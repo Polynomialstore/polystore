@@ -1,0 +1,77 @@
+{
+  "name": "sustained-non-response-thresholds",
+  "description": "Sensitivity sweep for sustained provider non-response repair timing, delayed readiness, and repair timeout behavior.",
+  "base_scenario": "../scenarios/sustained_non_response.yaml",
+  "cases": [
+    {
+      "name": "baseline-repair"
+    },
+    {
+      "name": "fast-threshold1-repair",
+      "config": {
+        "evict_after_missed_epochs": 1
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_delinquent_slots": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "slow-threshold6-still-repairs",
+      "config": {
+        "evict_after_missed_epochs": 6
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_delinquent_slots": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "long-repair-window",
+      "config": {
+        "repair_epochs": 8
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_delinquent_slots": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "readiness-timeout-unsafe",
+      "config": {
+        "repair_epochs": 4,
+        "repair_pending_timeout_epochs": 2
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 0,
+        "min_repairs_completed": 0,
+        "min_repair_timeouts": 1,
+        "max_repairs_completed": 0,
+        "min_delinquent_slots": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    }
+  ]
+}

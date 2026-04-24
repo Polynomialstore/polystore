@@ -1,0 +1,71 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/sustained_non_response.yaml",
+  "case_count": 5,
+  "cases": [
+    {
+      "case": "baseline-repair",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "sustained-non-response",
+      "seed": 32,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "fast-threshold1-repair",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "sustained-non-response",
+      "seed": 32,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "slow-threshold6-still-repairs",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "sustained-non-response",
+      "seed": 32,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "long-repair-window",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "sustained-non-response",
+      "seed": 32,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "readiness-timeout-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "sustained-non-response",
+      "seed": 32,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for sustained provider non-response repair timing, delayed readiness, and repair timeout behavior.",
+  "name": "sustained-non-response-thresholds",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/sustained-non-response-thresholds"
+}

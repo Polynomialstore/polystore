@@ -1,0 +1,71 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/closed_retrieval_rejection.yaml",
+  "case_count": 5,
+  "cases": [
+    {
+      "case": "baseline-close-all-epoch4",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "closed-retrieval-rejection",
+      "seed": 110,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "early-close-all-epoch2",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "closed-retrieval-rejection",
+      "seed": 110,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "partial-half-close-epoch4",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "closed-retrieval-rejection",
+      "seed": 110,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "no-close-open-control",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "closed-retrieval-rejection",
+      "seed": 110,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "larger-closed-read-demand",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "closed-retrieval-rejection",
+      "seed": 110,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for post-close retrieval rejection timing, partial close behavior, refund accounting, and larger closed-content read demand.",
+  "name": "closed-retrieval-rejection-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/closed-retrieval-rejection-controls"
+}

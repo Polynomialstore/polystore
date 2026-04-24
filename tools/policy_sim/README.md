@@ -74,9 +74,10 @@ python3 tools/policy_sim/run_sweeps.py \
 ```
 
 `--jobs 0` auto-detects CPU count and caps parallel workers at 8. Directory
-sweeps share one bounded worker pool across all selected sweep cases, so small
-sweep specs still utilize available cores. Use `--jobs 1` for single-process
-debugging or exact profiler traces.
+fixture runs default to this auto-parallel mode, and directory sweeps share one
+bounded worker pool across all selected sweep cases, so small sweep specs still
+utilize available cores. Use `--jobs 1` for single-process debugging or exact
+profiler traces.
 
 If `--out-dir` is omitted, `report.py` writes to a dedicated subdirectory
 instead of polluting raw simulator outputs: `<run-dir>/report` for single-run
@@ -123,11 +124,23 @@ are supported in scenario files:
 - `provider_online_probability_min` / `provider_online_probability_max`
 - `provider_repair_probability_min` / `provider_repair_probability_max`
 - `provider_storage_cost_jitter_bps` / `provider_bandwidth_cost_jitter_bps`
+- `provider_cost_shocks`
 - `provider_regions`
 - `regional_outages`
+- `elasticity_overlay_enabled`
+- `elasticity_overlay_providers_per_epoch`
+- `elasticity_overlay_max_providers_per_deal`
+- `elasticity_overlay_ready_delay_epochs`
+- `elasticity_overlay_ttl_epochs`
+- `staged_upload_attempts_per_epoch`
+- `staged_upload_mdu_per_attempt`
+- `staged_upload_commit_rate_bps`
+- `staged_upload_retention_epochs`
+- `staged_upload_max_pending_generations`
 - `max_repairs_started_per_epoch`
 - `repair_attempt_cap_per_slot`
 - `repair_backoff_epochs`
+- `repair_pending_timeout_epochs`
 - `high_bandwidth_promotion_enabled`
 - `high_bandwidth_capacity_threshold`
 - `high_bandwidth_min_retrievals`
@@ -147,6 +160,20 @@ are supported in scenario files:
 - `operator_count`
 - `dominant_operator_provider_bps`
 - `operator_assignment_cap_per_deal`
+- `retrieval_demand_shocks`
+- `sponsored_retrieval_bps`
+- `owner_retrieval_debit_bps`
+- `storage_lockin_enabled`
+- `deal_expiry_enabled`
+- `deal_duration_epochs`
+- `deal_close_epoch`
+- `deal_close_count`
+- `deal_close_bps`
+- `new_deal_requests_per_epoch`
+- `storage_demand_price_ceiling`
+- `storage_demand_reference_price`
+- `storage_demand_elasticity_bps`
+- `storage_demand_min_bps` / `storage_demand_max_bps`
 
 Versioned sweep specs live in `tools/policy_sim/sweeps`. They are strict JSON
 documents with a `.yaml` extension, matching scenario fixture conventions. A
@@ -154,7 +181,9 @@ sweep chooses a base scenario and a matrix of config overrides; raw per-case
 ledgers are generated locally while committed reports contain only
 `sweep_summary.md`, `sweep_summary.json`, and `manifest.json`. Current sweeps
 cover repair throughput, route attempts, provider reliability, price-controller
-steps, and high-bandwidth capability thresholds.
+steps, high-bandwidth capability thresholds, elasticity overlay controls,
+sponsored retrieval funding, storage escrow close/refund accounting, and
+storage escrow noncompliance enforcement modes.
 
 ## Model Scope
 
@@ -167,6 +196,8 @@ The simulator mirrors current protocol concepts:
 - Provider outage/withholding as soft faults that become quota/deputy misses.
 - Make-before-break repair with deterministic replacement provider selection.
 - Repair attempt caps and cooldown windows for constrained replacement markets.
+- Pending-provider readiness timeouts that cancel stalled repair attempts before
+  bounded retry.
 - Per-slot `HEALTHY` / `SUSPECT` / `DELINQUENT` health state with reason codes.
 - Provider capability promotion to `HIGH_BANDWIDTH` based on measured capacity,
   retrieval success, saturation, and hard-fault history.
@@ -176,6 +207,8 @@ The simulator mirrors current protocol concepts:
   without bypassing capacity and availability assertions.
 - Performance-market service tiers that classify modeled retrieval latency into
   Platinum/Gold/Silver/Fail and pay optional tiered QoS rewards.
+- Epoch-scoped retrieval demand shocks that exercise pricing response and
+  oscillation bounds.
 - Operator identity concentration and per-deal assignment caps for Sybil-shaped
   provider populations.
 - Simulated enforcement modes before live chain/runtime rollout.
@@ -184,8 +217,35 @@ The simulator mirrors current protocol concepts:
 - Explicit distinction between temporary unavailable reads and modeled
   data-loss events. Stress scenarios may allow bounded unavailable reads, but
   current durability assertions expect data-loss events to remain zero.
+- Explicit post-expiry retrieval rejection accounting so expired content
+  requests are not confused with live availability failures or billable
+  retrieval sessions.
+- Explicit post-close retrieval rejection accounting so intentionally closed
+  content requests are not confused with live availability failures or billable
+  retrieval sessions.
 - Basic economic accounting for retrieval fees, rewards, audit budget, provider
   P&L, slashing, and elasticity spend caps.
+- Epoch-scoped provider cost shocks that surface churn pressure.
+- Bounded provider economic churn that turns sustained negative P&L into
+  draining exits, active-capacity loss, and repair pressure.
+- Reserve-provider supply entry with probationary promotion before new SPs
+  become eligible for normal placement.
+- Provider bond-headroom checks that exclude undercollateralized SPs from new
+  responsibility and can repair active slots away from underbonded providers.
+- User-funded elasticity overlays that activate temporary overflow routes,
+  wait for readiness, serve retrievals, and expire by TTL without becoming
+  base durable slots.
+- Sponsored retrieval sessions that separate requester-funded public demand
+  from deal-owner escrow debit.
+- Storage lock-in accounting that charges committed deals upfront, earns
+  storage fees over service epochs, pays eligible providers, burns the
+  delinquent share under reward-exclusion semantics, and refunds unearned
+  escrow on early close or auto-expires fully earned deals.
+- Staged upload grief pressure where provisional generations are bounded by
+  retention TTL, preflight rejection, and pending-generation caps.
+- Demand-side storage admission accounting for latent new deal requests,
+  price-elastic demand suppression, price rejections, capacity rejections, and
+  effective/latent acceptance rates.
 
 The simulator deliberately does not run `polystorechaind`, gateways, or provider
 processes. Once a policy is stable here, add keeper tests or e2e scripts for the
@@ -208,8 +268,9 @@ When `--out-dir` is supplied, the simulator emits:
 `slots.csv` includes per-slot health reason, repair attempt, and cooldown state.
 `operators.csv` groups provider identities by operator and records provider
 share, assignment share, success, and P&L.
-`repairs.csv` includes start, pending-provider readiness, completion,
-attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
+`repairs.csv` includes start, pending-provider readiness, readiness timeout,
+completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and
+backoff events.
 
 `report.py` consumes those raw files and can emit:
 
@@ -241,11 +302,15 @@ over the timeline, enforcement interpretation, economic interpretation, the
 assertion contract, evidence excerpts, generated graphs, and remaining review
 questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
-provider P&L, burn/mint ratio, price trajectory, capacity utilization,
-saturation/repair pressure, repair backlog, high-bandwidth promotion, and hot
-retrieval routing, performance tiers, operator concentration, evidence
-pressure, audit budget, and elasticity spend. `signals.json` records derived
-availability, saturation, repair, capacity, economic, regional, high-bandwidth,
+provider P&L, provider churn, burn/mint ratio, price trajectory, capacity
+utilization, saturation/repair pressure, repair backlog, repair readiness,
+provider supply entry, provider bond headroom, high-bandwidth promotion, and hot
+retrieval routing, performance tiers, operator concentration, evidence pressure,
+audit budget, sponsored retrieval accounting, elasticity spend, elasticity
+overlay routes, and staged upload pressure.
+`signals.json` records derived
+availability, saturation, repair, capacity, economic, sponsored-retrieval,
+elasticity-overlay, staged-upload, regional, high-bandwidth,
 performance-market, concentration, and provider bottleneck signals for
 downstream analysis.
 

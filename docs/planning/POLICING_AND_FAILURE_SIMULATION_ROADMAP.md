@@ -1,6 +1,6 @@
 # PolyStore Policing and Failure Simulation Roadmap
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 ## 1. Purpose
 
@@ -107,7 +107,7 @@ were:
 | Withholding/ransom | Provider refuses to serve data it should hold. | Soft unless transcript/evidence reaches threshold | Route around, deputy/audit evidence, repair. |
 | Slow service | Provider serves correctly but misses latency expectations. | Statistical | Reputation or placement priority, not slash initially. |
 | Staged upload grief | User/gateway uploads many provisional generations and never commits. | Operational/accounting | Preflight rejection, retention limits, cleanup policy. |
-| Replacement grinding | User or attacker repeatedly forces replacements to capture slots. | Chain-observable churn | Cooldowns, attempt caps, deterministic candidate selection. |
+| Replacement grinding | User or attacker repeatedly forces replacements or pending catch-up attempts to churn. | Chain-observable churn | Readiness timeout, cooldowns, attempt caps, deterministic candidate selection. |
 | Deputy evidence spam | Deputy submits many low-quality failure claims. | Evidence-market signal | Evidence bond, burn-on-expiry, bounty only on conviction. |
 | Gateway misbehavior | Gateway withholds, rewrites, or misroutes requests. | Client/provider observable | Gateway is not a trust anchor; clients and chain verify roots/sessions. |
 | Coordinated provider failure | Multiple assigned slots fail together. | Mixed | Availability threshold analysis, repair backlog controls, operator alerts. |
@@ -116,6 +116,7 @@ were:
 | Price oscillation | Dynamic pricing overreacts to utilization or retrieval bursts. | Chain state / simulator | Step clamps, EMA windows, dampening, delayed activation. |
 | Wash retrieval traffic | Actors create fake retrievals to farm rewards or credits. | Session accounting / burn economics | Mandatory burns, credit caps, requester-paid sessions, anomaly alerts. |
 | Viral debt | Public or hot content exhausts escrow during a traffic spike. | Escrow/spend-window state | Sponsored sessions, top-ups, rate limiting, bounded elasticity. |
+| Elasticity overlay churn | Temporary overflow routes activate but do not become ready, serve, or expire cleanly. | Market/runtime telemetry | Readiness gate, spend-window accounting, TTL cleanup, route visibility. |
 | Subsidy farming | Providers create storage responsibility mainly to extract emissions. | Reward/accounting analysis | Fee-backed rent base, compliance gating, burn unearned rewards. |
 
 ## 7. Evidence Classes
@@ -264,9 +265,9 @@ Current assumptions:
 7. Retrieval burns reduce requester/session payments before provider payout.
 8. Audit budget spending is capped by available budget and miss-driven demand.
 9. Elasticity spending fails closed when the configured spend cap is exceeded.
-10. The model does not yet include user demand elasticity, real fiat bandwidth
-    prices, operator-level concentration, capital cost of bonds, or secondary
-    market token volatility.
+10. The model now includes first-pass storage demand elasticity, but it does
+    not yet include real fiat bandwidth prices, capital cost of bonds, or
+    secondary market token volatility.
 
 Human decisions still required:
 
@@ -292,16 +293,24 @@ Human decisions still required:
 | Withholding provider | Can users route around ransom behavior? | Retrieval success remains high, deputy/audit miss grows. | Router fallback and deputy evidence e2e. |
 | Lazy provider | Does no-synthetic/no-credit behavior lose rewards? | Quota miss and reward exclusion occur. | Base reward eligibility tests. |
 | Setup failure storm | Can new deals recover before first commit? | Bump count bounded, replacement not user-chosen. | Setup bump e2e with failed upload. |
-| Replacement grinding | Are repeated replacements rate-limited? | Cooldown and attempt caps bind. | Keeper replacement cooldown tests. |
+| Staged upload grief | Are abandoned provisional generations bounded before commit? | Retention cleanup and preflight rejection cap pending staged state without repair/slash. | Provider-daemon staged cleanup and gateway preflight tests. |
+| Replacement grinding | Are repeated replacements and failed pending catch-up attempts rate-limited? | Readiness timeouts, cooldowns, and attempt caps bind. | Keeper replacement cooldown and readiness-timeout tests. |
 | Deputy evidence spam | Is spam uneconomic? | Bond burn exceeds expected spam gain. | Evidence-market keeper tests. |
 | Audit budget exhaustion | Does the system degrade predictably? | Backlog grows, no unbounded mint. | Audit budget cap tests. |
 | Coordinated regional outage | What is the availability cliff? | Success drops only when fewer than `K` slots remain. | Nightly/long-running multi-SP tests. |
 | Underpriced supply collapse | Do honest providers churn when price is below cost? | Provider P&L turns negative and capacity exits. | Dynamic pricing and subsidy calibration tests. |
+| Provider cost shock | Does a sudden operator cost increase create churn pressure before availability fails? | Cost-shock epochs are visible, provider P&L turns negative, and retrievals remain available. | Provider cost telemetry and price-floor governance review. |
 | Overpriced demand collapse | Does high price suppress useful demand? | New deal creation and retrieval demand fall below target. | Quote UX and pricing-bound tests. |
 | Price oscillation | Does the controller converge after demand shocks? | Price remains within bounds and settles without repeated overshoot. | Epoch pricing keeper tests. |
+| Retrieval demand shock | Does burst read demand move retrieval price without oscillating or harming availability? | Retrieval price reacts within bounds, direction changes stay limited, and reads remain available. | Retrieval pricing keeper tests. |
 | Wash traffic | Can fake retrievals profit from rewards or credits? | Burn and fees exceed expected reward or credit value. | Session fee, credit cap, and anomaly tests. |
 | Viral public retrieval | Does public demand scale without draining owner escrow? | Sponsored sessions fund retrieval; owner escrow remains stable. | Sponsored-session e2e. |
+| Storage escrow close/refund | Does committed storage escrow lock, earn, and refund deterministically? | Storage escrow locks upfront, pays earned fees, refunds unearned close balance, and leaves no outstanding escrow. | Quote-to-charge, close/refund, and expiry keeper tests. |
+| Storage escrow noncompliance burn | Are earned storage fees withheld from delinquent responsibility? | Storage escrow still earns, compliant slots are paid, delinquent share is burned, and availability/durability stay intact. | Storage-fee payout eligibility and burn-ledger tests. |
+| Storage escrow expiry | Does fully earned committed storage expire cleanly? | Deals auto-expire at duration end, stop active responsibility, and leave no outstanding escrow. | Expiry auto-close and deal GC keeper tests. |
+| Closed retrieval rejection | Do reads after intentional deal close fail explicitly? | Post-close requests are counted as closed-content rejections, not unavailable reads or billable sessions. | Closed-deal query and post-close retrieval response tests. |
 | Elasticity cap hit | What happens when demand exceeds user budget? | Scaling stops cleanly and service is rate-limited, not unbounded. | `MsgSignalSaturation` spend-window e2e. |
+| Elasticity overlay scale-up | Does funded overflow capacity become useful and temporary? | Overlay routes activate, become ready, serve reads, and expire without data loss. | Overlay readiness, routing expansion, and TTL e2e. |
 | Subsidy farming | Can providers earn emissions without useful service? | Non-compliant or idle responsibility is unrewarded or uneconomic. | Base reward compliance tests. |
 | Repair candidate exhaustion | Does the network expose lack of spare capacity safely? | Repair backoffs occur, capacity is respected, no silent over-assignment. | Keeper candidate-selection and backoff tests. |
 | Price controller bounds | Does dynamic pricing stay bounded under sustained demand? | Prices move within configured floors/ceilings and reports expose provider P&L. | Epoch pricing keeper tests. |
@@ -817,7 +826,11 @@ Current simulator coverage:
    rewards and retrieval fee settlement.
 4. Reports expose tier counts, average latency, Fail-tier share, performance
    reward paid, provider latency distribution, and a performance-tier graph.
-5. The missing live surfaces are service-class params, latency telemetry
+5. `tools/policy_sim/sweeps/performance_market_latency_controls.yaml` compares
+   latency tier windows, slow-provider tails, jitter, route-attempt limits,
+   high-bandwidth routing, and reward multipliers before keeper/runtime QoS
+   defaults are chosen.
+6. The missing live surfaces are service-class params, latency telemetry
    accumulation, tiered reward multipliers, and explicit policy that slow QoS
    evidence is not slashable hard-fault evidence.
 
@@ -867,6 +880,20 @@ Economic invariants:
 3. Overlay providers must not dilute accountability for base slots.
 4. Elasticity should degrade into rate limiting when unfunded, not into
    unbounded protocol subsidy.
+
+Current simulator coverage:
+
+1. `tools/policy_sim/scenarios/elasticity_overlay_scaleup.yaml` models funded
+   hot-demand overflow capacity.
+2. Overlay routes activate only after the retrieval trigger, wait for readiness,
+   serve reads as temporary routes, and expire by TTL.
+3. Overlay providers do not become durable base slots, and corrupt overlay
+   responses produce evidence without automatically repairing base slots.
+4. Reports expose overlay activations, ready routes, active routes, serves,
+   expirations, rejections, and spend.
+5. `tools/policy_sim/sweeps/elasticity_overlay_controls.yaml` compares
+   readiness delay, TTL, spend cap, per-deal route cap, and aggressive scale-up
+   variants before keeper/runtime defaults are chosen.
 
 ## 23. Chain and Consensus Implementation Scope
 
@@ -1210,15 +1237,155 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `single_outage.yaml` | One provider offline for several epochs. | Reads remain available, repair starts after threshold, no slash. |
 | `withholding.yaml` | Provider refuses retrievals and synthetic participation. | Route-around succeeds where possible, deputy/audit misses accrue, repair starts. |
 | `corrupt_provider.yaml` | Provider returns corrupt data or invalid proofs. | Corrupt bytes are unpaid, hard fault is recorded, repair starts. |
+| `invalid_synthetic_proof.yaml` | Provider submits invalid synthetic/liveness proofs without corrupting retrieval bytes. | Invalid proofs are recorded, repair starts and completes, simulated slash accounting is visible, and corrupt byte payment remains zero. |
 | `lazy_provider.yaml` | Provider does not meet proof quota. | Reward exclusion occurs, soft-fault path does not slash. |
 | `setup_failure.yaml` | Initial upload to one slot fails. | Setup bump is bounded and replacement is system-selected. |
+| `staged_upload_grief.yaml` | User-gateway or client uploads provisional generations and never commits them. | Pending staged generations remain capped, preflight rejections and retention cleanup are visible, and committed data availability is unaffected. |
+| `repair_candidate_exhaustion.yaml` | Replacement capacity is unavailable or saturated. | Repair backoffs and candidate-exclusion reasons are visible, provider capacity is not over-assigned, and data-loss events remain zero. |
+| `replacement_grinding.yaml` | Pending replacement providers fail to prove readiness before promotion. | Repair readiness timeouts, cooldowns, and attempt caps are visible; no pending provider is promoted without readiness; data-loss events remain zero. |
 | `underpriced_storage.yaml` | Storage price below provider cost. | Provider P&L turns negative and churn pressure is visible. |
+| `overpriced_storage.yaml` | Storage price above modeled user willingness to pay. | Existing reads remain healthy while new deal demand is rejected by price, not capacity. |
+| `demand_elasticity_recovery.yaml` | Latent storage demand is suppressed by high price and recovers as dynamic pricing moves down. | Suppressed demand, recovered effective requests, accepted deals, bounded final price, and no capacity rejection. |
+| `provider_cost_shock.yaml` | Provider operating costs jump after launch while technical availability remains healthy. | Cost-shock windows are visible, provider P&L turns negative, churn pressure appears, and no availability or durability loss occurs. |
+| `provider_economic_churn.yaml` | Sustained negative provider economics causes bounded active-set exits. | Churn events are capped per epoch, exited capacity is visible, affected slots are repaired, reads remain available, and no data-loss events occur. |
+| `provider_supply_entry.yaml` | Reserve providers enter after supply pressure, serve probation, then promote into active assignment capacity. | Churn remains bounded, provider entries and probation promotions are visible, entered providers become active, repair completes, and data-loss events remain zero. |
+| `provider_bond_headroom.yaml` | Hard-fault slashing leaves a provider below minimum/per-slot collateral. | Underbonded providers are visible, new assignments exclude insufficient bond headroom, active underbonded slots repair away, and data-loss events remain zero. |
+| `retrieval_demand_shock.yaml` | Temporary read-demand spike tests retrieval-price response and oscillation bounds. | Retrieval shock windows are visible, price direction changes stay bounded, reads remain available, and price remains within configured limits. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
-| `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
+| `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost, sponsor spend is visible, and owner escrow remains stable. |
+| `storage_escrow_close_refund.yaml` | Committed storage locks escrow, earns provider storage fees, then closes a subset of deals early. | Locked, earned, refunded, outstanding, provider-payout, burned storage-fee, and post-close rejection values are visible; outstanding escrow reaches zero by run end. |
+| `storage_escrow_noncompliance_burn.yaml` | A lazy provider misses quota while committed storage escrow continues earning. | Non-compliant slot share is burned instead of paid, compliant providers still receive earned fees, repairs start, and reads remain available. |
+| `storage_escrow_expiry.yaml` | Committed storage reaches its configured duration. | Deals expire automatically after fully earning escrow, final open deals reach zero, and no hidden outstanding escrow remains. |
+| `closed_retrieval_rejection.yaml` | Committed storage is intentionally closed and later read attempts target inactive content. | Post-close reads are counted as closed-content rejections, unavailable reads stay zero, owner retrieval escrow is not debited, and unearned storage escrow is refunded. |
+| `expired_retrieval_rejection.yaml` | Committed storage reaches duration end and later read attempts target inactive content. | Post-expiry reads are counted as expired-content rejections, unavailable reads stay zero, owner retrieval escrow is not debited, and no hidden storage escrow remains. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
+| `elasticity_overlay_scaleup.yaml` | Sustained hot retrieval demand buys temporary overflow routes. | Overlay activations, serves, and TTL expirations are visible; spend caps are respected and durability is unaffected. |
 | `high_bandwidth_promotion.yaml` | Hot retrieval demand is routed across heterogeneous providers after measured high-bandwidth promotion. | Providers promote only after success/capacity/saturation checks, hot traffic uses promoted providers, no demotion or over-capacity assignment occurs. |
 | `high_bandwidth_regression.yaml` | Promoted high-bandwidth providers experience sustained saturation under concentrated hot routing. | Demotion occurs, hot retrievals continue, capacity remains respected, and data-loss events stay zero. |
 | `large_scale_regional_stress.yaml` | More than 1,000 heterogeneous SPs and thousands of users experience a correlated regional outage, bandwidth saturation, dynamic pricing, and constrained repair coordination. | Availability remains above floor, saturation and repair backoffs are visible, price remains bounded, and no provider is assigned beyond modeled capacity. |
+
+Current S6 sweep specs include `tools/policy_sim/sweeps/sponsored_retrieval_funding.yaml`,
+which compares full, partial, and absent sponsored-session funding so owner
+escrow-drain risk is visible before keeper defaults are chosen;
+`tools/policy_sim/sweeps/storage_escrow_close_refund.yaml`, which compares
+full-duration service, early close timing, close count, close-by-bps storage
+escrow outcomes, and post-close rejection counts;
+`tools/policy_sim/sweeps/storage_escrow_noncompliance_modes.yaml`, which
+compares measure-only, repair-only, and reward-exclusion treatment for earned
+storage-fee payout and burn behavior;
+`tools/policy_sim/sweeps/audit_budget_controls.yaml`, which compares
+miss-driven audit demand against tight, moderate, clearing, reserve, high-cost,
+and low-cost budget assumptions before keeper audit-budget defaults are chosen;
+`tools/policy_sim/sweeps/operator_concentration_controls.yaml`, which
+compares per-deal operator caps, disabled caps, dominant-operator share, and
+operator-count assumptions before placement-diversity defaults are chosen;
+`tools/policy_sim/sweeps/staged_upload_controls.yaml`, which compares
+retention TTL, pending-generation caps, no-cap behavior, and partial commit
+pressure before provider-daemon staged-generation cleanup defaults are chosen;
+and `tools/policy_sim/sweeps/replacement_grinding_controls.yaml`, which
+compares pending-provider readiness timeout, repair cooldown, and per-slot
+attempt-cap assumptions before keeper replacement retry defaults are chosen;
+and `tools/policy_sim/sweeps/repair_candidate_exhaustion_controls.yaml`,
+which compares replacement capacity, attempt caps, and cooldowns before
+candidate-selection fallback and capacity-guard defaults are chosen; and
+`tools/policy_sim/sweeps/performance_market_latency_controls.yaml`, which
+compares Hot-service latency tier windows, reward multipliers, slow-provider
+tails, jitter, route attempts, and high-bandwidth routing before QoS reward and
+placement-priority defaults are chosen; and
+`tools/policy_sim/sweeps/provider_bond_headroom_controls.yaml`, which compares
+minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing
+before collateral and underbonded-repair defaults are chosen; and
+`tools/policy_sim/sweeps/provider_cost_shock_controls.yaml`, which compares
+cost-shock severity, bandwidth-heavy demand, reward-buffer sizing, and
+dynamic-pricing response speed before storage-price floors, issuance buffers,
+or provider-cost telemetry assumptions are promoted into keeper work; and
+`tools/policy_sim/sweeps/provider_supply_entry_controls.yaml`, which compares
+reserve-provider entry caps, probation length, trigger timing, and underfilled
+reserve recovery before provider lifecycle-state and new-supply promotion
+semantics are chosen; and
+`tools/policy_sim/sweeps/evidence_spam_economics.yaml`, which compares deputy
+evidence-spam claim volume, bond size, conviction rate, and bounty sizing so
+unconvicted spam remains negative-EV, zero-bond spam is surfaced as unsafe, and
+profitable bounty farming is visible before evidence-market keeper defaults are
+chosen; and `tools/policy_sim/sweeps/wash_retrieval_economics.yaml`, which
+compares requester-funded retrieval sessions, owner-funded variable debits,
+retrieval burn rates, base fees, and wash-traffic volume so fake reads cannot
+profitably recycle provider payouts before retrieval-accounting defaults are
+chosen; and `tools/policy_sim/sweeps/retrieval_demand_shock_controls.yaml`,
+which compares retrieval-demand shock magnitude, duration, target, price-step
+size, ceiling, and disabled-controller behavior before retrieval price response
+and smoothing defaults are chosen; and
+`tools/policy_sim/sweeps/storage_demand_elasticity_controls.yaml`, which
+compares storage-demand elasticity, reference price, minimum demand floor,
+price-step speed, and disabled-controller behavior before storage price
+recovery defaults are chosen; and
+`tools/policy_sim/sweeps/elasticity_cap_hit_controls.yaml`, which compares
+non-overlay elasticity spend caps, overflow cost, trigger thresholds, and viral
+retrieval pressure so user-funded elasticity fails closed instead of creating
+unbounded spend; and
+`tools/policy_sim/sweeps/storage_escrow_expiry_controls.yaml`, which compares
+expiry duration, run length, disabled-expiry behavior, and larger escrow books
+so committed storage expires when fully mature, immature deals remain visibly
+open with outstanding escrow, and missing expiry enforcement is surfaced before
+keeper expiry semantics are chosen; and
+`tools/policy_sim/sweeps/expired_retrieval_rejection_controls.yaml` plus
+`tools/policy_sim/sweeps/closed_retrieval_rejection_controls.yaml`, which
+compare inactive-content retrieval timing, no-bill owner-escrow guards,
+partial close behavior, refund accounting, and larger read demand so expired
+and intentionally closed content fail explicitly instead of becoming live
+availability failures or billable retrieval sessions; and
+`tools/policy_sim/sweeps/subsidy_farming_economics.yaml`, which compares
+reward-exclusion, repair-only, and measure-only enforcement against lazy
+providers, higher lazy share, delayed eviction, and subsidy size so base
+rewards do not leak to quota-missing responsibility before reward-eligibility
+keeper defaults are chosen; and
+`tools/policy_sim/sweeps/underpriced_storage_economics.yaml` plus
+`tools/policy_sim/sweeps/overpriced_storage_affordability.yaml`, which compare
+provider P&L under storage underpricing, user-funded storage fee floors,
+reward/retrieval buffers, willingness-to-pay ceilings, dynamic price movement,
+and capacity-limited acceptance before storage quote and price-floor defaults
+are chosen; and `tools/policy_sim/sweeps/flapping_provider_thresholds.yaml`
+plus `tools/policy_sim/sweeps/sustained_non_response_thresholds.yaml`, which
+compare intermittent outage thresholds, repair-churn risk, sustained
+non-response repair timing, and repair-readiness timeouts before liveness
+threshold defaults are chosen; and
+`tools/policy_sim/sweeps/setup_failure_repair_controls.yaml`, which compares
+early setup-phase provider failure across measure-only, repair-only,
+threshold-delay, multi-provider, and repair-throughput-constrained cases before
+provider admission, initial health check, and setup-bump keeper semantics are
+chosen; and
+`tools/policy_sim/sweeps/withholding_enforcement_controls.yaml` plus
+`tools/policy_sim/sweeps/lazy_provider_quota_controls.yaml`, which compare
+soft-failure evidence across measure-only, repair-only, reward-exclusion,
+threshold-delay, multi-provider, and repair-throughput-constrained cases while
+asserting that soft evidence does not slash provider bond or pay corrupt bytes;
+and
+`tools/policy_sim/sweeps/corrupt_provider_enforcement_controls.yaml` plus
+`tools/policy_sim/sweeps/invalid_synthetic_proof_enforcement_controls.yaml`,
+which compare hard-fault behavior across measure-only, repair-only, jail, and
+slash-simulated modes, slash sizing, multi-provider abuse, and repair
+throughput limits before punitive keeper enforcement defaults are chosen.
+
+Current storage-escrow coverage includes
+`tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
+upfront lock-in, per-epoch earned storage fees, provider payout, early
+close/refund, and run-end outstanding escrow before keeper close/refund
+semantics are chosen. The paired sweep keeps the production question concrete:
+human review should decide exact keeper rounding, expiry auto-close, and
+quote-signing semantics only after looking at how earned/refunded/outstanding
+balances move under close timing and close fraction.
+`tools/policy_sim/scenarios/storage_escrow_noncompliance_burn.yaml` covers the
+adjacent enforcement question: when responsibility is delinquent under
+reward-exclusion semantics, earned storage-fee share should be burned rather
+than paid while the storage lock-in ledger remains balanced.
+`tools/policy_sim/scenarios/storage_escrow_expiry.yaml` covers duration-end
+auto-expiry: fully earned deals should leave the active set and leave no
+outstanding escrow before keeper expiry/GC semantics are implemented.
+`tools/policy_sim/scenarios/closed_retrieval_rejection.yaml` and
+`tools/policy_sim/scenarios/expired_retrieval_rejection.yaml` cover inactive
+content retrieval semantics: after close or expiry, reads should be rejected as
+closed or expired content rather than counted as live availability failures or
+billable retrieval sessions.
 
 ### 27.7 Output Contract
 
@@ -1231,11 +1398,12 @@ Each simulator run should be able to emit:
 4. `slots.csv`: one row per deal-slot with lifecycle, health reason, repair,
    provider, and reward eligibility state.
 5. `evidence.csv`: hard faults, soft faults, threshold evidence, and source.
-6. `repairs.csv`: repair start, candidate selection, catch-up, promotion,
-   attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff
-   events.
+6. `repairs.csv`: repair start, candidate selection, catch-up, readiness
+   timeout, promotion, attempt-count, cooldown, candidate-exclusion,
+   attempt-cap, and backoff events.
 7. `economy.csv`: storage charges, retrieval burns, payouts, reward mint/burn,
-   audit budget, escrow runway, and elasticity spend.
+   audit budget, escrow runway, elasticity spend, and latent/effective storage
+   demand admission.
 8. No `comparison.json` or other precomputed baseline-vs-candidate artifact in
    single-run simulator outputs.
 
@@ -1399,7 +1567,9 @@ CI should cover:
 7. Upload quote matches storage lock-in charge on commit.
 8. Retrieval open/complete burns and pays exactly as quoted.
 9. Sponsored retrieval does not debit owner deal escrow.
-10. Elasticity spend-window rejection is deterministic when cap is exhausted.
+10. Early deal close refunds unearned storage escrow and leaves no hidden
+    outstanding balance.
+11. Elasticity spend-window rejection is deterministic when cap is exhausted.
 
 ### 29.2 Nightly or Manual E2E
 
@@ -1469,6 +1639,8 @@ Required event reason codes:
 25. `elasticity_spend_rejected`
 26. `provider_underbonded`
 27. `provider_profitability_at_risk`
+28. `retrieval_rejected_closed_deal`
+29. `retrieval_rejected_expired_deal`
 
 Recommended dashboards:
 
@@ -1524,6 +1696,9 @@ The policing milestone is not complete until all of these are true:
     bond costs under the target fee/subsidy mix.
 17. Fee-funded revenue becomes the dominant provider income path as issuance
     decays toward tail emission.
+18. New or reserve providers pass explicit entry and probation stages before
+    normal assignment eligibility, and reports expose reserve, probationary,
+    and newly active supply counts.
 18. Wash retrieval, subsidy farming, and public-retrieval escrow drain are
     uneconomic in canonical simulations.
 19. Audit budget can clear expected protocol audit and repair load without
@@ -1556,8 +1731,10 @@ Before implementing the next large slice:
 12. Define provider cost assumptions for devnet/testnet simulation.
 13. Decide whether dynamic pricing remains disabled, measure-only, or active
     during trusted devnet.
-14. Decide the escrow close/refund semantics needed before fee-dominant
-    equilibrium analysis is meaningful.
+14. Decide the production escrow close/refund semantics needed before
+    fee-dominant equilibrium analysis is meaningful; the simulator now has a
+    first-pass lock/earn/refund fixture, but keeper rounding, expiry auto-close,
+    and quote-signing semantics still need human approval.
 
 For the current simulator-first milestone, the immediate punch list is:
 
@@ -1644,10 +1821,12 @@ The canonical economic scenarios should run alongside reliability scenarios:
 | Scenario | Question | Expected assertion |
 |---|---|---|
 | Underpriced storage | Does provider supply leave when price is below cost? | Honest provider churn rises and capacity drops until price/subsidy changes. |
+| Provider supply entry | Does reserve or new supply recover after churn pressure? | Reserve providers enter probation, promote into active supply, and repair can use restored capacity without data loss. |
+| Provider bond headroom | Does collateral constrain responsibility after slashing or underfunding? | Underbonded providers are excluded from new assignment and existing underbonded responsibility repairs away. |
 | Overpriced storage | Does demand collapse or escrow funding fail? | Deal creation or committed bytes fall below target; quote rejection rises. |
 | Storage price shock | Does the controller converge after supply/demand changes? | Price changes stay within step bounds and settle near target utilization. |
 | Retrieval demand spike | Does retrieval pricing and elasticity absorb burst demand? | Reads remain paid and attributable; overlays spawn only when funded. |
-| Viral public content | Can third-party demand pay without draining owner escrow? | Sponsored sessions carry public retrieval cost; owner escrow stays stable. |
+| Viral public content | Can third-party demand pay without draining owner escrow? | Sponsored sessions carry public retrieval cost; sponsor spend is visible; owner escrow stays stable. |
 | Wash retrieval | Can fake reads profit from rewards or credits? | Base burns, variable burns, and credit caps make the strategy negative EV. |
 | Subsidy farming | Can inactive providers farm emissions from slot responsibility? | Non-compliant slots earn zero or insufficient rewards; remainders burn. |
 | Audit budget exhaustion | Does protocol audit load exceed funding? | Backlog and alerts grow, but minting remains capped. |
@@ -1794,7 +1973,9 @@ approval before merge.
     simulation?
 16. What fee-vs-issuance target defines "healthy enough" before incentives are
     tightened?
-17. What are the end-of-deal escrow close/refund semantics?
+17. What are the production end-of-deal escrow close/refund semantics now that
+    the simulator can model lock-in, earned fees, early close refunds, and
+    outstanding escrow?
 18. Should reward remainders always burn, or can any phase route them to a
     protocol sink without creating cartel incentives?
 19. What storage and retrieval price bounds preserve affordability while

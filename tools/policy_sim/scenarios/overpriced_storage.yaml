@@ -1,0 +1,28 @@
+{
+  "name": "overpriced-storage",
+  "description": "Storage price exceeds modeled user willingness to pay, so new demand is rejected while existing reads remain healthy.",
+  "config": {
+    "scenario": "overpriced-storage",
+    "seed": 58,
+    "providers": 64,
+    "users": 80,
+    "deals": 24,
+    "epochs": 8,
+    "storage_price": 5.0,
+    "storage_demand_price_ceiling": 1.25,
+    "new_deal_requests_per_epoch": 12,
+    "provider_capacity_min": 10,
+    "provider_capacity_max": 12,
+    "base_reward_per_slot": 0.02,
+    "retrieval_price_per_slot": 0.01
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "min_new_deal_requests": 96,
+    "exact_new_deals_accepted": 0,
+    "min_new_deals_rejected_price": 96,
+    "max_new_deal_acceptance_rate": 0.0,
+    "max_new_deals_rejected_capacity": 0,
+    "max_data_loss_events": 0
+  }
+}

@@ -8,7 +8,7 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 
 Expected policy behavior: Repair backoffs are visible, provider capacity is respected, and data-loss events remain zero under the modeled fault.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `94.79%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `40` repair backoffs across `8` repair attempts. Slot health recorded `0` suspect slot-epochs and `40` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
+Observed result: retrieval success was `100.00%`, reward coverage was `94.79%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` expired retrieval rejections, `0` closed retrieval rejections, `0` modeled data-loss events, `0` bandwidth saturation responses and `40` repair backoffs across `8` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `40` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
 
 ## Review Focus
 
@@ -32,9 +32,26 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Repair delay | `2` epochs |
 | Repair attempt cap/slot | `1` (`0` means unlimited) |
 | Repair backoff window | `2` epochs |
+| Repair pending timeout | `0` epochs (`0` means disabled) |
 | Dynamic pricing | `false` |
 | Storage price | `1.0000` |
+| Storage lock-in | `false`; duration `0` epochs |
+| Deal expiry | `false` |
+| Deal close policy | epoch `0`; count `0`; share `0.00%` |
+| New deal requests/epoch | `0` |
+| Storage demand price ceiling | `0.0000` (`0` means disabled) |
+| Storage demand reference price | `0.0000` (`0` disables elasticity) |
+| Storage demand elasticity | `0.00%` |
+| Elasticity trigger | `0` retrievals/epoch (`0` disables) |
+| Elasticity spend cap | `0.0000` total |
+| Elasticity overlay | `false`; `0` providers/epoch; max `0`/deal |
+| Elasticity overlay timing | ready delay `1` epochs; TTL `0` epochs (`0` means no expiry) |
+| Staged uploads/epoch | `0` provisional attempts |
+| Staged upload retention | `0` epochs (`0` disables age cleanup) |
+| Staged upload pending cap | `0` generations (`0` means unlimited) |
 | Retrieval price/slot | `0.0100` |
+| Sponsored retrieval share | `0.00%` |
+| Owner retrieval debit share | `0.00%` |
 | Provider capacity range | `8`-`8` slots |
 | Provider bandwidth range | `0`-`0` serves/epoch (`0` means unlimited) |
 | Service class | `General` |
@@ -55,15 +72,38 @@ The economic model is intentionally simple and deterministic. It is useful for c
 
 | Assumption | Value | Interpretation |
 |---|---:|---|
-| Storage price | `1.0000` | Unitless price applied by the controller; current simulator does not yet model user demand elasticity against this quote. |
+| Storage price | `1.0000` | Unitless price applied by the controller, demand-elasticity curve, and optional affordability gate. |
+| Storage lock-in | enabled `False`, duration `0` epochs | If enabled, committed deals lock storage escrow upfront at the quoted storage price and earn it over the modeled duration. |
+| Deal expiry | enabled `False` | If enabled, deals auto-expire once their modeled duration has fully earned. |
+| Deal close/refund | epoch `0`, count `0`, share `0.00%` | Optional early close refunds unearned storage escrow and removes closed deals from active responsibility. |
+| New deal requests/epoch | `0` | Latent modeled write demand before optional price elasticity suppression. Effective requests are accepted only when price and capacity gates pass. |
+| Storage demand price ceiling | `0.0000` | If non-zero, new deal demand above this storage price is rejected as unaffordable. |
+| Storage demand reference price | `0.0000` | If non-zero with elasticity enabled, demand scales around this price before hard affordability rejection. |
+| Storage demand elasticity | `0.00%` | Demand multiplier change for a 100% price move relative to the reference price, clamped by configured min/max demand bps. |
 | Storage target utilization | `70.00%` | If dynamic pricing is enabled, utilization above this target steps storage price up, otherwise down. |
 | Retrieval price per slot | `0.0100` | Paid per successful provider slot served, before the configured variable burn. |
 | Retrieval target per epoch | `80` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |
+| Retrieval demand shocks | `[]` | Optional epoch-scoped retrieval demand multipliers used to test price shock response and oscillation. |
+| Sponsored retrieval share | `0.00%` | Share of retrieval attempts paid by requester/sponsor session funds instead of owner deal escrow. |
+| Owner retrieval escrow debit | `0.00%` | Share of non-sponsored retrieval base and variable cost debited to owner escrow in scenarios that explicitly model owner-paid reads. |
 | Dynamic pricing max step | `5.00%` | Per-epoch controller movement cap. Lower values are safer but slower to equilibrate. |
 | Base reward per slot | `0.0200` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
+| Provider initial/min bond | `100.0000` / `0.0000` | Simplified collateral model. Providers below the required bond are excluded from new responsibility and can trigger repair. |
+| Provider bond per assigned slot | `0.0000` | Additional modeled collateral required for each assigned storage slot. |
+| Provider cost shocks | `[]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
+| Provider churn policy | enabled `False`, threshold `0.0000`, after `1` epochs, cap `0`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |
+| Provider churn floor | `0` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |
+| Provider supply entry | enabled `False`, reserve `0`, cap `1`/epoch, probation `1` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |
+| Supply entry triggers | utilization >= `0.00%` or storage price >= `disabled` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
+| Elasticity trigger/spend | `0` retrievals/epoch / `0.0000` cap | User-funded overflow spending starts only after the configured demand trigger and must stay inside the spend cap. |
+| Elasticity overlay policy | enabled `False`, `0` providers/epoch, max `0`/deal | Temporary overlay routes expand retrieval options without becoming durable base slots. |
+| Elasticity overlay timing | ready delay `1` epochs, TTL `0` epochs | Models catch-up/readiness delay and scale-down expiration for overflow routes. |
+| Staged upload attempts/epoch | `0` | Provisional generations that consume local provider-daemon staging space before content commit. |
+| Staged upload commit rate | `100.00%` | Share of provisional uploads that become committed content instead of remaining abandoned local state. |
+| Staged upload retention/cap | `0` epochs / `0` generations | Local cleanup and preflight limits used to bound abandoned provisional-generation storage pressure. |
 | Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
 | Evidence spam claims/epoch | `0` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |
 | Evidence bond / bounty | `0.0000` / `0.0000` | Spam claims burn bond unless convicted; bounty is paid only on convicted evidence. |
@@ -73,13 +113,13 @@ The economic model is intentionally simple and deterministic. It is useful for c
 
 User-facing retrieval availability stayed intact: every modeled retrieval completed successfully. That does not mean every provider behaved correctly; it means redundancy, routing, or deputy service absorbed the fault.
 
-The policy layer recorded `80` evidence events: `80` soft, `0` threshold, `0` hard, and `0` spam events. Soft evidence is suitable for repair and reward exclusion; hard or convicted threshold evidence is the category that can later justify slashing or stronger sanctions.
+The policy layer recorded `80` evidence events: `80` soft, `0` threshold, `0` hard, `0` economic, `0` market, `0` spam, and `0` operational events. Soft and economic evidence are suitable for repair and reward exclusion; hard or convicted threshold evidence is the category that can later justify slashing or stronger sanctions.
 
 Repair was exercised: `0` repair operations started, `0` produced pending-provider readiness evidence, and `0` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible until replacement work catches up and the readiness gate is satisfied.
 
 Reward exclusion was active: `0.8000` modeled reward units were burned instead of paid to non-compliant slots.
 
-Repair coordination was constrained: `40` repair backoffs occurred across `8` repair attempts. Cooldown backoffs accounted for `16` events and attempt-cap backoffs accounted for `16` events.
+Repair coordination was constrained: `40` repair backoffs occurred across `8` repair attempts. Cooldown backoffs accounted for `16` events and attempt-cap backoffs accounted for `16` events. Pending-provider readiness timeouts accounted for `0` events.
 
 The directly implicated provider set begins with: `sp-000`.
 
@@ -91,6 +131,8 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 |---|---:|---|
 | Worst epoch success | `100.00%` at epoch `1` | Identifies the availability cliff instead of hiding it in aggregate success. |
 | Unavailable reads | `0` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |
+| Expired retrieval rejections | `0` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
+| Closed retrieval rejections | `0` | Post-close requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
 | Modeled data-loss events | `0` | Durability-loss signal. This should remain zero for current scale fixtures. |
 | Degraded epochs | `0` | Counts epochs with unavailable reads or success below 99.9%. |
 | Recovery epoch after worst | `2` | Shows whether the network returned to clean steady state after the worst point. |
@@ -101,9 +143,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Repair attempts | `8` | Counts bounded attempts to open a repair or discover replacement pressure. |
 | Repair backoff pressure | `40` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Repair backoffs per attempt | `5` | Distinguishes capacity/cooldown pressure from successful repair starts. |
-| Repair cooldowns / attempt caps | `16` / `16` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
+| Repair cooldowns / attempt caps / readiness timeouts | `16` / `16` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Suspect / delinquent slot-epochs | `0` / `40` | Separates early warning state from threshold-crossed delinquency. |
-| Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
+| Final repair backlog | `0` slots | Started repairs minus completed or timed-out repairs at run end. |
 | High-bandwidth providers | `0` | Providers currently eligible for hot/high-bandwidth routing. |
 | High-bandwidth promotions/demotions | `0` / `0` | Shows capability changes under measured demand. |
 | Hot high-bandwidth serves/retrieval | `0` | Measures whether hot retrievals actually use promoted providers. |
@@ -111,6 +153,22 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Platinum / Gold / Silver / Fail serves | `0` / `0` / `0` / `0` | Shows the latency-tier distribution for performance-market policy. |
 | Performance reward paid | `0.0000` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |
 | Provider latency p10 / p50 / p90 | `0` / `0` / `0` ms | Shows whether aggregate averages hide slow provider tails. |
+| New deal latent/effective demand | `0` / `0` | Shows how much modeled write demand survived the price-elasticity curve. |
+| New deal demand accepted/rejected/suppressed | `0` / `0` / `0` | Shows whether modeled write demand is entering the network, blocked by price/capacity, or never arriving because quotes are unattractive. |
+| New deal effective/latent acceptance | `0.00%` / `0.00%` | Demand-side market health signal; a technically available network can still fail if users cannot afford storage. |
+| Staged upload attempts/accepted/committed | `0` / `0` / `0` | Shows provisional upload pressure separately from committed storage demand. |
+| Staged upload rejections/cleaned | `0` / `0` | Preflight rejection and retention cleanup should bound abandoned provisional generations. |
+| Staged pending generations/MDUs peak | `0` / `0` | Detects whether local staged storage pressure exceeded configured caps. |
+| Elasticity spend / rejections | `0.0000` / `0` | Shows whether user-funded overflow expansion stayed inside the spend window. |
+| Elasticity overlays activated/served/expired | `0` / `0` / `0` | Confirms temporary overflow routes are created, actually used, and later removed. |
+| Elasticity overlay ready/active peak | `0` / `0` | Shows catch-up/readiness lag and total temporary routing footprint. |
+| Sponsored retrieval attempts/spend | `0` / `0.0000` | Shows public or requester-funded demand separately from owner-funded deal escrow. |
+| Owner-funded attempts / owner escrow debit | `640` / `0.0000` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |
+| Wash accounted spend / net gain | `0.6400` / `48.0000` | Worst-case colluding requester/provider economics after explicit base, sponsor, and owner-funded variable spend. |
+| Storage escrow locked/earned/refunded | `0.0000` / `0.0000` / `0.0000` | Shows quote-to-lock, provider earning, and close/refund accounting for committed storage. |
+| Storage escrow outstanding | `0.0000` final; peak `0.0000` | Detects funds left locked after close/expiry semantics should have released them. |
+| Storage fee provider payout/burned | `0.0000` / `0.0000` | Separates earned storage fees paid to eligible providers from fees withheld from non-compliant responsibility. |
+| Deals open/closed/expired | `8` / `0` / `0` | Confirms close/refund/expiry semantics remove deals from active responsibility instead of continuing to accrue rewards. |
 | Audit demand / spent | `0.4000` / `0.4000` | Shows whether enforcement evidence consumed the available audit budget. |
 | Audit backlog / exhausted epochs | `0.0000` / `0` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
 | Evidence spam claims / convictions | `0` / `0` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |
@@ -122,8 +180,21 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Final storage utilization | `100.00%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `100.00%` / `100.00%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
 | Provider P&L p10 / p50 / p90 | `3.8950` / `4.0820` / `4.2435` | Shows whether aggregate P&L hides marginal-provider distress. |
+| Provider cost shock epochs/providers | `0` / `0` | Shows when external cost pressure was active and how much of the provider population it affected. |
+| Max cost shock fixed/storage/bandwidth | `100.00%` / `100.00%` / `100.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
+| Provider churn events / final churned | `0` / `0` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |
+| Provider entries / probation promotions | `0` / `0` | Shows whether reserve supply entered and cleared readiness gating before receiving normal placement. |
+| Reserve / probationary / entered-active providers | `0` / `0` / `0` | Separates unused reserve supply, in-flight onboarding, and newly promoted active supply. |
+| Underbonded repairs / peak underbonded providers | `0` / `0` | Shows whether insufficient provider collateral became placement/repair pressure. |
+| Final underbonded assigned slots / bond deficit | `0` / `0.0000` | Checks whether repair removed responsibility from undercollateralized providers by run end. |
+| Churn pressure provider-epochs / peak | `2` / `1` | Shows the breadth and duration of providers below the configured churn threshold. |
+| Active / exited / reserve provider capacity | `96` / `0` / `0` slots | Measures supply remaining, removed, and still waiting outside normal placement. |
+| Peak assigned slots on churned providers | `0` | Shows the maximum repair burden created by economic exits. |
 | Storage price start/end/range | `1.0000` -> `1.0000` (`1.0000`-`1.0000`) | Shows dynamic pricing movement and bounds. |
 | Retrieval price start/end/range | `0.0100` -> `0.0100` (`0.0100`-`0.0100`) | Shows whether demand pressure moved retrieval pricing. |
+| Retrieval latent/effective attempts | `640` / `640` | Shows how much retrieval load was added by demand-shock multipliers. |
+| Retrieval demand shock epochs/multiplier | `0` / `100.00%` | Shows the size and duration of the modeled read-demand shock. |
+| Price direction changes storage/retrieval | `0` / `0` | Detects controller oscillation rather than relying on visual inspection. |
 
 ### Regional Signals
 
@@ -192,15 +263,16 @@ Repair summary:
 - Repair backoffs: `40`
 - Repair cooldown backoffs: `16`
 - Repair attempt-cap backoffs: `16`
+- Repair readiness timeouts: `0`
 - Suspect slot-epochs: `0`
 - Delinquent slot-epochs: `40`
 - Final active slots in last epoch: `96`
 
 Candidate exclusion summary:
 
-| Candidate Mode | No-Candidate Events | Eligible | Current Deal | Current Provider | Draining | Jailed | Capacity-Bound |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `fallback` | 8 | 0 | 0 | 8 | 0 | 0 | 88 |
+| Candidate Mode | No-Candidate Events | Eligible | Current Deal | Current Provider | Bond Headroom | Draining | Jailed | Capacity-Bound |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `fallback` | 8 | 0 | 0 | 8 | 0 | 0 | 0 | 88 |
 
 ### Repair Ledger Excerpt
 
@@ -227,6 +299,12 @@ The run minted `23.3600` reward/audit units and burned `4.0000` units, for a bur
 Providers earned `63.2000` in modeled revenue against `17.6000` in modeled cost, ending with aggregate P&L `45.6000`.
 
 Retrieval accounting paid providers `48.6400`, burned `0.6400` in base fees, and burned `2.5600` in variable retrieval fees.
+
+Wash-retrieval accounting shows explicit spend `0.6400` against possible colluding-provider gain `48.0000`.
+
+Sponsored retrieval accounting spent `0.0000` across `0` sponsor-funded attempts; owner retrieval escrow debit was `0.0000`.
+
+Storage escrow accounting locked `0.0000`, earned `0.0000`, refunded `0.0000`, paid providers `0.0000`, burned `0.0000`, and ended with outstanding escrow `0.0000`.
 
 Performance-tier accounting paid `0.0000` in QoS rewards.
 
@@ -304,17 +382,59 @@ Shows aggregate provider economics over time.
 
 ![Provider P&L](graphs/provider_pnl.svg)
 
+### Provider Cost Shock
+
+Shows modeled provider cost pressure against provider revenue.
+
+![Provider Cost Shock](graphs/provider_cost_shock.svg)
+
+### Provider Churn
+
+Shows modeled provider exits and per-epoch churn events.
+
+![Provider Churn](graphs/provider_churn.svg)
+
+### Provider Supply Entry
+
+Shows reserve provider entry and probationary promotion into active supply.
+
+![Provider Supply Entry](graphs/provider_supply.svg)
+
+### Provider Bond Headroom
+
+Shows underbonded providers and repairs triggered by insufficient assignment collateral.
+
+![Provider Bond Headroom](graphs/provider_bond_headroom.svg)
+
 ### Burn / Mint Ratio
 
 Shows whether burns are material relative to minted rewards and audit budget.
 
 ![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)
 
+### Storage Escrow Lifecycle
+
+Shows storage escrow locked, earned, refunded, and still outstanding after close/refund semantics.
+
+![Storage Escrow Lifecycle](graphs/storage_escrow_lifecycle.svg)
+
 ### Price Trajectory
 
 Shows storage price and retrieval price movement under dynamic pricing.
 
 ![Price Trajectory](graphs/price_trajectory.svg)
+
+### Retrieval Demand
+
+Shows effective retrieval attempts against latent baseline demand.
+
+![Retrieval Demand](graphs/retrieval_demand.svg)
+
+### Storage Demand
+
+Shows modeled new deal demand accepted versus rejected by price.
+
+![Storage Demand](graphs/storage_demand.svg)
 
 ### Capacity Utilization
 
@@ -333,6 +453,12 @@ Shows provider bandwidth saturation and repair backoffs, which are scale-specifi
 Shows whether started repairs are accumulating faster than they complete.
 
 ![Repair Backlog](graphs/repair_backlog.svg)
+
+### Repair Readiness
+
+Shows pending-provider readiness timeouts against successful readiness events.
+
+![Repair Readiness](graphs/repair_readiness.svg)
 
 ### High-Bandwidth Promotion
 
@@ -382,11 +508,29 @@ Shows unmet audit demand and exhausted-budget epochs when evidence exceeds avail
 
 ![Audit Backlog](graphs/audit_backlog.svg)
 
+### Sponsored Retrieval Accounting
+
+Shows sponsor-funded public retrieval spend against any owner deal-escrow debit.
+
+![Sponsored Retrieval Accounting](graphs/sponsored_retrieval_accounting.svg)
+
 ### Elasticity Spend
 
 Shows demand-funded elasticity spend and rejected expansion attempts.
 
 ![Elasticity Spend](graphs/elasticity_spend.svg)
+
+### Elasticity Overlay Routes
+
+Shows temporary overflow routes that are active or serving reads after user-funded elasticity scale-up.
+
+![Elasticity Overlay Routes](graphs/elasticity_overlay_routes.svg)
+
+### Staged Upload Pressure
+
+Shows provisional-generation preflight rejections and retention cleanup for abandoned staged uploads.
+
+![Staged Upload Pressure](graphs/staged_upload_pressure.svg)
 
 ## Raw Artifacts
 
@@ -396,6 +540,6 @@ Shows demand-funded elasticity spend and rejected expansion attempts.
 - `operators.csv`: final operator-level provider count, assignment share, success, and P&L metrics.
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
-- `economy.csv`: per-epoch market and accounting ledger.
-- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.
+- `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
+- `economy.csv`: per-epoch market, elasticity overlay, staged upload, and accounting ledger.
+- `signals.json`: derived availability, saturation, repair, capacity, economic, elasticity overlay, staged upload, regional, concentration, and provider bottleneck signals.

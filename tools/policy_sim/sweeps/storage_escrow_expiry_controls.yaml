@@ -1,0 +1,121 @@
+{
+  "name": "storage-escrow-expiry-controls",
+  "description": "Sensitivity sweep for committed-storage expiry timing, run length, disabled-expiry behavior, and larger escrow books.",
+  "base_scenario": "../scenarios/storage_escrow_expiry.yaml",
+  "cases": [
+    {
+      "name": "baseline-duration4"
+    },
+    {
+      "name": "short-duration2-post-expiry-rejections",
+      "config": {
+        "epochs": 4,
+        "deal_duration_epochs": 2
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_storage_escrow_locked": 220.0,
+        "min_storage_escrow_earned": 220.0,
+        "max_storage_escrow_refunded": 0.0,
+        "max_storage_escrow_outstanding": 0.0,
+        "min_storage_fee_provider_payouts": 220.0,
+        "max_storage_fee_burned": 0.0,
+        "min_expired_retrieval_attempts": 150,
+        "max_owner_retrieval_escrow_debited": 0.0,
+        "exact_final_open_deals": 0,
+        "exact_final_closed_deals": 12,
+        "exact_final_expired_deals": 12,
+        "exact_deals_expired": 12
+      }
+    },
+    {
+      "name": "one-epoch-duration-immediate-expiry",
+      "config": {
+        "epochs": 3,
+        "deal_duration_epochs": 1
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_storage_escrow_locked": 100.0,
+        "min_storage_escrow_earned": 100.0,
+        "max_storage_escrow_refunded": 0.0,
+        "max_storage_escrow_outstanding": 0.0,
+        "min_storage_fee_provider_payouts": 100.0,
+        "min_expired_retrieval_attempts": 150,
+        "max_owner_retrieval_escrow_debited": 0.0,
+        "exact_final_open_deals": 0,
+        "exact_final_closed_deals": 12,
+        "exact_final_expired_deals": 12,
+        "exact_deals_expired": 12
+      }
+    },
+    {
+      "name": "not-yet-mature-open-control",
+      "config": {
+        "deal_duration_epochs": 8
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_storage_escrow_locked": 900.0,
+        "min_storage_escrow_earned": 450.0,
+        "min_storage_escrow_outstanding": 450.0,
+        "max_storage_escrow_outstanding": 500.0,
+        "max_storage_escrow_refunded": 0.0,
+        "max_deals_expired": 0,
+        "exact_final_open_deals": 12,
+        "exact_final_closed_deals": 0,
+        "exact_final_expired_deals": 0,
+        "exact_deals_expired": 0
+      }
+    },
+    {
+      "name": "expiry-disabled-unsafe",
+      "config": {
+        "deal_expiry_enabled": false
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_storage_escrow_locked": 450.0,
+        "min_storage_escrow_earned": 450.0,
+        "max_storage_escrow_refunded": 0.0,
+        "max_storage_escrow_outstanding": 0.0,
+        "max_deals_expired": 0,
+        "exact_final_open_deals": 12,
+        "exact_final_closed_deals": 0,
+        "exact_final_expired_deals": 0,
+        "exact_deals_expired": 0
+      }
+    },
+    {
+      "name": "larger-escrow-book",
+      "config": {
+        "providers": 200,
+        "users": 500,
+        "deals": 80
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_storage_escrow_locked": 3000.0,
+        "min_storage_escrow_earned": 3000.0,
+        "max_storage_escrow_refunded": 0.0,
+        "max_storage_escrow_outstanding": 0.0,
+        "min_storage_fee_provider_payouts": 3000.0,
+        "max_storage_fee_burned": 0.0,
+        "exact_final_open_deals": 0,
+        "exact_final_closed_deals": 80,
+        "exact_final_expired_deals": 80,
+        "exact_deals_expired": 80
+      }
+    }
+  ]
+}

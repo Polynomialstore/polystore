@@ -1,0 +1,107 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/retrieval_demand_shock.yaml",
+  "case_count": 9,
+  "cases": [
+    {
+      "case": "baseline-10pct-step",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "slow-250bps-step",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "fast-2000bps-step",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-target-muted-response",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "low-target-sticky-high",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "severe-8x-shock",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "prolonged-shock",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "narrow-price-ceiling",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "controller-disabled-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "retrieval-demand-shock",
+      "seed": 83,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for retrieval-demand shock multipliers, pricing target, step size, and disabled controller behavior.",
+  "name": "retrieval-demand-shock-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/retrieval-demand-shock-controls"
+}

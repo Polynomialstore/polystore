@@ -1,0 +1,83 @@
+{
+  "name": "operator-concentration-controls",
+  "description": "Sensitivity sweep for per-deal operator assignment caps under dominant-operator Sybil pressure.",
+  "base_scenario": "../scenarios/operator_concentration_cap.yaml",
+  "cases": [
+    {
+      "name": "baseline-cap2-dominant50"
+    },
+    {
+      "name": "strict-cap1-dominant50",
+      "config": {
+        "operator_assignment_cap_per_deal": 1
+      },
+      "assertions": {
+        "max_top_operator_assignment_share_bps": 1700,
+        "max_max_operator_deal_slots": 3,
+        "max_operator_deal_cap_violations": 60,
+        "min_operator_deal_cap_violations": 1
+      }
+    },
+    {
+      "name": "loose-cap3-dominant50",
+      "config": {
+        "operator_assignment_cap_per_deal": 3
+      },
+      "assertions": {
+        "max_top_operator_assignment_share_bps": 1700,
+        "max_max_operator_deal_slots": 3
+      }
+    },
+    {
+      "name": "no-cap-dominant50",
+      "config": {
+        "operator_assignment_cap_per_deal": 0
+      },
+      "assertions": {
+        "min_top_operator_assignment_share_bps": 5000,
+        "max_top_operator_assignment_share_bps": 5000,
+        "min_max_operator_deal_slots": 12,
+        "max_max_operator_deal_slots": 12,
+        "max_operator_deal_cap_violations": 0
+      }
+    },
+    {
+      "name": "cap2-dominant70",
+      "config": {
+        "dominant_operator_provider_bps": 7000
+      },
+      "assertions": {
+        "min_top_operator_provider_share_bps": 7000,
+        "max_top_operator_assignment_share_bps": 2300,
+        "max_max_operator_deal_slots": 8,
+        "max_operator_deal_cap_violations": 10,
+        "min_operator_deal_cap_violations": 1
+      }
+    },
+    {
+      "name": "cap2-dominant80",
+      "config": {
+        "dominant_operator_provider_bps": 8000
+      },
+      "assertions": {
+        "min_top_operator_provider_share_bps": 8000,
+        "max_top_operator_assignment_share_bps": 4700,
+        "max_max_operator_deal_slots": 12,
+        "max_operator_deal_cap_violations": 25,
+        "min_operator_deal_cap_violations": 1
+      }
+    },
+    {
+      "name": "cap2-five-operators",
+      "config": {
+        "operator_count": 5
+      },
+      "assertions": {
+        "max_top_operator_assignment_share_bps": 2500,
+        "max_max_operator_deal_slots": 4,
+        "max_operator_deal_cap_violations": 60,
+        "min_operator_deal_cap_violations": 1
+      }
+    }
+  ]
+}

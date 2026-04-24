@@ -1,0 +1,82 @@
+{
+  "assertion_failures": 1,
+  "base_scenario": "tools/policy_sim/scenarios/elasticity_overlay_scaleup.yaml",
+  "case_count": 6,
+  "cases": [
+    {
+      "case": "baseline",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-overlay-scaleup",
+      "seed": 71,
+      "success_rate": 0.9432291666666667,
+      "unavailable_reads": 109
+    },
+    {
+      "case": "slow-readiness",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-overlay-scaleup",
+      "seed": 71,
+      "success_rate": 0.9348958333333334,
+      "unavailable_reads": 125
+    },
+    {
+      "case": "short-ttl",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-overlay-scaleup",
+      "seed": 71,
+      "success_rate": 0.9348958333333334,
+      "unavailable_reads": 125
+    },
+    {
+      "case": "low-spend-cap",
+      "data_loss_events": 0,
+      "failed_assertions": [
+        "max_elasticity_overlay_rejections"
+      ],
+      "scenario": "elasticity-overlay-scaleup",
+      "seed": 71,
+      "success_rate": 0.9182291666666667,
+      "unavailable_reads": 157
+    },
+    {
+      "case": "tight-per-deal-cap",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-overlay-scaleup",
+      "seed": 71,
+      "success_rate": 0.9239583333333333,
+      "unavailable_reads": 146
+    },
+    {
+      "case": "aggressive-scaleup",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "elasticity-overlay-scaleup",
+      "seed": 71,
+      "success_rate": 0.94375,
+      "unavailable_reads": 108
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for user-funded elasticity overlay readiness, TTL, spend cap, and per-deal route caps.",
+  "name": "elasticity-overlay-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/elasticity-overlay-controls"
+}

@@ -1,0 +1,99 @@
+{
+  "name": "replacement-grinding-controls",
+  "description": "Sensitivity sweep for pending-repair timeout, cooldown, and per-slot attempt-cap controls under replacement grinding.",
+  "base_scenario": "../scenarios/replacement_grinding.yaml",
+  "cases": [
+    {
+      "name": "baseline-cap3-timeout1-backoff2"
+    },
+    {
+      "name": "cap1-timeout1-backoff2",
+      "config": {
+        "repair_attempt_cap_per_slot": 1
+      },
+      "assertions": {
+        "min_repair_attempts": 6,
+        "max_repair_attempts": 6,
+        "min_repair_timeouts": 6,
+        "max_repair_timeouts": 6,
+        "min_repair_attempt_caps": 20,
+        "min_repair_cooldowns": 20,
+        "max_repairs_completed": 0
+      }
+    },
+    {
+      "name": "cap2-timeout1-backoff2",
+      "config": {
+        "repair_attempt_cap_per_slot": 2
+      },
+      "assertions": {
+        "min_repair_attempts": 12,
+        "max_repair_attempts": 12,
+        "min_repair_timeouts": 12,
+        "max_repair_timeouts": 12,
+        "min_repair_attempt_caps": 10,
+        "min_repair_cooldowns": 20,
+        "max_repairs_completed": 0
+      }
+    },
+    {
+      "name": "no-cap-timeout1-backoff2",
+      "config": {
+        "repair_attempt_cap_per_slot": 0
+      },
+      "assertions": {
+        "min_repair_attempts": 20,
+        "min_repair_timeouts": 18,
+        "min_repair_cooldowns": 18,
+        "min_repair_attempt_caps": 0,
+        "max_repair_attempt_caps": 0,
+        "max_repairs_completed": 0
+      }
+    },
+    {
+      "name": "cap3-timeout2-backoff2",
+      "config": {
+        "repair_pending_timeout_epochs": 2
+      },
+      "assertions": {
+        "min_repair_attempts": 18,
+        "min_repair_timeouts": 12,
+        "max_repair_timeouts": 12,
+        "min_repair_cooldowns": 12,
+        "min_repair_attempt_caps": 0,
+        "max_repair_attempt_caps": 0,
+        "max_repairs_completed": 0
+      }
+    },
+    {
+      "name": "cap3-timeout1-no-backoff",
+      "config": {
+        "repair_backoff_epochs": 0
+      },
+      "assertions": {
+        "min_repair_attempts": 18,
+        "min_repair_timeouts": 18,
+        "min_repair_cooldowns": 0,
+        "max_repair_cooldowns": 0,
+        "min_repair_attempt_caps": 20,
+        "max_repairs_completed": 0
+      }
+    },
+    {
+      "name": "cap3-timeout1-backoff4",
+      "config": {
+        "repair_backoff_epochs": 4
+      },
+      "assertions": {
+        "min_repair_attempts": 12,
+        "max_repair_attempts": 12,
+        "min_repair_timeouts": 12,
+        "max_repair_timeouts": 12,
+        "min_repair_cooldowns": 30,
+        "min_repair_attempt_caps": 0,
+        "max_repair_attempt_caps": 0,
+        "max_repairs_completed": 0
+      }
+    }
+  ]
+}

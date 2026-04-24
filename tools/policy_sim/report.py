@@ -72,6 +72,15 @@ SCENARIO_GUIDES = {
         "expected": "Invalid proofs appear, corrupt bytes are not paid, repairs start, and simulated slash accounting is non-zero in slash mode.",
         "review": "Review this before keeper slashing work. This is the clearest fixture for evidence quality and punishment severity.",
     },
+    "invalid-synthetic-proof": {
+        "title": "Invalid Synthetic Proof",
+        "intent": (
+            "Model a provider submitting invalid liveness proofs without corrupting retrieval bytes. The policy question is whether "
+            "chain-verifiable hard proof evidence alone triggers repair and simulated slash accounting."
+        ),
+        "expected": "Invalid proofs are recorded, repair starts and completes, the provider is simulated-slashed, corrupt retrieval payment remains zero, and durability remains intact.",
+        "review": "Use this fixture to isolate keeper proof-validation behavior from gateway byte-verification behavior before punitive hard-fault rollout.",
+    },
     "malicious-corrupt": {
         "title": "Corrupt Provider",
         "intent": (
@@ -99,6 +108,15 @@ SCENARIO_GUIDES = {
         "expected": "Early evidence should trigger repair while preserving availability and not expanding on-chain enforcement beyond simulated mode.",
         "review": "Use this to design provider admission and initial-deal health checks.",
     },
+    "staged-upload-grief": {
+        "title": "Staged Upload Grief",
+        "intent": (
+            "Model a client or user-gateway repeatedly uploading provisional generations and never committing them. "
+            "This is an operational/accounting grief case: local provider-daemon storage pressure must be bounded by retention cleanup and preflight caps, not by repair or punitive provider enforcement."
+        ),
+        "expected": "Preflight rejections and retention cleanup are visible, pending provisional generations stay under the configured cap, no repair starts, and committed retrieval availability remains intact.",
+        "review": "Use this before implementing provider-daemon staged-generation GC, gateway preflight checks, and operator alerts for abandoned provisional data.",
+    },
     "underpriced-storage": {
         "title": "Underpriced Storage Market",
         "intent": (
@@ -107,6 +125,69 @@ SCENARIO_GUIDES = {
         ),
         "expected": "Retrieval success remains high, but provider P&L turns negative and churn risk appears.",
         "review": "This fixture should force discussion of price floors, reward calibration, and dynamic pricing before production economics.",
+    },
+    "overpriced-storage": {
+        "title": "Overpriced Storage Demand Collapse",
+        "intent": (
+            "Model a technically healthy network whose storage quote exceeds modeled user willingness to pay. "
+            "This is a demand-side market warning: existing reads can stay perfect while new storage demand collapses."
+        ),
+        "expected": "Existing retrievals remain healthy, new deal requests are rejected by price rather than capacity, and the demand acceptance rate falls to zero.",
+        "review": "Use this fixture to discuss quote UX, price ceilings, affordability bounds, and whether dynamic pricing should move before demand disappears.",
+    },
+    "demand-elasticity-recovery": {
+        "title": "Storage Demand Elasticity Recovery",
+        "intent": (
+            "Model latent storage demand that initially pauses because storage price is above a reference willingness-to-pay level, "
+            "then recovers as the utilization-based controller steps price down."
+        ),
+        "expected": "Some latent demand is suppressed early, effective requests recover later, accepted deals become non-zero, and capacity rejections stay zero.",
+        "review": "Use this fixture to calibrate demand elasticity, quote telemetry, and price-step timing before encoding market defaults.",
+    },
+    "provider-cost-shock": {
+        "title": "Provider Cost Shock",
+        "intent": (
+            "Model a technically healthy network where provider operating costs jump after launch. "
+            "The policy question is whether the simulator exposes churn pressure and pricing mismatch before availability fails."
+        ),
+        "expected": "Retrieval success remains high, the cost-shock window is visible, provider P&L falls, and negative-P&L churn risk appears.",
+        "review": "Use this fixture to calibrate cost assumptions, price floors, reward buffers, and whether pricing should react to provider cost telemetry.",
+    },
+    "provider-economic-churn": {
+        "title": "Provider Economic Churn",
+        "intent": (
+            "Model rational provider exit after sustained negative P&L. The policy question is whether bounded churn converts "
+            "economic distress into visible capacity exit and repair pressure without causing durability loss."
+        ),
+        "expected": "Cost-shocked providers become churn candidates, exits are capped per epoch, affected slots are repaired, and reads remain available.",
+        "review": "Use this fixture to tune churn caps, replacement capacity, price floors, and how much economic distress should remain monitoring-only.",
+    },
+    "provider-supply-entry": {
+        "title": "Provider Supply Entry",
+        "intent": (
+            "Model reserve providers entering the active set after churn reduces supply. The policy question is whether supply recovery "
+            "has explicit admission, probation, and promotion telemetry instead of silently assuming infinite replacement capacity."
+        ),
+        "expected": "Cost-shocked providers churn, reserve providers enter probation, probationary providers promote to active supply, repair completes, and durability remains intact.",
+        "review": "Use this fixture to tune onboarding caps, probation length, utilization or price triggers, and whether new SPs should receive normal placement immediately or only after readiness evidence.",
+    },
+    "provider-bond-headroom": {
+        "title": "Provider Bond Headroom",
+        "intent": (
+            "Model provider assignment collateral as a first-class placement constraint. The policy question is whether a provider that "
+            "falls below required bond is visible, excluded from new responsibility, and repaired away without treating every economic fault as slashable fraud."
+        ),
+        "expected": "A slashed provider becomes underbonded, underbonded slots trigger repair, new assignments exclude insufficient-bond providers, and durability remains intact.",
+        "review": "Use this fixture to tune minimum bond, per-slot collateral, slash sizing, and whether underbonding should create repair, throttling, or only placement exclusion.",
+    },
+    "retrieval-demand-shock": {
+        "title": "Retrieval Demand Shock",
+        "intent": (
+            "Model a temporary retrieval demand spike and verify the retrieval-price controller reacts within configured bounds "
+            "without creating repeated oscillation or availability loss."
+        ),
+        "expected": "Retrieval demand shock epochs are visible, retrieval price rises and settles within bounds, reads stay available, and direction changes remain limited.",
+        "review": "Use this fixture to tune retrieval-demand targets, step size, price floors/ceilings, and shock dampening before keeper defaults.",
     },
     "wash-retrieval": {
         "title": "Wash Retrieval Demand",
@@ -121,10 +202,10 @@ SCENARIO_GUIDES = {
         "title": "Viral Public Retrieval Spike",
         "intent": (
             "Model a legitimate public-demand spike. The system should pay providers for real bandwidth, burn the configured fees, "
-            "and avoid treating popularity as misbehavior."
+            "avoid treating popularity as misbehavior, and isolate deal-owner escrow from sponsored public demand."
         ),
-        "expected": "High retrieval volume succeeds, provider payouts rise, and base burns are visible without unnecessary repair.",
-        "review": "Use this to separate anti-wash controls from legitimate popularity handling.",
+        "expected": "High retrieval volume succeeds, provider payouts rise, base burns and sponsored-session spend are visible, owner escrow is not debited, and unnecessary repair stays quiet.",
+        "review": "Use this to separate anti-wash controls from legitimate popularity handling and to plan sponsored-session keeper/accounting tests.",
     },
     "high-bandwidth-promotion": {
         "title": "High-Bandwidth Provider Promotion",
@@ -172,6 +253,15 @@ SCENARIO_GUIDES = {
         "expected": "Elasticity rejections are visible and spend remains at or below the cap.",
         "review": "Confirm this matches product expectations for burst handling and user-funded capacity expansion.",
     },
+    "elasticity-overlay-scaleup": {
+        "title": "Elasticity Overlay Scale-Up",
+        "intent": (
+            "Model the positive path for user-funded overflow capacity. Sustained hot retrieval pressure buys temporary overlay routes, "
+            "the routes become ready after a delay, serve reads, and expire instead of becoming permanent unpaid responsibility."
+        ),
+        "expected": "Overlay activations, spend, ready routes, serves, and expirations are visible; spend caps do not reject this fixture; durable slot repair and data-loss paths stay quiet.",
+        "review": "Use this before implementing MsgSignalSaturation, overlay readiness, overlay TTL, and gateway routing expansion in the live stack.",
+    },
     "audit-budget-exhaustion": {
         "title": "Audit Budget Exhaustion",
         "intent": (
@@ -208,6 +298,51 @@ SCENARIO_GUIDES = {
         "expected": "Quota misses are visible, reward coverage falls for non-compliant responsibility, and corrupt/data-loss safety invariants stay clean.",
         "review": "Use this before implementing base-reward gating and subsidy-farming controls.",
     },
+    "storage-escrow-close-refund": {
+        "title": "Storage Escrow Close And Refund",
+        "intent": (
+            "Model the storage lock-in lifecycle for committed content. The policy question is whether storage fees are locked, "
+            "earned over time by eligible providers, and refunded on early close without leaving hidden outstanding escrow."
+        ),
+        "expected": "Storage escrow is locked, earned storage fees pay eligible providers, early deal close refunds unearned funds, closed-content reads are rejected explicitly, and outstanding escrow reaches zero by run end.",
+        "review": "Use this before implementing keeper close/refund semantics, quote-to-charge parity, storage-fee payout, and end-of-deal accounting tests.",
+    },
+    "storage-escrow-noncompliance-burn": {
+        "title": "Storage Escrow Noncompliance Burn",
+        "intent": (
+            "Model earned storage fees under reward-exclusion mode when a provider misses liveness quota. "
+            "The policy question is whether non-compliant responsibility loses provider storage-fee payout without hiding availability or durability regressions."
+        ),
+        "expected": "Storage escrow still locks and earns, compliant slots are paid, non-compliant slot share is burned, repairs start, and outstanding escrow reaches zero by run end.",
+        "review": "Use this before implementing keeper storage-fee payout gates, reward-exclusion accounting, and burn-ledger tests for delinquent storage responsibility.",
+    },
+    "storage-escrow-expiry": {
+        "title": "Storage Escrow Expiry",
+        "intent": (
+            "Model end-of-duration storage accounting. The policy question is whether a fully earned deal auto-expires, "
+            "leaves no hidden escrow, and stops contributing active responsibility after its duration."
+        ),
+        "expected": "Storage escrow locks, earns exactly through the configured duration, every deal expires, no unearned refund is needed, and final open deals reach zero.",
+        "review": "Use this before implementing keeper expiry auto-close, deal GC, and final payout/escrow settlement tests.",
+    },
+    "expired-retrieval-rejection": {
+        "title": "Expired Retrieval Rejection",
+        "intent": (
+            "Model post-expiry retrieval semantics. The policy question is whether requests after a deal has fully expired "
+            "are counted as explicit expired-content rejections instead of user-facing availability failures or billable retrievals."
+        ),
+        "expected": "Deals expire cleanly, later retrieval attempts are rejected as expired, unavailable reads remain zero, and no retrieval escrow is debited after expiry.",
+        "review": "Use this before implementing gateway/keeper post-expiry query behavior, expired-deal response codes, and retrieval accounting guards.",
+    },
+    "closed-retrieval-rejection": {
+        "title": "Closed Retrieval Rejection",
+        "intent": (
+            "Model retrieval semantics after an intentional deal close and storage-escrow refund. The policy question is whether "
+            "requests after close are counted as explicit closed-content rejections instead of availability failures or billable retrievals."
+        ),
+        "expected": "Deals close cleanly, unearned storage escrow is refunded, later retrieval attempts are rejected as closed content, unavailable reads remain zero, and no retrieval escrow is debited after close.",
+        "review": "Use this before implementing gateway/keeper post-close query behavior, closed-deal response codes, and retrieval accounting guards.",
+    },
     "coordinated-regional-outage": {
         "title": "Coordinated Regional Outage",
         "intent": (
@@ -225,6 +360,15 @@ SCENARIO_GUIDES = {
         ),
         "expected": "Repair backoffs are visible, provider capacity is respected, and data-loss events remain zero under the modeled fault.",
         "review": "Use this case to tune assignment headroom, repair attempt caps, and launch-provider minimums.",
+    },
+    "replacement-grinding": {
+        "title": "Replacement Grinding",
+        "intent": (
+            "Model a repair path where pending replacement providers never prove readiness. The policy question is whether "
+            "timeouts, cooldowns, and per-slot attempt caps bound churn instead of letting repairs remain pending forever."
+        ),
+        "expected": "Repairs start, pending readiness times out, cooldowns and attempt caps are visible, no pending provider is promoted without readiness, and durability remains intact.",
+        "review": "Use this case to tune pending-provider readiness proof windows, repair timeout lengths, retry caps, and whether failed catch-up should affect provider reputation.",
     },
     "large-scale-regional-stress": {
         "title": "Large-Scale Regional Stress",
@@ -270,6 +414,11 @@ def fmt_num(value: Any, digits: int = 4) -> str:
 
 def fmt_money(value: Any) -> str:
     return f"{fnum(value):.4f}"
+
+
+def fmt_optional_money_threshold(value: Any) -> str:
+    number = fnum(value)
+    return fmt_money(number) if number > 0 else "disabled"
 
 
 def fmt_pct(value: Any) -> str:
@@ -328,14 +477,25 @@ def scenario_guide(name: str) -> dict[str, str]:
 
 
 def scenario_allows_unavailable_reads(name: str) -> bool:
-    return name in {"large-scale-regional-stress", "coordinated-regional-outage"}
+    return name in {
+        "large-scale-regional-stress",
+        "coordinated-regional-outage",
+        "provider-economic-churn",
+        "elasticity-overlay-scaleup",
+    }
 
 
 SWEEP_METRICS = [
     "success_rate",
     "unavailable_reads",
+    "offline_responses",
+    "expired_retrieval_attempts",
+    "closed_retrieval_attempts",
     "data_loss_events",
     "reward_coverage",
+    "reward_pool_minted",
+    "reward_paid",
+    "reward_burned",
     "repairs_started",
     "repairs_ready",
     "repairs_completed",
@@ -343,6 +503,7 @@ SWEEP_METRICS = [
     "repair_backoffs",
     "repair_cooldowns",
     "repair_attempt_caps",
+    "repair_timeouts",
     "high_bandwidth_promotions",
     "high_bandwidth_demotions",
     "high_bandwidth_providers",
@@ -360,12 +521,68 @@ SWEEP_METRICS = [
     "fail_serves",
     "average_latency_ms",
     "performance_fail_rate",
+    "platinum_share",
     "performance_reward_paid",
+    "storage_escrow_locked",
+    "storage_escrow_earned",
+    "storage_escrow_refunded",
+    "storage_escrow_outstanding",
+    "storage_fee_provider_payouts",
+    "storage_fee_burned",
+    "deals_closed",
+    "deals_expired",
+    "final_expired_deals",
+    "final_open_deals",
+    "final_closed_deals",
+    "retrieval_base_burned",
+    "retrieval_variable_burned",
+    "retrieval_provider_payouts",
+    "sponsored_retrieval_attempts",
+    "sponsored_retrieval_spent",
+    "owner_retrieval_escrow_debited",
+    "retrieval_wash_accounted_spend",
+    "retrieval_wash_net_gain",
+    "retrieval_attempts",
+    "retrieval_latent_attempts",
+    "retrieval_demand_shock_active",
+    "max_retrieval_demand_multiplier_bps",
+    "new_deal_latent_requests",
+    "new_deal_requests",
+    "new_deals_accepted",
+    "new_deals_suppressed_price",
+    "new_deals_rejected_price",
+    "new_deals_rejected_capacity",
+    "new_deal_acceptance_rate",
+    "new_deal_latent_acceptance_rate",
+    "elasticity_spent",
+    "elasticity_rejections",
+    "elasticity_overlay_activations",
+    "elasticity_overlay_expired",
+    "elasticity_overlay_serves",
+    "elasticity_overlay_rejections",
+    "final_elasticity_overlay_active",
+    "max_elasticity_overlay_active",
+    "final_elasticity_overlay_ready",
+    "max_elasticity_overlay_ready",
+    "staged_upload_attempts",
+    "staged_upload_accepted",
+    "staged_upload_committed",
+    "staged_upload_rejections",
+    "staged_upload_cleaned",
+    "final_staged_upload_pending_generations",
+    "max_staged_upload_pending_generations",
+    "final_staged_upload_pending_mdus",
+    "max_staged_upload_pending_mdus",
     "suspect_slots",
     "delinquent_slots",
+    "withheld_responses",
+    "deputy_misses",
     "quota_misses",
+    "corrupt_responses",
     "invalid_proofs",
+    "provider_hard_faults",
     "paid_corrupt_bytes",
+    "provider_slashed",
     "audit_budget_demand",
     "audit_budget_spent",
     "audit_budget_backlog",
@@ -375,12 +592,46 @@ SWEEP_METRICS = [
     "evidence_spam_bond_burned",
     "evidence_spam_bounty_paid",
     "evidence_spam_net_gain",
+    "provider_cost_shock_active",
+    "max_provider_cost_shocked_providers",
+    "max_provider_cost_shock_fixed_multiplier_bps",
+    "max_provider_cost_shock_storage_multiplier_bps",
+    "max_provider_cost_shock_bandwidth_multiplier_bps",
+    "provider_churn_events",
+    "churned_providers",
+    "provider_entries",
+    "provider_probation_promotions",
+    "provider_underbonded_repairs",
+    "final_underbonded_providers",
+    "max_underbonded_providers",
+    "final_underbonded_assigned_slots",
+    "max_underbonded_assigned_slots",
+    "final_provider_bond_deficit",
+    "max_provider_bond_deficit",
+    "reserve_providers",
+    "probationary_providers",
+    "max_reserve_providers",
+    "max_probationary_providers",
+    "entered_active_providers",
+    "churn_pressure_provider_epochs",
+    "max_churn_pressure_providers",
+    "final_active_provider_capacity",
+    "final_exited_provider_capacity",
+    "final_reserve_provider_capacity",
+    "final_probationary_provider_capacity",
+    "max_churned_assigned_slots",
     "providers_negative_pnl",
     "saturated_responses",
     "providers_over_capacity",
     "final_storage_utilization_bps",
+    "min_storage_price",
+    "max_storage_price",
     "final_storage_price",
+    "min_retrieval_price",
+    "max_retrieval_price",
     "final_retrieval_price",
+    "storage_price_direction_changes",
+    "retrieval_price_direction_changes",
     "provider_pnl",
 ]
 
@@ -391,22 +642,40 @@ SWEEP_CONFIG_KEYS = [
     "users",
     "deals",
     "epochs",
+    "retrievals_per_user_per_epoch",
     "enforcement_mode",
     "evict_after_missed_epochs",
     "deputy_evict_after_missed_epochs",
     "repair_epochs",
     "repair_attempt_cap_per_slot",
     "repair_backoff_epochs",
+    "repair_pending_timeout_epochs",
     "max_repairs_started_per_epoch",
     "route_attempt_limit",
     "dynamic_pricing",
     "dynamic_pricing_max_step_bps",
     "storage_target_utilization_bps",
     "retrieval_target_per_epoch",
+    "retrieval_demand_shocks",
+    "new_deal_requests_per_epoch",
+    "storage_demand_price_ceiling",
+    "storage_demand_reference_price",
+    "storage_demand_elasticity_bps",
+    "storage_demand_min_bps",
+    "storage_demand_max_bps",
     "storage_price",
+    "storage_lockin_enabled",
+    "deal_duration_epochs",
+    "deal_expiry_enabled",
+    "deal_close_epoch",
+    "deal_close_count",
+    "deal_close_bps",
     "retrieval_price_per_slot",
+    "sponsored_retrieval_bps",
+    "owner_retrieval_debit_bps",
     "base_reward_per_slot",
     "audit_budget_per_epoch",
+    "audit_cost_per_miss",
     "evidence_spam_claims_per_epoch",
     "evidence_spam_bond",
     "evidence_spam_bounty",
@@ -443,6 +712,42 @@ SWEEP_CONFIG_KEYS = [
     "provider_online_probability_max",
     "provider_repair_probability_min",
     "provider_repair_probability_max",
+    "provider_storage_cost_per_slot_epoch",
+    "provider_bandwidth_cost_per_retrieval",
+    "provider_fixed_cost_per_epoch",
+    "provider_storage_cost_jitter_bps",
+    "provider_bandwidth_cost_jitter_bps",
+    "provider_initial_bond",
+    "provider_min_bond",
+    "provider_bond_per_slot",
+    "slash_hard_fault",
+    "provider_cost_shocks",
+    "provider_churn_enabled",
+    "provider_churn_pnl_threshold",
+    "provider_churn_after_epochs",
+    "provider_churn_max_providers_per_epoch",
+    "provider_churn_min_remaining_providers",
+    "provider_entry_enabled",
+    "provider_entry_reserve_count",
+    "provider_entry_start_epoch",
+    "provider_entry_end_epoch",
+    "provider_entry_max_per_epoch",
+    "provider_entry_trigger_utilization_bps",
+    "provider_entry_trigger_storage_price",
+    "provider_entry_probation_epochs",
+    "elasticity_trigger_retrievals_per_epoch",
+    "elasticity_base_cost",
+    "elasticity_max_spend",
+    "elasticity_overlay_enabled",
+    "elasticity_overlay_providers_per_epoch",
+    "elasticity_overlay_max_providers_per_deal",
+    "elasticity_overlay_ready_delay_epochs",
+    "elasticity_overlay_ttl_epochs",
+    "staged_upload_attempts_per_epoch",
+    "staged_upload_mdu_per_attempt",
+    "staged_upload_commit_rate_bps",
+    "staged_upload_retention_epochs",
+    "staged_upload_max_pending_generations",
 ]
 
 
@@ -514,12 +819,20 @@ def compute_signals(
     repair_completed = fnum(totals.get("repairs_completed"))
     repair_attempts = fnum(totals.get("repair_attempts"))
     repair_backoffs = fnum(totals.get("repair_backoffs"))
+    repair_timeouts = fnum(totals.get("repair_timeouts"))
     retrieval_attempts = max(1.0, fnum(totals.get("retrieval_attempts")))
     storage_prices = [fnum(row.get("storage_price")) for row in economy]
     retrieval_prices = [fnum(row.get("retrieval_price_per_slot")) for row in economy]
     capacity_utils = [fnum(row.get("capacity_utilization_bps")) for row in providers]
     pnls = [fnum(row.get("pnl")) for row in providers]
     high_bandwidth_providers = [row for row in providers if row.get("capability_tier") == "HIGH_BANDWIDTH"]
+    reserve_provider_rows = [row for row in providers if row.get("lifecycle_state") == "RESERVE"]
+    probation_provider_rows = [row for row in providers if row.get("lifecycle_state") == "PROBATION"]
+    entered_active_provider_rows = [
+        row
+        for row in providers
+        if row.get("lifecycle_state") == "ACTIVE" and fnum(row.get("entered_epoch")) > 0
+    ]
     bandwidth_caps = [fnum(row.get("bandwidth_capacity_per_epoch")) for row in providers if fnum(row.get("bandwidth_capacity_per_epoch")) > 0]
     provider_latencies = [fnum(row.get("average_latency_ms")) for row in providers if fnum(row.get("latency_sample_count")) > 0]
     online_probs = [fnum(row.get("online_probability")) for row in providers]
@@ -533,6 +846,8 @@ def compute_signals(
         "availability": {
             "success_rate": fnum(totals.get("success_rate")),
             "unavailable_reads": fnum(totals.get("unavailable_reads")),
+            "expired_retrieval_attempts": fnum(totals.get("expired_retrieval_attempts")),
+            "closed_retrieval_attempts": fnum(totals.get("closed_retrieval_attempts")),
             "data_loss_events": fnum(totals.get("data_loss_events")),
             "worst_epoch": int(fnum(worst_epoch.get("epoch"))),
             "worst_epoch_success_rate": safe_rate(worst_epoch, "retrieval_successes", "retrieval_attempts") if worst_epoch else 0.0,
@@ -555,13 +870,14 @@ def compute_signals(
             "backoffs": repair_backoffs,
             "cooldowns": fnum(totals.get("repair_cooldowns")),
             "attempt_caps": fnum(totals.get("repair_attempt_caps")),
+            "repair_timeouts": repair_timeouts,
             "backoffs_per_attempt": repair_backoffs / max(1.0, repair_attempts),
             "backoffs_per_started_repair": repair_backoffs / max(1.0, repair_started),
             "peak_backoff_epoch": int(fnum(peak_repair_backoff_epoch.get("epoch"))),
             "peak_repair_backoffs": fnum(peak_repair_backoff_epoch.get("repair_backoffs")),
             "peak_repairing_epoch": int(fnum(peak_repairing_epoch.get("epoch"))),
             "peak_repairing_slots": fnum(peak_repairing_epoch.get("repairing_slots")),
-            "final_repair_backlog": max(0.0, repair_started - repair_completed),
+            "final_repair_backlog": max(0.0, repair_started - repair_completed - repair_timeouts),
             "suspect_slot_epochs": fnum(totals.get("suspect_slots")),
             "delinquent_slot_epochs": fnum(totals.get("delinquent_slots")),
         },
@@ -579,6 +895,14 @@ def compute_signals(
             "online_probability_p10": percentile(online_probs, 10),
             "online_probability_p50": percentile(online_probs, 50),
             "online_probability_p90": percentile(online_probs, 90),
+            "reserve_providers": fnum(totals.get("reserve_providers")),
+            "probationary_providers": fnum(totals.get("probationary_providers")),
+            "entered_active_providers": fnum(totals.get("entered_active_providers")),
+            "reserve_providers_from_rows": len(reserve_provider_rows),
+            "probationary_providers_from_rows": len(probation_provider_rows),
+            "entered_active_providers_from_rows": len(entered_active_provider_rows),
+            "final_reserve_provider_capacity": fnum(totals.get("final_reserve_provider_capacity")),
+            "final_probationary_provider_capacity": fnum(totals.get("final_probationary_provider_capacity")),
         },
         "economics": {
             "provider_pnl": fnum(totals.get("provider_pnl")),
@@ -596,6 +920,29 @@ def compute_signals(
             "evidence_spam_bond_burned": fnum(totals.get("evidence_spam_bond_burned")),
             "evidence_spam_bounty_paid": fnum(totals.get("evidence_spam_bounty_paid")),
             "evidence_spam_net_gain": fnum(totals.get("evidence_spam_net_gain")),
+            "provider_cost_shock_epochs": metric_sum(economy, "provider_cost_shock_active"),
+            "max_provider_cost_shocked_providers": fnum(totals.get("max_provider_cost_shocked_providers")),
+            "max_provider_cost_shock_fixed_multiplier_bps": fnum(totals.get("max_provider_cost_shock_fixed_multiplier_bps")),
+            "max_provider_cost_shock_storage_multiplier_bps": fnum(totals.get("max_provider_cost_shock_storage_multiplier_bps")),
+            "max_provider_cost_shock_bandwidth_multiplier_bps": fnum(totals.get("max_provider_cost_shock_bandwidth_multiplier_bps")),
+            "provider_churn_events": fnum(totals.get("provider_churn_events")),
+            "churned_providers": fnum(totals.get("churned_providers")),
+            "provider_entries": fnum(totals.get("provider_entries")),
+            "provider_probation_promotions": fnum(totals.get("provider_probation_promotions")),
+            "max_probationary_providers": fnum(totals.get("max_probationary_providers")),
+            "max_reserve_providers": fnum(totals.get("max_reserve_providers")),
+            "provider_underbonded_repairs": fnum(totals.get("provider_underbonded_repairs")),
+            "final_underbonded_providers": fnum(totals.get("final_underbonded_providers")),
+            "max_underbonded_providers": fnum(totals.get("max_underbonded_providers")),
+            "final_underbonded_assigned_slots": fnum(totals.get("final_underbonded_assigned_slots")),
+            "max_underbonded_assigned_slots": fnum(totals.get("max_underbonded_assigned_slots")),
+            "final_provider_bond_deficit": fnum(totals.get("final_provider_bond_deficit")),
+            "max_provider_bond_deficit": fnum(totals.get("max_provider_bond_deficit")),
+            "churn_pressure_provider_epochs": fnum(totals.get("churn_pressure_provider_epochs")),
+            "max_churn_pressure_providers": fnum(totals.get("max_churn_pressure_providers")),
+            "final_active_provider_capacity": fnum(totals.get("final_active_provider_capacity")),
+            "final_exited_provider_capacity": fnum(totals.get("final_exited_provider_capacity")),
+            "max_churned_assigned_slots": fnum(totals.get("max_churned_assigned_slots")),
             "storage_price_start": storage_prices[0] if storage_prices else 0.0,
             "storage_price_end": storage_prices[-1] if storage_prices else 0.0,
             "storage_price_min": min(storage_prices, default=0.0),
@@ -604,6 +951,42 @@ def compute_signals(
             "retrieval_price_end": retrieval_prices[-1] if retrieval_prices else 0.0,
             "retrieval_price_min": min(retrieval_prices, default=0.0),
             "retrieval_price_max": max(retrieval_prices, default=0.0),
+            "retrieval_attempts": fnum(totals.get("retrieval_attempts")),
+            "retrieval_latent_attempts": fnum(totals.get("retrieval_latent_attempts")),
+            "retrieval_demand_shock_epochs": fnum(totals.get("retrieval_demand_shock_active")),
+            "max_retrieval_demand_multiplier_bps": fnum(totals.get("max_retrieval_demand_multiplier_bps")),
+            "storage_price_direction_changes": fnum(totals.get("storage_price_direction_changes")),
+            "retrieval_price_direction_changes": fnum(totals.get("retrieval_price_direction_changes")),
+            "storage_escrow_locked": fnum(totals.get("storage_escrow_locked")),
+            "storage_escrow_earned": fnum(totals.get("storage_escrow_earned")),
+            "storage_escrow_refunded": fnum(totals.get("storage_escrow_refunded")),
+            "storage_escrow_outstanding": fnum(totals.get("storage_escrow_outstanding")),
+            "max_storage_escrow_outstanding": fnum(totals.get("max_storage_escrow_outstanding")),
+            "storage_fee_provider_payouts": fnum(totals.get("storage_fee_provider_payouts")),
+            "storage_fee_burned": fnum(totals.get("storage_fee_burned")),
+            "deals_closed": fnum(totals.get("deals_closed")),
+            "deals_expired": fnum(totals.get("deals_expired")),
+            "final_open_deals": fnum(totals.get("final_open_deals")),
+            "final_closed_deals": fnum(totals.get("final_closed_deals")),
+            "final_expired_deals": fnum(totals.get("final_expired_deals")),
+            "sponsored_retrieval_attempts": fnum(totals.get("sponsored_retrieval_attempts")),
+            "owner_funded_retrieval_attempts": fnum(totals.get("owner_funded_retrieval_attempts")),
+            "sponsored_retrieval_base_spent": fnum(totals.get("sponsored_retrieval_base_spent")),
+            "sponsored_retrieval_variable_spent": fnum(totals.get("sponsored_retrieval_variable_spent")),
+            "sponsored_retrieval_spent": fnum(totals.get("sponsored_retrieval_spent")),
+            "owner_retrieval_escrow_debited": fnum(totals.get("owner_retrieval_escrow_debited")),
+            "retrieval_wash_accounted_spend": fnum(totals.get("retrieval_wash_accounted_spend")),
+            "retrieval_wash_net_gain": fnum(totals.get("retrieval_wash_net_gain")),
+            "elasticity_spent": fnum(totals.get("elasticity_spent")),
+            "elasticity_rejections": fnum(totals.get("elasticity_rejections")),
+            "elasticity_overlay_activations": fnum(totals.get("elasticity_overlay_activations")),
+            "elasticity_overlay_expired": fnum(totals.get("elasticity_overlay_expired")),
+            "elasticity_overlay_serves": fnum(totals.get("elasticity_overlay_serves")),
+            "elasticity_overlay_rejections": fnum(totals.get("elasticity_overlay_rejections")),
+            "final_elasticity_overlay_active": fnum(totals.get("final_elasticity_overlay_active")),
+            "max_elasticity_overlay_active": fnum(totals.get("max_elasticity_overlay_active")),
+            "final_elasticity_overlay_ready": fnum(totals.get("final_elasticity_overlay_ready")),
+            "max_elasticity_overlay_ready": fnum(totals.get("max_elasticity_overlay_ready")),
         },
         "high_bandwidth": {
             "providers": fnum(totals.get("high_bandwidth_providers")),
@@ -633,6 +1016,35 @@ def compute_signals(
             "provider_latency_p10_ms": percentile(provider_latencies, 10),
             "provider_latency_p50_ms": percentile(provider_latencies, 50),
             "provider_latency_p90_ms": percentile(provider_latencies, 90),
+        },
+        "demand": {
+            "new_deal_latent_requests": fnum(totals.get("new_deal_latent_requests")),
+            "new_deal_requests": fnum(totals.get("new_deal_requests")),
+            "new_deals_accepted": fnum(totals.get("new_deals_accepted")),
+            "new_deals_suppressed_price": fnum(totals.get("new_deals_suppressed_price")),
+            "new_deals_rejected_price": fnum(totals.get("new_deals_rejected_price")),
+            "new_deals_rejected_capacity": fnum(totals.get("new_deals_rejected_capacity")),
+            "new_deal_acceptance_rate": fnum(totals.get("new_deal_acceptance_rate")),
+            "new_deal_latent_acceptance_rate": fnum(totals.get("new_deal_latent_acceptance_rate")),
+        },
+        "staged_uploads": {
+            "attempts": fnum(totals.get("staged_upload_attempts")),
+            "accepted": fnum(totals.get("staged_upload_accepted")),
+            "committed": fnum(totals.get("staged_upload_committed")),
+            "rejections": fnum(totals.get("staged_upload_rejections")),
+            "cleaned": fnum(totals.get("staged_upload_cleaned")),
+            "final_pending_generations": fnum(totals.get("final_staged_upload_pending_generations")),
+            "max_pending_generations": fnum(totals.get("max_staged_upload_pending_generations")),
+            "final_pending_mdus": fnum(totals.get("final_staged_upload_pending_mdus")),
+            "max_pending_mdus": fnum(totals.get("max_staged_upload_pending_mdus")),
+            "rejection_rate": (
+                fnum(totals.get("staged_upload_rejections"))
+                / max(1.0, fnum(totals.get("staged_upload_attempts")))
+            ),
+            "cleanup_rate": (
+                fnum(totals.get("staged_upload_cleaned"))
+                / max(1.0, fnum(totals.get("staged_upload_accepted")))
+            ),
         },
         "concentration": {
             "operator_count": fnum(totals.get("operator_count")),
@@ -780,10 +1192,13 @@ def write_report_md(
         f"`{fmt_num(totals.get('repairs_started'))}` / `{fmt_num(totals.get('repairs_ready'))}` / `{fmt_num(totals.get('repairs_completed'))}`, and "
         f"`{len(negative_pnl)}` providers ended with negative modeled P&L. The run recorded "
         f"`{fmt_num(totals.get('unavailable_reads'))}` unavailable reads, "
+        f"`{fmt_num(totals.get('expired_retrieval_attempts'))}` expired retrieval rejections, "
+        f"`{fmt_num(totals.get('closed_retrieval_attempts'))}` closed retrieval rejections, "
         f"`{fmt_num(totals.get('data_loss_events'))}` modeled data-loss events, "
         f"`{fmt_num(totals.get('saturated_responses'))}` bandwidth saturation responses and "
         f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs across "
-        f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts. Slot health recorded "
+        f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts, with "
+        f"`{fmt_num(totals.get('repair_timeouts'))}` pending-repair readiness timeouts. Slot health recorded "
         f"`{fmt_num(totals.get('suspect_slots'))}` suspect slot-epochs and "
         f"`{fmt_num(totals.get('delinquent_slots'))}` delinquent slot-epochs. "
         f"High-bandwidth promotions were `{fmt_num(totals.get('high_bandwidth_promotions'))}` and final high-bandwidth providers were "
@@ -811,23 +1226,40 @@ def write_report_md(
         f"| Repair delay | `{config.get('repair_epochs')}` epochs |",
         f"| Repair attempt cap/slot | `{config.get('repair_attempt_cap_per_slot')}` (`0` means unlimited) |",
         f"| Repair backoff window | `{config.get('repair_backoff_epochs')}` epochs |",
+        f"| Repair pending timeout | `{config.get('repair_pending_timeout_epochs')}` epochs (`0` means disabled) |",
         f"| Dynamic pricing | `{str(config.get('dynamic_pricing')).lower()}` |",
         f"| Storage price | `{fmt_money(config.get('storage_price'))}` |",
-            f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
-            f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
-            f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
-            f"| Service class | `{config.get('service_class')}` |",
-            f"| Performance market | `{str(config.get('performance_market_enabled')).lower()}` |",
-            f"| Provider latency range | `{fmt_num(config.get('provider_latency_ms_min'))}`-`{fmt_num(config.get('provider_latency_ms_max'))}` ms |",
-            f"| Latency tier windows | Platinum <= `{fmt_num(config.get('platinum_latency_ms'))}` ms, Gold <= `{fmt_num(config.get('gold_latency_ms'))}` ms, Silver <= `{fmt_num(config.get('silver_latency_ms'))}` ms |",
-            f"| High-bandwidth promotion | `{str(config.get('high_bandwidth_promotion_enabled')).lower()}` |",
-            f"| High-bandwidth capacity threshold | `{fmt_num(config.get('high_bandwidth_capacity_threshold'))}` serves/epoch |",
-            f"| Hot retrieval share | `{fmt_bps(config.get('hot_retrieval_bps'))}` |",
-            f"| Operators | `{config.get('operator_count') or config.get('providers')}` |",
-            f"| Dominant operator provider share | `{fmt_bps(config.get('dominant_operator_provider_bps'))}` |",
-            f"| Operator assignment cap/deal | `{fmt_num(config.get('operator_assignment_cap_per_deal'))}` (`0` means disabled) |",
-            f"| Provider regions | `{', '.join(str(item) for item in config.get('provider_regions', []))}` |",
-            "",
+        f"| Storage lock-in | `{str(config.get('storage_lockin_enabled')).lower()}`; duration `{fmt_num(config.get('deal_duration_epochs'))}` epochs |",
+        f"| Deal expiry | `{str(config.get('deal_expiry_enabled')).lower()}` |",
+        f"| Deal close policy | epoch `{fmt_num(config.get('deal_close_epoch'))}`; count `{fmt_num(config.get('deal_close_count'))}`; share `{fmt_bps(config.get('deal_close_bps'))}` |",
+        f"| New deal requests/epoch | `{fmt_num(config.get('new_deal_requests_per_epoch'))}` |",
+        f"| Storage demand price ceiling | `{fmt_money(config.get('storage_demand_price_ceiling'))}` (`0` means disabled) |",
+        f"| Storage demand reference price | `{fmt_money(config.get('storage_demand_reference_price'))}` (`0` disables elasticity) |",
+        f"| Storage demand elasticity | `{fmt_bps(config.get('storage_demand_elasticity_bps'))}` |",
+        f"| Elasticity trigger | `{fmt_num(config.get('elasticity_trigger_retrievals_per_epoch'))}` retrievals/epoch (`0` disables) |",
+        f"| Elasticity spend cap | `{fmt_money(config.get('elasticity_max_spend'))}` total |",
+        f"| Elasticity overlay | `{str(config.get('elasticity_overlay_enabled')).lower()}`; `{fmt_num(config.get('elasticity_overlay_providers_per_epoch'))}` providers/epoch; max `{fmt_num(config.get('elasticity_overlay_max_providers_per_deal'))}`/deal |",
+        f"| Elasticity overlay timing | ready delay `{fmt_num(config.get('elasticity_overlay_ready_delay_epochs'))}` epochs; TTL `{fmt_num(config.get('elasticity_overlay_ttl_epochs'))}` epochs (`0` means no expiry) |",
+        f"| Staged uploads/epoch | `{fmt_num(config.get('staged_upload_attempts_per_epoch'))}` provisional attempts |",
+        f"| Staged upload retention | `{fmt_num(config.get('staged_upload_retention_epochs'))}` epochs (`0` disables age cleanup) |",
+        f"| Staged upload pending cap | `{fmt_num(config.get('staged_upload_max_pending_generations'))}` generations (`0` means unlimited) |",
+        f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
+        f"| Sponsored retrieval share | `{fmt_bps(config.get('sponsored_retrieval_bps'))}` |",
+        f"| Owner retrieval debit share | `{fmt_bps(config.get('owner_retrieval_debit_bps'))}` |",
+        f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
+        f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
+        f"| Service class | `{config.get('service_class')}` |",
+        f"| Performance market | `{str(config.get('performance_market_enabled')).lower()}` |",
+        f"| Provider latency range | `{fmt_num(config.get('provider_latency_ms_min'))}`-`{fmt_num(config.get('provider_latency_ms_max'))}` ms |",
+        f"| Latency tier windows | Platinum <= `{fmt_num(config.get('platinum_latency_ms'))}` ms, Gold <= `{fmt_num(config.get('gold_latency_ms'))}` ms, Silver <= `{fmt_num(config.get('silver_latency_ms'))}` ms |",
+        f"| High-bandwidth promotion | `{str(config.get('high_bandwidth_promotion_enabled')).lower()}` |",
+        f"| High-bandwidth capacity threshold | `{fmt_num(config.get('high_bandwidth_capacity_threshold'))}` serves/epoch |",
+        f"| Hot retrieval share | `{fmt_bps(config.get('hot_retrieval_bps'))}` |",
+        f"| Operators | `{config.get('operator_count') or config.get('providers')}` |",
+        f"| Dominant operator provider share | `{fmt_bps(config.get('dominant_operator_provider_bps'))}` |",
+        f"| Operator assignment cap/deal | `{fmt_num(config.get('operator_assignment_cap_per_deal'))}` (`0` means disabled) |",
+        f"| Provider regions | `{', '.join(str(item) for item in config.get('provider_regions', []))}` |",
+        "",
         "## Economic Assumptions",
         "",
         *economic_assumption_lines(config),
@@ -886,6 +1318,7 @@ def write_report_md(
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Repair cooldown backoffs: `{fmt_num(totals.get('repair_cooldowns'))}`",
             f"- Repair attempt-cap backoffs: `{fmt_num(totals.get('repair_attempt_caps'))}`",
+            f"- Repair readiness timeouts: `{fmt_num(totals.get('repair_timeouts'))}`",
             f"- Suspect slot-epochs: `{fmt_num(totals.get('suspect_slots'))}`",
             f"- Delinquent slot-epochs: `{fmt_num(totals.get('delinquent_slots'))}`",
             f"- Final active slots in last epoch: `{len(active_end_slots)}`",
@@ -946,17 +1379,59 @@ def write_report_md(
             "",
             "![Provider P&L](graphs/provider_pnl.svg)",
             "",
+            "### Provider Cost Shock",
+            "",
+            "Shows modeled provider cost pressure against provider revenue.",
+            "",
+            "![Provider Cost Shock](graphs/provider_cost_shock.svg)",
+            "",
+            "### Provider Churn",
+            "",
+            "Shows modeled provider exits and per-epoch churn events.",
+            "",
+            "![Provider Churn](graphs/provider_churn.svg)",
+            "",
+            "### Provider Supply Entry",
+            "",
+            "Shows reserve provider entry and probationary promotion into active supply.",
+            "",
+            "![Provider Supply Entry](graphs/provider_supply.svg)",
+            "",
+            "### Provider Bond Headroom",
+            "",
+            "Shows underbonded providers and repairs triggered by insufficient assignment collateral.",
+            "",
+            "![Provider Bond Headroom](graphs/provider_bond_headroom.svg)",
+            "",
             "### Burn / Mint Ratio",
             "",
             "Shows whether burns are material relative to minted rewards and audit budget.",
             "",
             "![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)",
             "",
+            "### Storage Escrow Lifecycle",
+            "",
+            "Shows storage escrow locked, earned, refunded, and still outstanding after close/refund semantics.",
+            "",
+            "![Storage Escrow Lifecycle](graphs/storage_escrow_lifecycle.svg)",
+            "",
             "### Price Trajectory",
             "",
             "Shows storage price and retrieval price movement under dynamic pricing.",
             "",
             "![Price Trajectory](graphs/price_trajectory.svg)",
+            "",
+            "### Retrieval Demand",
+            "",
+            "Shows effective retrieval attempts against latent baseline demand.",
+            "",
+            "![Retrieval Demand](graphs/retrieval_demand.svg)",
+            "",
+            "### Storage Demand",
+            "",
+            "Shows modeled new deal demand accepted versus rejected by price.",
+            "",
+            "![Storage Demand](graphs/storage_demand.svg)",
             "",
             "### Capacity Utilization",
             "",
@@ -975,6 +1450,12 @@ def write_report_md(
             "Shows whether started repairs are accumulating faster than they complete.",
             "",
             "![Repair Backlog](graphs/repair_backlog.svg)",
+            "",
+            "### Repair Readiness",
+            "",
+            "Shows pending-provider readiness timeouts against successful readiness events.",
+            "",
+            "![Repair Readiness](graphs/repair_readiness.svg)",
             "",
             "### High-Bandwidth Promotion",
             "",
@@ -1024,11 +1505,29 @@ def write_report_md(
             "",
             "![Audit Backlog](graphs/audit_backlog.svg)",
             "",
+            "### Sponsored Retrieval Accounting",
+            "",
+            "Shows sponsor-funded public retrieval spend against any owner deal-escrow debit.",
+            "",
+            "![Sponsored Retrieval Accounting](graphs/sponsored_retrieval_accounting.svg)",
+            "",
             "### Elasticity Spend",
             "",
             "Shows demand-funded elasticity spend and rejected expansion attempts.",
             "",
             "![Elasticity Spend](graphs/elasticity_spend.svg)",
+            "",
+            "### Elasticity Overlay Routes",
+            "",
+            "Shows temporary overflow routes that are active or serving reads after user-funded elasticity scale-up.",
+            "",
+            "![Elasticity Overlay Routes](graphs/elasticity_overlay_routes.svg)",
+            "",
+            "### Staged Upload Pressure",
+            "",
+            "Shows provisional-generation preflight rejections and retention cleanup for abandoned staged uploads.",
+            "",
+            "![Staged Upload Pressure](graphs/staged_upload_pressure.svg)",
             "",
             "## Raw Artifacts",
             "",
@@ -1038,9 +1537,9 @@ def write_report_md(
             "- `operators.csv`: final operator-level provider count, assignment share, success, and P&L metrics.",
             "- `slots.csv`: per-slot epoch ledger, including health state and reason.",
             "- `evidence.csv`: policy evidence events.",
-            "- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
-            "- `economy.csv`: per-epoch market and accounting ledger.",
-            "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.",
+            "- `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
+            "- `economy.csv`: per-epoch market, elasticity overlay, staged upload, and accounting ledger.",
+            "- `signals.json`: derived availability, saturation, repair, capacity, economic, elasticity overlay, staged upload, regional, concentration, and provider bottleneck signals.",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1075,15 +1574,27 @@ def build_behavior_narrative(
             f"Availability was degraded: the run succeeded on `{fmt_pct(totals.get('success_rate'))}` of retrievals and recorded "
             f"`{fmt_num(totals.get('unavailable_reads'))}` unavailable reads."
         )
-
-    soft_evidence = sum(1 for row in evidence if row.get("evidence_class") == "soft")
-    hard_evidence = sum(1 for row in evidence if row.get("evidence_class") == "hard")
-    threshold_evidence = sum(1 for row in evidence if row.get("evidence_class") == "threshold")
-    spam_evidence = sum(1 for row in evidence if row.get("evidence_class") == "spam")
-    if evidence:
+    if fnum(totals.get("expired_retrieval_attempts")) > 0:
         parts.append(
-            f"The policy layer recorded `{len(evidence)}` evidence events: `{soft_evidence}` soft, `{threshold_evidence}` threshold, "
-            f"`{hard_evidence}` hard, and `{spam_evidence}` spam events. Soft evidence is suitable for repair and reward exclusion; "
+            f"Post-expiry retrieval behavior was exercised: `{fmt_num(totals.get('expired_retrieval_attempts'))}` requests arrived after all active deals had expired. "
+            "The simulator counted them as explicit expired-content rejections, not live availability failures or billable retrieval attempts."
+        )
+    if fnum(totals.get("closed_retrieval_attempts")) > 0:
+        parts.append(
+            f"Post-close retrieval behavior was exercised: `{fmt_num(totals.get('closed_retrieval_attempts'))}` requests arrived after all active deals had been intentionally closed. "
+            "The simulator counted them as explicit closed-content rejections, not live availability failures or billable retrieval attempts."
+        )
+
+    if evidence:
+        class_counts = Counter(row.get("evidence_class") or "unknown" for row in evidence)
+        known_classes = ["soft", "threshold", "hard", "economic", "market", "spam", "operational"]
+        other_evidence = len(evidence) - sum(class_counts.get(name, 0) for name in known_classes)
+        breakdown_parts = [f"`{class_counts.get(name, 0)}` {name}" for name in known_classes]
+        if other_evidence:
+            breakdown_parts.append(f"`{other_evidence}` other")
+        parts.append(
+            f"The policy layer recorded `{len(evidence)}` evidence events: {', '.join(breakdown_parts[:-1])}, "
+            f"and {breakdown_parts[-1]} events. Soft and economic evidence are suitable for repair and reward exclusion; "
             "hard or convicted threshold evidence is the category that can later justify slashing or stronger sanctions."
         )
     else:
@@ -1093,6 +1604,42 @@ def build_behavior_narrative(
             f"Deputy evidence spam was exercised: `{fmt_num(totals.get('evidence_spam_claims'))}` low-quality claims burned "
             f"`{fmt_money(totals.get('evidence_spam_bond_burned'))}` in bond and paid `{fmt_money(totals.get('evidence_spam_bounty_paid'))}` in bounties, "
             f"for spammer net gain `{fmt_money(totals.get('evidence_spam_net_gain'))}`."
+        )
+    if fnum(totals.get("new_deal_latent_requests")) > 0 or fnum(totals.get("new_deal_requests")) > 0:
+        parts.append(
+            f"Modeled write demand was exercised: `{fmt_num(totals.get('new_deal_latent_requests'))}` latent new deal requests became "
+            f"`{fmt_num(totals.get('new_deal_requests'))}` effective requests after price elasticity, with "
+            f"`{fmt_num(totals.get('new_deals_suppressed_price'))}` suppressed by price response. Effective requests produced "
+            f"`{fmt_num(totals.get('new_deals_accepted'))}` accepted deals, "
+            f"`{fmt_num(totals.get('new_deals_rejected_price'))}` price rejections, and "
+            f"`{fmt_num(totals.get('new_deals_rejected_capacity'))}` capacity rejections. "
+            f"The effective-request acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}` and latent-demand acceptance was `{fmt_pct(totals.get('new_deal_latent_acceptance_rate'))}`."
+        )
+    if fnum(totals.get("storage_escrow_locked")) > 0:
+        parts.append(
+            f"Storage escrow lifecycle accounting was exercised: `{fmt_money(totals.get('storage_escrow_locked'))}` was locked for committed storage, "
+            f"`{fmt_money(totals.get('storage_escrow_earned'))}` was earned over modeled service epochs, "
+            f"`{fmt_money(totals.get('storage_escrow_refunded'))}` was refunded on close, and final outstanding storage escrow was "
+            f"`{fmt_money(totals.get('storage_escrow_outstanding'))}`. Closed deals ended at "
+            f"`{fmt_num(totals.get('final_closed_deals'))}`, expired deals ended at "
+            f"`{fmt_num(totals.get('final_expired_deals'))}`, and open deals ended at `{fmt_num(totals.get('final_open_deals'))}`."
+        )
+    if fnum(totals.get("elasticity_overlay_activations")) > 0:
+        parts.append(
+            f"Elasticity overlay scaling was exercised: `{fmt_num(totals.get('elasticity_overlay_activations'))}` temporary overlay routes were activated, "
+            f"`{fmt_num(totals.get('elasticity_overlay_serves'))}` overlay serves completed, and "
+            f"`{fmt_num(totals.get('elasticity_overlay_expired'))}` routes expired by TTL. "
+            f"Peak ready overlay routes were `{fmt_num(totals.get('max_elasticity_overlay_ready'))}` and peak active routes were "
+            f"`{fmt_num(totals.get('max_elasticity_overlay_active'))}`."
+        )
+    if fnum(totals.get("staged_upload_attempts")) > 0:
+        parts.append(
+            f"Staged upload grief was exercised: `{fmt_num(totals.get('staged_upload_attempts'))}` provisional upload attempts produced "
+            f"`{fmt_num(totals.get('staged_upload_rejections'))}` preflight rejections and "
+            f"`{fmt_num(totals.get('staged_upload_cleaned'))}` retention cleanup events. Peak pending provisional state was "
+            f"`{fmt_num(totals.get('max_staged_upload_pending_generations'))}` generations / "
+            f"`{fmt_num(totals.get('max_staged_upload_pending_mdus'))}` MDUs, ending at "
+            f"`{fmt_num(totals.get('final_staged_upload_pending_generations'))}` generations."
         )
 
     if repairs:
@@ -1145,7 +1692,8 @@ def build_behavior_narrative(
             f"Repair coordination was constrained: `{fmt_num(totals.get('repair_backoffs'))}` repair backoffs occurred across "
             f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts. Cooldown backoffs accounted for "
             f"`{fmt_num(totals.get('repair_cooldowns'))}` events and attempt-cap backoffs accounted for "
-            f"`{fmt_num(totals.get('repair_attempt_caps'))}` events."
+            f"`{fmt_num(totals.get('repair_attempt_caps'))}` events. Pending-provider readiness timeouts accounted for "
+            f"`{fmt_num(totals.get('repair_timeouts'))}` events."
         )
     if metric_sum(economy, "elasticity_rejections") > 0:
         parts.append(
@@ -1175,15 +1723,38 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         "",
         "| Assumption | Value | Interpretation |",
         "|---|---:|---|",
-        f"| Storage price | `{fmt_money(config.get('storage_price'))}` | Unitless price applied by the controller; current simulator does not yet model user demand elasticity against this quote. |",
+        f"| Storage price | `{fmt_money(config.get('storage_price'))}` | Unitless price applied by the controller, demand-elasticity curve, and optional affordability gate. |",
+        f"| Storage lock-in | enabled `{bool(config.get('storage_lockin_enabled'))}`, duration `{fmt_num(config.get('deal_duration_epochs'))}` epochs | If enabled, committed deals lock storage escrow upfront at the quoted storage price and earn it over the modeled duration. |",
+        f"| Deal expiry | enabled `{bool(config.get('deal_expiry_enabled'))}` | If enabled, deals auto-expire once their modeled duration has fully earned. |",
+        f"| Deal close/refund | epoch `{fmt_num(config.get('deal_close_epoch'))}`, count `{fmt_num(config.get('deal_close_count'))}`, share `{fmt_bps(config.get('deal_close_bps'))}` | Optional early close refunds unearned storage escrow and removes closed deals from active responsibility. |",
+        f"| New deal requests/epoch | `{fmt_num(config.get('new_deal_requests_per_epoch'))}` | Latent modeled write demand before optional price elasticity suppression. Effective requests are accepted only when price and capacity gates pass. |",
+        f"| Storage demand price ceiling | `{fmt_money(config.get('storage_demand_price_ceiling'))}` | If non-zero, new deal demand above this storage price is rejected as unaffordable. |",
+        f"| Storage demand reference price | `{fmt_money(config.get('storage_demand_reference_price'))}` | If non-zero with elasticity enabled, demand scales around this price before hard affordability rejection. |",
+        f"| Storage demand elasticity | `{fmt_bps(config.get('storage_demand_elasticity_bps'))}` | Demand multiplier change for a 100% price move relative to the reference price, clamped by configured min/max demand bps. |",
         f"| Storage target utilization | `{fmt_bps(config.get('storage_target_utilization_bps'))}` | If dynamic pricing is enabled, utilization above this target steps storage price up, otherwise down. |",
         f"| Retrieval price per slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` | Paid per successful provider slot served, before the configured variable burn. |",
         f"| Retrieval target per epoch | `{fmt_num(config.get('retrieval_target_per_epoch'))}` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |",
+        f"| Retrieval demand shocks | `{json.dumps(config.get('retrieval_demand_shocks') or [])}` | Optional epoch-scoped retrieval demand multipliers used to test price shock response and oscillation. |",
+        f"| Sponsored retrieval share | `{fmt_bps(config.get('sponsored_retrieval_bps'))}` | Share of retrieval attempts paid by requester/sponsor session funds instead of owner deal escrow. |",
+        f"| Owner retrieval escrow debit | `{fmt_bps(config.get('owner_retrieval_debit_bps'))}` | Share of non-sponsored retrieval base and variable cost debited to owner escrow in scenarios that explicitly model owner-paid reads. |",
         f"| Dynamic pricing max step | `{fmt_bps(config.get('dynamic_pricing_max_step_bps'))}` | Per-epoch controller movement cap. Lower values are safer but slower to equilibrate. |",
         f"| Base reward per slot | `{fmt_money(config.get('base_reward_per_slot'))}` | Modeled issuance/subsidy paid only to reward-eligible active slots. |",
         f"| Provider storage cost/slot/epoch | `{fmt_money(config.get('provider_storage_cost_per_slot_epoch'))}` | Simplified provider cost basis; jitter may create marginal-provider distress. |",
         f"| Provider bandwidth cost/retrieval | `{fmt_money(config.get('provider_bandwidth_cost_per_retrieval'))}` | Simplified egress cost basis for retrieval-heavy scenarios. |",
+        f"| Provider initial/min bond | `{fmt_money(config.get('provider_initial_bond'))}` / `{fmt_money(config.get('provider_min_bond'))}` | Simplified collateral model. Providers below the required bond are excluded from new responsibility and can trigger repair. |",
+        f"| Provider bond per assigned slot | `{fmt_money(config.get('provider_bond_per_slot'))}` | Additional modeled collateral required for each assigned storage slot. |",
+        f"| Provider cost shocks | `{json.dumps(config.get('provider_cost_shocks') or [])}` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |",
+        f"| Provider churn policy | enabled `{bool(config.get('provider_churn_enabled'))}`, threshold `{fmt_money(config.get('provider_churn_pnl_threshold'))}`, after `{fmt_num(config.get('provider_churn_after_epochs'))}` epochs, cap `{fmt_num(config.get('provider_churn_max_providers_per_epoch'))}`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |",
+        f"| Provider churn floor | `{fmt_num(config.get('provider_churn_min_remaining_providers'))}` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |",
+        f"| Provider supply entry | enabled `{bool(config.get('provider_entry_enabled'))}`, reserve `{fmt_num(config.get('provider_entry_reserve_count'))}`, cap `{fmt_num(config.get('provider_entry_max_per_epoch'))}`/epoch, probation `{fmt_num(config.get('provider_entry_probation_epochs'))}` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |",
+        f"| Supply entry triggers | utilization >= `{fmt_bps(config.get('provider_entry_trigger_utilization_bps'))}` or storage price >= `{fmt_optional_money_threshold(config.get('provider_entry_trigger_storage_price'))}` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |",
         f"| Performance reward per serve | `{fmt_money(config.get('performance_reward_per_serve'))}` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |",
+        f"| Elasticity trigger/spend | `{fmt_num(config.get('elasticity_trigger_retrievals_per_epoch'))}` retrievals/epoch / `{fmt_money(config.get('elasticity_max_spend'))}` cap | User-funded overflow spending starts only after the configured demand trigger and must stay inside the spend cap. |",
+        f"| Elasticity overlay policy | enabled `{bool(config.get('elasticity_overlay_enabled'))}`, `{fmt_num(config.get('elasticity_overlay_providers_per_epoch'))}` providers/epoch, max `{fmt_num(config.get('elasticity_overlay_max_providers_per_deal'))}`/deal | Temporary overlay routes expand retrieval options without becoming durable base slots. |",
+        f"| Elasticity overlay timing | ready delay `{fmt_num(config.get('elasticity_overlay_ready_delay_epochs'))}` epochs, TTL `{fmt_num(config.get('elasticity_overlay_ttl_epochs'))}` epochs | Models catch-up/readiness delay and scale-down expiration for overflow routes. |",
+        f"| Staged upload attempts/epoch | `{fmt_num(config.get('staged_upload_attempts_per_epoch'))}` | Provisional generations that consume local provider-daemon staging space before content commit. |",
+        f"| Staged upload commit rate | `{fmt_bps(config.get('staged_upload_commit_rate_bps'))}` | Share of provisional uploads that become committed content instead of remaining abandoned local state. |",
+        f"| Staged upload retention/cap | `{fmt_num(config.get('staged_upload_retention_epochs'))}` epochs / `{fmt_num(config.get('staged_upload_max_pending_generations'))}` generations | Local cleanup and preflight limits used to bound abandoned provisional-generation storage pressure. |",
         f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |",
         f"| Evidence spam claims/epoch | `{fmt_num(config.get('evidence_spam_claims_per_epoch'))}` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |",
         f"| Evidence bond / bounty | `{fmt_money(config.get('evidence_spam_bond'))}` / `{fmt_money(config.get('evidence_spam_bounty'))}` | Spam claims burn bond unless convicted; bounty is paid only on convicted evidence. |",
@@ -1199,12 +1770,16 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
     economics = signals["economics"]
     high_bandwidth = signals["high_bandwidth"]
     performance = signals["performance"]
+    demand = signals["demand"]
+    staged = signals["staged_uploads"]
     concentration = signals["concentration"]
     return [
         "| Signal | Value | Why It Matters |",
         "|---|---:|---|",
         f"| Worst epoch success | `{fmt_pct(availability['worst_epoch_success_rate'])}` at epoch `{availability['worst_epoch']}` | Identifies the availability cliff instead of hiding it in aggregate success. |",
         f"| Unavailable reads | `{fmt_num(availability['unavailable_reads'])}` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |",
+        f"| Expired retrieval rejections | `{fmt_num(availability['expired_retrieval_attempts'])}` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |",
+        f"| Closed retrieval rejections | `{fmt_num(availability['closed_retrieval_attempts'])}` | Post-close requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |",
         f"| Modeled data-loss events | `{fmt_num(availability['data_loss_events'])}` | Durability-loss signal. This should remain zero for current scale fixtures. |",
         f"| Degraded epochs | `{fmt_num(availability['degraded_epochs'])}` | Counts epochs with unavailable reads or success below 99.9%. |",
         f"| Recovery epoch after worst | `{availability['recovery_epoch_after_worst'] or 'not recovered'}` | Shows whether the network returned to clean steady state after the worst point. |",
@@ -1215,9 +1790,9 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Repair attempts | `{fmt_num(repair['attempts'])}` | Counts bounded attempts to open a repair or discover replacement pressure. |",
         f"| Repair backoff pressure | `{fmt_num(repair['backoffs_per_started_repair'])}` backoffs per started repair | Shows whether repair coordination is saturated. |",
         f"| Repair backoffs per attempt | `{fmt_num(repair['backoffs_per_attempt'])}` | Distinguishes capacity/cooldown pressure from successful repair starts. |",
-        f"| Repair cooldowns / attempt caps | `{fmt_num(repair['cooldowns'])}` / `{fmt_num(repair['attempt_caps'])}` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |",
+        f"| Repair cooldowns / attempt caps / readiness timeouts | `{fmt_num(repair['cooldowns'])}` / `{fmt_num(repair['attempt_caps'])}` / `{fmt_num(repair['repair_timeouts'])}` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |",
         f"| Suspect / delinquent slot-epochs | `{fmt_num(repair['suspect_slot_epochs'])}` / `{fmt_num(repair['delinquent_slot_epochs'])}` | Separates early warning state from threshold-crossed delinquency. |",
-        f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed repairs at run end. |",
+        f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed or timed-out repairs at run end. |",
         f"| High-bandwidth providers | `{fmt_num(high_bandwidth['providers'])}` | Providers currently eligible for hot/high-bandwidth routing. |",
         f"| High-bandwidth promotions/demotions | `{fmt_num(high_bandwidth['promotions'])}` / `{fmt_num(high_bandwidth['demotions'])}` | Shows capability changes under measured demand. |",
         f"| Hot high-bandwidth serves/retrieval | `{fmt_num(high_bandwidth['hot_high_bandwidth_serves_per_hot_retrieval'])}` | Measures whether hot retrievals actually use promoted providers. |",
@@ -1225,6 +1800,22 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Platinum / Gold / Silver / Fail serves | `{fmt_num(performance['platinum_serves'])}` / `{fmt_num(performance['gold_serves'])}` / `{fmt_num(performance['silver_serves'])}` / `{fmt_num(performance['fail_serves'])}` | Shows the latency-tier distribution for performance-market policy. |",
         f"| Performance reward paid | `{fmt_money(performance['performance_reward_paid'])}` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |",
         f"| Provider latency p10 / p50 / p90 | `{fmt_num(performance['provider_latency_p10_ms'])}` / `{fmt_num(performance['provider_latency_p50_ms'])}` / `{fmt_num(performance['provider_latency_p90_ms'])}` ms | Shows whether aggregate averages hide slow provider tails. |",
+        f"| New deal latent/effective demand | `{fmt_num(demand['new_deal_latent_requests'])}` / `{fmt_num(demand['new_deal_requests'])}` | Shows how much modeled write demand survived the price-elasticity curve. |",
+        f"| New deal demand accepted/rejected/suppressed | `{fmt_num(demand['new_deals_accepted'])}` / `{fmt_num(demand['new_deals_rejected_price'] + demand['new_deals_rejected_capacity'])}` / `{fmt_num(demand['new_deals_suppressed_price'])}` | Shows whether modeled write demand is entering the network, blocked by price/capacity, or never arriving because quotes are unattractive. |",
+        f"| New deal effective/latent acceptance | `{fmt_pct(demand['new_deal_acceptance_rate'])}` / `{fmt_pct(demand['new_deal_latent_acceptance_rate'])}` | Demand-side market health signal; a technically available network can still fail if users cannot afford storage. |",
+        f"| Staged upload attempts/accepted/committed | `{fmt_num(staged['attempts'])}` / `{fmt_num(staged['accepted'])}` / `{fmt_num(staged['committed'])}` | Shows provisional upload pressure separately from committed storage demand. |",
+        f"| Staged upload rejections/cleaned | `{fmt_num(staged['rejections'])}` / `{fmt_num(staged['cleaned'])}` | Preflight rejection and retention cleanup should bound abandoned provisional generations. |",
+        f"| Staged pending generations/MDUs peak | `{fmt_num(staged['max_pending_generations'])}` / `{fmt_num(staged['max_pending_mdus'])}` | Detects whether local staged storage pressure exceeded configured caps. |",
+        f"| Elasticity spend / rejections | `{fmt_money(economics['elasticity_spent'])}` / `{fmt_num(economics['elasticity_rejections'])}` | Shows whether user-funded overflow expansion stayed inside the spend window. |",
+        f"| Elasticity overlays activated/served/expired | `{fmt_num(economics['elasticity_overlay_activations'])}` / `{fmt_num(economics['elasticity_overlay_serves'])}` / `{fmt_num(economics['elasticity_overlay_expired'])}` | Confirms temporary overflow routes are created, actually used, and later removed. |",
+        f"| Elasticity overlay ready/active peak | `{fmt_num(economics['max_elasticity_overlay_ready'])}` / `{fmt_num(economics['max_elasticity_overlay_active'])}` | Shows catch-up/readiness lag and total temporary routing footprint. |",
+        f"| Sponsored retrieval attempts/spend | `{fmt_num(economics['sponsored_retrieval_attempts'])}` / `{fmt_money(economics['sponsored_retrieval_spent'])}` | Shows public or requester-funded demand separately from owner-funded deal escrow. |",
+        f"| Owner-funded attempts / owner escrow debit | `{fmt_num(economics['owner_funded_retrieval_attempts'])}` / `{fmt_money(economics['owner_retrieval_escrow_debited'])}` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |",
+        f"| Wash accounted spend / net gain | `{fmt_money(economics['retrieval_wash_accounted_spend'])}` / `{fmt_money(economics['retrieval_wash_net_gain'])}` | Worst-case colluding requester/provider economics after explicit base, sponsor, and owner-funded variable spend. |",
+        f"| Storage escrow locked/earned/refunded | `{fmt_money(economics['storage_escrow_locked'])}` / `{fmt_money(economics['storage_escrow_earned'])}` / `{fmt_money(economics['storage_escrow_refunded'])}` | Shows quote-to-lock, provider earning, and close/refund accounting for committed storage. |",
+        f"| Storage escrow outstanding | `{fmt_money(economics['storage_escrow_outstanding'])}` final; peak `{fmt_money(economics['max_storage_escrow_outstanding'])}` | Detects funds left locked after close/expiry semantics should have released them. |",
+        f"| Storage fee provider payout/burned | `{fmt_money(economics['storage_fee_provider_payouts'])}` / `{fmt_money(economics['storage_fee_burned'])}` | Separates earned storage fees paid to eligible providers from fees withheld from non-compliant responsibility. |",
+        f"| Deals open/closed/expired | `{fmt_num(economics['final_open_deals'])}` / `{fmt_num(economics['final_closed_deals'])}` / `{fmt_num(economics['final_expired_deals'])}` | Confirms close/refund/expiry semantics remove deals from active responsibility instead of continuing to accrue rewards. |",
         f"| Audit demand / spent | `{fmt_money(economics['audit_budget_demand'])}` / `{fmt_money(economics['audit_budget_spent'])}` | Shows whether enforcement evidence consumed the available audit budget. |",
         f"| Audit backlog / exhausted epochs | `{fmt_money(economics['audit_budget_backlog'])}` / `{fmt_num(economics['audit_budget_exhausted_epochs'])}` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |",
         f"| Evidence spam claims / convictions | `{fmt_num(economics['evidence_spam_claims'])}` / `{fmt_num(economics['evidence_spam_convictions'])}` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |",
@@ -1236,8 +1827,21 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Final storage utilization | `{fmt_bps(capacity['final_utilization_bps'])}` | Active slots versus modeled provider capacity. |",
         f"| Provider utilization p50 / p90 / max | `{fmt_bps(capacity['provider_capacity_utilization_p50_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_p90_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_max_bps'])}` | Detects assignment concentration and capacity cliffs. |",
         f"| Provider P&L p10 / p50 / p90 | `{fmt_money(economics['provider_pnl_p10'])}` / `{fmt_money(economics['provider_pnl_p50'])}` / `{fmt_money(economics['provider_pnl_p90'])}` | Shows whether aggregate P&L hides marginal-provider distress. |",
+        f"| Provider cost shock epochs/providers | `{fmt_num(economics['provider_cost_shock_epochs'])}` / `{fmt_num(economics['max_provider_cost_shocked_providers'])}` | Shows when external cost pressure was active and how much of the provider population it affected. |",
+        f"| Max cost shock fixed/storage/bandwidth | `{fmt_bps(economics['max_provider_cost_shock_fixed_multiplier_bps'])}` / `{fmt_bps(economics['max_provider_cost_shock_storage_multiplier_bps'])}` / `{fmt_bps(economics['max_provider_cost_shock_bandwidth_multiplier_bps'])}` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |",
+        f"| Provider churn events / final churned | `{fmt_num(economics['provider_churn_events'])}` / `{fmt_num(economics['churned_providers'])}` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |",
+        f"| Provider entries / probation promotions | `{fmt_num(economics['provider_entries'])}` / `{fmt_num(economics['provider_probation_promotions'])}` | Shows whether reserve supply entered and cleared readiness gating before receiving normal placement. |",
+        f"| Reserve / probationary / entered-active providers | `{fmt_num(capacity['reserve_providers'])}` / `{fmt_num(capacity['probationary_providers'])}` / `{fmt_num(capacity['entered_active_providers'])}` | Separates unused reserve supply, in-flight onboarding, and newly promoted active supply. |",
+        f"| Underbonded repairs / peak underbonded providers | `{fmt_num(economics['provider_underbonded_repairs'])}` / `{fmt_num(economics['max_underbonded_providers'])}` | Shows whether insufficient provider collateral became placement/repair pressure. |",
+        f"| Final underbonded assigned slots / bond deficit | `{fmt_num(economics['final_underbonded_assigned_slots'])}` / `{fmt_money(economics['final_provider_bond_deficit'])}` | Checks whether repair removed responsibility from undercollateralized providers by run end. |",
+        f"| Churn pressure provider-epochs / peak | `{fmt_num(economics['churn_pressure_provider_epochs'])}` / `{fmt_num(economics['max_churn_pressure_providers'])}` | Shows the breadth and duration of providers below the configured churn threshold. |",
+        f"| Active / exited / reserve provider capacity | `{fmt_num(economics['final_active_provider_capacity'])}` / `{fmt_num(economics['final_exited_provider_capacity'])}` / `{fmt_num(capacity['final_reserve_provider_capacity'])}` slots | Measures supply remaining, removed, and still waiting outside normal placement. |",
+        f"| Peak assigned slots on churned providers | `{fmt_num(economics['max_churned_assigned_slots'])}` | Shows the maximum repair burden created by economic exits. |",
         f"| Storage price start/end/range | `{fmt_money(economics['storage_price_start'])}` -> `{fmt_money(economics['storage_price_end'])}` (`{fmt_money(economics['storage_price_min'])}`-`{fmt_money(economics['storage_price_max'])}`) | Shows dynamic pricing movement and bounds. |",
         f"| Retrieval price start/end/range | `{fmt_money(economics['retrieval_price_start'])}` -> `{fmt_money(economics['retrieval_price_end'])}` (`{fmt_money(economics['retrieval_price_min'])}`-`{fmt_money(economics['retrieval_price_max'])}`) | Shows whether demand pressure moved retrieval pricing. |",
+        f"| Retrieval latent/effective attempts | `{fmt_num(economics['retrieval_latent_attempts'])}` / `{fmt_num(economics['retrieval_attempts'])}` | Shows how much retrieval load was added by demand-shock multipliers. |",
+        f"| Retrieval demand shock epochs/multiplier | `{fmt_num(economics['retrieval_demand_shock_epochs'])}` / `{fmt_bps(economics['max_retrieval_demand_multiplier_bps'])}` | Shows the size and duration of the modeled read-demand shock. |",
+        f"| Price direction changes storage/retrieval | `{fmt_num(economics['storage_price_direction_changes'])}` / `{fmt_num(economics['retrieval_price_direction_changes'])}` | Detects controller oscillation rather than relying on visual inspection. |",
     ]
 
 
@@ -1305,6 +1909,13 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             + fnum(row.get("corrupt_responses"))
             + fnum(row.get("saturated_responses"))
             + fnum(row.get("evidence_spam_claims"))
+            + fnum(row.get("new_deals_suppressed_price"))
+            + fnum(row.get("new_deals_rejected_price"))
+            + fnum(row.get("new_deals_rejected_capacity"))
+            + fnum(row.get("elasticity_overlay_activations"))
+            + fnum(row.get("elasticity_overlay_rejections"))
+            + fnum(row.get("staged_upload_rejections"))
+            + fnum(row.get("staged_upload_cleaned"))
         )
         notes = []
         if fnum(row.get("offline_responses")):
@@ -1319,12 +1930,34 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('quota_misses'))} quota misses")
         if fnum(row.get("evidence_spam_claims")):
             notes.append(f"{fmt_num(row.get('evidence_spam_claims'))} evidence spam claims")
+        if fnum(row.get("new_deals_accepted")):
+            notes.append(f"{fmt_num(row.get('new_deals_accepted'))} new deals accepted")
+        if fnum(row.get("new_deals_suppressed_price")):
+            notes.append(f"{fmt_num(row.get('new_deals_suppressed_price'))} price-suppressed deals")
+        if fnum(row.get("new_deals_rejected_price")):
+            notes.append(f"{fmt_num(row.get('new_deals_rejected_price'))} price-rejected deals")
+        if fnum(row.get("new_deals_rejected_capacity")):
+            notes.append(f"{fmt_num(row.get('new_deals_rejected_capacity'))} capacity-rejected deals")
+        if fnum(row.get("elasticity_overlay_activations")):
+            notes.append(f"{fmt_num(row.get('elasticity_overlay_activations'))} overlay routes activated")
+        if fnum(row.get("elasticity_overlay_serves")):
+            notes.append(f"{fmt_num(row.get('elasticity_overlay_serves'))} overlay serves")
+        if fnum(row.get("elasticity_overlay_expired")):
+            notes.append(f"{fmt_num(row.get('elasticity_overlay_expired'))} overlay routes expired")
+        if fnum(row.get("elasticity_overlay_rejections")):
+            notes.append(f"{fmt_num(row.get('elasticity_overlay_rejections'))} overlay expansion rejections")
+        if fnum(row.get("staged_upload_rejections")):
+            notes.append(f"{fmt_num(row.get('staged_upload_rejections'))} staged preflight rejections")
+        if fnum(row.get("staged_upload_cleaned")):
+            notes.append(f"{fmt_num(row.get('staged_upload_cleaned'))} staged generations cleaned")
         if fnum(row.get("repair_backoffs")):
             notes.append(f"{fmt_num(row.get('repair_backoffs'))} repair backoffs")
         if fnum(row.get("repair_cooldowns")):
             notes.append(f"{fmt_num(row.get('repair_cooldowns'))} repair cooldowns")
         if fnum(row.get("repair_attempt_caps")):
             notes.append(f"{fmt_num(row.get('repair_attempt_caps'))} attempt caps")
+        if fnum(row.get("repair_timeouts")):
+            notes.append(f"{fmt_num(row.get('repair_timeouts'))} repair timeouts")
         if fnum(row.get("data_loss_events")):
             notes.append(f"{fmt_num(row.get('data_loss_events'))} data-loss events")
         if fnum(row.get("repairing_slots")):
@@ -1365,20 +1998,23 @@ def candidate_exclusion_lines(repairs: list[dict[str, str]]) -> list[str]:
         ("eligible_candidates", "Eligible candidates"),
         ("excluded_current_deal", "Excluded current deal providers"),
         ("excluded_current_provider", "Excluded current provider"),
+        ("excluded_bond_headroom", "Excluded providers lacking bond headroom"),
         ("excluded_draining", "Excluded draining providers"),
         ("excluded_jailed", "Excluded jailed providers"),
         ("excluded_capacity", "Excluded capacity-bound providers"),
     ]
     lines = [
-        "| Candidate Mode | No-Candidate Events | Eligible | Current Deal | Current Provider | Draining | Jailed | Capacity-Bound |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Candidate Mode | No-Candidate Events | Eligible | Current Deal | Current Provider | Bond Headroom | Draining | Jailed | Capacity-Bound |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for mode in sorted({row.get("candidate_mode", "") or "unknown" for row in rows}):
         mode_rows = [row for row in rows if (row.get("candidate_mode", "") or "unknown") == mode]
         sums = {key: sum(fnum(row.get(key)) for row in mode_rows) for key, _ in fields}
+        sums["excluded_bond_headroom"] += sum(fnum(row.get("excluded_underbonded")) for row in mode_rows)
         lines.append(
             f"| `{mode}` | {len(mode_rows)} | {fmt_num(sums['eligible_candidates'])} | "
             f"{fmt_num(sums['excluded_current_deal'])} | {fmt_num(sums['excluded_current_provider'])} | "
+            f"{fmt_num(sums['excluded_bond_headroom'])} | "
             f"{fmt_num(sums['excluded_draining'])} | {fmt_num(sums['excluded_jailed'])} | "
             f"{fmt_num(sums['excluded_capacity'])} |"
         )
@@ -1425,6 +2061,9 @@ def assertion_meaning(name: str) -> str:
         "min_success_rate": "Availability floor: user-facing reads must stay above this success rate.",
         "max_success_rate": "Control bound: used when the scenario is not intended to prove availability loss.",
         "max_data_loss_events": "Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero.",
+        "max_unavailable_reads": "Availability invariant: live retrievals should not fail outside explicit stress contracts.",
+        "min_expired_retrieval_attempts": "Post-expiry behavior: expired content requests must be counted separately from live availability failures.",
+        "min_closed_retrieval_attempts": "Post-close behavior: intentionally closed content requests must be counted separately from live availability failures.",
         "max_repairs_started": "No-repair invariant for healthy baseline runs.",
         "min_repairs_started": "Repair liveness: policy must start reassignment when evidence warrants it.",
         "min_repairs_ready": "Repair readiness: pending providers must produce catch-up evidence before promotion.",
@@ -1435,6 +2074,8 @@ def assertion_meaning(name: str) -> str:
         "max_repair_cooldowns": "Repair cooldown ceiling: cooldown throttling must not dominate healthy recovery.",
         "min_repair_attempt_caps": "Repair attempt-cap accounting: bounded retry fixtures must hit and report the cap.",
         "max_repair_attempt_caps": "Repair attempt-cap ceiling: healthy repair paths should not exhaust attempts.",
+        "min_repair_timeouts": "Repair readiness timeout accounting: pending providers that fail catch-up must time out visibly.",
+        "max_repair_timeouts": "Repair readiness timeout ceiling: healthy repair paths should not strand pending providers.",
         "min_high_bandwidth_promotions": "Capability promotion: measured fast providers should become high-bandwidth eligible.",
         "max_high_bandwidth_promotions": "Capability promotion ceiling: healthy baselines should not accidentally promote providers.",
         "min_high_bandwidth_providers": "Final high-bandwidth provider count should be non-zero in promotion fixtures.",
@@ -1448,6 +2089,34 @@ def assertion_meaning(name: str) -> str:
         "max_fail_serves": "Healthy performance fixtures should keep Fail-tier service bounded.",
         "min_performance_reward_paid": "Tiered QoS rewards must pay non-zero reward in performance fixtures.",
         "max_performance_fail_rate": "Fail-tier service share must remain below the chosen service-class threshold.",
+        "min_new_deal_latent_requests": "Demand fixture must exercise latent modeled write demand before price elasticity.",
+        "min_new_deal_requests": "Demand fixture must exercise effective modeled write demand after price elasticity.",
+        "min_new_deals_accepted": "Demand fixture must admit at least this many new storage deals.",
+        "exact_new_deals_accepted": "Demand fixture expects an exact accepted-deal count.",
+        "min_new_deals_suppressed_price": "Elastic demand fixture must suppress some latent demand when storage price is above the reference price.",
+        "max_new_deals_suppressed_price": "Healthy affordability fixture should keep price-elastic demand suppression bounded.",
+        "min_new_deals_rejected_price": "Overpriced-demand fixture must reject new deals because the quote exceeds user willingness to pay.",
+        "max_new_deals_rejected_price": "Healthy affordability fixture should keep price-driven deal rejection bounded.",
+        "max_new_deals_rejected_capacity": "Demand fixture should not accidentally reject requests because provider capacity was exhausted.",
+        "max_new_deal_acceptance_rate": "Demand collapse fixture should keep accepted demand below this ceiling.",
+        "min_new_deal_acceptance_rate": "Healthy demand fixture should accept at least this share of requested new deals.",
+        "min_new_deal_latent_acceptance_rate": "Recovery fixture should accept at least this share of latent demand after price response.",
+        "min_elasticity_overlay_activations": "Elasticity overlay fixture must activate temporary overflow routes.",
+        "min_elasticity_overlay_serves": "Elasticity overlay routes must actually serve user reads after readiness.",
+        "min_elasticity_overlay_expired": "Elasticity overlay TTL must remove temporary overflow routes.",
+        "max_elasticity_overlay_rejections": "Positive-path overlay fixture should not hit spend-cap or candidate-selection rejection.",
+        "max_final_elasticity_overlay_active": "Overlay scale-down should bound temporary active routes by run end.",
+        "min_elasticity_spent": "Elasticity fixture must spend non-zero user-funded overflow budget.",
+        "max_elasticity_spent": "Elasticity fixture must stay within the configured user-funded spend cap.",
+        "min_staged_upload_attempts": "Staged upload fixture must exercise provisional generation pressure.",
+        "min_staged_upload_committed": "Partial staged-upload flows should commit a non-zero share of provisional generations.",
+        "min_staged_upload_rejections": "Staged upload grief must hit preflight rejection once pending provisional state reaches the cap.",
+        "max_staged_upload_rejections": "Healthy staged upload flows should keep preflight rejection bounded.",
+        "min_staged_upload_cleaned": "Staged upload retention must clean abandoned provisional generations.",
+        "max_staged_upload_cleaned": "Healthy staged upload flows should not rely on excessive cleanup churn.",
+        "max_max_staged_upload_pending_generations": "Staged upload pending generations must stay below the configured cap.",
+        "max_max_staged_upload_pending_mdus": "Staged upload pending MDU footprint must stay below the configured cap.",
+        "max_final_staged_upload_pending_generations": "Staged upload final pending generation count should remain bounded at run end.",
         "min_suspect_slots": "Health-state observability: soft failures should become suspect before punitive consequences.",
         "max_suspect_slots": "Healthy baseline should not produce suspect slot state.",
         "min_delinquent_slots": "Delinquency observability: threshold-crossed slots should expose delinquent state.",
@@ -1456,13 +2125,57 @@ def assertion_meaning(name: str) -> str:
         "min_quota_misses": "Fault fixture must generate quota evidence.",
         "max_invalid_proofs": "Healthy providers should never produce invalid proofs.",
         "min_invalid_proofs": "Hard-fault fixture must generate invalid-proof evidence.",
+        "exact_corrupt_responses": "Invalid-proof-only fixture should not also exercise corrupt retrieval bytes.",
         "max_paid_corrupt_bytes": "Corrupt data must not earn payment.",
         "min_reward_coverage": "Healthy slots should receive the expected rewards.",
         "min_provider_slashed": "Simulated slashing must affect hard-fault providers.",
         "min_providers_negative_pnl": "Market warning: some providers must become economically distressed.",
+        "min_provider_cost_shock_active": "Cost-shock fixture must activate the configured cost-pressure window.",
+        "min_max_provider_cost_shocked_providers": "Cost-shock fixture must affect at least this many providers.",
+        "min_max_provider_cost_shock_storage_multiplier_bps": "Cost-shock fixture must raise modeled storage cost by at least this multiplier.",
+        "min_max_provider_cost_shock_bandwidth_multiplier_bps": "Cost-shock fixture must raise modeled bandwidth cost by at least this multiplier.",
+        "min_provider_churn_events": "Economic churn fixture must execute provider exits after sustained negative P&L.",
+        "min_churned_providers": "Economic churn fixture must end with providers marked as exited.",
+        "min_provider_entries": "Provider supply fixture must move reserve providers into onboarding.",
+        "min_provider_probation_promotions": "Provider supply fixture must promote onboarded providers into active supply.",
+        "min_entered_active_providers": "Provider supply fixture must end with newly entered providers in the active set.",
+        "exact_reserve_providers": "Provider supply fixture should consume the configured reserve by run end.",
+        "exact_probationary_providers": "Provider supply fixture should not leave providers stuck in probation by run end.",
+        "max_max_probationary_providers": "Provider supply fixture should bound simultaneous probationary onboarding.",
+        "min_provider_underbonded_repairs": "Bond-headroom fixture must trigger repair away from undercollateralized providers.",
+        "min_max_underbonded_providers": "Bond-headroom fixture must expose at least this many underbonded providers.",
+        "min_max_underbonded_assigned_slots": "Bond-headroom fixture must expose assigned responsibility on underbonded providers.",
+        "max_final_underbonded_assigned_slots": "Bond-headroom fixture should repair away all underbonded active responsibility by run end.",
+        "min_max_provider_bond_deficit": "Bond-headroom fixture must expose non-zero collateral deficit.",
+        "min_churn_pressure_provider_epochs": "Economic churn fixture must expose sustained below-threshold provider pressure.",
+        "min_max_churned_assigned_slots": "Economic churn fixture must create assigned-slot repair pressure after exits.",
+        "min_final_active_provider_capacity": "Economic churn fixture must retain enough active replacement capacity.",
+        "min_retrieval_demand_shock_active": "Retrieval-demand fixture must activate the configured demand-shock window.",
+        "min_max_retrieval_demand_multiplier_bps": "Retrieval-demand fixture must apply at least this read-demand multiplier.",
+        "min_retrieval_latent_attempts": "Retrieval-demand fixture must record baseline latent demand.",
+        "min_retrieval_attempts": "Retrieval-demand fixture must produce elevated effective retrieval attempts.",
+        "min_max_retrieval_price": "Retrieval-demand shock should move the retrieval price above this observed maximum.",
+        "max_retrieval_price_direction_changes": "Retrieval price should not repeatedly oscillate under the configured shock.",
         "min_retrieval_base_burned": "Requester/session demand must pay a non-zero base burn.",
         "min_retrieval_variable_burned": "Variable retrieval activity must contribute non-zero burn.",
         "min_retrieval_provider_payouts": "Legitimate high demand must pay providers for bandwidth.",
+        "min_retrieval_wash_accounted_spend": "Wash-retrieval fixture must record explicit requester, sponsor, or owner-funded spend.",
+        "max_retrieval_wash_net_gain": "Wash retrieval should be uneconomic for a colluding requester/provider.",
+        "min_retrieval_wash_net_gain": "Unsafe wash-retrieval fixture should expose positive colluding requester/provider gain.",
+        "min_storage_escrow_locked": "Storage lock-in fixture must lock non-zero storage escrow at commit.",
+        "min_storage_escrow_earned": "Storage lock-in fixture must earn storage fees over modeled service epochs.",
+        "min_storage_escrow_refunded": "Early-close fixture must refund unearned storage escrow.",
+        "max_storage_escrow_outstanding": "Storage escrow should not remain locked after the modeled close/expiry path should have released it.",
+        "min_storage_fee_provider_payouts": "Earned storage fees should pay eligible providers.",
+        "max_storage_fee_burned": "Healthy storage escrow fixture should not burn storage fees from non-compliance.",
+        "exact_deals_expired": "Deal expiry fixture should expire the expected number of deals.",
+        "exact_final_expired_deals": "Run-end expired deal count should match the scenario contract.",
+        "exact_final_closed_deals": "Close/refund fixture should end with the configured number of closed deals.",
+        "exact_deals_closed": "Close/refund fixture should close the configured number of deals.",
+        "min_sponsored_retrieval_attempts": "Sponsored public retrieval fixture must route demand through sponsor/requester-funded sessions.",
+        "min_sponsored_retrieval_spent": "Sponsored public retrieval fixture must pay non-zero session spend.",
+        "max_owner_retrieval_escrow_debited": "Retrieval accounting invariant: owner deal escrow should not be charged for sponsored, expired, or closed-content requests.",
+        "exact_owner_retrieval_escrow_debited": "Sponsored public retrieval should keep owner deal escrow unchanged.",
         "min_elasticity_rejections": "Spend cap must reject excess elasticity demand.",
         "max_elasticity_spent": "Elasticity spend must not exceed the configured cap.",
         "min_withheld_responses": "Withholding fixture must create visible withheld-response evidence.",
@@ -1540,6 +2253,14 @@ def build_economic_narrative(
         f"ending with aggregate P&L `{fmt_money(totals.get('provider_pnl'))}`.",
         f"Retrieval accounting paid providers `{fmt_money(totals.get('retrieval_provider_payouts'))}`, burned `{fmt_money(totals.get('retrieval_base_burned'))}` in base fees, "
         f"and burned `{fmt_money(totals.get('retrieval_variable_burned'))}` in variable retrieval fees.",
+        f"Wash-retrieval accounting shows explicit spend `{fmt_money(totals.get('retrieval_wash_accounted_spend'))}` against possible colluding-provider gain "
+        f"`{fmt_money(totals.get('retrieval_wash_net_gain'))}`.",
+        f"Sponsored retrieval accounting spent `{fmt_money(totals.get('sponsored_retrieval_spent'))}` across "
+        f"`{fmt_num(totals.get('sponsored_retrieval_attempts'))}` sponsor-funded attempts; owner retrieval escrow debit was "
+        f"`{fmt_money(totals.get('owner_retrieval_escrow_debited'))}`.",
+        f"Storage escrow accounting locked `{fmt_money(totals.get('storage_escrow_locked'))}`, earned `{fmt_money(totals.get('storage_escrow_earned'))}`, "
+        f"refunded `{fmt_money(totals.get('storage_escrow_refunded'))}`, paid providers `{fmt_money(totals.get('storage_fee_provider_payouts'))}`, "
+        f"burned `{fmt_money(totals.get('storage_fee_burned'))}`, and ended with outstanding escrow `{fmt_money(totals.get('storage_escrow_outstanding'))}`.",
         f"Performance-tier accounting paid `{fmt_money(totals.get('performance_reward_paid'))}` in QoS rewards.",
         f"Audit accounting saw `{fmt_money(totals.get('audit_budget_demand'))}` of demand, spent `{fmt_money(totals.get('audit_budget_spent'))}`, "
         f"and ended with `{fmt_money(totals.get('audit_budget_backlog'))}` backlog after `{fmt_num(totals.get('audit_budget_exhausted'))}` exhausted epochs.",
@@ -1549,6 +2270,63 @@ def build_economic_narrative(
             f"Evidence-spam accounting burned `{fmt_money(totals.get('evidence_spam_bond_burned'))}` in claim bonds, "
             f"paid `{fmt_money(totals.get('evidence_spam_bounty_paid'))}` in conviction-gated bounties, "
             f"and left the spammer with net gain `{fmt_money(totals.get('evidence_spam_net_gain'))}`."
+        )
+    if fnum(totals.get("new_deal_latent_requests")) > 0 or fnum(totals.get("new_deal_requests")) > 0:
+        parts.append(
+            f"Demand accounting saw `{fmt_num(totals.get('new_deal_latent_requests'))}` latent new deal requests, "
+            f"`{fmt_num(totals.get('new_deal_requests'))}` effective requests after elasticity, accepted "
+            f"`{fmt_num(totals.get('new_deals_accepted'))}`, suppressed `{fmt_num(totals.get('new_deals_suppressed_price'))}` by price response, rejected `{fmt_num(totals.get('new_deals_rejected_price'))}` on price, "
+            f"and rejected `{fmt_num(totals.get('new_deals_rejected_capacity'))}` on capacity. "
+            f"Effective-request acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}`."
+        )
+    if fnum(totals.get("elasticity_overlay_activations")) > 0:
+        parts.append(
+            f"Elasticity overlay accounting spent `{fmt_money(totals.get('elasticity_spent'))}` to activate "
+            f"`{fmt_num(totals.get('elasticity_overlay_activations'))}` temporary routes, served "
+            f"`{fmt_num(totals.get('elasticity_overlay_serves'))}` reads through overlay providers, rejected "
+            f"`{fmt_num(totals.get('elasticity_overlay_rejections'))}` expansion attempts, and expired "
+            f"`{fmt_num(totals.get('elasticity_overlay_expired'))}` routes by TTL."
+        )
+    if fnum(totals.get("staged_upload_attempts")) > 0:
+        parts.append(
+            f"Staged upload accounting saw `{fmt_num(totals.get('staged_upload_attempts'))}` provisional attempts, "
+            f"accepted `{fmt_num(totals.get('staged_upload_accepted'))}`, committed `{fmt_num(totals.get('staged_upload_committed'))}`, "
+            f"rejected `{fmt_num(totals.get('staged_upload_rejections'))}` at preflight, and cleaned "
+            f"`{fmt_num(totals.get('staged_upload_cleaned'))}` abandoned generations by retention policy. "
+            f"The peak local staged footprint was `{fmt_num(totals.get('max_staged_upload_pending_generations'))}` generations / "
+            f"`{fmt_num(totals.get('max_staged_upload_pending_mdus'))}` MDUs."
+        )
+    if fnum(totals.get("provider_cost_shock_active")) > 0:
+        parts.append(
+            f"Provider cost shocks were active for `{fmt_num(totals.get('provider_cost_shock_active'))}` shock-epochs, "
+            f"affecting up to `{fmt_num(totals.get('max_provider_cost_shocked_providers'))}` providers. "
+            f"The maximum modeled storage-cost multiplier reached `{fmt_bps(totals.get('max_provider_cost_shock_storage_multiplier_bps'))}`."
+        )
+    if fnum(totals.get("provider_churn_events")) > 0:
+        parts.append(
+            f"Provider churn policy executed `{fmt_num(totals.get('provider_churn_events'))}` exits, leaving "
+            f"`{fmt_num(totals.get('churned_providers'))}` churned providers and `{fmt_num(totals.get('final_active_provider_capacity'))}` active capacity slots. "
+        f"At peak, `{fmt_num(totals.get('max_churned_assigned_slots'))}` assigned slots sat on churned providers and needed repair/rerouting pressure."
+        )
+    if fnum(totals.get("provider_entries")) > 0 or fnum(totals.get("provider_probation_promotions")) > 0:
+        parts.append(
+            f"Supply entry moved `{fmt_num(totals.get('provider_entries'))}` reserve providers into probation and promoted "
+            f"`{fmt_num(totals.get('provider_probation_promotions'))}` providers into active supply. "
+            f"The run ended with `{fmt_num(totals.get('entered_active_providers'))}` newly entered active providers, "
+            f"`{fmt_num(totals.get('reserve_providers'))}` reserve providers, and `{fmt_num(totals.get('probationary_providers'))}` probationary providers."
+        )
+    if fnum(totals.get("max_underbonded_providers")) > 0:
+        parts.append(
+            f"Bond-headroom accounting observed up to `{fmt_num(totals.get('max_underbonded_providers'))}` underbonded providers and "
+            f"`{fmt_num(totals.get('max_underbonded_assigned_slots'))}` assigned slots on underbonded providers. "
+            f"The policy triggered `{fmt_num(totals.get('provider_underbonded_repairs'))}` underbonded-slot repairs and ended with "
+            f"`{fmt_num(totals.get('final_underbonded_assigned_slots'))}` assigned slots still underbonded."
+        )
+    if fnum(totals.get("retrieval_demand_shock_active")) > 0:
+        parts.append(
+            f"Retrieval demand shocks were active for `{fmt_num(totals.get('retrieval_demand_shock_active'))}` shock-epochs. "
+            f"Latent retrieval attempts `{fmt_num(totals.get('retrieval_latent_attempts'))}` became `{fmt_num(totals.get('retrieval_attempts'))}` effective attempts, "
+            f"and retrieval price changed direction `{fmt_num(totals.get('retrieval_price_direction_changes'))}` times."
         )
     if negative_pnl:
         parts.append(
@@ -1617,6 +2395,49 @@ def write_risk_register(
                 "followup": "If this is a scale fixture, track it as an availability tuning item. Otherwise block graduation and investigate routing, redundancy, repair timing, and provider selection.",
             }
         )
+    if fnum(totals.get("expired_retrieval_attempts")) and fnum(totals.get("owner_retrieval_escrow_debited")):
+        rows.append(
+            {
+                "risk": "Expired retrievals debited owner escrow",
+                "severity": "high",
+                "evidence": (
+                    f"{fmt_num(totals.get('expired_retrieval_attempts'))} expired retrieval rejections and "
+                    f"{fmt_money(totals.get('owner_retrieval_escrow_debited'))} owner retrieval escrow debit."
+                ),
+                "impact": "Post-expiry reads should fail as expired content rather than charging the deal owner for unavailable service.",
+                "followup": "Block graduation. Add keeper/gateway guards so expired deals are not selected for billable retrieval sessions.",
+            }
+        )
+    if fnum(totals.get("closed_retrieval_attempts")) and fnum(totals.get("owner_retrieval_escrow_debited")):
+        rows.append(
+            {
+                "risk": "Closed retrievals debited owner escrow",
+                "severity": "high",
+                "evidence": (
+                    f"{fmt_num(totals.get('closed_retrieval_attempts'))} closed retrieval rejections and "
+                    f"{fmt_money(totals.get('owner_retrieval_escrow_debited'))} owner retrieval escrow debit."
+                ),
+                "impact": "Post-close reads should fail as closed content rather than charging the deal owner for unavailable service.",
+                "followup": "Block graduation. Add keeper/gateway guards so closed deals are not selected for billable retrieval sessions.",
+            }
+        )
+    if (
+        str(config["scenario"]) == "subsidy-farming"
+        and fnum(totals.get("quota_misses")) > 0
+        and fnum(totals.get("reward_burned")) == 0
+    ):
+        rows.append(
+            {
+                "risk": "Subsidy farming paid full rewards",
+                "severity": "high",
+                "evidence": (
+                    f"{fmt_num(totals.get('quota_misses'))} quota misses occurred while reward burn remained "
+                    f"{fmt_money(totals.get('reward_burned'))}."
+                ),
+                "impact": "Providers can skip useful liveness work while still collecting the modeled base subsidy.",
+                "followup": "Block graduation. Require base-reward eligibility gates before subsidy defaults are accepted.",
+            }
+        )
     if negative_pnl:
         rows.append(
             {
@@ -1627,6 +2448,74 @@ def write_risk_register(
                 "followup": "Review storage price, retrieval price, reward pool, provider cost assumptions, and dynamic-pricing thresholds.",
             }
         )
+    if fnum(totals.get("provider_cost_shock_active")) > 0:
+        rows.append(
+            {
+                "risk": "Provider cost shock exposure",
+                "severity": "medium",
+                "evidence": (
+                    f"Cost shocks were active for {fmt_num(totals.get('provider_cost_shock_active'))} shock-epochs and affected up to "
+                    f"{fmt_num(totals.get('max_provider_cost_shocked_providers'))} providers."
+                ),
+                "impact": "A technically healthy network may have delayed economic instability if prices and rewards do not react to operator cost pressure.",
+                "followup": "Review provider cost telemetry assumptions, pricing floors, reward buffers, and whether cost shocks should remain monitoring-only or feed governance recommendations.",
+            }
+        )
+    if fnum(totals.get("provider_churn_events")) > 0:
+        rows.append(
+            {
+                "risk": "Provider capacity exit",
+                "severity": "medium" if fnum(totals.get("data_loss_events")) == 0 else "critical",
+                "evidence": (
+                    f"{fmt_num(totals.get('provider_churn_events'))} provider exits removed "
+                    f"{fmt_num(totals.get('final_exited_provider_capacity'))} capacity slots; peak assigned slots on churned providers was "
+                    f"{fmt_num(totals.get('max_churned_assigned_slots'))}."
+                ),
+                "impact": "Economic exits can turn a pricing problem into repair pressure and capacity scarcity.",
+                "followup": "Review churn caps, minimum replacement capacity, price-floor response, and whether draining exits need longer notice periods.",
+            }
+        )
+    if fnum(totals.get("max_underbonded_providers")) > 0:
+        rows.append(
+            {
+                "risk": "Provider bond headroom exhausted",
+                "severity": "medium" if fnum(totals.get("final_underbonded_assigned_slots")) == 0 else "high",
+                "evidence": (
+                    f"Peak underbonded providers {fmt_num(totals.get('max_underbonded_providers'))}; "
+                    f"peak assigned slots on underbonded providers {fmt_num(totals.get('max_underbonded_assigned_slots'))}; "
+                    f"final bond deficit {fmt_money(totals.get('final_provider_bond_deficit'))}."
+                ),
+                "impact": "Undercollateralized providers should not continue accumulating responsibility, especially after hard-fault slashing.",
+                "followup": "Review minimum bond, per-slot collateral, repair urgency, top-up UX, and whether underbonding should degrade placement before repair.",
+            }
+        )
+    if fnum(totals.get("provider_entries")) > fnum(totals.get("provider_probation_promotions")):
+        rows.append(
+            {
+                "risk": "Provider supply stuck in probation",
+                "severity": "medium",
+                "evidence": (
+                    f"{fmt_num(totals.get('provider_entries'))} provider entries but only "
+                    f"{fmt_num(totals.get('provider_probation_promotions'))} probation promotions."
+                ),
+                "impact": "Replacement capacity may be visible in reserve but unavailable for assignments when repair pressure arrives.",
+                "followup": "Review probation length, readiness criteria, entry caps, and whether the scenario ran long enough to observe promotion.",
+            }
+        )
+    if fnum(totals.get("retrieval_demand_shock_active")) > 0:
+        severity = "medium" if fnum(totals.get("retrieval_price_direction_changes")) > 2 else "low"
+        rows.append(
+            {
+                "risk": "Retrieval demand shock response",
+                "severity": severity,
+                "evidence": (
+                    f"Retrieval demand shocks were active for {fmt_num(totals.get('retrieval_demand_shock_active'))} shock-epochs; "
+                    f"retrieval price changed direction {fmt_num(totals.get('retrieval_price_direction_changes'))} times."
+                ),
+                "impact": "A controller that overreacts to burst reads can create unstable quotes or provider incentives even when reads remain available.",
+                "followup": "Review retrieval demand targets, step clamps, EMA windows, and whether shock handling should be smoothed before keeper defaults.",
+            }
+        )
     if elasticity_rejections:
         rows.append(
             {
@@ -1635,6 +2524,62 @@ def write_risk_register(
                 "evidence": f"{fmt_num(elasticity_rejections)} elasticity attempts were rejected.",
                 "impact": "The system correctly fails closed, but users may experience capacity limits during demand spikes.",
                 "followup": "Decide whether this is acceptable UX or whether user-funded burst budgets need product controls.",
+            }
+        )
+    if fnum(totals.get("elasticity_overlay_activations")) > 0:
+        severity = "medium" if fnum(totals.get("elasticity_overlay_rejections")) > 0 else "low"
+        rows.append(
+            {
+                "risk": "Elasticity overlay routing pressure",
+                "severity": severity,
+                "evidence": (
+                    f"{fmt_num(totals.get('elasticity_overlay_activations'))} overlays activated, "
+                    f"{fmt_num(totals.get('elasticity_overlay_serves'))} overlay serves completed, "
+                    f"{fmt_num(totals.get('elasticity_overlay_expired'))} overlays expired, and "
+                    f"{fmt_num(totals.get('elasticity_overlay_rejections'))} overlay expansions were rejected."
+                ),
+                "impact": "Temporary overflow capacity can preserve reads under hot demand, but it needs explicit readiness, TTL, spend accounting, and routing visibility.",
+                "followup": "Review overlay readiness proofs, TTL defaults, spend-window UX, gateway route ordering, and whether overlay providers affect audit or reward eligibility.",
+            }
+        )
+    if fnum(totals.get("owner_retrieval_escrow_debited")) > 0:
+        rows.append(
+            {
+                "risk": "Owner escrow drained by retrieval demand",
+                "severity": "medium",
+                "evidence": (
+                    f"Owner retrieval escrow was debited {fmt_money(totals.get('owner_retrieval_escrow_debited'))} while "
+                    f"sponsored retrieval spend was {fmt_money(totals.get('sponsored_retrieval_spent'))}."
+                ),
+                "impact": "Public demand can unexpectedly consume deal-owner funds if sponsor/requester-funded session accounting is absent or incomplete.",
+                "followup": "Review sponsored-session funding, owner escrow isolation, gateway quote display, and close/refund semantics.",
+            }
+        )
+    if (
+        fnum(totals.get("storage_escrow_outstanding")) > 0
+        and fnum(totals.get("final_closed_deals")) > 0
+        and fnum(totals.get("final_open_deals")) == 0
+    ):
+        rows.append(
+            {
+                "risk": "Storage escrow left outstanding after close",
+                "severity": "medium",
+                "evidence": (
+                    f"Final outstanding storage escrow was {fmt_money(totals.get('storage_escrow_outstanding'))} after "
+                    f"{fmt_num(totals.get('final_closed_deals'))} deals closed."
+                ),
+                "impact": "Close/refund semantics may leave user funds locked or protocol/provider accounting ambiguous.",
+                "followup": "Review deal close timing, earned-fee accrual, refund rounding, and whether expiry should auto-close storage escrow.",
+            }
+        )
+    if fnum(totals.get("storage_fee_burned")) > 0:
+        rows.append(
+            {
+                "risk": "Storage fees withheld from providers",
+                "severity": "medium",
+                "evidence": f"{fmt_money(totals.get('storage_fee_burned'))} earned storage-fee units were burned instead of paid.",
+                "impact": "This is expected for non-compliant responsibility, but unexpected burns in a healthy escrow fixture indicate accounting or reward-eligibility drift.",
+                "followup": "Review storage-fee eligibility, quota thresholds, and whether storage fees should follow base reward exclusion semantics.",
             }
         )
     if fnum(totals.get("saturated_responses")):
@@ -1676,10 +2621,21 @@ def write_risk_register(
                     f"{fmt_num(totals.get('repair_backoffs'))} repair backoffs across "
                     f"{fmt_num(totals.get('repair_attempts'))} attempts; "
                     f"{fmt_num(totals.get('repair_cooldowns'))} cooldowns and "
-                    f"{fmt_num(totals.get('repair_attempt_caps'))} attempt-cap events."
+                    f"{fmt_num(totals.get('repair_attempt_caps'))} attempt-cap events; "
+                    f"{fmt_num(totals.get('repair_timeouts'))} readiness timeouts."
                 ),
                 "impact": "The network may detect bad slots faster than it can safely heal them.",
                 "followup": "Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions.",
+            }
+        )
+    if fnum(totals.get("repair_timeouts")):
+        rows.append(
+            {
+                "risk": "Pending provider readiness timeout",
+                "severity": "medium",
+                "evidence": f"{fmt_num(totals.get('repair_timeouts'))} pending repairs timed out before readiness.",
+                "impact": "Replacement providers may be selected but fail to reconstruct or prove readiness quickly enough.",
+                "followup": "Review readiness proof requirements, timeout windows, catch-up bandwidth assumptions, and provider reputation effects for failed repair attempts.",
             }
         )
     if fnum(totals.get("audit_budget_backlog")):
@@ -1708,13 +2664,71 @@ def write_risk_register(
                 "followup": "Increase evidence bond, reduce bounty, add spam throttles, or require stronger conviction gating before keeper work.",
             }
         )
+    if str(config.get("scenario", "")) == "wash-retrieval" and fnum(totals.get("retrieval_wash_net_gain")) >= 0:
+        severity = "high" if fnum(totals.get("retrieval_wash_net_gain")) > 0 else "medium"
+        rows.append(
+            {
+                "risk": "Wash retrieval remains profitable",
+                "severity": severity,
+                "evidence": (
+                    f"{fmt_money(totals.get('retrieval_wash_net_gain'))} net gain after "
+                    f"{fmt_money(totals.get('retrieval_wash_accounted_spend'))} explicit retrieval spend."
+                ),
+                "impact": "Colluding requesters and providers can turn fake traffic into provider payouts unless requester/session funding and burns cover the payout path.",
+                "followup": "Require requester-paid variable fees, sufficient base burns, credit caps, and explicit burn/payout ledger accounting before keeper defaults.",
+            }
+        )
+    if fnum(totals.get("new_deals_rejected_price")) > 0:
+        rows.append(
+            {
+                "risk": "Storage demand rejected by price",
+                "severity": "medium",
+                "evidence": (
+                    f"{fmt_num(totals.get('new_deals_rejected_price'))} new deal requests were rejected by storage price; "
+                    f"acceptance rate was {fmt_pct(totals.get('new_deal_acceptance_rate'))}."
+                ),
+                "impact": "The network can be technically healthy while the market fails to admit useful storage demand.",
+                "followup": "Review quote UX, price ceilings, dynamic-pricing step timing, and affordability targets.",
+            }
+        )
+    if fnum(totals.get("new_deals_suppressed_price")) > 0:
+        rows.append(
+            {
+                "risk": "Storage demand suppressed by price elasticity",
+                "severity": "medium",
+                "evidence": (
+                    f"{fmt_num(totals.get('new_deals_suppressed_price'))} latent new deal requests were suppressed before requesting; "
+                    f"latent-demand acceptance rate was {fmt_pct(totals.get('new_deal_latent_acceptance_rate'))}."
+                ),
+                "impact": "Demand may silently leave the market before a hard quote rejection appears in protocol telemetry.",
+                "followup": "Review reference price, elasticity assumptions, price-step timing, quote telemetry, and whether demand should recover as utilization falls.",
+            }
+        )
+    if fnum(totals.get("staged_upload_rejections")) > 0 or fnum(totals.get("staged_upload_cleaned")) > 0:
+        rows.append(
+            {
+                "risk": "Staged upload retention pressure",
+                "severity": "medium",
+                "evidence": (
+                    f"{fmt_num(totals.get('staged_upload_rejections'))} provisional uploads were rejected at preflight and "
+                    f"{fmt_num(totals.get('staged_upload_cleaned'))} abandoned generations were cleaned; peak pending was "
+                    f"{fmt_num(totals.get('max_staged_upload_pending_generations'))} generations / "
+                    f"{fmt_num(totals.get('max_staged_upload_pending_mdus'))} MDUs."
+                ),
+                "impact": "Abandoned provisional generations can consume provider-daemon disk or operator attention if cleanup and preflight caps are missing.",
+                "followup": "Review staged-generation TTL, max pending cap, dry-run cleanup UX, and whether preflight rejection should be gateway-visible before upload.",
+            }
+        )
     if evidence and not repairs and str(config["scenario"]) not in {
         "ideal",
         "underpriced-storage",
+        "overpriced-storage",
         "wash-retrieval",
         "viral-public-retrieval",
         "elasticity-cap-hit",
+        "elasticity-overlay-scaleup",
         "deputy-evidence-spam",
+        "staged-upload-grief",
     }:
         rows.append(
             {
@@ -1768,6 +2782,14 @@ def write_risk_register(
             f"- Failed assertions: `{len(failed)}`",
             f"- Providers with negative P&L: `{len(negative_pnl)}`",
             f"- Elasticity rejections: `{fmt_num(elasticity_rejections)}`",
+            f"- Elasticity overlay activations/serves/expired: `{fmt_num(totals.get('elasticity_overlay_activations'))}` / `{fmt_num(totals.get('elasticity_overlay_serves'))}` / `{fmt_num(totals.get('elasticity_overlay_expired'))}`",
+            f"- Elasticity overlay rejections/final active/peak ready: `{fmt_num(totals.get('elasticity_overlay_rejections'))}` / `{fmt_num(totals.get('final_elasticity_overlay_active'))}` / `{fmt_num(totals.get('max_elasticity_overlay_ready'))}`",
+            f"- Sponsored retrieval attempts/spend: `{fmt_num(totals.get('sponsored_retrieval_attempts'))}` / `{fmt_money(totals.get('sponsored_retrieval_spent'))}`",
+            f"- Owner retrieval escrow debited: `{fmt_money(totals.get('owner_retrieval_escrow_debited'))}`",
+            f"- Wash retrieval accounted spend/net gain: `{fmt_money(totals.get('retrieval_wash_accounted_spend'))}` / `{fmt_money(totals.get('retrieval_wash_net_gain'))}`",
+            f"- Storage escrow locked/earned/refunded/outstanding: `{fmt_money(totals.get('storage_escrow_locked'))}` / `{fmt_money(totals.get('storage_escrow_earned'))}` / `{fmt_money(totals.get('storage_escrow_refunded'))}` / `{fmt_money(totals.get('storage_escrow_outstanding'))}`",
+            f"- Storage fee provider payout/burned: `{fmt_money(totals.get('storage_fee_provider_payouts'))}` / `{fmt_money(totals.get('storage_fee_burned'))}`",
+            f"- Final open/closed/expired deals: `{fmt_num(totals.get('final_open_deals'))}` / `{fmt_num(totals.get('final_closed_deals'))}` / `{fmt_num(totals.get('final_expired_deals'))}`",
             f"- Data-loss events: `{fmt_num(totals.get('data_loss_events'))}`",
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
             f"- Performance Fail-tier serves: `{fmt_num(totals.get('fail_serves'))}`",
@@ -1781,6 +2803,7 @@ def write_risk_register(
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Repair cooldowns: `{fmt_num(totals.get('repair_cooldowns'))}`",
             f"- Repair attempt-cap events: `{fmt_num(totals.get('repair_attempt_caps'))}`",
+            f"- Repair readiness timeouts: `{fmt_num(totals.get('repair_timeouts'))}`",
             f"- Audit budget demand: `{fmt_money(totals.get('audit_budget_demand'))}`",
             f"- Audit budget spent: `{fmt_money(totals.get('audit_budget_spent'))}`",
             f"- Audit budget backlog: `{fmt_money(totals.get('audit_budget_backlog'))}`",
@@ -1789,6 +2812,28 @@ def write_risk_register(
             f"- Evidence spam bond burned: `{fmt_money(totals.get('evidence_spam_bond_burned'))}`",
             f"- Evidence spam bounty paid: `{fmt_money(totals.get('evidence_spam_bounty_paid'))}`",
             f"- Evidence spam net gain: `{fmt_money(totals.get('evidence_spam_net_gain'))}`",
+            f"- Provider cost shock active epochs: `{fmt_num(totals.get('provider_cost_shock_active'))}`",
+            f"- Max cost-shocked providers: `{fmt_num(totals.get('max_provider_cost_shocked_providers'))}`",
+            f"- Provider churn events: `{fmt_num(totals.get('provider_churn_events'))}`",
+            f"- Churned providers: `{fmt_num(totals.get('churned_providers'))}`",
+            f"- Provider entries/promotions: `{fmt_num(totals.get('provider_entries'))}` / `{fmt_num(totals.get('provider_probation_promotions'))}`",
+            f"- Reserve/probationary/entered-active providers: `{fmt_num(totals.get('reserve_providers'))}` / `{fmt_num(totals.get('probationary_providers'))}` / `{fmt_num(totals.get('entered_active_providers'))}`",
+            f"- Underbonded repairs: `{fmt_num(totals.get('provider_underbonded_repairs'))}`",
+            f"- Final/peak underbonded providers: `{fmt_num(totals.get('final_underbonded_providers'))}` / `{fmt_num(totals.get('max_underbonded_providers'))}`",
+            f"- Final/peak underbonded assigned slots: `{fmt_num(totals.get('final_underbonded_assigned_slots'))}` / `{fmt_num(totals.get('max_underbonded_assigned_slots'))}`",
+            f"- Final active/exited/reserve provider capacity: `{fmt_num(totals.get('final_active_provider_capacity'))}` / `{fmt_num(totals.get('final_exited_provider_capacity'))}` / `{fmt_num(totals.get('final_reserve_provider_capacity'))}`",
+            f"- Retrieval demand shock active epochs: `{fmt_num(totals.get('retrieval_demand_shock_active'))}`",
+            f"- Retrieval price direction changes: `{fmt_num(totals.get('retrieval_price_direction_changes'))}`",
+            f"- Latent new deal requests: `{fmt_num(totals.get('new_deal_latent_requests'))}`",
+            f"- Effective new deal requests: `{fmt_num(totals.get('new_deal_requests'))}`",
+            f"- New deals accepted: `{fmt_num(totals.get('new_deals_accepted'))}`",
+            f"- New deals suppressed by price elasticity: `{fmt_num(totals.get('new_deals_suppressed_price'))}`",
+            f"- New deals rejected by price: `{fmt_num(totals.get('new_deals_rejected_price'))}`",
+            f"- New deals rejected by capacity: `{fmt_num(totals.get('new_deals_rejected_capacity'))}`",
+            f"- Staged upload attempts/accepted/committed: `{fmt_num(totals.get('staged_upload_attempts'))}` / `{fmt_num(totals.get('staged_upload_accepted'))}` / `{fmt_num(totals.get('staged_upload_committed'))}`",
+            f"- Staged upload rejections/cleaned: `{fmt_num(totals.get('staged_upload_rejections'))}` / `{fmt_num(totals.get('staged_upload_cleaned'))}`",
+            f"- Final/peak staged pending generations: `{fmt_num(totals.get('final_staged_upload_pending_generations'))}` / `{fmt_num(totals.get('max_staged_upload_pending_generations'))}`",
+            f"- Final/peak staged pending MDUs: `{fmt_num(totals.get('final_staged_upload_pending_mdus'))}` / `{fmt_num(totals.get('max_staged_upload_pending_mdus'))}`",
             "",
             "## Review Questions",
             "",
@@ -1808,14 +2853,30 @@ def graduation_semantics(scenario: str) -> str:
         "sustained-non-response": "Graduation means repeated soft failure can become per-slot delinquency and repair without treating soft evidence as slashable fraud.",
         "withholding": "Graduation means routing and evidence capture handle refusal-to-serve before any stronger punishment is considered.",
         "corrupt-provider": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
+        "invalid-synthetic-proof": "Graduation means invalid liveness-proof evidence alone can trigger repair and simulated slash accounting without corrupt byte retrieval evidence.",
         "malicious-corrupt": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
         "lazy-provider": "Graduation means subsidy/reward gating catches useful-work failures even if user reads are still available.",
+        "staged-upload-grief": "Graduation means abandoned provisional generations are bounded by visible preflight rejection and retention cleanup without triggering repair, slash, or committed-data availability loss.",
+        "elasticity-overlay-scaleup": "Graduation means user-funded overflow routes can be activated, become ready, serve reads, and expire without turning into permanent base responsibility or bypassing spend caps.",
+        "overpriced-storage": "Graduation means demand-side affordability failures are visible as price rejections rather than being mistaken for healthy market equilibrium.",
+        "demand-elasticity-recovery": "Graduation means price-sensitive demand suppression and recovery are visible before governance tunes storage-price defaults.",
+        "provider-cost-shock": "Graduation means provider cost stress is visible as churn pressure and pricing mismatch before it is turned into live governance parameters.",
+        "provider-economic-churn": "Graduation means bounded economic exits create visible capacity and repair pressure without violating durability.",
+        "provider-supply-entry": "Graduation means reserve-provider onboarding and probationary promotion are explicit enough to tune replacement supply before keeper lifecycle state is implemented.",
+        "provider-bond-headroom": "Graduation means minimum bond and per-slot collateral constraints are explicit enough to exclude or repair undercollateralized providers before keeper bond state is implemented.",
+        "retrieval-demand-shock": "Graduation means burst read demand and retrieval-price response are measurable, bounded, and reviewable before dynamic pricing keeper defaults are chosen.",
         "audit-budget-exhaustion": "Graduation means audit demand is bounded by budget and turns into backlog or policy review instead of unbounded issuance.",
         "deputy-evidence-spam": "Graduation means low-quality deputy evidence is economically negative-EV and cannot trigger live provider punishment without conviction.",
         "price-controller-bounds": "Graduation means price movement is bounded and explainable, not that the economic parameters are final.",
         "subsidy-farming": "Graduation means non-compliant responsibility is not profitably subsidized by base rewards.",
+        "storage-escrow-close-refund": "Graduation means storage lock-in, earned-fee payout, early close refund, and run-end outstanding escrow are deterministic before keeper close/refund semantics are implemented.",
+        "storage-escrow-noncompliance-burn": "Graduation means earned storage fees can be withheld from non-compliant responsibility and burned without confusing storage lock-in or availability accounting.",
+        "storage-escrow-expiry": "Graduation means fully earned storage deals can auto-expire without continuing active responsibility or leaving hidden escrow.",
+        "expired-retrieval-rejection": "Graduation means post-expiry reads return explicit expired-content rejection semantics without counting as unavailable reads or debiting retrieval escrow.",
+        "closed-retrieval-rejection": "Graduation means post-close reads return explicit closed-content rejection semantics without counting as unavailable reads or debiting retrieval escrow.",
         "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
         "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
+        "replacement-grinding": "Graduation means pending-provider readiness failures are bounded by timeout, cooldown, and attempt caps instead of leaving unbounded in-flight repairs.",
         "high-bandwidth-promotion": "Graduation means measured provider capability can promote hot-path eligibility without degrading availability or over-assigning capacity.",
         "high-bandwidth-regression": "Graduation means hot-path eligibility can be revoked when measured saturation regresses without causing durability loss.",
         "performance-market-latency": "Graduation means latency-tier windows, service-class attribution, and tiered performance rewards are deterministic and inspectable before keeper params are implemented.",
@@ -1842,13 +2903,24 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
     )
     corrupt_ready = fnum(totals.get("paid_corrupt_bytes")) == 0
     repair_ready = True
-    if scenario in {"single-outage", "withholding", "corrupt-provider", "malicious-corrupt", "lazy-provider", "setup-failure"}:
+    if scenario in {
+        "single-outage",
+        "withholding",
+        "corrupt-provider",
+        "invalid-synthetic-proof",
+        "malicious-corrupt",
+        "lazy-provider",
+        "setup-failure",
+    }:
         repair_ready = (
             fnum(totals.get("repairs_started")) > 0
             and fnum(totals.get("repairs_ready")) > 0
             and fnum(totals.get("repairs_completed")) > 0
         )
-    hard_enforcement_ready = scenario not in {"corrupt-provider", "malicious-corrupt"} or fnum(totals.get("provider_slashed")) > 0
+    hard_enforcement_ready = (
+        scenario not in {"corrupt-provider", "invalid-synthetic-proof", "malicious-corrupt"}
+        or fnum(totals.get("provider_slashed")) > 0
+    )
     ready = assertions_ready and data_loss_ready and availability_ready and corrupt_ready and repair_ready and hard_enforcement_ready
 
     if ready and scenario in {
@@ -1856,6 +2928,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "single-outage",
         "withholding",
         "corrupt-provider",
+        "invalid-synthetic-proof",
         "malicious-corrupt",
         "lazy-provider",
         "setup-failure",
@@ -1864,6 +2937,14 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "high-bandwidth-regression",
         "performance-market-latency",
         "operator-concentration-cap",
+        "staged-upload-grief",
+        "elasticity-overlay-scaleup",
+        "viral-public-retrieval",
+        "storage-escrow-close-refund",
+        "storage-escrow-noncompliance-burn",
+        "storage-escrow-expiry",
+        "expired-retrieval-rejection",
+        "closed-retrieval-rejection",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -1910,6 +2991,22 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a keeper/runtime planning ticket that names service-class params, latency-tier windows, reward multipliers, telemetry inputs, and which QoS tiers affect placement without becoming slashable evidence.")
     elif recommendation == "Candidate for implementation planning." and scenario == "operator-concentration-cap":
         lines.append("Create a keeper/runtime planning ticket that names operator identity source, per-deal assignment caps, replacement fallback behavior, and concentration alert thresholds.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "staged-upload-grief":
+        lines.append("Create a gateway/provider-daemon planning ticket that names staged-generation TTL, pending-generation caps, preflight rejection semantics, cleanup events, and operator dry-run/apply tooling.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "elasticity-overlay-scaleup":
+        lines.append("Create a keeper/gateway/provider-daemon planning ticket that names MsgSignalSaturation inputs, overlay readiness proof, spend-window accounting, TTL expiration, route preference, and overlay reward/audit rules.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "viral-public-retrieval":
+        lines.append("Create a keeper/gateway planning ticket that names sponsored-session funding, owner escrow isolation, retrieval burn/payout accounting, quote display, and close/refund semantics.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "storage-escrow-close-refund":
+        lines.append("Create a keeper/gateway planning ticket that names storage quote parity, upfront lock-in, per-epoch earned-fee payout, early close refund, expiry auto-close, and refund rounding semantics.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "storage-escrow-noncompliance-burn":
+        lines.append("Create a keeper/gateway planning ticket that names storage-fee reward eligibility, burn ledger attribution, delinquency windows, repair interaction, and provider payout query semantics.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "storage-escrow-expiry":
+        lines.append("Create a keeper/gateway planning ticket that names expiry auto-close, final earned-fee settlement, deal GC timing, query state, and retrieval behavior after expiry.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "expired-retrieval-rejection":
+        lines.append("Create a keeper/gateway planning ticket that names expired-deal query state, post-expiry retrieval response codes, no-bill retrieval accounting, and UI/API messaging for expired content.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "closed-retrieval-rejection":
+        lines.append("Create a keeper/gateway planning ticket that names closed-deal query state, post-close retrieval response codes, no-bill retrieval accounting, and UI/API messaging for intentionally closed content.")
     elif recommendation == "Candidate for implementation planning." and scenario == "deputy-evidence-spam":
         lines.append("Create a keeper/runtime planning ticket that names evidence bond escrow, burn-on-expiry, conviction-gated bounty payout, spam throttles, and deputy reputation inputs.")
     elif recommendation == "Candidate for implementation planning.":
@@ -1951,9 +3048,44 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("provider_pnl")) for row in economy],
     )
     write_line_svg(
+        graphs_dir / "provider_cost_shock.svg",
+        "Provider Cost",
+        [fnum(row.get("provider_cost")) for row in economy],
+        secondary=[fnum(row.get("provider_revenue")) for row in economy],
+        secondary_label="Provider Revenue",
+    )
+    write_line_svg(
+        graphs_dir / "provider_churn.svg",
+        "Churned Providers",
+        [fnum(row.get("churned_providers")) for row in economy],
+        secondary=[fnum(row.get("provider_churn_events")) for row in economy],
+        secondary_label="Provider Churn Events",
+    )
+    write_line_svg(
+        graphs_dir / "provider_supply.svg",
+        "Provider Entries",
+        [fnum(row.get("provider_entries")) for row in economy],
+        secondary=[fnum(row.get("provider_probation_promotions")) for row in economy],
+        secondary_label="Probation Promotions",
+    )
+    write_line_svg(
+        graphs_dir / "provider_bond_headroom.svg",
+        "Underbonded Providers",
+        [fnum(row.get("underbonded_providers")) for row in economy],
+        secondary=[fnum(row.get("provider_underbonded_repairs")) for row in economy],
+        secondary_label="Underbonded Repairs",
+    )
+    write_line_svg(
         graphs_dir / "burn_mint_ratio.svg",
         "Burn / Mint Ratio",
         [burn_mint_ratio(row) for row in economy],
+    )
+    write_line_svg(
+        graphs_dir / "storage_escrow_lifecycle.svg",
+        "Storage Escrow Lifecycle",
+        [fnum(row.get("storage_escrow_outstanding")) for row in economy],
+        secondary=[fnum(row.get("storage_escrow_refunded")) for row in economy],
+        secondary_label="Refunded Escrow",
     )
     write_line_svg(
         graphs_dir / "price_trajectory.svg",
@@ -1961,6 +3093,23 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("storage_price")) for row in economy],
         secondary=[fnum(row.get("retrieval_price_per_slot")) for row in economy],
         secondary_label="Retrieval Price",
+    )
+    write_line_svg(
+        graphs_dir / "retrieval_demand.svg",
+        "Retrieval Attempts",
+        [fnum(row.get("retrieval_attempts")) for row in epochs],
+        secondary=[fnum(row.get("retrieval_latent_attempts")) for row in epochs],
+        secondary_label="Latent Retrieval Attempts",
+    )
+    write_line_svg(
+        graphs_dir / "storage_demand.svg",
+        "New Deals Accepted",
+        [fnum(row.get("new_deals_accepted")) for row in economy],
+        secondary=[
+            fnum(row.get("new_deals_rejected_price")) + fnum(row.get("new_deals_suppressed_price"))
+            for row in economy
+        ],
+        secondary_label="Price Rejections + Suppressed",
     )
     write_line_svg(
         graphs_dir / "capacity_utilization.svg",
@@ -1978,6 +3127,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         graphs_dir / "repair_backlog.svg",
         "Repair Backlog",
         repair_backlog_series(epochs),
+    )
+    write_line_svg(
+        graphs_dir / "repair_readiness.svg",
+        "Repair Readiness Timeouts",
+        [fnum(row.get("repair_timeouts")) for row in epochs],
+        secondary=[fnum(row.get("repairs_ready")) for row in epochs],
+        secondary_label="Repairs Ready",
     )
     write_line_svg(
         graphs_dir / "high_bandwidth_promotion.svg",
@@ -2036,11 +3192,36 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         secondary_label="Exhausted Epoch",
     )
     write_line_svg(
+        graphs_dir / "sponsored_retrieval_accounting.svg",
+        "Sponsored Retrieval Spend",
+        [
+            fnum(row.get("sponsored_retrieval_base_spent"))
+            + fnum(row.get("sponsored_retrieval_variable_spent"))
+            for row in economy
+        ],
+        secondary=[fnum(row.get("owner_retrieval_escrow_debited")) for row in economy],
+        secondary_label="Owner Escrow Debit",
+    )
+    write_line_svg(
         graphs_dir / "elasticity_spend.svg",
         "Elasticity Spend",
         [fnum(row.get("elasticity_spent")) for row in economy],
         secondary=[fnum(row.get("elasticity_rejections")) for row in economy],
         secondary_label="Rejected Expansions",
+    )
+    write_line_svg(
+        graphs_dir / "elasticity_overlay_routes.svg",
+        "Elasticity Overlay Active Routes",
+        [fnum(row.get("elasticity_overlay_active")) for row in economy],
+        secondary=[fnum(row.get("elasticity_overlay_serves")) for row in economy],
+        secondary_label="Overlay Serves",
+    )
+    write_line_svg(
+        graphs_dir / "staged_upload_pressure.svg",
+        "Staged Pending Generations",
+        [fnum(row.get("staged_upload_pending_generations")) for row in economy],
+        secondary=[fnum(row.get("staged_upload_rejections")) for row in economy],
+        secondary_label="Preflight Rejections",
     )
 
 
@@ -2066,7 +3247,11 @@ def repair_backlog_series(epochs: list[dict[str, str]]) -> list[float]:
     backlog = 0.0
     out = []
     for row in epochs:
-        backlog += fnum(row.get("repairs_started")) - fnum(row.get("repairs_completed"))
+        backlog += (
+            fnum(row.get("repairs_started"))
+            - fnum(row.get("repairs_completed"))
+            - fnum(row.get("repair_timeouts"))
+        )
         out.append(max(0.0, backlog))
     return out
 
@@ -2260,6 +3445,8 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
     metrics = [
         ("success_rate", "Availability invariant."),
         ("unavailable_reads", "Temporary read failures; acceptable only in explicitly bounded stress cases."),
+        ("expired_retrieval_attempts", "Post-expiry read requests rejected as expired content instead of live availability failures."),
+        ("closed_retrieval_attempts", "Post-close read requests rejected as closed content instead of live availability failures."),
         ("data_loss_events", "Durability invariant; should stay zero for current fixtures."),
         ("reward_coverage", "Whether compliant slots remain economically recognized."),
         ("repairs_started", "Whether the candidate exercised repair."),
@@ -2267,12 +3454,16 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("repair_attempts", "Whether repair retry/accounting pressure changed."),
         ("repair_cooldowns", "Whether repair retry cooldown throttling was exercised."),
         ("repair_attempt_caps", "Whether per-slot repair attempt caps were hit."),
+        ("repair_timeouts", "Whether pending provider readiness failures were exercised."),
         ("suspect_slots", "Whether soft warning state was exercised."),
         ("delinquent_slots", "Whether threshold-crossed slot state was exercised."),
         ("quota_misses", "Soft liveness evidence created by the candidate."),
         ("invalid_proofs", "Hard evidence created by the candidate."),
         ("paid_corrupt_bytes", "Corrupt data payment safety invariant."),
         ("providers_negative_pnl", "Economic sustainability/churn indicator."),
+        ("provider_cost_shock_active", "Whether an external provider-cost shock was active."),
+        ("max_provider_cost_shocked_providers", "How much provider population the cost shock affected."),
+        ("max_provider_cost_shock_storage_multiplier_bps", "Peak modeled storage-cost shock multiplier."),
         ("saturated_responses", "Whether heterogeneous provider bandwidth became a bottleneck."),
         ("repair_backoffs", "Whether healing coordination or replacement capacity became constrained."),
         ("high_bandwidth_promotions", "Whether measured fast providers became hot-route eligible."),
@@ -2281,6 +3472,41 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("platinum_serves", "Whether the fastest performance tier was exercised."),
         ("fail_serves", "Whether slow/failed QoS service appeared."),
         ("performance_reward_paid", "Whether tiered performance rewards were paid."),
+        ("retrieval_latent_attempts", "Baseline retrieval demand before shock multipliers."),
+        ("retrieval_demand_shock_active", "Whether a retrieval demand shock was active."),
+        ("max_retrieval_demand_multiplier_bps", "Peak modeled retrieval-demand multiplier."),
+        ("retrieval_price_direction_changes", "Whether retrieval pricing oscillated."),
+        ("sponsored_retrieval_attempts", "How many retrieval attempts used sponsor/requester-funded sessions."),
+        ("sponsored_retrieval_spent", "How much sponsor/requester-funded retrieval spend was modeled."),
+        ("owner_retrieval_escrow_debited", "Whether public reads drained owner deal escrow."),
+        ("storage_escrow_locked", "How much storage escrow was locked upfront."),
+        ("storage_escrow_earned", "How much storage escrow was earned over service epochs."),
+        ("storage_escrow_refunded", "How much unearned storage escrow was refunded."),
+        ("storage_escrow_outstanding", "Whether any storage escrow remained locked at run end."),
+        ("storage_fee_provider_payouts", "How much earned storage fee was paid to providers."),
+        ("storage_fee_burned", "How much earned storage fee was withheld or burned."),
+        ("deals_expired", "How many deal expiry events occurred."),
+        ("final_closed_deals", "How many deals closed by run end."),
+        ("final_expired_deals", "How many deals expired by run end."),
+        ("new_deal_latent_requests", "How much write demand existed before price elasticity."),
+        ("new_deal_requests", "How much modeled write demand remained after price elasticity."),
+        ("new_deals_accepted", "How much new storage demand entered the network."),
+        ("new_deals_suppressed_price", "How much latent demand was suppressed before requesting because storage price was unattractive."),
+        ("new_deals_rejected_price", "How much demand was rejected because storage price exceeded willingness to pay."),
+        ("new_deals_rejected_capacity", "How much demand was rejected because placement capacity was exhausted."),
+        ("new_deal_acceptance_rate", "Demand-side market health among effective requests."),
+        ("new_deal_latent_acceptance_rate", "Demand-side market health relative to latent demand."),
+        ("elasticity_overlay_activations", "How many temporary overflow routes were activated."),
+        ("elasticity_overlay_serves", "Whether overflow routes actually served retrievals."),
+        ("elasticity_overlay_expired", "Whether temporary routes aged out by TTL."),
+        ("elasticity_overlay_rejections", "Whether spend caps or candidate selection rejected overlay expansion."),
+        ("max_elasticity_overlay_ready", "Peak ready overflow route footprint."),
+        ("max_elasticity_overlay_active", "Peak active overflow route footprint including pending readiness."),
+        ("staged_upload_attempts", "How much provisional upload pressure was modeled."),
+        ("staged_upload_rejections", "Whether preflight caps rejected abandoned provisional generations."),
+        ("staged_upload_cleaned", "Whether retention cleanup removed abandoned provisional generations."),
+        ("max_staged_upload_pending_generations", "Peak local pending provisional-generation footprint."),
+        ("max_staged_upload_pending_mdus", "Peak local pending provisional MDU footprint."),
         ("top_operator_assignment_share_bps", "Whether one operator dominates assignments."),
         ("max_operator_deal_slots", "Whether per-deal operator blast radius is bounded."),
         ("operator_deal_cap_violations", "Whether operator assignment caps were violated."),
@@ -2303,6 +3529,14 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         if delta > 0:
             return "Temporary read misses increased; acceptable only in explicitly bounded scale scenarios."
         return "Temporary read misses did not increase."
+    if key == "expired_retrieval_attempts":
+        if delta > 0:
+            return "More post-expiry reads were rejected explicitly instead of treated as live availability failures."
+        return "Post-expiry rejection volume did not increase."
+    if key == "closed_retrieval_attempts":
+        if delta > 0:
+            return "More post-close reads were rejected explicitly instead of treated as live availability failures."
+        return "Post-close rejection volume did not increase."
     if key == "data_loss_events":
         if candidate > 0:
             return "Durability invariant failed; this should block graduation."
@@ -2321,21 +3555,99 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         return "No additional penalty was applied."
     if key in {"provider_pnl", "provider_revenue", "provider_cost"}:
         return "Economic accounting changed; inspect provider distribution before drawing conclusions."
+    if key in {
+        "provider_cost_shock_active",
+        "max_provider_cost_shocked_providers",
+        "max_provider_cost_shock_fixed_multiplier_bps",
+        "max_provider_cost_shock_storage_multiplier_bps",
+        "max_provider_cost_shock_bandwidth_multiplier_bps",
+        "provider_churn_events",
+        "churned_providers",
+        "churn_pressure_provider_epochs",
+        "max_churn_pressure_providers",
+        "final_active_provider_capacity",
+        "final_exited_provider_capacity",
+        "max_churned_assigned_slots",
+    }:
+        return "Provider economic pressure changed; inspect churn, capacity exit, and price response."
     if key == "providers_negative_pnl":
         if delta > 0:
             return "More providers are economically distressed."
         return "Provider distress did not increase."
-    if key in {"retrieval_base_burned", "retrieval_variable_burned", "retrieval_provider_payouts"}:
+    if key in {
+        "retrieval_base_burned",
+        "retrieval_variable_burned",
+        "retrieval_provider_payouts",
+        "sponsored_retrieval_attempts",
+        "sponsored_retrieval_spent",
+        "owner_retrieval_escrow_debited",
+    }:
         return "Retrieval market accounting changed with demand volume or price settings."
+    if key in {
+        "retrieval_latent_attempts",
+        "retrieval_demand_shock_active",
+        "max_retrieval_demand_multiplier_bps",
+        "retrieval_price_direction_changes",
+        "storage_price_direction_changes",
+    }:
+        return "Retrieval demand or pricing control changed; inspect price trajectory and oscillation bounds."
     if key in {"platinum_serves", "gold_serves", "silver_serves", "fail_serves", "performance_reward_paid"}:
         return "Performance-market tiering changed; inspect service-class latency and reward assumptions."
+    if key in {
+        "new_deal_latent_requests",
+        "new_deal_requests",
+        "new_deals_accepted",
+        "new_deals_suppressed_price",
+        "new_deals_rejected_price",
+        "new_deals_rejected_capacity",
+        "new_deal_acceptance_rate",
+        "new_deal_latent_acceptance_rate",
+    }:
+        return "Storage demand changed; inspect price affordability and capacity admission assumptions."
+    if key in {
+        "elasticity_overlay_activations",
+        "elasticity_overlay_expired",
+        "elasticity_overlay_serves",
+        "elasticity_overlay_rejections",
+        "final_elasticity_overlay_active",
+        "max_elasticity_overlay_active",
+        "final_elasticity_overlay_ready",
+        "max_elasticity_overlay_ready",
+    }:
+        return "Elasticity overlay pressure changed; inspect spend caps, readiness delay, TTL, and route preference semantics."
+    if key in {
+        "storage_escrow_locked",
+        "storage_escrow_earned",
+        "storage_escrow_refunded",
+        "storage_escrow_outstanding",
+        "storage_fee_provider_payouts",
+        "storage_fee_burned",
+        "deals_closed",
+        "deals_expired",
+        "final_open_deals",
+        "final_closed_deals",
+        "final_expired_deals",
+    }:
+        return "Storage escrow lifecycle changed; inspect quote parity, earned-fee payout, close/refund timing, and outstanding escrow."
+    if key in {
+        "staged_upload_attempts",
+        "staged_upload_accepted",
+        "staged_upload_committed",
+        "staged_upload_rejections",
+        "staged_upload_cleaned",
+        "final_staged_upload_pending_generations",
+        "max_staged_upload_pending_generations",
+        "final_staged_upload_pending_mdus",
+        "max_staged_upload_pending_mdus",
+    }:
+        return "Staged upload pressure changed; inspect retention TTL, preflight caps, and cleanup semantics."
     if key in {"top_operator_assignment_share_bps", "max_operator_assignment_share_bps", "max_operator_deal_slots", "operator_deal_cap_violations"}:
         return "Operator concentration changed; inspect placement diversity and cap semantics."
     if key == "saturated_responses":
         if delta > 0:
             return "Candidate exposed provider bandwidth saturation."
         return "Bandwidth saturation did not increase."
-    if key in {"repair_backoffs", "repair_cooldowns", "repair_attempt_caps"}:
+    if key in {"repair_backoffs", "repair_cooldowns", "repair_attempt_caps", "repair_timeouts"}:
         if delta > 0:
             return "Candidate exposed repair coordination limits."
         return "Repair coordination limits did not increase."
@@ -2440,8 +3752,25 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("critical", "modeled data loss occurred")
     if fnum(totals.get("paid_corrupt_bytes")) > 0:
         raise_to("critical", "corrupt bytes were paid")
+    hard_fault_scenarios = {"corrupt-provider", "invalid-synthetic-proof", "malicious-corrupt"}
+    if scenario in hard_fault_scenarios and fnum(totals.get("invalid_proofs")) > 0:
+        enforcement_mode = str(config.get("enforcement_mode", ""))
+        if fnum(totals.get("corrupt_responses")) > 0 and fnum(totals.get("provider_hard_faults")) == 0:
+            raise_to("high", "corrupt responses did not become hard-fault evidence")
+        if enforcement_mode != "MEASURE_ONLY" and fnum(totals.get("repairs_started")) == 0:
+            raise_to("high", "hard-fault evidence did not start active repair")
+        if enforcement_mode == "MEASURE_ONLY" and fnum(totals.get("repairs_started")) == 0:
+            raise_to("medium", "hard-fault evidence is measure-only and did not start repair")
+        if (
+            enforcement_mode == "SLASH_SIMULATED"
+            and fnum(config.get("slash_hard_fault")) > 0
+            and fnum(totals.get("provider_slashed")) == 0
+        ):
+            raise_to("high", "slash-simulated hard-fault evidence did not reduce provider bond")
     if fnum(totals.get("providers_over_capacity")) > 0:
         raise_to("critical", "providers were assigned above modeled capacity")
+    if fnum(totals.get("operator_deal_cap_violations")) > 0:
+        raise_to("high", "operator per-deal assignment caps were violated")
     if fnum(totals.get("unavailable_reads")) > 0:
         if scenario_allows_unavailable_reads(scenario):
             raise_to("medium", "temporary unavailable reads are present in an allowed stress fixture")
@@ -2449,16 +3778,141 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
             raise_to("high", "unavailable reads outside an explicit stress allowance")
     if fnum(totals.get("success_rate"), 1.0) < 0.99:
         raise_to("high", "retrieval success fell below 99%")
+    if scenario == "subsidy-farming" and fnum(totals.get("quota_misses")) > 0 and fnum(totals.get("reward_burned")) == 0:
+        raise_to("high", "quota-missing slots still received the full reward subsidy")
+    soft_failure_scenarios = {"withholding", "lazy-provider"}
+    soft_evidence = (
+        fnum(totals.get("withheld_responses"))
+        + fnum(totals.get("deputy_misses"))
+        + fnum(totals.get("quota_misses"))
+    )
+    if scenario in soft_failure_scenarios and soft_evidence > 0:
+        enforcement_mode = str(config.get("enforcement_mode", ""))
+        if fnum(totals.get("provider_slashed")) > 0:
+            raise_to("high", "soft-failure evidence reduced provider bond")
+        if enforcement_mode != "MEASURE_ONLY" and fnum(totals.get("repairs_started")) == 0:
+            raise_to("high", "soft-failure evidence did not start active repair")
+        if enforcement_mode == "MEASURE_ONLY" and fnum(totals.get("repairs_started")) == 0:
+            raise_to("medium", "soft-failure evidence is measure-only and did not start repair")
+        if (
+            enforcement_mode == "REPAIR_ONLY"
+            and fnum(totals.get("quota_misses")) > 0
+            and fnum(totals.get("reward_burned")) == 0
+        ):
+            raise_to("medium", "soft-failure repair ran without reward exclusion")
+        if (
+            enforcement_mode in {"REWARD_EXCLUSION", "JAIL_SIMULATED", "SLASH_SIMULATED"}
+            and fnum(totals.get("quota_misses")) > 0
+            and fnum(totals.get("reward_burned")) == 0
+        ):
+            raise_to("high", "quota-missing soft failures did not burn withheld rewards")
     if fnum(totals.get("repair_backoffs")) > 0:
         raise_to("medium", "repair coordination backoffs occurred")
+    if fnum(totals.get("repair_timeouts")) > 0:
+        raise_to("medium", "pending repair readiness timeouts occurred")
+    if scenario == "flapping-provider" and fnum(totals.get("repairs_started")) > 0:
+        raise_to("medium", "flapping provider behavior caused repair churn")
+    if (
+        scenario == "sustained-non-response"
+        and fnum(totals.get("offline_responses")) > 0
+        and fnum(totals.get("repairs_started")) == 0
+    ):
+        raise_to("high", "sustained non-response did not start repair")
+    if scenario == "setup-failure" and fnum(totals.get("offline_responses")) > 0:
+        enforcement_mode = str(config.get("enforcement_mode", ""))
+        if fnum(totals.get("provider_slashed")) > 0:
+            raise_to("high", "setup-phase soft failure reduced provider bond")
+        if enforcement_mode != "MEASURE_ONLY" and fnum(totals.get("repairs_started")) == 0:
+            raise_to("high", "setup-phase failure did not start active repair")
+        if enforcement_mode == "MEASURE_ONLY" and fnum(totals.get("repairs_started")) == 0:
+            raise_to("medium", "setup-phase failure is measure-only and did not start repair")
     if fnum(totals.get("saturated_responses")) > 0:
         raise_to("medium", "provider bandwidth saturation occurred")
+    if fnum(totals.get("performance_fail_rate")) > 0.25:
+        raise_to("medium", "high Fail-tier QoS share")
     if fnum(totals.get("providers_negative_pnl")) > 0:
         raise_to("medium", "some providers ended with negative modeled P&L")
+    if fnum(totals.get("provider_churn_events")) > 0:
+        raise_to("medium", "provider economic churn removed active capacity")
     if fnum(totals.get("audit_budget_backlog")) > 0:
         raise_to("medium", "audit budget backlog remained at run end")
     if fnum(totals.get("evidence_spam_net_gain")) > 0:
         raise_to("high", "evidence spam was profitable")
+    if scenario == "wash-retrieval":
+        wash_net = fnum(totals.get("retrieval_wash_net_gain"))
+        if wash_net > 0:
+            raise_to("high", "wash retrieval was profitable after explicit spend")
+        elif fnum(totals.get("retrieval_attempts")) > 0 and wash_net == 0:
+            raise_to("medium", "wash retrieval carried no net cost")
+    if (
+        fnum(totals.get("evidence_spam_claims")) > 0
+        and fnum(totals.get("evidence_spam_bond_burned")) == 0
+        and fnum(totals.get("evidence_spam_convictions")) < fnum(totals.get("evidence_spam_claims"))
+    ):
+        raise_to("medium", "unconvicted evidence spam carried no burn cost")
+    if fnum(totals.get("new_deals_rejected_price")) > 0:
+        raise_to("medium", "new storage demand was rejected by price")
+    if fnum(totals.get("new_deals_suppressed_price")) > 0 and not (
+        scenario == "demand-elasticity-recovery" and fnum(totals.get("new_deals_accepted")) > 0
+    ):
+        raise_to("medium", "latent storage demand was suppressed by price elasticity")
+    if scenario == "demand-elasticity-recovery" and fnum(totals.get("new_deal_latent_requests")) > 0:
+        if (
+            fnum(config.get("storage_demand_reference_price")) > 0
+            and fnum(config.get("storage_price")) > fnum(config.get("storage_demand_reference_price"))
+            and fnum(totals.get("new_deals_suppressed_price")) == 0
+        ):
+            raise_to("medium", "storage demand did not respond to high initial price")
+        if fnum(totals.get("new_deals_accepted")) == 0:
+            raise_to("high", "storage demand never recovered into accepted deals")
+    if (
+        scenario == "retrieval-demand-shock"
+        and fnum(totals.get("retrieval_demand_shock_active")) > 0
+        and fnum(totals.get("max_retrieval_price")) <= fnum(config.get("retrieval_price_per_slot"))
+    ):
+        raise_to("medium", "retrieval demand shock did not move retrieval price")
+    if fnum(totals.get("retrieval_price_direction_changes")) > 2:
+        raise_to("medium", "retrieval price oscillated repeatedly")
+    if fnum(totals.get("elasticity_overlay_rejections")) > 0:
+        raise_to("medium", "elasticity overlay expansion was rejected")
+    if scenario == "elasticity-cap-hit":
+        triggered = fnum(totals.get("retrieval_attempts")) >= fnum(config.get("elasticity_trigger_retrievals_per_epoch"))
+        spend_window_exhaustible = fnum(config.get("elasticity_max_spend")) < (
+            fnum(config.get("elasticity_base_cost")) * fnum(config.get("epochs"))
+        )
+        if fnum(totals.get("elasticity_rejections")) == 0 and triggered and spend_window_exhaustible:
+            raise_to("high", "elasticity cap-hit scenario did not emit spend-cap rejection")
+        if fnum(totals.get("elasticity_spent")) > fnum(config.get("elasticity_max_spend")):
+            raise_to("high", "elasticity spend exceeded configured cap")
+    if fnum(totals.get("elasticity_rejections")) > 0:
+        raise_to("medium", "elasticity expansion was rejected by spend cap")
+    if fnum(totals.get("elasticity_overlay_activations")) > 0 and fnum(totals.get("elasticity_overlay_serves")) == 0:
+        raise_to("medium", "elasticity overlays activated but did not serve reads")
+    if fnum(totals.get("owner_retrieval_escrow_debited")) > 0:
+        raise_to("medium", "owner retrieval escrow was debited")
+    if (
+        fnum(totals.get("storage_escrow_outstanding")) > 0
+        and fnum(totals.get("final_closed_deals")) > 0
+        and fnum(totals.get("final_open_deals")) == 0
+    ):
+        raise_to("medium", "storage escrow remained outstanding after deal close")
+    if (
+        scenario == "storage-escrow-expiry"
+        and fnum(config.get("deal_duration_epochs")) > 0
+        and fnum(config.get("deal_duration_epochs")) <= fnum(config.get("epochs"))
+        and fnum(totals.get("final_open_deals")) > 0
+    ):
+        raise_to("high", "matured storage deals remained open after configured duration")
+    if fnum(totals.get("storage_fee_burned")) > 0:
+        raise_to("medium", "storage fees were burned instead of paid")
+    if fnum(totals.get("final_underbonded_assigned_slots")) > 0:
+        raise_to("high", "underbonded assigned slots remained at run end")
+    elif fnum(totals.get("max_underbonded_providers")) > 0:
+        raise_to("medium", "provider bond headroom became constrained")
+    if scenario == "provider-supply-entry" and fnum(totals.get("reserve_providers")) > 0:
+        raise_to("medium", "reserve providers remained unused at run end")
+    if fnum(totals.get("staged_upload_rejections")) > 0:
+        raise_to("medium", "staged upload preflight rejections occurred")
     if not reasons:
         reasons.append("assertions passed and no material sweep risk surfaced")
     return level, reasons
@@ -2542,15 +3996,17 @@ def write_sweep_summary_md(path: Path, payload: dict[str, Any]) -> None:
         "",
         "## Run Matrix",
         "",
-        "| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |",
-        "|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |",
+        "|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in sorted(rows, key=lambda item: (item["scenario"], stable_param(item.get("seed")), item["label"])):
         totals = row["totals"]
         lines.append(
             f"| `{row['label']}` | `{row['scenario']}` | `{row.get('seed')}` | `{row['risk_level']}` | "
             f"`{'PASS' if row['assertions_passed'] else 'FAIL'}` | {fmt_pct(totals.get('success_rate'))} | "
-            f"{fmt_num(totals.get('unavailable_reads'))} | {fmt_num(totals.get('data_loss_events'))} | "
+            f"{fmt_num(totals.get('unavailable_reads'))} | {fmt_num(totals.get('expired_retrieval_attempts'))} | "
+            f"{fmt_num(totals.get('closed_retrieval_attempts'))} | "
+            f"{fmt_num(totals.get('data_loss_events'))} | "
             f"{fmt_num(totals.get('repairs_started'))}/{fmt_num(totals.get('repairs_completed'))} | "
             f"{fmt_num(totals.get('repair_backoffs'))} | {fmt_num(totals.get('saturated_responses'))} | "
             f"{fmt_num(totals.get('providers_negative_pnl'))} | {fmt_money(totals.get('final_storage_price'))} | "
@@ -2636,20 +4092,36 @@ def sweep_metric_meaning(key: str) -> str:
     meanings = {
         "success_rate": "Primary availability outcome; should not regress silently.",
         "unavailable_reads": "Temporary user-facing misses; allowed only in explicit stress contracts.",
+        "offline_responses": "Provider responses missed because a selected provider was offline.",
+        "expired_retrieval_attempts": "Post-expiry read requests rejected as expired content, not live availability misses.",
+        "closed_retrieval_attempts": "Post-close read requests rejected as closed content, not live availability misses.",
         "data_loss_events": "Durability invariant; non-zero values block graduation.",
         "reward_coverage": "Shows whether compliant responsibility remains economically recognized.",
+        "reward_pool_minted": "Modeled base subsidy made available to active slots.",
+        "reward_paid": "Base subsidy actually paid to reward-eligible slots.",
+        "reward_burned": "Base subsidy withheld from non-compliant responsibility.",
         "repairs_started": "Detection and repair activation pressure.",
+        "repairs_ready": "Pending replacement providers that proved readiness.",
         "repairs_completed": "Healing throughput under the parameter set.",
         "repair_attempts": "Repair retry pressure before starts or backoffs.",
         "repair_backoffs": "Replacement capacity or repair-start bottlenecks.",
         "repair_cooldowns": "Retry cooldowns that intentionally throttle repair churn.",
         "repair_attempt_caps": "Per-slot attempt caps hit before a replacement could start.",
+        "repair_timeouts": "Pending replacement providers that failed readiness before timeout.",
         "high_bandwidth_promotions": "Measured provider capability promotions.",
         "high_bandwidth_demotions": "Capability demotions after performance regression.",
         "high_bandwidth_providers": "Final provider count eligible for high-bandwidth routing.",
         "high_bandwidth_serves": "Serves attributed to high-bandwidth providers.",
         "hot_retrieval_attempts": "Hot-service demand exercised by the run.",
         "hot_high_bandwidth_serves": "Hot retrieval serves handled by promoted high-bandwidth providers.",
+        "platinum_serves": "Serves in the fastest latency tier.",
+        "gold_serves": "Serves in the middle positive latency tier.",
+        "silver_serves": "Serves in the low positive latency tier.",
+        "fail_serves": "Serves slower than the configured positive latency tiers.",
+        "average_latency_ms": "Average modeled successful-service latency.",
+        "performance_fail_rate": "Share of tiered serves that landed in the Fail tier.",
+        "platinum_share": "Share of tiered serves that landed in the fastest performance tier.",
+        "performance_reward_paid": "Tiered QoS rewards paid separately from baseline storage and retrieval settlement.",
         "top_operator_assignment_share_bps": "Final assignment share of the largest operator.",
         "max_operator_assignment_share_bps": "Worst observed assignment share of any operator across epochs.",
         "top_operator_provider_share_bps": "Provider identity share controlled by the largest operator.",
@@ -2657,9 +4129,14 @@ def sweep_metric_meaning(key: str) -> str:
         "operator_deal_cap_violations": "Deal/operator groups above the configured cap.",
         "suspect_slots": "Soft warning slot-epochs before thresholded delinquency.",
         "delinquent_slots": "Threshold-crossed slot-epochs that should be visible to operators.",
+        "withheld_responses": "Refusal-to-serve retrieval responses generated by withholding providers.",
+        "deputy_misses": "Deputy-served slots where the responsible provider failed direct service.",
         "quota_misses": "Soft liveness evidence generated by the run.",
+        "corrupt_responses": "Bad retrieval responses generated by hard-fault providers.",
         "invalid_proofs": "Hard-fault evidence generated by the run.",
+        "provider_hard_faults": "Provider-level hard-fault counter used for enforcement graduation.",
         "paid_corrupt_bytes": "Payment safety invariant; should remain zero.",
+        "provider_slashed": "Simulated bond removed from providers after hard-fault evidence.",
         "audit_budget_demand": "Total audit work implied by soft-failure evidence and carried backlog.",
         "audit_budget_spent": "Audit budget actually consumed under the configured cap.",
         "audit_budget_backlog": "Unmet audit demand remaining at run end.",
@@ -2669,11 +4146,78 @@ def sweep_metric_meaning(key: str) -> str:
         "evidence_spam_bond_burned": "Evidence bond burned for unconvicted spam claims.",
         "evidence_spam_bounty_paid": "Conviction-gated bounty paid to the evidence spammer.",
         "evidence_spam_net_gain": "Spammer net economics; positive values indicate an abuse risk.",
+        "retrieval_wash_accounted_spend": "Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic.",
+        "retrieval_wash_net_gain": "Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk.",
+        "retrieval_attempts": "Effective retrieval attempts after demand shock multipliers and inactive-content rejection.",
+        "provider_cost_shock_active": "Epochs where external provider cost pressure was active.",
+        "max_provider_cost_shocked_providers": "Largest provider population affected by cost shock in any epoch.",
+        "max_provider_cost_shock_fixed_multiplier_bps": "Peak modeled fixed-cost multiplier during cost shock.",
+        "max_provider_cost_shock_storage_multiplier_bps": "Peak modeled storage-cost multiplier during cost shock.",
+        "max_provider_cost_shock_bandwidth_multiplier_bps": "Peak modeled bandwidth-cost multiplier during cost shock.",
+        "provider_churn_events": "Provider exits executed by the economic churn policy.",
+        "churned_providers": "Providers marked as exited by run end.",
+        "provider_entries": "Reserve providers admitted into probation by the supply-entry policy.",
+        "provider_probation_promotions": "Probationary providers promoted into assignment-eligible active supply.",
+        "reserve_providers": "Providers still outside normal placement as reserve supply.",
+        "probationary_providers": "Providers in onboarding probation and not yet eligible for normal placement.",
+        "max_reserve_providers": "Peak providers still outside normal placement as reserve supply.",
+        "max_probationary_providers": "Peak providers simultaneously in onboarding probation.",
+        "entered_active_providers": "Providers that entered from reserve and are active by run end.",
+        "provider_underbonded_repairs": "Repairs started because a provider lacked required bond headroom.",
+        "final_underbonded_providers": "Providers below the configured bond requirement at run end.",
+        "max_underbonded_providers": "Peak providers below the configured bond requirement.",
+        "final_underbonded_assigned_slots": "Assigned slots still held by underbonded providers at run end.",
+        "max_underbonded_assigned_slots": "Peak assigned slots held by underbonded providers.",
+        "final_provider_bond_deficit": "Run-end aggregate provider bond deficit under configured collateral rules.",
+        "max_provider_bond_deficit": "Peak aggregate provider bond deficit under configured collateral rules.",
+        "churn_pressure_provider_epochs": "Provider-epochs below the churn threshold.",
+        "max_churn_pressure_providers": "Peak providers simultaneously eligible for churn.",
+        "final_active_provider_capacity": "Provider capacity remaining after economic exits.",
+        "final_exited_provider_capacity": "Provider capacity removed by economic exits.",
+        "final_reserve_provider_capacity": "Provider capacity still held outside normal placement as reserve supply.",
+        "final_probationary_provider_capacity": "Provider capacity in onboarding probation at run end.",
+        "max_churned_assigned_slots": "Peak assigned slots on churned providers before repair catches up.",
+        "retrieval_latent_attempts": "Baseline read demand before demand-shock multipliers.",
+        "retrieval_demand_shock_active": "Epochs where read-demand shock multipliers were active.",
+        "max_retrieval_demand_multiplier_bps": "Peak modeled read-demand multiplier.",
+        "storage_price_direction_changes": "Storage price controller direction changes across the run.",
+        "retrieval_price_direction_changes": "Retrieval price controller direction changes across the run.",
+        "storage_escrow_locked": "Storage escrow charged upfront for committed deals.",
+        "storage_escrow_earned": "Storage escrow earned over modeled service epochs.",
+        "storage_escrow_refunded": "Unearned storage escrow returned by deal close/refund.",
+        "storage_escrow_outstanding": "Storage escrow still locked at run end.",
+        "storage_fee_provider_payouts": "Earned storage fees paid to eligible providers.",
+        "storage_fee_burned": "Earned storage fees withheld from non-compliant slots.",
+        "deals_closed": "Deal close events executed across the run.",
+        "deals_expired": "Deal expiry events executed across the run.",
+        "final_open_deals": "Deals still active at run end.",
+        "final_closed_deals": "Deals closed by run end.",
+        "final_expired_deals": "Deals expired by run end.",
+        "retrieval_base_burned": "Base retrieval fees burned across live retrieval attempts.",
+        "retrieval_variable_burned": "Variable retrieval fee burn withheld from provider payout.",
+        "retrieval_provider_payouts": "Retrieval fees paid to providers for served slots.",
+        "sponsored_retrieval_attempts": "Retrieval attempts funded by requester/sponsor sessions.",
+        "sponsored_retrieval_spent": "Total sponsored retrieval base plus variable spend.",
+        "owner_retrieval_escrow_debited": "Deal-owner escrow debited for non-sponsored retrievals.",
+        "elasticity_spent": "Non-overlay user-funded elasticity spend consumed by overflow demand.",
+        "elasticity_rejections": "Non-overlay elasticity expansion attempts rejected by spend cap.",
+        "elasticity_overlay_activations": "Temporary overflow routes activated by user-funded elasticity.",
+        "elasticity_overlay_expired": "Temporary overflow routes removed by TTL.",
+        "elasticity_overlay_serves": "Retrieval serves completed by overlay routes.",
+        "elasticity_overlay_rejections": "Overlay expansion rejected by spend cap or candidate selection.",
+        "final_elasticity_overlay_active": "Run-end temporary overlay routes, including routes pending readiness.",
+        "max_elasticity_overlay_active": "Peak temporary overlay routes, including routes pending readiness.",
+        "final_elasticity_overlay_ready": "Run-end overlay routes ready for routing.",
+        "max_elasticity_overlay_ready": "Peak overlay routes ready for routing.",
         "providers_negative_pnl": "Market sustainability and churn pressure.",
         "saturated_responses": "Provider bandwidth bottleneck signal.",
         "providers_over_capacity": "Placement/capacity invariant; should remain zero.",
         "final_storage_utilization_bps": "Supply utilization against modeled capacity.",
+        "min_storage_price": "Lowest storage price observed during the run.",
+        "max_storage_price": "Highest storage price observed during the run.",
         "final_storage_price": "Storage-controller endpoint under this run.",
+        "min_retrieval_price": "Lowest retrieval price observed during the run.",
+        "max_retrieval_price": "Highest retrieval price observed during the run.",
         "final_retrieval_price": "Retrieval-controller endpoint under this run.",
         "provider_pnl": "Aggregate provider economics; inspect distribution before deciding.",
     }

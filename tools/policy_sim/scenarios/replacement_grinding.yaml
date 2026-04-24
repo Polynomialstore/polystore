@@ -1,0 +1,34 @@
+{
+  "name": "replacement-grinding",
+  "description": "A faulty slot repeatedly opens replacement repairs whose pending providers never prove readiness; timeouts, cooldowns, and attempt caps must bound churn.",
+  "config": {
+    "scenario": "replacement-grinding",
+    "seed": 41,
+    "providers": 36,
+    "users": 80,
+    "deals": 18,
+    "epochs": 10,
+    "evict_after_missed_epochs": 1,
+    "repair_epochs": 2,
+    "repair_pending_timeout_epochs": 1,
+    "repair_backoff_epochs": 2,
+    "repair_attempt_cap_per_slot": 3,
+    "provider_repair_probability_min": 0.0,
+    "provider_repair_probability_max": 0.0
+  },
+  "faults": [
+    "offline:sp-000:1-10"
+  ],
+  "assertions": {
+    "min_success_rate": 0.95,
+    "min_offline_responses": 1,
+    "min_repair_attempts": 1,
+    "min_repairs_started": 1,
+    "min_repair_timeouts": 1,
+    "min_repair_cooldowns": 1,
+    "min_repair_attempt_caps": 1,
+    "max_repairs_completed": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

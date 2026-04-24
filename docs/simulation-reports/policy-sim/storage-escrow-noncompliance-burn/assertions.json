@@ -1,0 +1,62 @@
+[
+  {
+    "detail": "success_rate=1, required>=1",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "quota_misses=6, required>=1",
+    "name": "min_quota_misses",
+    "passed": true
+  },
+  {
+    "detail": "repairs_started=3, required>=1",
+    "name": "min_repairs_started",
+    "passed": true
+  },
+  {
+    "detail": "repairs_ready=3, required>=1",
+    "name": "min_repairs_ready",
+    "passed": true
+  },
+  {
+    "detail": "storage_escrow_locked=921.6, required>=900",
+    "name": "min_storage_escrow_locked",
+    "passed": true
+  },
+  {
+    "detail": "storage_escrow_earned=921.6, required>=900",
+    "name": "min_storage_escrow_earned",
+    "passed": true
+  },
+  {
+    "detail": "storage_fee_burned=9.6, required>=1",
+    "name": "min_storage_fee_burned",
+    "passed": true
+  },
+  {
+    "detail": "storage_fee_provider_payouts=912, required>=850",
+    "name": "min_storage_fee_provider_payouts",
+    "passed": true
+  },
+  {
+    "detail": "storage_escrow_refunded=0, required<=0",
+    "name": "max_storage_escrow_refunded",
+    "passed": true
+  },
+  {
+    "detail": "storage_escrow_outstanding=0, required<=0",
+    "name": "max_storage_escrow_outstanding",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "paid_corrupt_bytes=0, required<=0",
+    "name": "max_paid_corrupt_bytes",
+    "passed": true
+  }
+]
