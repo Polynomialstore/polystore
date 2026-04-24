@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 12 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 13 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 6 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -19,6 +19,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`corrupt-provider`](corrupt-provider/report.md) | `implementation planning` | hard-fault keeper path | Add invalid-proof or wrong-data keeper tests proving no corrupt payment, repair start, and slash/jail simulation gates. | `hard evidence submission`, `corrupt-byte reward exclusion`, `jail/slash params` | Provider returns corrupt bytes or invalid proof and user-gateway rejects the response. |
 | [`elasticity-cap-hit`](elasticity-cap-hit/report.md) | `further simulation review` | elasticity spend-window tests | Add spend-window tests for saturation signaling, fail-closed expansion, TTL, and cap-bound rejection. | `MsgSignalSaturation hardening`, `overlay accountability`, `deal spend window` | Burst traffic e2e after overlay semantics are implemented. |
 | [`flapping-provider`](flapping-provider/report.md) | `implementation planning` | keeper soft-fault window | Add missed-epoch window tests proving intermittent failures create health evidence without triggering repair churn. | `soft-fault decay`, `per-slot suspect state`, `operator health query` | Optional provider restart e2e; keeper coverage should be the first artifact. |
+| [`high-bandwidth-promotion`](high-bandwidth-promotion/report.md) | `implementation planning` | provider capability and hot-route policy tests | Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment. | `provider capability tier state`, `bandwidth probe telemetry`, `hot-route preference query`, `capability demotion rule` | Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression. |
 | [`ideal`](ideal/report.md) | `implementation planning` | keeper control tests | Add no-op epoch tests proving healthy providers do not accrue evidence, repair, reward exclusion, jail, or slash state. | `keeper epoch hooks`, `reward eligibility queries` | Gateway happy-path smoke remains sufficient; do not add a slow failure e2e for the control case. |
 | [`large-scale-regional-stress`](large-scale-regional-stress/report.md) | `further simulation review` | scale calibration and regression reporting | Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults. | `scale sweep corpus`, `placement diversity params`, `operator concentration analysis`, `CI artifact retention` | Do not mirror this as process e2e; keep it as simulator/CI artifact work. |
 | [`lazy-provider`](lazy-provider/report.md) | `implementation planning` | reward eligibility keeper tests | Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing. | `quota miss ledger`, `reward exclusion reason query`, `soft fault consequence ceiling` | Slow-path only after keeper reward accounting is stable. |
@@ -42,7 +43,7 @@ This report converts the committed simulator corpus into implementation planning
 - `lazy-provider`: Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing.
 - `setup-failure`: Add setup-phase replacement tests proving failed initial upload selects a system provider and does not imply fraud.
 - `repair-candidate-exhaustion`: Add tests proving no eligible replacement emits backoff, preserves capacity constraints, and does not over-assign providers.
-- `price-controller-bounds`: Add epoch pricing tests for floors, ceilings, utilization target, retrieval-demand target, and max step bps.
+- `high-bandwidth-promotion`: Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment.
 
 ## Missing Surfaces By Component
 
@@ -53,7 +54,9 @@ This report converts the committed simulator corpus into implementation planning
 | `MsgSignalSaturation hardening` | 1 |
 | `audit backlog query` | 1 |
 | `audit budget state` | 1 |
+| `bandwidth probe telemetry` | 1 |
 | `burn ledger` | 1 |
+| `capability demotion rule` | 1 |
 | `compliance-gated base rewards` | 1 |
 | `corrupt-byte reward exclusion` | 1 |
 | `credit cap enforcement` | 1 |
@@ -67,6 +70,7 @@ This report converts the committed simulator corpus into implementation planning
 | `gateway repair-aware routing` | 1 |
 | `hard evidence submission` | 1 |
 | `hot route observability` | 1 |
+| `hot-route preference query` | 1 |
 | `jail/slash params` | 1 |
 | `keeper epoch hooks` | 1 |
 | `nightly stress harness` | 1 |
@@ -81,6 +85,7 @@ This report converts the committed simulator corpus into implementation planning
 | `placement diversity params` | 1 |
 | `profitability dashboards` | 1 |
 | `promotion readiness proof` | 1 |
+| `provider capability tier state` | 1 |
 | `provider cost assumptions` | 1 |
 | `quota miss ledger` | 1 |
 | `regional/provider-class placement metadata` | 1 |

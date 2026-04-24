@@ -8,7 +8,7 @@ Model dynamic storage and retrieval price movement under sustained demand. This 
 
 Expected policy behavior: Prices move in the expected direction, remain within configured bounds, preserve availability, and do not hide provider distress.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs.
+Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
 
 ## Review Focus
 
@@ -37,6 +37,9 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Retrieval price/slot | `0.0100` |
 | Provider capacity range | `12`-`16` slots |
 | Provider bandwidth range | `0`-`0` serves/epoch (`0` means unlimited) |
+| High-bandwidth promotion | `false` |
+| High-bandwidth capacity threshold | `0` serves/epoch |
+| Hot retrieval share | `0.00%` |
 | Provider regions | `global` |
 
 ## Economic Assumptions
@@ -85,6 +88,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Suspect / delinquent slot-epochs | `0` / `0` | Separates early warning state from threshold-crossed delinquency. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
+| High-bandwidth providers | `0` | Providers currently eligible for hot/high-bandwidth routing. |
+| High-bandwidth promotions/demotions | `0` / `0` | Shows capability changes under measured demand. |
+| Hot high-bandwidth serves/retrieval | `0` | Measures whether hot retrievals actually use promoted providers. |
 | Final storage utilization | `86.81%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `85.71%` / `100.00%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
 | Provider P&L p10 / p50 / p90 | `20.2061` / `20.7607` / `21.2422` | Shows whether aggregate P&L hides marginal-provider distress. |
@@ -260,11 +266,23 @@ Shows whether started repairs are accumulating faster than they complete.
 
 ![Repair Backlog](graphs/repair_backlog.svg)
 
+### High-Bandwidth Promotion
+
+Shows capability promotion/demotion state over time for hot-path eligibility.
+
+![High-Bandwidth Promotion](graphs/high_bandwidth_promotion.svg)
+
+### Hot Retrieval Routing
+
+Shows whether hot retrieval attempts are being served by promoted high-bandwidth providers.
+
+![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)
+
 ## Raw Artifacts
 
 - `summary.json`: compact machine-readable run summary.
 - `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.
-- `providers.csv`: final provider-level economics and fault counters.
+- `providers.csv`: final provider-level economics, fault counters, and capability tier.
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.

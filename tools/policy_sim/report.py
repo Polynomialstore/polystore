@@ -126,6 +126,15 @@ SCENARIO_GUIDES = {
         "expected": "High retrieval volume succeeds, provider payouts rise, and base burns are visible without unnecessary repair.",
         "review": "Use this to separate anti-wash controls from legitimate popularity handling.",
     },
+    "high-bandwidth-promotion": {
+        "title": "High-Bandwidth Provider Promotion",
+        "intent": (
+            "Model hot retrieval demand with heterogeneous provider bandwidth. The policy question is whether measured high-capacity, "
+            "high-success providers become eligible for hot-path routing without giving every provider the same service posture."
+        ),
+        "expected": "Providers above the bandwidth and success thresholds are promoted, hot retrievals route through them, no demotion occurs, and availability remains intact.",
+        "review": "Use this before implementing provider capability state, hot-deal placement priority, or high-bandwidth reward multipliers in keeper/runtime code.",
+    },
     "elasticity-cap-hit": {
         "title": "Elasticity Cap Hit",
         "intent": (
@@ -281,6 +290,12 @@ SWEEP_METRICS = [
     "repair_backoffs",
     "repair_cooldowns",
     "repair_attempt_caps",
+    "high_bandwidth_promotions",
+    "high_bandwidth_demotions",
+    "high_bandwidth_providers",
+    "high_bandwidth_serves",
+    "hot_retrieval_attempts",
+    "hot_high_bandwidth_serves",
     "suspect_slots",
     "delinquent_slots",
     "quota_misses",
@@ -322,6 +337,14 @@ SWEEP_CONFIG_KEYS = [
     "provider_capacity_max",
     "provider_bandwidth_capacity_min",
     "provider_bandwidth_capacity_max",
+    "high_bandwidth_promotion_enabled",
+    "high_bandwidth_capacity_threshold",
+    "high_bandwidth_min_retrievals",
+    "high_bandwidth_min_success_rate_bps",
+    "high_bandwidth_max_saturation_bps",
+    "high_bandwidth_demotion_saturation_bps",
+    "high_bandwidth_routing_enabled",
+    "hot_retrieval_bps",
     "provider_online_probability_min",
     "provider_online_probability_max",
     "provider_repair_probability_min",
@@ -400,6 +423,7 @@ def compute_signals(
     retrieval_prices = [fnum(row.get("retrieval_price_per_slot")) for row in economy]
     capacity_utils = [fnum(row.get("capacity_utilization_bps")) for row in providers]
     pnls = [fnum(row.get("pnl")) for row in providers]
+    high_bandwidth_providers = [row for row in providers if row.get("capability_tier") == "HIGH_BANDWIDTH"]
     bandwidth_caps = [fnum(row.get("bandwidth_capacity_per_epoch")) for row in providers if fnum(row.get("bandwidth_capacity_per_epoch")) > 0]
     online_probs = [fnum(row.get("online_probability")) for row in providers]
     assigned_slots = sum(fnum(row.get("assigned_slots")) for row in providers)
@@ -471,6 +495,22 @@ def compute_signals(
             "retrieval_price_end": retrieval_prices[-1] if retrieval_prices else 0.0,
             "retrieval_price_min": min(retrieval_prices, default=0.0),
             "retrieval_price_max": max(retrieval_prices, default=0.0),
+        },
+        "high_bandwidth": {
+            "providers": fnum(totals.get("high_bandwidth_providers")),
+            "promotions": fnum(totals.get("high_bandwidth_promotions")),
+            "demotions": fnum(totals.get("high_bandwidth_demotions")),
+            "hot_retrieval_attempts": fnum(totals.get("hot_retrieval_attempts")),
+            "high_bandwidth_serves": fnum(totals.get("high_bandwidth_serves")),
+            "hot_high_bandwidth_serves": fnum(totals.get("hot_high_bandwidth_serves")),
+            "hot_high_bandwidth_serves_per_hot_retrieval": (
+                fnum(totals.get("hot_high_bandwidth_serves")) / max(1.0, fnum(totals.get("hot_retrieval_attempts")))
+            ),
+            "provider_count_from_rows": len(high_bandwidth_providers),
+            "bandwidth_capacity_p50": percentile(
+                [fnum(row.get("bandwidth_capacity_per_epoch")) for row in high_bandwidth_providers],
+                50,
+            ),
         },
         "regions": regions,
         "top_bottleneck_providers": top_bottleneck_providers(providers),
@@ -586,7 +626,9 @@ def write_report_md(
         f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs across "
         f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts. Slot health recorded "
         f"`{fmt_num(totals.get('suspect_slots'))}` suspect slot-epochs and "
-        f"`{fmt_num(totals.get('delinquent_slots'))}` delinquent slot-epochs.",
+        f"`{fmt_num(totals.get('delinquent_slots'))}` delinquent slot-epochs. "
+        f"High-bandwidth promotions were `{fmt_num(totals.get('high_bandwidth_promotions'))}` and final high-bandwidth providers were "
+        f"`{fmt_num(totals.get('high_bandwidth_providers'))}`.",
         "",
         "## Review Focus",
         "",
@@ -615,6 +657,9 @@ def write_report_md(
             f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
             f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
             f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
+            f"| High-bandwidth promotion | `{str(config.get('high_bandwidth_promotion_enabled')).lower()}` |",
+            f"| High-bandwidth capacity threshold | `{fmt_num(config.get('high_bandwidth_capacity_threshold'))}` serves/epoch |",
+            f"| Hot retrieval share | `{fmt_bps(config.get('hot_retrieval_bps'))}` |",
             f"| Provider regions | `{', '.join(str(item) for item in config.get('provider_regions', []))}` |",
             "",
         "## Economic Assumptions",
@@ -761,11 +806,23 @@ def write_report_md(
             "",
             "![Repair Backlog](graphs/repair_backlog.svg)",
             "",
+            "### High-Bandwidth Promotion",
+            "",
+            "Shows capability promotion/demotion state over time for hot-path eligibility.",
+            "",
+            "![High-Bandwidth Promotion](graphs/high_bandwidth_promotion.svg)",
+            "",
+            "### Hot Retrieval Routing",
+            "",
+            "Shows whether hot retrieval attempts are being served by promoted high-bandwidth providers.",
+            "",
+            "![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)",
+            "",
             "## Raw Artifacts",
             "",
             "- `summary.json`: compact machine-readable run summary.",
             "- `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.",
-            "- `providers.csv`: final provider-level economics and fault counters.",
+            "- `providers.csv`: final provider-level economics, fault counters, and capability tier.",
             "- `slots.csv`: per-slot epoch ledger, including health state and reason.",
             "- `evidence.csv`: policy evidence events.",
             "- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
@@ -841,6 +898,12 @@ def build_behavior_narrative(
             f"Provider bandwidth constraints mattered: the run recorded `{fmt_num(totals.get('saturated_responses'))}` saturated provider responses. "
             "That is a scale signal, not necessarily malicious behavior."
         )
+    if fnum(totals.get("high_bandwidth_promotions")) > 0 or fnum(totals.get("hot_retrieval_attempts")) > 0:
+        parts.append(
+            f"High-bandwidth capability policy was exercised: `{fmt_num(totals.get('high_bandwidth_promotions'))}` providers were promoted, "
+            f"`{fmt_num(totals.get('high_bandwidth_demotions'))}` were demoted, and hot retrievals received "
+            f"`{fmt_num(totals.get('hot_high_bandwidth_serves'))}` serves from high-bandwidth providers."
+        )
     if fnum(totals.get("repair_backoffs")) > 0:
         parts.append(
             f"Repair coordination was constrained: `{fmt_num(totals.get('repair_backoffs'))}` repair backoffs occurred across "
@@ -890,6 +953,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
     repair = signals["repair"]
     capacity = signals["capacity"]
     economics = signals["economics"]
+    high_bandwidth = signals["high_bandwidth"]
     return [
         "| Signal | Value | Why It Matters |",
         "|---|---:|---|",
@@ -908,6 +972,9 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Repair cooldowns / attempt caps | `{fmt_num(repair['cooldowns'])}` / `{fmt_num(repair['attempt_caps'])}` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |",
         f"| Suspect / delinquent slot-epochs | `{fmt_num(repair['suspect_slot_epochs'])}` / `{fmt_num(repair['delinquent_slot_epochs'])}` | Separates early warning state from threshold-crossed delinquency. |",
         f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed repairs at run end. |",
+        f"| High-bandwidth providers | `{fmt_num(high_bandwidth['providers'])}` | Providers currently eligible for hot/high-bandwidth routing. |",
+        f"| High-bandwidth promotions/demotions | `{fmt_num(high_bandwidth['promotions'])}` / `{fmt_num(high_bandwidth['demotions'])}` | Shows capability changes under measured demand. |",
+        f"| Hot high-bandwidth serves/retrieval | `{fmt_num(high_bandwidth['hot_high_bandwidth_serves_per_hot_retrieval'])}` | Measures whether hot retrievals actually use promoted providers. |",
         f"| Final storage utilization | `{fmt_bps(capacity['final_utilization_bps'])}` | Active slots versus modeled provider capacity. |",
         f"| Provider utilization p50 / p90 / max | `{fmt_bps(capacity['provider_capacity_utilization_p50_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_p90_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_max_bps'])}` | Detects assignment concentration and capacity cliffs. |",
         f"| Provider P&L p10 / p50 / p90 | `{fmt_money(economics['provider_pnl_p10'])}` / `{fmt_money(economics['provider_pnl_p50'])}` / `{fmt_money(economics['provider_pnl_p90'])}` | Shows whether aggregate P&L hides marginal-provider distress. |",
@@ -1090,6 +1157,12 @@ def assertion_meaning(name: str) -> str:
         "max_repair_cooldowns": "Repair cooldown ceiling: cooldown throttling must not dominate healthy recovery.",
         "min_repair_attempt_caps": "Repair attempt-cap accounting: bounded retry fixtures must hit and report the cap.",
         "max_repair_attempt_caps": "Repair attempt-cap ceiling: healthy repair paths should not exhaust attempts.",
+        "min_high_bandwidth_promotions": "Capability promotion: measured fast providers should become high-bandwidth eligible.",
+        "max_high_bandwidth_promotions": "Capability promotion ceiling: healthy baselines should not accidentally promote providers.",
+        "min_high_bandwidth_providers": "Final high-bandwidth provider count should be non-zero in promotion fixtures.",
+        "max_high_bandwidth_demotions": "Promotion fixture should not immediately demote providers unless regression is modeled.",
+        "min_hot_retrieval_attempts": "Hot-service fixture must exercise hot retrieval demand.",
+        "min_hot_high_bandwidth_serves": "Hot-service routing must use promoted high-bandwidth providers.",
         "min_suspect_slots": "Health-state observability: soft failures should become suspect before punitive consequences.",
         "max_suspect_slots": "Healthy baseline should not produce suspect slot state.",
         "min_delinquent_slots": "Delinquency observability: threshold-crossed slots should expose delinquent state.",
@@ -1366,6 +1439,7 @@ def graduation_semantics(scenario: str) -> str:
         "subsidy-farming": "Graduation means non-compliant responsibility is not profitably subsidized by base rewards.",
         "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
         "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
+        "high-bandwidth-promotion": "Graduation means measured provider capability can promote hot-path eligibility without degrading availability or over-assigning capacity.",
         "large-scale-regional-stress": "Graduation means the scale model preserves durability, exposes bottlenecks, and gives humans enough context to tune availability and economics.",
     }
     return semantics.get(
@@ -1397,7 +1471,16 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
     hard_enforcement_ready = scenario not in {"corrupt-provider", "malicious-corrupt"} or fnum(totals.get("provider_slashed")) > 0
     ready = assertions_ready and data_loss_ready and availability_ready and corrupt_ready and repair_ready and hard_enforcement_ready
 
-    if ready and scenario in {"ideal", "single-outage", "withholding", "corrupt-provider", "malicious-corrupt", "lazy-provider", "setup-failure"}:
+    if ready and scenario in {
+        "ideal",
+        "single-outage",
+        "withholding",
+        "corrupt-provider",
+        "malicious-corrupt",
+        "lazy-provider",
+        "setup-failure",
+        "high-bandwidth-promotion",
+    }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
     elif ready:
@@ -1434,7 +1517,9 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "## Candidate Next Artifact",
         "",
     ]
-    if recommendation == "Candidate for implementation planning.":
+    if recommendation == "Candidate for implementation planning." and scenario == "high-bandwidth-promotion":
+        lines.append("Create a keeper/runtime planning ticket that names the capability thresholds, probe telemetry, hot-route preference, assignment caps, and demotion conditions this fixture should enforce.")
+    elif recommendation == "Candidate for implementation planning.":
         lines.append("Create a keeper/e2e planning ticket that names the exact evidence rows, reward-accounting rule, and repair transition this fixture should enforce.")
     elif recommendation == "Candidate for further simulation review.":
         lines.append("Create a policy-review note that compares this scenario against at least one baseline and one adversarial variant.")
@@ -1500,6 +1585,20 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         graphs_dir / "repair_backlog.svg",
         "Repair Backlog",
         repair_backlog_series(epochs),
+    )
+    write_line_svg(
+        graphs_dir / "high_bandwidth_promotion.svg",
+        "High-Bandwidth Providers",
+        [fnum(row.get("high_bandwidth_providers")) for row in epochs],
+        secondary=[fnum(row.get("high_bandwidth_promotions")) for row in epochs],
+        secondary_label="Promotions",
+    )
+    write_line_svg(
+        graphs_dir / "hot_retrieval_routing.svg",
+        "Hot Retrieval Attempts",
+        [fnum(row.get("hot_retrieval_attempts")) for row in epochs],
+        secondary=[fnum(row.get("hot_high_bandwidth_serves")) for row in epochs],
+        secondary_label="Hot High-BW Serves",
     )
 
 
@@ -1729,6 +1828,9 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("providers_negative_pnl", "Economic sustainability/churn indicator."),
         ("saturated_responses", "Whether heterogeneous provider bandwidth became a bottleneck."),
         ("repair_backoffs", "Whether healing coordination or replacement capacity became constrained."),
+        ("high_bandwidth_promotions", "Whether measured fast providers became hot-route eligible."),
+        ("high_bandwidth_demotions", "Whether capability regression removed hot-route eligibility."),
+        ("hot_high_bandwidth_serves", "Whether hot traffic actually used promoted providers."),
         ("final_storage_utilization_bps", "Final active-slot utilization against modeled provider capacity."),
     ]
     lines = []
@@ -1780,6 +1882,16 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         if delta > 0:
             return "Candidate exposed repair coordination limits."
         return "Repair coordination limits did not increase."
+    if key in {"high_bandwidth_promotions", "high_bandwidth_providers"}:
+        if delta > 0:
+            return "Provider capability promotion increased."
+        return "Provider capability promotion did not increase."
+    if key == "high_bandwidth_demotions":
+        if delta > 0:
+            return "Provider capability regression increased; inspect whether this was intended."
+        return "Provider capability demotion did not increase."
+    if key in {"hot_retrieval_attempts", "hot_high_bandwidth_serves", "high_bandwidth_serves"}:
+        return "Hot routing or high-bandwidth serve accounting changed."
     if key == "final_storage_utilization_bps":
         return "Final storage utilization changed against modeled provider capacity."
     return "Metric changed; inspect the full report for causal context."
@@ -2071,6 +2183,12 @@ def sweep_metric_meaning(key: str) -> str:
         "repair_backoffs": "Replacement capacity or repair-start bottlenecks.",
         "repair_cooldowns": "Retry cooldowns that intentionally throttle repair churn.",
         "repair_attempt_caps": "Per-slot attempt caps hit before a replacement could start.",
+        "high_bandwidth_promotions": "Measured provider capability promotions.",
+        "high_bandwidth_demotions": "Capability demotions after performance regression.",
+        "high_bandwidth_providers": "Final provider count eligible for high-bandwidth routing.",
+        "high_bandwidth_serves": "Serves attributed to high-bandwidth providers.",
+        "hot_retrieval_attempts": "Hot-service demand exercised by the run.",
+        "hot_high_bandwidth_serves": "Hot retrieval serves handled by promoted high-bandwidth providers.",
         "suspect_slots": "Soft warning slot-epochs before thresholded delinquency.",
         "delinquent_slots": "Threshold-crossed slot-epochs that should be visible to operators.",
         "quota_misses": "Soft liveness evidence generated by the run.",

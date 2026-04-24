@@ -38,6 +38,17 @@
     "storage_price_min": 1.0,
     "storage_price_start": 1.0
   },
+  "high_bandwidth": {
+    "bandwidth_capacity_p50": 0.0,
+    "demotions": 0.0,
+    "high_bandwidth_serves": 0.0,
+    "hot_high_bandwidth_serves": 0.0,
+    "hot_high_bandwidth_serves_per_hot_retrieval": 0.0,
+    "hot_retrieval_attempts": 0.0,
+    "promotions": 0.0,
+    "provider_count_from_rows": 0,
+    "providers": 0.0
+  },
   "regions": [
     {
       "assigned_slots": 1152.0,

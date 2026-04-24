@@ -1,0 +1,37 @@
+{
+  "name": "high-bandwidth-promotion",
+  "description": "Hot retrieval demand should promote measured high-bandwidth providers and route hot traffic toward them without over-assigning capacity.",
+  "config": {
+    "scenario": "high-bandwidth-promotion",
+    "seed": 41,
+    "providers": 96,
+    "users": 300,
+    "deals": 48,
+    "epochs": 8,
+    "retrievals_per_user_per_epoch": 2,
+    "route_attempt_limit": 12,
+    "provider_bandwidth_capacity_min": 200,
+    "provider_bandwidth_capacity_max": 500,
+    "high_bandwidth_promotion_enabled": true,
+    "high_bandwidth_capacity_threshold": 350,
+    "high_bandwidth_min_retrievals": 20,
+    "high_bandwidth_min_success_rate_bps": 9900,
+    "high_bandwidth_max_saturation_bps": 500,
+    "high_bandwidth_demotion_saturation_bps": 0,
+    "high_bandwidth_routing_enabled": true,
+    "hot_retrieval_bps": 8000,
+    "retrieval_base_fee": 0.003,
+    "retrieval_price_per_slot": 0.014
+  },
+  "assertions": {
+    "min_success_rate": 0.99,
+    "min_high_bandwidth_promotions": 1,
+    "min_high_bandwidth_providers": 1,
+    "min_hot_retrieval_attempts": 1,
+    "min_hot_high_bandwidth_serves": 1,
+    "max_high_bandwidth_demotions": 0,
+    "max_providers_over_capacity": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}
