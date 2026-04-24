@@ -8,7 +8,7 @@ Model a technically healthy network whose prices do not cover provider costs. Th
 
 Expected policy behavior: Retrieval success remains high, but provider P&L turns negative and churn risk appears.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `48` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
+Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `48` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts.
 
 ## Review Focus
 
@@ -30,6 +30,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Retrievals/user/epoch | `1` |
 | Liveness quota | `2`-`8` blobs/slot/epoch |
 | Repair delay | `2` epochs |
+| Repair attempt cap/slot | `0` (`0` means unlimited) |
+| Repair backoff window | `0` epochs |
 | Dynamic pricing | `false` |
 | Storage price | `1.0000` |
 | Retrieval price/slot | `0.0020` |
@@ -77,7 +79,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Peak saturation | `0` at epoch `1` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
 | Repair readiness ratio | `100.00%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `100.00%` | Measures whether healing catches up with detection. |
+| Repair attempts | `0` | Counts bounded attempts to open a repair or discover replacement pressure. |
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair backoffs per attempt | `0` | Distinguishes capacity/cooldown pressure from successful repair starts. |
+| Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `37.50%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `37.50%` / `37.50%` / `37.50%` | Detects assignment concentration and capacity cliffs. |
@@ -134,7 +139,10 @@ Repair summary:
 - Repairs started: `0`
 - Repairs marked ready: `0`
 - Repairs completed: `0`
+- Repair attempts: `0`
 - Repair backoffs: `0`
+- Repair cooldown backoffs: `0`
+- Repair attempt-cap backoffs: `0`
 - Final active slots in last epoch: `288`
 
 ### Repair Ledger Excerpt
@@ -240,6 +248,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

@@ -6,18 +6,21 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 
 | Risk | Severity | Evidence | Impact | Recommended Follow-Up |
 |---|---|---|---|---|
-| Repair coordination bottleneck | `medium` | 72 repair attempts backed off. | The network may detect bad slots faster than it can safely heal them. | Review max repair starts per epoch, replacement capacity, and catch-up probability assumptions. |
+| Repair coordination bottleneck | `medium` | 40 repair backoffs across 8 attempts; 16 cooldowns and 16 attempt-cap events. | The network may detect bad slots faster than it can safely heal them. | Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions. |
 
 ## Evidence Counters
 
 - Evidence events: `80`
-- Repair events: `72`
+- Repair events: `40`
 - Failed assertions: `0`
 - Providers with negative P&L: `0`
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
-- Repair backoffs: `72`
+- Repair attempts: `8`
+- Repair backoffs: `40`
+- Repair cooldowns: `16`
+- Repair attempt-cap events: `16`
 
 ## Review Questions
 

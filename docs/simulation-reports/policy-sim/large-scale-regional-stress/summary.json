@@ -26,7 +26,7 @@
       "passed": true
     },
     {
-      "detail": "repair_backoffs=21150, required>=1",
+      "detail": "repair_backoffs=12436, required>=1",
       "name": "min_repair_backoffs",
       "passed": true
     },
@@ -110,6 +110,8 @@
         "region": "eu"
       }
     ],
+    "repair_attempt_cap_per_slot": 0,
+    "repair_backoff_epochs": 0,
     "repair_epochs": 3,
     "retrieval_base_fee": 0.002,
     "retrieval_burn_bps": 750,
@@ -171,7 +173,10 @@
     "providers_negative_pnl": 4,
     "providers_over_capacity": 0,
     "quota_misses": 15854,
-    "repair_backoffs": 21150,
+    "repair_attempt_caps": 0,
+    "repair_attempts": 16060,
+    "repair_backoffs": 12436,
+    "repair_cooldowns": 0,
     "repairing_slots": 12768,
     "repairs_completed": 3050,
     "repairs_ready": 3050,

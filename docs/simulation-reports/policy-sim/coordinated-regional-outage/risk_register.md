@@ -6,18 +6,21 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 
 | Risk | Severity | Evidence | Impact | Recommended Follow-Up |
 |---|---|---|---|---|
-| Repair coordination bottleneck | `medium` | 1144 repair attempts backed off. | The network may detect bad slots faster than it can safely heal them. | Review max repair starts per epoch, replacement capacity, and catch-up probability assumptions. |
+| Repair coordination bottleneck | `medium` | 698 repair backoffs across 794 attempts; 0 cooldowns and 0 attempt-cap events. | The network may detect bad slots faster than it can safely heal them. | Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions. |
 
 ## Evidence Counters
 
 - Evidence events: `1540`
-- Repair events: `1432`
+- Repair events: `986`
 - Failed assertions: `0`
 - Providers with negative P&L: `0`
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
-- Repair backoffs: `1144`
+- Repair attempts: `794`
+- Repair backoffs: `698`
+- Repair cooldowns: `0`
+- Repair attempt-cap events: `0`
 
 ## Review Questions
 

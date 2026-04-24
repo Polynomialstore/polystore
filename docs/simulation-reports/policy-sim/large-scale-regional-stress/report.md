@@ -8,7 +8,7 @@ Model a population-scale network with more than one thousand storage providers a
 
 Expected policy behavior: Availability should stay above the configured floor, price should remain bounded, saturation and repair backoffs should be visible, and no provider should be assigned above modeled capacity.
 
-Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` modeled data-loss events, `15482` bandwidth saturation responses and `21150` repair backoffs.
+Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` modeled data-loss events, `15482` bandwidth saturation responses and `12436` repair backoffs across `16060` repair attempts.
 
 ## Review Focus
 
@@ -30,6 +30,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Retrievals/user/epoch | `2` |
 | Liveness quota | `2`-`8` blobs/slot/epoch |
 | Repair delay | `3` epochs |
+| Repair attempt cap/slot | `0` (`0` means unlimited) |
+| Repair backoff window | `0` epochs |
 | Dynamic pricing | `true` |
 | Storage price | `1.0000` |
 | Retrieval price/slot | `0.0110` |
@@ -66,7 +68,7 @@ Reward exclusion was active: `292.9860` modeled reward units were burned instead
 
 Provider bandwidth constraints mattered: the run recorded `15482` saturated provider responses. That is a scale signal, not necessarily malicious behavior.
 
-Repair coordination was constrained: `21150` repair attempts backed off because no candidate or repair-start budget was available.
+Repair coordination was constrained: `12436` repair backoffs occurred across `16060` repair attempts. Cooldown backoffs accounted for `0` events and attempt-cap backoffs accounted for `0` events.
 
 The directly implicated provider set begins with: `sp-001, sp-007, sp-008, sp-012, sp-013`.
 
@@ -85,7 +87,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Peak saturation | `1534` at epoch `10` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
 | Repair readiness ratio | `84.16%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `84.16%` | Measures whether healing catches up with detection. |
-| Repair backoff pressure | `5.8361` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair attempts | `16060` | Counts bounded attempts to open a repair or discover replacement pressure. |
+| Repair backoff pressure | `3.4316` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair backoffs per attempt | `0.7743` | Distinguishes capacity/cooldown pressure from successful repair starts. |
+| Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Final repair backlog | `574` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `55.69%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `61.11%` / `94.44%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
@@ -128,11 +133,11 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | 5 | 99.90% | 1204 | 168 | 121 | 121 | 3.1500 | 537.0365 | 452 offline responses, 434 saturated, 150 quota misses, 463 slots repairing |
 | 6 | 99.97% | 907 | 113 | 139 | 139 | 2.1960 | 556.9552 | 306 offline responses, 378 saturated, 110 quota misses, 510 slots repairing |
 | 7 | 99.75% | 1230 | 168 | 117 | 117 | 3.3120 | 575.4129 | 461 offline responses, 436 saturated, 165 quota misses, 484 slots repairing |
-| 8 | 96.65% | 16790 | 180 | 114 | 114 | 54.4680 | 525.4441 | 9595 offline responses, 1288 saturated, 3025 quota misses, 2708 repair backoffs, 535 slots repairing |
-| 9 | 96.35% | 16131 | 180 | 108 | 108 | 51.1200 | 546.8025 | 9148 offline responses, 1413 saturated, 2836 quota misses, 5095 repair backoffs, 601 slots repairing |
-| 10 | 96.33% | 15270 | 180 | 134 | 134 | 47.5380 | 570.5596 | 8585 offline responses, 1534 saturated, 2635 quota misses, 4725 repair backoffs, 673 slots repairing |
-| 11 | 97.47% | 14159 | 180 | 127 | 127 | 44.7660 | 602.6376 | 7982 offline responses, 1340 saturated, 2475 quota misses, 4423 repair backoffs, 719 slots repairing |
-| 12 | 97.65% | 13782 | 180 | 150 | 150 | 42.4800 | 628.6651 | 7827 offline responses, 1378 saturated, 2342 quota misses, 4166 repair backoffs, 772 slots repairing |
+| 8 | 96.65% | 16790 | 180 | 114 | 114 | 54.4680 | 525.4441 | 9595 offline responses, 1288 saturated, 3025 quota misses, 2703 repair backoffs, 535 slots repairing |
+| 9 | 96.35% | 16131 | 180 | 108 | 108 | 51.1200 | 546.8025 | 9148 offline responses, 1413 saturated, 2836 quota misses, 2692 repair backoffs, 601 slots repairing |
+| 10 | 96.33% | 15270 | 180 | 134 | 134 | 47.5380 | 570.5596 | 8585 offline responses, 1534 saturated, 2635 quota misses, 2485 repair backoffs, 673 slots repairing |
+| 11 | 97.47% | 14159 | 180 | 127 | 127 | 44.7660 | 602.6376 | 7982 offline responses, 1340 saturated, 2475 quota misses, 2326 repair backoffs, 719 slots repairing |
+| 12 | 97.65% | 13782 | 180 | 150 | 150 | 42.4800 | 628.6651 | 7827 offline responses, 1378 saturated, 2342 quota misses, 2197 repair backoffs, 772 slots repairing |
 | 13 | 99.92% | 950 | 119 | 175 | 175 | 2.2140 | 709.0768 | 296 offline responses, 432 saturated, 105 quota misses, 802 slots repairing |
 | 14 | 99.25% | 1385 | 152 | 180 | 180 | 2.8620 | 730.3403 | 434 offline responses, 664 saturated, 135 quota misses, 746 slots repairing |
 | 15 | 99.93% | 1186 | 170 | 267 | 267 | 3.2760 | 762.3572 | 434 offline responses, 425 saturated, 157 quota misses, 718 slots repairing |
@@ -148,7 +153,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 ## Enforcement Interpretation
 
-The simulator recorded `31338` evidence events and `30874` repair ledger events. The first evidence epoch was `1` and the first repair-start epoch was `1`.
+The simulator recorded `31338` evidence events and `22160` repair ledger events. The first evidence epoch was `1` and the first repair-start epoch was `1`.
 
 Evidence by reason:
 
@@ -171,26 +176,29 @@ Repair summary:
 - Repairs started: `3624`
 - Repairs marked ready: `3050`
 - Repairs completed: `3050`
-- Repair backoffs: `21150`
+- Repair attempts: `16060`
+- Repair backoffs: `12436`
+- Repair cooldown backoffs: `0`
+- Repair attempt-cap backoffs: `0`
 - Final active slots in last epoch: `17426`
 
 ### Repair Ledger Excerpt
 
-| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason |
-|---:|---|---:|---:|---|---|---|
-| 1 | `repair_started` | 2 | 0 | `sp-012` | `sp-973` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 11 | 2 | `sp-122` | `sp-970` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 14 | 7 | `sp-163` | `sp-1176` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 27 | 11 | `sp-323` | `sp-984` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 31 | 6 | `sp-366` | `sp-151` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 54 | 2 | `sp-638` | `sp-1195` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 62 | 8 | `sp-740` | `sp-1125` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 70 | 0 | `sp-828` | `sp-744` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 77 | 6 | `sp-918` | `sp-738` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 91 | 6 | `sp-1086` | `sp-000` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 96 | 7 | `sp-1147` | `sp-587` | `deputy_served_zero_direct` |
-| 1 | `repair_started` | 96 | 11 | `sp-1151` | `sp-372` | `deputy_served_zero_direct` |
-| ... | ... | ... | ... | ... | ... | `30862` more events omitted |
+| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason | Attempt | Cooldown Until |
+|---:|---|---:|---:|---|---|---|---:|---:|
+| 1 | `repair_started` | 2 | 0 | `sp-012` | `sp-973` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 11 | 2 | `sp-122` | `sp-970` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 14 | 7 | `sp-163` | `sp-1176` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 27 | 11 | `sp-323` | `sp-984` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 31 | 6 | `sp-366` | `sp-151` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 54 | 2 | `sp-638` | `sp-1195` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 62 | 8 | `sp-740` | `sp-1125` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 70 | 0 | `sp-828` | `sp-744` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 77 | 6 | `sp-918` | `sp-738` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 91 | 6 | `sp-1086` | `sp-000` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 96 | 7 | `sp-1147` | `sp-587` | `deputy_served_zero_direct` | 1 | 0 |
+| 1 | `repair_started` | 96 | 11 | `sp-1151` | `sp-372` | `deputy_served_zero_direct` | 1 | 0 |
+| ... | ... | ... | ... | ... | ... | `22148` more events omitted | ... | ... |
 
 ## Economic Interpretation
 
@@ -225,7 +233,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 | `min_repairs_started` | `PASS` | Repair liveness: policy must start reassignment when evidence warrants it. | repairs_started=3624, required>=1 |
 | `min_repairs_ready` | `PASS` | Repair readiness: pending providers must produce catch-up evidence before promotion. | repairs_ready=3050, required>=1 |
 | `min_repairs_completed` | `PASS` | Repair completion: make-before-break reassignment must finish within the run. | repairs_completed=3050, required>=1 |
-| `min_repair_backoffs` | `PASS` | Scale fixture must expose healing coordination pressure. | repair_backoffs=21150, required>=1 |
+| `min_repair_backoffs` | `PASS` | Scale fixture must expose healing coordination pressure. | repair_backoffs=12436, required>=1 |
 | `max_providers_over_capacity` | `PASS` | Assignment must respect modeled provider capacity. | providers_over_capacity=0, required<=0 |
 | `min_final_storage_utilization_bps` | `PASS` | Network utilization should be high enough to make pricing/healing meaningful. | final_storage_utilization_bps=5569, required>=4500 |
 | `max_final_storage_utilization_bps` | `PASS` | Network utilization should remain below the capacity cliff. | final_storage_utilization_bps=5569, required<=8500 |
@@ -311,6 +319,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

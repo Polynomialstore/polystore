@@ -11,8 +11,23 @@
       "passed": true
     },
     {
-      "detail": "repair_backoffs=72, required>=1",
+      "detail": "repair_attempts=8, required>=1",
+      "name": "min_repair_attempts",
+      "passed": true
+    },
+    {
+      "detail": "repair_backoffs=40, required>=1",
       "name": "min_repair_backoffs",
+      "passed": true
+    },
+    {
+      "detail": "repair_cooldowns=16, required>=1",
+      "name": "min_repair_cooldowns",
+      "passed": true
+    },
+    {
+      "detail": "repair_attempt_caps=16, required>=1",
+      "name": "min_repair_attempt_caps",
       "passed": true
     },
     {
@@ -77,6 +92,8 @@
     "quota_max_blobs": 8,
     "quota_min_blobs": 2,
     "regional_outages": [],
+    "repair_attempt_cap_per_slot": 1,
+    "repair_backoff_epochs": 2,
     "repair_epochs": 2,
     "retrieval_base_fee": 0.001,
     "retrieval_burn_bps": 500,
@@ -138,7 +155,10 @@
     "providers_negative_pnl": 0,
     "providers_over_capacity": 0,
     "quota_misses": 40,
-    "repair_backoffs": 72,
+    "repair_attempt_caps": 16,
+    "repair_attempts": 8,
+    "repair_backoffs": 40,
+    "repair_cooldowns": 16,
     "repairing_slots": 0,
     "repairs_completed": 0,
     "repairs_ready": 0,

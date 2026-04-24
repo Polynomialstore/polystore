@@ -8,7 +8,7 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 
 Expected policy behavior: Regional offline responses appear, repair starts, availability remains within contract, and data-loss events remain zero.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `92.77%`, repairs started/ready/completed were `96` / `96` / `96`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `1144` repair backoffs.
+Observed result: retrieval success was `100.00%`, reward coverage was `92.77%`, repairs started/ready/completed were `96` / `96` / `96`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `698` repair backoffs across `794` repair attempts.
 
 ## Review Focus
 
@@ -30,6 +30,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Retrievals/user/epoch | `1` |
 | Liveness quota | `2`-`8` blobs/slot/epoch |
 | Repair delay | `2` epochs |
+| Repair attempt cap/slot | `0` (`0` means unlimited) |
+| Repair backoff window | `0` epochs |
 | Dynamic pricing | `false` |
 | Storage price | `1.0000` |
 | Retrieval price/slot | `0.0100` |
@@ -64,7 +66,7 @@ Repair was exercised: `96` repair operations started, `96` produced pending-prov
 
 Reward exclusion was active: `16.3200` modeled reward units were burned instead of paid to non-compliant slots.
 
-Repair coordination was constrained: `1144` repair attempts backed off because no candidate or repair-start budget was available.
+Repair coordination was constrained: `698` repair backoffs occurred across `794` repair attempts. Cooldown backoffs accounted for `0` events and attempt-cap backoffs accounted for `0` events.
 
 The directly implicated provider set begins with: `sp-001, sp-005, sp-009, sp-013, sp-017`.
 
@@ -83,7 +85,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Peak saturation | `0` at epoch `1` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
 | Repair readiness ratio | `100.00%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `100.00%` | Measures whether healing catches up with detection. |
-| Repair backoff pressure | `11.9167` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair attempts | `794` | Counts bounded attempts to open a repair or discover replacement pressure. |
+| Repair backoff pressure | `7.2708` backoffs per started repair | Shows whether repair coordination is saturated. |
+| Repair backoffs per attempt | `0.8791` | Distinguishes capacity/cooldown pressure from successful repair starts. |
+| Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `67.41%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `71.42%` / `100.00%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
@@ -121,9 +126,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | 2 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
 | 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
 | 4 | 100.00% | 983 | 24 | 0 | 0 | 4.8000 | 13.7600 | 525 offline responses, 240 quota misses, 194 repair backoffs |
-| 5 | 100.00% | 878 | 24 | 0 | 0 | 4.3200 | 13.7600 | 482 offline responses, 216 quota misses, 353 repair backoffs, 24 slots repairing |
-| 6 | 100.00% | 818 | 24 | 18 | 18 | 3.8400 | 13.7600 | 456 offline responses, 192 quota misses, 318 repair backoffs, 48 slots repairing |
-| 7 | 100.00% | 748 | 24 | 18 | 18 | 3.3600 | 14.1200 | 424 offline responses, 168 quota misses, 279 repair backoffs, 54 slots repairing |
+| 5 | 100.00% | 878 | 24 | 0 | 0 | 4.3200 | 13.7600 | 482 offline responses, 216 quota misses, 192 repair backoffs, 24 slots repairing |
+| 6 | 100.00% | 818 | 24 | 18 | 18 | 3.8400 | 13.7600 | 456 offline responses, 192 quota misses, 168 repair backoffs, 48 slots repairing |
+| 7 | 100.00% | 748 | 24 | 18 | 18 | 3.3600 | 14.1200 | 424 offline responses, 168 quota misses, 144 repair backoffs, 54 slots repairing |
 | 8 | 100.00% | 0 | 0 | 19 | 19 | 0.0000 | 17.3600 | 60 slots repairing |
 | 9 | 100.00% | 0 | 0 | 41 | 41 | 0.0000 | 17.7400 | 41 slots repairing |
 | 10 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
@@ -132,7 +137,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 ## Enforcement Interpretation
 
-The simulator recorded `1540` evidence events and `1432` repair ledger events. The first evidence epoch was `4` and the first repair-start epoch was `4`.
+The simulator recorded `1540` evidence events and `986` repair ledger events. The first evidence epoch was `4` and the first repair-start epoch was `4`.
 
 Evidence by reason:
 
@@ -155,26 +160,29 @@ Repair summary:
 - Repairs started: `96`
 - Repairs marked ready: `96`
 - Repairs completed: `96`
-- Repair backoffs: `1144`
+- Repair attempts: `794`
+- Repair backoffs: `698`
+- Repair cooldown backoffs: `0`
+- Repair attempt-cap backoffs: `0`
 - Final active slots in last epoch: `960`
 
 ### Repair Ledger Excerpt
 
-| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason |
-|---:|---|---:|---:|---|---|---|
-| 4 | `repair_started` | 1 | 5 | `sp-005` | `sp-049` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 1 | 9 | `sp-009` | `sp-076` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 2 | 1 | `sp-013` | `sp-112` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 2 | 5 | `sp-017` | `sp-048` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 2 | 9 | `sp-021` | `sp-051` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 3 | 9 | `sp-033` | `sp-117` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 4 | 1 | `sp-037` | `sp-019` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 4 | 9 | `sp-045` | `sp-021` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 5 | 1 | `sp-049` | `sp-030` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 5 | 5 | `sp-053` | `sp-019` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 5 | 9 | `sp-057` | `sp-105` | `deputy_served_zero_direct` |
-| 4 | `repair_started` | 6 | 1 | `sp-061` | `sp-045` | `deputy_served_zero_direct` |
-| ... | ... | ... | ... | ... | ... | `1420` more events omitted |
+| Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason | Attempt | Cooldown Until |
+|---:|---|---:|---:|---|---|---|---:|---:|
+| 4 | `repair_started` | 1 | 5 | `sp-005` | `sp-049` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 1 | 9 | `sp-009` | `sp-076` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 2 | 1 | `sp-013` | `sp-112` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 2 | 5 | `sp-017` | `sp-048` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 2 | 9 | `sp-021` | `sp-051` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 3 | 9 | `sp-033` | `sp-117` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 4 | 1 | `sp-037` | `sp-019` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 4 | 9 | `sp-045` | `sp-021` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 5 | 1 | `sp-049` | `sp-030` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 5 | 5 | `sp-053` | `sp-019` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 5 | 9 | `sp-057` | `sp-105` | `deputy_served_zero_direct` | 1 | 0 |
+| 4 | `repair_started` | 6 | 1 | `sp-061` | `sp-045` | `deputy_served_zero_direct` | 1 | 0 |
+| ... | ... | ... | ... | ... | ... | `974` more events omitted | ... | ... |
 
 ## Economic Interpretation
 
@@ -291,6 +299,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

@@ -17,7 +17,10 @@ Model a provider returning bad data or invalid synthetic proofs. This is the har
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Repair attempts: `6`
 - Repair backoffs: `0`
+- Repair cooldowns: `0`
+- Repair attempt-cap events: `0`
 
 ## Review Questions
 

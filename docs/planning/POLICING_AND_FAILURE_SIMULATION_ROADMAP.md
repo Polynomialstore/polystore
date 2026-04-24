@@ -603,7 +603,10 @@ represents pending-provider catch-up evidence before promotion. Missing
 desired-state pieces include:
 
 1. Explicit `SUSPECT` / `DELINQUENT` reason codes.
-2. Repair attempt counters and cooldown windows.
+2. Keeper/runtime repair attempt counters and cooldown windows. The simulator
+   now models these with `repair_attempt_cap_per_slot`,
+   `repair_backoff_epochs`, per-slot attempt state, cooldown backoff events,
+   and attempt-cap backoff events.
 3. Full catch-up proofs for all data/generation ranges, beyond the current
    readiness marker.
 4. Per-slot health queries for UI and operator tooling.
@@ -1187,8 +1190,8 @@ Each simulator run should be able to emit:
 4. `slots.csv`: one row per deal-slot with lifecycle, repair, provider, and
    reward eligibility state.
 5. `evidence.csv`: hard faults, soft faults, threshold evidence, and source.
-6. `repairs.csv`: repair start, candidate selection, catch-up, promotion, and
-   backoff events.
+6. `repairs.csv`: repair start, candidate selection, catch-up, promotion,
+   attempt-count, cooldown, attempt-cap, and backoff events.
 7. `economy.csv`: storage charges, retrieval burns, payouts, reward mint/burn,
    audit budget, escrow runway, and elasticity spend.
 8. No `comparison.json` or other precomputed baseline-vs-candidate artifact in

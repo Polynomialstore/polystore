@@ -10,8 +10,23 @@
     "passed": true
   },
   {
-    "detail": "repair_backoffs=72, required>=1",
+    "detail": "repair_attempts=8, required>=1",
+    "name": "min_repair_attempts",
+    "passed": true
+  },
+  {
+    "detail": "repair_backoffs=40, required>=1",
     "name": "min_repair_backoffs",
+    "passed": true
+  },
+  {
+    "detail": "repair_cooldowns=16, required>=1",
+    "name": "min_repair_cooldowns",
+    "passed": true
+  },
+  {
+    "detail": "repair_attempt_caps=16, required>=1",
+    "name": "min_repair_attempt_caps",
     "passed": true
   },
   {

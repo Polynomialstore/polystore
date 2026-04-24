@@ -9,7 +9,9 @@
     "deals": 8,
     "epochs": 8,
     "provider_capacity_min": 8,
-    "provider_capacity_max": 8
+    "provider_capacity_max": 8,
+    "repair_attempt_cap_per_slot": 1,
+    "repair_backoff_epochs": 2
   },
   "faults": [
     "offline:sp-000:2-6"
@@ -17,7 +19,10 @@
   "assertions": {
     "min_success_rate": 0.95,
     "min_offline_responses": 1,
+    "min_repair_attempts": 1,
     "min_repair_backoffs": 1,
+    "min_repair_cooldowns": 1,
+    "min_repair_attempt_caps": 1,
     "max_providers_over_capacity": 0,
     "max_data_loss_events": 0,
     "max_paid_corrupt_bytes": 0
