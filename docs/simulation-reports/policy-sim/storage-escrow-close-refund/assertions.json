@@ -40,6 +40,11 @@
     "passed": true
   },
   {
+    "detail": "closed_retrieval_attempts=110, required>=100",
+    "name": "min_closed_retrieval_attempts",
+    "passed": true
+  },
+  {
     "detail": "final_closed_deals=4, required=4",
     "name": "exact_final_closed_deals",
     "passed": true

@@ -304,7 +304,7 @@ SCENARIO_GUIDES = {
             "Model the storage lock-in lifecycle for committed content. The policy question is whether storage fees are locked, "
             "earned over time by eligible providers, and refunded on early close without leaving hidden outstanding escrow."
         ),
-        "expected": "Storage escrow is locked, earned storage fees pay eligible providers, early deal close refunds unearned funds, and outstanding escrow reaches zero by run end.",
+        "expected": "Storage escrow is locked, earned storage fees pay eligible providers, early deal close refunds unearned funds, closed-content reads are rejected explicitly, and outstanding escrow reaches zero by run end.",
         "review": "Use this before implementing keeper close/refund semantics, quote-to-charge parity, storage-fee payout, and end-of-deal accounting tests.",
     },
     "storage-escrow-noncompliance-burn": {

@@ -27,6 +27,7 @@
     "max_storage_escrow_outstanding": 0.0,
     "min_storage_fee_provider_payouts": 760.0,
     "max_storage_fee_burned": 0.0,
+    "min_closed_retrieval_attempts": 100,
     "exact_final_closed_deals": 4,
     "exact_deals_closed": 4
   }

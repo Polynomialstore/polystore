@@ -670,6 +670,8 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(0.0, result.totals["storage_escrow_outstanding"])
         self.assertEqual(4, result.totals["final_closed_deals"])
         self.assertEqual(4, result.totals["deals_closed"])
+        self.assertGreater(result.totals["closed_retrieval_attempts"], 0)
+        self.assertEqual(0, result.totals["unavailable_reads"])
         self.assertGreater(result.totals["storage_fee_provider_payouts"], 0)
         self.assertEqual(0.0, result.totals["storage_fee_burned"])
         self.assertTrue(any(row["reason"] == "deal_storage_escrow_closed" for row in result.evidence))

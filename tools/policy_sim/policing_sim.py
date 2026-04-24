@@ -1483,15 +1483,21 @@ class PolicySimulator:
         online: dict[str, bool],
         metrics: EpochMetrics,
     ) -> None:
-        open_deals = self._open_deals()
-        if not open_deals:
-            if any(deal.closed_reason == "expired" for deal in self.deals):
-                metrics.expired_retrieval_attempts += 1
-                return
-            if any(deal.closed_reason == "closed" for deal in self.deals):
-                metrics.closed_retrieval_attempts += 1
-                return
+        if not self.deals:
             metrics.unavailable_reads += 1
+            return
+        has_inactive_deals = any(deal.closed_epoch for deal in self.deals)
+        if has_inactive_deals:
+            deal = self.rng.choice(self.deals)
+        else:
+            deal = None
+        if deal and deal.closed_epoch:
+            if deal.closed_reason == "expired":
+                metrics.expired_retrieval_attempts += 1
+            elif deal.closed_reason == "closed":
+                metrics.closed_retrieval_attempts += 1
+            else:
+                metrics.unavailable_reads += 1
             return
         metrics.retrieval_attempts += 1
         metrics.retrieval_base_burned += self.config.retrieval_base_fee
@@ -1504,7 +1510,8 @@ class PolicySimulator:
             metrics.owner_retrieval_escrow_debited += (
                 self.config.retrieval_base_fee * self.config.owner_retrieval_debit_bps / 10_000
             )
-        deal = self.rng.choice(open_deals)
+        if deal is None:
+            deal = self.rng.choice(self.deals)
         self.deal_epoch_retrievals[deal.deal_id] = self.deal_epoch_retrievals.get(deal.deal_id, 0) + 1
         order = list(range(deal.n))
         self.rng.shuffle(order)

@@ -2478,7 +2478,7 @@
       "blockers": [],
       "e2e": "Create, commit, close early, and assert unearned storage escrow is refunded while earned fees remain paid to eligible providers.",
       "metrics": {
-        "closed_retrieval_attempts": 0,
+        "closed_retrieval_attempts": 110,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,

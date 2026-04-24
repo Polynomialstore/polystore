@@ -16,11 +16,11 @@ This report aggregates `5` completed simulator run output directories. It does n
 
 | Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
 |---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `baseline-count4-close-epoch4` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `early-count4-close-epoch2` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `baseline-count4-close-epoch4` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 110 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `early-count4-close-epoch2` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 154 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
 | `full-duration-no-close` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `half-close-bps-epoch4` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `late-close-bps-epoch6` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `half-close-bps-epoch4` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 151 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `late-close-bps-epoch6` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 35 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
 
 ## Key Metric Ranges
 
@@ -29,7 +29,7 @@ This report aggregates `5` completed simulator run output directories. It does n
 | `success_rate` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary user-facing misses; allowed only in explicit stress contracts. |
 | `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
-| `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
+| `closed_retrieval_attempts` | 0.000000 | 154.000000 | 154.000000 | 90.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Shows whether compliant responsibility remains economically recognized. |
 | `repairs_started` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Detection and repair activation pressure. |
@@ -148,7 +148,7 @@ This report aggregates `5` completed simulator run output directories. It does n
 | `final_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Retrieval-controller endpoint under this run. |
 | `storage_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage price controller direction changes across the run. |
 | `retrieval_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval price controller direction changes across the run. |
-| `provider_pnl` | 743.840000 | 978.560000 | 234.720000 | 841.640000 | Aggregate provider economics; inspect distribution before deciding. |
+| `provider_pnl` | 733.368000 | 978.560000 | 245.192000 | 835.520000 | Aggregate provider economics; inspect distribution before deciding. |
 
 ## Varied Parameters
 

@@ -17,6 +17,8 @@
         "max_storage_escrow_refunded": 0.0,
         "max_storage_escrow_outstanding": 0.0,
         "min_storage_fee_provider_payouts": 900.0,
+        "min_closed_retrieval_attempts": 0,
+        "max_closed_retrieval_attempts": 0,
         "exact_final_closed_deals": 0,
         "exact_deals_closed": 0
       }
@@ -65,6 +67,7 @@
         "min_storage_escrow_earned": 850.0,
         "min_storage_escrow_refunded": 50.0,
         "max_storage_escrow_outstanding": 0.0,
+        "min_closed_retrieval_attempts": 30,
         "exact_final_closed_deals": 3,
         "exact_deals_closed": 3
       }

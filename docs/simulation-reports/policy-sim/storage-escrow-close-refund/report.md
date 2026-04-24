@@ -6,9 +6,9 @@
 
 Model the storage lock-in lifecycle for committed content. The policy question is whether storage fees are locked, earned over time by eligible providers, and refunded on early close without leaving hidden outstanding escrow.
 
-Expected policy behavior: Storage escrow is locked, earned storage fees pay eligible providers, early deal close refunds unearned funds, and outstanding escrow reaches zero by run end.
+Expected policy behavior: Storage escrow is locked, earned storage fees pay eligible providers, early deal close refunds unearned funds, closed-content reads are rejected explicitly, and outstanding escrow reaches zero by run end.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` expired retrieval rejections, `0` closed retrieval rejections, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
+Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` expired retrieval rejections, `110` closed retrieval rejections, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
 
 ## Review Focus
 
@@ -113,6 +113,8 @@ The economic model is intentionally simple and deterministic. It is useful for c
 
 User-facing retrieval availability stayed intact: every modeled retrieval completed successfully. That does not mean every provider behaved correctly; it means redundancy, routing, or deputy service absorbed the fault.
 
+Post-close retrieval behavior was exercised: `110` requests arrived after all active deals had been intentionally closed. The simulator counted them as explicit closed-content rejections, not live availability failures or billable retrieval attempts.
+
 The policy layer recorded `16` evidence events: `0` soft, `0` threshold, `0` hard, `0` economic, `16` market, `0` spam, and `0` operational events. Soft and economic evidence are suitable for repair and reward exclusion; hard or convicted threshold evidence is the category that can later justify slashing or stronger sanctions.
 
 Storage escrow lifecycle accounting was exercised: `921.6000` was locked for committed storage, `768.0000` was earned over modeled service epochs, `153.6000` was refunded on close, and final outstanding storage escrow was `0.0000`. Closed deals ended at `4`, expired deals ended at `0`, and open deals ended at `8`.
@@ -128,7 +130,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Worst epoch success | `100.00%` at epoch `1` | Identifies the availability cliff instead of hiding it in aggregate success. |
 | Unavailable reads | `0` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |
 | Expired retrieval rejections | `0` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
-| Closed retrieval rejections | `0` | Post-close requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
+| Closed retrieval rejections | `110` | Post-close requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
 | Modeled data-loss events | `0` | Durability-loss signal. This should remain zero for current scale fixtures. |
 | Degraded epochs | `0` | Counts epochs with unavailable reads or success below 99.9%. |
 | Recovery epoch after worst | `2` | Shows whether the network returned to clean steady state after the worst point. |
@@ -159,7 +161,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Elasticity overlays activated/served/expired | `0` / `0` / `0` | Confirms temporary overflow routes are created, actually used, and later removed. |
 | Elasticity overlay ready/active peak | `0` / `0` | Shows catch-up/readiness lag and total temporary routing footprint. |
 | Sponsored retrieval attempts/spend | `0` / `0.0000` | Shows public or requester-funded demand separately from owner-funded deal escrow. |
-| Owner-funded attempts / owner escrow debit | `640` / `0.0000` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |
+| Owner-funded attempts / owner escrow debit | `530` / `0.0000` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |
 | Storage escrow locked/earned/refunded | `921.6000` / `768.0000` / `153.6000` | Shows quote-to-lock, provider earning, and close/refund accounting for committed storage. |
 | Storage escrow outstanding | `0.0000` final; peak `806.4000` | Detects funds left locked after close/expiry semantics should have released them. |
 | Storage fee provider payout/burned | `768.0000` / `0.0000` | Separates earned storage fees paid to eligible providers from fees withheld from non-compliant responsibility. |
@@ -174,7 +176,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Operator cap violations | `0` | Counts deals where operator slot concentration exceeded the configured cap. |
 | Final storage utilization | `12.50%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `12.50%` / `12.50%` / `12.50%` | Detects assignment concentration and capacity cliffs. |
-| Provider P&L p10 / p50 / p90 | `17.0445` / `17.1380` / `17.2060` | Shows whether aggregate P&L hides marginal-provider distress. |
+| Provider P&L p10 / p50 / p90 | `16.9000` / `16.9595` / `17.0530` | Shows whether aggregate P&L hides marginal-provider distress. |
 | Provider cost shock epochs/providers | `0` / `0` | Shows when external cost pressure was active and how much of the provider population it affected. |
 | Max cost shock fixed/storage/bandwidth | `100.00%` / `100.00%` / `100.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
 | Provider churn events / final churned | `0` / `0` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |
@@ -187,7 +189,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Peak assigned slots on churned providers | `0` | Shows the maximum repair burden created by economic exits. |
 | Storage price start/end/range | `0.0500` -> `0.0500` (`0.0500`-`0.0500`) | Shows dynamic pricing movement and bounds. |
 | Retrieval price start/end/range | `0.0100` -> `0.0100` (`0.0100`-`0.0100`) | Shows whether demand pressure moved retrieval pricing. |
-| Retrieval latent/effective attempts | `640` / `640` | Shows how much retrieval load was added by demand-shock multipliers. |
+| Retrieval latent/effective attempts | `640` / `530` | Shows how much retrieval load was added by demand-shock multipliers. |
 | Retrieval demand shock epochs/multiplier | `0` / `100.00%` | Shows the size and duration of the modeled read-demand shock. |
 | Price direction changes storage/retrieval | `0` / `0` | Detects controller oscillation rather than relying on visual inspection. |
 
@@ -195,33 +197,33 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 | Region | Providers | Utilization | Offline Responses | Saturated Responses | Negative P&L Providers | Avg P&L |
 |---|---:|---:|---:|---:|---:|---:|
-| `global` | 48 | 12.50% | 0 | 0 | 0 | 17.1267 |
+| `global` | 48 | 12.50% | 0 | 0 | 0 | 16.9708 |
 
 ### Top Bottleneck Providers
 
 | Provider | Region | Slots/Capacity | Utilization | Bandwidth Cap | Attempts | Offline | Saturated | P&L |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| `sp-046` | `global` | 2/16 | 12.50% | 0 | 120 | 0 | 0 | 17.2400 |
-| `sp-002` | `global` | 2/16 | 12.50% | 0 | 117 | 0 | 0 | 17.2145 |
-| `sp-042` | `global` | 2/16 | 12.50% | 0 | 117 | 0 | 0 | 17.2145 |
-| `sp-000` | `global` | 2/16 | 12.50% | 0 | 116 | 0 | 0 | 17.2060 |
-| `sp-004` | `global` | 2/16 | 12.50% | 0 | 116 | 0 | 0 | 17.2060 |
-| `sp-016` | `global` | 2/16 | 12.50% | 0 | 116 | 0 | 0 | 17.2060 |
-| `sp-038` | `global` | 2/16 | 12.50% | 0 | 114 | 0 | 0 | 17.1890 |
-| `sp-039` | `global` | 2/16 | 12.50% | 0 | 114 | 0 | 0 | 17.1890 |
+| `sp-000` | `global` | 2/16 | 12.50% | 0 | 103 | 0 | 0 | 17.0955 |
+| `sp-010` | `global` | 2/16 | 12.50% | 0 | 103 | 0 | 0 | 17.0955 |
+| `sp-004` | `global` | 2/16 | 12.50% | 0 | 101 | 0 | 0 | 17.0785 |
+| `sp-002` | `global` | 2/16 | 12.50% | 0 | 98 | 0 | 0 | 17.0530 |
+| `sp-006` | `global` | 2/16 | 12.50% | 0 | 98 | 0 | 0 | 17.0530 |
+| `sp-027` | `global` | 2/16 | 12.50% | 0 | 98 | 0 | 0 | 17.0530 |
+| `sp-008` | `global` | 2/16 | 12.50% | 0 | 97 | 0 | 0 | 17.0445 |
+| `sp-009` | `global` | 2/16 | 12.50% | 0 | 97 | 0 | 0 | 17.0445 |
 
 ### Top Operators
 
 | Operator | Providers | Provider Share | Assigned Slots | Assignment Share | Retrieval Attempts | Success | P&L |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `op-000` | 1 | 2.08% | 2 | 2.08% | 116 | 100.00% | 17.2060 |
-| `op-001` | 1 | 2.08% | 2 | 2.08% | 103 | 100.00% | 17.0955 |
-| `op-002` | 1 | 2.08% | 2 | 2.08% | 117 | 100.00% | 17.2145 |
-| `op-003` | 1 | 2.08% | 2 | 2.08% | 111 | 100.00% | 17.1635 |
-| `op-004` | 1 | 2.08% | 2 | 2.08% | 116 | 100.00% | 17.2060 |
-| `op-005` | 1 | 2.08% | 2 | 2.08% | 113 | 100.00% | 17.1805 |
-| `op-006` | 1 | 2.08% | 2 | 2.08% | 110 | 100.00% | 17.1550 |
-| `op-007` | 1 | 2.08% | 2 | 2.08% | 107 | 100.00% | 17.1295 |
+| `op-000` | 1 | 2.08% | 2 | 2.08% | 103 | 100.00% | 17.0955 |
+| `op-001` | 1 | 2.08% | 2 | 2.08% | 81 | 100.00% | 16.9085 |
+| `op-002` | 1 | 2.08% | 2 | 2.08% | 98 | 100.00% | 17.0530 |
+| `op-003` | 1 | 2.08% | 2 | 2.08% | 96 | 100.00% | 17.0360 |
+| `op-004` | 1 | 2.08% | 2 | 2.08% | 101 | 100.00% | 17.0785 |
+| `op-005` | 1 | 2.08% | 2 | 2.08% | 93 | 100.00% | 17.0105 |
+| `op-006` | 1 | 2.08% | 2 | 2.08% | 98 | 100.00% | 17.0530 |
+| `op-007` | 1 | 2.08% | 2 | 2.08% | 95 | 100.00% | 17.0275 |
 
 ### Timeline
 
@@ -231,10 +233,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | 2 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 122.3200 | steady state |
 | 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 122.3200 | steady state |
 | 4 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 122.3200 | steady state |
-| 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 83.2000 | steady state |
-| 6 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 83.2000 | steady state |
-| 7 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 83.2000 | steady state |
-| 8 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 83.2000 | steady state |
+| 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 81.5000 | steady state |
+| 6 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 81.7040 | steady state |
+| 7 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 81.3640 | steady state |
+| 8 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 80.7520 | steady state |
 
 ## Enforcement Interpretation
 
@@ -274,11 +276,11 @@ Candidate exclusion summary:
 
 ## Economic Interpretation
 
-The run minted `27.2000` reward/audit units and burned `3.2000` units, for a burn-to-mint ratio of `11.76%`.
+The run minted `27.2000` reward/audit units and burned `2.6500` units, for a burn-to-mint ratio of `9.74%`.
 
-Providers earned `835.8400` in modeled revenue against `13.7600` in modeled cost, ending with aggregate P&L `822.0800`.
+Providers earned `827.4800` in modeled revenue against `12.8800` in modeled cost, ending with aggregate P&L `814.6000`.
 
-Retrieval accounting paid providers `48.6400`, burned `0.6400` in base fees, and burned `2.5600` in variable retrieval fees.
+Retrieval accounting paid providers `40.2800`, burned `0.5300` in base fees, and burned `2.1200` in variable retrieval fees.
 
 Sponsored retrieval accounting spent `0.0000` across `0` sponsor-funded attempts; owner retrieval escrow debit was `0.0000`.
 
@@ -296,11 +298,11 @@ Final modeled storage price was `0.0500` and retrieval price per slot was `0.010
 
 | Provider | Assigned Slots | Revenue | Cost | Slashed | P&L | Churn Risk |
 |---|---:|---:|---:|---:|---:|---:|
-| `sp-032` | 2 | 0.4000 + 0.7980 | 0.2640 | 0.0000 | 16.9340 | no |
-| `sp-033` | 2 | 0.4000 + 0.8930 | 0.2740 | 0.0000 | 17.0190 | no |
-| `sp-020` | 2 | 0.4000 + 0.9025 | 0.2750 | 0.0000 | 17.0275 | no |
-| `sp-017` | 2 | 0.4000 + 0.9120 | 0.2760 | 0.0000 | 17.0360 | no |
-| `sp-023` | 2 | 0.4000 + 0.9215 | 0.2770 | 0.0000 | 17.0445 | no |
+| `sp-047` | 2 | 0.4000 + 0.6935 | 0.2530 | 0.0000 | 16.8405 | no |
+| `sp-017` | 2 | 0.4000 + 0.7315 | 0.2570 | 0.0000 | 16.8745 | no |
+| `sp-023` | 2 | 0.4000 + 0.7410 | 0.2580 | 0.0000 | 16.8830 | no |
+| `sp-032` | 2 | 0.4000 + 0.7410 | 0.2580 | 0.0000 | 16.8830 | no |
+| `sp-039` | 2 | 0.4000 + 0.7410 | 0.2580 | 0.0000 | 16.8830 | no |
 
 ## Assertion Contract
 
@@ -316,6 +318,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 | `max_storage_escrow_outstanding` | `PASS` | Storage escrow should not remain locked after the modeled close/expiry path should have released it. | storage_escrow_outstanding=0, required<=0 |
 | `min_storage_fee_provider_payouts` | `PASS` | Earned storage fees should pay eligible providers. | storage_fee_provider_payouts=768, required>=760 |
 | `max_storage_fee_burned` | `PASS` | Healthy storage escrow fixture should not burn storage fees from non-compliance. | storage_fee_burned=0, required<=0 |
+| `min_closed_retrieval_attempts` | `PASS` | Post-close behavior: intentionally closed content requests must be counted separately from live availability failures. | closed_retrieval_attempts=110, required>=100 |
 | `exact_final_closed_deals` | `PASS` | Close/refund fixture should end with the configured number of closed deals. | final_closed_deals=4, required=4 |
 | `exact_deals_closed` | `PASS` | Close/refund fixture should close the configured number of deals. | deals_closed=4, required=4 |
 
