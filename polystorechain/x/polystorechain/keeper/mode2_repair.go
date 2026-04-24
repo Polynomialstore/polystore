@@ -29,6 +29,23 @@ func providerMatchesServiceHint(provider types.Provider, serviceHint string) boo
 	}
 }
 
+func mode2ReplacementProviderIneligibility(provider types.Provider, serviceHint string) string {
+	if strings.TrimSpace(provider.Status) != "Active" {
+		return "status is not Active"
+	}
+	if provider.Draining {
+		return "provider is draining"
+	}
+	if !providerMatchesServiceHint(provider, serviceHint) {
+		return "provider does not match service hint"
+	}
+	return ""
+}
+
+func mode2ReplacementProviderEligible(provider types.Provider, serviceHint string) bool {
+	return mode2ReplacementProviderIneligibility(provider, serviceHint) == ""
+}
+
 func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal, slot uint32, epochID uint64) (string, error) {
 	if len(deal.Mode2Slots) == 0 {
 		return "", fmt.Errorf("mode2 slot map is empty")
@@ -56,13 +73,7 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 
 	candidates := make([]string, 0, 8)
 	if err := k.Providers.Walk(ctx, nil, func(addr string, provider types.Provider) (stop bool, err error) {
-		if strings.TrimSpace(provider.Status) != "Active" {
-			return false, nil
-		}
-		if provider.Draining {
-			return false, nil
-		}
-		if !providerMatchesServiceHint(provider, deal.ServiceHint) {
+		if !mode2ReplacementProviderEligible(provider, deal.ServiceHint) {
 			return false, nil
 		}
 		if _, blocked := exclude[strings.TrimSpace(provider.Address)]; blocked {
@@ -80,13 +91,7 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 	// one) so repairs remain possible without requiring extra providers.
 	if len(candidates) == 0 {
 		if err := k.Providers.Walk(ctx, nil, func(addr string, provider types.Provider) (stop bool, err error) {
-			if strings.TrimSpace(provider.Status) != "Active" {
-				return false, nil
-			}
-			if provider.Draining {
-				return false, nil
-			}
-			if !providerMatchesServiceHint(provider, deal.ServiceHint) {
+			if !mode2ReplacementProviderEligible(provider, deal.ServiceHint) {
 				return false, nil
 			}
 			cand := strings.TrimSpace(provider.Address)
