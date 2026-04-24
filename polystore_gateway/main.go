@@ -2963,6 +2963,9 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if maybeApplyHTTPTestFault(w, "sp_fetch_fail", http.StatusServiceUnavailable) {
+		return
+	}
 
 	startTotal := time.Now()
 
@@ -3715,6 +3718,10 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 	if proofPayload != nil {
 		w.Header().Set("X-PolyStore-Proof-JSON", base64.StdEncoding.EncodeToString(proofPayload))
+	}
+	if testFaultEnabled("sp_fetch_corrupt") {
+		w.Header().Set("X-PolyStore-Test-Fault", "sp_fetch_corrupt")
+		content = &corruptOnceReadCloser{ReadCloser: content}
 	}
 
 	// Serve as attachment so browsers will download instead of inline JSON.
@@ -6398,6 +6405,11 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if maybeApplyHTTPTestFault(w, "sp_upload_fail", http.StatusServiceUnavailable) {
+		statusCode = http.StatusServiceUnavailable
+		outcome = "test_fault_sp_upload_fail"
+		return
+	}
 
 	// Default limit 10MB (MDU is 8MB). We also drain the body on early returns to avoid
 	// clients seeing "connection broken" errors when the handler rejects a request before
@@ -6631,6 +6643,11 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		statusCode = http.StatusNoContent
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if maybeApplyHTTPTestFault(w, "sp_upload_fail", http.StatusServiceUnavailable) {
+		statusCode = http.StatusServiceUnavailable
+		outcome = "test_fault_sp_upload_fail"
 		return
 	}
 
@@ -6943,6 +6960,11 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		statusCode = http.StatusNoContent
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if maybeApplyHTTPTestFault(w, "sp_upload_fail", http.StatusServiceUnavailable) {
+		statusCode = http.StatusServiceUnavailable
+		outcome = "test_fault_sp_upload_fail"
 		return
 	}
 

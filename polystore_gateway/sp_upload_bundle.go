@@ -234,6 +234,11 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if maybeApplyHTTPTestFault(w, "sp_upload_fail", http.StatusServiceUnavailable) {
+		statusCode = http.StatusServiceUnavailable
+		outcome = "test_fault_sp_upload_fail"
+		return
+	}
 
 	binaryBundle := strings.HasPrefix(strings.TrimSpace(r.Header.Get("Content-Type")), spUploadBundleV2MediaType)
 	var (
