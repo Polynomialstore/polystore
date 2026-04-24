@@ -51,6 +51,7 @@ var (
 	RetrievalSessionProofProviderKey = collections.NewPrefix("RetrievalSessionProofProvider/value/")
 	VoucherUsedNonceKey              = collections.NewPrefix("VoucherUsedNonce/value/")
 	AuditTasksKey                    = collections.NewPrefix("AuditTasks/value/")
+	VirtualStripesKey                = collections.NewPrefix("VirtualStripes/value/")
 	DynamicPricingLastEpochKey       = collections.NewPrefix("DynamicPricingLastEpoch/value/")
 	RetrievalDemandByEpochKey        = collections.NewPrefix("RetrievalDemandByEpoch/value/")
 

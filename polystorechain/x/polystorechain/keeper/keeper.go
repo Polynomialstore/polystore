@@ -55,6 +55,7 @@ type Keeper struct {
 	RetrievalSessionProofProvider collections.Map[[]byte, string]
 	VoucherUsedNonces             collections.Map[collections.Pair[uint64, uint64], bool]
 	AuditTasks                    collections.Map[collections.Pair[uint64, uint64], types.AuditTask]
+	VirtualStripes                collections.Map[collections.Pair[uint64, uint32], types.VirtualStripe]
 	DynamicPricingLastEpoch       collections.Item[uint64]
 	RetrievalDemandByEpoch        collections.Map[uint64, uint64]
 
@@ -148,6 +149,13 @@ func NewKeeper(
 			"audit_tasks",
 			collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key),
 			codec.CollValue[types.AuditTask](cdc),
+		),
+		VirtualStripes: collections.NewMap(
+			sb,
+			types.VirtualStripesKey,
+			"virtual_stripes",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+			codec.CollValue[types.VirtualStripe](cdc),
 		),
 		DynamicPricingLastEpoch: collections.NewItem(
 			sb,

@@ -1180,6 +1180,12 @@ func TestSignalSaturation(t *testing.T) {
 	require.Equal(t, math.NewInt(1000).Sub(elasticityCost), deal.EscrowBalance)
 	require.Equal(t, elasticityCost, deal.SpendWindowSpent)
 
+	virtualStripe, err := f.keeper.VirtualStripes.Get(f.ctx, collections.Join(dealID, uint32(2)))
+	require.NoError(t, err)
+	require.Equal(t, dealID, virtualStripe.DealId)
+	require.Equal(t, uint32(2), virtualStripe.StripeIndex)
+	require.Equal(t, resSig.NewProviders, virtualStripe.OverlayProviders)
+
 	// 4. Signal Saturation (Unauthorized)
 	unassignedBz := []byte("unassigned_prov_____")
 	unassigned, _ := f.addressCodec.BytesToString(unassignedBz)
@@ -1205,6 +1211,8 @@ func TestSignalSaturation(t *testing.T) {
 	require.Equal(t, capBaseline.Providers, afterCapHit.Providers)
 	require.Equal(t, capBaseline.EscrowBalance, afterCapHit.EscrowBalance)
 	require.Equal(t, capBaseline.SpendWindowSpent, afterCapHit.SpendWindowSpent)
+	_, err = f.keeper.VirtualStripes.Get(f.ctx, collections.Join(dealID, uint32(3)))
+	require.ErrorIs(t, err, collections.ErrNotFound)
 
 	// 6. Escrow exhaustion should also fail closed when the spend cap allows scaling.
 	escrowBaseline := capBaseline
@@ -1222,4 +1230,6 @@ func TestSignalSaturation(t *testing.T) {
 	require.Equal(t, escrowBaseline.Providers, afterEscrowHit.Providers)
 	require.Equal(t, escrowBaseline.EscrowBalance, afterEscrowHit.EscrowBalance)
 	require.Equal(t, escrowBaseline.SpendWindowSpent, afterEscrowHit.SpendWindowSpent)
+	_, err = f.keeper.VirtualStripes.Get(f.ctx, collections.Join(dealID, uint32(3)))
+	require.ErrorIs(t, err, collections.ErrNotFound)
 }
