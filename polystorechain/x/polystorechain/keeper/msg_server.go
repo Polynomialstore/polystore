@@ -1064,6 +1064,19 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	return &types.MsgUpdateDealContentFromEvmResponse{Success: true}, nil
 }
 
+func livenessTierForLatency(latency int64) (uint32, string, math.LegacyDec) {
+	switch {
+	case latency <= 1:
+		return 0, "Platinum", math.LegacyNewDecWithPrec(100, 2)
+	case latency <= 5:
+		return 1, "Gold", math.LegacyNewDecWithPrec(80, 2)
+	case latency <= 10:
+		return 2, "Silver", math.LegacyNewDecWithPrec(50, 2)
+	default:
+		return 3, "Fail", math.LegacyNewDecWithPrec(0, 2)
+	}
+}
+
 // ProveLiveness handles MsgProveLiveness to verify KZG proofs and process rewards.
 func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiveness) (*types.MsgProveLivenessResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
@@ -1259,29 +1272,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	hProof := ctx.BlockHeight()
 	latency := hProof - hChallenge // Latency in blocks (Block difference from challenge start to proof inclusion)
 
-	var tier uint32
-	var rewardMultiplier math.LegacyDec
-	tierName := "Fail"
-
-	if latency <= 1 {
-		tier = 0                                             // Platinum
-		rewardMultiplier = math.LegacyNewDecWithPrec(100, 2) // 1.00
-		tierName = "Platinum"
-	} else if latency <= 5 {
-		tier = 1                                            // Gold
-		rewardMultiplier = math.LegacyNewDecWithPrec(80, 2) // 0.80
-		tierName = "Gold"
-	} else if latency <= 10 {
-		tier = 2                                            // Silver
-		rewardMultiplier = math.LegacyNewDecWithPrec(50, 2) // 0.50
-		tierName = "Silver"
-	} else {
-		tier = 3                                           // Fail
-		rewardMultiplier = math.LegacyNewDecWithPrec(0, 2) // 0.00
-		tierName = "Fail"
-		// Slashing already handled above for !valid proofs.
-		// For valid but too slow proofs, no reward, potentially still a small slash based on spec.
-	}
+	tier, tierName, rewardMultiplier := livenessTierForLatency(latency)
 
 	// --- INFLATIONARY DECAY ---
 	// BaseReward = 1 NIL * (1 / 2^(Height/Interval))
