@@ -14,7 +14,19 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-func TestProtocolRepairSession_PendingProviderOnly_AndBudgetFundsFees(t *testing.T) {
+type protocolRepairSessionSetup struct {
+	bank      *trackingBankKeeper
+	f         *fixture
+	msgServer types.MsgServer
+	ctx       sdk.Context
+	deal      types.Deal
+	active    string
+	pending   string
+}
+
+func setupProtocolRepairSession(t *testing.T) protocolRepairSessionSetup {
+	t.Helper()
+
 	bank := newTrackingBankKeeper()
 	f := initFixtureWithBankKeeper(t, bank)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
@@ -79,15 +91,31 @@ func TestProtocolRepairSession_PendingProviderOnly_AndBudgetFundsFees(t *testing
 	deal.Mode2Slots[0] = entry
 	require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
 
-	// Fund the protocol budget module for fees.
 	require.NoError(t, bank.MintCoins(ctx, types.ProtocolBudgetModuleName, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1000))))
 
+	deal, err = f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+
+	return protocolRepairSessionSetup{
+		bank:      bank,
+		f:         f,
+		msgServer: msgServer,
+		ctx:       ctx,
+		deal:      deal,
+		active:    active,
+		pending:   pending,
+	}
+}
+
+func TestProtocolRepairSession_PendingProviderOnly_AndBudgetFundsFees(t *testing.T) {
+	setup := setupProtocolRepairSession(t)
+
 	// Pending provider opens a protocol REPAIR session that targets the active slot provider.
-	resOpen, err := msgServer.OpenProtocolRetrievalSession(ctx, &types.MsgOpenProtocolRetrievalSession{
-		Creator:        pending,
+	resOpen, err := setup.msgServer.OpenProtocolRetrievalSession(setup.ctx, &types.MsgOpenProtocolRetrievalSession{
+		Creator:        setup.pending,
 		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR,
-		DealId:         deal.Id,
-		Provider:       active,
+		DealId:         setup.deal.Id,
+		Provider:       setup.active,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
 		StartMduIndex:  1,
 		StartBlobIndex: 0, // slot 0
@@ -103,21 +131,21 @@ func TestProtocolRepairSession_PendingProviderOnly_AndBudgetFundsFees(t *testing
 	require.Len(t, resOpen.SessionId, 32)
 
 	// Fees: base=1 (burned), variable=2; funded by protocol budget.
-	require.Equal(t, "997stake", bank.moduleBalances[types.ProtocolBudgetModuleName].String())
-	require.Equal(t, "2stake", bank.moduleBalances[types.ModuleName].String())
+	require.Equal(t, "997stake", setup.bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+	require.Equal(t, "2stake", setup.bank.moduleBalances[types.ModuleName].String())
 
-	sess, err := f.keeper.RetrievalSessions.Get(ctx, resOpen.SessionId)
+	sess, err := setup.f.keeper.RetrievalSessions.Get(setup.ctx, resOpen.SessionId)
 	require.NoError(t, err)
 	require.Equal(t, types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_PROTOCOL, sess.Funding)
 	require.Equal(t, types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR, sess.Purpose)
 	require.Equal(t, authtypes.NewModuleAddress(types.ProtocolBudgetModuleName).String(), sess.Payer)
 
 	// Non-pending providers cannot open repair sessions.
-	_, err = msgServer.OpenProtocolRetrievalSession(ctx, &types.MsgOpenProtocolRetrievalSession{
-		Creator:        active,
+	_, err = setup.msgServer.OpenProtocolRetrievalSession(setup.ctx, &types.MsgOpenProtocolRetrievalSession{
+		Creator:        setup.active,
 		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR,
-		DealId:         deal.Id,
-		Provider:       active,
+		DealId:         setup.deal.Id,
+		Provider:       setup.active,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
 		StartMduIndex:  1,
 		StartBlobIndex: 0,
@@ -130,6 +158,76 @@ func TestProtocolRepairSession_PendingProviderOnly_AndBudgetFundsFees(t *testing
 		},
 	})
 	require.Error(t, err)
+}
+
+func TestProtocolRepairSession_RejectsTargetAndRangeMismatch(t *testing.T) {
+	setup := setupProtocolRepairSession(t)
+
+	// The pending provider may fetch from the outgoing active provider for the
+	// repairing slot only; it cannot turn repair auth into a self-fetch side path.
+	_, err := setup.msgServer.OpenProtocolRetrievalSession(setup.ctx, &types.MsgOpenProtocolRetrievalSession{
+		Creator:        setup.pending,
+		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR,
+		DealId:         setup.deal.Id,
+		Provider:       setup.pending,
+		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
+		StartMduIndex:  1,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          1,
+		ExpiresAt:      0,
+		MaxTotalFee:    math.NewInt(0),
+		Auth: &types.MsgOpenProtocolRetrievalSession_Repair{
+			Repair: &types.RepairAuth{Slot: 0},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "provider does not match slot for blob range")
+
+	// Mode 2 repair sessions are slot-confined. A single protocol session must
+	// not cross from the outgoing slot into another provider's stripe range.
+	_, err = setup.msgServer.OpenProtocolRetrievalSession(setup.ctx, &types.MsgOpenProtocolRetrievalSession{
+		Creator:        setup.pending,
+		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR,
+		DealId:         setup.deal.Id,
+		Provider:       setup.active,
+		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
+		StartMduIndex:  1,
+		StartBlobIndex: 7, // rs=8+4 uses 8 rows per slot; blob 7..8 crosses slots.
+		BlobCount:      2,
+		Nonce:          2,
+		ExpiresAt:      0,
+		MaxTotalFee:    math.NewInt(0),
+		Auth: &types.MsgOpenProtocolRetrievalSession_Repair{
+			Repair: &types.RepairAuth{Slot: 0},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "blob range must stay within a single slot in Mode 2")
+
+	// Auth for a different slot cannot be used to fetch the repairing slot's
+	// active provider; the target slot must itself be in REPAIRING state.
+	_, err = setup.msgServer.OpenProtocolRetrievalSession(setup.ctx, &types.MsgOpenProtocolRetrievalSession{
+		Creator:        setup.pending,
+		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR,
+		DealId:         setup.deal.Id,
+		Provider:       setup.active,
+		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
+		StartMduIndex:  1,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          3,
+		ExpiresAt:      0,
+		MaxTotalFee:    math.NewInt(0),
+		Auth: &types.MsgOpenProtocolRetrievalSession_Repair{
+			Repair: &types.RepairAuth{Slot: 1},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "slot is not repairing")
+
+	require.Equal(t, "1000stake", setup.bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+	require.True(t, setup.bank.moduleBalances[types.ModuleName].IsZero())
 }
 
 func TestProtocolAuditSession_RequiresStoredTask(t *testing.T) {
