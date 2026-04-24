@@ -1,0 +1,441 @@
+{
+  "scenarios": [
+    {
+      "blockers": [],
+      "e2e": "No process e2e until audit sessions are wired through provider-daemon.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 4,
+        "repair_backoffs": 0,
+        "repairs_completed": 32,
+        "repairs_started": 32,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "audit budget state",
+        "audit backlog query",
+        "evidence bounty accounting"
+      ],
+      "next_test": "Add audit-budget minted/spent/carryover tests proving audit demand is capped and backlog is explicit.",
+      "scenario": "audit-budget-exhaustion",
+      "status": "implementation planning",
+      "target": "audit budget keeper tests"
+    },
+    {
+      "blockers": [],
+      "e2e": "Manual or nightly multi-provider outage, not PR-blocking CI.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 0,
+        "repair_backoffs": 1144,
+        "repairs_completed": 96,
+        "repairs_started": 96,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "regional/provider-class placement metadata",
+        "operator concentration limits",
+        "nightly stress harness"
+      ],
+      "next_test": "Keep as simulator calibration until placement-diversity params exist, then add keeper candidate-selection tests.",
+      "scenario": "coordinated-regional-outage",
+      "status": "further simulation review",
+      "target": "placement diversity and nightly stress"
+    },
+    {
+      "blockers": [],
+      "e2e": "Provider returns corrupt bytes or invalid proof and user-gateway rejects the response.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 1,
+        "repair_backoffs": 0,
+        "repairs_completed": 6,
+        "repairs_started": 6,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "hard evidence submission",
+        "corrupt-byte reward exclusion",
+        "jail/slash params"
+      ],
+      "next_test": "Add invalid-proof or wrong-data keeper tests proving no corrupt payment, repair start, and slash/jail simulation gates.",
+      "scenario": "corrupt-provider",
+      "status": "implementation planning",
+      "target": "hard-fault keeper path"
+    },
+    {
+      "blockers": [],
+      "e2e": "Burst traffic e2e after overlay semantics are implemented.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 0,
+        "repair_backoffs": 0,
+        "repairs_completed": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "MsgSignalSaturation hardening",
+        "overlay accountability",
+        "deal spend window"
+      ],
+      "next_test": "Add spend-window tests for saturation signaling, fail-closed expansion, TTL, and cap-bound rejection.",
+      "scenario": "elasticity-cap-hit",
+      "status": "further simulation review",
+      "target": "elasticity spend-window tests"
+    },
+    {
+      "blockers": [],
+      "e2e": "Optional provider restart e2e; keeper coverage should be the first artifact.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 0,
+        "repair_backoffs": 0,
+        "repairs_completed": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "soft-fault decay",
+        "per-slot suspect state",
+        "operator health query"
+      ],
+      "next_test": "Add missed-epoch window tests proving intermittent failures create health evidence without triggering repair churn.",
+      "scenario": "flapping-provider",
+      "status": "implementation planning",
+      "target": "keeper soft-fault window"
+    },
+    {
+      "blockers": [],
+      "e2e": "Gateway happy-path smoke remains sufficient; do not add a slow failure e2e for the control case.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 0,
+        "repair_backoffs": 0,
+        "repairs_completed": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "keeper epoch hooks",
+        "reward eligibility queries"
+      ],
+      "next_test": "Add no-op epoch tests proving healthy providers do not accrue evidence, repair, reward exclusion, jail, or slash state.",
+      "scenario": "ideal",
+      "status": "implementation planning",
+      "target": "keeper control tests"
+    },
+    {
+      "blockers": [],
+      "e2e": "Do not mirror this as process e2e; keep it as simulator/CI artifact work.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 4,
+        "repair_backoffs": 21150,
+        "repairs_completed": 3050,
+        "repairs_started": 3624,
+        "saturated_responses": 15482,
+        "success_rate": 0.9926041666666666,
+        "unavailable_reads": 1065,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "scale sweep corpus",
+        "placement diversity params",
+        "operator concentration analysis",
+        "CI artifact retention"
+      ],
+      "next_test": "Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults.",
+      "scenario": "large-scale-regional-stress",
+      "status": "further simulation review",
+      "target": "scale calibration and regression reporting"
+    },
+    {
+      "blockers": [],
+      "e2e": "Slow-path only after keeper reward accounting is stable.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 1,
+        "repair_backoffs": 0,
+        "repairs_completed": 6,
+        "repairs_started": 6,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "quota miss ledger",
+        "reward exclusion reason query",
+        "soft fault consequence ceiling"
+      ],
+      "next_test": "Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing.",
+      "scenario": "lazy-provider",
+      "status": "implementation planning",
+      "target": "reward eligibility keeper tests"
+    },
+    {
+      "blockers": [],
+      "e2e": "No process e2e; validate with keeper tests and simulator sweeps first.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 0,
+        "repair_backoffs": 0,
+        "repairs_completed": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "dynamic pricing params",
+        "storage utilization accumulator",
+        "retrieval demand accumulator"
+      ],
+      "next_test": "Add epoch pricing tests for floors, ceilings, utilization target, retrieval-demand target, and max step bps.",
+      "scenario": "price-controller-bounds",
+      "status": "implementation planning",
+      "target": "dynamic pricing keeper tests"
+    },
+    {
+      "blockers": [],
+      "e2e": "Small devnet with no spare provider capacity after keeper behavior is stable.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 0,
+        "repair_backoffs": 72,
+        "repairs_completed": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "candidate exclusion reasons",
+        "repair attempt caps",
+        "replacement capacity query"
+      ],
+      "next_test": "Add tests proving no eligible replacement emits backoff, preserves capacity constraints, and does not over-assign providers.",
+      "scenario": "repair-candidate-exhaustion",
+      "status": "implementation planning",
+      "target": "candidate selection and repair backoff keeper tests"
+    },
+    {
+      "blockers": [],
+      "e2e": "Create deal with one failing provider upload and verify replacement before first content commit.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 1,
+        "repair_backoffs": 0,
+        "repairs_completed": 6,
+        "repairs_started": 6,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "setup slot state",
+        "setup bump event",
+        "candidate exclusion reasons"
+      ],
+      "next_test": "Add setup-phase replacement tests proving failed initial upload selects a system provider and does not imply fraud.",
+      "scenario": "setup-failure",
+      "status": "implementation planning",
+      "target": "setup bump and deterministic replacement"
+    },
+    {
+      "blockers": [],
+      "e2e": "Kill one provider-daemon during retrieval and assert reads stay available while repair starts.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 1,
+        "repair_backoffs": 0,
+        "repairs_completed": 6,
+        "repairs_started": 6,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "slot health state",
+        "repair attempt ledger",
+        "promotion readiness proof",
+        "gateway repair-aware routing"
+      ],
+      "next_test": "Add a keeper test where a slot crosses missed-epoch threshold, enters repair, selects a deterministic pending provider, and later promotes.",
+      "scenario": "single-outage",
+      "status": "implementation planning",
+      "target": "keeper repair and gateway route-around"
+    },
+    {
+      "blockers": [],
+      "e2e": "No process e2e until keeper reward gating is complete.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 6,
+        "repair_backoffs": 0,
+        "repairs_completed": 48,
+        "repairs_started": 48,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "compliance-gated base rewards",
+        "subsidy leakage metrics",
+        "operator concentration checks"
+      ],
+      "next_test": "Add tests proving idle or non-compliant responsibility cannot farm base rewards profitably.",
+      "scenario": "subsidy-farming",
+      "status": "implementation planning",
+      "target": "base reward compliance tests"
+    },
+    {
+      "blockers": [],
+      "e2e": "Provider timeout/blackhole e2e after keeper state is deterministic.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 1,
+        "repair_backoffs": 0,
+        "repairs_completed": 6,
+        "repairs_started": 6,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "non-response accumulator",
+        "delinquency reason codes",
+        "reward exclusion event"
+      ],
+      "next_test": "Add per-slot delinquency tests for repeated non-response, reward exclusion, repair start, and replacement selection.",
+      "scenario": "sustained-non-response",
+      "status": "implementation planning",
+      "target": "keeper delinquency repair"
+    },
+    {
+      "blockers": [],
+      "e2e": "No process e2e yet; this is a parameter-calibration fixture.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 48,
+        "repair_backoffs": 0,
+        "repairs_completed": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "dynamic pricing state",
+        "provider cost assumptions",
+        "profitability dashboards"
+      ],
+      "next_test": "Compare storage floors, base rewards, and provider cost assumptions before encoding governance defaults.",
+      "scenario": "underpriced-storage",
+      "status": "further simulation review",
+      "target": "economic policy calibration"
+    },
+    {
+      "blockers": [],
+      "e2e": "Public retrieval spike against one deal with requester/sponsor funding.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 0,
+        "repair_backoffs": 0,
+        "repairs_completed": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "sponsored session funding",
+        "owner escrow isolation",
+        "hot route observability"
+      ],
+      "next_test": "Add sponsored-session tests proving public demand pays providers without draining owner escrow unexpectedly.",
+      "scenario": "viral-public-retrieval",
+      "status": "further simulation review",
+      "target": "sponsored retrieval accounting"
+    },
+    {
+      "blockers": [],
+      "e2e": "Synthetic wash traffic e2e only after keeper accounting exists.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 0,
+        "repair_backoffs": 0,
+        "repairs_completed": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "requester-paid session accounting",
+        "burn ledger",
+        "credit cap enforcement"
+      ],
+      "next_test": "Add retrieval fee, burn, credit-cap, and requester-paid session accounting tests.",
+      "scenario": "wash-retrieval",
+      "status": "further simulation review",
+      "target": "session fee and credit-cap keeper tests"
+    },
+    {
+      "blockers": [],
+      "e2e": "Provider refuses retrieval responses; gateway routes around and records attributable failure.",
+      "metrics": {
+        "data_loss_events": 0,
+        "providers_negative_pnl": 1,
+        "repair_backoffs": 0,
+        "repairs_completed": 6,
+        "repairs_started": 6,
+        "saturated_responses": 0,
+        "success_rate": 1.0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "threshold evidence case",
+        "deputy transcript accounting",
+        "gateway fallback telemetry"
+      ],
+      "next_test": "Add tests for threshold non-response evidence and deputy-served miss accounting before punitive policy.",
+      "scenario": "withholding",
+      "status": "implementation planning",
+      "target": "gateway fallback plus keeper evidence"
+    }
+  ],
+  "status_counts": {
+    "further simulation review": 6,
+    "implementation planning": 12
+  }
+}

@@ -12,6 +12,7 @@ try:
         write_output_dir,
     )
     from .report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
+    from .generate_report_corpus import write_graduation_map
 except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`.
     from policing_sim import (
         PolicySimulator,
@@ -22,6 +23,7 @@ except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`
         write_output_dir,
     )
     from report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
+    from generate_report_corpus import write_graduation_map
 
 
 class PolicySimulatorTests(unittest.TestCase):
@@ -275,6 +277,48 @@ class PolicySimulatorTests(unittest.TestCase):
             payload = (report_dir / "sweep_summary.json").read_text(encoding="utf-8")
             self.assertIn('"metric_ranges"', payload)
             self.assertIn('"high_risk_runs"', payload)
+
+    def test_graduation_map_links_scenarios_to_implementation_targets(self):
+        rows = [
+            {
+                "scenario": "ideal",
+                "verdict": "PASS",
+                "success_rate": 1.0,
+                "unavailable_reads": 0,
+                "data_loss_events": 0,
+                "repairs_started": 0,
+                "repairs_completed": 0,
+                "repair_backoffs": 0,
+                "providers_negative_pnl": 0,
+                "saturated_responses": 0,
+                "assertions": [],
+            },
+            {
+                "scenario": "corrupt-provider",
+                "verdict": "PASS",
+                "success_rate": 1.0,
+                "unavailable_reads": 0,
+                "data_loss_events": 0,
+                "repairs_started": 1,
+                "repairs_completed": 1,
+                "repair_backoffs": 0,
+                "providers_negative_pnl": 0,
+                "saturated_responses": 0,
+                "assertions": [],
+            },
+        ]
+        with TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            write_graduation_map(out_dir, rows)
+
+            self.assertTrue((out_dir / "graduation_map.md").exists())
+            self.assertTrue((out_dir / "graduation_map.json").exists())
+            text = (out_dir / "graduation_map.md").read_text(encoding="utf-8")
+            self.assertIn("## Scenario-to-Implementation Map", text)
+            self.assertIn("hard-fault keeper path", text)
+            self.assertIn("Provider returns corrupt bytes or invalid proof", text)
+            payload = (out_dir / "graduation_map.json").read_text(encoding="utf-8")
+            self.assertIn('"implementation planning"', payload)
 
 
 if __name__ == "__main__":

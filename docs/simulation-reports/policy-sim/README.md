@@ -15,6 +15,8 @@ python3 tools/policy_sim/generate_report_corpus.py \
 
 ## Scenario Index
 
+The corpus-level [graduation map](graduation_map.md) translates these simulator results into the next keeper, gateway/provider, or policy-calibration artifacts.
+
 | Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Backoffs | Saturated | Negative P&L | Report |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---|
 | `audit-budget-exhaustion` | `PASS` | 1.0000 | 0 | 0 | 32/32 | 0 | 0 | 4 | [report](audit-budget-exhaustion/report.md) |
