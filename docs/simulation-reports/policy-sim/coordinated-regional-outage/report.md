@@ -37,6 +37,10 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Retrieval price/slot | `0.0100` |
 | Provider capacity range | `8`-`16` slots |
 | Provider bandwidth range | `80`-`240` serves/epoch (`0` means unlimited) |
+| Service class | `General` |
+| Performance market | `false` |
+| Provider latency range | `0`-`0` ms |
+| Latency tier windows | Platinum <= `100` ms, Gold <= `250` ms, Silver <= `500` ms |
 | High-bandwidth promotion | `false` |
 | High-bandwidth capacity threshold | `0` serves/epoch |
 | Hot retrieval share | `0.00%` |
@@ -56,6 +60,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Base reward per slot | `0.0200` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
+| Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
 | Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and miss-driven demand. |
 | Retrieval burn | `5.00%` | Fraction of variable retrieval fees burned before provider payout. |
 
@@ -97,6 +102,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | High-bandwidth providers | `0` | Providers currently eligible for hot/high-bandwidth routing. |
 | High-bandwidth promotions/demotions | `0` / `0` | Shows capability changes under measured demand. |
 | Hot high-bandwidth serves/retrieval | `0` | Measures whether hot retrievals actually use promoted providers. |
+| Avg latency / Fail tier rate | `0` ms / `0.00%` | Separates correctness from QoS: slow-but-valid service can be available while still earning lower or no performance rewards. |
+| Platinum / Gold / Silver / Fail serves | `0` / `0` / `0` / `0` | Shows the latency-tier distribution for performance-market policy. |
+| Performance reward paid | `0.0000` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |
+| Provider latency p10 / p50 / p90 | `0` / `0` / `0` ms | Shows whether aggregate averages hide slow provider tails. |
 | Final storage utilization | `67.41%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `71.42%` / `100.00%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
 | Provider P&L p10 / p50 / p90 | `0.3920` / `2.0405` / `2.2745` | Shows whether aggregate P&L hides marginal-provider distress. |
@@ -204,6 +213,8 @@ The run minted `237.8600` reward/audit units and burned `29.5200` units, for a b
 Providers earned `410.1800` in modeled revenue against `208.3200` in modeled cost, ending with aggregate P&L `201.8600`.
 
 Retrieval accounting paid providers `200.6400`, burned `2.6400` in base fees, and burned `10.5600` in variable retrieval fees.
+
+Performance-tier accounting paid `0.0000` in QoS rewards.
 
 No provider ended with negative modeled P&L under the current assumptions.
 
@@ -316,6 +327,12 @@ Shows capability promotion/demotion state over time for hot-path eligibility.
 Shows whether hot retrieval attempts are being served by promoted high-bandwidth providers.
 
 ![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)
+
+### Performance Tiers
+
+Shows the fast positive tier and Fail-tier service counts under the performance market.
+
+![Performance Tiers](graphs/performance_tiers.svg)
 
 ## Raw Artifacts
 

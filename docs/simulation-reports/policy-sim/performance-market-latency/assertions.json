@@ -1,0 +1,57 @@
+[
+  {
+    "detail": "success_rate=1, required>=0.99",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "platinum_serves=10077, required>=1",
+    "name": "min_platinum_serves",
+    "passed": true
+  },
+  {
+    "detail": "gold_serves=14584, required>=1",
+    "name": "min_gold_serves",
+    "passed": true
+  },
+  {
+    "detail": "silver_serves=17480, required>=1",
+    "name": "min_silver_serves",
+    "passed": true
+  },
+  {
+    "detail": "fail_serves=7779, required>=1",
+    "name": "min_fail_serves",
+    "passed": true
+  },
+  {
+    "detail": "performance_reward_paid=76.879, required>=1",
+    "name": "min_performance_reward_paid",
+    "passed": true
+  },
+  {
+    "detail": "performance_fail_rate=0.155829327, required<=0.35",
+    "name": "max_performance_fail_rate",
+    "passed": true
+  },
+  {
+    "detail": "providers_over_capacity=0, required<=0",
+    "name": "max_providers_over_capacity",
+    "passed": true
+  },
+  {
+    "detail": "hot_retrieval_attempts=6240, required>=1",
+    "name": "min_hot_retrieval_attempts",
+    "passed": true
+  },
+  {
+    "detail": "hot_high_bandwidth_serves=41088, required>=1",
+    "name": "min_hot_high_bandwidth_serves",
+    "passed": true
+  }
+]

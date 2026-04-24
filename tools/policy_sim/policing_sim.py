@@ -30,6 +30,20 @@ HEALTH_SUSPECT = "SUSPECT"
 HEALTH_DELINQUENT = "DELINQUENT"
 CAPABILITY_ACTIVE = "ACTIVE"
 CAPABILITY_HIGH_BANDWIDTH = "HIGH_BANDWIDTH"
+SERVICE_COLD = "Cold"
+SERVICE_GENERAL = "General"
+SERVICE_HOT = "Hot"
+PERFORMANCE_PLATINUM = "Platinum"
+PERFORMANCE_GOLD = "Gold"
+PERFORMANCE_SILVER = "Silver"
+PERFORMANCE_FAIL = "Fail"
+PERFORMANCE_TIERS = {
+    PERFORMANCE_PLATINUM,
+    PERFORMANCE_GOLD,
+    PERFORMANCE_SILVER,
+    PERFORMANCE_FAIL,
+}
+SERVICE_CLASSES = {SERVICE_COLD, SERVICE_GENERAL, SERVICE_HOT}
 
 ENFORCEMENT_ORDER = {
     "MEASURE_ONLY": 0,
@@ -56,6 +70,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "repair-candidate-exhaustion",
     "high-bandwidth-promotion",
     "high-bandwidth-regression",
+    "performance-market-latency",
 }
 
 CLI_SCENARIOS = sorted(
@@ -115,6 +130,19 @@ class SimConfig:
     provider_bandwidth_capacity_per_epoch: int = 0
     provider_bandwidth_capacity_min: int = 0
     provider_bandwidth_capacity_max: int = 0
+    service_class: str = SERVICE_GENERAL
+    performance_market_enabled: bool = False
+    provider_latency_ms_min: float = 0.0
+    provider_latency_ms_max: float = 0.0
+    provider_latency_jitter_bps: int = 0
+    platinum_latency_ms: float = 100.0
+    gold_latency_ms: float = 250.0
+    silver_latency_ms: float = 500.0
+    performance_reward_per_serve: float = 0.0
+    platinum_reward_multiplier_bps: int = 15_000
+    gold_reward_multiplier_bps: int = 10_000
+    silver_reward_multiplier_bps: int = 5_000
+    fail_reward_multiplier_bps: int = 0
     high_bandwidth_promotion_enabled: bool = False
     high_bandwidth_capacity_threshold: int = 0
     high_bandwidth_min_retrievals: int = 0
@@ -185,6 +213,26 @@ class SimConfig:
             and self.provider_bandwidth_capacity_min > self.provider_bandwidth_capacity_max
         ):
             raise ValueError("provider_bandwidth_capacity_min must be <= provider_bandwidth_capacity_max")
+        if self.service_class not in SERVICE_CLASSES:
+            raise ValueError(f"service_class must be one of {sorted(SERVICE_CLASSES)}")
+        if self.provider_latency_ms_min < 0 or self.provider_latency_ms_max < 0:
+            raise ValueError("provider latency bounds must be non-negative")
+        if self.provider_latency_ms_min and self.provider_latency_ms_max and self.provider_latency_ms_min > self.provider_latency_ms_max:
+            raise ValueError("provider_latency_ms_min must be <= provider_latency_ms_max")
+        if self.provider_latency_jitter_bps < 0:
+            raise ValueError("provider_latency_jitter_bps must be non-negative")
+        if not (self.platinum_latency_ms <= self.gold_latency_ms <= self.silver_latency_ms):
+            raise ValueError("latency tier thresholds must satisfy platinum <= gold <= silver")
+        if self.performance_reward_per_serve < 0:
+            raise ValueError("performance_reward_per_serve must be non-negative")
+        for key, value in {
+            "platinum_reward_multiplier_bps": self.platinum_reward_multiplier_bps,
+            "gold_reward_multiplier_bps": self.gold_reward_multiplier_bps,
+            "silver_reward_multiplier_bps": self.silver_reward_multiplier_bps,
+            "fail_reward_multiplier_bps": self.fail_reward_multiplier_bps,
+        }.items():
+            if value < 0:
+                raise ValueError(f"{key} must be non-negative")
         if not 0 <= self.provider_online_probability_min <= self.provider_online_probability_max <= 1:
             raise ValueError("provider online probability bounds must be in [0, 1]")
         if not 0 <= self.provider_repair_probability_min <= self.provider_repair_probability_max <= 1:
@@ -227,6 +275,7 @@ class Provider:
     region: str = "global"
     capacity_slots: int = 16
     bandwidth_capacity_per_epoch: int = 0
+    latency_ms: float = 0.0
     repair_success_probability: float = 1.0
     capability_tier: str = CAPABILITY_ACTIVE
     capability_reason: str = ""
@@ -242,9 +291,16 @@ class Provider:
     withheld_responses: int = 0
     offline_responses: int = 0
     saturated_responses: int = 0
+    platinum_serves: int = 0
+    gold_serves: int = 0
+    silver_serves: int = 0
+    fail_serves: int = 0
+    latency_sample_count: int = 0
+    total_latency_ms: float = 0.0
     rewards_earned_slots: int = 0
     reward_revenue: float = 0.0
     retrieval_revenue: float = 0.0
+    performance_reward_revenue: float = 0.0
     total_cost: float = 0.0
     slashed: float = 0.0
     bond: float = 0.0
@@ -255,7 +311,7 @@ class Provider:
 
     @property
     def revenue(self) -> float:
-        return self.reward_revenue + self.retrieval_revenue
+        return self.reward_revenue + self.retrieval_revenue + self.performance_reward_revenue
 
     @property
     def pnl(self) -> float:
@@ -355,6 +411,13 @@ class EpochMetrics:
     high_bandwidth_serves: int = 0
     hot_retrieval_attempts: int = 0
     hot_high_bandwidth_serves: int = 0
+    platinum_serves: int = 0
+    gold_serves: int = 0
+    silver_serves: int = 0
+    fail_serves: int = 0
+    latency_sample_count: int = 0
+    total_latency_ms: float = 0.0
+    performance_reward_paid: float = 0.0
     paid_corrupt_bytes: int = 0
     retrieval_base_burned: float = 0.0
     retrieval_variable_burned: float = 0.0
@@ -458,6 +521,8 @@ class PolicySimulator:
         capacity_max = self.config.provider_capacity_max or self.config.provider_slot_capacity
         bandwidth_min = self.config.provider_bandwidth_capacity_min or self.config.provider_bandwidth_capacity_per_epoch
         bandwidth_max = self.config.provider_bandwidth_capacity_max or self.config.provider_bandwidth_capacity_per_epoch
+        latency_min = self.config.provider_latency_ms_min
+        latency_max = self.config.provider_latency_ms_max
         for index in range(self.config.providers):
             provider_id = self.provider_id(index)
             provider = Provider(
@@ -466,6 +531,7 @@ class PolicySimulator:
                 region=regions[index % len(regions)],
                 capacity_slots=rng.randint(capacity_min, capacity_max) if capacity_max else self.config.provider_slot_capacity,
                 bandwidth_capacity_per_epoch=rng.randint(bandwidth_min, bandwidth_max) if bandwidth_max else 0,
+                latency_ms=rng.uniform(latency_min, latency_max) if latency_max else 0.0,
                 repair_success_probability=rng.uniform(
                     self.config.provider_repair_probability_min,
                     self.config.provider_repair_probability_max,
@@ -663,16 +729,17 @@ class PolicySimulator:
         max_attempts = min(len(order), self.config.route_attempt_limit)
         successes = 0
         failed_slots: list[SlotState] = []
-        served_providers: list[str] = []
+        served_providers: list[tuple[str, str]] = []
 
         for slot_idx in order[:max_attempts]:
             slot = deal.slots[slot_idx]
             provider_id = self._slot_route_provider_id(slot)
 
-            outcome = self._serve_from_provider(provider_id, online)
+            outcome, latency_ms, performance_tier = self._serve_from_provider(provider_id, online)
             if outcome == "ok":
                 successes += 1
-                served_providers.append(provider_id)
+                served_providers.append((provider_id, performance_tier))
+                self._record_performance_serve(provider_id, latency_ms, performance_tier, metrics)
                 if self.providers[provider_id].capability_tier == CAPABILITY_HIGH_BANDWIDTH:
                     metrics.high_bandwidth_serves += 1
                     if is_hot:
@@ -686,6 +753,7 @@ class PolicySimulator:
                 continue
 
             failed_slots.append(slot)
+            self._record_performance_fail(provider_id, metrics)
             if outcome == "corrupt":
                 metrics.corrupt_responses += 1
                 metrics.invalid_proofs += 1
@@ -717,34 +785,99 @@ class PolicySimulator:
             return slot.pending_provider_id
         return slot.provider_id
 
-    def _serve_from_provider(self, provider_id: str, online: dict[str, bool]) -> str:
+    def _serve_from_provider(self, provider_id: str, online: dict[str, bool]) -> tuple[str, float, str]:
         provider = self.providers[provider_id]
         provider.retrieval_attempts += 1
         if not online.get(provider_id, False):
             provider.offline_responses += 1
-            return "offline"
+            return "offline", 0.0, PERFORMANCE_FAIL
         if (
             provider.bandwidth_capacity_per_epoch > 0
             and self.provider_epoch_serves.get(provider_id, 0) >= provider.bandwidth_capacity_per_epoch
         ):
             provider.saturated_responses += 1
-            return "saturated"
+            return "saturated", 0.0, PERFORMANCE_FAIL
 
         behavior = provider.behavior
         roll = self.rng.random()
         if roll < behavior.corrupt_rate:
             provider.corrupt_responses += 1
-            return "corrupt"
+            return "corrupt", 0.0, PERFORMANCE_FAIL
 
         roll = self.rng.random()
         if roll < behavior.withhold_rate:
             provider.withheld_responses += 1
-            return "withheld"
+            return "withheld", 0.0, PERFORMANCE_FAIL
 
         provider.retrieval_successes += 1
-        return "ok"
+        latency_ms = self._sample_latency_ms(provider)
+        return "ok", latency_ms, self._performance_tier(latency_ms)
 
-    def _settle_retrieval_payment(self, provider_ids: list[str], metrics: EpochMetrics) -> None:
+    def _sample_latency_ms(self, provider: Provider) -> float:
+        latency = provider.latency_ms
+        if latency <= 0:
+            return 0.0
+        return latency * jitter_multiplier(self.rng, self.config.provider_latency_jitter_bps)
+
+    def _performance_tier(self, latency_ms: float) -> str:
+        if not self.config.performance_market_enabled:
+            return ""
+        if latency_ms <= self.config.platinum_latency_ms:
+            return PERFORMANCE_PLATINUM
+        if latency_ms <= self.config.gold_latency_ms:
+            return PERFORMANCE_GOLD
+        if latency_ms <= self.config.silver_latency_ms:
+            return PERFORMANCE_SILVER
+        return PERFORMANCE_FAIL
+
+    def _record_performance_serve(
+        self,
+        provider_id: str,
+        latency_ms: float,
+        tier: str,
+        metrics: EpochMetrics,
+    ) -> None:
+        if not self.config.performance_market_enabled:
+            return
+        provider = self.providers[provider_id]
+        provider.latency_sample_count += 1
+        provider.total_latency_ms += latency_ms
+        metrics.latency_sample_count += 1
+        metrics.total_latency_ms += latency_ms
+        if tier == PERFORMANCE_PLATINUM:
+            provider.platinum_serves += 1
+            metrics.platinum_serves += 1
+        elif tier == PERFORMANCE_GOLD:
+            provider.gold_serves += 1
+            metrics.gold_serves += 1
+        elif tier == PERFORMANCE_SILVER:
+            provider.silver_serves += 1
+            metrics.silver_serves += 1
+        else:
+            provider.fail_serves += 1
+            metrics.fail_serves += 1
+
+        reward = self.config.performance_reward_per_serve * self._performance_reward_multiplier_bps(tier) / 10_000
+        provider.performance_reward_revenue += reward
+        metrics.performance_reward_paid += reward
+
+    def _record_performance_fail(self, provider_id: str, metrics: EpochMetrics) -> None:
+        if not self.config.performance_market_enabled:
+            return
+        provider = self.providers[provider_id]
+        provider.fail_serves += 1
+        metrics.fail_serves += 1
+
+    def _performance_reward_multiplier_bps(self, tier: str) -> int:
+        if tier == PERFORMANCE_PLATINUM:
+            return self.config.platinum_reward_multiplier_bps
+        if tier == PERFORMANCE_GOLD:
+            return self.config.gold_reward_multiplier_bps
+        if tier == PERFORMANCE_SILVER:
+            return self.config.silver_reward_multiplier_bps
+        return self.config.fail_reward_multiplier_bps
+
+    def _settle_retrieval_payment(self, provider_ids: list[tuple[str, str]], metrics: EpochMetrics) -> None:
         if not provider_ids:
             return
         variable = self.retrieval_price_per_slot * len(provider_ids)
@@ -753,7 +886,7 @@ class PolicySimulator:
         per_provider = payout / len(provider_ids)
         metrics.retrieval_variable_burned += burn
         metrics.retrieval_provider_payouts += payout
-        for provider_id in provider_ids:
+        for provider_id, _tier in provider_ids:
             self.providers[provider_id].retrieval_revenue += per_provider
 
     def _settle_slot_epoch(
@@ -1245,7 +1378,7 @@ class PolicySimulator:
         self.provider_slashed_total_last_epoch = provider_slashed_total
 
         metrics.provider_cost = provider_cost
-        metrics.provider_revenue = metrics.retrieval_provider_payouts + metrics.reward_paid
+        metrics.provider_revenue = metrics.retrieval_provider_payouts + metrics.reward_paid + metrics.performance_reward_paid
         metrics.provider_pnl = metrics.provider_revenue - metrics.provider_cost - provider_slashed_delta
         total_capacity = max(1, sum(p.capacity_slots for p in self.providers.values()))
         metrics.storage_utilization_bps = int(metrics.active_slots * 10_000 / total_capacity)
@@ -1267,6 +1400,9 @@ class PolicySimulator:
                 "provider_cost": metrics.provider_cost,
                 "provider_revenue": metrics.provider_revenue,
                 "provider_pnl": metrics.provider_pnl,
+                "performance_reward_paid": metrics.performance_reward_paid,
+                "latency_sample_count": metrics.latency_sample_count,
+                "average_latency_ms": metrics.total_latency_ms / metrics.latency_sample_count if metrics.latency_sample_count else 0.0,
                 "elasticity_spent": metrics.elasticity_spent,
                 "elasticity_rejections": metrics.elasticity_rejections,
             }
@@ -1366,6 +1502,13 @@ class PolicySimulator:
             "high_bandwidth_serves",
             "hot_retrieval_attempts",
             "hot_high_bandwidth_serves",
+            "platinum_serves",
+            "gold_serves",
+            "silver_serves",
+            "fail_serves",
+            "latency_sample_count",
+            "total_latency_ms",
+            "performance_reward_paid",
             "paid_corrupt_bytes",
             "retrieval_base_burned",
             "retrieval_variable_burned",
@@ -1395,6 +1538,17 @@ class PolicySimulator:
         totals["high_bandwidth_providers"] = sum(
             1 for p in self.providers.values() if p.capability_tier == CAPABILITY_HIGH_BANDWIDTH
         )
+        totals["average_latency_ms"] = (
+            totals["total_latency_ms"] / totals["latency_sample_count"] if totals["latency_sample_count"] else 0.0
+        )
+        tiered_serves = (
+            totals["platinum_serves"]
+            + totals["gold_serves"]
+            + totals["silver_serves"]
+            + totals["fail_serves"]
+        )
+        totals["platinum_share"] = totals["platinum_serves"] / tiered_serves if tiered_serves else 0.0
+        totals["performance_fail_rate"] = totals["fail_serves"] / tiered_serves if tiered_serves else 0.0
         totals["min_provider_pnl"] = min((p.pnl for p in self.providers.values()), default=0.0)
         totals["max_provider_pnl"] = max((p.pnl for p in self.providers.values()), default=0.0)
         assigned_counts = self._assigned_counts()
@@ -1436,6 +1590,8 @@ class PolicySimulator:
                     "capacity_slots": provider.capacity_slots,
                     "capacity_utilization_bps": int(assigned_counts[provider_id] * 10_000 / max(1, provider.capacity_slots)),
                     "bandwidth_capacity_per_epoch": provider.bandwidth_capacity_per_epoch,
+                    "latency_ms": provider.latency_ms,
+                    "average_latency_ms": provider.total_latency_ms / provider.latency_sample_count if provider.latency_sample_count else 0.0,
                     "repair_success_probability": provider.repair_success_probability,
                     "online_probability": provider.behavior.online_probability,
                     "hard_faults": provider.hard_faults,
@@ -1445,9 +1601,15 @@ class PolicySimulator:
                     "withheld_responses": provider.withheld_responses,
                     "offline_responses": provider.offline_responses,
                     "saturated_responses": provider.saturated_responses,
+                    "platinum_serves": provider.platinum_serves,
+                    "gold_serves": provider.gold_serves,
+                    "silver_serves": provider.silver_serves,
+                    "fail_serves": provider.fail_serves,
+                    "latency_sample_count": provider.latency_sample_count,
                     "rewards_earned_slots": provider.rewards_earned_slots,
                     "reward_revenue": provider.reward_revenue,
                     "retrieval_revenue": provider.retrieval_revenue,
+                    "performance_reward_revenue": provider.performance_reward_revenue,
                     "total_cost": provider.total_cost,
                     "slashed": provider.slashed,
                     "bond": provider.bond,

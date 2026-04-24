@@ -19,10 +19,10 @@ from typing import Any
 
 try:
     from .policing_sim import SimConfig, fixture_paths, load_scenario_spec, run_one, write_output_dir
-    from .report import generate_run_report
+    from .report import generate_run_report, stable_json_value
 except ImportError:  # Allows direct execution as a script.
     from policing_sim import SimConfig, fixture_paths, load_scenario_spec, run_one, write_output_dir
-    from report import generate_run_report
+    from report import generate_run_report, stable_json_value
 
 
 GRADUATION_TARGETS = {
@@ -140,6 +140,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["capability demotion rule", "saturation evidence accumulator", "hot-route failover telemetry", "operator regression alert"],
         "e2e": "Hot retrieval burst that intentionally saturates promoted providers; assert demotion events fire and retrievals continue through fallback capacity.",
     },
+    "performance-market-latency": {
+        "target": "service-class and latency-tier keeper tests",
+        "next_test": "Add keeper/runtime tests proving retrieval telemetry maps to Platinum/Gold/Silver/Fail tiers, tiered rewards are deterministic, and Fail-tier QoS does not become slashable hard evidence.",
+        "missing_surfaces": ["service-class params", "latency telemetry accumulator", "tiered reward multipliers", "QoS-only health notes"],
+        "e2e": "Hot-service retrieval burst after telemetry exists; assert tier counts and provider payouts reflect latency without breaking read availability.",
+    },
     "large-scale-regional-stress": {
         "target": "scale calibration and regression reporting",
         "next_test": "Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults.",
@@ -241,6 +247,11 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "high_bandwidth_providers": totals.get("high_bandwidth_providers", 0),
         "hot_retrieval_attempts": totals.get("hot_retrieval_attempts", 0),
         "hot_high_bandwidth_serves": totals.get("hot_high_bandwidth_serves", 0),
+        "platinum_serves": totals.get("platinum_serves", 0),
+        "gold_serves": totals.get("gold_serves", 0),
+        "silver_serves": totals.get("silver_serves", 0),
+        "fail_serves": totals.get("fail_serves", 0),
+        "performance_reward_paid": totals.get("performance_reward_paid", 0),
         "suspect_slots": totals.get("suspect_slots", 0),
         "delinquent_slots": totals.get("delinquent_slots", 0),
         "providers_negative_pnl": totals.get("providers_negative_pnl", 0),
@@ -272,10 +283,10 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
@@ -285,6 +296,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['repairs_started']}/{row['repairs_ready']}/{row['repairs_completed']} | "
             f"{row['suspect_slots']}/{row['delinquent_slots']} | {row['repair_attempts']} | {row['repair_backoffs']} | "
             f"{row['high_bandwidth_promotions']}/{row['high_bandwidth_providers']} | "
+            f"{row['platinum_serves']}/{row['gold_serves']}/{row['silver_serves']}/{row['fail_serves']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
             f"[report]({scenario}/report.md) |"
         )
@@ -306,7 +318,7 @@ def write_graduation_map(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
 
     (out_dir / "graduation_map.json").write_text(
-        json.dumps({"status_counts": status_counts, "scenarios": mapped}, indent=2, sort_keys=True) + "\n",
+        json.dumps(stable_json_value({"status_counts": status_counts, "scenarios": mapped}), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
@@ -392,6 +404,11 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "high_bandwidth_providers": row.get("high_bandwidth_providers", 0),
             "hot_retrieval_attempts": row.get("hot_retrieval_attempts", 0),
             "hot_high_bandwidth_serves": row.get("hot_high_bandwidth_serves", 0),
+            "platinum_serves": row.get("platinum_serves", 0),
+            "gold_serves": row.get("gold_serves", 0),
+            "silver_serves": row.get("silver_serves", 0),
+            "fail_serves": row.get("fail_serves", 0),
+            "performance_reward_paid": row.get("performance_reward_paid", 0),
             "suspect_slots": row.get("suspect_slots", 0),
             "delinquent_slots": row.get("delinquent_slots", 0),
             "providers_negative_pnl": row["providers_negative_pnl"],
@@ -424,6 +441,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "repair-candidate-exhaustion",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
+        "performance-market-latency",
     }
     if scenario in implementation_ready:
         return "implementation planning", []
@@ -451,6 +469,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "repair-candidate-exhaustion",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
+        "performance-market-latency",
         "price-controller-bounds",
     ]
     ready.sort(key=lambda row: (priority.index(row["scenario"]) if row["scenario"] in priority else 99, row["scenario"]))
