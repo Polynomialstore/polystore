@@ -85,6 +85,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
     "replacement-grinding",
+    "invalid-synthetic-proof",
     "high-bandwidth-promotion",
     "high-bandwidth-regression",
     "performance-market-latency",

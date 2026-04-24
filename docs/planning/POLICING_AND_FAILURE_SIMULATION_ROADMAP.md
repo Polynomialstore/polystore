@@ -1212,6 +1212,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `single_outage.yaml` | One provider offline for several epochs. | Reads remain available, repair starts after threshold, no slash. |
 | `withholding.yaml` | Provider refuses retrievals and synthetic participation. | Route-around succeeds where possible, deputy/audit misses accrue, repair starts. |
 | `corrupt_provider.yaml` | Provider returns corrupt data or invalid proofs. | Corrupt bytes are unpaid, hard fault is recorded, repair starts. |
+| `invalid_synthetic_proof.yaml` | Provider submits invalid synthetic/liveness proofs without corrupting retrieval bytes. | Invalid proofs are recorded, repair starts and completes, simulated slash accounting is visible, and corrupt byte payment remains zero. |
 | `lazy_provider.yaml` | Provider does not meet proof quota. | Reward exclusion occurs, soft-fault path does not slash. |
 | `setup_failure.yaml` | Initial upload to one slot fails. | Setup bump is bounded and replacement is system-selected. |
 | `repair_candidate_exhaustion.yaml` | Replacement capacity is unavailable or saturated. | Repair backoffs and candidate-exclusion reasons are visible, provider capacity is not over-assigned, and data-loss events remain zero. |

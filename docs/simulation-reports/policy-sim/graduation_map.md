@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 18 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 19 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 13 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -24,6 +24,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`high-bandwidth-promotion`](high-bandwidth-promotion/report.md) | `implementation planning` | provider capability and hot-route policy tests | Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment. | `provider capability tier state`, `bandwidth probe telemetry`, `hot-route preference query`, `capability demotion rule` | Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression. |
 | [`high-bandwidth-regression`](high-bandwidth-regression/report.md) | `implementation planning` | capability demotion and hot-route failover tests | Add keeper/runtime tests proving promoted providers demote after sustained saturation and hot routing falls back without data-loss or over-capacity assignment. | `capability demotion rule`, `saturation evidence accumulator`, `hot-route failover telemetry`, `operator regression alert` | Hot retrieval burst that intentionally saturates promoted providers; assert demotion events fire and retrievals continue through fallback capacity. |
 | [`ideal`](ideal/report.md) | `implementation planning` | keeper control tests | Add no-op epoch tests proving healthy providers do not accrue evidence, repair, reward exclusion, jail, or slash state. | `keeper epoch hooks`, `reward eligibility queries` | Gateway happy-path smoke remains sufficient; do not add a slow failure e2e for the control case. |
+| [`invalid-synthetic-proof`](invalid-synthetic-proof/report.md) | `implementation planning` | invalid-proof keeper path | Add keeper tests proving invalid liveness proofs create hard evidence, trigger repair, and apply slash/jail gates without requiring corrupt retrieval bytes. | `proof validation error attribution`, `hard evidence submission`, `jail/slash params` | Provider submits an invalid liveness proof while retrieval bytes remain clean; assert proof rejection and repair. |
 | [`large-scale-regional-stress`](large-scale-regional-stress/report.md) | `further simulation review` | scale calibration and regression reporting | Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults. | `scale sweep corpus`, `placement diversity params`, `operator concentration analysis`, `CI artifact retention` | Do not mirror this as process e2e; keep it as simulator/CI artifact work. |
 | [`lazy-provider`](lazy-provider/report.md) | `implementation planning` | reward eligibility keeper tests | Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing. | `quota miss ledger`, `reward exclusion reason query`, `soft fault consequence ceiling` | Slow-path only after keeper reward accounting is stable. |
 | [`operator-concentration-cap`](operator-concentration-cap/report.md) | `implementation planning` | operator identity and assignment cap keeper tests | Add keeper/runtime tests proving deterministic placement and repair candidate selection respect per-deal operator caps while surfacing fallback reasons. | `operator identity registry`, `per-deal operator cap params`, `candidate diversity diagnostics`, `Sybil concentration alerts` | Provider set with one dominant operator; assert hot and normal deal placement stay within operator caps and replacement falls back only with explicit evidence. |
@@ -52,10 +53,10 @@ This report converts the committed simulator corpus into implementation planning
 - `single-outage`: Add a keeper test where a slot crosses missed-epoch threshold, enters repair, selects a deterministic pending provider, and later promotes.
 - `sustained-non-response`: Add per-slot delinquency tests for repeated non-response, reward exclusion, repair start, and replacement selection.
 - `corrupt-provider`: Add invalid-proof or wrong-data keeper tests proving no corrupt payment, repair start, and slash/jail simulation gates.
+- `invalid-synthetic-proof`: Add keeper tests proving invalid liveness proofs create hard evidence, trigger repair, and apply slash/jail gates without requiring corrupt retrieval bytes.
 - `lazy-provider`: Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing.
 - `setup-failure`: Add setup-phase replacement tests proving failed initial upload selects a system provider and does not imply fraud.
 - `repair-candidate-exhaustion`: Add tests proving no eligible replacement emits backoff, preserves capacity constraints, and does not over-assign providers.
-- `replacement-grinding`: Add tests proving pending replacements must submit readiness before promotion, time out when they fail catch-up, and respect retry cooldown and attempt caps.
 
 ## Missing Surfaces By Component
 
@@ -64,6 +65,8 @@ This report converts the committed simulator corpus into implementation planning
 | `affordability dashboards` | 2 |
 | `candidate exclusion reasons` | 2 |
 | `capability demotion rule` | 2 |
+| `hard evidence submission` | 2 |
+| `jail/slash params` | 2 |
 | `profitability dashboards` | 2 |
 | `quote rejection telemetry` | 2 |
 | `retrieval demand accumulator` | 2 |
@@ -99,11 +102,9 @@ This report converts the committed simulator corpus into implementation planning
 | `failed catch-up reputation signal` | 1 |
 | `gateway fallback telemetry` | 1 |
 | `gateway repair-aware routing` | 1 |
-| `hard evidence submission` | 1 |
 | `hot route observability` | 1 |
 | `hot-route failover telemetry` | 1 |
 | `hot-route preference query` | 1 |
-| `jail/slash params` | 1 |
 | `keeper epoch hooks` | 1 |
 | `latency telemetry accumulator` | 1 |
 | `nightly stress harness` | 1 |
@@ -124,6 +125,7 @@ This report converts the committed simulator corpus into implementation planning
 | `pricing smoothing params` | 1 |
 | `probation readiness checks` | 1 |
 | `promotion readiness proof` | 1 |
+| `proof validation error attribution` | 1 |
 | `provider bond state` | 1 |
 | `provider capability tier state` | 1 |
 | `provider cost assumptions` | 1 |

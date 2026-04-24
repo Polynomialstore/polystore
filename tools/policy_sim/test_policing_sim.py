@@ -100,6 +100,18 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertGreaterEqual(result.totals["repairs_ready"], 1)
         self.assertEqual(0, result.totals["paid_corrupt_bytes"])
 
+    def test_invalid_synthetic_proof_isolated_from_corrupt_retrieval(self):
+        fixture = Path(__file__).with_name("scenarios") / "invalid_synthetic_proof.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreaterEqual(result.totals["invalid_proofs"], 1)
+        self.assertGreaterEqual(result.totals["repairs_completed"], 1)
+        self.assertGreaterEqual(result.totals["provider_slashed"], 1)
+        self.assertEqual(0, result.totals["corrupt_responses"])
+        self.assertEqual(0, result.totals["paid_corrupt_bytes"])
+
     def test_custom_fault_injection(self):
         config = SimConfig(scenario="ideal", providers=24, deals=8, users=40, epochs=6)
         result = PolicySimulator(

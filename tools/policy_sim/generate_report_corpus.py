@@ -64,6 +64,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["hard evidence submission", "corrupt-byte reward exclusion", "jail/slash params"],
         "e2e": "Provider returns corrupt bytes or invalid proof and user-gateway rejects the response.",
     },
+    "invalid-synthetic-proof": {
+        "target": "invalid-proof keeper path",
+        "next_test": "Add keeper tests proving invalid liveness proofs create hard evidence, trigger repair, and apply slash/jail gates without requiring corrupt retrieval bytes.",
+        "missing_surfaces": ["proof validation error attribution", "hard evidence submission", "jail/slash params"],
+        "e2e": "Provider submits an invalid liveness proof while retrieval bytes remain clean; assert proof rejection and repair.",
+    },
     "lazy-provider": {
         "target": "reward eligibility keeper tests",
         "next_test": "Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing.",
@@ -558,6 +564,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "sustained-non-response",
         "withholding",
         "corrupt-provider",
+        "invalid-synthetic-proof",
         "lazy-provider",
         "setup-failure",
         "audit-budget-exhaustion",
@@ -592,6 +599,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "single-outage",
         "sustained-non-response",
         "corrupt-provider",
+        "invalid-synthetic-proof",
         "lazy-provider",
         "setup-failure",
         "repair-candidate-exhaustion",

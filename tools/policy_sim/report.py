@@ -72,6 +72,15 @@ SCENARIO_GUIDES = {
         "expected": "Invalid proofs appear, corrupt bytes are not paid, repairs start, and simulated slash accounting is non-zero in slash mode.",
         "review": "Review this before keeper slashing work. This is the clearest fixture for evidence quality and punishment severity.",
     },
+    "invalid-synthetic-proof": {
+        "title": "Invalid Synthetic Proof",
+        "intent": (
+            "Model a provider submitting invalid liveness proofs without corrupting retrieval bytes. The policy question is whether "
+            "chain-verifiable hard proof evidence alone triggers repair and simulated slash accounting."
+        ),
+        "expected": "Invalid proofs are recorded, repair starts and completes, the provider is simulated-slashed, corrupt retrieval payment remains zero, and durability remains intact.",
+        "review": "Use this fixture to isolate keeper proof-validation behavior from gateway byte-verification behavior before punitive hard-fault rollout.",
+    },
     "malicious-corrupt": {
         "title": "Corrupt Provider",
         "intent": (
@@ -1775,6 +1784,7 @@ def assertion_meaning(name: str) -> str:
         "min_quota_misses": "Fault fixture must generate quota evidence.",
         "max_invalid_proofs": "Healthy providers should never produce invalid proofs.",
         "min_invalid_proofs": "Hard-fault fixture must generate invalid-proof evidence.",
+        "exact_corrupt_responses": "Invalid-proof-only fixture should not also exercise corrupt retrieval bytes.",
         "max_paid_corrupt_bytes": "Corrupt data must not earn payment.",
         "min_reward_coverage": "Healthy slots should receive the expected rewards.",
         "min_provider_slashed": "Simulated slashing must affect hard-fault providers.",
@@ -2318,6 +2328,7 @@ def graduation_semantics(scenario: str) -> str:
         "sustained-non-response": "Graduation means repeated soft failure can become per-slot delinquency and repair without treating soft evidence as slashable fraud.",
         "withholding": "Graduation means routing and evidence capture handle refusal-to-serve before any stronger punishment is considered.",
         "corrupt-provider": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
+        "invalid-synthetic-proof": "Graduation means invalid liveness-proof evidence alone can trigger repair and simulated slash accounting without corrupt byte retrieval evidence.",
         "malicious-corrupt": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
         "lazy-provider": "Graduation means subsidy/reward gating catches useful-work failures even if user reads are still available.",
         "overpriced-storage": "Graduation means demand-side affordability failures are visible as price rejections rather than being mistaken for healthy market equilibrium.",
@@ -2360,13 +2371,24 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
     )
     corrupt_ready = fnum(totals.get("paid_corrupt_bytes")) == 0
     repair_ready = True
-    if scenario in {"single-outage", "withholding", "corrupt-provider", "malicious-corrupt", "lazy-provider", "setup-failure"}:
+    if scenario in {
+        "single-outage",
+        "withholding",
+        "corrupt-provider",
+        "invalid-synthetic-proof",
+        "malicious-corrupt",
+        "lazy-provider",
+        "setup-failure",
+    }:
         repair_ready = (
             fnum(totals.get("repairs_started")) > 0
             and fnum(totals.get("repairs_ready")) > 0
             and fnum(totals.get("repairs_completed")) > 0
         )
-    hard_enforcement_ready = scenario not in {"corrupt-provider", "malicious-corrupt"} or fnum(totals.get("provider_slashed")) > 0
+    hard_enforcement_ready = (
+        scenario not in {"corrupt-provider", "invalid-synthetic-proof", "malicious-corrupt"}
+        or fnum(totals.get("provider_slashed")) > 0
+    )
     ready = assertions_ready and data_loss_ready and availability_ready and corrupt_ready and repair_ready and hard_enforcement_ready
 
     if ready and scenario in {
@@ -2374,6 +2396,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "single-outage",
         "withholding",
         "corrupt-provider",
+        "invalid-synthetic-proof",
         "malicious-corrupt",
         "lazy-provider",
         "setup-failure",
