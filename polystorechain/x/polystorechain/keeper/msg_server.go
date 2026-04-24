@@ -1849,6 +1849,9 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 		pending, err := k.selectMode2ReplacementProvider(ctx, deal, slot, epochID)
 		if err != nil {
 			ctx.Logger().Error("failed to select replacement provider for health eviction", "deal", dealID, "slot", slotIdxU64, "error", err)
+			if errEvidence := k.Keeper.recordRepairBackoff(ctx, dealID, provider, slot, epochID, err.Error()); errEvidence != nil {
+				ctx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
+			}
 			return
 		}
 
