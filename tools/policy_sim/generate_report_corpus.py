@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import tempfile
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -146,6 +148,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["service-class params", "latency telemetry accumulator", "tiered reward multipliers", "QoS-only health notes"],
         "e2e": "Hot-service retrieval burst after telemetry exists; assert tier counts and provider payouts reflect latency without breaking read availability.",
     },
+    "operator-concentration-cap": {
+        "target": "operator identity and assignment cap keeper tests",
+        "next_test": "Add keeper/runtime tests proving deterministic placement and repair candidate selection respect per-deal operator caps while surfacing fallback reasons.",
+        "missing_surfaces": ["operator identity registry", "per-deal operator cap params", "candidate diversity diagnostics", "Sybil concentration alerts"],
+        "e2e": "Provider set with one dominant operator; assert hot and normal deal placement stay within operator caps and replacement falls back only with explicit evidence.",
+    },
     "large-scale-regional-stress": {
         "target": "scale calibration and regression reporting",
         "next_test": "Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults.",
@@ -155,10 +163,11 @@ GRADUATION_TARGETS = {
 }
 
 
-def generate_corpus(scenario_dir: Path, out_dir: Path, work_dir: Path | None, clean: bool) -> int:
+def generate_corpus(scenario_dir: Path, out_dir: Path, work_dir: Path | None, clean: bool, jobs: int = 1) -> int:
     paths = fixture_paths(scenario_dir)
     if not paths:
         raise SystemExit(f"no scenario fixtures found in {scenario_dir}")
+    jobs = resolve_jobs(jobs, len(paths))
 
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
@@ -168,63 +177,84 @@ def generate_corpus(scenario_dir: Path, out_dir: Path, work_dir: Path | None, cl
         if clean and work_dir.exists():
             shutil.rmtree(work_dir)
         work_dir.mkdir(parents=True, exist_ok=True)
-        return _generate(paths, out_dir, work_dir)
+        return _generate(paths, out_dir, work_dir, jobs)
 
     with tempfile.TemporaryDirectory(prefix="polystore-policy-runs-") as tmp:
-        return _generate(paths, out_dir, Path(tmp))
+        return _generate(paths, out_dir, Path(tmp), jobs)
 
 
-def _generate(paths: list[Path], out_dir: Path, run_root: Path) -> int:
+def _generate(paths: list[Path], out_dir: Path, run_root: Path, jobs: int) -> int:
     rows: list[dict[str, Any]] = []
     failures = 0
-    for path in paths:
-        spec = load_scenario_spec(path)
-        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
-        failed = [item for item in result.assertions if not item.passed]
-        if failed:
-            failures += 1
+    tasks = [(path, out_dir, run_root) for path in paths]
+    if jobs == 1:
+        results = [_generate_one(task) for task in tasks]
+    else:
+        with ProcessPoolExecutor(max_workers=jobs) as executor:
+            results = list(executor.map(_generate_one, tasks))
 
-        run_dir = run_root / spec.name
-        report_dir = out_dir / spec.name
-        write_output_dir(run_dir, result)
-        generate_run_report(run_dir, report_dir)
-        shutil.copy2(run_dir / "summary.json", report_dir / "summary.json")
-        shutil.copy2(run_dir / "assertions.json", report_dir / "assertions.json")
-        (report_dir / "manifest.json").write_text(
-            json.dumps(
-                {
-                    "scenario_fixture": str(path),
-                    "description": spec.description,
-                    "committed_artifacts": [
-                        "report.md",
-                        "risk_register.md",
-                        "graduation.md",
-                        "signals.json",
-                        "summary.json",
-                        "assertions.json",
-                        "graphs/*.svg",
-                    ],
-                    "omitted_artifacts": [
-                        "epochs.csv",
-                        "providers.csv",
-                        "slots.csv",
-                        "evidence.csv",
-                        "repairs.csv",
-                        "economy.csv",
-                    ],
-                    "omission_reason": "CSV ledgers are generated in CI/local artifacts to keep the committed report corpus reviewable.",
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        rows.append(index_row(spec.name, result, failed))
+    for row, failed_count in sorted(results, key=lambda item: item[0]["scenario"]):
+        rows.append(row)
+        failures += failed_count
 
     write_index(out_dir, rows)
     write_graduation_map(out_dir, rows)
     return 1 if failures else 0
+
+
+def _generate_one(task: tuple[Path, Path, Path]) -> tuple[dict[str, Any], int]:
+    path, out_dir, run_root = task
+    spec = load_scenario_spec(path)
+    result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+    failed = [item for item in result.assertions if not item.passed]
+
+    run_dir = run_root / spec.name
+    report_dir = out_dir / spec.name
+    write_output_dir(run_dir, result)
+    generate_run_report(run_dir, report_dir)
+    shutil.copy2(run_dir / "summary.json", report_dir / "summary.json")
+    shutil.copy2(run_dir / "assertions.json", report_dir / "assertions.json")
+    (report_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "scenario_fixture": str(path),
+                "description": spec.description,
+                "committed_artifacts": [
+                    "report.md",
+                    "risk_register.md",
+                    "graduation.md",
+                    "signals.json",
+                    "summary.json",
+                    "assertions.json",
+                    "graphs/*.svg",
+                ],
+                "omitted_artifacts": [
+                    "epochs.csv",
+                    "providers.csv",
+                    "operators.csv",
+                    "slots.csv",
+                    "evidence.csv",
+                    "repairs.csv",
+                    "economy.csv",
+                ],
+                "omission_reason": "CSV ledgers are generated in CI/local artifacts to keep the committed report corpus reviewable.",
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return index_row(spec.name, result, failed), int(bool(failed))
+
+
+def resolve_jobs(requested: int, task_count: int) -> int:
+    if task_count <= 1:
+        return 1
+    if requested > 0:
+        return min(requested, task_count)
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(task_count, cpu_count, 8))
 
 
 def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
@@ -252,6 +282,10 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "silver_serves": totals.get("silver_serves", 0),
         "fail_serves": totals.get("fail_serves", 0),
         "performance_reward_paid": totals.get("performance_reward_paid", 0),
+        "top_operator_provider_share_bps": totals.get("top_operator_provider_share_bps", 0),
+        "top_operator_assignment_share_bps": totals.get("top_operator_assignment_share_bps", 0),
+        "max_operator_deal_slots": totals.get("max_operator_deal_slots", 0),
+        "operator_deal_cap_violations": totals.get("operator_deal_cap_violations", 0),
         "suspect_slots": totals.get("suspect_slots", 0),
         "delinquent_slots": totals.get("delinquent_slots", 0),
         "providers_negative_pnl": totals.get("providers_negative_pnl", 0),
@@ -274,7 +308,8 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "python3 tools/policy_sim/generate_report_corpus.py \\",
         "  --scenario-dir tools/policy_sim/scenarios \\",
         "  --out-dir docs/simulation-reports/policy-sim \\",
-        "  --work-dir /tmp/polystore-policy-runs",
+        "  --work-dir /tmp/polystore-policy-runs \\",
+        "  --jobs 0",
         "```",
         "",
         "## Scenario Index",
@@ -283,10 +318,10 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | OpCap | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
@@ -297,6 +332,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['suspect_slots']}/{row['delinquent_slots']} | {row['repair_attempts']} | {row['repair_backoffs']} | "
             f"{row['high_bandwidth_promotions']}/{row['high_bandwidth_providers']} | "
             f"{row['platinum_serves']}/{row['gold_serves']}/{row['silver_serves']}/{row['fail_serves']} | "
+            f"{row['top_operator_assignment_share_bps']}/{row['max_operator_deal_slots']}/{row['operator_deal_cap_violations']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
             f"[report]({scenario}/report.md) |"
         )
@@ -409,6 +445,10 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "silver_serves": row.get("silver_serves", 0),
             "fail_serves": row.get("fail_serves", 0),
             "performance_reward_paid": row.get("performance_reward_paid", 0),
+            "top_operator_provider_share_bps": row.get("top_operator_provider_share_bps", 0),
+            "top_operator_assignment_share_bps": row.get("top_operator_assignment_share_bps", 0),
+            "max_operator_deal_slots": row.get("max_operator_deal_slots", 0),
+            "operator_deal_cap_violations": row.get("operator_deal_cap_violations", 0),
             "suspect_slots": row.get("suspect_slots", 0),
             "delinquent_slots": row.get("delinquent_slots", 0),
             "providers_negative_pnl": row["providers_negative_pnl"],
@@ -442,6 +482,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
+        "operator-concentration-cap",
     }
     if scenario in implementation_ready:
         return "implementation planning", []
@@ -470,6 +511,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
+        "operator-concentration-cap",
         "price-controller-bounds",
     ]
     ready.sort(key=lambda row: (priority.index(row["scenario"]) if row["scenario"] in priority else 99, row["scenario"]))
@@ -498,12 +540,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path)
     parser.add_argument("--no-clean", action="store_true", help="do not delete existing output directories before generation")
+    parser.add_argument("--jobs", type=int, default=0, help="parallel scenario workers; 0 auto-detects CPU count capped at 8")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return generate_corpus(args.scenario_dir, args.out_dir, args.work_dir, clean=not args.no_clean)
+    return generate_corpus(args.scenario_dir, args.out_dir, args.work_dir, clean=not args.no_clean, jobs=args.jobs)
 
 
 if __name__ == "__main__":

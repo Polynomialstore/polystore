@@ -313,6 +313,28 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertLess(result.totals["performance_fail_rate"], 0.35)
         self.assertTrue(any(row["performance_reward_revenue"] > 0 for row in result.providers))
 
+    def test_operator_concentration_cap_limits_per_deal_blast_radius(self):
+        config = SimConfig(
+            scenario="operator-concentration-cap",
+            seed=53,
+            providers=80,
+            users=120,
+            deals=40,
+            epochs=4,
+            operator_count=10,
+            dominant_operator_provider_bps=5000,
+            operator_assignment_cap_per_deal=2,
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertEqual(10, result.totals["operator_count"])
+        self.assertEqual(5000, result.totals["top_operator_provider_share_bps"])
+        self.assertLessEqual(result.totals["max_operator_deal_slots"], 2)
+        self.assertEqual(0, result.totals["operator_deal_cap_violations"])
+        self.assertLessEqual(result.totals["top_operator_assignment_share_bps"], 1700)
+        self.assertTrue(any(row["provider_count"] == 40 for row in result.operators))
+        self.assertTrue(all("operator_id" in row for row in result.providers))
+
     def test_jail_window_is_exclusive(self):
         simulator = PolicySimulator(
             SimConfig(
@@ -352,6 +374,7 @@ class PolicySimulatorTests(unittest.TestCase):
                 "assertions.json",
                 "epochs.csv",
                 "providers.csv",
+                "operators.csv",
                 "slots.csv",
                 "evidence.csv",
                 "repairs.csv",
@@ -391,6 +414,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
             self.assertTrue((report_dir / "graphs" / "hot_retrieval_routing.svg").exists())
             self.assertTrue((report_dir / "graphs" / "performance_tiers.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "operator_concentration.svg").exists())
             graph_text = (report_dir / "graphs" / "retrieval_success_rate.svg").read_text(encoding="utf-8")
             self.assertNotIn("Scale: x=epoch", graph_text)
             self.assertIn('y1="52"', graph_text)
@@ -402,6 +426,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("## Diagnostic Signals", report_text)
             self.assertIn("### Regional Signals", report_text)
             self.assertIn("### Top Bottleneck Providers", report_text)
+            self.assertIn("### Top Operators", report_text)
             self.assertIn("## Enforcement Interpretation", report_text)
             self.assertIn("## Economic Interpretation", report_text)
             self.assertIn("## Evidence Ledger Excerpt", report_text)
@@ -416,8 +441,10 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![High-Bandwidth Promotion](graphs/high_bandwidth_promotion.svg)", report_text)
             self.assertIn("![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)", report_text)
             self.assertIn("![Performance Tiers](graphs/performance_tiers.svg)", report_text)
+            self.assertIn("![Operator Concentration](graphs/operator_concentration.svg)", report_text)
             signal_text = (report_dir / "signals.json").read_text(encoding="utf-8")
             self.assertIn("availability", signal_text)
+            self.assertIn("concentration", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)
             risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")
             self.assertIn("## Material Risks", risk_text)

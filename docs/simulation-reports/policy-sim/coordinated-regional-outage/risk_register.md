@@ -19,6 +19,9 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `0.83%`
+- Top operator assignment share: `1.14%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `22`
 - Delinquent slot-epochs: `925`
 - Repair attempts: `794`

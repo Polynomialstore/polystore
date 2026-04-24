@@ -13,6 +13,7 @@
   "omitted_artifacts": [
     "epochs.csv",
     "providers.csv",
+    "operators.csv",
     "slots.csv",
     "evidence.csv",
     "repairs.csv",

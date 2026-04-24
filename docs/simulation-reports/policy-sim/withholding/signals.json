@@ -23,6 +23,18 @@
     "provider_capacity_utilization_p90_bps": 4375.0,
     "providers_over_capacity": 0.0
   },
+  "concentration": {
+    "max_operator_assignment_share_bps": 243.0,
+    "max_operator_deal_slots": 1.0,
+    "operator_count": 48.0,
+    "operator_deal_cap_violations": 0.0,
+    "top_operator_assigned_slots": 7.0,
+    "top_operator_assignment_share_bps": 243.0,
+    "top_operator_id": "op-016",
+    "top_operator_provider_count": 1.0,
+    "top_operator_provider_id": "op-016",
+    "top_operator_provider_share_bps": 208.0
+  },
   "economics": {
     "provider_pnl": 58.84,
     "provider_pnl_p10": 1.1115,
@@ -197,6 +209,88 @@
       "region": "global",
       "retrieval_attempts": 149.0,
       "saturated_responses": 0.0
+    }
+  ],
+  "top_operators": [
+    {
+      "assigned_slots": 7.0,
+      "assignment_share_bps": 243.0,
+      "operator_id": "op-016",
+      "pnl": 1.418,
+      "provider_count": 1.0,
+      "provider_share_bps": 208.0,
+      "retrieval_attempts": 148.0,
+      "success_rate": 1.0
+    },
+    {
+      "assigned_slots": 7.0,
+      "assignment_share_bps": 243.0,
+      "operator_id": "op-022",
+      "pnl": 1.452,
+      "provider_count": 1.0,
+      "provider_share_bps": 208.0,
+      "retrieval_attempts": 152.0,
+      "success_rate": 1.0
+    },
+    {
+      "assigned_slots": 7.0,
+      "assignment_share_bps": 243.0,
+      "operator_id": "op-024",
+      "pnl": 1.588,
+      "provider_count": 1.0,
+      "provider_share_bps": 208.0,
+      "retrieval_attempts": 168.0,
+      "success_rate": 1.0
+    },
+    {
+      "assigned_slots": 7.0,
+      "assignment_share_bps": 243.0,
+      "operator_id": "op-028",
+      "pnl": 1.537,
+      "provider_count": 1.0,
+      "provider_share_bps": 208.0,
+      "retrieval_attempts": 162.0,
+      "success_rate": 1.0
+    },
+    {
+      "assigned_slots": 7.0,
+      "assignment_share_bps": 243.0,
+      "operator_id": "op-035",
+      "pnl": 1.656,
+      "provider_count": 1.0,
+      "provider_share_bps": 208.0,
+      "retrieval_attempts": 176.0,
+      "success_rate": 1.0
+    },
+    {
+      "assigned_slots": 7.0,
+      "assignment_share_bps": 243.0,
+      "operator_id": "op-039",
+      "pnl": 1.35,
+      "provider_count": 1.0,
+      "provider_share_bps": 208.0,
+      "retrieval_attempts": 140.0,
+      "success_rate": 1.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "assignment_share_bps": 208.0,
+      "operator_id": "op-001",
+      "pnl": 1.171,
+      "provider_count": 1.0,
+      "provider_share_bps": 208.0,
+      "retrieval_attempts": 126.0,
+      "success_rate": 1.0
+    },
+    {
+      "assigned_slots": 6.0,
+      "assignment_share_bps": 208.0,
+      "operator_id": "op-002",
+      "pnl": 1.256,
+      "provider_count": 1.0,
+      "provider_share_bps": 208.0,
+      "retrieval_attempts": 136.0,
+      "success_rate": 1.0
     }
   ]
 }

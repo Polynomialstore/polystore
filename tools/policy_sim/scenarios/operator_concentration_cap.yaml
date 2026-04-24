@@ -1,0 +1,29 @@
+{
+  "name": "operator-concentration-cap",
+  "description": "Dominant operator controls many SP identities, but per-deal placement caps limit blast radius.",
+  "config": {
+    "scenario": "operator-concentration-cap",
+    "seed": 53,
+    "providers": 80,
+    "users": 160,
+    "deals": 40,
+    "epochs": 6,
+    "retrievals_per_user_per_epoch": 2,
+    "operator_count": 10,
+    "dominant_operator_provider_bps": 5000,
+    "operator_assignment_cap_per_deal": 2,
+    "provider_slot_capacity": 16,
+    "provider_fixed_cost_per_epoch": 0.0,
+    "provider_storage_cost_per_slot_epoch": 0.005,
+    "retrieval_price_per_slot": 0.012
+  },
+  "assertions": {
+    "min_success_rate": 0.99,
+    "max_data_loss_events": 0,
+    "min_top_operator_provider_share_bps": 5000,
+    "max_top_operator_assignment_share_bps": 1700,
+    "max_max_operator_deal_slots": 2,
+    "max_operator_deal_cap_violations": 0,
+    "max_providers_over_capacity": 0
+  }
+}

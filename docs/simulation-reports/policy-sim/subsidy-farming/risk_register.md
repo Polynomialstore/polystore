@@ -19,6 +19,9 @@ Model providers attempting to collect base rewards while skipping useful livenes
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `1.38%`
+- Top operator assignment share: `2.08%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `48`
 - Delinquent slot-epochs: `96`
 - Repair attempts: `48`

@@ -44,6 +44,9 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | High-bandwidth promotion | `false` |
 | High-bandwidth capacity threshold | `0` serves/epoch |
 | Hot retrieval share | `0.00%` |
+| Operators | `120` |
+| Dominant operator provider share | `0.00%` |
+| Operator assignment cap/deal | `0` (`0` means disabled) |
 | Provider regions | `na, eu, apac, sa` |
 
 ## Economic Assumptions
@@ -106,6 +109,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Platinum / Gold / Silver / Fail serves | `0` / `0` / `0` / `0` | Shows the latency-tier distribution for performance-market policy. |
 | Performance reward paid | `0.0000` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |
 | Provider latency p10 / p50 / p90 | `0` / `0` / `0` ms | Shows whether aggregate averages hide slow provider tails. |
+| Top operator provider share | `0.83%` | Shows whether many SP identities are controlled by one operator. |
+| Top operator assignment share | `1.14%` | Shows whether placement caps translate identity concentration into slot concentration. |
+| Max operator slots/deal | `1` | Checks per-deal blast-radius limits against operator Sybil concentration. |
+| Operator cap violations | `0` | Counts deals where operator slot concentration exceeded the configured cap. |
 | Final storage utilization | `67.41%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `71.42%` / `100.00%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
 | Provider P&L p10 / p50 / p90 | `0.3920` / `2.0405` / `2.2745` | Shows whether aggregate P&L hides marginal-provider distress. |
@@ -133,6 +140,19 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | `sp-081` | `eu` | 6/12 | 50.00% | 215 | 171 | 72 | 0 | 0.4415 |
 | `sp-093` | `eu` | 6/9 | 66.66% | 169 | 174 | 71 | 0 | 0.4755 |
 | `sp-065` | `eu` | 6/12 | 50.00% | 133 | 170 | 71 | 0 | 0.4215 |
+
+### Top Operators
+
+| Operator | Providers | Provider Share | Assigned Slots | Assignment Share | Retrieval Attempts | Success | P&L |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `op-006` | 1 | 0.83% | 11 | 1.14% | 207 | 100.00% | 2.1995 |
+| `op-051` | 1 | 0.83% | 11 | 1.14% | 243 | 100.00% | 2.5155 |
+| `op-059` | 1 | 0.83% | 11 | 1.14% | 235 | 100.00% | 2.4675 |
+| `op-083` | 1 | 0.83% | 11 | 1.14% | 229 | 100.00% | 2.4065 |
+| `op-004` | 1 | 0.83% | 10 | 1.04% | 209 | 100.00% | 2.1865 |
+| `op-014` | 1 | 0.83% | 10 | 1.04% | 234 | 100.00% | 2.4290 |
+| `op-019` | 1 | 0.83% | 10 | 1.04% | 231 | 100.00% | 2.4235 |
+| `op-026` | 1 | 0.83% | 10 | 1.04% | 219 | 100.00% | 2.3015 |
 
 ### Timeline
 
@@ -334,13 +354,20 @@ Shows the fast positive tier and Fail-tier service counts under the performance 
 
 ![Performance Tiers](graphs/performance_tiers.svg)
 
+### Operator Concentration
+
+Shows whether operator assignment share is bounded despite provider identity concentration.
+
+![Operator Concentration](graphs/operator_concentration.svg)
+
 ## Raw Artifacts
 
 - `summary.json`: compact machine-readable run summary.
 - `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.
 - `providers.csv`: final provider-level economics, fault counters, and capability tier.
+- `operators.csv`: final operator-level provider count, assignment share, success, and P&L metrics.
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
-- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.
+- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.

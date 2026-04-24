@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import os
 import shutil
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -122,8 +124,9 @@ def build_case(
     return SweepCase(name=name, config=config, faults=[*base_faults, *extra_faults], assertions=assertions)
 
 
-def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bool = True) -> dict[str, Any]:
+def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bool = True, jobs: int = 1) -> dict[str, Any]:
     spec = load_sweep_spec(spec_path)
+    jobs = resolve_jobs(jobs, len(spec.cases))
     sweep_run_dir = run_root / spec.name
     sweep_report_dir = report_root / spec.name
     if clean:
@@ -133,26 +136,15 @@ def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bo
     sweep_run_dir.mkdir(parents=True, exist_ok=True)
     sweep_report_dir.mkdir(parents=True, exist_ok=True)
 
-    failures = 0
-    case_rows = []
-    for case in spec.cases:
-        result = run_one(SimConfig(**case.config), case.faults, case.assertions, None)
-        failed = [item for item in result.assertions if not item.passed]
-        if failed:
-            failures += 1
-        run_dir = sweep_run_dir / case.name
-        write_output_dir(run_dir, result)
-        case_rows.append(
-            {
-                "case": case.name,
-                "scenario": result.config.get("scenario"),
-                "seed": result.config.get("seed"),
-                "failed_assertions": [item.name for item in failed],
-                "success_rate": result.totals.get("success_rate"),
-                "unavailable_reads": result.totals.get("unavailable_reads"),
-                "data_loss_events": result.totals.get("data_loss_events"),
-            }
-        )
+    tasks = [(case, sweep_run_dir) for case in spec.cases]
+    if jobs == 1:
+        results = [_run_sweep_case(task) for task in tasks]
+    else:
+        with ProcessPoolExecutor(max_workers=jobs) as executor:
+            results = list(executor.map(_run_sweep_case, tasks))
+
+    case_rows = [row for row, _failed_count in results]
+    failures = sum(failed_count for _row, failed_count in results)
 
     generate_sweep_report(sweep_run_dir, sweep_report_dir)
     manifest = {
@@ -163,7 +155,7 @@ def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bo
         "assertion_failures": failures,
         "raw_run_dir": f"sweep-artifacts/{spec.name}",
         "committed_artifacts": ["sweep_summary.md", "sweep_summary.json", "manifest.json"],
-        "omitted_artifacts": ["*/summary.json", "*/epochs.csv", "*/providers.csv", "*/slots.csv", "*/evidence.csv", "*/repairs.csv", "*/economy.csv"],
+        "omitted_artifacts": ["*/summary.json", "*/epochs.csv", "*/providers.csv", "*/operators.csv", "*/slots.csv", "*/evidence.csv", "*/repairs.csv", "*/economy.csv"],
         "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
         "cases": case_rows,
     }
@@ -172,6 +164,35 @@ def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bo
         encoding="utf-8",
     )
     return manifest
+
+
+def _run_sweep_case(task: tuple[SweepCase, Path]) -> tuple[dict[str, Any], int]:
+    case, sweep_run_dir = task
+    result = run_one(SimConfig(**case.config), case.faults, case.assertions, None)
+    failed = [item for item in result.assertions if not item.passed]
+    run_dir = sweep_run_dir / case.name
+    write_output_dir(run_dir, result)
+    return (
+        {
+            "case": case.name,
+            "scenario": result.config.get("scenario"),
+            "seed": result.config.get("seed"),
+            "failed_assertions": [item.name for item in failed],
+            "success_rate": result.totals.get("success_rate"),
+            "unavailable_reads": result.totals.get("unavailable_reads"),
+            "data_loss_events": result.totals.get("data_loss_events"),
+        },
+        int(bool(failed)),
+    )
+
+
+def resolve_jobs(requested: int, task_count: int) -> int:
+    if task_count <= 1:
+        return 1
+    if requested > 0:
+        return min(requested, task_count)
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(task_count, cpu_count, 8))
 
 
 def stable_repo_path(path: Path) -> str:
@@ -205,7 +226,8 @@ def write_sweep_index(out_dir: Path, manifests: list[dict[str, Any]]) -> None:
         "python3 tools/policy_sim/run_sweeps.py \\",
         "  --sweep-dir tools/policy_sim/sweeps \\",
         "  --run-dir /tmp/polystore-policy-sweep-runs \\",
-        "  --out-dir docs/simulation-reports/policy-sim/sweeps",
+        "  --out-dir docs/simulation-reports/policy-sim/sweeps \\",
+        "  --jobs 0",
         "```",
         "",
         "## Sweep Index",
@@ -257,6 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--no-clean", action="store_true", help="do not delete existing output directories before generation")
+    parser.add_argument("--jobs", type=int, default=0, help="parallel sweep-case workers; 0 auto-detects CPU count capped at 8")
     parser.add_argument("--fail-on-assertion", action="store_true", help="return non-zero when any sweep case assertion fails")
     return parser
 
@@ -271,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.sweep_dir:
         paths.extend(sweep_paths(args.sweep_dir))
 
-    manifests = [run_sweep_spec(path, args.run_dir, args.out_dir, clean=not args.no_clean) for path in paths]
+    manifests = [run_sweep_spec(path, args.run_dir, args.out_dir, clean=not args.no_clean, jobs=args.jobs) for path in paths]
     write_sweep_index(args.out_dir, manifests)
     failures = sum(int(manifest["assertion_failures"]) for manifest in manifests)
     return 1 if args.fail_on_assertion and failures else 0

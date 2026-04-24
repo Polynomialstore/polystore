@@ -19,6 +19,9 @@ Model hot retrieval demand with heterogeneous provider bandwidth. The policy que
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `1.04%`
+- Top operator assignment share: `1.04%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `0`
 - Delinquent slot-epochs: `0`
 - Repair attempts: `0`

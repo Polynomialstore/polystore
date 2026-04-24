@@ -19,6 +19,9 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `8.33%`
+- Top operator assignment share: `8.33%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `0`
 - Delinquent slot-epochs: `40`
 - Repair attempts: `8`

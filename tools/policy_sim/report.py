@@ -154,6 +154,15 @@ SCENARIO_GUIDES = {
         "expected": "Retrievals remain available, all latency tiers appear, Fail-tier serves earn no performance reward, and provider economics expose the tiered reward effect.",
         "review": "Use this before implementing latency-tier keeper params, provider telemetry, service-class reward multipliers, or hot-service placement priority.",
     },
+    "operator-concentration-cap": {
+        "title": "Operator Concentration Cap",
+        "intent": (
+            "Model a Sybil-shaped provider set where one operator controls many SP identities. The policy question is whether "
+            "placement can preserve per-deal operator diversity even when the dominant operator has enough provider keys and capacity to fill many slots."
+        ),
+        "expected": "The dominant operator is visible in provider-share signals, no deal exceeds the configured operator slot cap, and availability remains intact.",
+        "review": "Use this before implementing operator identity, per-deal assignment caps, Sybil concentration alerts, or replacement-candidate diversity checks.",
+    },
     "elasticity-cap-hit": {
         "title": "Elasticity Cap Hit",
         "intent": (
@@ -331,6 +340,11 @@ SWEEP_METRICS = [
     "high_bandwidth_serves",
     "hot_retrieval_attempts",
     "hot_high_bandwidth_serves",
+    "max_operator_assignment_share_bps",
+    "top_operator_assignment_share_bps",
+    "top_operator_provider_share_bps",
+    "max_operator_deal_slots",
+    "operator_deal_cap_violations",
     "platinum_serves",
     "gold_serves",
     "silver_serves",
@@ -400,6 +414,9 @@ SWEEP_CONFIG_KEYS = [
     "high_bandwidth_demotion_saturation_bps",
     "high_bandwidth_routing_enabled",
     "hot_retrieval_bps",
+    "operator_count",
+    "dominant_operator_provider_bps",
+    "operator_assignment_cap_per_deal",
     "provider_online_probability_min",
     "provider_online_probability_max",
     "provider_repair_probability_min",
@@ -411,6 +428,7 @@ def generate_run_report(run_dir: Path, out_dir: Path) -> None:
     summary = load_json(run_dir / "summary.json")
     epochs = load_csv(run_dir / "epochs.csv")
     providers = load_csv(run_dir / "providers.csv")
+    operators = load_csv(run_dir / "operators.csv")
     slots = load_csv(run_dir / "slots.csv")
     evidence = load_csv(run_dir / "evidence.csv")
     repairs = load_csv(run_dir / "repairs.csv")
@@ -419,12 +437,12 @@ def generate_run_report(run_dir: Path, out_dir: Path) -> None:
     graphs_dir = out_dir / "graphs"
     graphs_dir.mkdir(exist_ok=True)
 
-    signals = compute_signals(summary, epochs, providers, repairs, economy)
+    signals = compute_signals(summary, epochs, providers, operators, repairs, economy)
     (out_dir / "signals.json").write_text(
         json.dumps(stable_json_value(signals), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    write_report_md(out_dir / "report.md", summary, epochs, providers, slots, evidence, repairs, economy)
+    write_report_md(out_dir / "report.md", summary, epochs, providers, operators, slots, evidence, repairs, economy)
     write_risk_register(out_dir / "risk_register.md", summary, providers, evidence, repairs, economy)
     write_graduation_report(out_dir / "graduation.md", summary)
     write_graphs(graphs_dir, epochs, economy)
@@ -444,6 +462,7 @@ def compute_signals(
     summary: dict[str, Any],
     epochs: list[dict[str, str]],
     providers: list[dict[str, str]],
+    operators: list[dict[str, str]],
     repairs: list[dict[str, str]],
     economy: list[dict[str, str]],
 ) -> dict[str, Any]:
@@ -484,6 +503,8 @@ def compute_signals(
     online_probs = [fnum(row.get("online_probability")) for row in providers]
     assigned_slots = sum(fnum(row.get("assigned_slots")) for row in providers)
     capacity_slots = sum(fnum(row.get("capacity_slots")) for row in providers)
+    top_operator = max(operators, key=lambda row: fnum(row.get("assigned_slots")), default={})
+    top_operator_by_providers = max(operators, key=lambda row: fnum(row.get("provider_count")), default={})
     regions = regional_signals(providers)
 
     return {
@@ -581,8 +602,21 @@ def compute_signals(
             "provider_latency_p50_ms": percentile(provider_latencies, 50),
             "provider_latency_p90_ms": percentile(provider_latencies, 90),
         },
+        "concentration": {
+            "operator_count": fnum(totals.get("operator_count")),
+            "top_operator_id": top_operator.get("operator_id", ""),
+            "top_operator_assigned_slots": fnum(totals.get("top_operator_assigned_slots")),
+            "top_operator_assignment_share_bps": fnum(totals.get("top_operator_assignment_share_bps")),
+            "max_operator_assignment_share_bps": fnum(totals.get("max_operator_assignment_share_bps")),
+            "max_operator_deal_slots": fnum(totals.get("max_operator_deal_slots")),
+            "operator_deal_cap_violations": fnum(totals.get("operator_deal_cap_violations")),
+            "top_operator_provider_id": top_operator_by_providers.get("operator_id", ""),
+            "top_operator_provider_count": fnum(totals.get("top_operator_provider_count")),
+            "top_operator_provider_share_bps": fnum(totals.get("top_operator_provider_share_bps")),
+        },
         "regions": regions,
         "top_bottleneck_providers": top_bottleneck_providers(providers),
+        "top_operators": top_operators(operators),
     }
 
 
@@ -609,6 +643,29 @@ def regional_signals(providers: list[dict[str, str]]) -> list[dict[str, Any]]:
             }
         )
     return regions
+
+
+def top_operators(operators: list[dict[str, str]]) -> list[dict[str, Any]]:
+    ranked = sorted(
+        operators,
+        key=lambda row: (fnum(row.get("assigned_slots")), fnum(row.get("provider_count"))),
+        reverse=True,
+    )
+    out = []
+    for row in ranked[:8]:
+        out.append(
+            {
+                "operator_id": row.get("operator_id", ""),
+                "provider_count": fnum(row.get("provider_count")),
+                "provider_share_bps": fnum(row.get("provider_share_bps")),
+                "assigned_slots": fnum(row.get("assigned_slots")),
+                "assignment_share_bps": fnum(row.get("assignment_share_bps")),
+                "retrieval_attempts": fnum(row.get("retrieval_attempts")),
+                "success_rate": fnum(row.get("success_rate")),
+                "pnl": fnum(row.get("pnl")),
+            }
+        )
+    return out
 
 
 def top_bottleneck_providers(providers: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -646,6 +703,7 @@ def write_report_md(
     summary: dict[str, Any],
     epochs: list[dict[str, str]],
     providers: list[dict[str, str]],
+    operators: list[dict[str, str]],
     slots: list[dict[str, str]],
     evidence: list[dict[str, str]],
     repairs: list[dict[str, str]],
@@ -670,7 +728,7 @@ def write_report_md(
     verdict = "PASS" if assertions and not failed else "NEEDS REVIEW"
     if not assertions:
         verdict = "UNASSERTED"
-    signals = compute_signals(summary, epochs, providers, repairs, economy)
+    signals = compute_signals(summary, epochs, providers, operators, repairs, economy)
 
     lines = [
         f"# Policy Simulation Report: {guide['title']}",
@@ -733,6 +791,9 @@ def write_report_md(
             f"| High-bandwidth promotion | `{str(config.get('high_bandwidth_promotion_enabled')).lower()}` |",
             f"| High-bandwidth capacity threshold | `{fmt_num(config.get('high_bandwidth_capacity_threshold'))}` serves/epoch |",
             f"| Hot retrieval share | `{fmt_bps(config.get('hot_retrieval_bps'))}` |",
+            f"| Operators | `{config.get('operator_count') or config.get('providers')}` |",
+            f"| Dominant operator provider share | `{fmt_bps(config.get('dominant_operator_provider_bps'))}` |",
+            f"| Operator assignment cap/deal | `{fmt_num(config.get('operator_assignment_cap_per_deal'))}` (`0` means disabled) |",
             f"| Provider regions | `{', '.join(str(item) for item in config.get('provider_regions', []))}` |",
             "",
         "## Economic Assumptions",
@@ -756,6 +817,10 @@ def write_report_md(
         "### Top Bottleneck Providers",
         "",
         *bottleneck_provider_lines(signals),
+        "",
+        "### Top Operators",
+        "",
+        *top_operator_lines(signals),
         "",
         "### Timeline",
         "",
@@ -897,16 +962,23 @@ def write_report_md(
             "",
             "![Performance Tiers](graphs/performance_tiers.svg)",
             "",
+            "### Operator Concentration",
+            "",
+            "Shows whether operator assignment share is bounded despite provider identity concentration.",
+            "",
+            "![Operator Concentration](graphs/operator_concentration.svg)",
+            "",
             "## Raw Artifacts",
             "",
             "- `summary.json`: compact machine-readable run summary.",
             "- `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.",
             "- `providers.csv`: final provider-level economics, fault counters, and capability tier.",
+            "- `operators.csv`: final operator-level provider count, assignment share, success, and P&L metrics.",
             "- `slots.csv`: per-slot epoch ledger, including health state and reason.",
             "- `evidence.csv`: policy evidence events.",
             "- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
             "- `economy.csv`: per-epoch market and accounting ledger.",
-            "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.",
+            "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -990,6 +1062,13 @@ def build_behavior_narrative(
             f"`{fmt_num(totals.get('silver_serves'))}` Silver, and `{fmt_num(totals.get('fail_serves'))}` Fail serves. "
             f"Tiered performance rewards paid `{fmt_money(totals.get('performance_reward_paid'))}`."
         )
+    if fnum(totals.get("top_operator_provider_count")) > 1 or fnum(totals.get("operator_deal_cap_violations")) > 0:
+        parts.append(
+            f"Operator concentration was measured across `{fmt_num(totals.get('operator_count'))}` operators. "
+            f"The largest provider-share operator controlled `{fmt_bps(totals.get('top_operator_provider_share_bps'))}` of provider identities, while "
+            f"the largest assignment-share operator ended with `{fmt_bps(totals.get('top_operator_assignment_share_bps'))}` of assigned slots. "
+            f"The maximum same-operator slots in any deal was `{fmt_num(totals.get('max_operator_deal_slots'))}`."
+        )
     if fnum(totals.get("repair_backoffs")) > 0:
         parts.append(
             f"Repair coordination was constrained: `{fmt_num(totals.get('repair_backoffs'))}` repair backoffs occurred across "
@@ -1042,6 +1121,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
     economics = signals["economics"]
     high_bandwidth = signals["high_bandwidth"]
     performance = signals["performance"]
+    concentration = signals["concentration"]
     return [
         "| Signal | Value | Why It Matters |",
         "|---|---:|---|",
@@ -1067,6 +1147,10 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Platinum / Gold / Silver / Fail serves | `{fmt_num(performance['platinum_serves'])}` / `{fmt_num(performance['gold_serves'])}` / `{fmt_num(performance['silver_serves'])}` / `{fmt_num(performance['fail_serves'])}` | Shows the latency-tier distribution for performance-market policy. |",
         f"| Performance reward paid | `{fmt_money(performance['performance_reward_paid'])}` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |",
         f"| Provider latency p10 / p50 / p90 | `{fmt_num(performance['provider_latency_p10_ms'])}` / `{fmt_num(performance['provider_latency_p50_ms'])}` / `{fmt_num(performance['provider_latency_p90_ms'])}` ms | Shows whether aggregate averages hide slow provider tails. |",
+        f"| Top operator provider share | `{fmt_bps(concentration['top_operator_provider_share_bps'])}` | Shows whether many SP identities are controlled by one operator. |",
+        f"| Top operator assignment share | `{fmt_bps(concentration['top_operator_assignment_share_bps'])}` | Shows whether placement caps translate identity concentration into slot concentration. |",
+        f"| Max operator slots/deal | `{fmt_num(concentration['max_operator_deal_slots'])}` | Checks per-deal blast-radius limits against operator Sybil concentration. |",
+        f"| Operator cap violations | `{fmt_num(concentration['operator_deal_cap_violations'])}` | Counts deals where operator slot concentration exceeded the configured cap. |",
         f"| Final storage utilization | `{fmt_bps(capacity['final_utilization_bps'])}` | Active slots versus modeled provider capacity. |",
         f"| Provider utilization p50 / p90 / max | `{fmt_bps(capacity['provider_capacity_utilization_p50_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_p90_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_max_bps'])}` | Detects assignment concentration and capacity cliffs. |",
         f"| Provider P&L p10 / p50 / p90 | `{fmt_money(economics['provider_pnl_p10'])}` / `{fmt_money(economics['provider_pnl_p50'])}` / `{fmt_money(economics['provider_pnl_p90'])}` | Shows whether aggregate P&L hides marginal-provider distress. |",
@@ -1106,6 +1190,23 @@ def bottleneck_provider_lines(signals: dict[str, Any]) -> list[str]:
             f"{fmt_bps(row['capacity_utilization_bps'])} | {fmt_num(row['bandwidth_capacity_per_epoch'])} | "
             f"{fmt_num(row['retrieval_attempts'])} | {fmt_num(row['offline_responses'])} | "
             f"{fmt_num(row['saturated_responses'])} | {fmt_money(row['pnl'])} |"
+        )
+    return lines
+
+
+def top_operator_lines(signals: dict[str, Any]) -> list[str]:
+    operators = signals.get("top_operators", [])
+    if not operators:
+        return ["- No operator rows were recorded."]
+    lines = [
+        "| Operator | Providers | Provider Share | Assigned Slots | Assignment Share | Retrieval Attempts | Success | P&L |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in operators:
+        lines.append(
+            f"| `{row['operator_id']}` | {fmt_num(row['provider_count'])} | {fmt_bps(row['provider_share_bps'])} | "
+            f"{fmt_num(row['assigned_slots'])} | {fmt_bps(row['assignment_share_bps'])} | "
+            f"{fmt_num(row['retrieval_attempts'])} | {fmt_pct(row['success_rate'])} | {fmt_money(row['pnl'])} |"
         )
     return lines
 
@@ -1283,6 +1384,11 @@ def assertion_meaning(name: str) -> str:
         "min_saturated_responses": "Scale fixture must expose provider bandwidth saturation.",
         "min_repair_backoffs": "Scale fixture must expose healing coordination pressure.",
         "max_providers_over_capacity": "Assignment must respect modeled provider capacity.",
+        "min_top_operator_provider_share_bps": "Fixture must actually model a dominant operator controlling many provider identities.",
+        "max_top_operator_assignment_share_bps": "Placement should cap the dominant operator's final assignment share.",
+        "max_max_operator_assignment_share_bps": "No epoch should let one operator exceed the configured assignment-share ceiling.",
+        "max_max_operator_deal_slots": "No deal should assign more than this many slots to one operator.",
+        "max_operator_deal_cap_violations": "Per-deal operator cap should not be violated.",
         "min_final_storage_utilization_bps": "Network utilization should be high enough to make pricing/healing meaningful.",
         "max_final_storage_utilization_bps": "Network utilization should remain below the capacity cliff.",
         "min_final_storage_price": "Dynamic pricing should move storage price to or above this value by run end.",
@@ -1451,6 +1557,16 @@ def write_risk_register(
                 "followup": "Review service-class placement, latency tier windows, high-bandwidth routing, and performance reward multipliers.",
             }
         )
+    if fnum(totals.get("operator_deal_cap_violations")):
+        rows.append(
+            {
+                "risk": "Operator assignment cap violation",
+                "severity": "high",
+                "evidence": f"{fmt_num(totals.get('operator_deal_cap_violations'))} deal/operator groups exceeded the configured cap.",
+                "impact": "A single operator may gain too much per-deal blast radius despite multiple SP identities.",
+                "followup": "Review operator identity, initial placement, replacement-candidate fallback, and per-deal cap defaults.",
+            }
+        )
     if fnum(totals.get("repair_backoffs")):
         rows.append(
             {
@@ -1523,6 +1639,9 @@ def write_risk_register(
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
             f"- Performance Fail-tier serves: `{fmt_num(totals.get('fail_serves'))}`",
             f"- Performance reward paid: `{fmt_money(totals.get('performance_reward_paid'))}`",
+            f"- Top operator provider share: `{fmt_bps(totals.get('top_operator_provider_share_bps'))}`",
+            f"- Top operator assignment share: `{fmt_bps(totals.get('top_operator_assignment_share_bps'))}`",
+            f"- Operator cap violations: `{fmt_num(totals.get('operator_deal_cap_violations'))}`",
             f"- Suspect slot-epochs: `{fmt_num(totals.get('suspect_slots'))}`",
             f"- Delinquent slot-epochs: `{fmt_num(totals.get('delinquent_slots'))}`",
             f"- Repair attempts: `{fmt_num(totals.get('repair_attempts'))}`",
@@ -1558,6 +1677,7 @@ def graduation_semantics(scenario: str) -> str:
         "high-bandwidth-promotion": "Graduation means measured provider capability can promote hot-path eligibility without degrading availability or over-assigning capacity.",
         "high-bandwidth-regression": "Graduation means hot-path eligibility can be revoked when measured saturation regresses without causing durability loss.",
         "performance-market-latency": "Graduation means latency-tier windows, service-class attribution, and tiered performance rewards are deterministic and inspectable before keeper params are implemented.",
+        "operator-concentration-cap": "Graduation means operator identity and per-deal assignment caps can limit Sybil blast radius before keeper placement parameters are implemented.",
         "large-scale-regional-stress": "Graduation means the scale model preserves durability, exposes bottlenecks, and gives humans enough context to tune availability and economics.",
     }
     return semantics.get(
@@ -1600,6 +1720,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
+        "operator-concentration-cap",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -1644,6 +1765,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a keeper/runtime planning ticket that names the capability thresholds, probe telemetry, hot-route preference, assignment caps, and demotion conditions this fixture should enforce.")
     elif recommendation == "Candidate for implementation planning." and scenario == "performance-market-latency":
         lines.append("Create a keeper/runtime planning ticket that names service-class params, latency-tier windows, reward multipliers, telemetry inputs, and which QoS tiers affect placement without becoming slashable evidence.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "operator-concentration-cap":
+        lines.append("Create a keeper/runtime planning ticket that names operator identity source, per-deal assignment caps, replacement fallback behavior, and concentration alert thresholds.")
     elif recommendation == "Candidate for implementation planning.":
         lines.append("Create a keeper/e2e planning ticket that names the exact evidence rows, reward-accounting rule, and repair transition this fixture should enforce.")
     elif recommendation == "Candidate for further simulation review.":
@@ -1731,6 +1854,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("platinum_serves")) for row in epochs],
         secondary=[fnum(row.get("fail_serves")) for row in epochs],
         secondary_label="Fail Serves",
+    )
+    write_line_svg(
+        graphs_dir / "operator_concentration.svg",
+        "Top Operator Assignment Share BPS",
+        [fnum(row.get("max_operator_assignment_share_bps")) for row in epochs],
+        secondary=[fnum(row.get("operator_deal_cap_violations")) for row in epochs],
+        secondary_label="Cap Violations",
     )
 
 
@@ -1966,6 +2096,9 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("platinum_serves", "Whether the fastest performance tier was exercised."),
         ("fail_serves", "Whether slow/failed QoS service appeared."),
         ("performance_reward_paid", "Whether tiered performance rewards were paid."),
+        ("top_operator_assignment_share_bps", "Whether one operator dominates assignments."),
+        ("max_operator_deal_slots", "Whether per-deal operator blast radius is bounded."),
+        ("operator_deal_cap_violations", "Whether operator assignment caps were violated."),
         ("final_storage_utilization_bps", "Final active-slot utilization against modeled provider capacity."),
     ]
     lines = []
@@ -2011,6 +2144,8 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         return "Retrieval market accounting changed with demand volume or price settings."
     if key in {"platinum_serves", "gold_serves", "silver_serves", "fail_serves", "performance_reward_paid"}:
         return "Performance-market tiering changed; inspect service-class latency and reward assumptions."
+    if key in {"top_operator_assignment_share_bps", "max_operator_assignment_share_bps", "max_operator_deal_slots", "operator_deal_cap_violations"}:
+        return "Operator concentration changed; inspect placement diversity and cap semantics."
     if key == "saturated_responses":
         if delta > 0:
             return "Candidate exposed provider bandwidth saturation."
@@ -2326,6 +2461,11 @@ def sweep_metric_meaning(key: str) -> str:
         "high_bandwidth_serves": "Serves attributed to high-bandwidth providers.",
         "hot_retrieval_attempts": "Hot-service demand exercised by the run.",
         "hot_high_bandwidth_serves": "Hot retrieval serves handled by promoted high-bandwidth providers.",
+        "top_operator_assignment_share_bps": "Final assignment share of the largest operator.",
+        "max_operator_assignment_share_bps": "Worst observed assignment share of any operator across epochs.",
+        "top_operator_provider_share_bps": "Provider identity share controlled by the largest operator.",
+        "max_operator_deal_slots": "Maximum same-operator slots in any one deal.",
+        "operator_deal_cap_violations": "Deal/operator groups above the configured cap.",
         "suspect_slots": "Soft warning slot-epochs before thresholded delinquency.",
         "delinquent_slots": "Threshold-crossed slot-epochs that should be visible to operators.",
         "quota_misses": "Soft liveness evidence generated by the run.",

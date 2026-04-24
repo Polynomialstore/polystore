@@ -19,6 +19,9 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`
 - Performance reward paid: `0.0000`
+- Top operator provider share: `1.66%`
+- Top operator assignment share: `2.31%`
+- Operator cap violations: `0`
 - Suspect slot-epochs: `32`
 - Delinquent slot-epochs: `64`
 - Repair attempts: `32`
