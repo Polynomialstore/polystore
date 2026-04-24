@@ -2075,6 +2075,7 @@ def assertion_meaning(name: str) -> str:
         "min_elasticity_spent": "Elasticity fixture must spend non-zero user-funded overflow budget.",
         "max_elasticity_spent": "Elasticity fixture must stay within the configured user-funded spend cap.",
         "min_staged_upload_attempts": "Staged upload fixture must exercise provisional generation pressure.",
+        "min_staged_upload_committed": "Partial staged-upload flows should commit a non-zero share of provisional generations.",
         "min_staged_upload_rejections": "Staged upload grief must hit preflight rejection once pending provisional state reaches the cap.",
         "max_staged_upload_rejections": "Healthy staged upload flows should keep preflight rejection bounded.",
         "min_staged_upload_cleaned": "Staged upload retention must clean abandoned provisional generations.",

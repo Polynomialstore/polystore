@@ -28,6 +28,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `repair-throughput-large-scale` | 3 | 0 | Population-scale sensitivity sweep for repair-start throughput under the large regional stress fixture. | [summary](repair-throughput-large-scale/sweep_summary.md) |
 | `route-attempt-large-scale` | 3 | 1 | Population-scale sensitivity sweep for retrieval route-attempt limits during correlated regional stress. | [summary](route-attempt-large-scale/sweep_summary.md) |
 | `sponsored-retrieval-funding` | 3 | 2 | Sensitivity sweep for public retrieval demand funded by sponsor sessions versus owner deal escrow. | [summary](sponsored-retrieval-funding/sweep_summary.md) |
+| `staged-upload-controls` | 7 | 0 | Sensitivity sweep for staged upload retention, pending-generation caps, and partial commit pressure under abandoned provisional uploads. | [summary](staged-upload-controls/sweep_summary.md) |
 | `storage-escrow-close-refund` | 5 | 0 | Sensitivity sweep for storage lock-in, earned storage fees, early close refunds, and end-of-run outstanding escrow. | [summary](storage-escrow-close-refund/sweep_summary.md) |
 | `storage-escrow-noncompliance-modes` | 3 | 0 | Sensitivity sweep for storage-fee payout and burn behavior across measure-only, repair-only, and reward-exclusion enforcement modes. | [summary](storage-escrow-noncompliance-modes/sweep_summary.md) |
 

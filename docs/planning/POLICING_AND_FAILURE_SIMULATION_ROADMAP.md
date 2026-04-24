@@ -1274,7 +1274,10 @@ miss-driven audit demand against tight, moderate, clearing, reserve, high-cost,
 and low-cost budget assumptions before keeper audit-budget defaults are chosen;
 and `tools/policy_sim/sweeps/operator_concentration_controls.yaml`, which
 compares per-deal operator caps, disabled caps, dominant-operator share, and
-operator-count assumptions before placement-diversity defaults are chosen.
+operator-count assumptions before placement-diversity defaults are chosen; and
+`tools/policy_sim/sweeps/staged_upload_controls.yaml`, which compares
+retention TTL, pending-generation caps, no-cap behavior, and partial commit
+pressure before provider-daemon staged-generation cleanup defaults are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
