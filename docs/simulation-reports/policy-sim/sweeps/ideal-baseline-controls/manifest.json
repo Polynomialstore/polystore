@@ -1,0 +1,71 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/ideal.yaml",
+  "case_count": 5,
+  "cases": [
+    {
+      "case": "baseline-cooperative",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "ideal",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "larger-cooperative-population",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "ideal",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-read-demand-unconstrained-bandwidth",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "ideal",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "large-capacity-slack",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "ideal",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "mild-dynamic-pricing-no-shock",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "ideal",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Direct cooperative-baseline sweep covering scale, heterogeneous capacity, high retrieval demand, and mild pricing-controller activation without failures.",
+  "name": "ideal-baseline-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/ideal-baseline-controls"
+}

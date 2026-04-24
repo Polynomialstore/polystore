@@ -1,0 +1,96 @@
+{
+  "name": "ideal-baseline-controls",
+  "description": "Direct cooperative-baseline sweep covering scale, heterogeneous capacity, high retrieval demand, and mild pricing-controller activation without failures.",
+  "base_scenario": "../scenarios/ideal.yaml",
+  "cases": [
+    {
+      "name": "baseline-cooperative"
+    },
+    {
+      "name": "larger-cooperative-population",
+      "config": {
+        "providers": 128,
+        "users": 256,
+        "deals": 96,
+        "epochs": 10,
+        "provider_capacity_min": 12,
+        "provider_capacity_max": 24,
+        "provider_bandwidth_capacity_min": 150,
+        "provider_bandwidth_capacity_max": 300
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_repairs_started": 0,
+        "max_suspect_slots": 0,
+        "max_delinquent_slots": 0,
+        "max_quota_misses": 0,
+        "max_invalid_proofs": 0,
+        "max_saturated_responses": 0,
+        "max_providers_over_capacity": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_reward_coverage": 1.0
+      }
+    },
+    {
+      "name": "high-read-demand-unconstrained-bandwidth",
+      "config": {
+        "users": 240,
+        "deals": 48,
+        "epochs": 10,
+        "retrievals_per_user_per_epoch": 3,
+        "route_attempt_limit": 12
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_repairs_started": 0,
+        "max_quota_misses": 0,
+        "max_invalid_proofs": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_reward_coverage": 1.0
+      }
+    },
+    {
+      "name": "large-capacity-slack",
+      "config": {
+        "providers": 96,
+        "users": 180,
+        "deals": 60,
+        "epochs": 8,
+        "provider_capacity_min": 20,
+        "provider_capacity_max": 48
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_repairs_started": 0,
+        "max_providers_over_capacity": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_reward_coverage": 1.0
+      }
+    },
+    {
+      "name": "mild-dynamic-pricing-no-shock",
+      "config": {
+        "dynamic_pricing": true,
+        "storage_target_utilization_bps": 7000,
+        "retrieval_target_per_epoch": 120,
+        "dynamic_pricing_max_step_bps": 200
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_repairs_started": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_reward_coverage": 1.0,
+        "max_storage_price_direction_changes": 0,
+        "max_retrieval_price_direction_changes": 0
+      }
+    }
+  ]
+}

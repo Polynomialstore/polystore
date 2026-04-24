@@ -1,0 +1,100 @@
+{
+  "name": "high-bandwidth-promotion-controls",
+  "description": "Direct sweep for hot-retrieval high-bandwidth promotion across capacity thresholds, traffic pressure, routing enablement, and saturation guardrails.",
+  "base_scenario": "../scenarios/high_bandwidth_promotion.yaml",
+  "cases": [
+    {
+      "name": "baseline-promotion"
+    },
+    {
+      "name": "lower-capacity-threshold-more-promotions",
+      "config": {
+        "high_bandwidth_capacity_threshold": 250
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_high_bandwidth_promotions": 1,
+        "min_high_bandwidth_providers": 1,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1,
+        "max_high_bandwidth_demotions": 0,
+        "max_providers_over_capacity": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "strict-capacity-threshold-fewer-promotions",
+      "config": {
+        "high_bandwidth_capacity_threshold": 450
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_high_bandwidth_promotions": 1,
+        "min_high_bandwidth_providers": 1,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1,
+        "max_high_bandwidth_demotions": 0,
+        "max_providers_over_capacity": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "promotion-without-routing",
+      "config": {
+        "high_bandwidth_routing_enabled": false
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_high_bandwidth_promotions": 1,
+        "min_high_bandwidth_providers": 1,
+        "min_hot_retrieval_attempts": 1,
+        "max_high_bandwidth_demotions": 0,
+        "max_providers_over_capacity": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "lower-hot-demand-still-promotes",
+      "config": {
+        "users": 180,
+        "retrievals_per_user_per_epoch": 1,
+        "hot_retrieval_bps": 6000,
+        "high_bandwidth_min_retrievals": 8
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_high_bandwidth_promotions": 1,
+        "min_high_bandwidth_providers": 1,
+        "min_hot_retrieval_attempts": 1,
+        "max_high_bandwidth_demotions": 0,
+        "max_providers_over_capacity": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "saturation-guardrail-no-demotion",
+      "config": {
+        "provider_bandwidth_capacity_min": 160,
+        "provider_bandwidth_capacity_max": 360,
+        "high_bandwidth_capacity_threshold": 220,
+        "high_bandwidth_max_saturation_bps": 1500,
+        "high_bandwidth_demotion_saturation_bps": 0
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_high_bandwidth_promotions": 1,
+        "min_high_bandwidth_providers": 1,
+        "min_hot_retrieval_attempts": 1,
+        "min_hot_high_bandwidth_serves": 1,
+        "max_high_bandwidth_demotions": 0,
+        "max_providers_over_capacity": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "name": "single-outage-repair-controls",
+  "description": "Direct sweep for one-provider outage repair behavior across enforcement posture, threshold timing, multi-provider outages, and repair throughput limits.",
+  "base_scenario": "../scenarios/single_outage.yaml",
+  "cases": [
+    {
+      "name": "baseline-reward-exclusion"
+    },
+    {
+      "name": "repair-only-outage-repair",
+      "config": {
+        "enforcement_mode": "REPAIR_ONLY"
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_delinquent_slots": 1,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "measure-only-detects-without-repair",
+      "config": {
+        "enforcement_mode": "MEASURE_ONLY"
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 0,
+        "min_repairs_ready": 0,
+        "min_repairs_completed": 0,
+        "max_repairs_started": 0,
+        "min_suspect_slots": 0,
+        "min_delinquent_slots": 1,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "aggressive-threshold1",
+      "config": {
+        "evict_after_missed_epochs": 1,
+        "deputy_evict_after_missed_epochs": 1
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_suspect_slots": 0,
+        "min_delinquent_slots": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "delayed-threshold4",
+      "config": {
+        "evict_after_missed_epochs": 4,
+        "deputy_evict_after_missed_epochs": 3
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "min_suspect_slots": 1,
+        "min_delinquent_slots": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "multi-provider-outage",
+      "faults": [
+        "offline:sp-001:2-5",
+        "offline:sp-002:2-5",
+        "offline:sp-003:2-5"
+      ],
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 4,
+        "min_repairs_started": 4,
+        "min_repairs_ready": 4,
+        "min_repairs_completed": 4,
+        "min_delinquent_slots": 4,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "repair-throughput-limited",
+      "config": {
+        "max_repairs_started_per_epoch": 1,
+        "repair_epochs": 2,
+        "repair_backoff_epochs": 1
+      },
+      "faults": [
+        "offline:sp-001:2-5",
+        "offline:sp-002:2-5",
+        "offline:sp-003:2-5"
+      ],
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 4,
+        "min_repairs_started": 1,
+        "min_repair_backoffs": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    }
+  ]
+}

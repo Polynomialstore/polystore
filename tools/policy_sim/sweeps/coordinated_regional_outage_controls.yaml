@@ -1,0 +1,104 @@
+{
+  "name": "coordinated-regional-outage-controls",
+  "description": "Direct sweep for correlated regional outage handling across repair throughput, route attempts, outage severity, and larger heterogeneous populations.",
+  "base_scenario": "../scenarios/coordinated_regional_outage.yaml",
+  "cases": [
+    {
+      "name": "baseline-regional-outage"
+    },
+    {
+      "name": "route-attempt-tight-stress",
+      "config": {
+        "route_attempt_limit": 8
+      },
+      "assertions": {
+        "min_success_rate": 0.65,
+        "max_unavailable_reads": 900,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "route-attempt-wide",
+      "config": {
+        "route_attempt_limit": 20
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "repair-throughput-tight",
+      "config": {
+        "max_repairs_started_per_epoch": 6,
+        "repair_epochs": 3,
+        "repair_backoff_epochs": 1
+      },
+      "assertions": {
+        "min_success_rate": 0.95,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repair_backoffs": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "longer-regional-outage",
+      "config": {
+        "regional_outages": [
+          {"region": "eu", "epochs": "3-9"}
+        ],
+        "epochs": 14,
+        "max_repairs_started_per_epoch": 30
+      },
+      "assertions": {
+        "min_success_rate": 0.95,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "larger-heterogeneous-population",
+      "config": {
+        "providers": 360,
+        "users": 900,
+        "deals": 240,
+        "epochs": 16,
+        "provider_regions": ["na", "eu", "apac", "sa", "af", "oc"],
+        "regional_outages": [
+          {"region": "eu", "epochs": "5-9"}
+        ],
+        "provider_capacity_min": 12,
+        "provider_capacity_max": 32,
+        "provider_bandwidth_capacity_min": 90,
+        "provider_bandwidth_capacity_max": 260,
+        "provider_online_probability_min": 0.99,
+        "provider_online_probability_max": 1.0,
+        "max_repairs_started_per_epoch": 60,
+        "repair_epochs": 3
+      },
+      "assertions": {
+        "min_success_rate": 0.98,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_repairs_completed": 1,
+        "max_providers_over_capacity": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    }
+  ]
+}
