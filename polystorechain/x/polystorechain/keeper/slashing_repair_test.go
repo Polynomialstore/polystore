@@ -94,6 +94,7 @@ func requireNoPolicyRepairEvidence(t *testing.T, f *fixture, ctx sdk.Context) {
 	for _, kind := range []string{
 		"quota_miss_repair_started",
 		"deputy_miss_repair_started",
+		"repair_backoff_entered",
 		"slot_repair_completed",
 	} {
 		require.False(t, hasEvidenceSummary(t, f, ctx, kind), "unexpected evidence summary: %s", kind)
@@ -387,6 +388,51 @@ func TestCheckMissedProofs_Mode2RepairFallbackReusesProvider(t *testing.T) {
 	require.NotEmpty(t, slot0.PendingProvider)
 	require.NotEqual(t, providerA, slot0.PendingProvider)
 	require.Contains(t, []string{providerB, providerC}, slot0.PendingProvider)
+}
+
+func TestCheckMissedProofs_Mode2RepairBackoffWhenNoCandidate(t *testing.T) {
+	f := initFixture(t)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	params.EvictAfterMissedEpochs = 1
+	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC)
+
+	for _, addr := range []string{providerB, providerC} {
+		provider, err := f.keeper.Providers.Get(sdkCtx, addr)
+		require.NoError(t, err)
+		provider.Status = "Jailed"
+		require.NoError(t, f.keeper.Providers.Set(sdkCtx, addr, provider))
+	}
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	epochID := uint64(1)
+	setMode2EpochCredits(t, f, sdkCtx, dealID, epochID, 1, 2)
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	slot0 := updated.Mode2Slots[0]
+	require.NotNil(t, slot0)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, slot0.Status)
+	require.Empty(t, slot0.PendingProvider)
+
+	missed, err := f.keeper.Mode2MissedEpochs.Get(sdkCtx, collections.Join(dealID, uint32(0)))
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), missed)
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_repair_started"))
 }
 
 func TestCheckMissedProofs_CompletesMode2SlotRepairWhenQuotaMet(t *testing.T) {
