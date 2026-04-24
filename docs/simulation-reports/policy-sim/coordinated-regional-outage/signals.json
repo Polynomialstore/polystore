@@ -41,7 +41,7 @@
   "regions": [
     {
       "assigned_slots": 263.0,
-      "avg_provider_pnl": 2.113966666667,
+      "avg_provider_pnl": 2.113966667,
       "capacity_slots": 346.0,
       "negative_pnl_providers": 0,
       "offline_responses": 0.0,
@@ -52,7 +52,7 @@
     },
     {
       "assigned_slots": 170.0,
-      "avg_provider_pnl": 0.399083333333,
+      "avg_provider_pnl": 0.399083333,
       "capacity_slots": 351.0,
       "negative_pnl_providers": 0,
       "offline_responses": 1887.0,
@@ -63,7 +63,7 @@
     },
     {
       "assigned_slots": 260.0,
-      "avg_provider_pnl": 2.080316666667,
+      "avg_provider_pnl": 2.080316667,
       "capacity_slots": 370.0,
       "negative_pnl_providers": 0,
       "offline_responses": 0.0,
@@ -86,7 +86,7 @@
   ],
   "repair": {
     "backoffs": 1144.0,
-    "backoffs_per_started_repair": 11.916666666667,
+    "backoffs_per_started_repair": 11.916666667,
     "completed": 96.0,
     "completion_ratio": 1.0,
     "final_repair_backlog": 0.0,

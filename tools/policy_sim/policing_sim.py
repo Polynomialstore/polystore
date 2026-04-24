@@ -1314,7 +1314,7 @@ def add_generic_assertion(add, totals: dict[str, Any], name: str, expected: Any)
 
 def format_assert_value(value: Any) -> str:
     if isinstance(value, float):
-        return f"{value:.12g}"
+        return f"{value:.9g}"
     return str(value)
 
 
@@ -1435,7 +1435,7 @@ def write_json(path: Path, result: SimResult) -> None:
 
 def stable_json_value(value: Any) -> Any:
     if isinstance(value, float):
-        return round(value, 12)
+        return round(value, 9)
     if isinstance(value, dict):
         return {key: stable_json_value(item) for key, item in value.items()}
     if isinstance(value, list):

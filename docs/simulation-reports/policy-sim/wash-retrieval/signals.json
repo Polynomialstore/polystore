@@ -24,7 +24,7 @@
     "providers_over_capacity": 0.0
   },
   "economics": {
-    "provider_pnl": 394.559999999998,
+    "provider_pnl": 394.56,
     "provider_pnl_p10": 7.931,
     "provider_pnl_p50": 8.186,
     "provider_pnl_p90": 8.56,

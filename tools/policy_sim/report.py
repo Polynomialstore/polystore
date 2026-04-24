@@ -294,7 +294,7 @@ def generate_run_report(run_dir: Path, out_dir: Path) -> None:
 
 def stable_json_value(value: Any) -> Any:
     if isinstance(value, float):
-        return round(value, 12)
+        return round(value, 9)
     if isinstance(value, dict):
         return {key: stable_json_value(item) for key, item in value.items()}
     if isinstance(value, list):

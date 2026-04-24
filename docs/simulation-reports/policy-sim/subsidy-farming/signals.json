@@ -24,7 +24,7 @@
     "providers_over_capacity": 0.0
   },
   "economics": {
-    "provider_pnl": 252.799999999999,
+    "provider_pnl": 252.8,
     "provider_pnl_p10": 3.533,
     "provider_pnl_p50": 3.703,
     "provider_pnl_p90": 4.3075,
@@ -41,7 +41,7 @@
   "regions": [
     {
       "assigned_slots": 576.0,
-      "avg_provider_pnl": 3.511111111111,
+      "avg_provider_pnl": 3.511111111,
       "capacity_slots": 1152.0,
       "negative_pnl_providers": 6,
       "offline_responses": 0.0,

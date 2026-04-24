@@ -143,7 +143,7 @@
     "retrieval_successes": 800,
     "retrieval_variable_burned": 3.2,
     "reward_burned": 0.48,
-    "reward_coverage": 0.991666666667,
+    "reward_coverage": 0.991666667,
     "reward_eligible_slots": 2856,
     "reward_paid": 57.12,
     "reward_pool_minted": 57.6,

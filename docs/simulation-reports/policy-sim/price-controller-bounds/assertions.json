@@ -5,22 +5,22 @@
     "passed": true
   },
   {
-    "detail": "final_storage_price=1.4482981665, required>=1",
+    "detail": "final_storage_price=1.44829817, required>=1",
     "name": "min_final_storage_price",
     "passed": true
   },
   {
-    "detail": "final_storage_price=1.4482981665, required<=2",
+    "detail": "final_storage_price=1.44829817, required<=2",
     "name": "max_final_storage_price",
     "passed": true
   },
   {
-    "detail": "final_retrieval_price=0.014482981665, required>=0.01",
+    "detail": "final_retrieval_price=0.0144829817, required>=0.01",
     "name": "min_final_retrieval_price",
     "passed": true
   },
   {
-    "detail": "final_retrieval_price=0.014482981665, required<=0.05",
+    "detail": "final_retrieval_price=0.0144829817, required<=0.05",
     "name": "max_final_retrieval_price",
     "passed": true
   },

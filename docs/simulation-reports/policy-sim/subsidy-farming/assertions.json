@@ -10,7 +10,7 @@
     "passed": true
   },
   {
-    "detail": "reward_coverage=0.983050847458, required<=0.995",
+    "detail": "reward_coverage=0.983050847, required<=0.995",
     "name": "max_reward_coverage",
     "passed": true
   },

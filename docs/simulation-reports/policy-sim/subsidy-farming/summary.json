@@ -11,7 +11,7 @@
       "passed": true
     },
     {
-      "detail": "reward_coverage=0.983050847458, required<=0.995",
+      "detail": "reward_coverage=0.983050847, required<=0.995",
       "name": "max_reward_coverage",
       "passed": true
     },
@@ -132,8 +132,8 @@
     "paid_corrupt_bytes": 0,
     "provider_cost": 101.6,
     "provider_hard_faults": 0,
-    "provider_pnl": 252.799999999999,
-    "provider_revenue": 354.399999999999,
+    "provider_pnl": 252.8,
+    "provider_revenue": 354.4,
     "provider_slashed": 0.0,
     "providers_negative_pnl": 6,
     "providers_over_capacity": 0,
@@ -148,7 +148,7 @@
     "retrieval_successes": 1000,
     "retrieval_variable_burned": 4.0,
     "reward_burned": 4.8,
-    "reward_coverage": 0.983050847458,
+    "reward_coverage": 0.983050847,
     "reward_eligible_slots": 5568,
     "reward_paid": 278.4,
     "reward_pool_minted": 283.2,

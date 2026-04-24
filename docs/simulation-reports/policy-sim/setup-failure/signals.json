@@ -41,7 +41,7 @@
   "regions": [
     {
       "assigned_slots": 288.0,
-      "avg_provider_pnl": 0.979166666667,
+      "avg_provider_pnl": 0.979166667,
       "capacity_slots": 768.0,
       "negative_pnl_providers": 1,
       "offline_responses": 15.0,
