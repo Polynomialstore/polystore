@@ -8,7 +8,7 @@ Model a population-scale network with more than one thousand storage providers a
 
 Expected policy behavior: Availability should stay above the configured floor, price should remain bounded, saturation and repair backoffs should be visible, and no provider should be assigned above modeled capacity.
 
-Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` modeled data-loss events, `15482` bandwidth saturation responses and `12436` repair backoffs across `16060` repair attempts.
+Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` modeled data-loss events, `15482` bandwidth saturation responses and `12436` repair backoffs across `16060` repair attempts. Slot health recorded `361` suspect slot-epochs and `25634` delinquent slot-epochs.
 
 ## Review Focus
 
@@ -91,6 +91,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Repair backoff pressure | `3.4316` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Repair backoffs per attempt | `0.7743` | Distinguishes capacity/cooldown pressure from successful repair starts. |
 | Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
+| Suspect / delinquent slot-epochs | `361` / `25634` | Separates early warning state from threshold-crossed delinquency. |
 | Final repair backlog | `574` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `55.69%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `61.11%` / `94.44%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
@@ -126,30 +127,30 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | 99.78% | 1379 | 180 | 0 | 0 | 3.6900 | 472.3180 | 511 offline responses, 497 saturated, 180 quota misses, 11 repair backoffs |
-| 2 | 100.00% | 1085 | 138 | 0 | 0 | 2.6640 | 488.1882 | 391 offline responses, 421 saturated, 135 quota misses, 180 slots repairing |
-| 3 | 100.00% | 1009 | 126 | 0 | 0 | 2.3940 | 503.6600 | 316 offline responses, 459 saturated, 108 quota misses, 318 slots repairing |
-| 4 | 100.00% | 958 | 121 | 102 | 102 | 2.3220 | 519.8743 | 267 offline responses, 468 saturated, 102 quota misses, 444 slots repairing |
-| 5 | 99.90% | 1204 | 168 | 121 | 121 | 3.1500 | 537.0365 | 452 offline responses, 434 saturated, 150 quota misses, 463 slots repairing |
-| 6 | 99.97% | 907 | 113 | 139 | 139 | 2.1960 | 556.9552 | 306 offline responses, 378 saturated, 110 quota misses, 510 slots repairing |
-| 7 | 99.75% | 1230 | 168 | 117 | 117 | 3.3120 | 575.4129 | 461 offline responses, 436 saturated, 165 quota misses, 484 slots repairing |
-| 8 | 96.65% | 16790 | 180 | 114 | 114 | 54.4680 | 525.4441 | 9595 offline responses, 1288 saturated, 3025 quota misses, 2703 repair backoffs, 535 slots repairing |
-| 9 | 96.35% | 16131 | 180 | 108 | 108 | 51.1200 | 546.8025 | 9148 offline responses, 1413 saturated, 2836 quota misses, 2692 repair backoffs, 601 slots repairing |
-| 10 | 96.33% | 15270 | 180 | 134 | 134 | 47.5380 | 570.5596 | 8585 offline responses, 1534 saturated, 2635 quota misses, 2485 repair backoffs, 673 slots repairing |
-| 11 | 97.47% | 14159 | 180 | 127 | 127 | 44.7660 | 602.6376 | 7982 offline responses, 1340 saturated, 2475 quota misses, 2326 repair backoffs, 719 slots repairing |
-| 12 | 97.65% | 13782 | 180 | 150 | 150 | 42.4800 | 628.6651 | 7827 offline responses, 1378 saturated, 2342 quota misses, 2197 repair backoffs, 772 slots repairing |
-| 13 | 99.92% | 950 | 119 | 175 | 175 | 2.2140 | 709.0768 | 296 offline responses, 432 saturated, 105 quota misses, 802 slots repairing |
-| 14 | 99.25% | 1385 | 152 | 180 | 180 | 2.8620 | 730.3403 | 434 offline responses, 664 saturated, 135 quota misses, 746 slots repairing |
-| 15 | 99.93% | 1186 | 170 | 267 | 267 | 3.2760 | 762.3572 | 434 offline responses, 425 saturated, 157 quota misses, 718 slots repairing |
-| 16 | 99.87% | 952 | 111 | 168 | 168 | 2.2140 | 792.1959 | 283 offline responses, 451 saturated, 107 quota misses, 621 slots repairing |
-| 17 | 99.83% | 917 | 99 | 173 | 173 | 1.8540 | 821.7166 | 256 offline responses, 479 saturated, 83 quota misses, 564 slots repairing |
-| 18 | 100.00% | 971 | 153 | 157 | 157 | 2.8980 | 853.1627 | 388 offline responses, 287 saturated, 143 quota misses, 490 slots repairing |
-| 19 | 99.82% | 1285 | 157 | 138 | 138 | 3.0420 | 882.1683 | 420 offline responses, 562 saturated, 146 quota misses, 486 slots repairing |
-| 20 | 99.97% | 1239 | 164 | 111 | 111 | 3.0960 | 914.7988 | 455 offline responses, 461 saturated, 159 quota misses, 505 slots repairing |
-| 21 | 99.97% | 965 | 123 | 137 | 137 | 2.3760 | 947.3959 | 323 offline responses, 402 saturated, 117 quota misses, 558 slots repairing |
-| 22 | 99.88% | 893 | 118 | 156 | 156 | 2.1960 | 980.9474 | 268 offline responses, 411 saturated, 96 quota misses, 544 slots repairing |
-| 23 | 100.00% | 1137 | 164 | 141 | 141 | 3.1140 | 1017.0526 | 445 offline responses, 374 saturated, 154 quota misses, 506 slots repairing |
-| 24 | 99.97% | 1429 | 180 | 135 | 135 | 3.7440 | 1052.1894 | 550 offline responses, 488 saturated, 189 quota misses, 22 repair backoffs, 529 slots repairing |
+| 1 | 99.78% | 1379 | 180 | 0 | 0 | 3.6900 | 472.3180 | 511 offline responses, 497 saturated, 180 quota misses, 11 repair backoffs, 15 suspect slots, 190 delinquent slots |
+| 2 | 100.00% | 1085 | 138 | 0 | 0 | 2.6640 | 488.1882 | 391 offline responses, 421 saturated, 135 quota misses, 180 slots repairing, 10 suspect slots, 318 delinquent slots |
+| 3 | 100.00% | 1009 | 126 | 0 | 0 | 2.3940 | 503.6600 | 316 offline responses, 459 saturated, 108 quota misses, 318 slots repairing, 7 suspect slots, 444 delinquent slots |
+| 4 | 100.00% | 958 | 121 | 102 | 102 | 2.3220 | 519.8743 | 267 offline responses, 468 saturated, 102 quota misses, 444 slots repairing, 8 suspect slots, 463 delinquent slots |
+| 5 | 99.90% | 1204 | 168 | 121 | 121 | 3.1500 | 537.0365 | 452 offline responses, 434 saturated, 150 quota misses, 463 slots repairing, 7 suspect slots, 510 delinquent slots |
+| 6 | 99.97% | 907 | 113 | 139 | 139 | 2.1960 | 556.9552 | 306 offline responses, 378 saturated, 110 quota misses, 510 slots repairing, 9 suspect slots, 484 delinquent slots |
+| 7 | 99.75% | 1230 | 168 | 117 | 117 | 3.3120 | 575.4129 | 461 offline responses, 436 saturated, 165 quota misses, 484 slots repairing, 16 suspect slots, 535 delinquent slots |
+| 8 | 96.65% | 16790 | 180 | 114 | 114 | 54.4680 | 525.4441 | 9595 offline responses, 1288 saturated, 3025 quota misses, 2703 repair backoffs, 535 slots repairing, 170 suspect slots, 3277 delinquent slots |
+| 9 | 96.35% | 16131 | 180 | 108 | 108 | 51.1200 | 546.8025 | 9148 offline responses, 1413 saturated, 2836 quota misses, 2692 repair backoffs, 601 slots repairing, 5 suspect slots, 3328 delinquent slots |
+| 10 | 96.33% | 15270 | 180 | 134 | 134 | 47.5380 | 570.5596 | 8585 offline responses, 1534 saturated, 2635 quota misses, 2485 repair backoffs, 673 slots repairing, 6 suspect slots, 3174 delinquent slots |
+| 11 | 97.47% | 14159 | 180 | 127 | 127 | 44.7660 | 602.6376 | 7982 offline responses, 1340 saturated, 2475 quota misses, 2326 repair backoffs, 719 slots repairing, 3 suspect slots, 3076 delinquent slots |
+| 12 | 97.65% | 13782 | 180 | 150 | 150 | 42.4800 | 628.6651 | 7827 offline responses, 1378 saturated, 2342 quota misses, 2197 repair backoffs, 772 slots repairing, 8 suspect slots, 2974 delinquent slots |
+| 13 | 99.92% | 950 | 119 | 175 | 175 | 2.2140 | 709.0768 | 296 offline responses, 432 saturated, 105 quota misses, 802 slots repairing, 4 suspect slots, 746 delinquent slots |
+| 14 | 99.25% | 1385 | 152 | 180 | 180 | 2.8620 | 730.3403 | 434 offline responses, 664 saturated, 135 quota misses, 746 slots repairing, 7 suspect slots, 718 delinquent slots |
+| 15 | 99.93% | 1186 | 170 | 267 | 267 | 3.2760 | 762.3572 | 434 offline responses, 425 saturated, 157 quota misses, 718 slots repairing, 12 suspect slots, 621 delinquent slots |
+| 16 | 99.87% | 952 | 111 | 168 | 168 | 2.2140 | 792.1959 | 283 offline responses, 451 saturated, 107 quota misses, 621 slots repairing, 12 suspect slots, 564 delinquent slots |
+| 17 | 99.83% | 917 | 99 | 173 | 173 | 1.8540 | 821.7166 | 256 offline responses, 479 saturated, 83 quota misses, 564 slots repairing, 4 suspect slots, 490 delinquent slots |
+| 18 | 100.00% | 971 | 153 | 157 | 157 | 2.8980 | 853.1627 | 388 offline responses, 287 saturated, 143 quota misses, 490 slots repairing, 8 suspect slots, 486 delinquent slots |
+| 19 | 99.82% | 1285 | 157 | 138 | 138 | 3.0420 | 882.1683 | 420 offline responses, 562 saturated, 146 quota misses, 486 slots repairing, 12 suspect slots, 505 delinquent slots |
+| 20 | 99.97% | 1239 | 164 | 111 | 111 | 3.0960 | 914.7988 | 455 offline responses, 461 saturated, 159 quota misses, 505 slots repairing, 8 suspect slots, 558 delinquent slots |
+| 21 | 99.97% | 965 | 123 | 137 | 137 | 2.3760 | 947.3959 | 323 offline responses, 402 saturated, 117 quota misses, 558 slots repairing, 9 suspect slots, 544 delinquent slots |
+| 22 | 99.88% | 893 | 118 | 156 | 156 | 2.1960 | 980.9474 | 268 offline responses, 411 saturated, 96 quota misses, 544 slots repairing, 4 suspect slots, 506 delinquent slots |
+| 23 | 100.00% | 1137 | 164 | 141 | 141 | 3.1140 | 1017.0526 | 445 offline responses, 374 saturated, 154 quota misses, 506 slots repairing, 9 suspect slots, 529 delinquent slots |
+| 24 | 99.97% | 1429 | 180 | 135 | 135 | 3.7440 | 1052.1894 | 550 offline responses, 488 saturated, 189 quota misses, 22 repair backoffs, 529 slots repairing, 8 suspect slots, 594 delinquent slots |
 
 ## Enforcement Interpretation
 
@@ -180,6 +181,8 @@ Repair summary:
 - Repair backoffs: `12436`
 - Repair cooldown backoffs: `0`
 - Repair attempt-cap backoffs: `0`
+- Suspect slot-epochs: `361`
+- Delinquent slot-epochs: `25634`
 - Final active slots in last epoch: `17426`
 
 ### Repair Ledger Excerpt
@@ -317,7 +320,7 @@ Shows whether started repairs are accumulating faster than they complete.
 - `summary.json`: compact machine-readable run summary.
 - `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.
 - `providers.csv`: final provider-level economics and fault counters.
-- `slots.csv`: per-slot epoch ledger.
+- `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.

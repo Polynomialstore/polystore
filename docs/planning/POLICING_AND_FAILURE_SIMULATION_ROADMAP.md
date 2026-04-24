@@ -602,7 +602,9 @@ emitting repair ledger events in `started/ready/completed` order, where `ready`
 represents pending-provider catch-up evidence before promotion. Missing
 desired-state pieces include:
 
-1. Explicit `SUSPECT` / `DELINQUENT` reason codes.
+1. Keeper/runtime `SUSPECT` / `DELINQUENT` reason codes. The simulator now
+   emits per-slot `HEALTHY`, `SUSPECT`, and `DELINQUENT` health state with
+   reason codes in `slots.csv`.
 2. Keeper/runtime repair attempt counters and cooldown windows. The simulator
    now models these with `repair_attempt_cap_per_slot`,
    `repair_backoff_epochs`, per-slot attempt state, cooldown backoff events,
@@ -1187,8 +1189,8 @@ Each simulator run should be able to emit:
 2. `epochs.csv`: one row per epoch with reliability and economic metrics.
 3. `providers.csv`: one row per provider with health, assignment, reward,
    payout, P&L, and churn-risk metrics.
-4. `slots.csv`: one row per deal-slot with lifecycle, repair, provider, and
-   reward eligibility state.
+4. `slots.csv`: one row per deal-slot with lifecycle, health reason, repair,
+   provider, and reward eligibility state.
 5. `evidence.csv`: hard faults, soft faults, threshold evidence, and source.
 6. `repairs.csv`: repair start, candidate selection, catch-up, promotion,
    attempt-count, cooldown, attempt-cap, and backoff events.

@@ -17,6 +17,8 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Suspect slot-epochs: `0`
+- Delinquent slot-epochs: `40`
 - Repair attempts: `8`
 - Repair backoffs: `40`
 - Repair cooldowns: `16`

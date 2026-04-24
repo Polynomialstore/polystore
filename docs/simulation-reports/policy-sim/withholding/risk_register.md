@@ -17,6 +17,8 @@ Model a provider that stays nominally online but withholds retrieval responses a
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Suspect slot-epochs: `0`
+- Delinquent slot-epochs: `12`
 - Repair attempts: `6`
 - Repair backoffs: `0`
 - Repair cooldowns: `0`

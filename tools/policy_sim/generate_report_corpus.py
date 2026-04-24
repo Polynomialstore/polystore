@@ -224,6 +224,8 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "repair_backoffs": totals.get("repair_backoffs", 0),
         "repair_cooldowns": totals.get("repair_cooldowns", 0),
         "repair_attempt_caps": totals.get("repair_attempt_caps", 0),
+        "suspect_slots": totals.get("suspect_slots", 0),
+        "delinquent_slots": totals.get("delinquent_slots", 0),
         "providers_negative_pnl": totals.get("providers_negative_pnl", 0),
         "saturated_responses": totals.get("saturated_responses", 0),
         "assertions": [asdict(item) for item in result.assertions],
@@ -255,15 +257,16 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Attempts | Backoffs | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
         lines.append(
             f"| `{scenario}` | `{row['verdict']}` | {row['success_rate']:.4f} | "
             f"{row['unavailable_reads']} | {row['data_loss_events']} | "
-            f"{row['repairs_started']}/{row['repairs_ready']}/{row['repairs_completed']} | {row['repair_attempts']} | {row['repair_backoffs']} | "
+            f"{row['repairs_started']}/{row['repairs_ready']}/{row['repairs_completed']} | "
+            f"{row['suspect_slots']}/{row['delinquent_slots']} | {row['repair_attempts']} | {row['repair_backoffs']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
             f"[report]({scenario}/report.md) |"
         )
@@ -366,6 +369,8 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "repair_backoffs": row["repair_backoffs"],
             "repair_cooldowns": row.get("repair_cooldowns", 0),
             "repair_attempt_caps": row.get("repair_attempt_caps", 0),
+            "suspect_slots": row.get("suspect_slots", 0),
+            "delinquent_slots": row.get("delinquent_slots", 0),
             "providers_negative_pnl": row["providers_negative_pnl"],
             "saturated_responses": row["saturated_responses"],
         },

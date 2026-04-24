@@ -47,6 +47,7 @@
     "seed": 29,
     "totals": {
       "data_loss_events": 0.0,
+      "delinquent_slots": 19476.0,
       "final_retrieval_price": 0.024267259,
       "final_storage_price": 0.440684938,
       "final_storage_utilization_bps": 5707.0,
@@ -66,6 +67,7 @@
       "reward_coverage": 0.966306814,
       "saturated_responses": 12704.0,
       "success_rate": 0.995159722,
+      "suspect_slots": 228.0,
       "unavailable_reads": 697.0
     }
   },
@@ -118,6 +120,7 @@
       "seed": 29,
       "totals": {
         "data_loss_events": 0.0,
+        "delinquent_slots": 19476.0,
         "final_retrieval_price": 0.024267259,
         "final_storage_price": 0.440684938,
         "final_storage_utilization_bps": 5707.0,
@@ -137,6 +140,7 @@
         "reward_coverage": 0.966306814,
         "saturated_responses": 12704.0,
         "success_rate": 0.995159722,
+        "suspect_slots": 228.0,
         "unavailable_reads": 697.0
       }
     },
@@ -188,6 +192,7 @@
       "seed": 29,
       "totals": {
         "data_loss_events": 0.0,
+        "delinquent_slots": 25634.0,
         "final_retrieval_price": 0.024267259,
         "final_storage_price": 0.440684938,
         "final_storage_utilization_bps": 5569.0,
@@ -207,6 +212,7 @@
         "reward_coverage": 0.961174242,
         "saturated_responses": 15482.0,
         "success_rate": 0.992604167,
+        "suspect_slots": 361.0,
         "unavailable_reads": 1065.0
       }
     },
@@ -257,6 +263,7 @@
       "seed": 29,
       "totals": {
         "data_loss_events": 0.0,
+        "delinquent_slots": 29466.0,
         "final_retrieval_price": 0.024267259,
         "final_storage_price": 0.440684938,
         "final_storage_utilization_bps": 5539.0,
@@ -276,6 +283,7 @@
         "reward_coverage": 0.955320587,
         "saturated_responses": 17494.0,
         "success_rate": 0.992138889,
+        "suspect_slots": 461.0,
         "unavailable_reads": 1132.0
       }
     }
@@ -286,6 +294,12 @@
       "max": 0.0,
       "mean": 0.0,
       "min": 0.0
+    },
+    "delinquent_slots": {
+      "delta": 9990.0,
+      "max": 29466.0,
+      "mean": 24858.666666667,
+      "min": 19476.0
     },
     "final_retrieval_price": {
       "delta": 0.0,
@@ -401,6 +415,12 @@
       "mean": 0.993300926,
       "min": 0.992138889
     },
+    "suspect_slots": {
+      "delta": 233.0,
+      "max": 461.0,
+      "mean": 350.0,
+      "min": 228.0
+    },
     "unavailable_reads": {
       "delta": 435.0,
       "max": 1132.0,
@@ -458,6 +478,7 @@
       "seed": 29,
       "totals": {
         "data_loss_events": 0.0,
+        "delinquent_slots": 29466.0,
         "final_retrieval_price": 0.024267259,
         "final_storage_price": 0.440684938,
         "final_storage_utilization_bps": 5539.0,
@@ -477,6 +498,7 @@
         "reward_coverage": 0.955320587,
         "saturated_responses": 17494.0,
         "success_rate": 0.992138889,
+        "suspect_slots": 461.0,
         "unavailable_reads": 1132.0
       }
     },
@@ -528,6 +550,7 @@
       "seed": 29,
       "totals": {
         "data_loss_events": 0.0,
+        "delinquent_slots": 25634.0,
         "final_retrieval_price": 0.024267259,
         "final_storage_price": 0.440684938,
         "final_storage_utilization_bps": 5569.0,
@@ -547,6 +570,7 @@
         "reward_coverage": 0.961174242,
         "saturated_responses": 15482.0,
         "success_rate": 0.992604167,
+        "suspect_slots": 361.0,
         "unavailable_reads": 1065.0
       }
     },
@@ -598,6 +622,7 @@
       "seed": 29,
       "totals": {
         "data_loss_events": 0.0,
+        "delinquent_slots": 19476.0,
         "final_retrieval_price": 0.024267259,
         "final_storage_price": 0.440684938,
         "final_storage_utilization_bps": 5707.0,
@@ -617,6 +642,7 @@
         "reward_coverage": 0.966306814,
         "saturated_responses": 12704.0,
         "success_rate": 0.995159722,
+        "suspect_slots": 228.0,
         "unavailable_reads": 697.0
       }
     }

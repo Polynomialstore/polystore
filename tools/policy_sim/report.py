@@ -281,6 +281,8 @@ SWEEP_METRICS = [
     "repair_backoffs",
     "repair_cooldowns",
     "repair_attempt_caps",
+    "suspect_slots",
+    "delinquent_slots",
     "quota_misses",
     "invalid_proofs",
     "paid_corrupt_bytes",
@@ -437,6 +439,8 @@ def compute_signals(
             "peak_repairing_epoch": int(fnum(peak_repairing_epoch.get("epoch"))),
             "peak_repairing_slots": fnum(peak_repairing_epoch.get("repairing_slots")),
             "final_repair_backlog": max(0.0, repair_started - repair_completed),
+            "suspect_slot_epochs": fnum(totals.get("suspect_slots")),
+            "delinquent_slot_epochs": fnum(totals.get("delinquent_slots")),
         },
         "capacity": {
             "assigned_slots": assigned_slots,
@@ -580,7 +584,9 @@ def write_report_md(
         f"`{fmt_num(totals.get('data_loss_events'))}` modeled data-loss events, "
         f"`{fmt_num(totals.get('saturated_responses'))}` bandwidth saturation responses and "
         f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs across "
-        f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts.",
+        f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts. Slot health recorded "
+        f"`{fmt_num(totals.get('suspect_slots'))}` suspect slot-epochs and "
+        f"`{fmt_num(totals.get('delinquent_slots'))}` delinquent slot-epochs.",
         "",
         "## Review Focus",
         "",
@@ -665,6 +671,8 @@ def write_report_md(
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Repair cooldown backoffs: `{fmt_num(totals.get('repair_cooldowns'))}`",
             f"- Repair attempt-cap backoffs: `{fmt_num(totals.get('repair_attempt_caps'))}`",
+            f"- Suspect slot-epochs: `{fmt_num(totals.get('suspect_slots'))}`",
+            f"- Delinquent slot-epochs: `{fmt_num(totals.get('delinquent_slots'))}`",
             f"- Final active slots in last epoch: `{len(active_end_slots)}`",
             "",
             "### Repair Ledger Excerpt",
@@ -754,7 +762,7 @@ def write_report_md(
             "- `summary.json`: compact machine-readable run summary.",
             "- `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.",
             "- `providers.csv`: final provider-level economics and fault counters.",
-            "- `slots.csv`: per-slot epoch ledger.",
+            "- `slots.csv`: per-slot epoch ledger, including health state and reason.",
             "- `evidence.csv`: policy evidence events.",
             "- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.",
             "- `economy.csv`: per-epoch market and accounting ledger.",
@@ -894,6 +902,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Repair backoff pressure | `{fmt_num(repair['backoffs_per_started_repair'])}` backoffs per started repair | Shows whether repair coordination is saturated. |",
         f"| Repair backoffs per attempt | `{fmt_num(repair['backoffs_per_attempt'])}` | Distinguishes capacity/cooldown pressure from successful repair starts. |",
         f"| Repair cooldowns / attempt caps | `{fmt_num(repair['cooldowns'])}` / `{fmt_num(repair['attempt_caps'])}` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |",
+        f"| Suspect / delinquent slot-epochs | `{fmt_num(repair['suspect_slot_epochs'])}` / `{fmt_num(repair['delinquent_slot_epochs'])}` | Separates early warning state from threshold-crossed delinquency. |",
         f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed repairs at run end. |",
         f"| Final storage utilization | `{fmt_bps(capacity['final_utilization_bps'])}` | Active slots versus modeled provider capacity. |",
         f"| Provider utilization p50 / p90 / max | `{fmt_bps(capacity['provider_capacity_utilization_p50_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_p90_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_max_bps'])}` | Detects assignment concentration and capacity cliffs. |",
@@ -971,6 +980,10 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('data_loss_events'))} data-loss events")
         if fnum(row.get("repairing_slots")):
             notes.append(f"{fmt_num(row.get('repairing_slots'))} slots repairing")
+        if fnum(row.get("suspect_slots")):
+            notes.append(f"{fmt_num(row.get('suspect_slots'))} suspect slots")
+        if fnum(row.get("delinquent_slots")):
+            notes.append(f"{fmt_num(row.get('delinquent_slots'))} delinquent slots")
         if not notes:
             notes.append("steady state")
         rows.append(
@@ -1045,6 +1058,10 @@ def assertion_meaning(name: str) -> str:
         "max_repair_cooldowns": "Repair cooldown ceiling: cooldown throttling must not dominate healthy recovery.",
         "min_repair_attempt_caps": "Repair attempt-cap accounting: bounded retry fixtures must hit and report the cap.",
         "max_repair_attempt_caps": "Repair attempt-cap ceiling: healthy repair paths should not exhaust attempts.",
+        "min_suspect_slots": "Health-state observability: soft failures should become suspect before punitive consequences.",
+        "max_suspect_slots": "Healthy baseline should not produce suspect slot state.",
+        "min_delinquent_slots": "Delinquency observability: threshold-crossed slots should expose delinquent state.",
+        "max_delinquent_slots": "Transient jitter should not cross into delinquent slot state.",
         "max_quota_misses": "Healthy providers should not miss liveness quota.",
         "min_quota_misses": "Fault fixture must generate quota evidence.",
         "max_invalid_proofs": "Healthy providers should never produce invalid proofs.",
@@ -1285,6 +1302,8 @@ def write_risk_register(
             f"- Elasticity rejections: `{fmt_num(elasticity_rejections)}`",
             f"- Data-loss events: `{fmt_num(totals.get('data_loss_events'))}`",
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
+            f"- Suspect slot-epochs: `{fmt_num(totals.get('suspect_slots'))}`",
+            f"- Delinquent slot-epochs: `{fmt_num(totals.get('delinquent_slots'))}`",
             f"- Repair attempts: `{fmt_num(totals.get('repair_attempts'))}`",
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Repair cooldowns: `{fmt_num(totals.get('repair_cooldowns'))}`",
@@ -1670,6 +1689,8 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("repair_attempts", "Whether repair retry/accounting pressure changed."),
         ("repair_cooldowns", "Whether repair retry cooldown throttling was exercised."),
         ("repair_attempt_caps", "Whether per-slot repair attempt caps were hit."),
+        ("suspect_slots", "Whether soft warning state was exercised."),
+        ("delinquent_slots", "Whether threshold-crossed slot state was exercised."),
         ("quota_misses", "Soft liveness evidence created by the candidate."),
         ("invalid_proofs", "Hard evidence created by the candidate."),
         ("paid_corrupt_bytes", "Corrupt data payment safety invariant."),
@@ -1703,7 +1724,7 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         if delta > 0:
             return "Repair path was exercised in the candidate scenario."
         return "Repair activity did not increase."
-    if key in {"quota_misses", "deputy_misses", "invalid_proofs", "withheld_responses", "offline_responses"}:
+    if key in {"quota_misses", "deputy_misses", "invalid_proofs", "withheld_responses", "offline_responses", "suspect_slots", "delinquent_slots"}:
         if delta > 0:
             return "Candidate generated additional policy evidence."
         return "Candidate did not add this evidence class."
@@ -2018,6 +2039,8 @@ def sweep_metric_meaning(key: str) -> str:
         "repair_backoffs": "Replacement capacity or repair-start bottlenecks.",
         "repair_cooldowns": "Retry cooldowns that intentionally throttle repair churn.",
         "repair_attempt_caps": "Per-slot attempt caps hit before a replacement could start.",
+        "suspect_slots": "Soft warning slot-epochs before thresholded delinquency.",
+        "delinquent_slots": "Threshold-crossed slot-epochs that should be visible to operators.",
         "quota_misses": "Soft liveness evidence generated by the run.",
         "invalid_proofs": "Hard-fault evidence generated by the run.",
         "paid_corrupt_bytes": "Payment safety invariant; should remain zero.",

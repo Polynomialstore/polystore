@@ -17,6 +17,8 @@ Model artificial retrieval demand. The policy question is whether fake activity 
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Suspect slot-epochs: `0`
+- Delinquent slot-epochs: `0`
 - Repair attempts: `0`
 - Repair backoffs: `0`
 - Repair cooldowns: `0`

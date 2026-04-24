@@ -111,6 +111,7 @@
     "compliant_slots": 5568,
     "corrupt_responses": 0,
     "data_loss_events": 0,
+    "delinquent_slots": 96,
     "deputy_misses": 0,
     "deputy_served": 0,
     "direct_served": 8000,
@@ -160,6 +161,7 @@
     "reward_pool_minted": 283.2,
     "saturated_responses": 0,
     "success_rate": 1.0,
+    "suspect_slots": 48,
     "unavailable_reads": 0,
     "withheld_responses": 0
   }

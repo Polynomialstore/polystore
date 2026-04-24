@@ -12,6 +12,8 @@
   "assertions": {
     "min_success_rate": 1.0,
     "max_repairs_started": 0,
+    "max_suspect_slots": 0,
+    "max_delinquent_slots": 0,
     "max_quota_misses": 0,
     "max_invalid_proofs": 0,
     "max_data_loss_events": 0,

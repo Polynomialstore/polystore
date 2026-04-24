@@ -60,6 +60,7 @@
     "completed": 48.0,
     "completion_ratio": 1.0,
     "cooldowns": 0.0,
+    "delinquent_slot_epochs": 96.0,
     "final_repair_backlog": 0.0,
     "peak_backoff_epoch": 1,
     "peak_repair_backoffs": 0.0,
@@ -67,7 +68,8 @@
     "peak_repairing_slots": 48.0,
     "readiness_ratio": 1.0,
     "ready": 48.0,
-    "started": 48.0
+    "started": 48.0,
+    "suspect_slot_epochs": 48.0
   },
   "saturation": {
     "peak_saturated_responses": 0.0,

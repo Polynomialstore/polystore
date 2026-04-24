@@ -8,7 +8,7 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 
 Expected policy behavior: Regional offline responses appear, repair starts, availability remains within contract, and data-loss events remain zero.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `92.77%`, repairs started/ready/completed were `96` / `96` / `96`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `698` repair backoffs across `794` repair attempts.
+Observed result: retrieval success was `100.00%`, reward coverage was `92.77%`, repairs started/ready/completed were `96` / `96` / `96`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `698` repair backoffs across `794` repair attempts. Slot health recorded `22` suspect slot-epochs and `925` delinquent slot-epochs.
 
 ## Review Focus
 
@@ -89,6 +89,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Repair backoff pressure | `7.2708` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Repair backoffs per attempt | `0.8791` | Distinguishes capacity/cooldown pressure from successful repair starts. |
 | Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
+| Suspect / delinquent slot-epochs | `22` / `925` | Separates early warning state from threshold-crossed delinquency. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `67.41%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `71.42%` / `100.00%` / `100.00%` | Detects assignment concentration and capacity cliffs. |
@@ -125,11 +126,11 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
 | 2 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
 | 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
-| 4 | 100.00% | 983 | 24 | 0 | 0 | 4.8000 | 13.7600 | 525 offline responses, 240 quota misses, 194 repair backoffs |
-| 5 | 100.00% | 878 | 24 | 0 | 0 | 4.3200 | 13.7600 | 482 offline responses, 216 quota misses, 192 repair backoffs, 24 slots repairing |
-| 6 | 100.00% | 818 | 24 | 18 | 18 | 3.8400 | 13.7600 | 456 offline responses, 192 quota misses, 168 repair backoffs, 48 slots repairing |
-| 7 | 100.00% | 748 | 24 | 18 | 18 | 3.3600 | 14.1200 | 424 offline responses, 168 quota misses, 144 repair backoffs, 54 slots repairing |
-| 8 | 100.00% | 0 | 0 | 19 | 19 | 0.0000 | 17.3600 | 60 slots repairing |
+| 4 | 100.00% | 983 | 24 | 0 | 0 | 4.8000 | 13.7600 | 525 offline responses, 240 quota misses, 194 repair backoffs, 22 suspect slots, 218 delinquent slots |
+| 5 | 100.00% | 878 | 24 | 0 | 0 | 4.3200 | 13.7600 | 482 offline responses, 216 quota misses, 192 repair backoffs, 24 slots repairing, 240 delinquent slots |
+| 6 | 100.00% | 818 | 24 | 18 | 18 | 3.8400 | 13.7600 | 456 offline responses, 192 quota misses, 168 repair backoffs, 48 slots repairing, 222 delinquent slots |
+| 7 | 100.00% | 748 | 24 | 18 | 18 | 3.3600 | 14.1200 | 424 offline responses, 168 quota misses, 144 repair backoffs, 54 slots repairing, 204 delinquent slots |
+| 8 | 100.00% | 0 | 0 | 19 | 19 | 0.0000 | 17.3600 | 60 slots repairing, 41 delinquent slots |
 | 9 | 100.00% | 0 | 0 | 41 | 41 | 0.0000 | 17.7400 | 41 slots repairing |
 | 10 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
 | 11 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 18.5600 | steady state |
@@ -164,6 +165,8 @@ Repair summary:
 - Repair backoffs: `698`
 - Repair cooldown backoffs: `0`
 - Repair attempt-cap backoffs: `0`
+- Suspect slot-epochs: `22`
+- Delinquent slot-epochs: `925`
 - Final active slots in last epoch: `960`
 
 ### Repair Ledger Excerpt
@@ -297,7 +300,7 @@ Shows whether started repairs are accumulating faster than they complete.
 - `summary.json`: compact machine-readable run summary.
 - `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.
 - `providers.csv`: final provider-level economics and fault counters.
-- `slots.csv`: per-slot epoch ledger.
+- `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.

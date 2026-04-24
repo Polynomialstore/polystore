@@ -10,6 +10,16 @@
     "passed": true
   },
   {
+    "detail": "suspect_slots=0, required<=0",
+    "name": "max_suspect_slots",
+    "passed": true
+  },
+  {
+    "detail": "delinquent_slots=0, required<=0",
+    "name": "max_delinquent_slots",
+    "passed": true
+  },
+  {
     "detail": "quota_misses=0, required<=0",
     "name": "max_quota_misses",
     "passed": true

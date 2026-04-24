@@ -17,6 +17,8 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Suspect slot-epochs: `32`
+- Delinquent slot-epochs: `64`
 - Repair attempts: `32`
 - Repair backoffs: `0`
 - Repair cooldowns: `0`

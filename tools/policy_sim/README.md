@@ -138,6 +138,7 @@ The simulator mirrors current protocol concepts:
 - Provider outage/withholding as soft faults that become quota/deputy misses.
 - Make-before-break repair with deterministic replacement provider selection.
 - Repair attempt caps and cooldown windows for constrained replacement markets.
+- Per-slot `HEALTHY` / `SUSPECT` / `DELINQUENT` health state with reason codes.
 - Simulated enforcement modes before live chain/runtime rollout.
 - Large-scale heterogeneous-provider runs with regional outages, bandwidth
   saturation, and repair coordination limits.
@@ -164,9 +165,9 @@ When `--out-dir` is supplied, the simulator emits:
 - `repairs.csv`
 - `economy.csv`
 
-`slots.csv` includes per-slot repair attempt and cooldown state. `repairs.csv`
-includes start, pending-provider readiness, completion, attempt-count, cooldown,
-attempt-cap, and backoff events.
+`slots.csv` includes per-slot health reason, repair attempt, and cooldown state.
+`repairs.csv` includes start, pending-provider readiness, completion,
+attempt-count, cooldown, attempt-cap, and backoff events.
 
 `report.py` consumes those raw files and can emit:
 

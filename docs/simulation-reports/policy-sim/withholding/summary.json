@@ -21,6 +21,11 @@
       "passed": true
     },
     {
+      "detail": "delinquent_slots=12, required>=1",
+      "name": "min_delinquent_slots",
+      "passed": true
+    },
+    {
       "detail": "data_loss_events=0, required<=0",
       "name": "max_data_loss_events",
       "passed": true
@@ -109,6 +114,7 @@
     "compliant_slots": 2862,
     "corrupt_responses": 0,
     "data_loss_events": 0,
+    "delinquent_slots": 12,
     "deputy_misses": 6,
     "deputy_served": 16,
     "direct_served": 6400,
@@ -158,6 +164,7 @@
     "reward_pool_minted": 57.36,
     "saturated_responses": 0,
     "success_rate": 1.0,
+    "suspect_slots": 0,
     "unavailable_reads": 0,
     "withheld_responses": 16
   }
