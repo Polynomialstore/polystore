@@ -1549,6 +1549,13 @@ This program should be split into workstreams that can land independently.
 | Observability | Explain state and consequences. | Queries, events, website, dashboards |
 | E2E harness | Prove real-stack behavior for critical scenarios. | `scripts/e2e_*`, Playwright, provider fault modes |
 
+The first implementation ticket seed is tracked in
+[`POLICY_SIM_IMPLEMENTATION_TICKETS.md`](POLICY_SIM_IMPLEMENTATION_TICKETS.md).
+It converts the graduation map and sweep evidence into keeper, gateway,
+provider-daemon, and e2e PR slices. Treat that file as the bridge from
+simulation evidence to implementation work; keep the roadmap strategic and keep
+individual ticket acceptance criteria in the ticket document.
+
 ## 29. End-to-End Test Program
 
 The full system needs layered e2e coverage. The target should be few reliable
