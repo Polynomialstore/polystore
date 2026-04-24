@@ -1,0 +1,114 @@
+{
+  "name": "lazy-provider-quota-controls",
+  "description": "Sensitivity sweep for lazy-provider quota misses across reward exclusion, repair-only reward leakage, measure-only observation, eviction thresholds, multi-provider laziness, and repair throughput limits.",
+  "base_scenario": "../scenarios/lazy_provider.yaml",
+  "cases": [
+    {
+      "name": "baseline-reward-exclusion"
+    },
+    {
+      "name": "repair-only-reward-leak",
+      "config": {
+        "enforcement_mode": "REPAIR_ONLY"
+      },
+      "assertions": {
+        "min_quota_misses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_suspect_slots": 1,
+        "min_delinquent_slots": 1,
+        "min_reward_coverage": 1.0,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "measure-only-detects-but-does-not-repair",
+      "config": {
+        "enforcement_mode": "MEASURE_ONLY"
+      },
+      "assertions": {
+        "min_quota_misses": 1,
+        "min_repairs_started": 0,
+        "max_repairs_started": 0,
+        "min_repairs_ready": 0,
+        "min_suspect_slots": 1,
+        "min_delinquent_slots": 1,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "delayed-quota-eviction",
+      "config": {
+        "evict_after_missed_epochs": 4
+      },
+      "assertions": {
+        "min_quota_misses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_suspect_slots": 1,
+        "min_delinquent_slots": 1,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "aggressive-quota-eviction",
+      "config": {
+        "evict_after_missed_epochs": 1
+      },
+      "assertions": {
+        "min_quota_misses": 1,
+        "min_repairs_started": 1,
+        "min_repairs_ready": 1,
+        "min_suspect_slots": 0,
+        "min_delinquent_slots": 1,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "multi-lazy-provider",
+      "faults": [
+        "lazy:sp-001",
+        "lazy:sp-002",
+        "lazy:sp-003"
+      ],
+      "assertions": {
+        "min_quota_misses": 3,
+        "min_repairs_started": 3,
+        "min_repairs_ready": 3,
+        "min_delinquent_slots": 3,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "repair-throughput-limited-lazy",
+      "config": {
+        "max_repairs_started_per_epoch": 1,
+        "repair_epochs": 2,
+        "repair_backoff_epochs": 1
+      },
+      "faults": [
+        "lazy:sp-001",
+        "lazy:sp-002",
+        "lazy:sp-003"
+      ],
+      "assertions": {
+        "min_quota_misses": 3,
+        "min_repairs_started": 1,
+        "min_repair_backoffs": 1,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    }
+  ]
+}

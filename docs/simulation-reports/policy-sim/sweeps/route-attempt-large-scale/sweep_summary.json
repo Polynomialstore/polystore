@@ -141,6 +141,7 @@
       "deals_closed": 0.0,
       "deals_expired": 0.0,
       "delinquent_slots": 25634.0,
+      "deputy_misses": 15484.0,
       "elasticity_overlay_activations": 0.0,
       "elasticity_overlay_expired": 0.0,
       "elasticity_overlay_rejections": 0.0,
@@ -270,7 +271,8 @@
       "suspect_slots": 361.0,
       "top_operator_assignment_share_bps": 13.0,
       "top_operator_provider_share_bps": 8.0,
-      "unavailable_reads": 1065.0
+      "unavailable_reads": 1065.0,
+      "withheld_responses": 0.0
     }
   },
   "high_risk_runs": [
@@ -419,6 +421,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 13109.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -548,7 +551,8 @@
         "suspect_slots": 5906.0,
         "top_operator_assignment_share_bps": 11.0,
         "top_operator_provider_share_bps": 8.0,
-        "unavailable_reads": 38214.0
+        "unavailable_reads": 38214.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -693,6 +697,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 25634.0,
+        "deputy_misses": 15484.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -822,7 +827,8 @@
         "suspect_slots": 361.0,
         "top_operator_assignment_share_bps": 13.0,
         "top_operator_provider_share_bps": 8.0,
-        "unavailable_reads": 1065.0
+        "unavailable_reads": 1065.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -967,6 +973,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 25634.0,
+        "deputy_misses": 15484.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -1096,7 +1103,8 @@
         "suspect_slots": 361.0,
         "top_operator_assignment_share_bps": 13.0,
         "top_operator_provider_share_bps": 8.0,
-        "unavailable_reads": 1065.0
+        "unavailable_reads": 1065.0,
+        "withheld_responses": 0.0
       }
     }
   ],
@@ -1178,6 +1186,12 @@
       "max": 25634.0,
       "mean": 21459.0,
       "min": 13109.0
+    },
+    "deputy_misses": {
+      "delta": 15484.0,
+      "max": 15484.0,
+      "mean": 10322.666666667,
+      "min": 0.0
     },
     "elasticity_overlay_activations": {
       "delta": 0.0,
@@ -1958,6 +1972,12 @@
       "max": 38214.0,
       "mean": 13448.0,
       "min": 1065.0
+    },
+    "withheld_responses": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
     }
   },
   "mode": "Sensitivity Sweep",
@@ -2105,6 +2125,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 25634.0,
+        "deputy_misses": 15484.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -2234,7 +2255,8 @@
         "suspect_slots": 361.0,
         "top_operator_assignment_share_bps": 13.0,
         "top_operator_provider_share_bps": 8.0,
-        "unavailable_reads": 1065.0
+        "unavailable_reads": 1065.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -2379,6 +2401,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 25634.0,
+        "deputy_misses": 15484.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -2508,7 +2531,8 @@
         "suspect_slots": 361.0,
         "top_operator_assignment_share_bps": 13.0,
         "top_operator_provider_share_bps": 8.0,
-        "unavailable_reads": 1065.0
+        "unavailable_reads": 1065.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -2656,6 +2680,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 13109.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -2785,7 +2810,8 @@
         "suspect_slots": 5906.0,
         "top_operator_assignment_share_bps": 11.0,
         "top_operator_provider_share_bps": 8.0,
-        "unavailable_reads": 38214.0
+        "unavailable_reads": 38214.0,
+        "withheld_responses": 0.0
       }
     }
   ],

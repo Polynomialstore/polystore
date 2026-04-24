@@ -27,6 +27,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `flapping-provider-thresholds` | 5 | 0 | Sensitivity sweep for intermittent provider outage thresholds, repair-churn risk, and suspect evidence visibility. | [summary](flapping-provider-thresholds/sweep_summary.md) |
 | `high-bandwidth-thresholds` | 9 | 5 | Sensitivity sweep for high-bandwidth capacity and demotion-saturation thresholds under hot retrieval pressure. | [summary](high-bandwidth-thresholds/sweep_summary.md) |
 | `invalid-synthetic-proof-enforcement-controls` | 7 | 0 | Sensitivity sweep for invalid synthetic/liveness proof hard faults without corrupt retrieval bytes across enforcement modes, slash size, and multi-provider proof abuse. | [summary](invalid-synthetic-proof-enforcement-controls/sweep_summary.md) |
+| `lazy-provider-quota-controls` | 7 | 0 | Sensitivity sweep for lazy-provider quota misses across reward exclusion, repair-only reward leakage, measure-only observation, eviction thresholds, multi-provider laziness, and repair throughput limits. | [summary](lazy-provider-quota-controls/sweep_summary.md) |
 | `operator-concentration-controls` | 7 | 0 | Sensitivity sweep for per-deal operator assignment caps under dominant-operator Sybil pressure. | [summary](operator-concentration-controls/sweep_summary.md) |
 | `overpriced-storage-affordability` | 6 | 0 | Sensitivity sweep for overpriced storage demand rejection, willingness-to-pay ceilings, dynamic price movement, and capacity-limited acceptance. | [summary](overpriced-storage-affordability/sweep_summary.md) |
 | `performance-market-latency-controls` | 9 | 0 | Sensitivity sweep for Hot-service latency tier windows, reward multipliers, jitter, routing, and slow-provider tails. | [summary](performance-market-latency-controls/sweep_summary.md) |
@@ -51,6 +52,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `sustained-non-response-thresholds` | 5 | 0 | Sensitivity sweep for sustained provider non-response repair timing, delayed readiness, and repair timeout behavior. | [summary](sustained-non-response-thresholds/sweep_summary.md) |
 | `underpriced-storage-economics` | 6 | 0 | Sensitivity sweep for provider P&L under storage underpricing, user-funded storage fees, reward-only buffers, and storage-price floors. | [summary](underpriced-storage-economics/sweep_summary.md) |
 | `wash-retrieval-economics` | 8 | 0 | Sensitivity sweep for requester-paid retrieval funding, burn rates, and wash-traffic profitability. | [summary](wash-retrieval-economics/sweep_summary.md) |
+| `withholding-enforcement-controls` | 7 | 0 | Sensitivity sweep for refusal-to-serve soft failures across measure-only, repair-only, reward exclusion, delayed thresholds, multi-provider withholding, and repair throughput limits. | [summary](withholding-enforcement-controls/sweep_summary.md) |
 
 ## Review Rule
 

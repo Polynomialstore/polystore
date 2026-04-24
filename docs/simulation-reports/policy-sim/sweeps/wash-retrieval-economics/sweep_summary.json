@@ -138,6 +138,7 @@
       "deals_closed": 0.0,
       "deals_expired": 0.0,
       "delinquent_slots": 0.0,
+      "deputy_misses": 0.0,
       "elasticity_overlay_activations": 0.0,
       "elasticity_overlay_expired": 0.0,
       "elasticity_overlay_rejections": 0.0,
@@ -267,7 +268,8 @@
       "suspect_slots": 0.0,
       "top_operator_assignment_share_bps": 208.0,
       "top_operator_provider_share_bps": 208.0,
-      "unavailable_reads": 0.0
+      "unavailable_reads": 0.0,
+      "withheld_responses": 0.0
     }
   },
   "high_risk_runs": [
@@ -410,6 +412,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -539,7 +542,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -682,6 +686,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -811,7 +816,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -953,6 +959,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -1082,7 +1089,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -1224,6 +1232,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -1353,7 +1362,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     }
   ],
@@ -1431,6 +1441,12 @@
       "min": 0.0
     },
     "delinquent_slots": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "deputy_misses": {
       "delta": 0.0,
       "max": 0.0,
       "mean": 0.0,
@@ -2215,6 +2231,12 @@
       "max": 0.0,
       "mean": 0.0,
       "min": 0.0
+    },
+    "withheld_responses": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
     }
   },
   "mode": "Sensitivity Sweep",
@@ -2359,6 +2381,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -2488,7 +2511,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -2630,6 +2654,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -2759,7 +2784,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -2901,6 +2927,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -3030,7 +3057,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -3172,6 +3200,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -3301,7 +3330,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -3444,6 +3474,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -3573,7 +3604,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -3715,6 +3747,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -3844,7 +3877,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -3986,6 +4020,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -4115,7 +4150,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     },
     {
@@ -4257,6 +4293,7 @@
         "deals_closed": 0.0,
         "deals_expired": 0.0,
         "delinquent_slots": 0.0,
+        "deputy_misses": 0.0,
         "elasticity_overlay_activations": 0.0,
         "elasticity_overlay_expired": 0.0,
         "elasticity_overlay_rejections": 0.0,
@@ -4386,7 +4423,8 @@
         "suspect_slots": 0.0,
         "top_operator_assignment_share_bps": 208.0,
         "top_operator_provider_share_bps": 208.0,
-        "unavailable_reads": 0.0
+        "unavailable_reads": 0.0,
+        "withheld_responses": 0.0
       }
     }
   ],

@@ -1,0 +1,89 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/lazy_provider.yaml",
+  "case_count": 7,
+  "cases": [
+    {
+      "case": "baseline-reward-exclusion",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "lazy-provider",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "repair-only-reward-leak",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "lazy-provider",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "measure-only-detects-but-does-not-repair",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "lazy-provider",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "delayed-quota-eviction",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "lazy-provider",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "aggressive-quota-eviction",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "lazy-provider",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "multi-lazy-provider",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "lazy-provider",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "repair-throughput-limited-lazy",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "lazy-provider",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for lazy-provider quota misses across reward exclusion, repair-only reward leakage, measure-only observation, eviction thresholds, multi-provider laziness, and repair throughput limits.",
+  "name": "lazy-provider-quota-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/lazy-provider-quota-controls"
+}

@@ -1,12 +1,12 @@
 # Policy Simulation Sensitivity Sweep
 
-This report aggregates `8` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.
+This report aggregates `7` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.
 
 ## Executive Summary
 
 - Mode: `Sensitivity Sweep`.
-- Runs analyzed: `8`.
-- Varied parameters: `6`.
+- Runs analyzed: `7`.
+- Varied parameters: `5`.
 - Critical-risk runs: `0`.
 - Assertion failures: `0`.
 - Runs with modeled data loss: `0`.
@@ -16,14 +16,13 @@ This report aggregates `8` completed simulator run output directories. It does n
 
 | Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
 |---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `baseline-cap2-probation1` | `provider-supply-entry` | `97` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 60/60 | 0 | 0 | 8 | 0.7195 | 0.0138 |
-| `delayed-entry-start` | `provider-supply-entry` | `97` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 60/59 | 0 | 0 | 8 | 0.7564 | 0.0138 |
-| `immediate-promotion` | `provider-supply-entry` | `97` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 60/60 | 0 | 0 | 8 | 0.7195 | 0.0138 |
-| `longer-probation` | `provider-supply-entry` | `97` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 60/59 | 0 | 0 | 8 | 0.7564 | 0.0138 |
-| `price-triggered-entry` | `provider-supply-entry` | `97` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 60/59 | 0 | 0 | 8 | 0.9240 | 0.0138 |
-| `slow-entry-cap1` | `provider-supply-entry` | `97` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 60/59 | 0 | 0 | 8 | 0.7195 | 0.0138 |
-| `underfilled-short-window` | `provider-supply-entry` | `97` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 60/59 | 0 | 0 | 8 | 0.9240 | 0.0138 |
-| `wide-entry-cap4` | `provider-supply-entry` | `97` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 60/60 | 0 | 0 | 8 | 0.7195 | 0.0138 |
+| `aggressive-soft-eviction` | `withholding` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 6/6 | 0 | 0 | 1 | 1.0000 | 0.0100 |
+| `baseline-reward-exclusion` | `withholding` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 6/6 | 0 | 0 | 1 | 1.0000 | 0.0100 |
+| `delayed-soft-eviction` | `withholding` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 6/6 | 0 | 0 | 1 | 1.0000 | 0.0100 |
+| `measure-only-detects-but-does-not-repair` | `withholding` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
+| `multi-provider-withholding` | `withholding` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 24/24 | 0 | 0 | 4 | 1.0000 | 0.0100 |
+| `repair-only-reward-leak` | `withholding` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 6/6 | 0 | 0 | 1 | 1.0000 | 0.0100 |
+| `repair-throughput-limited-withholding` | `withholding` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 10/8 | 185 | 0 | 4 | 1.0000 | 0.0100 |
 
 ## Key Metric Ranges
 
@@ -31,19 +30,19 @@ This report aggregates `8` completed simulator run output directories. It does n
 |---|---:|---:|---:|---:|---|
 | `success_rate` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary user-facing misses; allowed only in explicit stress contracts. |
-| `offline_responses` | 123.000000 | 146.000000 | 23.000000 | 135.375000 | Provider responses missed because a selected provider was offline. |
+| `offline_responses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider responses missed because a selected provider was offline. |
 | `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
 | `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
-| `reward_coverage` | 0.989975 | 0.989980 | 0.000005 | 0.989977 | Shows whether compliant responsibility remains economically recognized. |
-| `reward_pool_minted` | 239.400000 | 239.520000 | 0.120000 | 239.445000 | Modeled base subsidy made available to active slots. |
-| `reward_paid` | 237.000000 | 237.120000 | 0.120000 | 237.045000 | Base subsidy actually paid to reward-eligible slots. |
-| `reward_burned` | 2.400000 | 2.400000 | 0.000000 | 2.400000 | Base subsidy withheld from non-compliant responsibility. |
-| `repairs_started` | 60.000000 | 60.000000 | 0.000000 | 60.000000 | Detection and repair activation pressure. |
-| `repairs_ready` | 59.000000 | 60.000000 | 1.000000 | 59.375000 | Pending replacement providers that proved readiness. |
-| `repairs_completed` | 59.000000 | 60.000000 | 1.000000 | 59.375000 | Healing throughput under the parameter set. |
-| `repair_attempts` | 60.000000 | 60.000000 | 0.000000 | 60.000000 | Repair retry pressure before starts or backoffs. |
-| `repair_backoffs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Replacement capacity or repair-start bottlenecks. |
+| `reward_coverage` | 0.931890 | 1.000000 | 0.068110 | 0.987515 | Shows whether compliant responsibility remains economically recognized. |
+| `reward_pool_minted` | 56.640000 | 57.600000 | 0.960000 | 57.277143 | Modeled base subsidy made available to active slots. |
+| `reward_paid` | 53.360000 | 57.600000 | 4.240000 | 56.562857 | Base subsidy actually paid to reward-eligible slots. |
+| `reward_burned` | 0.000000 | 3.900000 | 3.900000 | 0.714286 | Base subsidy withheld from non-compliant responsibility. |
+| `repairs_started` | 0.000000 | 24.000000 | 24.000000 | 8.285714 | Detection and repair activation pressure. |
+| `repairs_ready` | 0.000000 | 24.000000 | 24.000000 | 8.000000 | Pending replacement providers that proved readiness. |
+| `repairs_completed` | 0.000000 | 24.000000 | 24.000000 | 8.000000 | Healing throughput under the parameter set. |
+| `repair_attempts` | 0.000000 | 195.000000 | 195.000000 | 34.714286 | Repair retry pressure before starts or backoffs. |
+| `repair_backoffs` | 0.000000 | 185.000000 | 185.000000 | 26.428571 | Replacement capacity or repair-start bottlenecks. |
 | `repair_cooldowns` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retry cooldowns that intentionally throttle repair churn. |
 | `repair_attempt_caps` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Per-slot attempt caps hit before a replacement could start. |
 | `repair_timeouts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Pending replacement providers that failed readiness before timeout. |
@@ -53,9 +52,9 @@ This report aggregates `8` completed simulator run output directories. It does n
 | `high_bandwidth_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves attributed to high-bandwidth providers. |
 | `hot_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Hot-service demand exercised by the run. |
 | `hot_high_bandwidth_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Hot retrieval serves handled by promoted high-bandwidth providers. |
-| `max_operator_assignment_share_bps` | 185.000000 | 207.000000 | 22.000000 | 198.750000 | Worst observed assignment share of any operator across epochs. |
-| `top_operator_assignment_share_bps` | 185.000000 | 207.000000 | 22.000000 | 198.750000 | Final assignment share of the largest operator. |
-| `top_operator_provider_share_bps` | 113.000000 | 113.000000 | 0.000000 | 113.000000 | Provider identity share controlled by the largest operator. |
+| `max_operator_assignment_share_bps` | 208.000000 | 277.000000 | 69.000000 | 247.428571 | Worst observed assignment share of any operator across epochs. |
+| `top_operator_assignment_share_bps` | 208.000000 | 277.000000 | 69.000000 | 247.428571 | Final assignment share of the largest operator. |
+| `top_operator_provider_share_bps` | 208.000000 | 208.000000 | 0.000000 | 208.000000 | Provider identity share controlled by the largest operator. |
 | `max_operator_deal_slots` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Maximum same-operator slots in any one deal. |
 | `operator_deal_cap_violations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal/operator groups above the configured cap. |
 | `platinum_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves in the fastest latency tier. |
@@ -75,18 +74,18 @@ This report aggregates `8` completed simulator run output directories. It does n
 | `deals_closed` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal close events executed across the run. |
 | `deals_expired` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal expiry events executed across the run. |
 | `final_expired_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals expired by run end. |
-| `final_open_deals` | 36.000000 | 36.000000 | 0.000000 | 36.000000 | Deals still active at run end. |
+| `final_open_deals` | 24.000000 | 24.000000 | 0.000000 | 24.000000 | Deals still active at run end. |
 | `final_closed_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals closed by run end. |
-| `retrieval_base_burned` | 1.540000 | 1.540000 | 0.000000 | 1.540000 | Base retrieval fees burned across live retrieval attempts. |
-| `retrieval_variable_burned` | 7.268339 | 7.268339 | 0.000000 | 7.268339 | Variable retrieval fee burn withheld from provider payout. |
-| `retrieval_provider_payouts` | 138.098446 | 138.098446 | 0.000000 | 138.098446 | Retrieval fees paid to providers for served slots. |
+| `retrieval_base_burned` | 0.800000 | 0.800000 | 0.000000 | 0.800000 | Base retrieval fees burned across live retrieval attempts. |
+| `retrieval_variable_burned` | 3.200000 | 3.200000 | 0.000000 | 3.200000 | Variable retrieval fee burn withheld from provider payout. |
+| `retrieval_provider_payouts` | 60.800000 | 60.800000 | 0.000000 | 60.800000 | Retrieval fees paid to providers for served slots. |
 | `sponsored_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval attempts funded by requester/sponsor sessions. |
 | `sponsored_retrieval_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Total sponsored retrieval base plus variable spend. |
 | `owner_retrieval_escrow_debited` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal-owner escrow debited for non-sponsored retrievals. |
-| `retrieval_wash_accounted_spend` | 1.540000 | 1.540000 | 0.000000 | 1.540000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
-| `retrieval_wash_net_gain` | 136.558446 | 136.558446 | 0.000000 | 136.558446 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
-| `retrieval_attempts` | 1540.000000 | 1540.000000 | 0.000000 | 1540.000000 | Effective retrieval attempts after demand shock multipliers and inactive-content rejection. |
-| `retrieval_latent_attempts` | 1540.000000 | 1540.000000 | 0.000000 | 1540.000000 | Baseline read demand before demand-shock multipliers. |
+| `retrieval_wash_accounted_spend` | 0.800000 | 0.800000 | 0.000000 | 0.800000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
+| `retrieval_wash_net_gain` | 60.000000 | 60.000000 | 0.000000 | 60.000000 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
+| `retrieval_attempts` | 800.000000 | 800.000000 | 0.000000 | 800.000000 | Effective retrieval attempts after demand shock multipliers and inactive-content rejection. |
+| `retrieval_latent_attempts` | 800.000000 | 800.000000 | 0.000000 | 800.000000 | Baseline read demand before demand-shock multipliers. |
 | `retrieval_demand_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where read-demand shock multipliers were active. |
 | `max_retrieval_demand_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled read-demand multiplier. |
 | `new_deal_latent_requests` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
@@ -114,18 +113,18 @@ This report aggregates `8` completed simulator run output directories. It does n
 | `max_staged_upload_pending_generations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `final_staged_upload_pending_mdus` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `max_staged_upload_pending_mdus` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
-| `suspect_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Soft warning slot-epochs before thresholded delinquency. |
-| `delinquent_slots` | 60.000000 | 64.000000 | 4.000000 | 62.500000 | Threshold-crossed slot-epochs that should be visible to operators. |
-| `withheld_responses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Refusal-to-serve retrieval responses generated by withholding providers. |
-| `deputy_misses` | 53.000000 | 54.000000 | 1.000000 | 53.375000 | Deputy-served slots where the responsible provider failed direct service. |
-| `quota_misses` | 60.000000 | 60.000000 | 0.000000 | 60.000000 | Soft liveness evidence generated by the run. |
+| `suspect_slots` | 0.000000 | 13.000000 | 13.000000 | 1.857143 | Soft warning slot-epochs before thresholded delinquency. |
+| `delinquent_slots` | 12.000000 | 204.000000 | 192.000000 | 51.428571 | Threshold-crossed slot-epochs that should be visible to operators. |
+| `withheld_responses` | 16.000000 | 576.000000 | 560.000000 | 125.571429 | Refusal-to-serve retrieval responses generated by withholding providers. |
+| `deputy_misses` | 6.000000 | 183.000000 | 177.000000 | 42.142857 | Deputy-served slots where the responsible provider failed direct service. |
+| `quota_misses` | 6.000000 | 195.000000 | 189.000000 | 45.142857 | Soft liveness evidence generated by the run. |
 | `corrupt_responses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Bad retrieval responses generated by hard-fault providers. |
 | `invalid_proofs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Hard-fault evidence generated by the run. |
 | `provider_hard_faults` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider-level hard-fault counter used for enforcement graduation. |
 | `paid_corrupt_bytes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Payment safety invariant; should remain zero. |
 | `provider_slashed` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Simulated bond removed from providers after hard-fault evidence. |
-| `audit_budget_demand` | 0.565000 | 0.570000 | 0.005000 | 0.566875 | Total audit work implied by soft-failure evidence and carried backlog. |
-| `audit_budget_spent` | 0.565000 | 0.570000 | 0.005000 | 0.566875 | Audit budget actually consumed under the configured cap. |
+| `audit_budget_demand` | 0.060000 | 1.890000 | 1.830000 | 0.436429 | Total audit work implied by soft-failure evidence and carried backlog. |
+| `audit_budget_spent` | 0.060000 | 1.890000 | 1.830000 | 0.436429 | Audit budget actually consumed under the configured cap. |
 | `audit_budget_backlog` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Unmet audit demand remaining at run end. |
 | `audit_budget_exhausted` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where audit demand exceeded available budget. |
 | `evidence_spam_claims` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Low-quality deputy evidence submissions in the spam fixture. |
@@ -133,15 +132,15 @@ This report aggregates `8` completed simulator run output directories. It does n
 | `evidence_spam_bond_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Evidence bond burned for unconvicted spam claims. |
 | `evidence_spam_bounty_paid` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Conviction-gated bounty paid to the evidence spammer. |
 | `evidence_spam_net_gain` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Spammer net economics; positive values indicate an abuse risk. |
-| `provider_cost_shock_active` | 12.000000 | 12.000000 | 0.000000 | 12.000000 | Epochs where external provider cost pressure was active. |
-| `max_provider_cost_shocked_providers` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Largest provider population affected by cost shock in any epoch. |
-| `max_provider_cost_shock_fixed_multiplier_bps` | 80000.000000 | 80000.000000 | 0.000000 | 80000.000000 | Peak modeled fixed-cost multiplier during cost shock. |
-| `max_provider_cost_shock_storage_multiplier_bps` | 80000.000000 | 80000.000000 | 0.000000 | 80000.000000 | Peak modeled storage-cost multiplier during cost shock. |
-| `max_provider_cost_shock_bandwidth_multiplier_bps` | 40000.000000 | 40000.000000 | 0.000000 | 40000.000000 | Peak modeled bandwidth-cost multiplier during cost shock. |
-| `provider_churn_events` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Provider exits executed by the economic churn policy. |
-| `churned_providers` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Providers marked as exited by run end. |
-| `provider_entries` | 2.000000 | 8.000000 | 6.000000 | 6.500000 | Reserve providers admitted into probation by the supply-entry policy. |
-| `provider_probation_promotions` | 2.000000 | 8.000000 | 6.000000 | 6.500000 | Probationary providers promoted into assignment-eligible active supply. |
+| `provider_cost_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where external provider cost pressure was active. |
+| `max_provider_cost_shocked_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Largest provider population affected by cost shock in any epoch. |
+| `max_provider_cost_shock_fixed_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled fixed-cost multiplier during cost shock. |
+| `max_provider_cost_shock_storage_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled storage-cost multiplier during cost shock. |
+| `max_provider_cost_shock_bandwidth_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled bandwidth-cost multiplier during cost shock. |
+| `provider_churn_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider exits executed by the economic churn policy. |
+| `churned_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers marked as exited by run end. |
+| `provider_entries` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Reserve providers admitted into probation by the supply-entry policy. |
+| `provider_probation_promotions` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Probationary providers promoted into assignment-eligible active supply. |
 | `provider_underbonded_repairs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Repairs started because a provider lacked required bond headroom. |
 | `final_underbonded_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers below the configured bond requirement at run end. |
 | `max_underbonded_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers below the configured bond requirement. |
@@ -149,79 +148,74 @@ This report aggregates `8` completed simulator run output directories. It does n
 | `max_underbonded_assigned_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak assigned slots held by underbonded providers. |
 | `final_provider_bond_deficit` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Run-end aggregate provider bond deficit under configured collateral rules. |
 | `max_provider_bond_deficit` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak aggregate provider bond deficit under configured collateral rules. |
-| `reserve_providers` | 0.000000 | 6.000000 | 6.000000 | 1.500000 | Providers still outside normal placement as reserve supply. |
+| `reserve_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers still outside normal placement as reserve supply. |
 | `probationary_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers in onboarding probation and not yet eligible for normal placement. |
-| `max_reserve_providers` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Peak providers still outside normal placement as reserve supply. |
-| `max_probationary_providers` | 0.000000 | 6.000000 | 6.000000 | 2.250000 | Peak providers simultaneously in onboarding probation. |
-| `entered_active_providers` | 2.000000 | 8.000000 | 6.000000 | 6.500000 | Providers that entered from reserve and are active by run end. |
-| `churn_pressure_provider_epochs` | 20.000000 | 20.000000 | 0.000000 | 20.000000 | Provider-epochs below the churn threshold. |
-| `max_churn_pressure_providers` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Peak providers simultaneously eligible for churn. |
-| `final_active_provider_capacity` | 908.000000 | 983.000000 | 75.000000 | 964.250000 | Provider capacity remaining after economic exits. |
-| `final_exited_provider_capacity` | 96.000000 | 96.000000 | 0.000000 | 96.000000 | Provider capacity removed by economic exits. |
-| `final_reserve_provider_capacity` | 0.000000 | 75.000000 | 75.000000 | 18.750000 | Provider capacity still held outside normal placement as reserve supply. |
+| `max_reserve_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers still outside normal placement as reserve supply. |
+| `max_probationary_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers simultaneously in onboarding probation. |
+| `entered_active_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers that entered from reserve and are active by run end. |
+| `churn_pressure_provider_epochs` | 0.000000 | 40.000000 | 40.000000 | 17.000000 | Provider-epochs below the churn threshold. |
+| `max_churn_pressure_providers` | 0.000000 | 4.000000 | 4.000000 | 1.714286 | Peak providers simultaneously eligible for churn. |
+| `final_active_provider_capacity` | 768.000000 | 768.000000 | 0.000000 | 768.000000 | Provider capacity remaining after economic exits. |
+| `final_exited_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity removed by economic exits. |
+| `final_reserve_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity still held outside normal placement as reserve supply. |
 | `final_probationary_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity in onboarding probation at run end. |
-| `max_churned_assigned_slots` | 31.000000 | 32.000000 | 1.000000 | 31.375000 | Peak assigned slots on churned providers before repair catches up. |
-| `providers_negative_pnl` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Market sustainability and churn pressure. |
+| `max_churned_assigned_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak assigned slots on churned providers before repair catches up. |
+| `providers_negative_pnl` | 0.000000 | 4.000000 | 4.000000 | 1.714286 | Market sustainability and churn pressure. |
 | `saturated_responses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider bandwidth bottleneck signal. |
 | `providers_over_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Placement/capacity invariant; should remain zero. |
-| `final_storage_utilization_bps` | 4384.000000 | 4746.000000 | 362.000000 | 4478.250000 | Supply utilization against modeled capacity. |
-| `min_storage_price` | 0.719548 | 0.837068 | 0.117520 | 0.758153 | Lowest storage price observed during the run. |
+| `final_storage_utilization_bps` | 3723.000000 | 3750.000000 | 27.000000 | 3746.142857 | Supply utilization against modeled capacity. |
+| `min_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Lowest storage price observed during the run. |
 | `max_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Highest storage price observed during the run. |
-| `final_storage_price` | 0.719548 | 0.923967 | 0.204418 | 0.779878 | Storage-controller endpoint under this run. |
+| `final_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Storage-controller endpoint under this run. |
 | `min_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Lowest retrieval price observed during the run. |
-| `max_retrieval_price` | 0.013785 | 0.013785 | 0.000000 | 0.013785 | Highest retrieval price observed during the run. |
-| `final_retrieval_price` | 0.013785 | 0.013785 | 0.000000 | 0.013785 | Retrieval-controller endpoint under this run. |
-| `storage_price_direction_changes` | 0.000000 | 3.000000 | 3.000000 | 1.250000 | Storage price controller direction changes across the run. |
+| `max_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Highest retrieval price observed during the run. |
+| `final_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Retrieval-controller endpoint under this run. |
+| `storage_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage price controller direction changes across the run. |
 | `retrieval_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval price controller direction changes across the run. |
-| `provider_pnl` | 273.508446 | 273.748446 | 0.240000 | 273.597696 | Aggregate provider economics; inspect distribution before deciding. |
+| `provider_pnl` | 54.960000 | 59.200000 | 4.240000 | 58.162857 | Aggregate provider economics; inspect distribution before deciding. |
 
 ## Varied Parameters
 
 | Parameter | Values |
 |---|---|
-| `provider_entry_end_epoch` | `12`, `14`, `6` |
-| `provider_entry_max_per_epoch` | `1`, `2`, `4` |
-| `provider_entry_probation_epochs` | `0`, `1`, `3` |
-| `provider_entry_start_epoch` | `5`, `7` |
-| `provider_entry_trigger_storage_price` | `0.0`, `0.9` |
-| `provider_entry_trigger_utilization_bps` | `0`, `4000` |
+| `deputy_evict_after_missed_epochs` | `1`, `3` |
+| `enforcement_mode` | `MEASURE_ONLY`, `REPAIR_ONLY`, `REWARD_EXCLUSION` |
+| `evict_after_missed_epochs` | `1`, `2`, `4` |
+| `max_repairs_started_per_epoch` | `0`, `1` |
+| `repair_backoff_epochs` | `0`, `1` |
 
 ## Parameter Sensitivity
 
 | Parameter | Value | Runs | Avg Success | Total Unavailable | Total Data Loss | Avg Backoffs | Avg Negative P&L | Avg Final Storage Price |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| `provider_entry_end_epoch` | `12` | 6 | 100.00% | 0 | 0 | 0 | 8 | 0.7598 |
-| `provider_entry_end_epoch` | `14` | 1 | 100.00% | 0 | 0 | 0 | 8 | 0.7564 |
-| `provider_entry_end_epoch` | `6` | 1 | 100.00% | 0 | 0 | 0 | 8 | 0.9240 |
-| `provider_entry_max_per_epoch` | `1` | 2 | 100.00% | 0 | 0 | 0 | 8 | 0.8218 |
-| `provider_entry_max_per_epoch` | `2` | 4 | 100.00% | 0 | 0 | 0 | 8 | 0.7891 |
-| `provider_entry_max_per_epoch` | `4` | 2 | 100.00% | 0 | 0 | 0 | 8 | 0.7195 |
-| `provider_entry_probation_epochs` | `0` | 1 | 100.00% | 0 | 0 | 0 | 8 | 0.7195 |
-| `provider_entry_probation_epochs` | `1` | 6 | 100.00% | 0 | 0 | 0 | 8 | 0.7938 |
-| `provider_entry_probation_epochs` | `3` | 1 | 100.00% | 0 | 0 | 0 | 8 | 0.7564 |
-| `provider_entry_start_epoch` | `5` | 7 | 100.00% | 0 | 0 | 0 | 8 | 0.7832 |
-| `provider_entry_start_epoch` | `7` | 1 | 100.00% | 0 | 0 | 0 | 8 | 0.7564 |
-| `provider_entry_trigger_storage_price` | `0.0` | 7 | 100.00% | 0 | 0 | 0 | 8 | 0.7593 |
-| `provider_entry_trigger_storage_price` | `0.9` | 1 | 100.00% | 0 | 0 | 0 | 8 | 0.9240 |
-| `provider_entry_trigger_utilization_bps` | `0` | 1 | 100.00% | 0 | 0 | 0 | 8 | 0.9240 |
-| `provider_entry_trigger_utilization_bps` | `4000` | 7 | 100.00% | 0 | 0 | 0 | 8 | 0.7593 |
+| `deputy_evict_after_missed_epochs` | `1` | 6 | 100.00% | 0 | 0 | 30.8333 | 1.8333 | 1.0000 |
+| `deputy_evict_after_missed_epochs` | `3` | 1 | 100.00% | 0 | 0 | 0 | 1 | 1.0000 |
+| `enforcement_mode` | `MEASURE_ONLY` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `enforcement_mode` | `REPAIR_ONLY` | 1 | 100.00% | 0 | 0 | 0 | 1 | 1.0000 |
+| `enforcement_mode` | `REWARD_EXCLUSION` | 5 | 100.00% | 0 | 0 | 37 | 2.2000 | 1.0000 |
+| `evict_after_missed_epochs` | `1` | 1 | 100.00% | 0 | 0 | 0 | 1 | 1.0000 |
+| `evict_after_missed_epochs` | `2` | 5 | 100.00% | 0 | 0 | 37 | 2 | 1.0000 |
+| `evict_after_missed_epochs` | `4` | 1 | 100.00% | 0 | 0 | 0 | 1 | 1.0000 |
+| `max_repairs_started_per_epoch` | `0` | 6 | 100.00% | 0 | 0 | 0 | 1.3333 | 1.0000 |
+| `max_repairs_started_per_epoch` | `1` | 1 | 100.00% | 0 | 0 | 185 | 4 | 1.0000 |
+| `repair_backoff_epochs` | `0` | 6 | 100.00% | 0 | 0 | 0 | 1.3333 | 1.0000 |
+| `repair_backoff_epochs` | `1` | 1 | 100.00% | 0 | 0 | 185 | 4 | 1.0000 |
 
 ## High-Risk Runs
 
 | Run | Scenario | Risk | Reasons |
 |---|---|---|---|
-| `wide-entry-cap4` | `provider-supply-entry` | `medium` | some providers ended with negative modeled P&L; provider economic churn removed active capacity |
-| `underfilled-short-window` | `provider-supply-entry` | `medium` | some providers ended with negative modeled P&L; provider economic churn removed active capacity; reserve providers remained unused at run end |
-| `slow-entry-cap1` | `provider-supply-entry` | `medium` | some providers ended with negative modeled P&L; provider economic churn removed active capacity |
-| `price-triggered-entry` | `provider-supply-entry` | `medium` | some providers ended with negative modeled P&L; provider economic churn removed active capacity; reserve providers remained unused at run end |
-| `longer-probation` | `provider-supply-entry` | `medium` | some providers ended with negative modeled P&L; provider economic churn removed active capacity |
-| `immediate-promotion` | `provider-supply-entry` | `medium` | some providers ended with negative modeled P&L; provider economic churn removed active capacity |
-| `delayed-entry-start` | `provider-supply-entry` | `medium` | some providers ended with negative modeled P&L; provider economic churn removed active capacity |
-| `baseline-cap2-probation1` | `provider-supply-entry` | `medium` | some providers ended with negative modeled P&L; provider economic churn removed active capacity |
+| `repair-throughput-limited-withholding` | `withholding` | `medium` | repair coordination backoffs occurred; some providers ended with negative modeled P&L |
+| `repair-only-reward-leak` | `withholding` | `medium` | soft-failure repair ran without reward exclusion; some providers ended with negative modeled P&L |
+| `multi-provider-withholding` | `withholding` | `medium` | some providers ended with negative modeled P&L |
+| `measure-only-detects-but-does-not-repair` | `withholding` | `medium` | soft-failure evidence is measure-only and did not start repair |
+| `delayed-soft-eviction` | `withholding` | `medium` | some providers ended with negative modeled P&L |
+| `baseline-reward-exclusion` | `withholding` | `medium` | some providers ended with negative modeled P&L |
+| `aggressive-soft-eviction` | `withholding` | `medium` | some providers ended with negative modeled P&L |
 
 ## Best Observed Run
 
-`baseline-cap2-probation1` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.
+`measure-only-detects-but-does-not-repair` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.
 
 This is not an automatic policy choice. It is the run humans should inspect first when deciding which parameter set deserves keeper or e2e implementation work.
 
