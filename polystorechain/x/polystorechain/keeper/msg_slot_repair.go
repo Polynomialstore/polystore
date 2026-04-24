@@ -53,11 +53,15 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 	if strings.TrimSpace(slot.Provider) == pending {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("pending_provider must differ from current provider")
 	}
-	if _, err := k.Providers.Get(ctx, pending); err != nil {
+	provider, err := k.Providers.Get(ctx, pending)
+	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return nil, sdkerrors.ErrNotFound.Wrapf("pending provider %q not registered", pending)
 		}
 		return nil, fmt.Errorf("failed to load pending provider: %w", err)
+	}
+	if reason := mode2ReplacementProviderIneligibility(provider, deal.ServiceHint); reason != "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("pending_provider is not eligible for slot repair: %s", reason)
 	}
 
 	slot.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
