@@ -28,6 +28,10 @@ Model a provider that does not satisfy liveness quota even when user-facing read
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Audit budget demand: `0.0600`
+- Audit budget spent: `0.0600`
+- Audit budget backlog: `0.0000`
+- Audit budget exhausted epochs: `0`
 
 ## Review Questions
 

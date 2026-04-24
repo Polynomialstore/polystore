@@ -28,6 +28,10 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 - Repair backoffs: `40`
 - Repair cooldowns: `16`
 - Repair attempt-cap events: `16`
+- Audit budget demand: `0.4000`
+- Audit budget spent: `0.4000`
+- Audit budget backlog: `0.0000`
+- Audit budget exhausted epochs: `0`
 
 ## Review Questions
 

@@ -64,7 +64,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
-| Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and miss-driven demand. |
+| Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
 | Retrieval burn | `5.00%` | Fraction of variable retrieval fees burned before provider payout. |
 
 ## What Happened
@@ -103,6 +103,8 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Platinum / Gold / Silver / Fail serves | `0` / `0` / `0` / `0` | Shows the latency-tier distribution for performance-market policy. |
 | Performance reward paid | `0.0000` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |
 | Provider latency p10 / p50 / p90 | `0` / `0` / `0` ms | Shows whether aggregate averages hide slow provider tails. |
+| Audit demand / spent | `0.0000` / `0.0000` | Shows whether enforcement evidence consumed the available audit budget. |
+| Audit backlog / exhausted epochs | `0.0000` / `0` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
 | Top operator provider share | `1.04%` | Shows whether many SP identities are controlled by one operator. |
 | Top operator assignment share | `1.04%` | Shows whether placement caps translate identity concentration into slot concentration. |
 | Max operator slots/deal | `1` | Checks per-deal blast-radius limits against operator Sybil concentration. |
@@ -208,6 +210,8 @@ Providers earned `2430.6959` in modeled revenue against `440.3200` in modeled co
 Retrieval accounting paid providers `2062.0559`, burned `22.4000` in base fees, and burned `108.5293` in variable retrieval fees.
 
 Performance-tier accounting paid `0.0000` in QoS rewards.
+
+Audit accounting saw `0.0000` of demand, spent `0.0000`, and ended with `0.0000` backlog after `0` exhausted epochs.
 
 No provider ended with negative modeled P&L under the current assumptions.
 
@@ -332,6 +336,12 @@ Shows soft liveness evidence and hard invalid-proof evidence by epoch.
 Shows whether miss-driven audit demand is spending budget or accumulating carryover.
 
 ![Audit Budget](graphs/audit_budget.svg)
+
+### Audit Backlog
+
+Shows unmet audit demand and exhausted-budget epochs when evidence exceeds available enforcement budget.
+
+![Audit Backlog](graphs/audit_backlog.svg)
 
 ### Elasticity Spend
 

@@ -28,6 +28,10 @@ Model a provider with intermittent outages that recover before the delinquency t
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Audit budget demand: `0.2300`
+- Audit budget spent: `0.2300`
+- Audit budget backlog: `0.0000`
+- Audit budget exhausted epochs: `0`
 
 ## Review Questions
 

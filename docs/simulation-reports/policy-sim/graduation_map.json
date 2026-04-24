@@ -39,7 +39,7 @@
         "audit backlog query",
         "evidence bounty accounting"
       ],
-      "next_test": "Add audit-budget minted/spent/carryover tests proving audit demand is capped and backlog is explicit.",
+      "next_test": "Add audit-budget demand/spend/backlog tests proving audit demand is capped and backlog is explicit.",
       "scenario": "audit-budget-exhaustion",
       "status": "implementation planning",
       "target": "audit budget keeper tests"

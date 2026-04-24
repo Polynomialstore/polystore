@@ -10,8 +10,23 @@
     "passed": true
   },
   {
-    "detail": "audit_budget_spent=0.1, required>=0.1",
+    "detail": "audit_budget_demand=118.6, required>=1",
+    "name": "min_audit_budget_demand",
+    "passed": true
+  },
+  {
+    "detail": "audit_budget_spent=0.4, required>=0.1",
     "name": "min_audit_budget_spent",
+    "passed": true
+  },
+  {
+    "detail": "audit_budget_backlog=15.6, required>=0.1",
+    "name": "min_audit_budget_backlog",
+    "passed": true
+  },
+  {
+    "detail": "audit_budget_exhausted=8, required>=1",
+    "name": "min_audit_budget_exhausted",
     "passed": true
   },
   {

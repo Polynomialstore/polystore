@@ -20,7 +20,10 @@
   "assertions": {
     "min_success_rate": 0.99,
     "min_quota_misses": 1,
+    "min_audit_budget_demand": 1.0,
     "min_audit_budget_spent": 0.1,
+    "min_audit_budget_backlog": 0.1,
+    "min_audit_budget_exhausted": 1,
     "max_data_loss_events": 0,
     "max_paid_corrupt_bytes": 0
   }
