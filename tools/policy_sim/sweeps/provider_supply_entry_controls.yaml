@@ -1,0 +1,140 @@
+{
+  "name": "provider-supply-entry-controls",
+  "description": "Sensitivity sweep for reserve-provider entry caps, probation length, trigger timing, and underfilled reserve recovery.",
+  "base_scenario": "../scenarios/provider_supply_entry.yaml",
+  "cases": [
+    {
+      "name": "baseline-cap2-probation1"
+    },
+    {
+      "name": "slow-entry-cap1",
+      "config": {
+        "provider_entry_max_per_epoch": 1
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_provider_entries": 8,
+        "min_provider_probation_promotions": 8,
+        "min_entered_active_providers": 8,
+        "exact_reserve_providers": 0,
+        "exact_probationary_providers": 0,
+        "max_max_probationary_providers": 1,
+        "min_repairs_completed": 1
+      }
+    },
+    {
+      "name": "wide-entry-cap4",
+      "config": {
+        "provider_entry_max_per_epoch": 4
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_provider_entries": 8,
+        "min_provider_probation_promotions": 8,
+        "min_entered_active_providers": 8,
+        "exact_reserve_providers": 0,
+        "exact_probationary_providers": 0,
+        "max_max_probationary_providers": 4,
+        "min_repairs_completed": 1
+      }
+    },
+    {
+      "name": "immediate-promotion",
+      "config": {
+        "provider_entry_probation_epochs": 0,
+        "provider_entry_max_per_epoch": 4
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_provider_entries": 8,
+        "min_provider_probation_promotions": 8,
+        "min_entered_active_providers": 8,
+        "exact_reserve_providers": 0,
+        "exact_probationary_providers": 0,
+        "max_max_probationary_providers": 0,
+        "min_repairs_completed": 1
+      }
+    },
+    {
+      "name": "longer-probation",
+      "config": {
+        "provider_entry_probation_epochs": 3
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_provider_entries": 8,
+        "min_provider_probation_promotions": 8,
+        "min_entered_active_providers": 8,
+        "exact_reserve_providers": 0,
+        "exact_probationary_providers": 0,
+        "max_max_probationary_providers": 6,
+        "min_repairs_completed": 1
+      }
+    },
+    {
+      "name": "delayed-entry-start",
+      "config": {
+        "provider_entry_start_epoch": 7,
+        "provider_entry_end_epoch": 14
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_provider_entries": 8,
+        "min_provider_probation_promotions": 8,
+        "min_entered_active_providers": 8,
+        "exact_reserve_providers": 0,
+        "exact_probationary_providers": 0,
+        "max_max_probationary_providers": 2,
+        "min_repairs_completed": 1
+      }
+    },
+    {
+      "name": "price-triggered-entry",
+      "config": {
+        "provider_entry_trigger_utilization_bps": 0,
+        "provider_entry_trigger_storage_price": 0.9
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_provider_entries": 2,
+        "min_provider_probation_promotions": 2,
+        "min_entered_active_providers": 2,
+        "exact_reserve_providers": 6,
+        "exact_probationary_providers": 0,
+        "max_max_probationary_providers": 2,
+        "min_repairs_completed": 1
+      }
+    },
+    {
+      "name": "underfilled-short-window",
+      "config": {
+        "provider_entry_end_epoch": 6,
+        "provider_entry_max_per_epoch": 1
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "min_provider_entries": 2,
+        "min_provider_probation_promotions": 2,
+        "min_entered_active_providers": 2,
+        "exact_reserve_providers": 6,
+        "exact_probationary_providers": 0,
+        "max_max_probationary_providers": 1,
+        "min_repairs_completed": 1
+      }
+    }
+  ]
+}

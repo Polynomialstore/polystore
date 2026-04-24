@@ -131,6 +131,8 @@ This report aggregates `3` completed simulator run output directories. It does n
 | `max_provider_bond_deficit` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak aggregate provider bond deficit under configured collateral rules. |
 | `reserve_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers still outside normal placement as reserve supply. |
 | `probationary_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers in onboarding probation and not yet eligible for normal placement. |
+| `max_reserve_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers still outside normal placement as reserve supply. |
+| `max_probationary_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers simultaneously in onboarding probation. |
 | `entered_active_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers that entered from reserve and are active by run end. |
 | `churn_pressure_provider_epochs` | 26.000000 | 313.000000 | 287.000000 | 209.333333 | Provider-epochs below the churn threshold. |
 | `max_churn_pressure_providers` | 12.000000 | 20.000000 | 8.000000 | 16.666667 | Peak providers simultaneously eligible for churn. |

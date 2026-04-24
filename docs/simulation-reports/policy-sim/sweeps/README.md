@@ -27,6 +27,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `provider-churn-caps` | 7 | 0 | Sensitivity sweep for provider economic churn caps versus repair throughput under the economic churn fixture. | [summary](provider-churn-caps/sweep_summary.md) |
 | `provider-cost-shock-controls` | 8 | 0 | Sensitivity sweep for provider cost-shock severity, reward buffer, and dynamic-pricing response. | [summary](provider-cost-shock-controls/sweep_summary.md) |
 | `provider-reliability-large-scale` | 3 | 0 | Population-scale sensitivity sweep for heterogeneous provider online-probability floors. | [summary](provider-reliability-large-scale/sweep_summary.md) |
+| `provider-supply-entry-controls` | 8 | 0 | Sensitivity sweep for reserve-provider entry caps, probation length, trigger timing, and underfilled reserve recovery. | [summary](provider-supply-entry-controls/sweep_summary.md) |
 | `repair-candidate-exhaustion-controls` | 7 | 0 | Sensitivity sweep for replacement capacity, retry caps, and cooldowns when repair candidates are exhausted or saturated. | [summary](repair-candidate-exhaustion-controls/sweep_summary.md) |
 | `repair-throughput-large-scale` | 3 | 0 | Population-scale sensitivity sweep for repair-start throughput under the large regional stress fixture. | [summary](repair-throughput-large-scale/sweep_summary.md) |
 | `replacement-grinding-controls` | 7 | 0 | Sensitivity sweep for pending-repair timeout, cooldown, and per-slot attempt-cap controls under replacement grinding. | [summary](replacement-grinding-controls/sweep_summary.md) |

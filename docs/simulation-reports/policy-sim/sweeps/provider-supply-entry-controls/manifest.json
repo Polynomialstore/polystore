@@ -1,0 +1,98 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/provider_supply_entry.yaml",
+  "case_count": 8,
+  "cases": [
+    {
+      "case": "baseline-cap2-probation1",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-supply-entry",
+      "seed": 97,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "slow-entry-cap1",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-supply-entry",
+      "seed": 97,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "wide-entry-cap4",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-supply-entry",
+      "seed": 97,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "immediate-promotion",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-supply-entry",
+      "seed": 97,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "longer-probation",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-supply-entry",
+      "seed": 97,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "delayed-entry-start",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-supply-entry",
+      "seed": 97,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "price-triggered-entry",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-supply-entry",
+      "seed": 97,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "underfilled-short-window",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-supply-entry",
+      "seed": 97,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for reserve-provider entry caps, probation length, trigger timing, and underfilled reserve recovery.",
+  "name": "provider-supply-entry-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/provider-supply-entry-controls"
+}

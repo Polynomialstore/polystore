@@ -1290,7 +1290,11 @@ before collateral and underbonded-repair defaults are chosen; and
 `tools/policy_sim/sweeps/provider_cost_shock_controls.yaml`, which compares
 cost-shock severity, bandwidth-heavy demand, reward-buffer sizing, and
 dynamic-pricing response speed before storage-price floors, issuance buffers,
-or provider-cost telemetry assumptions are promoted into keeper work.
+or provider-cost telemetry assumptions are promoted into keeper work; and
+`tools/policy_sim/sweeps/provider_supply_entry_controls.yaml`, which compares
+reserve-provider entry caps, probation length, trigger timing, and underfilled
+reserve recovery before provider lifecycle-state and new-supply promotion
+semantics are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models

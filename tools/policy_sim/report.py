@@ -593,6 +593,8 @@ SWEEP_METRICS = [
     "max_provider_bond_deficit",
     "reserve_providers",
     "probationary_providers",
+    "max_reserve_providers",
+    "max_probationary_providers",
     "entered_active_providers",
     "churn_pressure_provider_epochs",
     "max_churn_pressure_providers",
@@ -3728,6 +3730,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("high", "underbonded assigned slots remained at run end")
     elif fnum(totals.get("max_underbonded_providers")) > 0:
         raise_to("medium", "provider bond headroom became constrained")
+    if scenario == "provider-supply-entry" and fnum(totals.get("reserve_providers")) > 0:
+        raise_to("medium", "reserve providers remained unused at run end")
     if fnum(totals.get("staged_upload_rejections")) > 0:
         raise_to("medium", "staged upload preflight rejections occurred")
     if not reasons:
@@ -3956,6 +3960,8 @@ def sweep_metric_meaning(key: str) -> str:
         "provider_probation_promotions": "Probationary providers promoted into assignment-eligible active supply.",
         "reserve_providers": "Providers still outside normal placement as reserve supply.",
         "probationary_providers": "Providers in onboarding probation and not yet eligible for normal placement.",
+        "max_reserve_providers": "Peak providers still outside normal placement as reserve supply.",
+        "max_probationary_providers": "Peak providers simultaneously in onboarding probation.",
         "entered_active_providers": "Providers that entered from reserve and are active by run end.",
         "provider_underbonded_repairs": "Repairs started because a provider lacked required bond headroom.",
         "final_underbonded_providers": "Providers below the configured bond requirement at run end.",
