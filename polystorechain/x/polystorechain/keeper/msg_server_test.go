@@ -334,6 +334,16 @@ func TestMode2SlotRepairLifecycle(t *testing.T) {
 		DealId:  res.DealId,
 		Slot:    0,
 	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "slot repair is not ready")
+
+	markMode2RepairReadyForTest(t, f, sdk.UnwrapSDKContext(f.ctx), res.DealId, 0, dealAfterStart.Mode2Slots[0].RepairTargetGen)
+
+	_, err = msgServer.CompleteSlotRepair(f.ctx, &types.MsgCompleteSlotRepair{
+		Creator: candidate,
+		DealId:  res.DealId,
+		Slot:    0,
+	})
 	require.NoError(t, err)
 
 	dealAfterComplete, err := f.keeper.Deals.Get(f.ctx, res.DealId)

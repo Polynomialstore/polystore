@@ -143,6 +143,9 @@ func (k Keeper) scheduleDrainingRepairs(ctx sdk.Context, epochID uint64) error {
 				entry.PendingProvider = strings.TrimSpace(pending)
 				entry.StatusSinceHeight = ctx.BlockHeight()
 				entry.RepairTargetGen = deal.CurrentGen
+				if err := k.clearMode2RepairReadiness(ctx, dealID, slot); err != nil {
+					return true, err
+				}
 				deal.Mode2Slots[i] = entry
 				dealChanged = true
 

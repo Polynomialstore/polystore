@@ -335,27 +335,27 @@ func (k Keeper) recordCredit(ctx sdk.Context, epochID uint64, dealID uint64, ass
 	return k.Mode1EpochCredits.Set(ctx, key, current+1)
 }
 
-func (k Keeper) recordCreditMode2(ctx sdk.Context, epochID uint64, dealID uint64, slot uint32, key collections.Pair[collections.Pair[uint64, uint32], uint64], mduIndex uint64, blobIndex uint64) error {
+func (k Keeper) recordCreditMode2(ctx sdk.Context, epochID uint64, dealID uint64, slot uint32, key collections.Pair[collections.Pair[uint64, uint32], uint64], mduIndex uint64, blobIndex uint64) (bool, error) {
 	if epochID == 0 {
-		return nil
+		return false, nil
 	}
 	assignment := assignmentBytesMode2(slot)
 	seenKey := creditSeenKey(epochID, dealID, assignment, mduIndex, blobIndex)
 	_, err := k.CreditSeen.Get(ctx, seenKey)
 	if err == nil {
-		return nil
+		return false, nil
 	}
 	if !errors.Is(err, collections.ErrNotFound) {
-		return err
+		return false, err
 	}
 	if err := k.CreditSeen.Set(ctx, seenKey, true); err != nil {
-		return err
+		return false, err
 	}
 	current, err := k.Mode2EpochCredits.Get(ctx, key)
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {
-		return err
+		return false, err
 	}
-	return k.Mode2EpochCredits.Set(ctx, key, current+1)
+	return true, k.Mode2EpochCredits.Set(ctx, key, current+1)
 }
 
 func (k Keeper) recordSynthetic(ctx sdk.Context, epochID uint64, dealID uint64, assignment []byte, key collections.Pair[collections.Pair[uint64, string], uint64], mduIndex uint64, blobIndex uint64) (bool, error) {
@@ -498,7 +498,14 @@ func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types
 		}
 
 		key := collections.Join(collections.Join(deal.Id, slotU), epochID)
-		return k.recordCreditMode2(ctx, epochID, deal.Id, slotU, key, mduIndex, uint64(blobIndex))
+		counted, err := k.recordCreditMode2(ctx, epochID, deal.Id, slotU, key, mduIndex, uint64(blobIndex))
+		if err != nil {
+			return err
+		}
+		if counted && pending != "" && creator == pending {
+			return k.markMode2RepairReady(ctx, deal, slotU, creator, epochID)
+		}
+		return nil
 	}
 
 	assignment, err := assignmentBytesMode1(provider)
@@ -595,6 +602,9 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 		}
 		if !counted {
 			return sdkerrors.ErrInvalidRequest.Wrap("duplicate synthetic challenge proof")
+		}
+		if pending != "" && creator == pending {
+			return k.markMode2RepairReady(ctx, deal, slotU, creator, epochID)
 		}
 		return nil
 	}

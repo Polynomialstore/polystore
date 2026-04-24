@@ -70,6 +70,9 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 	slot.RepairTargetGen = deal.CurrentGen
 	deal.Mode2Slots[slotIdx] = slot
 
+	if err := k.clearMode2RepairReadiness(ctx, deal.Id, msg.Slot); err != nil {
+		return nil, fmt.Errorf("failed to clear stale repair readiness: %w", err)
+	}
 	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
@@ -126,6 +129,14 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner or pending provider can complete slot repair")
 	}
 
+	ready, err := k.mode2RepairReady(ctx, deal.Id, msg.Slot, slot.RepairTargetGen)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check repair readiness: %w", err)
+	}
+	if !ready {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("slot repair is not ready; pending provider must submit repair readiness proof before promotion")
+	}
+
 	oldProvider := slot.Provider
 	slot.Provider = slot.PendingProvider
 	slot.PendingProvider = ""
@@ -143,6 +154,9 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	// cannot keep replaying historical proofs.
 	deal.CurrentGen++
 
+	if err := k.clearMode2RepairReadiness(ctx, deal.Id, msg.Slot); err != nil {
+		return nil, fmt.Errorf("failed to clear consumed repair readiness: %w", err)
+	}
 	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}

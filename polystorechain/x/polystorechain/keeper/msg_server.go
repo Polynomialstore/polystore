@@ -1859,6 +1859,10 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 		entry.PendingProvider = strings.TrimSpace(pending)
 		entry.StatusSinceHeight = ctx.BlockHeight()
 		entry.RepairTargetGen = deal.CurrentGen
+		if err := k.clearMode2RepairReadiness(ctx, dealID, slot); err != nil {
+			ctx.Logger().Error("failed to clear stale repair readiness", "deal", dealID, "slot", slot, "error", err)
+			return
+		}
 		deal.Mode2Slots[slot] = entry
 
 		if err := k.Deals.Set(ctx, dealID, deal); err != nil {

@@ -67,6 +67,7 @@ type Keeper struct {
 	Mode2EpochSynthetic     collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
 	Mode2EpochSlotServed    collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
 	Mode2EpochDeputyServed  collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2RepairReadiness    collections.Map[collections.Pair[uint64, uint32], uint64]
 	Mode2MissedEpochs       collections.Map[collections.Pair[uint64, uint32], uint64]
 	Mode2DeputyMissedEpochs collections.Map[collections.Pair[uint64, uint32], uint64]
 	CreditSeen              collections.Map[[]byte, bool]
@@ -210,6 +211,13 @@ func NewKeeper(
 			types.Mode2EpochDeputyServedKey,
 			"mode2_epoch_deputy_served",
 			collections.PairKeyCodec(collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), collections.Uint64Key),
+			collections.Uint64Value,
+		),
+		Mode2RepairReadiness: collections.NewMap(
+			sb,
+			types.Mode2RepairReadinessKey,
+			"mode2_repair_readiness",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
 			collections.Uint64Value,
 		),
 		Mode2MissedEpochs: collections.NewMap(

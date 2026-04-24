@@ -377,6 +377,18 @@ Exit criteria:
 1. Chain behavior matches simulator assumptions for the covered policy surfaces.
 2. No punitive policy is enabled without deterministic tests.
 
+Current landed status:
+
+1. Dynamic pricing bounds, base reward compliance, audit budget caps, protocol
+   repair-session authorization, repair candidate eligibility, and repair
+   backoff evidence have keeper coverage.
+2. Repair start and replacement selection now have deterministic tests across
+   quota misses, deputy-served misses, provider health failures, draining, and
+   routine rotation.
+3. The active graduation slice is repair-readiness and promotion correctness:
+   a pending provider must produce deterministic readiness evidence before
+   manual or automatic slot promotion can replace the active provider.
+
 ### Milestone 4: Gateway and Provider Enforcement
 
 Deliverables:
@@ -582,11 +594,15 @@ delinquency.
 | `EXPIRED` | Deal expired; slot no longer serves. | No | No | Deal expiry / GC. |
 
 Current implementation already has `ACTIVE`, `REPAIRING`, `pending_provider`,
-and `repair_target_gen`. Missing desired-state pieces include:
+`repair_target_gen`, and a first-generation `Mode2RepairReadiness` keeper
+ledger. The readiness ledger is set by valid pending-provider proof activity
+while a slot is repairing, and promotion checks that readiness before swapping
+the active provider. Missing desired-state pieces include:
 
 1. Explicit `SUSPECT` / `DELINQUENT` reason codes.
 2. Repair attempt counters and cooldown windows.
-3. Readiness proof or catch-up proof before promotion.
+3. Full catch-up proofs for all data/generation ranges, beyond the current
+   readiness marker.
 4. Per-slot health queries for UI and operator tooling.
 5. A unified treatment of setup-phase bumping and post-commit repair.
 
@@ -641,6 +657,14 @@ Implementation surfaces:
 | Website | Show degraded/repairing slot state and current provider/pending provider. |
 | Simulator | Model delinquency thresholds, candidate exhaustion, repair duration, false positives, and promotion success. |
 | E2E | Kill/withhold/corrupt provider, verify repair starts, pending provider catches up, promotion occurs, reads remain available. |
+
+Current implementation note:
+
+The current keeper-level readiness marker is a promotion guardrail, not a full
+data-plane catch-up proof. It prevents immediate promotion without pending
+provider proof activity, but the next data-plane step is to prove that the
+pending provider reconstructed every required shard for `repair_target_gen`
+and any generations committed while repair was in progress.
 
 ## 20. New SP Onboarding and Higher-Bandwidth Promotion
 
