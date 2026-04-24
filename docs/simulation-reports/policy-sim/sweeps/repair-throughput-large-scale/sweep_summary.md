@@ -26,6 +26,7 @@ This report aggregates `3` completed simulator run output directories. It does n
 |---|---:|---:|---:|---:|---|
 | `success_rate` | 0.992604 | 0.993069 | 0.000465 | 0.992787 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 998.000000 | 1065.000000 | 67.000000 | 1038.666667 | Temporary user-facing misses; allowed only in explicit stress contracts. |
+| `offline_responses` | 47180.000000 | 52952.000000 | 5772.000000 | 50175.000000 | Provider responses missed because a selected provider was offline. |
 | `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
 | `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |

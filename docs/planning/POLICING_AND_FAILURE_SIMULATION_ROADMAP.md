@@ -1340,7 +1340,11 @@ keeper defaults are chosen; and
 provider P&L under storage underpricing, user-funded storage fee floors,
 reward/retrieval buffers, willingness-to-pay ceilings, dynamic price movement,
 and capacity-limited acceptance before storage quote and price-floor defaults
-are chosen.
+are chosen; and `tools/policy_sim/sweeps/flapping_provider_thresholds.yaml`
+plus `tools/policy_sim/sweeps/sustained_non_response_thresholds.yaml`, which
+compare intermittent outage thresholds, repair-churn risk, sustained
+non-response repair timing, and repair-readiness timeouts before liveness
+threshold defaults are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models

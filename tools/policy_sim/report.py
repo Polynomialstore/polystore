@@ -488,6 +488,7 @@ def scenario_allows_unavailable_reads(name: str) -> bool:
 SWEEP_METRICS = [
     "success_rate",
     "unavailable_reads",
+    "offline_responses",
     "expired_retrieval_attempts",
     "closed_retrieval_attempts",
     "data_loss_events",
@@ -3762,6 +3763,14 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "repair coordination backoffs occurred")
     if fnum(totals.get("repair_timeouts")) > 0:
         raise_to("medium", "pending repair readiness timeouts occurred")
+    if scenario == "flapping-provider" and fnum(totals.get("repairs_started")) > 0:
+        raise_to("medium", "flapping provider behavior caused repair churn")
+    if (
+        scenario == "sustained-non-response"
+        and fnum(totals.get("offline_responses")) > 0
+        and fnum(totals.get("repairs_started")) == 0
+    ):
+        raise_to("high", "sustained non-response did not start repair")
     if fnum(totals.get("saturated_responses")) > 0:
         raise_to("medium", "provider bandwidth saturation occurred")
     if fnum(totals.get("performance_fail_rate")) > 0.25:
@@ -4017,6 +4026,7 @@ def sweep_metric_meaning(key: str) -> str:
     meanings = {
         "success_rate": "Primary availability outcome; should not regress silently.",
         "unavailable_reads": "Temporary user-facing misses; allowed only in explicit stress contracts.",
+        "offline_responses": "Provider responses missed because a selected provider was offline.",
         "expired_retrieval_attempts": "Post-expiry read requests rejected as expired content, not live availability misses.",
         "closed_retrieval_attempts": "Post-close read requests rejected as closed content, not live availability misses.",
         "data_loss_events": "Durability invariant; non-zero values block graduation.",

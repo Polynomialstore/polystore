@@ -1,0 +1,76 @@
+{
+  "name": "flapping-provider-thresholds",
+  "description": "Sensitivity sweep for intermittent provider outage thresholds, repair-churn risk, and suspect evidence visibility.",
+  "base_scenario": "../scenarios/flapping_provider.yaml",
+  "cases": [
+    {
+      "name": "baseline-threshold3"
+    },
+    {
+      "name": "long-threshold5-no-repair",
+      "config": {
+        "evict_after_missed_epochs": 5,
+        "deputy_evict_after_missed_epochs": 5
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_suspect_slots": 1,
+        "max_delinquent_slots": 0,
+        "max_repairs_started": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "threshold2-repair-churn-unsafe",
+      "config": {
+        "evict_after_missed_epochs": 2,
+        "deputy_evict_after_missed_epochs": 2
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_repairs_started": 1,
+        "max_repairs_started": 10,
+        "max_delinquent_slots": 10,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "threshold1-aggressive-repair-churn-unsafe",
+      "config": {
+        "evict_after_missed_epochs": 1,
+        "deputy_evict_after_missed_epochs": 1
+      },
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 1,
+        "min_suspect_slots": 0,
+        "min_repairs_started": 1,
+        "max_repairs_started": 10,
+        "min_delinquent_slots": 1,
+        "max_delinquent_slots": 20,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    },
+    {
+      "name": "two-flapping-providers-threshold3",
+      "faults": [
+        "offline:sp-001:2,3,5,6"
+      ],
+      "assertions": {
+        "min_success_rate": 0.99,
+        "min_offline_responses": 50,
+        "min_suspect_slots": 1,
+        "min_repairs_started": 1,
+        "max_repairs_started": 5,
+        "max_delinquent_slots": 10,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0
+      }
+    }
+  ]
+}

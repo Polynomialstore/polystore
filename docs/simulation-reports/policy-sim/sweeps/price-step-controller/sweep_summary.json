@@ -204,6 +204,7 @@
       "new_deals_rejected_capacity": 0.0,
       "new_deals_rejected_price": 0.0,
       "new_deals_suppressed_price": 0.0,
+      "offline_responses": 0.0,
       "operator_deal_cap_violations": 0.0,
       "owner_retrieval_escrow_debited": 0.0,
       "paid_corrupt_bytes": 0.0,
@@ -738,6 +739,12 @@
       "min": 0.0
     },
     "new_deals_suppressed_price": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "offline_responses": {
       "delta": 0.0,
       "max": 0.0,
       "mean": 0.0,
@@ -1318,6 +1325,7 @@
         "new_deals_rejected_capacity": 0.0,
         "new_deals_rejected_price": 0.0,
         "new_deals_suppressed_price": 0.0,
+        "offline_responses": 0.0,
         "operator_deal_cap_violations": 0.0,
         "owner_retrieval_escrow_debited": 0.0,
         "paid_corrupt_bytes": 0.0,
@@ -1586,6 +1594,7 @@
         "new_deals_rejected_capacity": 0.0,
         "new_deals_rejected_price": 0.0,
         "new_deals_suppressed_price": 0.0,
+        "offline_responses": 0.0,
         "operator_deal_cap_violations": 0.0,
         "owner_retrieval_escrow_debited": 0.0,
         "paid_corrupt_bytes": 0.0,
@@ -1854,6 +1863,7 @@
         "new_deals_rejected_capacity": 0.0,
         "new_deals_rejected_price": 0.0,
         "new_deals_suppressed_price": 0.0,
+        "offline_responses": 0.0,
         "operator_deal_cap_violations": 0.0,
         "owner_retrieval_escrow_debited": 0.0,
         "paid_corrupt_bytes": 0.0,
@@ -2122,6 +2132,7 @@
         "new_deals_rejected_capacity": 0.0,
         "new_deals_rejected_price": 0.0,
         "new_deals_suppressed_price": 0.0,
+        "offline_responses": 0.0,
         "operator_deal_cap_violations": 0.0,
         "owner_retrieval_escrow_debited": 0.0,
         "paid_corrupt_bytes": 0.0,
