@@ -75,6 +75,8 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider cost shocks | `[]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
 | Provider churn policy | enabled `False`, threshold `0.0000`, after `1` epochs, cap `0`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |
 | Provider churn floor | `0` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |
+| Provider supply entry | enabled `False`, reserve `0`, cap `1`/epoch, probation `1` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |
+| Supply entry triggers | utilization >= `0.00%` or storage price >= `disabled` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
 | Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
 | Evidence spam claims/epoch | `0` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |
@@ -138,8 +140,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Provider cost shock epochs/providers | `0` / `0` | Shows when external cost pressure was active and how much of the provider population it affected. |
 | Max cost shock fixed/storage/bandwidth | `100.00%` / `100.00%` / `100.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
 | Provider churn events / final churned | `0` / `0` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |
+| Provider entries / probation promotions | `0` / `0` | Shows whether reserve supply entered and cleared readiness gating before receiving normal placement. |
+| Reserve / probationary / entered-active providers | `0` / `0` / `0` | Separates unused reserve supply, in-flight onboarding, and newly promoted active supply. |
 | Churn pressure provider-epochs / peak | `10` / `1` | Shows the breadth and duration of providers below the configured churn threshold. |
-| Active / exited provider capacity | `768` / `0` slots | Measures supply actually remaining after modeled exits. |
+| Active / exited / reserve provider capacity | `768` / `0` / `0` slots | Measures supply remaining, removed, and still waiting outside normal placement. |
 | Peak assigned slots on churned providers | `0` | Shows the maximum repair burden created by economic exits. |
 | Storage price start/end/range | `1.0000` -> `1.0000` (`1.0000`-`1.0000`) | Shows dynamic pricing movement and bounds. |
 | Retrieval price start/end/range | `0.0100` -> `0.0100` (`0.0100`-`0.0100`) | Shows whether demand pressure moved retrieval pricing. |
@@ -335,6 +339,12 @@ Shows modeled provider cost pressure against provider revenue.
 Shows modeled provider exits and per-epoch churn events.
 
 ![Provider Churn](graphs/provider_churn.svg)
+
+### Provider Supply Entry
+
+Shows reserve provider entry and probationary promotion into active supply.
+
+![Provider Supply Entry](graphs/provider_supply.svg)
 
 ### Burn / Mint Ratio
 

@@ -42,7 +42,9 @@ Model rational provider exit after sustained negative P&L. The policy question i
 - Max cost-shocked providers: `8`
 - Provider churn events: `8`
 - Churned providers: `8`
-- Final active/exited provider capacity: `854` / `102`
+- Provider entries/promotions: `0` / `0`
+- Reserve/probationary/entered-active providers: `0` / `0` / `0`
+- Final active/exited/reserve provider capacity: `854` / `102` / `0`
 - Retrieval demand shock active epochs: `0`
 - Retrieval price direction changes: `0`
 - Latent new deal requests: `0`

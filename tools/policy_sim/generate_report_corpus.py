@@ -106,6 +106,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["draining provider state", "provider exit telemetry", "churn caps", "replacement capacity dashboards"],
         "e2e": "No process e2e yet; validate churn policy with simulator sweeps and then add keeper drain/replacement tests.",
     },
+    "provider-supply-entry": {
+        "target": "provider lifecycle and supply recovery calibration",
+        "next_test": "Compare reserve sizing, entry caps, probation windows, utilization triggers, and readiness semantics before keeper provider lifecycle state is implemented.",
+        "missing_surfaces": ["provider lifecycle state", "probation readiness checks", "reserve supply telemetry", "entry and promotion caps"],
+        "e2e": "No process e2e yet; validate supply recovery with simulator scenarios before provider registration or promotion keeper tests.",
+    },
     "retrieval-demand-shock": {
         "target": "dynamic pricing calibration",
         "next_test": "Compare retrieval demand targets, price-step clamps, smoothing windows, and burst response before encoding retrieval pricing defaults.",

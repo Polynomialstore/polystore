@@ -513,6 +513,22 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(1.0, result.totals["success_rate"])
         self.assertEqual([2, 2, 2, 2], [row["provider_churn_events"] for row in result.economy if row["provider_churn_events"]])
 
+    def test_provider_supply_entry_promotes_reserve_capacity(self):
+        fixture = Path(__file__).with_name("scenarios") / "provider_supply_entry.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(8, result.totals["provider_entries"])
+        self.assertEqual(8, result.totals["provider_probation_promotions"])
+        self.assertEqual(8, result.totals["entered_active_providers"])
+        self.assertEqual(0, result.totals["reserve_providers"])
+        self.assertEqual(0, result.totals["probationary_providers"])
+        self.assertGreater(result.totals["final_active_provider_capacity"], 850)
+        self.assertTrue(any(row["provider_entries"] for row in result.economy))
+        self.assertTrue(any(row["provider_probation_promotions"] for row in result.economy))
+        self.assertTrue(any(row["lifecycle_state"] == "ACTIVE" and row["entered_epoch"] > 0 for row in result.providers))
+
     def test_retrieval_demand_shock_tracks_price_oscillation(self):
         config = SimConfig(
             scenario="retrieval-demand-shock",
@@ -597,6 +613,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "capacity_utilization.svg").exists())
             self.assertTrue((report_dir / "graphs" / "provider_cost_shock.svg").exists())
             self.assertTrue((report_dir / "graphs" / "provider_churn.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "provider_supply.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
             self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
             self.assertTrue((report_dir / "graphs" / "hot_retrieval_routing.svg").exists())
@@ -627,6 +644,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Provider P&L](graphs/provider_pnl.svg)", report_text)
             self.assertIn("![Provider Cost Shock](graphs/provider_cost_shock.svg)", report_text)
             self.assertIn("![Provider Churn](graphs/provider_churn.svg)", report_text)
+            self.assertIn("![Provider Supply Entry](graphs/provider_supply.svg)", report_text)
             self.assertIn("![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)", report_text)
             self.assertIn("![Price Trajectory](graphs/price_trajectory.svg)", report_text)
             self.assertIn("![Retrieval Demand](graphs/retrieval_demand.svg)", report_text)
@@ -647,6 +665,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("availability", signal_text)
             self.assertIn("concentration", signal_text)
             self.assertIn("churned_providers", signal_text)
+            self.assertIn("entered_active_providers", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)
             risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")
             self.assertIn("## Material Risks", risk_text)

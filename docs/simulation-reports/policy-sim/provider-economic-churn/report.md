@@ -75,6 +75,8 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider cost shocks | `[{"bandwidth_cost_multiplier_bps": 40000, "end_epoch": 12, "fixed_cost_multiplier_bps": 80000, "provider_ids": ["sp-000", "sp-001", "sp-002", "sp-003", "sp-004", "sp-005", "sp-006", "sp-007"], "start_epoch": 3, "storage_cost_multiplier_bps": 80000}]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
 | Provider churn policy | enabled `True`, threshold `0.0000`, after `2` epochs, cap `2`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |
 | Provider churn floor | `72` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |
+| Provider supply entry | enabled `False`, reserve `0`, cap `1`/epoch, probation `1` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |
+| Supply entry triggers | utilization >= `0.00%` or storage price >= `disabled` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
 | Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
 | Evidence spam claims/epoch | `0` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |
@@ -138,8 +140,10 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Provider cost shock epochs/providers | `10` / `8` | Shows when external cost pressure was active and how much of the provider population it affected. |
 | Max cost shock fixed/storage/bandwidth | `800.00%` / `800.00%` / `400.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
 | Provider churn events / final churned | `8` / `8` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |
+| Provider entries / probation promotions | `0` / `0` | Shows whether reserve supply entered and cleared readiness gating before receiving normal placement. |
+| Reserve / probationary / entered-active providers | `0` / `0` / `0` | Separates unused reserve supply, in-flight onboarding, and newly promoted active supply. |
 | Churn pressure provider-epochs / peak | `20` / `8` | Shows the breadth and duration of providers below the configured churn threshold. |
-| Active / exited provider capacity | `854` / `102` slots | Measures supply actually remaining after modeled exits. |
+| Active / exited / reserve provider capacity | `854` / `102` / `0` slots | Measures supply remaining, removed, and still waiting outside normal placement. |
 | Peak assigned slots on churned providers | `24` | Shows the maximum repair burden created by economic exits. |
 | Storage price start/end/range | `1.0000` -> `1.3121` (`1.0000`-`1.3121`) | Shows dynamic pricing movement and bounds. |
 | Retrieval price start/end/range | `0.0100` -> `0.0131` (`0.0100`-`0.0131`) | Shows whether demand pressure moved retrieval pricing. |
@@ -151,20 +155,20 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 | Region | Providers | Utilization | Offline Responses | Saturated Responses | Negative P&L Providers | Avg P&L |
 |---|---:|---:|---:|---:|---:|---:|
-| `global` | 80 | 45.18% | 99 | 0 | 8 | 2.4627 |
+| `global` | 80 | 45.18% | 99 | 0 | 8 | 2.5987 |
 
 ### Top Bottleneck Providers
 
 | Provider | Region | Slots/Capacity | Utilization | Bandwidth Cap | Attempts | Offline | Saturated | P&L |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| `sp-001` | `global` | 0/13 | 0.00% | 187 | 59 | 17 | 0 | -2.1610 |
-| `sp-004` | `global` | 0/13 | 0.00% | 166 | 106 | 14 | 0 | -2.5239 |
-| `sp-002` | `global` | 0/14 | 0.00% | 148 | 104 | 12 | 0 | -2.5219 |
-| `sp-006` | `global` | 0/12 | 0.00% | 148 | 89 | 12 | 0 | -2.4030 |
-| `sp-003` | `global` | 0/10 | 0.00% | 195 | 59 | 12 | 0 | -2.1316 |
-| `sp-005` | `global` | 0/13 | 0.00% | 173 | 74 | 11 | 0 | -2.2654 |
-| `sp-000` | `global` | 0/13 | 0.00% | 205 | 72 | 11 | 0 | -2.2714 |
-| `sp-007` | `global` | 0/14 | 0.00% | 205 | 90 | 10 | 0 | -2.3853 |
+| `sp-001` | `global` | 0/13 | 0.00% | 187 | 59 | 17 | 0 | -0.5610 |
+| `sp-004` | `global` | 0/13 | 0.00% | 166 | 106 | 14 | 0 | -1.4039 |
+| `sp-002` | `global` | 0/14 | 0.00% | 148 | 104 | 12 | 0 | -1.4019 |
+| `sp-006` | `global` | 0/12 | 0.00% | 148 | 89 | 12 | 0 | -1.1230 |
+| `sp-003` | `global` | 0/10 | 0.00% | 195 | 59 | 12 | 0 | -0.5316 |
+| `sp-005` | `global` | 0/13 | 0.00% | 173 | 74 | 11 | 0 | -0.8254 |
+| `sp-000` | `global` | 0/13 | 0.00% | 205 | 72 | 11 | 0 | -0.8314 |
+| `sp-007` | `global` | 0/14 | 0.00% | 205 | 90 | 10 | 0 | -1.1053 |
 
 ### Top Operators
 
@@ -188,13 +192,13 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 13.8307 | steady state |
 | 4 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 14.1024 | steady state |
 | 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 14.2620 | steady state |
-| 6 | 100.00% | 52 | 12 | 0 | 0 | 0.4800 | 13.9557 | 29 offline responses, 12 quota misses, 12 delinquent slots |
-| 7 | 100.00% | 44 | 12 | 12 | 12 | 0.4800 | 14.6657 | 22 offline responses, 12 quota misses, 12 slots repairing, 12 delinquent slots |
-| 8 | 100.00% | 45 | 12 | 12 | 12 | 0.4800 | 15.7590 | 22 offline responses, 12 quota misses, 12 slots repairing, 12 delinquent slots |
-| 9 | 100.00% | 47 | 12 | 12 | 12 | 0.4800 | 16.8999 | 26 offline responses, 12 quota misses, 12 slots repairing, 12 delinquent slots |
-| 10 | 100.00% | 0 | 0 | 12 | 12 | 0.0000 | 18.4514 | 12 slots repairing |
-| 11 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 19.1686 | steady state |
-| 12 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 19.4119 | steady state |
+| 6 | 100.00% | 52 | 12 | 0 | 0 | 0.4800 | 15.2357 | 29 offline responses, 12 quota misses, 12 delinquent slots |
+| 7 | 100.00% | 44 | 12 | 12 | 12 | 0.4800 | 16.2657 | 22 offline responses, 12 quota misses, 12 slots repairing, 12 delinquent slots |
+| 8 | 100.00% | 45 | 12 | 12 | 12 | 0.4800 | 17.6790 | 22 offline responses, 12 quota misses, 12 slots repairing, 12 delinquent slots |
+| 9 | 100.00% | 47 | 12 | 12 | 12 | 0.4800 | 19.1399 | 26 offline responses, 12 quota misses, 12 slots repairing, 12 delinquent slots |
+| 10 | 100.00% | 0 | 0 | 12 | 12 | 0.0000 | 19.7314 | 12 slots repairing |
+| 11 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 20.4486 | steady state |
+| 12 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 20.6919 | steady state |
 
 ## Enforcement Interpretation
 
@@ -256,7 +260,7 @@ Candidate exclusion summary:
 
 The run minted `217.4400` reward/audit units and burned `8.6382` units, for a burn-to-mint ratio of `3.97%`.
 
-Providers earned `308.3662` in modeled revenue against `111.3490` in modeled cost, ending with aggregate P&L `197.0172`.
+Providers earned `308.3662` in modeled revenue against `100.4690` in modeled cost, ending with aggregate P&L `207.8972`.
 
 Retrieval accounting paid providers `104.8462`, burned `1.2000` in base fees, and burned `5.5182` in variable retrieval fees.
 
@@ -276,11 +280,11 @@ Final modeled storage price was `1.3121` and retrieval price per slot was `0.013
 
 | Provider | Assigned Slots | Revenue | Cost | Slashed | P&L | Churn Risk |
 |---|---:|---:|---:|---:|---:|---:|
-| `sp-004` | 0 | 1.9200 + 0.9481 | 5.3920 | 0.0000 | -2.5239 | yes |
-| `sp-002` | 0 | 1.9200 + 0.9531 | 5.3950 | 0.0000 | -2.5219 | yes |
-| `sp-006` | 0 | 1.6800 + 0.7870 | 4.8700 | 0.0000 | -2.4030 | yes |
-| `sp-007` | 0 | 1.6800 + 0.8167 | 4.8820 | 0.0000 | -2.3853 | yes |
-| `sp-000` | 0 | 1.4400 + 0.6146 | 4.3260 | 0.0000 | -2.2714 | yes |
+| `sp-004` | 0 | 1.9200 + 0.9481 | 4.2720 | 0.0000 | -1.4039 | yes |
+| `sp-002` | 0 | 1.9200 + 0.9531 | 4.2750 | 0.0000 | -1.4019 | yes |
+| `sp-006` | 0 | 1.6800 + 0.7870 | 3.5900 | 0.0000 | -1.1230 | yes |
+| `sp-007` | 0 | 1.6800 + 0.8167 | 3.6020 | 0.0000 | -1.1053 | yes |
+| `sp-000` | 0 | 1.4400 + 0.6146 | 2.8860 | 0.0000 | -0.8314 | yes |
 
 ## Assertion Contract
 
@@ -355,6 +359,12 @@ Shows modeled provider cost pressure against provider revenue.
 Shows modeled provider exits and per-epoch churn events.
 
 ![Provider Churn](graphs/provider_churn.svg)
+
+### Provider Supply Entry
+
+Shows reserve provider entry and probationary promotion into active supply.
+
+![Provider Supply Entry](graphs/provider_supply.svg)
 
 ### Burn / Mint Ratio
 

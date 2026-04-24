@@ -144,6 +144,15 @@ SCENARIO_GUIDES = {
         "expected": "Cost-shocked providers become churn candidates, exits are capped per epoch, affected slots are repaired, and reads remain available.",
         "review": "Use this fixture to tune churn caps, replacement capacity, price floors, and how much economic distress should remain monitoring-only.",
     },
+    "provider-supply-entry": {
+        "title": "Provider Supply Entry",
+        "intent": (
+            "Model reserve providers entering the active set after churn reduces supply. The policy question is whether supply recovery "
+            "has explicit admission, probation, and promotion telemetry instead of silently assuming infinite replacement capacity."
+        ),
+        "expected": "Cost-shocked providers churn, reserve providers enter probation, probationary providers promote to active supply, repair completes, and durability remains intact.",
+        "review": "Use this fixture to tune onboarding caps, probation length, utilization or price triggers, and whether new SPs should receive normal placement immediately or only after readiness evidence.",
+    },
     "retrieval-demand-shock": {
         "title": "Retrieval Demand Shock",
         "intent": (
@@ -317,6 +326,11 @@ def fmt_money(value: Any) -> str:
     return f"{fnum(value):.4f}"
 
 
+def fmt_optional_money_threshold(value: Any) -> str:
+    number = fnum(value)
+    return fmt_money(number) if number > 0 else "disabled"
+
+
 def fmt_pct(value: Any) -> str:
     return f"{fnum(value) * 100:.2f}%"
 
@@ -438,10 +452,17 @@ SWEEP_METRICS = [
     "max_provider_cost_shock_bandwidth_multiplier_bps",
     "provider_churn_events",
     "churned_providers",
+    "provider_entries",
+    "provider_probation_promotions",
+    "reserve_providers",
+    "probationary_providers",
+    "entered_active_providers",
     "churn_pressure_provider_epochs",
     "max_churn_pressure_providers",
     "final_active_provider_capacity",
     "final_exited_provider_capacity",
+    "final_reserve_provider_capacity",
+    "final_probationary_provider_capacity",
     "max_churned_assigned_slots",
     "providers_negative_pnl",
     "saturated_responses",
@@ -526,6 +547,14 @@ SWEEP_CONFIG_KEYS = [
     "provider_churn_after_epochs",
     "provider_churn_max_providers_per_epoch",
     "provider_churn_min_remaining_providers",
+    "provider_entry_enabled",
+    "provider_entry_reserve_count",
+    "provider_entry_start_epoch",
+    "provider_entry_end_epoch",
+    "provider_entry_max_per_epoch",
+    "provider_entry_trigger_utilization_bps",
+    "provider_entry_trigger_storage_price",
+    "provider_entry_probation_epochs",
 ]
 
 
@@ -603,6 +632,13 @@ def compute_signals(
     capacity_utils = [fnum(row.get("capacity_utilization_bps")) for row in providers]
     pnls = [fnum(row.get("pnl")) for row in providers]
     high_bandwidth_providers = [row for row in providers if row.get("capability_tier") == "HIGH_BANDWIDTH"]
+    reserve_provider_rows = [row for row in providers if row.get("lifecycle_state") == "RESERVE"]
+    probation_provider_rows = [row for row in providers if row.get("lifecycle_state") == "PROBATION"]
+    entered_active_provider_rows = [
+        row
+        for row in providers
+        if row.get("lifecycle_state") == "ACTIVE" and fnum(row.get("entered_epoch")) > 0
+    ]
     bandwidth_caps = [fnum(row.get("bandwidth_capacity_per_epoch")) for row in providers if fnum(row.get("bandwidth_capacity_per_epoch")) > 0]
     provider_latencies = [fnum(row.get("average_latency_ms")) for row in providers if fnum(row.get("latency_sample_count")) > 0]
     online_probs = [fnum(row.get("online_probability")) for row in providers]
@@ -662,6 +698,14 @@ def compute_signals(
             "online_probability_p10": percentile(online_probs, 10),
             "online_probability_p50": percentile(online_probs, 50),
             "online_probability_p90": percentile(online_probs, 90),
+            "reserve_providers": fnum(totals.get("reserve_providers")),
+            "probationary_providers": fnum(totals.get("probationary_providers")),
+            "entered_active_providers": fnum(totals.get("entered_active_providers")),
+            "reserve_providers_from_rows": len(reserve_provider_rows),
+            "probationary_providers_from_rows": len(probation_provider_rows),
+            "entered_active_providers_from_rows": len(entered_active_provider_rows),
+            "final_reserve_provider_capacity": fnum(totals.get("final_reserve_provider_capacity")),
+            "final_probationary_provider_capacity": fnum(totals.get("final_probationary_provider_capacity")),
         },
         "economics": {
             "provider_pnl": fnum(totals.get("provider_pnl")),
@@ -686,6 +730,10 @@ def compute_signals(
             "max_provider_cost_shock_bandwidth_multiplier_bps": fnum(totals.get("max_provider_cost_shock_bandwidth_multiplier_bps")),
             "provider_churn_events": fnum(totals.get("provider_churn_events")),
             "churned_providers": fnum(totals.get("churned_providers")),
+            "provider_entries": fnum(totals.get("provider_entries")),
+            "provider_probation_promotions": fnum(totals.get("provider_probation_promotions")),
+            "max_probationary_providers": fnum(totals.get("max_probationary_providers")),
+            "max_reserve_providers": fnum(totals.get("max_reserve_providers")),
             "churn_pressure_provider_epochs": fnum(totals.get("churn_pressure_provider_epochs")),
             "max_churn_pressure_providers": fnum(totals.get("max_churn_pressure_providers")),
             "final_active_provider_capacity": fnum(totals.get("final_active_provider_capacity")),
@@ -1073,6 +1121,12 @@ def write_report_md(
             "",
             "![Provider Churn](graphs/provider_churn.svg)",
             "",
+            "### Provider Supply Entry",
+            "",
+            "Shows reserve provider entry and probationary promotion into active supply.",
+            "",
+            "![Provider Supply Entry](graphs/provider_supply.svg)",
+            "",
             "### Burn / Mint Ratio",
             "",
             "Shows whether burns are material relative to minted rewards and audit budget.",
@@ -1340,6 +1394,8 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Provider cost shocks | `{json.dumps(config.get('provider_cost_shocks') or [])}` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |",
         f"| Provider churn policy | enabled `{bool(config.get('provider_churn_enabled'))}`, threshold `{fmt_money(config.get('provider_churn_pnl_threshold'))}`, after `{fmt_num(config.get('provider_churn_after_epochs'))}` epochs, cap `{fmt_num(config.get('provider_churn_max_providers_per_epoch'))}`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |",
         f"| Provider churn floor | `{fmt_num(config.get('provider_churn_min_remaining_providers'))}` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |",
+        f"| Provider supply entry | enabled `{bool(config.get('provider_entry_enabled'))}`, reserve `{fmt_num(config.get('provider_entry_reserve_count'))}`, cap `{fmt_num(config.get('provider_entry_max_per_epoch'))}`/epoch, probation `{fmt_num(config.get('provider_entry_probation_epochs'))}` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |",
+        f"| Supply entry triggers | utilization >= `{fmt_bps(config.get('provider_entry_trigger_utilization_bps'))}` or storage price >= `{fmt_optional_money_threshold(config.get('provider_entry_trigger_storage_price'))}` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |",
         f"| Performance reward per serve | `{fmt_money(config.get('performance_reward_per_serve'))}` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |",
         f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |",
         f"| Evidence spam claims/epoch | `{fmt_num(config.get('evidence_spam_claims_per_epoch'))}` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |",
@@ -1400,8 +1456,10 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Provider cost shock epochs/providers | `{fmt_num(economics['provider_cost_shock_epochs'])}` / `{fmt_num(economics['max_provider_cost_shocked_providers'])}` | Shows when external cost pressure was active and how much of the provider population it affected. |",
         f"| Max cost shock fixed/storage/bandwidth | `{fmt_bps(economics['max_provider_cost_shock_fixed_multiplier_bps'])}` / `{fmt_bps(economics['max_provider_cost_shock_storage_multiplier_bps'])}` / `{fmt_bps(economics['max_provider_cost_shock_bandwidth_multiplier_bps'])}` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |",
         f"| Provider churn events / final churned | `{fmt_num(economics['provider_churn_events'])}` / `{fmt_num(economics['churned_providers'])}` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |",
+        f"| Provider entries / probation promotions | `{fmt_num(economics['provider_entries'])}` / `{fmt_num(economics['provider_probation_promotions'])}` | Shows whether reserve supply entered and cleared readiness gating before receiving normal placement. |",
+        f"| Reserve / probationary / entered-active providers | `{fmt_num(capacity['reserve_providers'])}` / `{fmt_num(capacity['probationary_providers'])}` / `{fmt_num(capacity['entered_active_providers'])}` | Separates unused reserve supply, in-flight onboarding, and newly promoted active supply. |",
         f"| Churn pressure provider-epochs / peak | `{fmt_num(economics['churn_pressure_provider_epochs'])}` / `{fmt_num(economics['max_churn_pressure_providers'])}` | Shows the breadth and duration of providers below the configured churn threshold. |",
-        f"| Active / exited provider capacity | `{fmt_num(economics['final_active_provider_capacity'])}` / `{fmt_num(economics['final_exited_provider_capacity'])}` slots | Measures supply actually remaining after modeled exits. |",
+        f"| Active / exited / reserve provider capacity | `{fmt_num(economics['final_active_provider_capacity'])}` / `{fmt_num(economics['final_exited_provider_capacity'])}` / `{fmt_num(capacity['final_reserve_provider_capacity'])}` slots | Measures supply remaining, removed, and still waiting outside normal placement. |",
         f"| Peak assigned slots on churned providers | `{fmt_num(economics['max_churned_assigned_slots'])}` | Shows the maximum repair burden created by economic exits. |",
         f"| Storage price start/end/range | `{fmt_money(economics['storage_price_start'])}` -> `{fmt_money(economics['storage_price_end'])}` (`{fmt_money(economics['storage_price_min'])}`-`{fmt_money(economics['storage_price_max'])}`) | Shows dynamic pricing movement and bounds. |",
         f"| Retrieval price start/end/range | `{fmt_money(economics['retrieval_price_start'])}` -> `{fmt_money(economics['retrieval_price_end'])}` (`{fmt_money(economics['retrieval_price_min'])}`-`{fmt_money(economics['retrieval_price_max'])}`) | Shows whether demand pressure moved retrieval pricing. |",
@@ -1659,6 +1717,12 @@ def assertion_meaning(name: str) -> str:
         "min_max_provider_cost_shock_bandwidth_multiplier_bps": "Cost-shock fixture must raise modeled bandwidth cost by at least this multiplier.",
         "min_provider_churn_events": "Economic churn fixture must execute provider exits after sustained negative P&L.",
         "min_churned_providers": "Economic churn fixture must end with providers marked as exited.",
+        "min_provider_entries": "Provider supply fixture must move reserve providers into onboarding.",
+        "min_provider_probation_promotions": "Provider supply fixture must promote onboarded providers into active supply.",
+        "min_entered_active_providers": "Provider supply fixture must end with newly entered providers in the active set.",
+        "exact_reserve_providers": "Provider supply fixture should consume the configured reserve by run end.",
+        "exact_probationary_providers": "Provider supply fixture should not leave providers stuck in probation by run end.",
+        "max_max_probationary_providers": "Provider supply fixture should bound simultaneous probationary onboarding.",
         "min_churn_pressure_provider_epochs": "Economic churn fixture must expose sustained below-threshold provider pressure.",
         "min_max_churned_assigned_slots": "Economic churn fixture must create assigned-slot repair pressure after exits.",
         "min_final_active_provider_capacity": "Economic churn fixture must retain enough active replacement capacity.",
@@ -1778,6 +1842,13 @@ def build_economic_narrative(
             f"`{fmt_num(totals.get('churned_providers'))}` churned providers and `{fmt_num(totals.get('final_active_provider_capacity'))}` active capacity slots. "
             f"At peak, `{fmt_num(totals.get('max_churned_assigned_slots'))}` assigned slots sat on churned providers and needed repair/rerouting pressure."
         )
+    if fnum(totals.get("provider_entries")) > 0 or fnum(totals.get("provider_probation_promotions")) > 0:
+        parts.append(
+            f"Supply entry moved `{fmt_num(totals.get('provider_entries'))}` reserve providers into probation and promoted "
+            f"`{fmt_num(totals.get('provider_probation_promotions'))}` providers into active supply. "
+            f"The run ended with `{fmt_num(totals.get('entered_active_providers'))}` newly entered active providers, "
+            f"`{fmt_num(totals.get('reserve_providers'))}` reserve providers, and `{fmt_num(totals.get('probationary_providers'))}` probationary providers."
+        )
     if fnum(totals.get("retrieval_demand_shock_active")) > 0:
         parts.append(
             f"Retrieval demand shocks were active for `{fmt_num(totals.get('retrieval_demand_shock_active'))}` shock-epochs. "
@@ -1886,6 +1957,19 @@ def write_risk_register(
                 ),
                 "impact": "Economic exits can turn a pricing problem into repair pressure and capacity scarcity.",
                 "followup": "Review churn caps, minimum replacement capacity, price-floor response, and whether draining exits need longer notice periods.",
+            }
+        )
+    if fnum(totals.get("provider_entries")) > fnum(totals.get("provider_probation_promotions")):
+        rows.append(
+            {
+                "risk": "Provider supply stuck in probation",
+                "severity": "medium",
+                "evidence": (
+                    f"{fmt_num(totals.get('provider_entries'))} provider entries but only "
+                    f"{fmt_num(totals.get('provider_probation_promotions'))} probation promotions."
+                ),
+                "impact": "Replacement capacity may be visible in reserve but unavailable for assignments when repair pressure arrives.",
+                "followup": "Review probation length, readiness criteria, entry caps, and whether the scenario ran long enough to observe promotion.",
             }
         )
     if fnum(totals.get("retrieval_demand_shock_active")) > 0:
@@ -2095,7 +2179,9 @@ def write_risk_register(
             f"- Max cost-shocked providers: `{fmt_num(totals.get('max_provider_cost_shocked_providers'))}`",
             f"- Provider churn events: `{fmt_num(totals.get('provider_churn_events'))}`",
             f"- Churned providers: `{fmt_num(totals.get('churned_providers'))}`",
-            f"- Final active/exited provider capacity: `{fmt_num(totals.get('final_active_provider_capacity'))}` / `{fmt_num(totals.get('final_exited_provider_capacity'))}`",
+            f"- Provider entries/promotions: `{fmt_num(totals.get('provider_entries'))}` / `{fmt_num(totals.get('provider_probation_promotions'))}`",
+            f"- Reserve/probationary/entered-active providers: `{fmt_num(totals.get('reserve_providers'))}` / `{fmt_num(totals.get('probationary_providers'))}` / `{fmt_num(totals.get('entered_active_providers'))}`",
+            f"- Final active/exited/reserve provider capacity: `{fmt_num(totals.get('final_active_provider_capacity'))}` / `{fmt_num(totals.get('final_exited_provider_capacity'))}` / `{fmt_num(totals.get('final_reserve_provider_capacity'))}`",
             f"- Retrieval demand shock active epochs: `{fmt_num(totals.get('retrieval_demand_shock_active'))}`",
             f"- Retrieval price direction changes: `{fmt_num(totals.get('retrieval_price_direction_changes'))}`",
             f"- Latent new deal requests: `{fmt_num(totals.get('new_deal_latent_requests'))}`",
@@ -2129,6 +2215,7 @@ def graduation_semantics(scenario: str) -> str:
         "demand-elasticity-recovery": "Graduation means price-sensitive demand suppression and recovery are visible before governance tunes storage-price defaults.",
         "provider-cost-shock": "Graduation means provider cost stress is visible as churn pressure and pricing mismatch before it is turned into live governance parameters.",
         "provider-economic-churn": "Graduation means bounded economic exits create visible capacity and repair pressure without violating durability.",
+        "provider-supply-entry": "Graduation means reserve-provider onboarding and probationary promotion are explicit enough to tune replacement supply before keeper lifecycle state is implemented.",
         "retrieval-demand-shock": "Graduation means burst read demand and retrieval-price response are measurable, bounded, and reviewable before dynamic pricing keeper defaults are chosen.",
         "audit-budget-exhaustion": "Graduation means audit demand is bounded by budget and turns into backlog or policy review instead of unbounded issuance.",
         "deputy-evidence-spam": "Graduation means low-quality deputy evidence is economically negative-EV and cannot trigger live provider punishment without conviction.",
@@ -2283,6 +2370,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("churned_providers")) for row in economy],
         secondary=[fnum(row.get("provider_churn_events")) for row in economy],
         secondary_label="Provider Churn Events",
+    )
+    write_line_svg(
+        graphs_dir / "provider_supply.svg",
+        "Provider Entries",
+        [fnum(row.get("provider_entries")) for row in economy],
+        secondary=[fnum(row.get("provider_probation_promotions")) for row in economy],
+        secondary_label="Probation Promotions",
     )
     write_line_svg(
         graphs_dir / "burn_mint_ratio.svg",
@@ -3082,10 +3176,17 @@ def sweep_metric_meaning(key: str) -> str:
         "max_provider_cost_shock_bandwidth_multiplier_bps": "Peak modeled bandwidth-cost multiplier during cost shock.",
         "provider_churn_events": "Provider exits executed by the economic churn policy.",
         "churned_providers": "Providers marked as exited by run end.",
+        "provider_entries": "Reserve providers admitted into probation by the supply-entry policy.",
+        "provider_probation_promotions": "Probationary providers promoted into assignment-eligible active supply.",
+        "reserve_providers": "Providers still outside normal placement as reserve supply.",
+        "probationary_providers": "Providers in onboarding probation and not yet eligible for normal placement.",
+        "entered_active_providers": "Providers that entered from reserve and are active by run end.",
         "churn_pressure_provider_epochs": "Provider-epochs below the churn threshold.",
         "max_churn_pressure_providers": "Peak providers simultaneously eligible for churn.",
         "final_active_provider_capacity": "Provider capacity remaining after economic exits.",
         "final_exited_provider_capacity": "Provider capacity removed by economic exits.",
+        "final_reserve_provider_capacity": "Provider capacity still held outside normal placement as reserve supply.",
+        "final_probationary_provider_capacity": "Provider capacity in onboarding probation at run end.",
         "max_churned_assigned_slots": "Peak assigned slots on churned providers before repair catches up.",
         "retrieval_latent_attempts": "Baseline read demand before demand-shock multipliers.",
         "retrieval_demand_shock_active": "Epochs where read-demand shock multipliers were active.",

@@ -89,10 +89,17 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `max_provider_cost_shock_bandwidth_multiplier_bps` | 40000.000000 | 40000.000000 | 0.000000 | 40000.000000 | Peak modeled bandwidth-cost multiplier during cost shock. |
 | `provider_churn_events` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Provider exits executed by the economic churn policy. |
 | `churned_providers` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Providers marked as exited by run end. |
+| `provider_entries` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Reserve providers admitted into probation by the supply-entry policy. |
+| `provider_probation_promotions` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Probationary providers promoted into assignment-eligible active supply. |
+| `reserve_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers still outside normal placement as reserve supply. |
+| `probationary_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers in onboarding probation and not yet eligible for normal placement. |
+| `entered_active_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers that entered from reserve and are active by run end. |
 | `churn_pressure_provider_epochs` | 8.000000 | 36.000000 | 28.000000 | 18.857143 | Provider-epochs below the churn threshold. |
 | `max_churn_pressure_providers` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Peak providers simultaneously eligible for churn. |
 | `final_active_provider_capacity` | 854.000000 | 854.000000 | 0.000000 | 854.000000 | Provider capacity remaining after economic exits. |
 | `final_exited_provider_capacity` | 102.000000 | 102.000000 | 0.000000 | 102.000000 | Provider capacity removed by economic exits. |
+| `final_reserve_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity still held outside normal placement as reserve supply. |
+| `final_probationary_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity in onboarding probation at run end. |
 | `max_churned_assigned_slots` | 13.000000 | 48.000000 | 35.000000 | 36.142857 | Peak assigned slots on churned providers before repair catches up. |
 | `providers_negative_pnl` | 8.000000 | 8.000000 | 0.000000 | 8.000000 | Market sustainability and churn pressure. |
 | `saturated_responses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider bandwidth bottleneck signal. |
@@ -102,7 +109,7 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `final_retrieval_price` | 0.013121 | 0.013121 | 0.000000 | 0.013121 | Retrieval-controller endpoint under this run. |
 | `storage_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage price controller direction changes across the run. |
 | `retrieval_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval price controller direction changes across the run. |
-| `provider_pnl` | 186.371625 | 200.578203 | 14.206578 | 193.745568 | Aggregate provider economics; inspect distribution before deciding. |
+| `provider_pnl` | 197.571625 | 213.560499 | 15.988874 | 207.116997 | Aggregate provider economics; inspect distribution before deciding. |
 
 ## Varied Parameters
 

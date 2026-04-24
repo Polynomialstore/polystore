@@ -40,7 +40,9 @@ Model a temporary retrieval demand spike and verify the retrieval-price controll
 - Max cost-shocked providers: `0`
 - Provider churn events: `0`
 - Churned providers: `0`
-- Final active/exited provider capacity: `1536` / `0`
+- Provider entries/promotions: `0` / `0`
+- Reserve/probationary/entered-active providers: `0` / `0` / `0`
+- Final active/exited/reserve provider capacity: `1536` / `0` / `0`
 - Retrieval demand shock active epochs: `4`
 - Retrieval price direction changes: `2`
 - Latent new deal requests: `0`

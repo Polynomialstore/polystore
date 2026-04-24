@@ -7,7 +7,7 @@ This report converts the committed simulator corpus into implementation planning
 | Status | Count | Meaning |
 |---|---:|---|
 | `implementation planning` | 17 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
-| `further simulation review` | 11 | The fixture passed but should inform parameter or product policy before implementation work. |
+| `further simulation review` | 12 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
 ## Scenario-to-Implementation Map
@@ -32,6 +32,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`price-controller-bounds`](price-controller-bounds/report.md) | `implementation planning` | dynamic pricing keeper tests | Add epoch pricing tests for floors, ceilings, utilization target, retrieval-demand target, and max step bps. | `dynamic pricing params`, `storage utilization accumulator`, `retrieval demand accumulator` | No process e2e; validate with keeper tests and simulator sweeps first. |
 | [`provider-cost-shock`](provider-cost-shock/report.md) | `further simulation review` | economic policy calibration | Compare provider cost assumptions, price floors, reward buffers, and whether cost telemetry should trigger governance review before encoding market defaults. | `provider cost telemetry`, `profitability dashboards`, `price-floor governance policy` | No process e2e yet; this is a parameter-calibration fixture. |
 | [`provider-economic-churn`](provider-economic-churn/report.md) | `further simulation review` | economic churn and replacement calibration | Compare churn caps, minimum active-provider floor, draining notice, replacement throughput, and price-floor response before keeper drain semantics are implemented. | `draining provider state`, `provider exit telemetry`, `churn caps`, `replacement capacity dashboards` | No process e2e yet; validate churn policy with simulator sweeps and then add keeper drain/replacement tests. |
+| [`provider-supply-entry`](provider-supply-entry/report.md) | `further simulation review` | provider lifecycle and supply recovery calibration | Compare reserve sizing, entry caps, probation windows, utilization triggers, and readiness semantics before keeper provider lifecycle state is implemented. | `provider lifecycle state`, `probation readiness checks`, `reserve supply telemetry`, `entry and promotion caps` | No process e2e yet; validate supply recovery with simulator scenarios before provider registration or promotion keeper tests. |
 | [`repair-candidate-exhaustion`](repair-candidate-exhaustion/report.md) | `implementation planning` | candidate selection and repair backoff keeper tests | Add tests proving no eligible replacement emits backoff, preserves capacity constraints, and does not over-assign providers. | `candidate exclusion reasons`, `repair attempt caps`, `replacement capacity query` | Small devnet with no spare provider capacity after keeper behavior is stable. |
 | [`retrieval-demand-shock`](retrieval-demand-shock/report.md) | `further simulation review` | dynamic pricing calibration | Compare retrieval demand targets, price-step clamps, smoothing windows, and burst response before encoding retrieval pricing defaults. | `retrieval demand accumulator`, `pricing smoothing params`, `burst-demand dashboards` | No process e2e yet; validate with keeper pricing tests and simulator sweeps first. |
 | [`setup-failure`](setup-failure/report.md) | `implementation planning` | setup bump and deterministic replacement | Add setup-phase replacement tests proving failed initial upload selects a system provider and does not imply fraud. | `setup slot state`, `setup bump event`, `candidate exclusion reasons` | Create deal with one failing provider upload and verify replacement before first content commit. |
@@ -88,6 +89,7 @@ This report converts the committed simulator corpus into implementation planning
 | `draining provider state` | 1 |
 | `dynamic pricing params` | 1 |
 | `dynamic pricing state` | 1 |
+| `entry and promotion caps` | 1 |
 | `evidence bond escrow` | 1 |
 | `evidence bounty accounting` | 1 |
 | `gateway fallback telemetry` | 1 |
@@ -114,11 +116,13 @@ This report converts the committed simulator corpus into implementation planning
 | `placement diversity params` | 1 |
 | `price-floor governance policy` | 1 |
 | `pricing smoothing params` | 1 |
+| `probation readiness checks` | 1 |
 | `promotion readiness proof` | 1 |
 | `provider capability tier state` | 1 |
 | `provider cost assumptions` | 1 |
 | `provider cost telemetry` | 1 |
 | `provider exit telemetry` | 1 |
+| `provider lifecycle state` | 1 |
 | `quota miss ledger` | 1 |
 | `regional/provider-class placement metadata` | 1 |
 | `repair attempt caps` | 1 |
@@ -126,6 +130,7 @@ This report converts the committed simulator corpus into implementation planning
 | `replacement capacity dashboards` | 1 |
 | `replacement capacity query` | 1 |
 | `requester-paid session accounting` | 1 |
+| `reserve supply telemetry` | 1 |
 | `reward eligibility queries` | 1 |
 | `reward exclusion event` | 1 |
 | `reward exclusion reason query` | 1 |

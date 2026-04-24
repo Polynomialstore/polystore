@@ -12,6 +12,6 @@
   <line x1="86" y1="78" x2="86" y2="342" stroke="#111827" stroke-width="1.2"/>
   <text x="455.0" y="396" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#111827">Epoch</text>
   <text transform="translate(22 210.0) rotate(-90)" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#111827">Provider Cost</text>
-  <polyline fill="none" stroke="#2563eb" stroke-width="2.5" points="86.0,280.6 153.1,280.6 220.2,237.5 287.3,238.2 354.4,237.8 421.5,237.4 488.5,246.3 555.6,254.3 622.7,262.7 689.8,270.3 756.9,270.3 824.0,270.3" />
+  <polyline fill="none" stroke="#2563eb" stroke-width="2.5" points="86.0,280.6 153.1,280.6 220.2,237.5 287.3,238.2 354.4,237.8 421.5,249.1 488.5,261.0 555.6,271.9 622.7,283.1 689.8,282.0 756.9,282.0 824.0,282.0" />
   <polyline fill="none" stroke="#d97706" stroke-width="2.5" points="86.0,114.6 153.1,112.9 220.2,111.1 287.3,109.3 354.4,107.4 421.5,109.9 488.5,112.3 555.6,110.3 622.7,108.2 689.8,101.7 756.9,95.2 824.0,92.9" />
 </svg>

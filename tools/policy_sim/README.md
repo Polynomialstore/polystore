@@ -199,6 +199,8 @@ The simulator mirrors current protocol concepts:
 - Epoch-scoped provider cost shocks that surface churn pressure.
 - Bounded provider economic churn that turns sustained negative P&L into
   draining exits, active-capacity loss, and repair pressure.
+- Reserve-provider supply entry with probationary promotion before new SPs
+  become eligible for normal placement.
 - Demand-side storage admission accounting for latent new deal requests,
   price-elastic demand suppression, price rejections, capacity rejections, and
   effective/latent acceptance rates.
@@ -258,8 +260,8 @@ assertion contract, evidence excerpts, generated graphs, and remaining review
 questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
 provider P&L, provider churn, burn/mint ratio, price trajectory, capacity
-utilization, saturation/repair pressure, repair backlog, high-bandwidth
-promotion, and hot retrieval routing, performance tiers, operator
+utilization, saturation/repair pressure, repair backlog, provider supply entry,
+high-bandwidth promotion, and hot retrieval routing, performance tiers, operator
 concentration, evidence pressure, audit budget, and elasticity spend.
 `signals.json` records derived
 availability, saturation, repair, capacity, economic, regional, high-bandwidth,

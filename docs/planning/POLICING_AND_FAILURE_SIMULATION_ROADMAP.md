@@ -1219,6 +1219,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `demand_elasticity_recovery.yaml` | Latent storage demand is suppressed by high price and recovers as dynamic pricing moves down. | Suppressed demand, recovered effective requests, accepted deals, bounded final price, and no capacity rejection. |
 | `provider_cost_shock.yaml` | Provider operating costs jump after launch while technical availability remains healthy. | Cost-shock windows are visible, provider P&L turns negative, churn pressure appears, and no availability or durability loss occurs. |
 | `provider_economic_churn.yaml` | Sustained negative provider economics causes bounded active-set exits. | Churn events are capped per epoch, exited capacity is visible, affected slots are repaired, reads remain available, and no data-loss events occur. |
+| `provider_supply_entry.yaml` | Reserve providers enter after supply pressure, serve probation, then promote into active assignment capacity. | Churn remains bounded, provider entries and probation promotions are visible, entered providers become active, repair completes, and data-loss events remain zero. |
 | `retrieval_demand_shock.yaml` | Temporary read-demand spike tests retrieval-price response and oscillation bounds. | Retrieval shock windows are visible, price direction changes stay bounded, reads remain available, and price remains within configured limits. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
@@ -1532,6 +1533,9 @@ The policing milestone is not complete until all of these are true:
     bond costs under the target fee/subsidy mix.
 17. Fee-funded revenue becomes the dominant provider income path as issuance
     decays toward tail emission.
+18. New or reserve providers pass explicit entry and probation stages before
+    normal assignment eligibility, and reports expose reserve, probationary,
+    and newly active supply counts.
 18. Wash retrieval, subsidy farming, and public-retrieval escrow drain are
     uneconomic in canonical simulations.
 19. Audit budget can clear expected protocol audit and repair load without
@@ -1652,6 +1656,7 @@ The canonical economic scenarios should run alongside reliability scenarios:
 | Scenario | Question | Expected assertion |
 |---|---|---|
 | Underpriced storage | Does provider supply leave when price is below cost? | Honest provider churn rises and capacity drops until price/subsidy changes. |
+| Provider supply entry | Does reserve or new supply recover after churn pressure? | Reserve providers enter probation, promote into active supply, and repair can use restored capacity without data loss. |
 | Overpriced storage | Does demand collapse or escrow funding fail? | Deal creation or committed bytes fall below target; quote rejection rises. |
 | Storage price shock | Does the controller converge after supply/demand changes? | Price changes stay within step bounds and settle near target utilization. |
 | Retrieval demand spike | Does retrieval pricing and elasticity absorb burst demand? | Reads remain paid and attributable; overlays spawn only when funded. |

@@ -35,6 +35,9 @@ HEALTH_SUSPECT = "SUSPECT"
 HEALTH_DELINQUENT = "DELINQUENT"
 CAPABILITY_ACTIVE = "ACTIVE"
 CAPABILITY_HIGH_BANDWIDTH = "HIGH_BANDWIDTH"
+PROVIDER_ACTIVE = "ACTIVE"
+PROVIDER_RESERVE = "RESERVE"
+PROVIDER_PROBATION = "PROBATION"
 SERVICE_COLD = "Cold"
 SERVICE_GENERAL = "General"
 SERVICE_HOT = "Hot"
@@ -74,6 +77,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "demand-elasticity-recovery",
     "provider-cost-shock",
     "provider-economic-churn",
+    "provider-supply-entry",
     "retrieval-demand-shock",
     "price-controller-bounds",
     "subsidy-farming",
@@ -189,6 +193,14 @@ class SimConfig:
     provider_churn_after_epochs: int = 1
     provider_churn_max_providers_per_epoch: int = 0
     provider_churn_min_remaining_providers: int = 0
+    provider_entry_enabled: bool = False
+    provider_entry_reserve_count: int = 0
+    provider_entry_start_epoch: int = 1
+    provider_entry_end_epoch: int = 0
+    provider_entry_max_per_epoch: int = 1
+    provider_entry_trigger_utilization_bps: int = 0
+    provider_entry_trigger_storage_price: float = 0.0
+    provider_entry_probation_epochs: int = 1
     provider_regions: tuple[str, ...] = ("global",)
     regional_outages: tuple[dict[str, Any], ...] = ()
     max_repairs_started_per_epoch: int = 0
@@ -351,6 +363,29 @@ class SimConfig:
             raise ValueError("provider_churn_min_remaining_providers must be non-negative")
         if self.provider_churn_min_remaining_providers > self.providers:
             raise ValueError("provider_churn_min_remaining_providers must be <= providers")
+        if self.provider_entry_reserve_count < 0:
+            raise ValueError("provider_entry_reserve_count must be non-negative")
+        if self.provider_entry_reserve_count > self.providers:
+            raise ValueError("provider_entry_reserve_count must be <= providers")
+        if self.providers - self.provider_entry_reserve_count < self.n:
+            raise ValueError("active providers after reserve allocation must be >= K+M")
+        if self.provider_entry_start_epoch <= 0:
+            raise ValueError("provider_entry_start_epoch must be positive")
+        if self.provider_entry_end_epoch < 0:
+            raise ValueError("provider_entry_end_epoch must be non-negative")
+        if (
+            self.provider_entry_end_epoch
+            and self.provider_entry_end_epoch < self.provider_entry_start_epoch
+        ):
+            raise ValueError("provider_entry_end_epoch must be 0 or >= provider_entry_start_epoch")
+        if self.provider_entry_max_per_epoch < 0:
+            raise ValueError("provider_entry_max_per_epoch must be non-negative")
+        if not 0 <= self.provider_entry_trigger_utilization_bps <= 100_000:
+            raise ValueError("provider_entry_trigger_utilization_bps must be in [0, 100000]")
+        if self.provider_entry_trigger_storage_price < 0:
+            raise ValueError("provider_entry_trigger_storage_price must be non-negative")
+        if self.provider_entry_probation_epochs < 0:
+            raise ValueError("provider_entry_probation_epochs must be non-negative")
 
 
 @dataclass
@@ -376,6 +411,10 @@ class Provider:
     repair_success_probability: float = 1.0
     capability_tier: str = CAPABILITY_ACTIVE
     capability_reason: str = ""
+    lifecycle_state: str = PROVIDER_ACTIVE
+    entered_epoch: int = 0
+    probation_until_epoch: int = 0
+    supply_promoted_epoch: int = 0
     high_bandwidth_promoted_epoch: int = 0
     high_bandwidth_demoted_epoch: int = 0
     storage_cost_multiplier: float = 1.0
@@ -558,8 +597,15 @@ class EpochMetrics:
     churn_pressure_providers: int = 0
     provider_churn_events: int = 0
     churned_providers: int = 0
+    provider_entries: int = 0
+    provider_probation_promotions: int = 0
+    reserve_providers: int = 0
+    probationary_providers: int = 0
+    entered_active_providers: int = 0
     active_provider_capacity: int = 0
     exited_provider_capacity: int = 0
+    reserve_provider_capacity: int = 0
+    probationary_provider_capacity: int = 0
     churned_assigned_slots: int = 0
     storage_price: float = 0.0
     retrieval_price_per_slot: float = 0.0
@@ -662,6 +708,7 @@ class PolicySimulator:
         latency_min = self.config.provider_latency_ms_min
         latency_max = self.config.provider_latency_ms_max
         operator_count = self.config.operator_count or self.config.providers
+        reserve_start = self.config.providers - self.config.provider_entry_reserve_count
         for index in range(self.config.providers):
             provider_id = self.provider_id(index)
             provider = Provider(
@@ -683,6 +730,8 @@ class PolicySimulator:
                 self.config.provider_online_probability_min,
                 self.config.provider_online_probability_max,
             )
+            if index >= reserve_start:
+                provider.lifecycle_state = PROVIDER_RESERVE
             providers[provider_id] = provider
         return providers
 
@@ -746,6 +795,8 @@ class PolicySimulator:
                 if provider_id in deal_provider_ids:
                     continue
                 provider = self.providers[provider_id]
+                if not self._provider_lifecycle_assignable(provider):
+                    continue
                 if enforce_capacity and assigned_counts.get(provider_id, 0) >= provider.capacity_slots:
                     continue
                 if (
@@ -838,6 +889,7 @@ class PolicySimulator:
         metrics.retrieval_price_per_slot = self.retrieval_price_per_slot
         self.provider_epoch_serves = {pid: 0 for pid in self.providers}
         self.repairs_started_this_epoch = 0
+        self._promote_probationary_providers(epoch, metrics)
         online = self._epoch_online_map(epoch)
         self._simulate_new_deal_demand(epoch, metrics)
 
@@ -978,6 +1030,8 @@ class PolicySimulator:
                 if provider_id in deal_provider_ids:
                     continue
                 provider = self.providers[provider_id]
+                if not self._provider_lifecycle_assignable(provider):
+                    continue
                 if provider.behavior.draining or self._is_jailed(provider, epoch):
                     continue
                 if assigned_counts.get(provider_id, 0) >= provider.capacity_slots:
@@ -1031,7 +1085,9 @@ class PolicySimulator:
         out: dict[str, bool] = {}
         for provider_id, provider in self.providers.items():
             behavior = provider.behavior
-            if self._is_jailed(provider, epoch):
+            if not self._provider_lifecycle_assignable(provider):
+                out[provider_id] = False
+            elif self._is_jailed(provider, epoch):
                 out[provider_id] = False
             elif self._region_offline(provider.region, epoch):
                 out[provider_id] = False
@@ -1586,6 +1642,9 @@ class PolicySimulator:
             if not allow_same_deal and pid in current_deal_providers:
                 diagnostics["excluded_current_deal"] += 1
                 continue
+            if not self._provider_lifecycle_assignable(provider):
+                diagnostics["excluded_ineligible_lifecycle"] = diagnostics.get("excluded_ineligible_lifecycle", 0) + 1
+                continue
             if provider.behavior.draining:
                 diagnostics["excluded_draining"] += 1
                 continue
@@ -1609,6 +1668,10 @@ class PolicySimulator:
     @staticmethod
     def _is_jailed(provider: Provider, epoch: int) -> bool:
         return epoch < provider.jailed_until_epoch
+
+    @staticmethod
+    def _provider_lifecycle_assignable(provider: Provider) -> bool:
+        return provider.lifecycle_state == PROVIDER_ACTIVE and not provider.churned_epoch
 
     def _assigned_counts(self, include_pending: bool = False) -> dict[str, int]:
         assigned_counts = {pid: 0 for pid in self.providers}
@@ -1783,6 +1846,8 @@ class PolicySimulator:
 
         provider_cost = 0.0
         for provider_id, provider in self.providers.items():
+            if not self._provider_lifecycle_assignable(provider):
+                continue
             fixed_multiplier, storage_multiplier, bandwidth_multiplier = self._provider_cost_multipliers(provider, epoch)
             cost = (
                 self.config.provider_fixed_cost_per_epoch
@@ -1800,6 +1865,8 @@ class PolicySimulator:
             provider_cost += cost
 
         self._apply_provider_economic_churn(epoch, metrics, assigned_counts)
+        self._apply_provider_supply_entry(epoch, metrics)
+        self._record_provider_capacity_snapshot(metrics, assigned_counts)
 
         provider_slashed_total = sum(p.slashed for p in self.providers.values())
         provider_slashed_delta = provider_slashed_total - self.provider_slashed_total_last_epoch
@@ -1850,8 +1917,15 @@ class PolicySimulator:
                 "churn_pressure_providers": metrics.churn_pressure_providers,
                 "provider_churn_events": metrics.provider_churn_events,
                 "churned_providers": metrics.churned_providers,
+                "provider_entries": metrics.provider_entries,
+                "provider_probation_promotions": metrics.provider_probation_promotions,
+                "reserve_providers": metrics.reserve_providers,
+                "probationary_providers": metrics.probationary_providers,
+                "entered_active_providers": metrics.entered_active_providers,
                 "active_provider_capacity": metrics.active_provider_capacity,
                 "exited_provider_capacity": metrics.exited_provider_capacity,
+                "reserve_provider_capacity": metrics.reserve_provider_capacity,
+                "probationary_provider_capacity": metrics.probationary_provider_capacity,
                 "churned_assigned_slots": metrics.churned_assigned_slots,
                 "performance_reward_paid": metrics.performance_reward_paid,
                 "latency_sample_count": metrics.latency_sample_count,
@@ -1869,7 +1943,7 @@ class PolicySimulator:
     ) -> None:
         threshold = self.config.provider_churn_pnl_threshold
         for provider in self.providers.values():
-            if provider.churned_epoch:
+            if not self._provider_lifecycle_assignable(provider):
                 continue
             if provider.pnl < threshold:
                 provider.churn_pressure_epochs += 1
@@ -1879,13 +1953,15 @@ class PolicySimulator:
         pressure_candidates = [
             provider
             for provider in self.providers.values()
-            if not provider.churned_epoch
+            if self._provider_lifecycle_assignable(provider)
             and provider.churn_pressure_epochs >= self.config.provider_churn_after_epochs
         ]
         metrics.churn_pressure_providers = len(pressure_candidates)
 
         if self.config.provider_churn_enabled and pressure_candidates:
-            active_providers = sum(1 for provider in self.providers.values() if not provider.churned_epoch)
+            active_providers = sum(
+                1 for provider in self.providers.values() if self._provider_lifecycle_assignable(provider)
+            )
             max_exits_by_floor = max(0, active_providers - self.config.provider_churn_min_remaining_providers)
             max_exits_by_config = self.config.provider_churn_max_providers_per_epoch or len(pressure_candidates)
             exit_limit = min(len(pressure_candidates), max_exits_by_floor, max_exits_by_config)
@@ -1907,7 +1983,89 @@ class PolicySimulator:
                     }
                 )
 
-        self._record_provider_capacity_snapshot(metrics, assigned_counts)
+    def _promote_probationary_providers(self, epoch: int, metrics: EpochMetrics) -> None:
+        for provider in self.providers.values():
+            if provider.lifecycle_state != PROVIDER_PROBATION:
+                continue
+            if provider.probation_until_epoch and epoch < provider.probation_until_epoch:
+                continue
+            provider.lifecycle_state = PROVIDER_ACTIVE
+            provider.supply_promoted_epoch = epoch
+            metrics.provider_probation_promotions += 1
+            self.evidence_rows.append(
+                {
+                    "epoch": epoch,
+                    "deal_id": "",
+                    "slot": "",
+                    "provider_id": provider.provider_id,
+                    "evidence_class": "market",
+                    "reason": "provider_probation_promoted",
+                    "consequence": "active_supply",
+                }
+            )
+
+    def _apply_provider_supply_entry(
+        self,
+        epoch: int,
+        metrics: EpochMetrics,
+    ) -> None:
+        if not self.config.provider_entry_enabled:
+            return
+        if self.config.provider_entry_max_per_epoch <= 0:
+            return
+        if epoch < self.config.provider_entry_start_epoch:
+            return
+        if self.config.provider_entry_end_epoch and epoch > self.config.provider_entry_end_epoch:
+            return
+        if not self._provider_entry_triggered(metrics):
+            return
+
+        reserve = sorted(
+            (
+                provider
+                for provider in self.providers.values()
+                if provider.lifecycle_state == PROVIDER_RESERVE and not provider.churned_epoch
+            ),
+            key=lambda provider: provider.provider_id,
+        )
+        for provider in reserve[: self.config.provider_entry_max_per_epoch]:
+            provider.lifecycle_state = PROVIDER_PROBATION
+            provider.entered_epoch = epoch
+            provider.probation_until_epoch = epoch + self.config.provider_entry_probation_epochs
+            metrics.provider_entries += 1
+            self.evidence_rows.append(
+                {
+                    "epoch": epoch,
+                    "deal_id": "",
+                    "slot": "",
+                    "provider_id": provider.provider_id,
+                    "evidence_class": "market",
+                    "reason": "provider_supply_entry",
+                    "consequence": "probation",
+                }
+            )
+            if self.config.provider_entry_probation_epochs == 0:
+                provider.lifecycle_state = PROVIDER_ACTIVE
+                provider.supply_promoted_epoch = epoch
+                metrics.provider_probation_promotions += 1
+
+    def _provider_entry_triggered(self, metrics: EpochMetrics) -> bool:
+        utilization_threshold = self.config.provider_entry_trigger_utilization_bps
+        price_threshold = self.config.provider_entry_trigger_storage_price
+        if utilization_threshold <= 0 and price_threshold <= 0:
+            return True
+
+        active_capacity = sum(
+            provider.capacity_slots
+            for provider in self.providers.values()
+            if self._provider_lifecycle_assignable(provider)
+        )
+        utilization_bps = int(metrics.active_slots * 10_000 / max(1, active_capacity))
+        if utilization_threshold > 0 and utilization_bps >= utilization_threshold:
+            return True
+        if price_threshold > 0 and self.storage_price >= price_threshold:
+            return True
+        return False
 
     def _record_provider_capacity_snapshot(
         self,
@@ -1915,10 +2073,31 @@ class PolicySimulator:
         assigned_counts: dict[str, int],
     ) -> None:
         churned = [provider for provider in self.providers.values() if provider.churned_epoch]
-        active = [provider for provider in self.providers.values() if not provider.churned_epoch]
+        active = [
+            provider
+            for provider in self.providers.values()
+            if provider.lifecycle_state == PROVIDER_ACTIVE and not provider.churned_epoch
+        ]
+        reserve = [
+            provider
+            for provider in self.providers.values()
+            if provider.lifecycle_state == PROVIDER_RESERVE and not provider.churned_epoch
+        ]
+        probationary = [
+            provider
+            for provider in self.providers.values()
+            if provider.lifecycle_state == PROVIDER_PROBATION and not provider.churned_epoch
+        ]
         metrics.churned_providers = len(churned)
+        metrics.reserve_providers = len(reserve)
+        metrics.probationary_providers = len(probationary)
+        metrics.entered_active_providers = sum(
+            1 for provider in active if provider.entered_epoch > 0
+        )
         metrics.active_provider_capacity = sum(provider.capacity_slots for provider in active)
         metrics.exited_provider_capacity = sum(provider.capacity_slots for provider in churned)
+        metrics.reserve_provider_capacity = sum(provider.capacity_slots for provider in reserve)
+        metrics.probationary_provider_capacity = sum(provider.capacity_slots for provider in probationary)
         metrics.churned_assigned_slots = sum(assigned_counts[provider.provider_id] for provider in churned)
 
     def _provider_cost_multipliers(self, provider: Provider, epoch: int) -> tuple[float, float, float]:
@@ -1944,6 +2123,8 @@ class PolicySimulator:
                 continue
             active_shocks += 1
             for provider in self.providers.values():
+                if not self._provider_lifecycle_assignable(provider):
+                    continue
                 if not self._provider_cost_shock_applies(shock, provider, epoch):
                     continue
                 shocked_providers.add(provider.provider_id)
@@ -2109,6 +2290,8 @@ class PolicySimulator:
             "provider_cost",
             "provider_cost_shock_active",
             "provider_churn_events",
+            "provider_entries",
+            "provider_probation_promotions",
             "elasticity_spent",
             "elasticity_rejections",
         ]
@@ -2179,11 +2362,36 @@ class PolicySimulator:
         )
         totals["churned_providers"] = sum(1 for p in self.providers.values() if p.churned_epoch)
         totals["max_churned_providers"] = max((m.churned_providers for m in self.metrics), default=0)
+        totals["reserve_providers"] = sum(
+            1 for p in self.providers.values() if p.lifecycle_state == PROVIDER_RESERVE and not p.churned_epoch
+        )
+        totals["probationary_providers"] = sum(
+            1 for p in self.providers.values() if p.lifecycle_state == PROVIDER_PROBATION and not p.churned_epoch
+        )
+        totals["entered_active_providers"] = sum(
+            1
+            for p in self.providers.values()
+            if p.lifecycle_state == PROVIDER_ACTIVE and p.entered_epoch > 0 and not p.churned_epoch
+        )
+        totals["max_probationary_providers"] = max((m.probationary_providers for m in self.metrics), default=0)
+        totals["max_reserve_providers"] = max((m.reserve_providers for m in self.metrics), default=0)
         totals["final_active_provider_capacity"] = sum(
-            p.capacity_slots for p in self.providers.values() if not p.churned_epoch
+            p.capacity_slots
+            for p in self.providers.values()
+            if p.lifecycle_state == PROVIDER_ACTIVE and not p.churned_epoch
         )
         totals["final_exited_provider_capacity"] = sum(
             p.capacity_slots for p in self.providers.values() if p.churned_epoch
+        )
+        totals["final_reserve_provider_capacity"] = sum(
+            p.capacity_slots
+            for p in self.providers.values()
+            if p.lifecycle_state == PROVIDER_RESERVE and not p.churned_epoch
+        )
+        totals["final_probationary_provider_capacity"] = sum(
+            p.capacity_slots
+            for p in self.providers.values()
+            if p.lifecycle_state == PROVIDER_PROBATION and not p.churned_epoch
         )
         totals["max_churned_assigned_slots"] = max((m.churned_assigned_slots for m in self.metrics), default=0)
         assigned_counts = self._assigned_counts()
@@ -2244,6 +2452,10 @@ class PolicySimulator:
                     "provider_id": provider_id,
                     "operator_id": provider.operator_id,
                     "region": provider.region,
+                    "lifecycle_state": provider.lifecycle_state,
+                    "entered_epoch": provider.entered_epoch,
+                    "probation_until_epoch": provider.probation_until_epoch,
+                    "supply_promoted_epoch": provider.supply_promoted_epoch,
                     "capability_tier": provider.capability_tier,
                     "capability_reason": provider.capability_reason,
                     "high_bandwidth_promoted_epoch": provider.high_bandwidth_promoted_epoch,
@@ -2500,6 +2712,7 @@ def empty_candidate_diagnostics() -> dict[str, Any]:
         "eligible_candidates": 0,
         "excluded_current_deal": 0,
         "excluded_current_provider": 0,
+        "excluded_ineligible_lifecycle": 0,
         "excluded_draining": 0,
         "excluded_jailed": 0,
         "excluded_capacity": 0,

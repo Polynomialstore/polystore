@@ -40,7 +40,9 @@ Model a Sybil-shaped provider set where one operator controls many SP identities
 - Max cost-shocked providers: `0`
 - Provider churn events: `0`
 - Churned providers: `0`
-- Final active/exited provider capacity: `1280` / `0`
+- Provider entries/promotions: `0` / `0`
+- Reserve/probationary/entered-active providers: `0` / `0` / `0`
+- Final active/exited/reserve provider capacity: `1280` / `0` / `0`
 - Retrieval demand shock active epochs: `0`
 - Retrieval price direction changes: `0`
 - Latent new deal requests: `0`

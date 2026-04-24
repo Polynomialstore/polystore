@@ -40,7 +40,9 @@ Model an honest provider that becomes unavailable for several epochs. The policy
 - Max cost-shocked providers: `0`
 - Provider churn events: `0`
 - Churned providers: `0`
-- Final active/exited provider capacity: `768` / `0`
+- Provider entries/promotions: `0` / `0`
+- Reserve/probationary/entered-active providers: `0` / `0` / `0`
+- Final active/exited/reserve provider capacity: `768` / `0` / `0`
 - Retrieval demand shock active epochs: `0`
 - Retrieval price direction changes: `0`
 - Latent new deal requests: `0`

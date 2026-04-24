@@ -41,7 +41,9 @@ Model a technically healthy network where provider operating costs jump after la
 - Max cost-shocked providers: `64`
 - Provider churn events: `0`
 - Churned providers: `0`
-- Final active/exited provider capacity: `1024` / `0`
+- Provider entries/promotions: `0` / `0`
+- Reserve/probationary/entered-active providers: `0` / `0` / `0`
+- Final active/exited/reserve provider capacity: `1024` / `0` / `0`
 - Retrieval demand shock active epochs: `0`
 - Retrieval price direction changes: `0`
 - Latent new deal requests: `0`
