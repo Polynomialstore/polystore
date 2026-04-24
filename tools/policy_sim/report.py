@@ -3715,6 +3715,12 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "audit budget backlog remained at run end")
     if fnum(totals.get("evidence_spam_net_gain")) > 0:
         raise_to("high", "evidence spam was profitable")
+    if (
+        fnum(totals.get("evidence_spam_claims")) > 0
+        and fnum(totals.get("evidence_spam_bond_burned")) == 0
+        and fnum(totals.get("evidence_spam_convictions")) < fnum(totals.get("evidence_spam_claims"))
+    ):
+        raise_to("medium", "unconvicted evidence spam carried no burn cost")
     if fnum(totals.get("new_deals_rejected_price")) > 0:
         raise_to("medium", "new storage demand was rejected by price")
     if fnum(totals.get("new_deals_suppressed_price")) > 0:

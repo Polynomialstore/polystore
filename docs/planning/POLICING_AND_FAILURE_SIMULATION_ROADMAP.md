@@ -1,6 +1,6 @@
 # PolyStore Policing and Failure Simulation Roadmap
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 ## 1. Purpose
 
@@ -1302,7 +1302,12 @@ or provider-cost telemetry assumptions are promoted into keeper work; and
 `tools/policy_sim/sweeps/provider_supply_entry_controls.yaml`, which compares
 reserve-provider entry caps, probation length, trigger timing, and underfilled
 reserve recovery before provider lifecycle-state and new-supply promotion
-semantics are chosen.
+semantics are chosen; and
+`tools/policy_sim/sweeps/evidence_spam_economics.yaml`, which compares deputy
+evidence-spam claim volume, bond size, conviction rate, and bounty sizing so
+unconvicted spam remains negative-EV, zero-bond spam is surfaced as unsafe, and
+profitable bounty farming is visible before evidence-market keeper defaults are
+chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models

@@ -1,0 +1,124 @@
+{
+  "name": "evidence-spam-economics",
+  "description": "Sensitivity sweep for deputy evidence-spam bond, bounty, conviction, and claim-volume economics.",
+  "base_scenario": "../scenarios/deputy_evidence_spam.yaml",
+  "cases": [
+    {
+      "name": "baseline-bond-burn-no-conviction"
+    },
+    {
+      "name": "low-bond-no-conviction",
+      "config": {
+        "evidence_spam_bond": 0.01
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_evidence_spam_claims": 1,
+        "min_evidence_spam_bond_burned": 1.0,
+        "max_evidence_spam_bounty_paid": 0.0,
+        "max_evidence_spam_net_gain": 0.0,
+        "max_repairs_started": 0,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "high-bond-no-conviction",
+      "config": {
+        "evidence_spam_bond": 0.1
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_evidence_spam_claims": 1,
+        "min_evidence_spam_bond_burned": 1.0,
+        "max_evidence_spam_bounty_paid": 0.0,
+        "max_evidence_spam_net_gain": 0.0,
+        "max_repairs_started": 0,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "sparse-convictions-still-negative",
+      "config": {
+        "evidence_spam_conviction_bps": 1000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_evidence_spam_claims": 1,
+        "min_evidence_spam_bond_burned": 1.0,
+        "max_evidence_spam_bounty_paid": 5.0,
+        "max_evidence_spam_net_gain": 0.0,
+        "max_repairs_started": 0,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "profitable-bounty-unsafe",
+      "config": {
+        "evidence_spam_bond": 0.01,
+        "evidence_spam_conviction_bps": 5000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_evidence_spam_claims": 1,
+        "min_evidence_spam_net_gain": 1.0,
+        "max_evidence_spam_bounty_paid": 25.0,
+        "max_evidence_spam_net_gain": 25.0,
+        "max_repairs_started": 0,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "zero-bond-no-conviction-unsafe",
+      "config": {
+        "evidence_spam_bond": 0.0
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_evidence_spam_claims": 1,
+        "min_evidence_spam_bond_burned": 0.0,
+        "max_evidence_spam_bond_burned": 0.0,
+        "max_evidence_spam_bounty_paid": 0.0,
+        "max_evidence_spam_net_gain": 0.0,
+        "max_repairs_started": 0,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "high-volume-bond-burn",
+      "config": {
+        "evidence_spam_claims_per_epoch": 200
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_evidence_spam_claims": 1000,
+        "min_evidence_spam_bond_burned": 50.0,
+        "max_evidence_spam_bounty_paid": 0.0,
+        "max_evidence_spam_net_gain": 0.0,
+        "max_repairs_started": 0,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "throttled-low-volume",
+      "config": {
+        "evidence_spam_claims_per_epoch": 5
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_evidence_spam_claims": 30,
+        "min_evidence_spam_bond_burned": 1.0,
+        "max_evidence_spam_bounty_paid": 0.0,
+        "max_evidence_spam_net_gain": 0.0,
+        "max_repairs_started": 0,
+        "max_provider_slashed": 0.0,
+        "max_data_loss_events": 0
+      }
+    }
+  ]
+}
