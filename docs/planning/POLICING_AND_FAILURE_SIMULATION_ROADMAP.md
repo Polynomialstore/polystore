@@ -1262,12 +1262,16 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 
 Current S6 sweep specs include `tools/policy_sim/sweeps/sponsored_retrieval_funding.yaml`,
 which compares full, partial, and absent sponsored-session funding so owner
-escrow-drain risk is visible before keeper defaults are chosen, and
+escrow-drain risk is visible before keeper defaults are chosen;
 `tools/policy_sim/sweeps/storage_escrow_close_refund.yaml`, which compares
-full-duration service, early close timing, close count, and close-by-bps
-storage escrow outcomes. `tools/policy_sim/sweeps/storage_escrow_noncompliance_modes.yaml`
+full-duration service, early close timing, close count, close-by-bps storage
+escrow outcomes, and post-close rejection counts;
+`tools/policy_sim/sweeps/storage_escrow_noncompliance_modes.yaml`, which
 compares measure-only, repair-only, and reward-exclusion treatment for earned
-storage-fee payout and burn behavior.
+storage-fee payout and burn behavior; and
+`tools/policy_sim/sweeps/audit_budget_controls.yaml`, which compares
+miss-driven audit demand against tight, moderate, clearing, reserve, high-cost,
+and low-cost budget assumptions before keeper audit-budget defaults are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models

@@ -650,6 +650,7 @@ SWEEP_CONFIG_KEYS = [
     "owner_retrieval_debit_bps",
     "base_reward_per_slot",
     "audit_budget_per_epoch",
+    "audit_cost_per_miss",
     "evidence_spam_claims_per_epoch",
     "evidence_spam_bond",
     "evidence_spam_bounty",

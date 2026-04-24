@@ -3,6 +3,7 @@
     "assertions_passed": true,
     "config": {
       "audit_budget_per_epoch": 25.0,
+      "audit_cost_per_miss": 0.01,
       "base_reward_per_slot": 0.018,
       "deal_close_bps": 0,
       "deal_close_count": 0,
@@ -250,6 +251,7 @@
       "assertions_passed": true,
       "config": {
         "audit_budget_per_epoch": 25.0,
+        "audit_cost_per_miss": 0.01,
         "base_reward_per_slot": 0.018,
         "deal_close_bps": 0,
         "deal_close_count": 0,
@@ -495,6 +497,7 @@
       "assertions_passed": true,
       "config": {
         "audit_budget_per_epoch": 25.0,
+        "audit_cost_per_miss": 0.01,
         "base_reward_per_slot": 0.018,
         "deal_close_bps": 0,
         "deal_close_count": 0,
@@ -741,6 +744,7 @@
       "assertions_passed": true,
       "config": {
         "audit_budget_per_epoch": 25.0,
+        "audit_cost_per_miss": 0.01,
         "base_reward_per_slot": 0.018,
         "deal_close_bps": 0,
         "deal_close_count": 0,
@@ -1731,6 +1735,7 @@
       "assertions_passed": true,
       "config": {
         "audit_budget_per_epoch": 25.0,
+        "audit_cost_per_miss": 0.01,
         "base_reward_per_slot": 0.018,
         "deal_close_bps": 0,
         "deal_close_count": 0,
@@ -1977,6 +1982,7 @@
       "assertions_passed": true,
       "config": {
         "audit_budget_per_epoch": 25.0,
+        "audit_cost_per_miss": 0.01,
         "base_reward_per_slot": 0.018,
         "deal_close_bps": 0,
         "deal_close_count": 0,
@@ -2223,6 +2229,7 @@
       "assertions_passed": true,
       "config": {
         "audit_budget_per_epoch": 25.0,
+        "audit_cost_per_miss": 0.01,
         "base_reward_per_slot": 0.018,
         "deal_close_bps": 0,
         "deal_close_count": 0,

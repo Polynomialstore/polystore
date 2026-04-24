@@ -18,6 +18,7 @@ python3 tools/policy_sim/run_sweeps.py \
 
 | Sweep | Cases | Assertion Failures | Description | Report |
 |---|---:|---:|---|---|
+| `audit-budget-controls` | 6 | 0 | Sensitivity sweep for protocol audit-budget funding versus miss-driven audit demand, backlog, and carryover. | [summary](audit-budget-controls/sweep_summary.md) |
 | `elasticity-overlay-controls` | 6 | 1 | Sensitivity sweep for user-funded elasticity overlay readiness, TTL, spend cap, and per-deal route caps. | [summary](elasticity-overlay-controls/sweep_summary.md) |
 | `high-bandwidth-thresholds` | 9 | 5 | Sensitivity sweep for high-bandwidth capacity and demotion-saturation thresholds under hot retrieval pressure. | [summary](high-bandwidth-thresholds/sweep_summary.md) |
 | `price-step-controller` | 4 | 0 | Controller sensitivity sweep for dynamic pricing max-step parameters in the pricing-bounds fixture. | [summary](price-step-controller/sweep_summary.md) |
