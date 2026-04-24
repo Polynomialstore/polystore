@@ -134,6 +134,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["provider capability tier state", "bandwidth probe telemetry", "hot-route preference query", "capability demotion rule"],
         "e2e": "Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression.",
     },
+    "high-bandwidth-regression": {
+        "target": "capability demotion and hot-route failover tests",
+        "next_test": "Add keeper/runtime tests proving promoted providers demote after sustained saturation and hot routing falls back without data-loss or over-capacity assignment.",
+        "missing_surfaces": ["capability demotion rule", "saturation evidence accumulator", "hot-route failover telemetry", "operator regression alert"],
+        "e2e": "Hot retrieval burst that intentionally saturates promoted providers; assert demotion events fire and retrievals continue through fallback capacity.",
+    },
     "large-scale-regional-stress": {
         "target": "scale calibration and regression reporting",
         "next_test": "Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults.",
@@ -417,6 +423,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "subsidy-farming",
         "repair-candidate-exhaustion",
         "high-bandwidth-promotion",
+        "high-bandwidth-regression",
     }
     if scenario in implementation_ready:
         return "implementation planning", []
@@ -443,6 +450,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "setup-failure",
         "repair-candidate-exhaustion",
         "high-bandwidth-promotion",
+        "high-bandwidth-regression",
         "price-controller-bounds",
     ]
     ready.sort(key=lambda row: (priority.index(row["scenario"]) if row["scenario"] in priority else 99, row["scenario"]))

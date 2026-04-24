@@ -29,6 +29,7 @@ The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routin
 | `elasticity-cap-hit` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0/0 | 0 | 0 | [report](elasticity-cap-hit/report.md) |
 | `flapping-provider` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 24/0 | 0 | 0 | 0/0 | 0 | 0 | [report](flapping-provider/report.md) |
 | `high-bandwidth-promotion` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 55/55 | 0 | 0 | [report](high-bandwidth-promotion/report.md) |
+| `high-bandwidth-regression` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 32/30 | 21 | 0 | [report](high-bandwidth-regression/report.md) |
 | `ideal` | `PASS` | 1.0000 | 0 | 0 | 0/0/0 | 0/0 | 0 | 0 | 0/0 | 0 | 0 | [report](ideal/report.md) |
 | `large-scale-regional-stress` | `PASS` | 0.9926 | 1065 | 0 | 3624/3050/3050 | 361/25634 | 16060 | 12436 | 0/0 | 15482 | 4 | [report](large-scale-regional-stress/report.md) |
 | `lazy-provider` | `PASS` | 1.0000 | 0 | 0 | 6/6/6 | 6/12 | 6 | 0 | 0/0 | 0 | 1 | [report](lazy-provider/report.md) |

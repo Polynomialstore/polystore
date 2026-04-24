@@ -55,6 +55,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
     "high-bandwidth-promotion",
+    "high-bandwidth-regression",
 }
 
 CLI_SCENARIOS = sorted(

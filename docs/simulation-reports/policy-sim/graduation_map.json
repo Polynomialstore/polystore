@@ -213,6 +213,42 @@
     },
     {
       "blockers": [],
+      "e2e": "Hot retrieval burst that intentionally saturates promoted providers; assert demotion events fire and retrievals continue through fallback capacity.",
+      "metrics": {
+        "data_loss_events": 0,
+        "delinquent_slots": 0,
+        "high_bandwidth_demotions": 2,
+        "high_bandwidth_promotions": 32,
+        "high_bandwidth_providers": 30,
+        "hot_high_bandwidth_serves": 21062,
+        "hot_retrieval_attempts": 4800,
+        "providers_negative_pnl": 0,
+        "repair_attempt_caps": 0,
+        "repair_attempts": 0,
+        "repair_backoffs": 0,
+        "repair_cooldowns": 0,
+        "repairs_completed": 0,
+        "repairs_ready": 0,
+        "repairs_started": 0,
+        "saturated_responses": 21,
+        "success_rate": 1.0,
+        "suspect_slots": 0,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "capability demotion rule",
+        "saturation evidence accumulator",
+        "hot-route failover telemetry",
+        "operator regression alert"
+      ],
+      "next_test": "Add keeper/runtime tests proving promoted providers demote after sustained saturation and hot routing falls back without data-loss or over-capacity assignment.",
+      "scenario": "high-bandwidth-regression",
+      "status": "implementation planning",
+      "target": "capability demotion and hot-route failover tests"
+    },
+    {
+      "blockers": [],
       "e2e": "Gateway happy-path smoke remains sufficient; do not add a slow failure e2e for the control case.",
       "metrics": {
         "data_loss_events": 0,
@@ -670,6 +706,6 @@
   ],
   "status_counts": {
     "further simulation review": 6,
-    "implementation planning": 13
+    "implementation planning": 14
   }
 }

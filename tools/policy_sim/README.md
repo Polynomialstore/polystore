@@ -149,6 +149,8 @@ The simulator mirrors current protocol concepts:
 - Per-slot `HEALTHY` / `SUSPECT` / `DELINQUENT` health state with reason codes.
 - Provider capability promotion to `HIGH_BANDWIDTH` based on measured capacity,
   retrieval success, saturation, and hard-fault history.
+- Capability demotion from `HIGH_BANDWIDTH` when hot routing exposes sustained
+  saturation regression.
 - Hot retrieval routing that can prefer promoted high-bandwidth providers
   without bypassing capacity and availability assertions.
 - Simulated enforcement modes before live chain/runtime rollout.
