@@ -247,6 +247,8 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The corpus-level [graduation map](graduation_map.md) translates these simulator results into the next keeper, gateway/provider, or policy-calibration artifacts.",
         "",
+        "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
+        "",
         "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Backoffs | Saturated | Negative P&L | Report |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
     ]

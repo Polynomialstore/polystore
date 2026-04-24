@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,6 +14,7 @@ try:
     )
     from .report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
     from .generate_report_corpus import write_graduation_map
+    from .run_sweeps import load_sweep_spec, run_sweep_spec
 except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`.
     from policing_sim import (
         PolicySimulator,
@@ -24,6 +26,7 @@ except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`
     )
     from report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
     from generate_report_corpus import write_graduation_map
+    from run_sweeps import load_sweep_spec, run_sweep_spec
 
 
 class PolicySimulatorTests(unittest.TestCase):
@@ -277,6 +280,8 @@ class PolicySimulatorTests(unittest.TestCase):
             payload = (report_dir / "sweep_summary.json").read_text(encoding="utf-8")
             self.assertIn('"metric_ranges"', payload)
             self.assertIn('"high_risk_runs"', payload)
+            rows = json.loads(payload)["runs"]
+            self.assertIn("sweep-artifacts/sweep/ideal", {row["run_dir"] for row in rows})
 
     def test_graduation_map_links_scenarios_to_implementation_targets(self):
         rows = [
@@ -319,6 +324,57 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("Provider returns corrupt bytes or invalid proof", text)
             payload = (out_dir / "graduation_map.json").read_text(encoding="utf-8")
             self.assertIn('"implementation planning"', payload)
+
+    def test_sweep_spec_runner_expands_matrix_and_reports(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenario = root / "base.yaml"
+            scenario.write_text(
+                """
+{
+  "name": "ideal",
+  "config": {
+    "scenario": "ideal",
+    "seed": 7,
+    "providers": 24,
+    "users": 8,
+    "deals": 4,
+    "epochs": 3
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_repairs_started": 0
+  }
+}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            sweep = root / "sweep.yaml"
+            sweep.write_text(
+                """
+{
+  "name": "test-sweep",
+  "description": "Small unit-test sweep.",
+  "base_scenario": "base.yaml",
+  "matrix": {
+    "seed": [7, 8]
+  }
+}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            spec = load_sweep_spec(sweep)
+            self.assertEqual(2, len(spec.cases))
+            manifest = run_sweep_spec(sweep, root / "runs", root / "reports")
+
+            self.assertEqual(2, manifest["case_count"])
+            self.assertEqual("sweep-artifacts/test-sweep", manifest["raw_run_dir"])
+            self.assertTrue((root / "reports" / "test-sweep" / "sweep_summary.md").exists())
+            self.assertTrue((root / "reports" / "test-sweep" / "sweep_summary.json").exists())
+            self.assertTrue((root / "reports" / "test-sweep" / "manifest.json").exists())
 
 
 if __name__ == "__main__":

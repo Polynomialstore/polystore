@@ -1,0 +1,8 @@
+{
+  "name": "provider-reliability-large-scale",
+  "description": "Population-scale sensitivity sweep for heterogeneous provider online-probability floors.",
+  "base_scenario": "../scenarios/large_scale_regional_stress.yaml",
+  "matrix": {
+    "provider_online_probability_min": [0.975, 0.985, 0.995]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "price-step-controller",
+  "description": "Controller sensitivity sweep for dynamic pricing max-step parameters in the pricing-bounds fixture.",
+  "base_scenario": "../scenarios/price_controller_bounds.yaml",
+  "matrix": {
+    "dynamic_pricing_max_step_bps": [100, 350, 800, 1200]
+  }
+}

@@ -61,6 +61,15 @@ python3 tools/policy_sim/report.py \
   --out-dir /tmp/polystore-policy/reports/sweep
 ```
 
+Run the versioned sweep specs and generate committed sweep reports:
+
+```bash
+python3 tools/policy_sim/run_sweeps.py \
+  --sweep-dir tools/policy_sim/sweeps \
+  --run-dir /tmp/polystore-policy-sweep-runs \
+  --out-dir docs/simulation-reports/policy-sim/sweeps
+```
+
 If `--out-dir` is omitted, `report.py` writes to a dedicated subdirectory
 instead of polluting raw simulator outputs: `<run-dir>/report` for single-run
 reports, `<candidate-dir>/delta` for baseline/candidate comparisons, and
@@ -109,6 +118,12 @@ are supported in scenario files:
 - `provider_regions`
 - `regional_outages`
 - `max_repairs_started_per_epoch`
+
+Versioned sweep specs live in `tools/policy_sim/sweeps`. They are strict JSON
+documents with a `.yaml` extension, matching scenario fixture conventions. A
+sweep chooses a base scenario and a matrix of config overrides; raw per-case
+ledgers are generated locally while committed reports contain only
+`sweep_summary.md`, `sweep_summary.json`, and `manifest.json`.
 
 ## Model Scope
 
@@ -165,6 +180,10 @@ are generated as local/CI artifacts instead of being committed.
 The corpus also includes `graduation_map.md` and `graduation_map.json`, which
 aggregate all scenario outcomes into keeper, gateway/provider, process-level
 e2e, and further-simulation targets.
+
+`run_sweeps.py` writes committed sweep summaries under
+`docs/simulation-reports/policy-sim/sweeps`, while omitting raw sweep ledgers
+for the same reason.
 
 The Markdown reports are intended to be human review artifacts, not just metric
 dumps. A run report explains scenario intent, expected behavior, what happened

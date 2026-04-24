@@ -127,6 +127,10 @@ jobs:
             --scenario-dir tools/policy_sim/scenarios \
             --out-dir docs/simulation-reports/policy-sim \
             --work-dir _artifacts/policy_sim/runs
+          python3 tools/policy_sim/run_sweeps.py \
+            --sweep-dir tools/policy_sim/sweeps \
+            --run-dir _artifacts/policy_sim/sweeps \
+            --out-dir docs/simulation-reports/policy-sim/sweeps
 
       - name: Verify committed policy reports are current
         run: git diff --exit-code docs/simulation-reports/policy-sim
@@ -138,6 +142,7 @@ jobs:
           name: policy-simulator-artifacts
           path: |
             _artifacts/policy_sim/runs/**
+            _artifacts/policy_sim/sweeps/**
             docs/simulation-reports/policy-sim/**
           if-no-files-found: ignore
 
