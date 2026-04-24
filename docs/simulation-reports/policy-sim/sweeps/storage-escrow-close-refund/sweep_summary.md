@@ -78,6 +78,7 @@ This report aggregates `5` completed simulator run output directories. It does n
 | `owner_retrieval_escrow_debited` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal-owner escrow debited for non-sponsored retrievals. |
 | `retrieval_wash_accounted_spend` | 0.486000 | 0.640000 | 0.154000 | 0.550000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
 | `retrieval_wash_net_gain` | 36.450000 | 48.000000 | 11.550000 | 41.250000 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
+| `retrieval_attempts` | 486.000000 | 640.000000 | 154.000000 | 550.000000 | Effective retrieval attempts after demand shock multipliers and inactive-content rejection. |
 | `retrieval_latent_attempts` | 640.000000 | 640.000000 | 0.000000 | 640.000000 | Baseline read demand before demand-shock multipliers. |
 | `retrieval_demand_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where read-demand shock multipliers were active. |
 | `max_retrieval_demand_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled read-demand multiplier. |
@@ -154,6 +155,8 @@ This report aggregates `5` completed simulator run output directories. It does n
 | `providers_over_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Placement/capacity invariant; should remain zero. |
 | `final_storage_utilization_bps` | 937.000000 | 1875.000000 | 938.000000 | 1343.600000 | Supply utilization against modeled capacity. |
 | `final_storage_price` | 0.050000 | 0.050000 | 0.000000 | 0.050000 | Storage-controller endpoint under this run. |
+| `min_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Lowest retrieval price observed during the run. |
+| `max_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Highest retrieval price observed during the run. |
 | `final_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Retrieval-controller endpoint under this run. |
 | `storage_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage price controller direction changes across the run. |
 | `retrieval_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval price controller direction changes across the run. |

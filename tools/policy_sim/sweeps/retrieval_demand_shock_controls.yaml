@@ -1,0 +1,147 @@
+{
+  "name": "retrieval-demand-shock-controls",
+  "description": "Sensitivity sweep for retrieval-demand shock multipliers, pricing target, step size, and disabled controller behavior.",
+  "base_scenario": "../scenarios/retrieval_demand_shock.yaml",
+  "cases": [
+    {
+      "name": "baseline-10pct-step"
+    },
+    {
+      "name": "slow-250bps-step",
+      "config": {
+        "dynamic_pricing_max_step_bps": 250
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_retrieval_demand_shock_active": 4,
+        "min_max_retrieval_demand_multiplier_bps": 40000,
+        "min_retrieval_latent_attempts": 3600,
+        "min_retrieval_attempts": 7000,
+        "min_max_retrieval_price": 0.0105,
+        "max_retrieval_price_direction_changes": 2,
+        "max_final_retrieval_price": 0.05
+      }
+    },
+    {
+      "name": "fast-2000bps-step",
+      "config": {
+        "dynamic_pricing_max_step_bps": 2000
+      }
+    },
+    {
+      "name": "high-target-muted-response",
+      "config": {
+        "retrieval_target_per_epoch": 1000
+      }
+    },
+    {
+      "name": "low-target-sticky-high",
+      "config": {
+        "retrieval_target_per_epoch": 100
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_retrieval_demand_shock_active": 4,
+        "min_max_retrieval_demand_multiplier_bps": 40000,
+        "min_retrieval_latent_attempts": 3600,
+        "min_retrieval_attempts": 7000,
+        "min_final_retrieval_price": 0.02,
+        "max_final_retrieval_price": 0.05
+      }
+    },
+    {
+      "name": "severe-8x-shock",
+      "config": {
+        "retrieval_demand_shocks": [
+          {
+            "start_epoch": 2,
+            "end_epoch": 5,
+            "multiplier_bps": 80000
+          }
+        ]
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_retrieval_demand_shock_active": 4,
+        "min_max_retrieval_demand_multiplier_bps": 80000,
+        "min_retrieval_latent_attempts": 3600,
+        "min_retrieval_attempts": 10000,
+        "min_max_retrieval_price": 0.011,
+        "max_retrieval_price_direction_changes": 2,
+        "max_final_retrieval_price": 0.05
+      }
+    },
+    {
+      "name": "prolonged-shock",
+      "config": {
+        "retrieval_demand_shocks": [
+          {
+            "start_epoch": 2,
+            "end_epoch": 9,
+            "multiplier_bps": 40000
+          }
+        ]
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_retrieval_demand_shock_active": 8,
+        "min_max_retrieval_demand_multiplier_bps": 40000,
+        "min_retrieval_latent_attempts": 3600,
+        "min_retrieval_attempts": 10000,
+        "min_max_retrieval_price": 0.015,
+        "max_retrieval_price_direction_changes": 2,
+        "max_final_retrieval_price": 0.05
+      }
+    },
+    {
+      "name": "narrow-price-ceiling",
+      "config": {
+        "retrieval_price_max": 0.015
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_retrieval_demand_shock_active": 4,
+        "min_max_retrieval_demand_multiplier_bps": 40000,
+        "min_retrieval_latent_attempts": 3600,
+        "min_retrieval_attempts": 7000,
+        "min_max_retrieval_price": 0.011,
+        "max_retrieval_price_direction_changes": 2,
+        "max_final_retrieval_price": 0.015
+      }
+    },
+    {
+      "name": "controller-disabled-unsafe",
+      "config": {
+        "dynamic_pricing": false
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "max_data_loss_events": 0,
+        "max_paid_corrupt_bytes": 0,
+        "min_retrieval_demand_shock_active": 4,
+        "min_max_retrieval_demand_multiplier_bps": 40000,
+        "min_retrieval_latent_attempts": 3600,
+        "min_retrieval_attempts": 7000,
+        "min_max_retrieval_price": 0.01,
+        "max_retrieval_price_direction_changes": 0,
+        "max_final_retrieval_price": 0.01
+      }
+    }
+  ]
+}

@@ -538,6 +538,7 @@ SWEEP_METRICS = [
     "owner_retrieval_escrow_debited",
     "retrieval_wash_accounted_spend",
     "retrieval_wash_net_gain",
+    "retrieval_attempts",
     "retrieval_latent_attempts",
     "retrieval_demand_shock_active",
     "max_retrieval_demand_multiplier_bps",
@@ -614,6 +615,8 @@ SWEEP_METRICS = [
     "providers_over_capacity",
     "final_storage_utilization_bps",
     "final_storage_price",
+    "min_retrieval_price",
+    "max_retrieval_price",
     "final_retrieval_price",
     "storage_price_direction_changes",
     "retrieval_price_direction_changes",
@@ -3759,6 +3762,14 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "new storage demand was rejected by price")
     if fnum(totals.get("new_deals_suppressed_price")) > 0:
         raise_to("medium", "latent storage demand was suppressed by price elasticity")
+    if (
+        scenario == "retrieval-demand-shock"
+        and fnum(totals.get("retrieval_demand_shock_active")) > 0
+        and fnum(totals.get("max_retrieval_price")) <= fnum(config.get("retrieval_price_per_slot"))
+    ):
+        raise_to("medium", "retrieval demand shock did not move retrieval price")
+    if fnum(totals.get("retrieval_price_direction_changes")) > 2:
+        raise_to("medium", "retrieval price oscillated repeatedly")
     if fnum(totals.get("elasticity_overlay_rejections")) > 0:
         raise_to("medium", "elasticity overlay expansion was rejected")
     if fnum(totals.get("elasticity_overlay_activations")) > 0 and fnum(totals.get("elasticity_overlay_serves")) == 0:
@@ -4002,6 +4013,7 @@ def sweep_metric_meaning(key: str) -> str:
         "evidence_spam_net_gain": "Spammer net economics; positive values indicate an abuse risk.",
         "retrieval_wash_accounted_spend": "Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic.",
         "retrieval_wash_net_gain": "Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk.",
+        "retrieval_attempts": "Effective retrieval attempts after demand shock multipliers and inactive-content rejection.",
         "provider_cost_shock_active": "Epochs where external provider cost pressure was active.",
         "max_provider_cost_shocked_providers": "Largest provider population affected by cost shock in any epoch.",
         "max_provider_cost_shock_fixed_multiplier_bps": "Peak modeled fixed-cost multiplier during cost shock.",
@@ -4065,6 +4077,8 @@ def sweep_metric_meaning(key: str) -> str:
         "providers_over_capacity": "Placement/capacity invariant; should remain zero.",
         "final_storage_utilization_bps": "Supply utilization against modeled capacity.",
         "final_storage_price": "Storage-controller endpoint under this run.",
+        "min_retrieval_price": "Lowest retrieval price observed during the run.",
+        "max_retrieval_price": "Highest retrieval price observed during the run.",
         "final_retrieval_price": "Retrieval-controller endpoint under this run.",
         "provider_pnl": "Aggregate provider economics; inspect distribution before deciding.",
     }

@@ -1311,7 +1311,10 @@ chosen; and `tools/policy_sim/sweeps/wash_retrieval_economics.yaml`, which
 compares requester-funded retrieval sessions, owner-funded variable debits,
 retrieval burn rates, base fees, and wash-traffic volume so fake reads cannot
 profitably recycle provider payouts before retrieval-accounting defaults are
-chosen.
+chosen; and `tools/policy_sim/sweeps/retrieval_demand_shock_controls.yaml`,
+which compares retrieval-demand shock magnitude, duration, target, price-step
+size, ceiling, and disabled-controller behavior before retrieval price response
+and smoothing defaults are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
