@@ -3,7 +3,6 @@ package keeper_test
 import (
 	"crypto/ecdsa"
 	"math/big"
-	"os"
 	"testing"
 
 	"cosmossdk.io/math"
@@ -12,7 +11,6 @@ import (
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
-	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
@@ -246,11 +244,6 @@ func TestSponsoredOpen_Public_RefundsLockedFeeToPayerOnCancel(t *testing.T) {
 }
 
 func TestSponsoredRetrievalCompletionPaysProofProviderWithoutOwnerEscrowDebit(t *testing.T) {
-	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
-	if _, err := os.Stat("../../../trusted_setup.txt"); os.IsNotExist(err) {
-		t.Skip("trusted_setup.txt not found at ../../../trusted_setup.txt, skipping sponsored settlement test")
-	}
-
 	bank := newTrackingBankKeeper()
 	f := initFixtureWithBankKeeper(t, bank)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
@@ -293,35 +286,7 @@ func TestSponsoredRetrievalCompletionPaysProofProviderWithoutOwnerEscrowDebit(t 
 	providerAddr, err := sdk.AccAddressFromBech32(assignedProvider)
 	require.NoError(t, err)
 
-	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
-	mduData := make([]byte, 8*1024*1024)
-	dealAfterCreate, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
-	require.NoError(t, err)
-	require.NotNil(t, dealAfterCreate.Mode2Profile)
-	rsK := uint64(dealAfterCreate.Mode2Profile.K)
-	rsM := uint64(dealAfterCreate.Mode2Profile.M)
-
-	witnessFlat, shards, err := crypto_ffi.ExpandMduRs(mduData, rsK, rsM)
-	require.NoError(t, err)
-	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
-	require.NoError(t, err)
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
-	require.NoError(t, err)
-
-	const leafIndex = uint64(0)
-	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, rsK, rsM, witnessFlat, shards, leafIndex, 0)
-	require.Equal(t, root, root2)
-
-	_, err = msgServer.UpdateDealContent(ctx, &types.MsgUpdateDealContent{
-		Creator:     owner,
-		DealId:      resDeal.DealId,
-		Cid:         manifestCid,
-		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
-		WitnessMdus: 1,
-	})
-	require.NoError(t, err)
+	manifestCid, proof := commitValidMode2ContentAndProof(t, f, ctx, msgServer, owner, resDeal.DealId)
 
 	_, err = msgServer.UpdateDealRetrievalPolicy(ctx, &types.MsgUpdateDealRetrievalPolicy{
 		Creator: owner,
@@ -358,18 +323,6 @@ func TestSponsoredRetrievalCompletionPaysProofProviderWithoutOwnerEscrowDebit(t 
 	require.NoError(t, err)
 	require.Equal(t, "89stake", bank.accountBalances[sponsorAddr.String()].String())
 	require.Equal(t, "10stake", bank.moduleBalances[types.ModuleName].String())
-
-	proof := types.ChainedProof{
-		MduIndex:        0,
-		MduRootFr:       root,
-		ManifestOpening: manifestProof,
-		BlobCommitment:  commitment,
-		MerklePath:      merklePath,
-		BlobIndex:       uint32(leafIndex),
-		ZValue:          z,
-		YValue:          y,
-		KzgOpeningProof: kzgProof,
-	}
 
 	_, err = msgServer.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{
 		Creator:   assignedProvider,

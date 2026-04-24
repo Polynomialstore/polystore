@@ -112,3 +112,94 @@ func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
 	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED, sessionAfter.Status)
 	require.True(t, sessionAfter.LockedFee.IsZero())
 }
+
+func TestRetrievalSessionCompletionPaysProviderAndBurnsVariableCut(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyNewDec(0)
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 10)
+	p.RetrievalBurnBps = 2000
+	require.NoError(t, f.keeper.Params.Set(ctx, p))
+
+	for i := 0; i < 10; i++ {
+		addrBz := make([]byte, 20)
+		copy(addrBz, []byte(fmt.Sprintf("retrieval_pay_p%02d", i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	userBz := make([]byte, 20)
+	copy(userBz, []byte("retrieval_pay_user"))
+	user, _ := f.addressCodec.BytesToString(userBz)
+	userAddr, err := sdk.AccAddressFromBech32(user)
+	require.NoError(t, err)
+	bank.setAccountBalance(userAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		MaxMonthlySpend:     math.NewInt(0),
+		InitialEscrowAmount: math.NewInt(100),
+	})
+	require.NoError(t, err)
+	assignedProvider := resDeal.AssignedProviders[0]
+	providerAddr, err := sdk.AccAddressFromBech32(assignedProvider)
+	require.NoError(t, err)
+
+	manifestCid, proof := commitValidMode2ContentAndProof(t, f, ctx, msgServer, user, resDeal.DealId)
+
+	openRes, err := msgServer.OpenRetrievalSession(ctx, &types.MsgOpenRetrievalSession{
+		Creator:        user,
+		DealId:         resDeal.DealId,
+		Provider:       assignedProvider,
+		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
+		StartMduIndex:  0,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          1,
+		ExpiresAt:      0,
+	})
+	require.NoError(t, err)
+
+	dealAfterOpen, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(89), dealAfterOpen.EscrowBalance)
+	require.Equal(t, "99stake", bank.moduleBalances[types.ModuleName].String())
+
+	_, err = msgServer.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{
+		Creator:   assignedProvider,
+		SessionId: openRes.SessionId,
+		Proofs:    []types.ChainedProof{proof},
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{
+		Creator:   user,
+		SessionId: openRes.SessionId,
+	})
+	require.NoError(t, err)
+
+	session, err := f.keeper.RetrievalSessions.Get(ctx, openRes.SessionId)
+	require.NoError(t, err)
+	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED, session.Status)
+	require.True(t, session.LockedFee.IsZero())
+	require.Equal(t, types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW, session.Funding)
+
+	dealAfterComplete, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(89), dealAfterComplete.EscrowBalance)
+	require.Equal(t, "8stake", bank.accountBalances[providerAddr.String()].String())
+	require.Equal(t, "89stake", bank.moduleBalances[types.ModuleName].String())
+}
