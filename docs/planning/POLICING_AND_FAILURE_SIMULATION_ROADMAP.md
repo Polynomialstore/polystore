@@ -264,9 +264,9 @@ Current assumptions:
 7. Retrieval burns reduce requester/session payments before provider payout.
 8. Audit budget spending is capped by available budget and miss-driven demand.
 9. Elasticity spending fails closed when the configured spend cap is exceeded.
-10. The model does not yet include user demand elasticity, real fiat bandwidth
-    prices, operator-level concentration, capital cost of bonds, or secondary
-    market token volatility.
+10. The model now includes first-pass storage demand elasticity, but it does
+    not yet include real fiat bandwidth prices, capital cost of bonds, or
+    secondary market token volatility.
 
 Human decisions still required:
 
