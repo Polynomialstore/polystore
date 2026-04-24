@@ -346,7 +346,7 @@
         "repairs_started": 3624,
         "saturated_responses": 15482,
         "silver_serves": 0,
-        "success_rate": 0.9926041666666666,
+        "success_rate": 0.992604167,
         "suspect_slots": 361,
         "unavailable_reads": 1065,
         "verdict": "PASS"
@@ -415,7 +415,7 @@
         "high_bandwidth_providers": 64,
         "hot_high_bandwidth_serves": 41088,
         "hot_retrieval_attempts": 6240,
-        "performance_reward_paid": 76.87900000000064,
+        "performance_reward_paid": 76.879,
         "platinum_serves": 10077,
         "providers_negative_pnl": 0,
         "repair_attempt_caps": 0,

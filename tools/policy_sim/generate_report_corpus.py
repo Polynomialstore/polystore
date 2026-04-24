@@ -19,10 +19,10 @@ from typing import Any
 
 try:
     from .policing_sim import SimConfig, fixture_paths, load_scenario_spec, run_one, write_output_dir
-    from .report import generate_run_report
+    from .report import generate_run_report, stable_json_value
 except ImportError:  # Allows direct execution as a script.
     from policing_sim import SimConfig, fixture_paths, load_scenario_spec, run_one, write_output_dir
-    from report import generate_run_report
+    from report import generate_run_report, stable_json_value
 
 
 GRADUATION_TARGETS = {
@@ -318,7 +318,7 @@ def write_graduation_map(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
 
     (out_dir / "graduation_map.json").write_text(
-        json.dumps({"status_counts": status_counts, "scenarios": mapped}, indent=2, sort_keys=True) + "\n",
+        json.dumps(stable_json_value({"status_counts": status_counts, "scenarios": mapped}), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
