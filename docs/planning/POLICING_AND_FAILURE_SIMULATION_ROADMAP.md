@@ -1203,6 +1203,9 @@ Outputs:
 7. `sweep_summary.md` and `sweep_summary.json`: parameter-sweep or
    regression-suite summaries with run matrices, varied parameters,
    metric ranges, high-risk runs, and human review questions.
+8. `graduation_map.md` and `graduation_map.json`: corpus-level mapping from
+   scenario evidence to keeper tests, gateway/provider tests, e2e posture,
+   missing implementation surfaces, and further simulation review.
 
 The first report implementation must be stdlib-only and Markdown/CSV focused.
 Graph generation starts with SVG written directly by the report tool. Optional

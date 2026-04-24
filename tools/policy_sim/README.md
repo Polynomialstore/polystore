@@ -162,6 +162,10 @@ set under `docs/simulation-reports/policy-sim`. The corpus includes Markdown,
 graphs, `signals.json`, `summary.json`, and `assertions.json`; full CSV ledgers
 are generated as local/CI artifacts instead of being committed.
 
+The corpus also includes `graduation_map.md` and `graduation_map.json`, which
+aggregate all scenario outcomes into keeper, gateway/provider, process-level
+e2e, and further-simulation targets.
+
 The Markdown reports are intended to be human review artifacts, not just metric
 dumps. A run report explains scenario intent, expected behavior, what happened
 over the timeline, enforcement interpretation, economic interpretation, the
