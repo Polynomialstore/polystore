@@ -150,3 +150,50 @@ func TestCheckMissedProofs_SchedulesDrainRepairs(t *testing.T) {
 	_, err = f.keeper.DealActivityStates.Get(sdkCtx, dealID)
 	require.ErrorIs(t, err, collections.ErrNotFound)
 }
+
+func TestCheckMissedProofs_DrainRepairBackoffWhenNoCandidate(t *testing.T) {
+	f := initFixture(t)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	params.MaxDrainBytesPerEpoch = 100_000_000
+	params.MaxRepairingBytesRatioBps = 0
+	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC)
+
+	provider, err := f.keeper.Providers.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	provider.Draining = true
+	require.NoError(t, f.keeper.Providers.Set(sdkCtx, providerA, provider))
+
+	for _, addr := range []string{providerB, providerC} {
+		provider, err := f.keeper.Providers.Get(sdkCtx, addr)
+		require.NoError(t, err)
+		provider.Status = "Jailed"
+		require.NoError(t, f.keeper.Providers.Set(sdkCtx, addr, provider))
+	}
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	epochID := uint64(1)
+	setMode2EpochCredits(t, f, sdkCtx, dealID, epochID, 0, 1, 2)
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	slot0 := updated.Mode2Slots[0]
+	require.NotNil(t, slot0)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, slot0.Status)
+	require.Empty(t, slot0.PendingProvider)
+	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "drain_repair_started"))
+}

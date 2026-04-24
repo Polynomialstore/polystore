@@ -133,6 +133,9 @@ func (k Keeper) scheduleDrainingRepairs(ctx sdk.Context, epochID uint64) error {
 						"provider", entry.Provider,
 						"error", err,
 					)
+					if errEvidence := k.recordRepairBackoff(ctx, dealID, entry.Provider, slot, epochID, err.Error()); errEvidence != nil {
+						ctx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
+					}
 					continue
 				}
 
