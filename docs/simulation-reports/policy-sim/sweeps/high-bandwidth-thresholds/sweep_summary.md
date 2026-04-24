@@ -41,6 +41,7 @@ This report aggregates `9` completed simulator run output directories. It does n
 | `repair_backoffs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Replacement capacity or repair-start bottlenecks. |
 | `repair_cooldowns` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retry cooldowns that intentionally throttle repair churn. |
 | `repair_attempt_caps` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Per-slot attempt caps hit before a replacement could start. |
+| `repair_timeouts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Pending replacement providers that failed readiness before timeout. |
 | `high_bandwidth_promotions` | 17.000000 | 40.000000 | 23.000000 | 29.666667 | Measured provider capability promotions. |
 | `high_bandwidth_demotions` | 0.000000 | 5.000000 | 5.000000 | 1.444444 | Capability demotions after performance regression. |
 | `high_bandwidth_providers` | 17.000000 | 40.000000 | 23.000000 | 28.222222 | Final provider count eligible for high-bandwidth routing. |

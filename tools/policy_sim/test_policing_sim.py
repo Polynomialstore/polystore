@@ -265,6 +265,33 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertTrue(all(row["eligible_candidates"] == 0 for row in no_candidate_rows))
         self.assertTrue(any(row["excluded_capacity"] > 0 for row in no_candidate_rows))
 
+    def test_pending_repair_timeout_reopens_bounded_retry(self):
+        config = SimConfig(
+            scenario="replacement-grinding",
+            seed=41,
+            providers=36,
+            users=80,
+            deals=18,
+            epochs=10,
+            evict_after_missed_epochs=1,
+            repair_epochs=2,
+            repair_pending_timeout_epochs=1,
+            repair_backoff_epochs=2,
+            repair_attempt_cap_per_slot=3,
+            provider_repair_probability_min=0.0,
+            provider_repair_probability_max=0.0,
+        )
+        result = PolicySimulator(config, extra_faults=["offline:sp-000:1-10"]).run()
+
+        self.assertGreater(result.totals["repairs_started"], 0)
+        self.assertEqual(0, result.totals["repairs_ready"])
+        self.assertEqual(0, result.totals["repairs_completed"])
+        self.assertGreater(result.totals["repair_timeouts"], 0)
+        self.assertGreater(result.totals["repair_cooldowns"], 0)
+        self.assertGreater(result.totals["repair_attempt_caps"], 0)
+        self.assertTrue(any(row["event"] == "repair_timeout" for row in result.repairs))
+        self.assertIn("repair_started_epoch", result.slots[0])
+
     def test_flapping_provider_marks_suspect_without_delinquent_repair_churn(self):
         config = SimConfig(
             scenario="flapping-provider",
@@ -632,6 +659,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "provider_supply.svg").exists())
             self.assertTrue((report_dir / "graphs" / "provider_bond_headroom.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "repair_readiness.svg").exists())
             self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
             self.assertTrue((report_dir / "graphs" / "hot_retrieval_routing.svg").exists())
             self.assertTrue((report_dir / "graphs" / "performance_tiers.svg").exists())
@@ -670,6 +698,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Saturation And Repair Pressure](graphs/saturation_and_repair.svg)", report_text)
             self.assertIn("![Capacity Utilization](graphs/capacity_utilization.svg)", report_text)
             self.assertIn("![Repair Backlog](graphs/repair_backlog.svg)", report_text)
+            self.assertIn("![Repair Readiness](graphs/repair_readiness.svg)", report_text)
             self.assertIn("![High-Bandwidth Promotion](graphs/high_bandwidth_promotion.svg)", report_text)
             self.assertIn("![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)", report_text)
             self.assertIn("![Performance Tiers](graphs/performance_tiers.svg)", report_text)
@@ -685,6 +714,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("churned_providers", signal_text)
             self.assertIn("entered_active_providers", signal_text)
             self.assertIn("max_underbonded_providers", signal_text)
+            self.assertIn("repair_timeouts", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)
             risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")
             self.assertIn("## Material Risks", risk_text)

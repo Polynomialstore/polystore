@@ -28,6 +28,7 @@ Model artificial retrieval demand. The policy question is whether fake activity 
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Repair readiness timeouts: `0`
 - Audit budget demand: `0.0000`
 - Audit budget spent: `0.0000`
 - Audit budget backlog: `0.0000`

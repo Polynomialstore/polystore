@@ -29,6 +29,7 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Repair readiness timeouts: `0`
 - Audit budget demand: `118.6000`
 - Audit budget spent: `0.4000`
 - Audit budget backlog: `15.6000`

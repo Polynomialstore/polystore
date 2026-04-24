@@ -289,6 +289,15 @@ SCENARIO_GUIDES = {
         "expected": "Repair backoffs are visible, provider capacity is respected, and data-loss events remain zero under the modeled fault.",
         "review": "Use this case to tune assignment headroom, repair attempt caps, and launch-provider minimums.",
     },
+    "replacement-grinding": {
+        "title": "Replacement Grinding",
+        "intent": (
+            "Model a repair path where pending replacement providers never prove readiness. The policy question is whether "
+            "timeouts, cooldowns, and per-slot attempt caps bound churn instead of letting repairs remain pending forever."
+        ),
+        "expected": "Repairs start, pending readiness times out, cooldowns and attempt caps are visible, no pending provider is promoted without readiness, and durability remains intact.",
+        "review": "Use this case to tune pending-provider readiness proof windows, repair timeout lengths, retry caps, and whether failed catch-up should affect provider reputation.",
+    },
     "large-scale-regional-stress": {
         "title": "Large-Scale Regional Stress",
         "intent": (
@@ -411,6 +420,7 @@ SWEEP_METRICS = [
     "repair_backoffs",
     "repair_cooldowns",
     "repair_attempt_caps",
+    "repair_timeouts",
     "high_bandwidth_promotions",
     "high_bandwidth_demotions",
     "high_bandwidth_providers",
@@ -504,6 +514,7 @@ SWEEP_CONFIG_KEYS = [
     "repair_epochs",
     "repair_attempt_cap_per_slot",
     "repair_backoff_epochs",
+    "repair_pending_timeout_epochs",
     "max_repairs_started_per_epoch",
     "route_attempt_limit",
     "dynamic_pricing",
@@ -645,6 +656,7 @@ def compute_signals(
     repair_completed = fnum(totals.get("repairs_completed"))
     repair_attempts = fnum(totals.get("repair_attempts"))
     repair_backoffs = fnum(totals.get("repair_backoffs"))
+    repair_timeouts = fnum(totals.get("repair_timeouts"))
     retrieval_attempts = max(1.0, fnum(totals.get("retrieval_attempts")))
     storage_prices = [fnum(row.get("storage_price")) for row in economy]
     retrieval_prices = [fnum(row.get("retrieval_price_per_slot")) for row in economy]
@@ -693,13 +705,14 @@ def compute_signals(
             "backoffs": repair_backoffs,
             "cooldowns": fnum(totals.get("repair_cooldowns")),
             "attempt_caps": fnum(totals.get("repair_attempt_caps")),
+            "repair_timeouts": repair_timeouts,
             "backoffs_per_attempt": repair_backoffs / max(1.0, repair_attempts),
             "backoffs_per_started_repair": repair_backoffs / max(1.0, repair_started),
             "peak_backoff_epoch": int(fnum(peak_repair_backoff_epoch.get("epoch"))),
             "peak_repair_backoffs": fnum(peak_repair_backoff_epoch.get("repair_backoffs")),
             "peak_repairing_epoch": int(fnum(peak_repairing_epoch.get("epoch"))),
             "peak_repairing_slots": fnum(peak_repairing_epoch.get("repairing_slots")),
-            "final_repair_backlog": max(0.0, repair_started - repair_completed),
+            "final_repair_backlog": max(0.0, repair_started - repair_completed - repair_timeouts),
             "suspect_slot_epochs": fnum(totals.get("suspect_slots")),
             "delinquent_slot_epochs": fnum(totals.get("delinquent_slots")),
         },
@@ -968,7 +981,8 @@ def write_report_md(
         f"`{fmt_num(totals.get('data_loss_events'))}` modeled data-loss events, "
         f"`{fmt_num(totals.get('saturated_responses'))}` bandwidth saturation responses and "
         f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs across "
-        f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts. Slot health recorded "
+        f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts, with "
+        f"`{fmt_num(totals.get('repair_timeouts'))}` pending-repair readiness timeouts. Slot health recorded "
         f"`{fmt_num(totals.get('suspect_slots'))}` suspect slot-epochs and "
         f"`{fmt_num(totals.get('delinquent_slots'))}` delinquent slot-epochs. "
         f"High-bandwidth promotions were `{fmt_num(totals.get('high_bandwidth_promotions'))}` and final high-bandwidth providers were "
@@ -996,6 +1010,7 @@ def write_report_md(
         f"| Repair delay | `{config.get('repair_epochs')}` epochs |",
         f"| Repair attempt cap/slot | `{config.get('repair_attempt_cap_per_slot')}` (`0` means unlimited) |",
         f"| Repair backoff window | `{config.get('repair_backoff_epochs')}` epochs |",
+        f"| Repair pending timeout | `{config.get('repair_pending_timeout_epochs')}` epochs (`0` means disabled) |",
         f"| Dynamic pricing | `{str(config.get('dynamic_pricing')).lower()}` |",
         f"| Storage price | `{fmt_money(config.get('storage_price'))}` |",
         f"| New deal requests/epoch | `{fmt_num(config.get('new_deal_requests_per_epoch'))}` |",
@@ -1075,6 +1090,7 @@ def write_report_md(
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Repair cooldown backoffs: `{fmt_num(totals.get('repair_cooldowns'))}`",
             f"- Repair attempt-cap backoffs: `{fmt_num(totals.get('repair_attempt_caps'))}`",
+            f"- Repair readiness timeouts: `{fmt_num(totals.get('repair_timeouts'))}`",
             f"- Suspect slot-epochs: `{fmt_num(totals.get('suspect_slots'))}`",
             f"- Delinquent slot-epochs: `{fmt_num(totals.get('delinquent_slots'))}`",
             f"- Final active slots in last epoch: `{len(active_end_slots)}`",
@@ -1201,6 +1217,12 @@ def write_report_md(
             "",
             "![Repair Backlog](graphs/repair_backlog.svg)",
             "",
+            "### Repair Readiness",
+            "",
+            "Shows pending-provider readiness timeouts against successful readiness events.",
+            "",
+            "![Repair Readiness](graphs/repair_readiness.svg)",
+            "",
             "### High-Bandwidth Promotion",
             "",
             "Shows capability promotion/demotion state over time for hot-path eligibility.",
@@ -1263,7 +1285,7 @@ def write_report_md(
             "- `operators.csv`: final operator-level provider count, assignment share, success, and P&L metrics.",
             "- `slots.csv`: per-slot epoch ledger, including health state and reason.",
             "- `evidence.csv`: policy evidence events.",
-            "- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
+            "- `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
             "- `economy.csv`: per-epoch market and accounting ledger.",
             "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.",
         ]
@@ -1382,7 +1404,8 @@ def build_behavior_narrative(
             f"Repair coordination was constrained: `{fmt_num(totals.get('repair_backoffs'))}` repair backoffs occurred across "
             f"`{fmt_num(totals.get('repair_attempts'))}` repair attempts. Cooldown backoffs accounted for "
             f"`{fmt_num(totals.get('repair_cooldowns'))}` events and attempt-cap backoffs accounted for "
-            f"`{fmt_num(totals.get('repair_attempt_caps'))}` events."
+            f"`{fmt_num(totals.get('repair_attempt_caps'))}` events. Pending-provider readiness timeouts accounted for "
+            f"`{fmt_num(totals.get('repair_timeouts'))}` events."
         )
     if metric_sum(economy, "elasticity_rejections") > 0:
         parts.append(
@@ -1465,9 +1488,9 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Repair attempts | `{fmt_num(repair['attempts'])}` | Counts bounded attempts to open a repair or discover replacement pressure. |",
         f"| Repair backoff pressure | `{fmt_num(repair['backoffs_per_started_repair'])}` backoffs per started repair | Shows whether repair coordination is saturated. |",
         f"| Repair backoffs per attempt | `{fmt_num(repair['backoffs_per_attempt'])}` | Distinguishes capacity/cooldown pressure from successful repair starts. |",
-        f"| Repair cooldowns / attempt caps | `{fmt_num(repair['cooldowns'])}` / `{fmt_num(repair['attempt_caps'])}` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |",
+        f"| Repair cooldowns / attempt caps / readiness timeouts | `{fmt_num(repair['cooldowns'])}` / `{fmt_num(repair['attempt_caps'])}` / `{fmt_num(repair['repair_timeouts'])}` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |",
         f"| Suspect / delinquent slot-epochs | `{fmt_num(repair['suspect_slot_epochs'])}` / `{fmt_num(repair['delinquent_slot_epochs'])}` | Separates early warning state from threshold-crossed delinquency. |",
-        f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed repairs at run end. |",
+        f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed or timed-out repairs at run end. |",
         f"| High-bandwidth providers | `{fmt_num(high_bandwidth['providers'])}` | Providers currently eligible for hot/high-bandwidth routing. |",
         f"| High-bandwidth promotions/demotions | `{fmt_num(high_bandwidth['promotions'])}` / `{fmt_num(high_bandwidth['demotions'])}` | Shows capability changes under measured demand. |",
         f"| Hot high-bandwidth serves/retrieval | `{fmt_num(high_bandwidth['hot_high_bandwidth_serves_per_hot_retrieval'])}` | Measures whether hot retrievals actually use promoted providers. |",
@@ -1602,6 +1625,8 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('repair_cooldowns'))} repair cooldowns")
         if fnum(row.get("repair_attempt_caps")):
             notes.append(f"{fmt_num(row.get('repair_attempt_caps'))} attempt caps")
+        if fnum(row.get("repair_timeouts")):
+            notes.append(f"{fmt_num(row.get('repair_timeouts'))} repair timeouts")
         if fnum(row.get("data_loss_events")):
             notes.append(f"{fmt_num(row.get('data_loss_events'))} data-loss events")
         if fnum(row.get("repairing_slots")):
@@ -1715,6 +1740,8 @@ def assertion_meaning(name: str) -> str:
         "max_repair_cooldowns": "Repair cooldown ceiling: cooldown throttling must not dominate healthy recovery.",
         "min_repair_attempt_caps": "Repair attempt-cap accounting: bounded retry fixtures must hit and report the cap.",
         "max_repair_attempt_caps": "Repair attempt-cap ceiling: healthy repair paths should not exhaust attempts.",
+        "min_repair_timeouts": "Repair readiness timeout accounting: pending providers that fail catch-up must time out visibly.",
+        "max_repair_timeouts": "Repair readiness timeout ceiling: healthy repair paths should not strand pending providers.",
         "min_high_bandwidth_promotions": "Capability promotion: measured fast providers should become high-bandwidth eligible.",
         "max_high_bandwidth_promotions": "Capability promotion ceiling: healthy baselines should not accidentally promote providers.",
         "min_high_bandwidth_providers": "Final high-bandwidth provider count should be non-zero in promotion fixtures.",
@@ -2102,10 +2129,21 @@ def write_risk_register(
                     f"{fmt_num(totals.get('repair_backoffs'))} repair backoffs across "
                     f"{fmt_num(totals.get('repair_attempts'))} attempts; "
                     f"{fmt_num(totals.get('repair_cooldowns'))} cooldowns and "
-                    f"{fmt_num(totals.get('repair_attempt_caps'))} attempt-cap events."
+                    f"{fmt_num(totals.get('repair_attempt_caps'))} attempt-cap events; "
+                    f"{fmt_num(totals.get('repair_timeouts'))} readiness timeouts."
                 ),
                 "impact": "The network may detect bad slots faster than it can safely heal them.",
                 "followup": "Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions.",
+            }
+        )
+    if fnum(totals.get("repair_timeouts")):
+        rows.append(
+            {
+                "risk": "Pending provider readiness timeout",
+                "severity": "medium",
+                "evidence": f"{fmt_num(totals.get('repair_timeouts'))} pending repairs timed out before readiness.",
+                "impact": "Replacement providers may be selected but fail to reconstruct or prove readiness quickly enough.",
+                "followup": "Review readiness proof requirements, timeout windows, catch-up bandwidth assumptions, and provider reputation effects for failed repair attempts.",
             }
         )
     if fnum(totals.get("audit_budget_backlog")):
@@ -2234,6 +2272,7 @@ def write_risk_register(
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Repair cooldowns: `{fmt_num(totals.get('repair_cooldowns'))}`",
             f"- Repair attempt-cap events: `{fmt_num(totals.get('repair_attempt_caps'))}`",
+            f"- Repair readiness timeouts: `{fmt_num(totals.get('repair_timeouts'))}`",
             f"- Audit budget demand: `{fmt_money(totals.get('audit_budget_demand'))}`",
             f"- Audit budget spent: `{fmt_money(totals.get('audit_budget_spent'))}`",
             f"- Audit budget backlog: `{fmt_money(totals.get('audit_budget_backlog'))}`",
@@ -2294,6 +2333,7 @@ def graduation_semantics(scenario: str) -> str:
         "subsidy-farming": "Graduation means non-compliant responsibility is not profitably subsidized by base rewards.",
         "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
         "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
+        "replacement-grinding": "Graduation means pending-provider readiness failures are bounded by timeout, cooldown, and attempt caps instead of leaving unbounded in-flight repairs.",
         "high-bandwidth-promotion": "Graduation means measured provider capability can promote hot-path eligibility without degrading availability or over-assigning capacity.",
         "high-bandwidth-regression": "Graduation means hot-path eligibility can be revoked when measured saturation regresses without causing durability loss.",
         "performance-market-latency": "Graduation means latency-tier windows, service-class attribution, and tiered performance rewards are deterministic and inspectable before keeper params are implemented.",
@@ -2503,6 +2543,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         repair_backlog_series(epochs),
     )
     write_line_svg(
+        graphs_dir / "repair_readiness.svg",
+        "Repair Readiness Timeouts",
+        [fnum(row.get("repair_timeouts")) for row in epochs],
+        secondary=[fnum(row.get("repairs_ready")) for row in epochs],
+        secondary_label="Repairs Ready",
+    )
+    write_line_svg(
         graphs_dir / "high_bandwidth_promotion.svg",
         "High-Bandwidth Providers",
         [fnum(row.get("high_bandwidth_providers")) for row in epochs],
@@ -2589,7 +2636,11 @@ def repair_backlog_series(epochs: list[dict[str, str]]) -> list[float]:
     backlog = 0.0
     out = []
     for row in epochs:
-        backlog += fnum(row.get("repairs_started")) - fnum(row.get("repairs_completed"))
+        backlog += (
+            fnum(row.get("repairs_started"))
+            - fnum(row.get("repairs_completed"))
+            - fnum(row.get("repair_timeouts"))
+        )
         out.append(max(0.0, backlog))
     return out
 
@@ -2790,6 +2841,7 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("repair_attempts", "Whether repair retry/accounting pressure changed."),
         ("repair_cooldowns", "Whether repair retry cooldown throttling was exercised."),
         ("repair_attempt_caps", "Whether per-slot repair attempt caps were hit."),
+        ("repair_timeouts", "Whether pending provider readiness failures were exercised."),
         ("suspect_slots", "Whether soft warning state was exercised."),
         ("delinquent_slots", "Whether threshold-crossed slot state was exercised."),
         ("quota_misses", "Soft liveness evidence created by the candidate."),
@@ -2907,7 +2959,7 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         if delta > 0:
             return "Candidate exposed provider bandwidth saturation."
         return "Bandwidth saturation did not increase."
-    if key in {"repair_backoffs", "repair_cooldowns", "repair_attempt_caps"}:
+    if key in {"repair_backoffs", "repair_cooldowns", "repair_attempt_caps", "repair_timeouts"}:
         if delta > 0:
             return "Candidate exposed repair coordination limits."
         return "Repair coordination limits did not increase."
@@ -3023,6 +3075,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("high", "retrieval success fell below 99%")
     if fnum(totals.get("repair_backoffs")) > 0:
         raise_to("medium", "repair coordination backoffs occurred")
+    if fnum(totals.get("repair_timeouts")) > 0:
+        raise_to("medium", "pending repair readiness timeouts occurred")
     if fnum(totals.get("saturated_responses")) > 0:
         raise_to("medium", "provider bandwidth saturation occurred")
     if fnum(totals.get("providers_negative_pnl")) > 0:
@@ -3222,6 +3276,7 @@ def sweep_metric_meaning(key: str) -> str:
         "repair_backoffs": "Replacement capacity or repair-start bottlenecks.",
         "repair_cooldowns": "Retry cooldowns that intentionally throttle repair churn.",
         "repair_attempt_caps": "Per-slot attempt caps hit before a replacement could start.",
+        "repair_timeouts": "Pending replacement providers that failed readiness before timeout.",
         "high_bandwidth_promotions": "Measured provider capability promotions.",
         "high_bandwidth_demotions": "Capability demotions after performance regression.",
         "high_bandwidth_providers": "Final provider count eligible for high-bandwidth routing.",

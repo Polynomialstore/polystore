@@ -9,7 +9,7 @@ Model a population-scale network with more than one thousand storage providers a
 | User-facing availability loss | `medium` | 1065 unavailable reads; success rate 99.26%. | Temporary read misses are acceptable only when explicitly allowed by the scenario contract and data loss remains zero. | If this is a scale fixture, track it as an availability tuning item. Otherwise block graduation and investigate routing, redundancy, repair timing, and provider selection. |
 | Provider economic churn pressure | `medium` | 4 of 1200 providers ended with negative modeled P&L. | A technically healthy network may still be unstable if rational providers exit. | Review storage price, retrieval price, reward pool, provider cost assumptions, and dynamic-pricing thresholds. |
 | Provider bandwidth saturation | `medium` | 15482 provider responses saturated before serving. | Retrieval demand may exceed heterogeneous provider bandwidth before the storage layer notices a hard fault. | Review bandwidth admission, route_attempt_limit, retrieval pricing, and elasticity policy. |
-| Repair coordination bottleneck | `medium` | 12436 repair backoffs across 16060 attempts; 0 cooldowns and 0 attempt-cap events. | The network may detect bad slots faster than it can safely heal them. | Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions. |
+| Repair coordination bottleneck | `medium` | 12436 repair backoffs across 16060 attempts; 0 cooldowns and 0 attempt-cap events; 0 readiness timeouts. | The network may detect bad slots faster than it can safely heal them. | Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions. |
 
 ## Evidence Counters
 
@@ -31,6 +31,7 @@ Model a population-scale network with more than one thousand storage providers a
 - Repair backoffs: `12436`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Repair readiness timeouts: `0`
 - Audit budget demand: `313.3800`
 - Audit budget spent: `313.3800`
 - Audit budget backlog: `0.0000`

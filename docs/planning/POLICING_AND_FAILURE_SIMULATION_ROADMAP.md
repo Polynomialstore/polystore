@@ -107,7 +107,7 @@ were:
 | Withholding/ransom | Provider refuses to serve data it should hold. | Soft unless transcript/evidence reaches threshold | Route around, deputy/audit evidence, repair. |
 | Slow service | Provider serves correctly but misses latency expectations. | Statistical | Reputation or placement priority, not slash initially. |
 | Staged upload grief | User/gateway uploads many provisional generations and never commits. | Operational/accounting | Preflight rejection, retention limits, cleanup policy. |
-| Replacement grinding | User or attacker repeatedly forces replacements to capture slots. | Chain-observable churn | Cooldowns, attempt caps, deterministic candidate selection. |
+| Replacement grinding | User or attacker repeatedly forces replacements or pending catch-up attempts to churn. | Chain-observable churn | Readiness timeout, cooldowns, attempt caps, deterministic candidate selection. |
 | Deputy evidence spam | Deputy submits many low-quality failure claims. | Evidence-market signal | Evidence bond, burn-on-expiry, bounty only on conviction. |
 | Gateway misbehavior | Gateway withholds, rewrites, or misroutes requests. | Client/provider observable | Gateway is not a trust anchor; clients and chain verify roots/sessions. |
 | Coordinated provider failure | Multiple assigned slots fail together. | Mixed | Availability threshold analysis, repair backlog controls, operator alerts. |
@@ -292,7 +292,7 @@ Human decisions still required:
 | Withholding provider | Can users route around ransom behavior? | Retrieval success remains high, deputy/audit miss grows. | Router fallback and deputy evidence e2e. |
 | Lazy provider | Does no-synthetic/no-credit behavior lose rewards? | Quota miss and reward exclusion occur. | Base reward eligibility tests. |
 | Setup failure storm | Can new deals recover before first commit? | Bump count bounded, replacement not user-chosen. | Setup bump e2e with failed upload. |
-| Replacement grinding | Are repeated replacements rate-limited? | Cooldown and attempt caps bind. | Keeper replacement cooldown tests. |
+| Replacement grinding | Are repeated replacements and failed pending catch-up attempts rate-limited? | Readiness timeouts, cooldowns, and attempt caps bind. | Keeper replacement cooldown and readiness-timeout tests. |
 | Deputy evidence spam | Is spam uneconomic? | Bond burn exceeds expected spam gain. | Evidence-market keeper tests. |
 | Audit budget exhaustion | Does the system degrade predictably? | Backlog grows, no unbounded mint. | Audit budget cap tests. |
 | Coordinated regional outage | What is the availability cliff? | Success drops only when fewer than `K` slots remain. | Nightly/long-running multi-SP tests. |
@@ -1214,6 +1214,8 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `corrupt_provider.yaml` | Provider returns corrupt data or invalid proofs. | Corrupt bytes are unpaid, hard fault is recorded, repair starts. |
 | `lazy_provider.yaml` | Provider does not meet proof quota. | Reward exclusion occurs, soft-fault path does not slash. |
 | `setup_failure.yaml` | Initial upload to one slot fails. | Setup bump is bounded and replacement is system-selected. |
+| `repair_candidate_exhaustion.yaml` | Replacement capacity is unavailable or saturated. | Repair backoffs and candidate-exclusion reasons are visible, provider capacity is not over-assigned, and data-loss events remain zero. |
+| `replacement_grinding.yaml` | Pending replacement providers fail to prove readiness before promotion. | Repair readiness timeouts, cooldowns, and attempt caps are visible; no pending provider is promoted without readiness; data-loss events remain zero. |
 | `underpriced_storage.yaml` | Storage price below provider cost. | Provider P&L turns negative and churn pressure is visible. |
 | `overpriced_storage.yaml` | Storage price above modeled user willingness to pay. | Existing reads remain healthy while new deal demand is rejected by price, not capacity. |
 | `demand_elasticity_recovery.yaml` | Latent storage demand is suppressed by high price and recovers as dynamic pricing moves down. | Suppressed demand, recovered effective requests, accepted deals, bounded final price, and no capacity rejection. |
@@ -1240,9 +1242,9 @@ Each simulator run should be able to emit:
 4. `slots.csv`: one row per deal-slot with lifecycle, health reason, repair,
    provider, and reward eligibility state.
 5. `evidence.csv`: hard faults, soft faults, threshold evidence, and source.
-6. `repairs.csv`: repair start, candidate selection, catch-up, promotion,
-   attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff
-   events.
+6. `repairs.csv`: repair start, candidate selection, catch-up, readiness
+   timeout, promotion, attempt-count, cooldown, candidate-exclusion,
+   attempt-cap, and backoff events.
 7. `economy.csv`: storage charges, retrieval burns, payouts, reward mint/burn,
    audit budget, escrow runway, elasticity spend, and latent/effective storage
    demand admission.

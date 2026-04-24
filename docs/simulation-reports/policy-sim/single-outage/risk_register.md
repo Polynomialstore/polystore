@@ -28,6 +28,7 @@ Model an honest provider that becomes unavailable for several epochs. The policy
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Repair readiness timeouts: `0`
 - Audit budget demand: `0.0650`
 - Audit budget spent: `0.0650`
 - Audit budget backlog: `0.0000`

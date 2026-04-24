@@ -130,6 +130,7 @@ are supported in scenario files:
 - `max_repairs_started_per_epoch`
 - `repair_attempt_cap_per_slot`
 - `repair_backoff_epochs`
+- `repair_pending_timeout_epochs`
 - `high_bandwidth_promotion_enabled`
 - `high_bandwidth_capacity_threshold`
 - `high_bandwidth_min_retrievals`
@@ -175,6 +176,8 @@ The simulator mirrors current protocol concepts:
 - Provider outage/withholding as soft faults that become quota/deputy misses.
 - Make-before-break repair with deterministic replacement provider selection.
 - Repair attempt caps and cooldown windows for constrained replacement markets.
+- Pending-provider readiness timeouts that cancel stalled repair attempts before
+  bounded retry.
 - Per-slot `HEALTHY` / `SUSPECT` / `DELINQUENT` health state with reason codes.
 - Provider capability promotion to `HIGH_BANDWIDTH` based on measured capacity,
   retrieval success, saturation, and hard-fault history.
@@ -228,8 +231,9 @@ When `--out-dir` is supplied, the simulator emits:
 `slots.csv` includes per-slot health reason, repair attempt, and cooldown state.
 `operators.csv` groups provider identities by operator and records provider
 share, assignment share, success, and P&L.
-`repairs.csv` includes start, pending-provider readiness, completion,
-attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
+`repairs.csv` includes start, pending-provider readiness, readiness timeout,
+completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and
+backoff events.
 
 `report.py` consumes those raw files and can emit:
 
@@ -262,10 +266,10 @@ assertion contract, evidence excerpts, generated graphs, and remaining review
 questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
 provider P&L, provider churn, burn/mint ratio, price trajectory, capacity
-utilization, saturation/repair pressure, repair backlog, provider supply entry,
-provider bond headroom, high-bandwidth promotion, and hot retrieval routing,
-performance tiers, operator concentration, evidence pressure, audit budget, and
-elasticity spend.
+utilization, saturation/repair pressure, repair backlog, repair readiness,
+provider supply entry, provider bond headroom, high-bandwidth promotion, and hot
+retrieval routing, performance tiers, operator concentration, evidence pressure,
+audit budget, and elasticity spend.
 `signals.json` records derived
 availability, saturation, repair, capacity, economic, regional, high-bandwidth,
 performance-market, concentration, and provider bottleneck signals for

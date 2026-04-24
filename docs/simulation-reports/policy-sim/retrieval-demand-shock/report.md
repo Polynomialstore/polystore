@@ -8,7 +8,7 @@ Model a temporary retrieval demand spike and verify the retrieval-price controll
 
 Expected policy behavior: Retrieval demand shock epochs are visible, retrieval price rises and settles within bounds, reads stay available, and direction changes remain limited.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
+Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
 
 ## Review Focus
 
@@ -32,6 +32,7 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Repair delay | `2` epochs |
 | Repair attempt cap/slot | `0` (`0` means unlimited) |
 | Repair backoff window | `0` epochs |
+| Repair pending timeout | `0` epochs (`0` means disabled) |
 | Dynamic pricing | `true` |
 | Storage price | `1.0000` |
 | New deal requests/epoch | `0` |
@@ -111,9 +112,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Repair attempts | `0` | Counts bounded attempts to open a repair or discover replacement pressure. |
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Repair backoffs per attempt | `0` | Distinguishes capacity/cooldown pressure from successful repair starts. |
-| Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
+| Repair cooldowns / attempt caps / readiness timeouts | `0` / `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Suspect / delinquent slot-epochs | `0` / `0` | Separates early warning state from threshold-crossed delinquency. |
-| Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
+| Final repair backlog | `0` slots | Started repairs minus completed or timed-out repairs at run end. |
 | High-bandwidth providers | `0` | Providers currently eligible for hot/high-bandwidth routing. |
 | High-bandwidth promotions/demotions | `0` / `0` | Shows capability changes under measured demand. |
 | Hot high-bandwidth serves/retrieval | `0` | Measures whether hot retrievals actually use promoted providers. |
@@ -221,6 +222,7 @@ Repair summary:
 - Repair backoffs: `0`
 - Repair cooldown backoffs: `0`
 - Repair attempt-cap backoffs: `0`
+- Repair readiness timeouts: `0`
 - Suspect slot-epochs: `0`
 - Delinquent slot-epochs: `0`
 - Final active slots in last epoch: `864`
@@ -375,6 +377,12 @@ Shows whether started repairs are accumulating faster than they complete.
 
 ![Repair Backlog](graphs/repair_backlog.svg)
 
+### Repair Readiness
+
+Shows pending-provider readiness timeouts against successful readiness events.
+
+![Repair Readiness](graphs/repair_readiness.svg)
+
 ### High-Bandwidth Promotion
 
 Shows capability promotion/demotion state over time for hot-path eligibility.
@@ -437,6 +445,6 @@ Shows demand-funded elasticity spend and rejected expansion attempts.
 - `operators.csv`: final operator-level provider count, assignment share, success, and P&L metrics.
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.

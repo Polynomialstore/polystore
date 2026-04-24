@@ -84,6 +84,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "subsidy-farming",
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
+    "replacement-grinding",
     "high-bandwidth-promotion",
     "high-bandwidth-regression",
     "performance-market-latency",
@@ -124,6 +125,7 @@ class SimConfig:
     repair_epochs: int = 2
     repair_attempt_cap_per_slot: int = 0
     repair_backoff_epochs: int = 0
+    repair_pending_timeout_epochs: int = 0
     route_attempt_limit: int = 12
     enforcement_mode: str = "REWARD_EXCLUSION"
     dynamic_pricing: bool = False
@@ -321,6 +323,8 @@ class SimConfig:
             raise ValueError("repair_attempt_cap_per_slot must be non-negative")
         if self.repair_backoff_epochs < 0:
             raise ValueError("repair_backoff_epochs must be non-negative")
+        if self.repair_pending_timeout_epochs < 0:
+            raise ValueError("repair_pending_timeout_epochs must be non-negative")
         if self.high_bandwidth_capacity_threshold < 0:
             raise ValueError("high_bandwidth_capacity_threshold must be non-negative")
         if self.high_bandwidth_min_retrievals < 0:
@@ -479,6 +483,7 @@ class SlotState:
     repair_ready: bool = False
     repair_attempts: int = 0
     repair_backoff_until_epoch: int = 0
+    repair_started_epoch: int = 0
     last_repair_attempt_epoch: int = 0
     missed_epochs: int = 0
     deputy_missed_epochs: int = 0
@@ -555,6 +560,7 @@ class EpochMetrics:
     repair_backoffs: int = 0
     repair_cooldowns: int = 0
     repair_attempt_caps: int = 0
+    repair_timeouts: int = 0
     high_bandwidth_promotions: int = 0
     high_bandwidth_demotions: int = 0
     high_bandwidth_providers: int = 0
@@ -1397,11 +1403,15 @@ class PolicySimulator:
             and self.rng.random() <= provider.repair_success_probability
         )
         if not can_coordinate_repair:
+            if self._repair_pending_timed_out(epoch, slot):
+                self._timeout_repair(epoch, deal, slot, metrics)
             return
 
         if slot.repair_remaining_epochs > 0:
             slot.repair_remaining_epochs -= 1
         if slot.repair_remaining_epochs > 0:
+            if self._repair_pending_timed_out(epoch, slot):
+                self._timeout_repair(epoch, deal, slot, metrics)
             return
 
         if not slot.repair_ready:
@@ -1450,8 +1460,45 @@ class PolicySimulator:
         )
         slot.repair_attempts = 0
         slot.repair_backoff_until_epoch = 0
+        slot.repair_started_epoch = 0
         slot.last_repair_attempt_epoch = 0
         self._mark_healthy(slot)
+
+    def _repair_pending_timed_out(self, epoch: int, slot: SlotState) -> bool:
+        timeout = self.config.repair_pending_timeout_epochs
+        if timeout <= 0 or slot.repair_started_epoch <= 0:
+            return False
+        return epoch - slot.repair_started_epoch >= timeout
+
+    def _timeout_repair(self, epoch: int, deal: DealState, slot: SlotState, metrics: EpochMetrics) -> None:
+        pending = slot.pending_provider_id or ""
+        metrics.repair_timeouts += 1
+        if self.config.repair_backoff_epochs > 0:
+            slot.repair_backoff_until_epoch = max(
+                slot.repair_backoff_until_epoch,
+                epoch + self.config.repair_backoff_epochs,
+            )
+        self.repair_rows.append(
+            {
+                "epoch": epoch,
+                "event": "repair_timeout",
+                "deal_id": deal.deal_id,
+                "slot": slot.slot,
+                "old_provider": slot.provider_id,
+                "new_provider": pending,
+                "reason": "readiness_timeout",
+                "generation": slot.current_gen,
+                "attempt": slot.repair_attempts,
+                "cooldown_until_epoch": slot.repair_backoff_until_epoch,
+            }
+        )
+        slot.status = SLOT_ACTIVE
+        slot.pending_provider_id = None
+        slot.repair_remaining_epochs = 0
+        slot.repair_ready = False
+        slot.repair_started_epoch = 0
+        slot.last_reason = "readiness_timeout"
+        self._mark_delinquent(slot, "readiness_timeout")
 
     @staticmethod
     def _mark_suspect(slot: SlotState, reason: str) -> None:
@@ -1470,6 +1517,7 @@ class PolicySimulator:
         slot.health_reason = ""
         slot.repair_attempts = 0
         slot.repair_backoff_until_epoch = 0
+        slot.repair_started_epoch = 0
         slot.last_repair_attempt_epoch = 0
 
     def _start_repair(
@@ -1534,6 +1582,7 @@ class PolicySimulator:
         slot.pending_provider_id = pending
         slot.repair_remaining_epochs = self.config.repair_epochs
         slot.repair_ready = False
+        slot.repair_started_epoch = epoch
         slot.repair_backoff_until_epoch = 0
         slot.last_reason = reason
         metrics.repairs_started += 1
@@ -1834,6 +1883,7 @@ class PolicySimulator:
                 "repair_ready": int(slot.repair_ready),
                 "repair_attempts": slot.repair_attempts,
                 "repair_backoff_until_epoch": slot.repair_backoff_until_epoch,
+                "repair_started_epoch": slot.repair_started_epoch,
                 "missed_epochs": slot.missed_epochs,
                 "deputy_missed_epochs": slot.deputy_missed_epochs,
                 "credits_raw": slot.credits_raw,
@@ -2337,6 +2387,7 @@ class PolicySimulator:
             "repair_backoffs",
             "repair_cooldowns",
             "repair_attempt_caps",
+            "repair_timeouts",
             "high_bandwidth_promotions",
             "high_bandwidth_demotions",
             "high_bandwidth_serves",
@@ -2908,6 +2959,7 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
         "repair_epochs": args.repair_epochs,
         "repair_attempt_cap_per_slot": args.repair_attempt_cap_per_slot,
         "repair_backoff_epochs": args.repair_backoff_epochs,
+        "repair_pending_timeout_epochs": args.repair_pending_timeout_epochs,
         "enforcement_mode": args.enforcement_mode,
     }
     for key, value in cli_values.items():
@@ -2994,7 +3046,7 @@ def print_summary(result: SimResult) -> None:
         "success_rate={success_rate:.4f} reward_coverage={reward_coverage:.4f} "
         "repairs_started={repairs_started} repairs_ready={repairs_ready} "
         "repairs_completed={repairs_completed} repair_attempts={repair_attempts} "
-        "repair_backoffs={repair_backoffs}".format(**totals)
+        "repair_backoffs={repair_backoffs} repair_timeouts={repair_timeouts}".format(**totals)
     )
     print(
         "quota_misses={quota_misses} deputy_misses={deputy_misses} "
@@ -3062,6 +3114,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-epochs", type=int)
     parser.add_argument("--repair-attempt-cap-per-slot", type=int)
     parser.add_argument("--repair-backoff-epochs", type=int)
+    parser.add_argument("--repair-pending-timeout-epochs", type=int)
     parser.add_argument("--enforcement-mode", choices=sorted(ENFORCEMENT_ORDER))
     parser.add_argument("--dynamic-pricing", action="store_true")
     parser.add_argument(

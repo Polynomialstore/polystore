@@ -178,6 +178,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["candidate exclusion reasons", "repair attempt caps", "replacement capacity query"],
         "e2e": "Small devnet with no spare provider capacity after keeper behavior is stable.",
     },
+    "replacement-grinding": {
+        "target": "pending-provider readiness and retry keeper tests",
+        "next_test": "Add tests proving pending replacements must submit readiness before promotion, time out when they fail catch-up, and respect retry cooldown and attempt caps.",
+        "missing_surfaces": ["pending-provider readiness proof", "repair timeout ledger", "retry cooldown state", "failed catch-up reputation signal"],
+        "e2e": "Provider replacement with a pending SP that never catches up; assert timeout/retry state before process-level promotion.",
+    },
     "high-bandwidth-promotion": {
         "target": "provider capability and hot-route policy tests",
         "next_test": "Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment.",
@@ -559,6 +565,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "price-controller-bounds",
         "subsidy-farming",
         "repair-candidate-exhaustion",
+        "replacement-grinding",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
@@ -588,6 +595,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "lazy-provider",
         "setup-failure",
         "repair-candidate-exhaustion",
+        "replacement-grinding",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",

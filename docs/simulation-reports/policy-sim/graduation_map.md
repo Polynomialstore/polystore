@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 17 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 18 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 13 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -35,6 +35,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`provider-economic-churn`](provider-economic-churn/report.md) | `further simulation review` | economic churn and replacement calibration | Compare churn caps, minimum active-provider floor, draining notice, replacement throughput, and price-floor response before keeper drain semantics are implemented. | `draining provider state`, `provider exit telemetry`, `churn caps`, `replacement capacity dashboards` | No process e2e yet; validate churn policy with simulator sweeps and then add keeper drain/replacement tests. |
 | [`provider-supply-entry`](provider-supply-entry/report.md) | `further simulation review` | provider lifecycle and supply recovery calibration | Compare reserve sizing, entry caps, probation windows, utilization triggers, and readiness semantics before keeper provider lifecycle state is implemented. | `provider lifecycle state`, `probation readiness checks`, `reserve supply telemetry`, `entry and promotion caps` | No process e2e yet; validate supply recovery with simulator scenarios before provider registration or promotion keeper tests. |
 | [`repair-candidate-exhaustion`](repair-candidate-exhaustion/report.md) | `implementation planning` | candidate selection and repair backoff keeper tests | Add tests proving no eligible replacement emits backoff, preserves capacity constraints, and does not over-assign providers. | `candidate exclusion reasons`, `repair attempt caps`, `replacement capacity query` | Small devnet with no spare provider capacity after keeper behavior is stable. |
+| [`replacement-grinding`](replacement-grinding/report.md) | `implementation planning` | pending-provider readiness and retry keeper tests | Add tests proving pending replacements must submit readiness before promotion, time out when they fail catch-up, and respect retry cooldown and attempt caps. | `pending-provider readiness proof`, `repair timeout ledger`, `retry cooldown state`, `failed catch-up reputation signal` | Provider replacement with a pending SP that never catches up; assert timeout/retry state before process-level promotion. |
 | [`retrieval-demand-shock`](retrieval-demand-shock/report.md) | `further simulation review` | dynamic pricing calibration | Compare retrieval demand targets, price-step clamps, smoothing windows, and burst response before encoding retrieval pricing defaults. | `retrieval demand accumulator`, `pricing smoothing params`, `burst-demand dashboards` | No process e2e yet; validate with keeper pricing tests and simulator sweeps first. |
 | [`setup-failure`](setup-failure/report.md) | `implementation planning` | setup bump and deterministic replacement | Add setup-phase replacement tests proving failed initial upload selects a system provider and does not imply fraud. | `setup slot state`, `setup bump event`, `candidate exclusion reasons` | Create deal with one failing provider upload and verify replacement before first content commit. |
 | [`single-outage`](single-outage/report.md) | `implementation planning` | keeper repair and gateway route-around | Add a keeper test where a slot crosses missed-epoch threshold, enters repair, selects a deterministic pending provider, and later promotes. | `slot health state`, `repair attempt ledger`, `promotion readiness proof`, `gateway repair-aware routing` | Kill one provider-daemon during retrieval and assert reads stay available while repair starts. |
@@ -54,7 +55,7 @@ This report converts the committed simulator corpus into implementation planning
 - `lazy-provider`: Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing.
 - `setup-failure`: Add setup-phase replacement tests proving failed initial upload selects a system provider and does not imply fraud.
 - `repair-candidate-exhaustion`: Add tests proving no eligible replacement emits backoff, preserves capacity constraints, and does not over-assign providers.
-- `high-bandwidth-promotion`: Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment.
+- `replacement-grinding`: Add tests proving pending replacements must submit readiness before promotion, time out when they fail catch-up, and respect retry cooldown and attempt caps.
 
 ## Missing Surfaces By Component
 
@@ -95,6 +96,7 @@ This report converts the committed simulator corpus into implementation planning
 | `entry and promotion caps` | 1 |
 | `evidence bond escrow` | 1 |
 | `evidence bounty accounting` | 1 |
+| `failed catch-up reputation signal` | 1 |
 | `gateway fallback telemetry` | 1 |
 | `gateway repair-aware routing` | 1 |
 | `hard evidence submission` | 1 |
@@ -114,6 +116,7 @@ This report converts the committed simulator corpus into implementation planning
 | `operator regression alert` | 1 |
 | `overlay accountability` | 1 |
 | `owner escrow isolation` | 1 |
+| `pending-provider readiness proof` | 1 |
 | `per-deal operator cap params` | 1 |
 | `per-slot suspect state` | 1 |
 | `placement diversity params` | 1 |
@@ -131,10 +134,12 @@ This report converts the committed simulator corpus into implementation planning
 | `regional/provider-class placement metadata` | 1 |
 | `repair attempt caps` | 1 |
 | `repair attempt ledger` | 1 |
+| `repair timeout ledger` | 1 |
 | `replacement capacity dashboards` | 1 |
 | `replacement capacity query` | 1 |
 | `requester-paid session accounting` | 1 |
 | `reserve supply telemetry` | 1 |
+| `retry cooldown state` | 1 |
 | `reward eligibility queries` | 1 |
 | `reward exclusion event` | 1 |
 | `reward exclusion reason query` | 1 |

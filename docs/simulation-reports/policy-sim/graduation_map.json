@@ -1248,6 +1248,66 @@
     },
     {
       "blockers": [],
+      "e2e": "Provider replacement with a pending SP that never catches up; assert timeout/retry state before process-level promotion.",
+      "metrics": {
+        "data_loss_events": 0,
+        "delinquent_slots": 60,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
+        "fail_serves": 0,
+        "gold_serves": 0,
+        "high_bandwidth_demotions": 0,
+        "high_bandwidth_promotions": 0,
+        "high_bandwidth_providers": 0,
+        "hot_high_bandwidth_serves": 0,
+        "hot_retrieval_attempts": 0,
+        "max_operator_deal_slots": 1,
+        "max_provider_cost_shock_storage_multiplier_bps": 10000,
+        "max_provider_cost_shocked_providers": 0,
+        "max_retrieval_demand_multiplier_bps": 10000,
+        "new_deal_latent_requests": 0,
+        "new_deal_requests": 0,
+        "new_deals_accepted": 0,
+        "new_deals_rejected_capacity": 0,
+        "new_deals_rejected_price": 0,
+        "new_deals_suppressed_price": 0,
+        "operator_deal_cap_violations": 0,
+        "performance_reward_paid": 0.0,
+        "platinum_serves": 0,
+        "provider_cost_shock_active": 0,
+        "providers_negative_pnl": 1,
+        "repair_attempt_caps": 6,
+        "repair_attempts": 18,
+        "repair_backoffs": 24,
+        "repair_cooldowns": 18,
+        "repairs_completed": 0,
+        "repairs_ready": 0,
+        "repairs_started": 18,
+        "retrieval_demand_shock_active": 0,
+        "retrieval_price_direction_changes": 0,
+        "saturated_responses": 0,
+        "silver_serves": 0,
+        "success_rate": 1.0,
+        "suspect_slots": 0,
+        "top_operator_assignment_share_bps": 277,
+        "top_operator_provider_share_bps": 277,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "pending-provider readiness proof",
+        "repair timeout ledger",
+        "retry cooldown state",
+        "failed catch-up reputation signal"
+      ],
+      "next_test": "Add tests proving pending replacements must submit readiness before promotion, time out when they fail catch-up, and respect retry cooldown and attempt caps.",
+      "scenario": "replacement-grinding",
+      "status": "implementation planning",
+      "target": "pending-provider readiness and retry keeper tests"
+    },
+    {
+      "blockers": [],
       "e2e": "No process e2e yet; validate with keeper pricing tests and simulator sweeps first.",
       "metrics": {
         "data_loss_events": 0,
@@ -1781,6 +1841,6 @@
   ],
   "status_counts": {
     "further simulation review": 13,
-    "implementation planning": 17
+    "implementation planning": 18
   }
 }

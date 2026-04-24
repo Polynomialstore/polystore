@@ -161,6 +161,7 @@
     "peak_repairing_slots": 16.0,
     "readiness_ratio": 1.0,
     "ready": 60.0,
+    "repair_timeouts": 0.0,
     "started": 60.0,
     "suspect_slot_epochs": 0.0
   },

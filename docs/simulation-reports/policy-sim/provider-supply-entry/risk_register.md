@@ -30,6 +30,7 @@ Model reserve providers entering the active set after churn reduces supply. The 
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Repair readiness timeouts: `0`
 - Audit budget demand: `0.5650`
 - Audit budget spent: `0.5650`
 - Audit budget backlog: `0.0000`

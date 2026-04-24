@@ -8,7 +8,7 @@ Model a population-scale network with more than one thousand storage providers a
 
 Expected policy behavior: Availability should stay above the configured floor, price should remain bounded, saturation and repair backoffs should be visible, and no provider should be assigned above modeled capacity.
 
-Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` modeled data-loss events, `15482` bandwidth saturation responses and `12436` repair backoffs across `16060` repair attempts. Slot health recorded `361` suspect slot-epochs and `25634` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
+Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` modeled data-loss events, `15482` bandwidth saturation responses and `12436` repair backoffs across `16060` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `361` suspect slot-epochs and `25634` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
 
 ## Review Focus
 
@@ -32,6 +32,7 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Repair delay | `3` epochs |
 | Repair attempt cap/slot | `0` (`0` means unlimited) |
 | Repair backoff window | `0` epochs |
+| Repair pending timeout | `0` epochs (`0` means disabled) |
 | Dynamic pricing | `true` |
 | Storage price | `1.0000` |
 | New deal requests/epoch | `0` |
@@ -97,7 +98,7 @@ Reward exclusion was active: `292.9860` modeled reward units were burned instead
 
 Provider bandwidth constraints mattered: the run recorded `15482` saturated provider responses. That is a scale signal, not necessarily malicious behavior.
 
-Repair coordination was constrained: `12436` repair backoffs occurred across `16060` repair attempts. Cooldown backoffs accounted for `0` events and attempt-cap backoffs accounted for `0` events.
+Repair coordination was constrained: `12436` repair backoffs occurred across `16060` repair attempts. Cooldown backoffs accounted for `0` events and attempt-cap backoffs accounted for `0` events. Pending-provider readiness timeouts accounted for `0` events.
 
 The directly implicated provider set begins with: `sp-001, sp-007, sp-008, sp-012, sp-013`.
 
@@ -119,9 +120,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Repair attempts | `16060` | Counts bounded attempts to open a repair or discover replacement pressure. |
 | Repair backoff pressure | `3.4316` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Repair backoffs per attempt | `0.7743` | Distinguishes capacity/cooldown pressure from successful repair starts. |
-| Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
+| Repair cooldowns / attempt caps / readiness timeouts | `0` / `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
 | Suspect / delinquent slot-epochs | `361` / `25634` | Separates early warning state from threshold-crossed delinquency. |
-| Final repair backlog | `574` slots | Started repairs minus completed repairs at run end. |
+| Final repair backlog | `574` slots | Started repairs minus completed or timed-out repairs at run end. |
 | High-bandwidth providers | `0` | Providers currently eligible for hot/high-bandwidth routing. |
 | High-bandwidth promotions/demotions | `0` / `0` | Shows capability changes under measured demand. |
 | Hot high-bandwidth serves/retrieval | `0` | Measures whether hot retrievals actually use promoted providers. |
@@ -254,6 +255,7 @@ Repair summary:
 - Repair backoffs: `12436`
 - Repair cooldown backoffs: `0`
 - Repair attempt-cap backoffs: `0`
+- Repair readiness timeouts: `0`
 - Suspect slot-epochs: `361`
 - Delinquent slot-epochs: `25634`
 - Final active slots in last epoch: `17426`
@@ -432,6 +434,12 @@ Shows whether started repairs are accumulating faster than they complete.
 
 ![Repair Backlog](graphs/repair_backlog.svg)
 
+### Repair Readiness
+
+Shows pending-provider readiness timeouts against successful readiness events.
+
+![Repair Readiness](graphs/repair_readiness.svg)
+
 ### High-Bandwidth Promotion
 
 Shows capability promotion/demotion state over time for hot-path eligibility.
@@ -494,6 +502,6 @@ Shows demand-funded elasticity spend and rejected expansion attempts.
 - `operators.csv`: final operator-level provider count, assignment share, success, and P&L metrics.
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, concentration, and provider bottleneck signals.
