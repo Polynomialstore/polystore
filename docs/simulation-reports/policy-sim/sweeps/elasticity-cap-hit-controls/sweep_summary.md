@@ -1,12 +1,12 @@
 # Policy Simulation Sensitivity Sweep
 
-This report aggregates `7` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.
+This report aggregates `6` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.
 
 ## Executive Summary
 
 - Mode: `Sensitivity Sweep`.
-- Runs analyzed: `7`.
-- Varied parameters: `3`.
+- Runs analyzed: `6`.
+- Varied parameters: `5`.
 - Critical-risk runs: `0`.
 - Assertion failures: `0`.
 - Runs with modeled data loss: `0`.
@@ -16,13 +16,12 @@ This report aggregates `7` completed simulator run output directories. It does n
 
 | Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
 |---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `baseline-cap2-dominant50` | `operator-concentration-cap` | `53` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0120 |
-| `cap2-dominant70` | `operator-concentration-cap` | `53` | `high` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0120 |
-| `cap2-dominant80` | `operator-concentration-cap` | `53` | `high` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0120 |
-| `cap2-five-operators` | `operator-concentration-cap` | `53` | `high` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0120 |
-| `loose-cap3-dominant50` | `operator-concentration-cap` | `53` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0120 |
-| `no-cap-dominant50` | `operator-concentration-cap` | `53` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0120 |
-| `strict-cap1-dominant50` | `operator-concentration-cap` | `53` | `high` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0120 |
+| `baseline-zero-spend-cap` | `elasticity-cap-hit` | `23` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
+| `expensive-overflow-rejected-before-spend` | `elasticity-cap-hit` | `23` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
+| `larger-budget-still-bounded` | `elasticity-cap-hit` | `23` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
+| `larger-viral-pressure-zero-cap` | `elasticity-cap-hit` | `23` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
+| `no-trigger-control` | `elasticity-cap-hit` | `23` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
+| `small-spend-window` | `elasticity-cap-hit` | `23` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
 
 ## Key Metric Ranges
 
@@ -35,8 +34,8 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Shows whether compliant responsibility remains economically recognized. |
-| `reward_pool_minted` | 57.600000 | 57.600000 | 0.000000 | 57.600000 | Modeled base subsidy made available to active slots. |
-| `reward_paid` | 57.600000 | 57.600000 | 0.000000 | 57.600000 | Base subsidy actually paid to reward-eligible slots. |
+| `reward_pool_minted` | 28.800000 | 28.800000 | 0.000000 | 28.800000 | Modeled base subsidy made available to active slots. |
+| `reward_paid` | 28.800000 | 28.800000 | 0.000000 | 28.800000 | Base subsidy actually paid to reward-eligible slots. |
 | `reward_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Base subsidy withheld from non-compliant responsibility. |
 | `repairs_started` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Detection and repair activation pressure. |
 | `repairs_ready` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Pending replacement providers that proved readiness. |
@@ -52,11 +51,11 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `high_bandwidth_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves attributed to high-bandwidth providers. |
 | `hot_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Hot-service demand exercised by the run. |
 | `hot_high_bandwidth_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Hot retrieval serves handled by promoted high-bandwidth providers. |
-| `max_operator_assignment_share_bps` | 1208.000000 | 5000.000000 | 3792.000000 | 2690.142857 | Worst observed assignment share of any operator across epochs. |
-| `top_operator_assignment_share_bps` | 1208.000000 | 5000.000000 | 3792.000000 | 2690.142857 | Final assignment share of the largest operator. |
-| `top_operator_provider_share_bps` | 5000.000000 | 8000.000000 | 3000.000000 | 5714.285714 | Provider identity share controlled by the largest operator. |
-| `max_operator_deal_slots` | 2.000000 | 12.000000 | 10.000000 | 6.285714 | Maximum same-operator slots in any one deal. |
-| `operator_deal_cap_violations` | 0.000000 | 60.000000 | 60.000000 | 21.428571 | Deal/operator groups above the configured cap. |
+| `max_operator_assignment_share_bps` | 208.000000 | 208.000000 | 0.000000 | 208.000000 | Worst observed assignment share of any operator across epochs. |
+| `top_operator_assignment_share_bps` | 208.000000 | 208.000000 | 0.000000 | 208.000000 | Final assignment share of the largest operator. |
+| `top_operator_provider_share_bps` | 208.000000 | 208.000000 | 0.000000 | 208.000000 | Provider identity share controlled by the largest operator. |
+| `max_operator_deal_slots` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Maximum same-operator slots in any one deal. |
+| `operator_deal_cap_violations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal/operator groups above the configured cap. |
 | `platinum_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves in the fastest latency tier. |
 | `gold_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves in the middle positive latency tier. |
 | `silver_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Serves in the low positive latency tier. |
@@ -74,18 +73,18 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `deals_closed` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal close events executed across the run. |
 | `deals_expired` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal expiry events executed across the run. |
 | `final_expired_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals expired by run end. |
-| `final_open_deals` | 40.000000 | 40.000000 | 0.000000 | 40.000000 | Deals still active at run end. |
+| `final_open_deals` | 24.000000 | 24.000000 | 0.000000 | 24.000000 | Deals still active at run end. |
 | `final_closed_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals closed by run end. |
-| `retrieval_base_burned` | 1.920000 | 1.920000 | 0.000000 | 1.920000 | Base retrieval fees burned across live retrieval attempts. |
-| `retrieval_variable_burned` | 9.216000 | 9.216000 | 0.000000 | 9.216000 | Variable retrieval fee burn withheld from provider payout. |
-| `retrieval_provider_payouts` | 175.104000 | 175.104000 | 0.000000 | 175.104000 | Retrieval fees paid to providers for served slots. |
+| `retrieval_base_burned` | 5.000000 | 15.000000 | 10.000000 | 6.666667 | Base retrieval fees burned across live retrieval attempts. |
+| `retrieval_variable_burned` | 20.000000 | 60.000000 | 40.000000 | 26.666667 | Variable retrieval fee burn withheld from provider payout. |
+| `retrieval_provider_payouts` | 380.000000 | 1140.000000 | 760.000000 | 506.666667 | Retrieval fees paid to providers for served slots. |
 | `sponsored_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval attempts funded by requester/sponsor sessions. |
 | `sponsored_retrieval_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Total sponsored retrieval base plus variable spend. |
 | `owner_retrieval_escrow_debited` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal-owner escrow debited for non-sponsored retrievals. |
-| `retrieval_wash_accounted_spend` | 1.920000 | 1.920000 | 0.000000 | 1.920000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
-| `retrieval_wash_net_gain` | 173.184000 | 173.184000 | 0.000000 | 173.184000 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
-| `retrieval_attempts` | 1920.000000 | 1920.000000 | 0.000000 | 1920.000000 | Effective retrieval attempts after demand shock multipliers and inactive-content rejection. |
-| `retrieval_latent_attempts` | 1920.000000 | 1920.000000 | 0.000000 | 1920.000000 | Baseline read demand before demand-shock multipliers. |
+| `retrieval_wash_accounted_spend` | 5.000000 | 15.000000 | 10.000000 | 6.666667 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
+| `retrieval_wash_net_gain` | 375.000000 | 1125.000000 | 750.000000 | 500.000000 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
+| `retrieval_attempts` | 5000.000000 | 15000.000000 | 10000.000000 | 6666.666667 | Effective retrieval attempts after demand shock multipliers and inactive-content rejection. |
+| `retrieval_latent_attempts` | 5000.000000 | 15000.000000 | 10000.000000 | 6666.666667 | Baseline read demand before demand-shock multipliers. |
 | `retrieval_demand_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where read-demand shock multipliers were active. |
 | `max_retrieval_demand_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled read-demand multiplier. |
 | `new_deal_latent_requests` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
@@ -96,8 +95,8 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `new_deals_rejected_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `new_deal_acceptance_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `new_deal_latent_acceptance_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
-| `elasticity_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Non-overlay user-funded elasticity spend consumed by overflow demand. |
-| `elasticity_rejections` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Non-overlay elasticity expansion attempts rejected by spend cap. |
+| `elasticity_spent` | 0.000000 | 50.000000 | 50.000000 | 11.666667 | Non-overlay user-funded elasticity spend consumed by overflow demand. |
+| `elasticity_rejections` | 0.000000 | 5.000000 | 5.000000 | 3.000000 | Non-overlay elasticity expansion attempts rejected by spend cap. |
 | `elasticity_overlay_activations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary overflow routes activated by user-funded elasticity. |
 | `elasticity_overlay_expired` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary overflow routes removed by TTL. |
 | `elasticity_overlay_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval serves completed by overlay routes. |
@@ -157,7 +156,7 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `entered_active_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers that entered from reserve and are active by run end. |
 | `churn_pressure_provider_epochs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider-epochs below the churn threshold. |
 | `max_churn_pressure_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers simultaneously eligible for churn. |
-| `final_active_provider_capacity` | 1280.000000 | 1280.000000 | 0.000000 | 1280.000000 | Provider capacity remaining after economic exits. |
+| `final_active_provider_capacity` | 768.000000 | 768.000000 | 0.000000 | 768.000000 | Provider capacity remaining after economic exits. |
 | `final_exited_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity removed by economic exits. |
 | `final_reserve_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity still held outside normal placement as reserve supply. |
 | `final_probationary_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity in onboarding probation at run end. |
@@ -169,47 +168,51 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `min_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Lowest storage price observed during the run. |
 | `max_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Highest storage price observed during the run. |
 | `final_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Storage-controller endpoint under this run. |
-| `min_retrieval_price` | 0.012000 | 0.012000 | 0.000000 | 0.012000 | Lowest retrieval price observed during the run. |
-| `max_retrieval_price` | 0.012000 | 0.012000 | 0.000000 | 0.012000 | Highest retrieval price observed during the run. |
-| `final_retrieval_price` | 0.012000 | 0.012000 | 0.000000 | 0.012000 | Retrieval-controller endpoint under this run. |
+| `min_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Lowest retrieval price observed during the run. |
+| `max_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Highest retrieval price observed during the run. |
+| `final_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Retrieval-controller endpoint under this run. |
 | `storage_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage price controller direction changes across the run. |
 | `retrieval_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval price controller direction changes across the run. |
-| `provider_pnl` | 202.944000 | 202.944000 | 0.000000 | 202.944000 | Aggregate provider economics; inspect distribution before deciding. |
+| `provider_pnl` | 342.400000 | 1022.400000 | 680.000000 | 455.733333 | Aggregate provider economics; inspect distribution before deciding. |
 
 ## Varied Parameters
 
 | Parameter | Values |
 |---|---|
-| `dominant_operator_provider_bps` | `5000`, `7000`, `8000` |
-| `operator_assignment_cap_per_deal` | `0`, `1`, `2`, `3` |
-| `operator_count` | `10`, `5` |
+| `elasticity_base_cost` | `10.0`, `25.0` |
+| `elasticity_max_spend` | `0.0`, `20.0`, `50.0` |
+| `elasticity_trigger_retrievals_per_epoch` | `20000`, `500` |
+| `retrievals_per_user_per_epoch` | `4`, `6` |
+| `users` | `250`, `500` |
 
 ## Parameter Sensitivity
 
 | Parameter | Value | Runs | Avg Success | Total Unavailable | Total Data Loss | Avg Backoffs | Avg Negative P&L | Avg Final Storage Price |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| `dominant_operator_provider_bps` | `5000` | 5 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `dominant_operator_provider_bps` | `7000` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `dominant_operator_provider_bps` | `8000` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `operator_assignment_cap_per_deal` | `0` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `operator_assignment_cap_per_deal` | `1` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `operator_assignment_cap_per_deal` | `2` | 4 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `operator_assignment_cap_per_deal` | `3` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `operator_count` | `10` | 6 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `operator_count` | `5` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `elasticity_base_cost` | `10.0` | 5 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `elasticity_base_cost` | `25.0` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `elasticity_max_spend` | `0.0` | 3 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `elasticity_max_spend` | `20.0` | 2 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `elasticity_max_spend` | `50.0` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `elasticity_trigger_retrievals_per_epoch` | `20000` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `elasticity_trigger_retrievals_per_epoch` | `500` | 5 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `retrievals_per_user_per_epoch` | `4` | 5 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `retrievals_per_user_per_epoch` | `6` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `users` | `250` | 5 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `users` | `500` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
 
 ## High-Risk Runs
 
 | Run | Scenario | Risk | Reasons |
 |---|---|---|---|
-| `strict-cap1-dominant50` | `operator-concentration-cap` | `high` | operator per-deal assignment caps were violated |
-| `cap2-five-operators` | `operator-concentration-cap` | `high` | operator per-deal assignment caps were violated |
-| `cap2-dominant80` | `operator-concentration-cap` | `high` | operator per-deal assignment caps were violated |
-| `cap2-dominant70` | `operator-concentration-cap` | `high` | operator per-deal assignment caps were violated |
+| `small-spend-window` | `elasticity-cap-hit` | `medium` | elasticity expansion was rejected by spend cap |
+| `larger-viral-pressure-zero-cap` | `elasticity-cap-hit` | `medium` | elasticity expansion was rejected by spend cap |
+| `expensive-overflow-rejected-before-spend` | `elasticity-cap-hit` | `medium` | elasticity expansion was rejected by spend cap |
+| `baseline-zero-spend-cap` | `elasticity-cap-hit` | `medium` | elasticity expansion was rejected by spend cap |
 
 ## Best Observed Run
 
-`baseline-cap2-dominant50` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.
+`baseline-zero-spend-cap` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.
 
 This is not an automatic policy choice. It is the run humans should inspect first when deciding which parameter set deserves keeper or e2e implementation work.
 

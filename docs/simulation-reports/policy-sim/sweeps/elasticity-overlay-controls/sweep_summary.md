@@ -95,6 +95,8 @@ This report aggregates `6` completed simulator run output directories. It does n
 | `new_deals_rejected_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `new_deal_acceptance_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `new_deal_latent_acceptance_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `elasticity_spent` | 12.000000 | 60.000000 | 48.000000 | 39.000000 | Non-overlay user-funded elasticity spend consumed by overflow demand. |
+| `elasticity_rejections` | 0.000000 | 6.000000 | 6.000000 | 1.000000 | Non-overlay elasticity expansion attempts rejected by spend cap. |
 | `elasticity_overlay_activations` | 12.000000 | 60.000000 | 48.000000 | 39.000000 | Temporary overflow routes activated by user-funded elasticity. |
 | `elasticity_overlay_expired` | 9.000000 | 30.000000 | 21.000000 | 19.500000 | Temporary overflow routes removed by TTL. |
 | `elasticity_overlay_serves` | 112.000000 | 419.000000 | 307.000000 | 252.166667 | Retrieval serves completed by overlay routes. |
@@ -203,7 +205,7 @@ This report aggregates `6` completed simulator run output directories. It does n
 
 | Run | Scenario | Risk | Reasons |
 |---|---|---|---|
-| `low-spend-cap` | `elasticity-overlay-scaleup` | `critical` | 1 assertion contract failures; temporary unavailable reads are present in an allowed stress fixture; retrieval success fell below 99%; provider bandwidth saturation occurred; elasticity overlay expansion was rejected |
+| `low-spend-cap` | `elasticity-overlay-scaleup` | `critical` | 1 assertion contract failures; temporary unavailable reads are present in an allowed stress fixture; retrieval success fell below 99%; provider bandwidth saturation occurred; elasticity overlay expansion was rejected; elasticity expansion was rejected by spend cap |
 | `tight-per-deal-cap` | `elasticity-overlay-scaleup` | `high` | temporary unavailable reads are present in an allowed stress fixture; retrieval success fell below 99%; provider bandwidth saturation occurred |
 | `slow-readiness` | `elasticity-overlay-scaleup` | `high` | temporary unavailable reads are present in an allowed stress fixture; retrieval success fell below 99%; provider bandwidth saturation occurred |
 | `short-ttl` | `elasticity-overlay-scaleup` | `high` | temporary unavailable reads are present in an allowed stress fixture; retrieval success fell below 99%; provider bandwidth saturation occurred |

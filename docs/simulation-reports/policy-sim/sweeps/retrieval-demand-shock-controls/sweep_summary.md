@@ -98,6 +98,8 @@ This report aggregates `9` completed simulator run output directories. It does n
 | `new_deals_rejected_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `new_deal_acceptance_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `new_deal_latent_acceptance_rate` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `elasticity_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Non-overlay user-funded elasticity spend consumed by overflow demand. |
+| `elasticity_rejections` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Non-overlay elasticity expansion attempts rejected by spend cap. |
 | `elasticity_overlay_activations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary overflow routes activated by user-funded elasticity. |
 | `elasticity_overlay_expired` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary overflow routes removed by TTL. |
 | `elasticity_overlay_serves` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval serves completed by overlay routes. |

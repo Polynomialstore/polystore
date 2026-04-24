@@ -1319,6 +1319,10 @@ and smoothing defaults are chosen; and
 compares storage-demand elasticity, reference price, minimum demand floor,
 price-step speed, and disabled-controller behavior before storage price
 recovery defaults are chosen; and
+`tools/policy_sim/sweeps/elasticity_cap_hit_controls.yaml`, which compares
+non-overlay elasticity spend caps, overflow cost, trigger thresholds, and viral
+retrieval pressure so user-funded elasticity fails closed instead of creating
+unbounded spend; and
 `tools/policy_sim/sweeps/storage_escrow_expiry_controls.yaml`, which compares
 expiry duration, run length, disabled-expiry behavior, and larger escrow books
 so committed storage expires when fully mature, immature deals remain visibly

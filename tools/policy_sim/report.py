@@ -554,6 +554,8 @@ SWEEP_METRICS = [
     "new_deals_rejected_capacity",
     "new_deal_acceptance_rate",
     "new_deal_latent_acceptance_rate",
+    "elasticity_spent",
+    "elasticity_rejections",
     "elasticity_overlay_activations",
     "elasticity_overlay_expired",
     "elasticity_overlay_serves",
@@ -3873,6 +3875,17 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "retrieval price oscillated repeatedly")
     if fnum(totals.get("elasticity_overlay_rejections")) > 0:
         raise_to("medium", "elasticity overlay expansion was rejected")
+    if scenario == "elasticity-cap-hit":
+        triggered = fnum(totals.get("retrieval_attempts")) >= fnum(config.get("elasticity_trigger_retrievals_per_epoch"))
+        spend_window_exhaustible = fnum(config.get("elasticity_max_spend")) < (
+            fnum(config.get("elasticity_base_cost")) * fnum(config.get("epochs"))
+        )
+        if fnum(totals.get("elasticity_rejections")) == 0 and triggered and spend_window_exhaustible:
+            raise_to("high", "elasticity cap-hit scenario did not emit spend-cap rejection")
+        if fnum(totals.get("elasticity_spent")) > fnum(config.get("elasticity_max_spend")):
+            raise_to("high", "elasticity spend exceeded configured cap")
+    if fnum(totals.get("elasticity_rejections")) > 0:
+        raise_to("medium", "elasticity expansion was rejected by spend cap")
     if fnum(totals.get("elasticity_overlay_activations")) > 0 and fnum(totals.get("elasticity_overlay_serves")) == 0:
         raise_to("medium", "elasticity overlays activated but did not serve reads")
     if fnum(totals.get("owner_retrieval_escrow_debited")) > 0:
@@ -4186,6 +4199,8 @@ def sweep_metric_meaning(key: str) -> str:
         "sponsored_retrieval_attempts": "Retrieval attempts funded by requester/sponsor sessions.",
         "sponsored_retrieval_spent": "Total sponsored retrieval base plus variable spend.",
         "owner_retrieval_escrow_debited": "Deal-owner escrow debited for non-sponsored retrievals.",
+        "elasticity_spent": "Non-overlay user-funded elasticity spend consumed by overflow demand.",
+        "elasticity_rejections": "Non-overlay elasticity expansion attempts rejected by spend cap.",
         "elasticity_overlay_activations": "Temporary overflow routes activated by user-funded elasticity.",
         "elasticity_overlay_expired": "Temporary overflow routes removed by TTL.",
         "elasticity_overlay_serves": "Retrieval serves completed by overlay routes.",

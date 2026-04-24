@@ -1,0 +1,76 @@
+{
+  "name": "elasticity-cap-hit-controls",
+  "description": "Sensitivity sweep for non-overlay elasticity spend-cap behavior across zero budget, small spend windows, expensive overflow, disabled demand triggers, and larger viral retrieval pressure.",
+  "base_scenario": "../scenarios/elasticity_cap_hit.yaml",
+  "cases": [
+    {
+      "name": "baseline-zero-spend-cap"
+    },
+    {
+      "name": "small-spend-window",
+      "config": {
+        "elasticity_max_spend": 20.0
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_elasticity_rejections": 1,
+        "min_elasticity_spent": 10.0,
+        "max_elasticity_spent": 20.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "expensive-overflow-rejected-before-spend",
+      "config": {
+        "elasticity_base_cost": 25.0,
+        "elasticity_max_spend": 20.0
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_elasticity_rejections": 1,
+        "max_elasticity_spent": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "larger-viral-pressure-zero-cap",
+      "config": {
+        "users": 500,
+        "retrievals_per_user_per_epoch": 6
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_elasticity_rejections": 1,
+        "max_elasticity_spent": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "no-trigger-control",
+      "config": {
+        "elasticity_trigger_retrievals_per_epoch": 20000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_elasticity_rejections": 0,
+        "max_elasticity_rejections": 0,
+        "max_elasticity_spent": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "larger-budget-still-bounded",
+      "config": {
+        "elasticity_max_spend": 50.0,
+        "elasticity_base_cost": 10.0
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_elasticity_rejections": 0,
+        "min_elasticity_spent": 10.0,
+        "max_elasticity_spent": 50.0,
+        "max_data_loss_events": 0
+      }
+    }
+  ]
+}
