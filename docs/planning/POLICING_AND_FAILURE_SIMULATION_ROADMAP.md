@@ -306,6 +306,7 @@ Human decisions still required:
 | Wash traffic | Can fake retrievals profit from rewards or credits? | Burn and fees exceed expected reward or credit value. | Session fee, credit cap, and anomaly tests. |
 | Viral public retrieval | Does public demand scale without draining owner escrow? | Sponsored sessions fund retrieval; owner escrow remains stable. | Sponsored-session e2e. |
 | Storage escrow close/refund | Does committed storage escrow lock, earn, and refund deterministically? | Storage escrow locks upfront, pays earned fees, refunds unearned close balance, and leaves no outstanding escrow. | Quote-to-charge, close/refund, and expiry keeper tests. |
+| Storage escrow noncompliance burn | Are earned storage fees withheld from delinquent responsibility? | Storage escrow still earns, compliant slots are paid, delinquent share is burned, and availability/durability stay intact. | Storage-fee payout eligibility and burn-ledger tests. |
 | Elasticity cap hit | What happens when demand exceeds user budget? | Scaling stops cleanly and service is rate-limited, not unbounded. | `MsgSignalSaturation` spend-window e2e. |
 | Elasticity overlay scale-up | Does funded overflow capacity become useful and temporary? | Overlay routes activate, become ready, serve reads, and expire without data loss. | Overlay readiness, routing expansion, and TTL e2e. |
 | Subsidy farming | Can providers earn emissions without useful service? | Non-compliant or idle responsibility is unrewarded or uneconomic. | Base reward compliance tests. |
@@ -1247,6 +1248,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost, sponsor spend is visible, and owner escrow remains stable. |
 | `storage_escrow_close_refund.yaml` | Committed storage locks escrow, earns provider storage fees, then closes a subset of deals early. | Locked, earned, refunded, outstanding, provider-payout, and burned storage-fee values are visible; outstanding escrow reaches zero by run end. |
+| `storage_escrow_noncompliance_burn.yaml` | A lazy provider misses quota while committed storage escrow continues earning. | Non-compliant slot share is burned instead of paid, compliant providers still receive earned fees, repairs start, and reads remain available. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
 | `elasticity_overlay_scaleup.yaml` | Sustained hot retrieval demand buys temporary overflow routes. | Overlay activations, serves, and TTL expirations are visible; spend caps are respected and durability is unaffected. |
 | `high_bandwidth_promotion.yaml` | Hot retrieval demand is routed across heterogeneous providers after measured high-bandwidth promotion. | Providers promote only after success/capacity/saturation checks, hot traffic uses promoted providers, no demotion or over-capacity assignment occurs. |
@@ -1268,6 +1270,10 @@ semantics are chosen. The paired sweep keeps the production question concrete:
 human review should decide exact keeper rounding, expiry auto-close, and
 quote-signing semantics only after looking at how earned/refunded/outstanding
 balances move under close timing and close fraction.
+`tools/policy_sim/scenarios/storage_escrow_noncompliance_burn.yaml` covers the
+adjacent enforcement question: when responsibility is delinquent under
+reward-exclusion semantics, earned storage-fee share should be burned rather
+than paid while the storage lock-in ledger remains balanced.
 
 ### 27.7 Output Contract
 

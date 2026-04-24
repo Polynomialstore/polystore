@@ -1,0 +1,36 @@
+{
+  "name": "storage-escrow-noncompliance-burn",
+  "description": "Committed storage escrow continues earning over service epochs, but slots that miss quota under reward-exclusion mode do not receive provider storage-fee payouts.",
+  "config": {
+    "scenario": "storage-escrow-noncompliance-burn",
+    "seed": 103,
+    "providers": 48,
+    "users": 80,
+    "deals": 12,
+    "epochs": 8,
+    "retrievals_per_user_per_epoch": 1,
+    "storage_price": 0.05,
+    "storage_lockin_enabled": true,
+    "deal_duration_epochs": 8,
+    "base_reward_per_slot": 0.02,
+    "provider_storage_cost_per_slot_epoch": 0.005,
+    "provider_fixed_cost_per_epoch": 0.01
+  },
+  "faults": [
+    "lazy:sp-000"
+  ],
+  "assertions": {
+    "min_success_rate": 1.0,
+    "min_quota_misses": 1,
+    "min_repairs_started": 1,
+    "min_repairs_ready": 1,
+    "min_storage_escrow_locked": 900.0,
+    "min_storage_escrow_earned": 900.0,
+    "min_storage_fee_burned": 1.0,
+    "min_storage_fee_provider_payouts": 850.0,
+    "max_storage_escrow_refunded": 0.0,
+    "max_storage_escrow_outstanding": 0.0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

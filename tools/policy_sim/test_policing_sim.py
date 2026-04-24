@@ -675,6 +675,18 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertTrue(any(row["reason"] == "deal_storage_escrow_closed" for row in result.evidence))
         self.assertIn("storage_escrow_outstanding", result.economy[0])
 
+    def test_storage_escrow_burns_noncompliant_slot_share(self):
+        fixture = Path(__file__).with_name("scenarios") / "storage_escrow_noncompliance_burn.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreater(result.totals["storage_fee_burned"], 0)
+        self.assertGreater(result.totals["storage_fee_provider_payouts"], result.totals["storage_fee_burned"])
+        self.assertEqual(0.0, result.totals["storage_escrow_outstanding"])
+        self.assertGreater(result.totals["quota_misses"], 0)
+        self.assertTrue(any(row["reason"] == "quota_shortfall" for row in result.evidence))
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)

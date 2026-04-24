@@ -84,6 +84,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "price-controller-bounds",
     "subsidy-farming",
     "storage-escrow-close-refund",
+    "storage-escrow-noncompliance-burn",
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
     "replacement-grinding",

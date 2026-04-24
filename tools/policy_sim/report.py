@@ -307,6 +307,15 @@ SCENARIO_GUIDES = {
         "expected": "Storage escrow is locked, earned storage fees pay eligible providers, early deal close refunds unearned funds, and outstanding escrow reaches zero by run end.",
         "review": "Use this before implementing keeper close/refund semantics, quote-to-charge parity, storage-fee payout, and end-of-deal accounting tests.",
     },
+    "storage-escrow-noncompliance-burn": {
+        "title": "Storage Escrow Noncompliance Burn",
+        "intent": (
+            "Model earned storage fees under reward-exclusion mode when a provider misses liveness quota. "
+            "The policy question is whether non-compliant responsibility loses provider storage-fee payout without hiding availability or durability regressions."
+        ),
+        "expected": "Storage escrow still locks and earns, compliant slots are paid, non-compliant slot share is burned, repairs start, and outstanding escrow reaches zero by run end.",
+        "review": "Use this before implementing keeper storage-fee payout gates, reward-exclusion accounting, and burn-ledger tests for delinquent storage responsibility.",
+    },
     "coordinated-regional-outage": {
         "title": "Coordinated Regional Outage",
         "intent": (
@@ -2700,6 +2709,7 @@ def graduation_semantics(scenario: str) -> str:
         "price-controller-bounds": "Graduation means price movement is bounded and explainable, not that the economic parameters are final.",
         "subsidy-farming": "Graduation means non-compliant responsibility is not profitably subsidized by base rewards.",
         "storage-escrow-close-refund": "Graduation means storage lock-in, earned-fee payout, early close refund, and run-end outstanding escrow are deterministic before keeper close/refund semantics are implemented.",
+        "storage-escrow-noncompliance-burn": "Graduation means earned storage fees can be withheld from non-compliant responsibility and burned without confusing storage lock-in or availability accounting.",
         "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
         "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
         "replacement-grinding": "Graduation means pending-provider readiness failures are bounded by timeout, cooldown, and attempt caps instead of leaving unbounded in-flight repairs.",
@@ -2767,6 +2777,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "elasticity-overlay-scaleup",
         "viral-public-retrieval",
         "storage-escrow-close-refund",
+        "storage-escrow-noncompliance-burn",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -2821,6 +2832,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a keeper/gateway planning ticket that names sponsored-session funding, owner escrow isolation, retrieval burn/payout accounting, quote display, and close/refund semantics.")
     elif recommendation == "Candidate for implementation planning." and scenario == "storage-escrow-close-refund":
         lines.append("Create a keeper/gateway planning ticket that names storage quote parity, upfront lock-in, per-epoch earned-fee payout, early close refund, expiry auto-close, and refund rounding semantics.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "storage-escrow-noncompliance-burn":
+        lines.append("Create a keeper/gateway planning ticket that names storage-fee reward eligibility, burn ledger attribution, delinquency windows, repair interaction, and provider payout query semantics.")
     elif recommendation == "Candidate for implementation planning." and scenario == "deputy-evidence-spam":
         lines.append("Create a keeper/runtime planning ticket that names evidence bond escrow, burn-on-expiry, conviction-gated bounty payout, spam throttles, and deputy reputation inputs.")
     elif recommendation == "Candidate for implementation planning.":

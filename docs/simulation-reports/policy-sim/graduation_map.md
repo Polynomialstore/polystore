@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 23 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 24 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 12 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -43,6 +43,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`single-outage`](single-outage/report.md) | `implementation planning` | keeper repair and gateway route-around | Add a keeper test where a slot crosses missed-epoch threshold, enters repair, selects a deterministic pending provider, and later promotes. | `slot health state`, `repair attempt ledger`, `promotion readiness proof`, `gateway repair-aware routing` | Kill one provider-daemon during retrieval and assert reads stay available while repair starts. |
 | [`staged-upload-grief`](staged-upload-grief/report.md) | `implementation planning` | provider-daemon staged cleanup and gateway preflight | Add provider-daemon and user-gateway tests proving abandoned provisional generations are capped, cleaned after TTL, and surfaced through dry-run/apply cleanup UX without affecting committed deal state. | `staged generation TTL`, `pending generation cap`, `cleanup events`, `gateway preflight rejection` | Client repeatedly stages uploads without commit; assert provider-daemon cleanup bounds disk pressure and committed reads remain available. |
 | [`storage-escrow-close-refund`](storage-escrow-close-refund/report.md) | `implementation planning` | storage escrow close/refund accounting | Add keeper and gateway tests proving storage quote parity, upfront lock-in, earned-fee payout, early close refund, expiry auto-close, and zero hidden outstanding escrow. | `storage escrow state`, `deal close message`, `earned-fee payout ledger`, `refund rounding`, `expiry auto-close` | Create, commit, close early, and assert unearned storage escrow is refunded while earned fees remain paid to eligible providers. |
+| [`storage-escrow-noncompliance-burn`](storage-escrow-noncompliance-burn/report.md) | `implementation planning` | storage fee reward-exclusion accounting | Add keeper and gateway tests proving delinquent storage responsibility loses earned-fee payout and records a burn without confusing storage lock-in, repair, or availability accounting. | `storage fee payout eligibility`, `burn ledger attribution`, `delinquency-to-payout gate`, `repair interaction`, `provider payout queries` | Commit content, force one provider through quota delinquency, assert earned fees for non-compliant responsibility are burned while compliant providers are paid and reads remain available. |
 | [`subsidy-farming`](subsidy-farming/report.md) | `implementation planning` | base reward compliance tests | Add tests proving idle or non-compliant responsibility cannot farm base rewards profitably. | `compliance-gated base rewards`, `subsidy leakage metrics`, `operator concentration checks` | No process e2e until keeper reward gating is complete. |
 | [`sustained-non-response`](sustained-non-response/report.md) | `implementation planning` | keeper delinquency repair | Add per-slot delinquency tests for repeated non-response, reward exclusion, repair start, and replacement selection. | `non-response accumulator`, `delinquency reason codes`, `reward exclusion event` | Provider timeout/blackhole e2e after keeper state is deterministic. |
 | [`underpriced-storage`](underpriced-storage/report.md) | `further simulation review` | economic policy calibration | Compare storage floors, base rewards, and provider cost assumptions before encoding governance defaults. | `dynamic pricing state`, `provider cost assumptions`, `profitability dashboards` | No process e2e yet; this is a parameter-calibration fixture. |
@@ -85,6 +86,7 @@ This report converts the committed simulator corpus into implementation planning
 | `bond top-up flow` | 1 |
 | `bounty payout ledger` | 1 |
 | `burn ledger` | 1 |
+| `burn ledger attribution` | 1 |
 | `burst-demand dashboards` | 1 |
 | `candidate diversity diagnostics` | 1 |
 | `churn caps` | 1 |
@@ -96,6 +98,7 @@ This report converts the committed simulator corpus into implementation planning
 | `deal close message` | 1 |
 | `deal spend window` | 1 |
 | `delinquency reason codes` | 1 |
+| `delinquency-to-payout gate` | 1 |
 | `demand forecasting` | 1 |
 | `deputy reputation` | 1 |
 | `deputy transcript accounting` | 1 |
@@ -145,11 +148,13 @@ This report converts the committed simulator corpus into implementation planning
 | `provider cost telemetry` | 1 |
 | `provider exit telemetry` | 1 |
 | `provider lifecycle state` | 1 |
+| `provider payout queries` | 1 |
 | `quota miss ledger` | 1 |
 | `refund rounding` | 1 |
 | `regional/provider-class placement metadata` | 1 |
 | `repair attempt caps` | 1 |
 | `repair attempt ledger` | 1 |
+| `repair interaction` | 1 |
 | `repair timeout ledger` | 1 |
 | `replacement capacity dashboards` | 1 |
 | `replacement capacity query` | 1 |
@@ -171,6 +176,7 @@ This report converts the committed simulator corpus into implementation planning
 | `sponsored session funding` | 1 |
 | `staged generation TTL` | 1 |
 | `storage escrow state` | 1 |
+| `storage fee payout eligibility` | 1 |
 | `storage utilization accumulator` | 1 |
 | `subsidy leakage metrics` | 1 |
 | `threshold evidence case` | 1 |

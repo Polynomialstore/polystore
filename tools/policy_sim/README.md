@@ -230,8 +230,9 @@ The simulator mirrors current protocol concepts:
 - Sponsored retrieval sessions that separate requester-funded public demand
   from deal-owner escrow debit.
 - Storage lock-in accounting that charges committed deals upfront, earns
-  storage fees over service epochs, pays eligible providers, and refunds
-  unearned escrow on early close.
+  storage fees over service epochs, pays eligible providers, burns the
+  delinquent share under reward-exclusion semantics, and refunds unearned
+  escrow on early close.
 - Staged upload grief pressure where provisional generations are bounded by
   retention TTL, preflight rejection, and pending-generation caps.
 - Demand-side storage admission accounting for latent new deal requests,
