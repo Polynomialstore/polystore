@@ -124,6 +124,20 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(0, result.totals["provider_slashed"])
         self.assertTrue(any(row["reason"] == "deputy_evidence_spam" for row in result.evidence))
 
+    def test_overpriced_storage_rejects_new_demand_without_capacity_pressure(self):
+        fixture = Path(__file__).with_name("scenarios") / "overpriced_storage.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(96, result.totals["new_deal_requests"])
+        self.assertEqual(0, result.totals["new_deals_accepted"])
+        self.assertEqual(96, result.totals["new_deals_rejected_price"])
+        self.assertEqual(0, result.totals["new_deals_rejected_capacity"])
+        self.assertEqual(0.0, result.totals["new_deal_acceptance_rate"])
+        self.assertEqual(spec.config["deals"], result.totals["final_deals"])
+        self.assertIn("new_deals_rejected_price", result.economy[0])
+
     def test_heterogeneous_scale_controls_surface_saturation_and_repair_backoff(self):
         config = SimConfig(
             scenario="large-scale-regional-stress",
@@ -436,6 +450,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "signals.json").exists())
             self.assertTrue((report_dir / "graphs" / "retrieval_success_rate.svg").exists())
             self.assertTrue((report_dir / "graphs" / "price_trajectory.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "storage_demand.svg").exists())
             self.assertTrue((report_dir / "graphs" / "saturation_and_repair.svg").exists())
             self.assertTrue((report_dir / "graphs" / "capacity_utilization.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
@@ -468,6 +483,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Provider P&L](graphs/provider_pnl.svg)", report_text)
             self.assertIn("![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)", report_text)
             self.assertIn("![Price Trajectory](graphs/price_trajectory.svg)", report_text)
+            self.assertIn("![Storage Demand](graphs/storage_demand.svg)", report_text)
             self.assertIn("![Saturation And Repair Pressure](graphs/saturation_and_repair.svg)", report_text)
             self.assertIn("![Capacity Utilization](graphs/capacity_utilization.svg)", report_text)
             self.assertIn("![Repair Backlog](graphs/repair_backlog.svg)", report_text)

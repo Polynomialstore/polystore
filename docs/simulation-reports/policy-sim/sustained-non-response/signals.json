@@ -35,6 +35,13 @@
     "top_operator_provider_id": "op-017",
     "top_operator_provider_share_bps": 208.0
   },
+  "demand": {
+    "new_deal_acceptance_rate": 0.0,
+    "new_deal_requests": 0.0,
+    "new_deals_accepted": 0.0,
+    "new_deals_rejected_capacity": 0.0,
+    "new_deals_rejected_price": 0.0
+  },
   "economics": {
     "audit_budget_backlog": 0.0,
     "audit_budget_carryover": 9.94,

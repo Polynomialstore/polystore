@@ -108,6 +108,15 @@ SCENARIO_GUIDES = {
         "expected": "Retrieval success remains high, but provider P&L turns negative and churn risk appears.",
         "review": "This fixture should force discussion of price floors, reward calibration, and dynamic pricing before production economics.",
     },
+    "overpriced-storage": {
+        "title": "Overpriced Storage Demand Collapse",
+        "intent": (
+            "Model a technically healthy network whose storage quote exceeds modeled user willingness to pay. "
+            "This is a demand-side market warning: existing reads can stay perfect while new storage demand collapses."
+        ),
+        "expected": "Existing retrievals remain healthy, new deal requests are rejected by price rather than capacity, and the demand acceptance rate falls to zero.",
+        "review": "Use this fixture to discuss quote UX, price ceilings, affordability bounds, and whether dynamic pricing should move before demand disappears.",
+    },
     "wash-retrieval": {
         "title": "Wash Retrieval Demand",
         "intent": (
@@ -361,6 +370,11 @@ SWEEP_METRICS = [
     "average_latency_ms",
     "performance_fail_rate",
     "performance_reward_paid",
+    "new_deal_requests",
+    "new_deals_accepted",
+    "new_deals_rejected_price",
+    "new_deals_rejected_capacity",
+    "new_deal_acceptance_rate",
     "suspect_slots",
     "delinquent_slots",
     "quota_misses",
@@ -403,6 +417,8 @@ SWEEP_CONFIG_KEYS = [
     "dynamic_pricing_max_step_bps",
     "storage_target_utilization_bps",
     "retrieval_target_per_epoch",
+    "new_deal_requests_per_epoch",
+    "storage_demand_price_ceiling",
     "storage_price",
     "retrieval_price_per_slot",
     "base_reward_per_slot",
@@ -634,6 +650,13 @@ def compute_signals(
             "provider_latency_p50_ms": percentile(provider_latencies, 50),
             "provider_latency_p90_ms": percentile(provider_latencies, 90),
         },
+        "demand": {
+            "new_deal_requests": fnum(totals.get("new_deal_requests")),
+            "new_deals_accepted": fnum(totals.get("new_deals_accepted")),
+            "new_deals_rejected_price": fnum(totals.get("new_deals_rejected_price")),
+            "new_deals_rejected_capacity": fnum(totals.get("new_deals_rejected_capacity")),
+            "new_deal_acceptance_rate": fnum(totals.get("new_deal_acceptance_rate")),
+        },
         "concentration": {
             "operator_count": fnum(totals.get("operator_count")),
             "top_operator_id": top_operator.get("operator_id", ""),
@@ -813,6 +836,8 @@ def write_report_md(
         f"| Repair backoff window | `{config.get('repair_backoff_epochs')}` epochs |",
         f"| Dynamic pricing | `{str(config.get('dynamic_pricing')).lower()}` |",
         f"| Storage price | `{fmt_money(config.get('storage_price'))}` |",
+        f"| New deal requests/epoch | `{fmt_num(config.get('new_deal_requests_per_epoch'))}` |",
+        f"| Storage demand price ceiling | `{fmt_money(config.get('storage_demand_price_ceiling'))}` (`0` means disabled) |",
             f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
             f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
             f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
@@ -958,6 +983,12 @@ def write_report_md(
             "",
             "![Price Trajectory](graphs/price_trajectory.svg)",
             "",
+            "### Storage Demand",
+            "",
+            "Shows modeled new deal demand accepted versus rejected by price.",
+            "",
+            "![Storage Demand](graphs/storage_demand.svg)",
+            "",
             "### Capacity Utilization",
             "",
             "Shows active storage responsibility against modeled provider capacity.",
@@ -1094,6 +1125,14 @@ def build_behavior_narrative(
             f"`{fmt_money(totals.get('evidence_spam_bond_burned'))}` in bond and paid `{fmt_money(totals.get('evidence_spam_bounty_paid'))}` in bounties, "
             f"for spammer net gain `{fmt_money(totals.get('evidence_spam_net_gain'))}`."
         )
+    if fnum(totals.get("new_deal_requests")) > 0:
+        parts.append(
+            f"Modeled write demand was exercised: `{fmt_num(totals.get('new_deal_requests'))}` new deal requests produced "
+            f"`{fmt_num(totals.get('new_deals_accepted'))}` accepted deals, "
+            f"`{fmt_num(totals.get('new_deals_rejected_price'))}` price rejections, and "
+            f"`{fmt_num(totals.get('new_deals_rejected_capacity'))}` capacity rejections. "
+            f"The aggregate demand acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}`."
+        )
 
     if repairs:
         started = sum(1 for row in repairs if row.get("event") == "repair_started")
@@ -1175,7 +1214,9 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         "",
         "| Assumption | Value | Interpretation |",
         "|---|---:|---|",
-        f"| Storage price | `{fmt_money(config.get('storage_price'))}` | Unitless price applied by the controller; current simulator does not yet model user demand elasticity against this quote. |",
+        f"| Storage price | `{fmt_money(config.get('storage_price'))}` | Unitless price applied by the controller and optional affordability gate for modeled new deal demand. |",
+        f"| New deal requests/epoch | `{fmt_num(config.get('new_deal_requests_per_epoch'))}` | Optional modeled write demand. Requests are accepted only when price and capacity gates pass. |",
+        f"| Storage demand price ceiling | `{fmt_money(config.get('storage_demand_price_ceiling'))}` | If non-zero, new deal demand above this storage price is rejected as unaffordable. |",
         f"| Storage target utilization | `{fmt_bps(config.get('storage_target_utilization_bps'))}` | If dynamic pricing is enabled, utilization above this target steps storage price up, otherwise down. |",
         f"| Retrieval price per slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` | Paid per successful provider slot served, before the configured variable burn. |",
         f"| Retrieval target per epoch | `{fmt_num(config.get('retrieval_target_per_epoch'))}` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |",
@@ -1199,6 +1240,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
     economics = signals["economics"]
     high_bandwidth = signals["high_bandwidth"]
     performance = signals["performance"]
+    demand = signals["demand"]
     concentration = signals["concentration"]
     return [
         "| Signal | Value | Why It Matters |",
@@ -1225,6 +1267,8 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Platinum / Gold / Silver / Fail serves | `{fmt_num(performance['platinum_serves'])}` / `{fmt_num(performance['gold_serves'])}` / `{fmt_num(performance['silver_serves'])}` / `{fmt_num(performance['fail_serves'])}` | Shows the latency-tier distribution for performance-market policy. |",
         f"| Performance reward paid | `{fmt_money(performance['performance_reward_paid'])}` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |",
         f"| Provider latency p10 / p50 / p90 | `{fmt_num(performance['provider_latency_p10_ms'])}` / `{fmt_num(performance['provider_latency_p50_ms'])}` / `{fmt_num(performance['provider_latency_p90_ms'])}` ms | Shows whether aggregate averages hide slow provider tails. |",
+        f"| New deal demand accepted/rejected | `{fmt_num(demand['new_deals_accepted'])}` / `{fmt_num(demand['new_deals_rejected_price'] + demand['new_deals_rejected_capacity'])}` | Shows whether modeled write demand is entering the network or being blocked by price/capacity. |",
+        f"| New deal acceptance rate | `{fmt_pct(demand['new_deal_acceptance_rate'])}` | Demand-side market health signal; a technically available network can still fail if users cannot afford storage. |",
         f"| Audit demand / spent | `{fmt_money(economics['audit_budget_demand'])}` / `{fmt_money(economics['audit_budget_spent'])}` | Shows whether enforcement evidence consumed the available audit budget. |",
         f"| Audit backlog / exhausted epochs | `{fmt_money(economics['audit_budget_backlog'])}` / `{fmt_num(economics['audit_budget_exhausted_epochs'])}` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |",
         f"| Evidence spam claims / convictions | `{fmt_num(economics['evidence_spam_claims'])}` / `{fmt_num(economics['evidence_spam_convictions'])}` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |",
@@ -1319,6 +1363,12 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('quota_misses'))} quota misses")
         if fnum(row.get("evidence_spam_claims")):
             notes.append(f"{fmt_num(row.get('evidence_spam_claims'))} evidence spam claims")
+        if fnum(row.get("new_deals_accepted")):
+            notes.append(f"{fmt_num(row.get('new_deals_accepted'))} new deals accepted")
+        if fnum(row.get("new_deals_rejected_price")):
+            notes.append(f"{fmt_num(row.get('new_deals_rejected_price'))} price-rejected deals")
+        if fnum(row.get("new_deals_rejected_capacity")):
+            notes.append(f"{fmt_num(row.get('new_deals_rejected_capacity'))} capacity-rejected deals")
         if fnum(row.get("repair_backoffs")):
             notes.append(f"{fmt_num(row.get('repair_backoffs'))} repair backoffs")
         if fnum(row.get("repair_cooldowns")):
@@ -1448,6 +1498,14 @@ def assertion_meaning(name: str) -> str:
         "max_fail_serves": "Healthy performance fixtures should keep Fail-tier service bounded.",
         "min_performance_reward_paid": "Tiered QoS rewards must pay non-zero reward in performance fixtures.",
         "max_performance_fail_rate": "Fail-tier service share must remain below the chosen service-class threshold.",
+        "min_new_deal_requests": "Demand fixture must exercise modeled write demand.",
+        "min_new_deals_accepted": "Demand fixture must admit at least this many new storage deals.",
+        "exact_new_deals_accepted": "Demand fixture expects an exact accepted-deal count.",
+        "min_new_deals_rejected_price": "Overpriced-demand fixture must reject new deals because the quote exceeds user willingness to pay.",
+        "max_new_deals_rejected_price": "Healthy affordability fixture should keep price-driven deal rejection bounded.",
+        "max_new_deals_rejected_capacity": "Demand fixture should not accidentally reject requests because provider capacity was exhausted.",
+        "max_new_deal_acceptance_rate": "Demand collapse fixture should keep accepted demand below this ceiling.",
+        "min_new_deal_acceptance_rate": "Healthy demand fixture should accept at least this share of requested new deals.",
         "min_suspect_slots": "Health-state observability: soft failures should become suspect before punitive consequences.",
         "max_suspect_slots": "Healthy baseline should not produce suspect slot state.",
         "min_delinquent_slots": "Delinquency observability: threshold-crossed slots should expose delinquent state.",
@@ -1549,6 +1607,13 @@ def build_economic_narrative(
             f"Evidence-spam accounting burned `{fmt_money(totals.get('evidence_spam_bond_burned'))}` in claim bonds, "
             f"paid `{fmt_money(totals.get('evidence_spam_bounty_paid'))}` in conviction-gated bounties, "
             f"and left the spammer with net gain `{fmt_money(totals.get('evidence_spam_net_gain'))}`."
+        )
+    if fnum(totals.get("new_deal_requests")) > 0:
+        parts.append(
+            f"Demand accounting saw `{fmt_num(totals.get('new_deal_requests'))}` new deal requests, accepted "
+            f"`{fmt_num(totals.get('new_deals_accepted'))}`, rejected `{fmt_num(totals.get('new_deals_rejected_price'))}` on price, "
+            f"and rejected `{fmt_num(totals.get('new_deals_rejected_capacity'))}` on capacity. "
+            f"New deal acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}`."
         )
     if negative_pnl:
         parts.append(
@@ -1708,9 +1773,23 @@ def write_risk_register(
                 "followup": "Increase evidence bond, reduce bounty, add spam throttles, or require stronger conviction gating before keeper work.",
             }
         )
+    if fnum(totals.get("new_deals_rejected_price")) > 0:
+        rows.append(
+            {
+                "risk": "Storage demand rejected by price",
+                "severity": "medium",
+                "evidence": (
+                    f"{fmt_num(totals.get('new_deals_rejected_price'))} new deal requests were rejected by storage price; "
+                    f"acceptance rate was {fmt_pct(totals.get('new_deal_acceptance_rate'))}."
+                ),
+                "impact": "The network can be technically healthy while the market fails to admit useful storage demand.",
+                "followup": "Review quote UX, price ceilings, dynamic-pricing step timing, and affordability targets.",
+            }
+        )
     if evidence and not repairs and str(config["scenario"]) not in {
         "ideal",
         "underpriced-storage",
+        "overpriced-storage",
         "wash-retrieval",
         "viral-public-retrieval",
         "elasticity-cap-hit",
@@ -1789,6 +1868,10 @@ def write_risk_register(
             f"- Evidence spam bond burned: `{fmt_money(totals.get('evidence_spam_bond_burned'))}`",
             f"- Evidence spam bounty paid: `{fmt_money(totals.get('evidence_spam_bounty_paid'))}`",
             f"- Evidence spam net gain: `{fmt_money(totals.get('evidence_spam_net_gain'))}`",
+            f"- New deal requests: `{fmt_num(totals.get('new_deal_requests'))}`",
+            f"- New deals accepted: `{fmt_num(totals.get('new_deals_accepted'))}`",
+            f"- New deals rejected by price: `{fmt_num(totals.get('new_deals_rejected_price'))}`",
+            f"- New deals rejected by capacity: `{fmt_num(totals.get('new_deals_rejected_capacity'))}`",
             "",
             "## Review Questions",
             "",
@@ -1810,6 +1893,7 @@ def graduation_semantics(scenario: str) -> str:
         "corrupt-provider": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
         "malicious-corrupt": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
         "lazy-provider": "Graduation means subsidy/reward gating catches useful-work failures even if user reads are still available.",
+        "overpriced-storage": "Graduation means demand-side affordability failures are visible as price rejections rather than being mistaken for healthy market equilibrium.",
         "audit-budget-exhaustion": "Graduation means audit demand is bounded by budget and turns into backlog or policy review instead of unbounded issuance.",
         "deputy-evidence-spam": "Graduation means low-quality deputy evidence is economically negative-EV and cannot trigger live provider punishment without conviction.",
         "price-controller-bounds": "Graduation means price movement is bounded and explainable, not that the economic parameters are final.",
@@ -1961,6 +2045,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("storage_price")) for row in economy],
         secondary=[fnum(row.get("retrieval_price_per_slot")) for row in economy],
         secondary_label="Retrieval Price",
+    )
+    write_line_svg(
+        graphs_dir / "storage_demand.svg",
+        "New Deals Accepted",
+        [fnum(row.get("new_deals_accepted")) for row in economy],
+        secondary=[fnum(row.get("new_deals_rejected_price")) for row in economy],
+        secondary_label="Price Rejections",
     )
     write_line_svg(
         graphs_dir / "capacity_utilization.svg",
@@ -2281,6 +2372,11 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("platinum_serves", "Whether the fastest performance tier was exercised."),
         ("fail_serves", "Whether slow/failed QoS service appeared."),
         ("performance_reward_paid", "Whether tiered performance rewards were paid."),
+        ("new_deal_requests", "Whether modeled write demand was exercised."),
+        ("new_deals_accepted", "How much new storage demand entered the network."),
+        ("new_deals_rejected_price", "How much demand was rejected because storage price exceeded willingness to pay."),
+        ("new_deals_rejected_capacity", "How much demand was rejected because placement capacity was exhausted."),
+        ("new_deal_acceptance_rate", "Demand-side market health and quote affordability signal."),
         ("top_operator_assignment_share_bps", "Whether one operator dominates assignments."),
         ("max_operator_deal_slots", "Whether per-deal operator blast radius is bounded."),
         ("operator_deal_cap_violations", "Whether operator assignment caps were violated."),
@@ -2329,6 +2425,8 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         return "Retrieval market accounting changed with demand volume or price settings."
     if key in {"platinum_serves", "gold_serves", "silver_serves", "fail_serves", "performance_reward_paid"}:
         return "Performance-market tiering changed; inspect service-class latency and reward assumptions."
+    if key in {"new_deal_requests", "new_deals_accepted", "new_deals_rejected_price", "new_deals_rejected_capacity", "new_deal_acceptance_rate"}:
+        return "Storage demand changed; inspect price affordability and capacity admission assumptions."
     if key in {"top_operator_assignment_share_bps", "max_operator_assignment_share_bps", "max_operator_deal_slots", "operator_deal_cap_violations"}:
         return "Operator concentration changed; inspect placement diversity and cap semantics."
     if key == "saturated_responses":
@@ -2459,6 +2557,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "audit budget backlog remained at run end")
     if fnum(totals.get("evidence_spam_net_gain")) > 0:
         raise_to("high", "evidence spam was profitable")
+    if fnum(totals.get("new_deals_rejected_price")) > 0:
+        raise_to("medium", "new storage demand was rejected by price")
     if not reasons:
         reasons.append("assertions passed and no material sweep risk surfaced")
     return level, reasons

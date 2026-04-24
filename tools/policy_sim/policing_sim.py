@@ -67,6 +67,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "sustained-non-response",
     "audit-budget-exhaustion",
     "deputy-evidence-spam",
+    "overpriced-storage",
     "price-controller-bounds",
     "subsidy-farming",
     "coordinated-regional-outage",
@@ -122,6 +123,8 @@ class SimConfig:
     retrieval_price_min: float = 0.001
     retrieval_price_max: float = 1.0
     retrieval_target_per_epoch: int = 80
+    new_deal_requests_per_epoch: int = 0
+    storage_demand_price_ceiling: float = 0.0
     retrieval_base_fee: float = 0.001
     retrieval_burn_bps: int = 500
     dynamic_pricing_max_step_bps: int = 500
@@ -212,6 +215,10 @@ class SimConfig:
             raise ValueError(f"unknown enforcement_mode {self.enforcement_mode!r}")
         if self.retrieval_burn_bps < 0 or self.retrieval_burn_bps > 10_000:
             raise ValueError("retrieval_burn_bps must be in [0, 10000]")
+        if self.new_deal_requests_per_epoch < 0:
+            raise ValueError("new_deal_requests_per_epoch must be non-negative")
+        if self.storage_demand_price_ceiling < 0:
+            raise ValueError("storage_demand_price_ceiling must be non-negative")
         if self.provider_capacity_min < 0 or self.provider_capacity_max < 0:
             raise ValueError("provider capacity bounds must be non-negative")
         if self.provider_capacity_min and self.provider_capacity_max and self.provider_capacity_min > self.provider_capacity_max:
@@ -446,6 +453,10 @@ class EpochMetrics:
     latency_sample_count: int = 0
     total_latency_ms: float = 0.0
     performance_reward_paid: float = 0.0
+    new_deal_requests: int = 0
+    new_deals_accepted: int = 0
+    new_deals_rejected_price: int = 0
+    new_deals_rejected_capacity: int = 0
     paid_corrupt_bytes: int = 0
     retrieval_base_burned: float = 0.0
     retrieval_variable_burned: float = 0.0
@@ -541,6 +552,7 @@ class PolicySimulator:
         self.retrieval_price_per_slot = config.retrieval_price_per_slot
         self.repairs_started_this_epoch = 0
         self.provider_slashed_total_last_epoch = 0.0
+        self.next_deal_id = max((deal.deal_id for deal in self.deals), default=0) + 1
         self._apply_builtin_scenario(config.scenario)
         for fault in self.extra_faults:
             self.apply_fault(fault)
@@ -744,6 +756,7 @@ class PolicySimulator:
         self.provider_epoch_serves = {pid: 0 for pid in self.providers}
         self.repairs_started_this_epoch = 0
         online = self._epoch_online_map(epoch)
+        self._simulate_new_deal_demand(epoch, metrics)
 
         for _ in range(self.config.users * self.config.retrievals_per_user_per_epoch):
             self._simulate_retrieval(epoch, online, metrics)
@@ -768,6 +781,90 @@ class PolicySimulator:
         self._record_concentration_metrics(metrics)
         self._maybe_update_prices(metrics)
         return metrics
+
+    def _simulate_new_deal_demand(self, epoch: int, metrics: EpochMetrics) -> None:
+        requests = self.config.new_deal_requests_per_epoch
+        if requests <= 0:
+            return
+
+        metrics.new_deal_requests = requests
+        for _ in range(requests):
+            if (
+                self.config.storage_demand_price_ceiling > 0
+                and self.storage_price > self.config.storage_demand_price_ceiling
+            ):
+                metrics.new_deals_rejected_price += 1
+                continue
+            deal = self._try_create_dynamic_deal(epoch)
+            if not deal:
+                metrics.new_deals_rejected_capacity += 1
+                continue
+            self.deals.append(deal)
+            self.next_deal_id += 1
+            metrics.new_deals_accepted += 1
+
+    def _try_create_dynamic_deal(self, epoch: int) -> DealState | None:
+        deal_id = self.next_deal_id
+        start = (deal_id * self.config.n) % self.config.providers
+        assigned_counts = self._assigned_counts(include_pending=True)
+        slots = []
+        deal_provider_ids: set[str] = set()
+        deal_operator_counts: dict[str, int] = {}
+        for slot_idx in range(self.config.n):
+            provider_id = self._select_dynamic_provider(
+                epoch,
+                start,
+                slot_idx,
+                assigned_counts,
+                deal_provider_ids,
+                deal_operator_counts,
+            )
+            if not provider_id:
+                return None
+            slots.append(SlotState(deal_id=deal_id, slot=slot_idx, provider_id=provider_id))
+            assigned_counts[provider_id] += 1
+            deal_provider_ids.add(provider_id)
+            operator_id = self.providers[provider_id].operator_id
+            deal_operator_counts[operator_id] = deal_operator_counts.get(operator_id, 0) + 1
+        return DealState(
+            deal_id=deal_id,
+            k=self.config.k,
+            m=self.config.m,
+            user_mdus=self.config.user_mdus_per_deal,
+            witness_mdus=self.config.witness_mdus,
+            slots=slots,
+        )
+
+    def _select_dynamic_provider(
+        self,
+        epoch: int,
+        start: int,
+        slot_idx: int,
+        assigned_counts: dict[str, int],
+        deal_provider_ids: set[str],
+        deal_operator_counts: dict[str, int],
+    ) -> str | None:
+        ordered_provider_ids = [
+            self.provider_id((start + slot_idx + offset) % self.config.providers)
+            for offset in range(self.config.providers)
+        ]
+        for enforce_operator_cap in (True, False):
+            for provider_id in ordered_provider_ids:
+                if provider_id in deal_provider_ids:
+                    continue
+                provider = self.providers[provider_id]
+                if provider.behavior.draining or self._is_jailed(provider, epoch):
+                    continue
+                if assigned_counts.get(provider_id, 0) >= provider.capacity_slots:
+                    continue
+                if (
+                    enforce_operator_cap
+                    and self.config.operator_assignment_cap_per_deal > 0
+                    and deal_operator_counts.get(provider.operator_id, 0) >= self.config.operator_assignment_cap_per_deal
+                ):
+                    continue
+                return provider_id
+        return None
 
     def _simulate_evidence_spam(self, epoch: int, metrics: EpochMetrics) -> None:
         claims = self.config.evidence_spam_claims_per_epoch
@@ -1593,6 +1690,10 @@ class PolicySimulator:
                 "audit_budget_carryover": metrics.audit_budget_carryover,
                 "audit_budget_backlog": metrics.audit_budget_backlog,
                 "audit_budget_exhausted": metrics.audit_budget_exhausted,
+                "new_deal_requests": metrics.new_deal_requests,
+                "new_deals_accepted": metrics.new_deals_accepted,
+                "new_deals_rejected_price": metrics.new_deals_rejected_price,
+                "new_deals_rejected_capacity": metrics.new_deals_rejected_capacity,
                 "evidence_spam_claims": metrics.evidence_spam_claims,
                 "evidence_spam_convictions": metrics.evidence_spam_convictions,
                 "evidence_spam_bond_burned": metrics.evidence_spam_bond_burned,
@@ -1710,6 +1811,10 @@ class PolicySimulator:
             "latency_sample_count",
             "total_latency_ms",
             "performance_reward_paid",
+            "new_deal_requests",
+            "new_deals_accepted",
+            "new_deals_rejected_price",
+            "new_deals_rejected_capacity",
             "paid_corrupt_bytes",
             "retrieval_base_burned",
             "retrieval_variable_burned",
@@ -1738,6 +1843,12 @@ class PolicySimulator:
         totals["reward_coverage"] = (
             totals["reward_eligible_slots"] / active_slots if active_slots else 0.0
         )
+        totals["new_deal_acceptance_rate"] = (
+            totals["new_deals_accepted"] / totals["new_deal_requests"]
+            if totals["new_deal_requests"]
+            else 0.0
+        )
+        totals["final_deals"] = len(self.deals)
         totals["provider_hard_faults"] = sum(p.hard_faults for p in self.providers.values())
         totals["provider_revenue"] = sum(p.revenue for p in self.providers.values())
         totals["provider_pnl"] = sum(p.pnl for p in self.providers.values())

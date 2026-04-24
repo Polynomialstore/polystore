@@ -36,6 +36,10 @@ Model a legitimate public-demand spike. The system should pay providers for real
 - Evidence spam bond burned: `0.0000`
 - Evidence spam bounty paid: `0.0000`
 - Evidence spam net gain: `0.0000`
+- New deal requests: `0`
+- New deals accepted: `0`
+- New deals rejected by price: `0`
+- New deals rejected by capacity: `0`
 
 ## Review Questions
 

@@ -34,6 +34,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Repair backoff window | `0` epochs |
 | Dynamic pricing | `false` |
 | Storage price | `1.0000` |
+| New deal requests/epoch | `0` |
+| Storage demand price ceiling | `0.0000` (`0` means disabled) |
 | Retrieval price/slot | `0.0100` |
 | Provider capacity range | `16`-`16` slots |
 | Provider bandwidth range | `0`-`0` serves/epoch (`0` means unlimited) |
@@ -55,7 +57,9 @@ The economic model is intentionally simple and deterministic. It is useful for c
 
 | Assumption | Value | Interpretation |
 |---|---:|---|
-| Storage price | `1.0000` | Unitless price applied by the controller; current simulator does not yet model user demand elasticity against this quote. |
+| Storage price | `1.0000` | Unitless price applied by the controller and optional affordability gate for modeled new deal demand. |
+| New deal requests/epoch | `0` | Optional modeled write demand. Requests are accepted only when price and capacity gates pass. |
+| Storage demand price ceiling | `0.0000` | If non-zero, new deal demand above this storage price is rejected as unaffordable. |
 | Storage target utilization | `70.00%` | If dynamic pricing is enabled, utilization above this target steps storage price up, otherwise down. |
 | Retrieval price per slot | `0.0100` | Paid per successful provider slot served, before the configured variable burn. |
 | Retrieval target per epoch | `80` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |
@@ -107,6 +111,8 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Platinum / Gold / Silver / Fail serves | `0` / `0` / `0` / `0` | Shows the latency-tier distribution for performance-market policy. |
 | Performance reward paid | `0.0000` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |
 | Provider latency p10 / p50 / p90 | `0` / `0` / `0` ms | Shows whether aggregate averages hide slow provider tails. |
+| New deal demand accepted/rejected | `0` / `0` | Shows whether modeled write demand is entering the network or being blocked by price/capacity. |
+| New deal acceptance rate | `0.00%` | Demand-side market health signal; a technically available network can still fail if users cannot afford storage. |
 | Audit demand / spent | `0.0000` / `0.0000` | Shows whether enforcement evidence consumed the available audit budget. |
 | Audit backlog / exhausted epochs | `0.0000` / `0` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
 | Evidence spam claims / convictions | `0` / `0` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |
@@ -276,6 +282,12 @@ Shows whether burns are material relative to minted rewards and audit budget.
 Shows storage price and retrieval price movement under dynamic pricing.
 
 ![Price Trajectory](graphs/price_trajectory.svg)
+
+### Storage Demand
+
+Shows modeled new deal demand accepted versus rejected by price.
+
+![Storage Demand](graphs/storage_demand.svg)
 
 ### Capacity Utilization
 

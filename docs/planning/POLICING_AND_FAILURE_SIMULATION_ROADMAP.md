@@ -1213,6 +1213,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `lazy_provider.yaml` | Provider does not meet proof quota. | Reward exclusion occurs, soft-fault path does not slash. |
 | `setup_failure.yaml` | Initial upload to one slot fails. | Setup bump is bounded and replacement is system-selected. |
 | `underpriced_storage.yaml` | Storage price below provider cost. | Provider P&L turns negative and churn pressure is visible. |
+| `overpriced_storage.yaml` | Storage price above modeled user willingness to pay. | Existing reads remain healthy while new deal demand is rejected by price, not capacity. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
