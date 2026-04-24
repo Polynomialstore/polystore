@@ -87,6 +87,16 @@ service Query {
   rpc ListRetrievalSessionsByProvider(QueryListRetrievalSessionsByProviderRequest) returns (QueryListRetrievalSessionsByProviderResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/retrieval-sessions/by-provider/{provider}";
   }
+
+  // Queries a virtual overlay stripe for a deal.
+  rpc GetVirtualStripe(QueryGetVirtualStripeRequest) returns (QueryGetVirtualStripeResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/virtual-stripes/{stripe_index}";
+  }
+
+  // Lists virtual overlay stripes for a deal.
+  rpc ListVirtualStripesByDeal(QueryListVirtualStripesByDealRequest) returns (QueryListVirtualStripesByDealResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/virtual-stripes";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -218,5 +228,24 @@ message QueryListRetrievalSessionsByProviderRequest {
 
 message QueryListRetrievalSessionsByProviderResponse {
   repeated RetrievalSession sessions = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+message QueryGetVirtualStripeRequest {
+  uint64 deal_id = 1;
+  uint32 stripe_index = 2;
+}
+
+message QueryGetVirtualStripeResponse {
+  VirtualStripe stripe = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryListVirtualStripesByDealRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+message QueryListVirtualStripesByDealResponse {
+  repeated VirtualStripe stripes = 1 [(gogoproto.nullable) = false];
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }

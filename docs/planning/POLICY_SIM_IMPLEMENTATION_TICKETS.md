@@ -59,7 +59,7 @@ surface can advance a ticket without completing the full runtime/e2e goal.
 | T9. Retrieval Session Accounting and Sponsored Reads | Landed, first pass | Keeper tests cover owner-funded and requester/sponsor-funded settlement, burn, payout, and owner-escrow isolation. |
 | T10. High-Bandwidth Promotion and Demotion | Partial, in PR stack | Current work uses existing `Edge` capability as the Hot-placement/high-bandwidth proxy; telemetry, explicit promotion/demotion, and operator UX remain open. |
 | T11. Performance Market Latency Tiers | Partial | Latency tier boundaries are covered; telemetry accumulation and tiered payout integration remain broader performance-market work. |
-| T12. Elasticity Overlay Spend Window | Partial, in PR stack | Spend-cap/escrow fail-closed behavior and funded overlay route state are covered; readiness, service accounting, TTL cleanup, and gateway routing remain open. |
+| T12. Elasticity Overlay Spend Window | Partial, in PR stack | Spend-cap/escrow fail-closed behavior, funded overlay route state, and query visibility are covered; readiness, service accounting, TTL cleanup, and gateway routing remain open. |
 
 ## Ready Tickets
 

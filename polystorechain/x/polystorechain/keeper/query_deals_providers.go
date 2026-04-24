@@ -29,6 +29,50 @@ func (k queryServer) GetDeal(goCtx context.Context, req *types.QueryGetDealReque
 	return &types.QueryGetDealResponse{Deal: &deal}, nil
 }
 
+func (k queryServer) GetVirtualStripe(goCtx context.Context, req *types.QueryGetVirtualStripeRequest) (*types.QueryGetVirtualStripeResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	if req.DealId == 0 {
+		return nil, status.Error(codes.InvalidArgument, "deal_id is required")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	stripe, err := k.k.VirtualStripes.Get(ctx, collections.Join(req.DealId, req.StripeIndex))
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "virtual stripe not found")
+		}
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &types.QueryGetVirtualStripeResponse{Stripe: stripe}, nil
+}
+
+func (k queryServer) ListVirtualStripesByDeal(goCtx context.Context, req *types.QueryListVirtualStripesByDealRequest) (*types.QueryListVirtualStripesByDealResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	if req.DealId == 0 {
+		return nil, status.Error(codes.InvalidArgument, "deal_id is required")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	stripes := make([]types.VirtualStripe, 0)
+	err := k.k.VirtualStripes.Walk(ctx, nil, func(key collections.Pair[uint64, uint32], stripe types.VirtualStripe) (bool, error) {
+		if key.K1() != req.DealId {
+			return false, nil
+		}
+		stripes = append(stripes, stripe)
+		return false, nil
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListVirtualStripesByDealResponse{Stripes: stripes}, nil
+}
+
 func (k queryServer) ListDeals(goCtx context.Context, req *types.QueryListDealsRequest) (*types.QueryListDealsResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
