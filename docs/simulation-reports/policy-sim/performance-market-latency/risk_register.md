@@ -36,6 +36,8 @@ Model Hot-service retrieval demand across providers with heterogeneous latency. 
 - Evidence spam bond burned: `0.0000`
 - Evidence spam bounty paid: `0.0000`
 - Evidence spam net gain: `0.0000`
+- Provider cost shock active epochs: `0`
+- Max cost-shocked providers: `0`
 - Latent new deal requests: `0`
 - Effective new deal requests: `0`
 - New deals accepted: `0`

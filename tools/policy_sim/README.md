@@ -124,6 +124,7 @@ are supported in scenario files:
 - `provider_online_probability_min` / `provider_online_probability_max`
 - `provider_repair_probability_min` / `provider_repair_probability_max`
 - `provider_storage_cost_jitter_bps` / `provider_bandwidth_cost_jitter_bps`
+- `provider_cost_shocks`
 - `provider_regions`
 - `regional_outages`
 - `max_repairs_started_per_epoch`
@@ -192,6 +193,8 @@ The simulator mirrors current protocol concepts:
   current durability assertions expect data-loss events to remain zero.
 - Basic economic accounting for retrieval fees, rewards, audit budget, provider
   P&L, slashing, and elasticity spend caps.
+- Epoch-scoped provider cost shocks that surface churn pressure before actual
+  provider exits are modeled.
 - Demand-side storage admission accounting for latent new deal requests,
   price-elastic demand suppression, price rejections, capacity rejections, and
   effective/latent acceptance rates.

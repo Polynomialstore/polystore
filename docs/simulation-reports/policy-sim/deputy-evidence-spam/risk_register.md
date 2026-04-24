@@ -36,6 +36,8 @@ Model a deputy submitting low-quality failure claims. The policy question is whe
 - Evidence spam bond burned: `12.0000`
 - Evidence spam bounty paid: `0.0000`
 - Evidence spam net gain: `-12.0000`
+- Provider cost shock active epochs: `0`
+- Max cost-shocked providers: `0`
 - Latent new deal requests: `0`
 - Effective new deal requests: `0`
 - New deals accepted: `0`

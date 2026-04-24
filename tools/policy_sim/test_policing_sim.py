@@ -441,6 +441,35 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertAlmostEqual(epoch_pnls[0], epoch_pnls[1])
         self.assertAlmostEqual(result.totals["provider_pnl"], sum(epoch_pnls))
 
+    def test_provider_cost_shock_surfaces_churn_pressure(self):
+        config = SimConfig(
+            scenario="provider-cost-shock",
+            seed=71,
+            providers=32,
+            users=40,
+            deals=20,
+            epochs=6,
+            provider_storage_cost_per_slot_epoch=0.01,
+            provider_fixed_cost_per_epoch=0.05,
+            base_reward_per_slot=0.03,
+            provider_cost_shocks=(
+                {
+                    "start_epoch": 4,
+                    "end_epoch": 6,
+                    "fixed_cost_multiplier_bps": 30000,
+                    "storage_cost_multiplier_bps": 50000,
+                },
+            ),
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertEqual(0, result.economy[0]["provider_cost_shock_active"])
+        self.assertEqual(1, result.economy[3]["provider_cost_shock_active"])
+        self.assertEqual(32, result.economy[3]["provider_cost_shocked_providers"])
+        self.assertEqual(50000, result.totals["max_provider_cost_shock_storage_multiplier_bps"])
+        self.assertGreater(result.economy[3]["provider_cost"], result.economy[0]["provider_cost"])
+        self.assertGreater(result.totals["providers_negative_pnl"], 0)
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)
@@ -492,6 +521,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "storage_demand.svg").exists())
             self.assertTrue((report_dir / "graphs" / "saturation_and_repair.svg").exists())
             self.assertTrue((report_dir / "graphs" / "capacity_utilization.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "provider_cost_shock.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
             self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
             self.assertTrue((report_dir / "graphs" / "hot_retrieval_routing.svg").exists())
@@ -520,6 +550,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Retrieval Success Rate](graphs/retrieval_success_rate.svg)", report_text)
             self.assertIn("![Slot State Transitions](graphs/slot_states.svg)", report_text)
             self.assertIn("![Provider P&L](graphs/provider_pnl.svg)", report_text)
+            self.assertIn("![Provider Cost Shock](graphs/provider_cost_shock.svg)", report_text)
             self.assertIn("![Burn / Mint Ratio](graphs/burn_mint_ratio.svg)", report_text)
             self.assertIn("![Price Trajectory](graphs/price_trajectory.svg)", report_text)
             self.assertIn("![Storage Demand](graphs/storage_demand.svg)", report_text)

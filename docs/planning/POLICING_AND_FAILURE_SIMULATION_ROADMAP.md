@@ -297,6 +297,7 @@ Human decisions still required:
 | Audit budget exhaustion | Does the system degrade predictably? | Backlog grows, no unbounded mint. | Audit budget cap tests. |
 | Coordinated regional outage | What is the availability cliff? | Success drops only when fewer than `K` slots remain. | Nightly/long-running multi-SP tests. |
 | Underpriced supply collapse | Do honest providers churn when price is below cost? | Provider P&L turns negative and capacity exits. | Dynamic pricing and subsidy calibration tests. |
+| Provider cost shock | Does a sudden operator cost increase create churn pressure before availability fails? | Cost-shock epochs are visible, provider P&L turns negative, and retrievals remain available. | Provider cost telemetry and price-floor governance review. |
 | Overpriced demand collapse | Does high price suppress useful demand? | New deal creation and retrieval demand fall below target. | Quote UX and pricing-bound tests. |
 | Price oscillation | Does the controller converge after demand shocks? | Price remains within bounds and settles without repeated overshoot. | Epoch pricing keeper tests. |
 | Wash traffic | Can fake retrievals profit from rewards or credits? | Burn and fees exceed expected reward or credit value. | Session fee, credit cap, and anomaly tests. |
@@ -1215,6 +1216,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `underpriced_storage.yaml` | Storage price below provider cost. | Provider P&L turns negative and churn pressure is visible. |
 | `overpriced_storage.yaml` | Storage price above modeled user willingness to pay. | Existing reads remain healthy while new deal demand is rejected by price, not capacity. |
 | `demand_elasticity_recovery.yaml` | Latent storage demand is suppressed by high price and recovers as dynamic pricing moves down. | Suppressed demand, recovered effective requests, accepted deals, bounded final price, and no capacity rejection. |
+| `provider_cost_shock.yaml` | Provider operating costs jump after launch while technical availability remains healthy. | Cost-shock windows are visible, provider P&L turns negative, churn pressure appears, and no availability or durability loss occurs. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |

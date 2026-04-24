@@ -126,6 +126,15 @@ SCENARIO_GUIDES = {
         "expected": "Some latent demand is suppressed early, effective requests recover later, accepted deals become non-zero, and capacity rejections stay zero.",
         "review": "Use this fixture to calibrate demand elasticity, quote telemetry, and price-step timing before encoding market defaults.",
     },
+    "provider-cost-shock": {
+        "title": "Provider Cost Shock",
+        "intent": (
+            "Model a technically healthy network where provider operating costs jump after launch. "
+            "The policy question is whether the simulator exposes churn pressure and pricing mismatch before availability fails."
+        ),
+        "expected": "Retrieval success remains high, the cost-shock window is visible, provider P&L falls, and negative-P&L churn risk appears.",
+        "review": "Use this fixture to calibrate cost assumptions, price floors, reward buffers, and whether pricing should react to provider cost telemetry.",
+    },
     "wash-retrieval": {
         "title": "Wash Retrieval Demand",
         "intent": (
@@ -401,6 +410,11 @@ SWEEP_METRICS = [
     "evidence_spam_bond_burned",
     "evidence_spam_bounty_paid",
     "evidence_spam_net_gain",
+    "provider_cost_shock_active",
+    "max_provider_cost_shocked_providers",
+    "max_provider_cost_shock_fixed_multiplier_bps",
+    "max_provider_cost_shock_storage_multiplier_bps",
+    "max_provider_cost_shock_bandwidth_multiplier_bps",
     "providers_negative_pnl",
     "saturated_responses",
     "providers_over_capacity",
@@ -475,6 +489,7 @@ SWEEP_CONFIG_KEYS = [
     "provider_online_probability_max",
     "provider_repair_probability_min",
     "provider_repair_probability_max",
+    "provider_cost_shocks",
 ]
 
 
@@ -628,6 +643,11 @@ def compute_signals(
             "evidence_spam_bond_burned": fnum(totals.get("evidence_spam_bond_burned")),
             "evidence_spam_bounty_paid": fnum(totals.get("evidence_spam_bounty_paid")),
             "evidence_spam_net_gain": fnum(totals.get("evidence_spam_net_gain")),
+            "provider_cost_shock_epochs": metric_sum(economy, "provider_cost_shock_active"),
+            "max_provider_cost_shocked_providers": fnum(totals.get("max_provider_cost_shocked_providers")),
+            "max_provider_cost_shock_fixed_multiplier_bps": fnum(totals.get("max_provider_cost_shock_fixed_multiplier_bps")),
+            "max_provider_cost_shock_storage_multiplier_bps": fnum(totals.get("max_provider_cost_shock_storage_multiplier_bps")),
+            "max_provider_cost_shock_bandwidth_multiplier_bps": fnum(totals.get("max_provider_cost_shock_bandwidth_multiplier_bps")),
             "storage_price_start": storage_prices[0] if storage_prices else 0.0,
             "storage_price_end": storage_prices[-1] if storage_prices else 0.0,
             "storage_price_min": min(storage_prices, default=0.0),
@@ -992,6 +1012,12 @@ def write_report_md(
             "",
             "![Provider P&L](graphs/provider_pnl.svg)",
             "",
+            "### Provider Cost Shock",
+            "",
+            "Shows modeled provider cost pressure against provider revenue.",
+            "",
+            "![Provider Cost Shock](graphs/provider_cost_shock.svg)",
+            "",
             "### Burn / Mint Ratio",
             "",
             "Shows whether burns are material relative to minted rewards and audit budget.",
@@ -1249,6 +1275,7 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Base reward per slot | `{fmt_money(config.get('base_reward_per_slot'))}` | Modeled issuance/subsidy paid only to reward-eligible active slots. |",
         f"| Provider storage cost/slot/epoch | `{fmt_money(config.get('provider_storage_cost_per_slot_epoch'))}` | Simplified provider cost basis; jitter may create marginal-provider distress. |",
         f"| Provider bandwidth cost/retrieval | `{fmt_money(config.get('provider_bandwidth_cost_per_retrieval'))}` | Simplified egress cost basis for retrieval-heavy scenarios. |",
+        f"| Provider cost shocks | `{json.dumps(config.get('provider_cost_shocks') or [])}` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |",
         f"| Performance reward per serve | `{fmt_money(config.get('performance_reward_per_serve'))}` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |",
         f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |",
         f"| Evidence spam claims/epoch | `{fmt_num(config.get('evidence_spam_claims_per_epoch'))}` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |",
@@ -1306,6 +1333,8 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Final storage utilization | `{fmt_bps(capacity['final_utilization_bps'])}` | Active slots versus modeled provider capacity. |",
         f"| Provider utilization p50 / p90 / max | `{fmt_bps(capacity['provider_capacity_utilization_p50_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_p90_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_max_bps'])}` | Detects assignment concentration and capacity cliffs. |",
         f"| Provider P&L p10 / p50 / p90 | `{fmt_money(economics['provider_pnl_p10'])}` / `{fmt_money(economics['provider_pnl_p50'])}` / `{fmt_money(economics['provider_pnl_p90'])}` | Shows whether aggregate P&L hides marginal-provider distress. |",
+        f"| Provider cost shock epochs/providers | `{fmt_num(economics['provider_cost_shock_epochs'])}` / `{fmt_num(economics['max_provider_cost_shocked_providers'])}` | Shows when external cost pressure was active and how much of the provider population it affected. |",
+        f"| Max cost shock fixed/storage/bandwidth | `{fmt_bps(economics['max_provider_cost_shock_fixed_multiplier_bps'])}` / `{fmt_bps(economics['max_provider_cost_shock_storage_multiplier_bps'])}` / `{fmt_bps(economics['max_provider_cost_shock_bandwidth_multiplier_bps'])}` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |",
         f"| Storage price start/end/range | `{fmt_money(economics['storage_price_start'])}` -> `{fmt_money(economics['storage_price_end'])}` (`{fmt_money(economics['storage_price_min'])}`-`{fmt_money(economics['storage_price_max'])}`) | Shows dynamic pricing movement and bounds. |",
         f"| Retrieval price start/end/range | `{fmt_money(economics['retrieval_price_start'])}` -> `{fmt_money(economics['retrieval_price_end'])}` (`{fmt_money(economics['retrieval_price_min'])}`-`{fmt_money(economics['retrieval_price_max'])}`) | Shows whether demand pressure moved retrieval pricing. |",
     ]
@@ -1553,6 +1582,10 @@ def assertion_meaning(name: str) -> str:
         "min_reward_coverage": "Healthy slots should receive the expected rewards.",
         "min_provider_slashed": "Simulated slashing must affect hard-fault providers.",
         "min_providers_negative_pnl": "Market warning: some providers must become economically distressed.",
+        "min_provider_cost_shock_active": "Cost-shock fixture must activate the configured cost-pressure window.",
+        "min_max_provider_cost_shocked_providers": "Cost-shock fixture must affect at least this many providers.",
+        "min_max_provider_cost_shock_storage_multiplier_bps": "Cost-shock fixture must raise modeled storage cost by at least this multiplier.",
+        "min_max_provider_cost_shock_bandwidth_multiplier_bps": "Cost-shock fixture must raise modeled bandwidth cost by at least this multiplier.",
         "min_retrieval_base_burned": "Requester/session demand must pay a non-zero base burn.",
         "min_retrieval_variable_burned": "Variable retrieval activity must contribute non-zero burn.",
         "min_retrieval_provider_payouts": "Legitimate high demand must pay providers for bandwidth.",
@@ -1651,6 +1684,12 @@ def build_economic_narrative(
             f"and rejected `{fmt_num(totals.get('new_deals_rejected_capacity'))}` on capacity. "
             f"Effective-request acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}`."
         )
+    if fnum(totals.get("provider_cost_shock_active")) > 0:
+        parts.append(
+            f"Provider cost shocks were active for `{fmt_num(totals.get('provider_cost_shock_active'))}` shock-epochs, "
+            f"affecting up to `{fmt_num(totals.get('max_provider_cost_shocked_providers'))}` providers. "
+            f"The maximum modeled storage-cost multiplier reached `{fmt_bps(totals.get('max_provider_cost_shock_storage_multiplier_bps'))}`."
+        )
     if negative_pnl:
         parts.append(
             f"`{len(negative_pnl)}` providers ended with negative P&L and `{len(churn_risk)}` were marked as churn risk. "
@@ -1726,6 +1765,19 @@ def write_risk_register(
                 "evidence": f"{len(negative_pnl)} of {len(providers)} providers ended with negative modeled P&L.",
                 "impact": "A technically healthy network may still be unstable if rational providers exit.",
                 "followup": "Review storage price, retrieval price, reward pool, provider cost assumptions, and dynamic-pricing thresholds.",
+            }
+        )
+    if fnum(totals.get("provider_cost_shock_active")) > 0:
+        rows.append(
+            {
+                "risk": "Provider cost shock exposure",
+                "severity": "medium",
+                "evidence": (
+                    f"Cost shocks were active for {fmt_num(totals.get('provider_cost_shock_active'))} shock-epochs and affected up to "
+                    f"{fmt_num(totals.get('max_provider_cost_shocked_providers'))} providers."
+                ),
+                "impact": "A technically healthy network may have delayed economic instability if prices and rewards do not react to operator cost pressure.",
+                "followup": "Review provider cost telemetry assumptions, pricing floors, reward buffers, and whether cost shocks should remain monitoring-only or feed governance recommendations.",
             }
         )
     if elasticity_rejections:
@@ -1917,6 +1969,8 @@ def write_risk_register(
             f"- Evidence spam bond burned: `{fmt_money(totals.get('evidence_spam_bond_burned'))}`",
             f"- Evidence spam bounty paid: `{fmt_money(totals.get('evidence_spam_bounty_paid'))}`",
             f"- Evidence spam net gain: `{fmt_money(totals.get('evidence_spam_net_gain'))}`",
+            f"- Provider cost shock active epochs: `{fmt_num(totals.get('provider_cost_shock_active'))}`",
+            f"- Max cost-shocked providers: `{fmt_num(totals.get('max_provider_cost_shocked_providers'))}`",
             f"- Latent new deal requests: `{fmt_num(totals.get('new_deal_latent_requests'))}`",
             f"- Effective new deal requests: `{fmt_num(totals.get('new_deal_requests'))}`",
             f"- New deals accepted: `{fmt_num(totals.get('new_deals_accepted'))}`",
@@ -1946,6 +2000,7 @@ def graduation_semantics(scenario: str) -> str:
         "lazy-provider": "Graduation means subsidy/reward gating catches useful-work failures even if user reads are still available.",
         "overpriced-storage": "Graduation means demand-side affordability failures are visible as price rejections rather than being mistaken for healthy market equilibrium.",
         "demand-elasticity-recovery": "Graduation means price-sensitive demand suppression and recovery are visible before governance tunes storage-price defaults.",
+        "provider-cost-shock": "Graduation means provider cost stress is visible as churn pressure and pricing mismatch before it is turned into live governance parameters.",
         "audit-budget-exhaustion": "Graduation means audit demand is bounded by budget and turns into backlog or policy review instead of unbounded issuance.",
         "deputy-evidence-spam": "Graduation means low-quality deputy evidence is economically negative-EV and cannot trigger live provider punishment without conviction.",
         "price-controller-bounds": "Graduation means price movement is bounded and explainable, not that the economic parameters are final.",
@@ -2085,6 +2140,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         graphs_dir / "provider_pnl.svg",
         "Provider P&L",
         [fnum(row.get("provider_pnl")) for row in economy],
+    )
+    write_line_svg(
+        graphs_dir / "provider_cost_shock.svg",
+        "Provider Cost",
+        [fnum(row.get("provider_cost")) for row in economy],
+        secondary=[fnum(row.get("provider_revenue")) for row in economy],
+        secondary_label="Provider Revenue",
     )
     write_line_svg(
         graphs_dir / "burn_mint_ratio.svg",
@@ -2419,6 +2481,9 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("invalid_proofs", "Hard evidence created by the candidate."),
         ("paid_corrupt_bytes", "Corrupt data payment safety invariant."),
         ("providers_negative_pnl", "Economic sustainability/churn indicator."),
+        ("provider_cost_shock_active", "Whether an external provider-cost shock was active."),
+        ("max_provider_cost_shocked_providers", "How much provider population the cost shock affected."),
+        ("max_provider_cost_shock_storage_multiplier_bps", "Peak modeled storage-cost shock multiplier."),
         ("saturated_responses", "Whether heterogeneous provider bandwidth became a bottleneck."),
         ("repair_backoffs", "Whether healing coordination or replacement capacity became constrained."),
         ("high_bandwidth_promotions", "Whether measured fast providers became hot-route eligible."),
@@ -2475,6 +2540,14 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         return "No additional penalty was applied."
     if key in {"provider_pnl", "provider_revenue", "provider_cost"}:
         return "Economic accounting changed; inspect provider distribution before drawing conclusions."
+    if key in {
+        "provider_cost_shock_active",
+        "max_provider_cost_shocked_providers",
+        "max_provider_cost_shock_fixed_multiplier_bps",
+        "max_provider_cost_shock_storage_multiplier_bps",
+        "max_provider_cost_shock_bandwidth_multiplier_bps",
+    }:
+        return "Provider cost pressure changed; inspect churn-risk and price response."
     if key == "providers_negative_pnl":
         if delta > 0:
             return "More providers are economically distressed."
@@ -2838,6 +2911,11 @@ def sweep_metric_meaning(key: str) -> str:
         "evidence_spam_bond_burned": "Evidence bond burned for unconvicted spam claims.",
         "evidence_spam_bounty_paid": "Conviction-gated bounty paid to the evidence spammer.",
         "evidence_spam_net_gain": "Spammer net economics; positive values indicate an abuse risk.",
+        "provider_cost_shock_active": "Epochs where external provider cost pressure was active.",
+        "max_provider_cost_shocked_providers": "Largest provider population affected by cost shock in any epoch.",
+        "max_provider_cost_shock_fixed_multiplier_bps": "Peak modeled fixed-cost multiplier during cost shock.",
+        "max_provider_cost_shock_storage_multiplier_bps": "Peak modeled storage-cost multiplier during cost shock.",
+        "max_provider_cost_shock_bandwidth_multiplier_bps": "Peak modeled bandwidth-cost multiplier during cost shock.",
         "providers_negative_pnl": "Market sustainability and churn pressure.",
         "saturated_responses": "Provider bandwidth bottleneck signal.",
         "providers_over_capacity": "Placement/capacity invariant; should remain zero.",

@@ -72,6 +72,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "deputy-evidence-spam",
     "overpriced-storage",
     "demand-elasticity-recovery",
+    "provider-cost-shock",
     "price-controller-bounds",
     "subsidy-farming",
     "coordinated-regional-outage",
@@ -179,6 +180,7 @@ class SimConfig:
     provider_repair_probability_max: float = 1.0
     provider_storage_cost_jitter_bps: int = 0
     provider_bandwidth_cost_jitter_bps: int = 0
+    provider_cost_shocks: tuple[dict[str, Any], ...] = ()
     provider_regions: tuple[str, ...] = ("global",)
     regional_outages: tuple[dict[str, Any], ...] = ()
     max_repairs_started_per_epoch: int = 0
@@ -302,6 +304,24 @@ class SimConfig:
             raise ValueError("operator_count must be <= providers")
         if self.operator_assignment_cap_per_deal < 0:
             raise ValueError("operator_assignment_cap_per_deal must be non-negative")
+        if not isinstance(self.provider_cost_shocks, (list, tuple)):
+            raise ValueError("provider_cost_shocks must be a list")
+        for shock in self.provider_cost_shocks:
+            if not isinstance(shock, dict):
+                raise ValueError("provider cost shock entries must be objects")
+            start_epoch = int(shock.get("start_epoch", shock.get("epoch", 0)))
+            if start_epoch <= 0:
+                raise ValueError("provider cost shocks require positive start_epoch")
+            end_epoch = int(shock.get("end_epoch", self.epochs))
+            if end_epoch < start_epoch:
+                raise ValueError("provider cost shock end_epoch must be >= start_epoch")
+            for key in {
+                "fixed_cost_multiplier_bps",
+                "storage_cost_multiplier_bps",
+                "bandwidth_cost_multiplier_bps",
+            }:
+                if int(shock.get(key, 10_000)) < 0:
+                    raise ValueError(f"{key} must be non-negative")
 
 
 @dataclass
@@ -496,6 +516,11 @@ class EpochMetrics:
     provider_cost: float = 0.0
     provider_revenue: float = 0.0
     provider_pnl: float = 0.0
+    provider_cost_shock_active: int = 0
+    provider_cost_shocked_providers: int = 0
+    provider_cost_shock_fixed_multiplier_bps: int = 10_000
+    provider_cost_shock_storage_multiplier_bps: int = 10_000
+    provider_cost_shock_bandwidth_multiplier_bps: int = 10_000
     storage_price: float = 0.0
     retrieval_price_per_slot: float = 0.0
     storage_utilization_bps: int = 0
@@ -1685,16 +1710,27 @@ class PolicySimulator:
                 self.elasticity_spent_total += self.config.elasticity_base_cost
                 metrics.elasticity_spent += self.config.elasticity_base_cost
 
+        shock_stats = self._provider_cost_shock_stats(epoch)
+        metrics.provider_cost_shock_active = shock_stats["active"]
+        metrics.provider_cost_shocked_providers = shock_stats["shocked_providers"]
+        metrics.provider_cost_shock_fixed_multiplier_bps = shock_stats["fixed_multiplier_bps"]
+        metrics.provider_cost_shock_storage_multiplier_bps = shock_stats["storage_multiplier_bps"]
+        metrics.provider_cost_shock_bandwidth_multiplier_bps = shock_stats["bandwidth_multiplier_bps"]
+
         provider_cost = 0.0
         for provider_id, provider in self.providers.items():
+            fixed_multiplier, storage_multiplier, bandwidth_multiplier = self._provider_cost_multipliers(provider, epoch)
             cost = (
                 self.config.provider_fixed_cost_per_epoch
+                * fixed_multiplier
                 + assigned_counts[provider_id]
                 * self.config.provider_storage_cost_per_slot_epoch
                 * provider.storage_cost_multiplier
+                * storage_multiplier
                 + self.provider_epoch_serves[provider_id]
                 * self.config.provider_bandwidth_cost_per_retrieval
                 * provider.bandwidth_cost_multiplier
+                * bandwidth_multiplier
             )
             provider.total_cost += cost
             provider_cost += cost
@@ -1740,6 +1776,11 @@ class PolicySimulator:
                 "provider_cost": metrics.provider_cost,
                 "provider_revenue": metrics.provider_revenue,
                 "provider_pnl": metrics.provider_pnl,
+                "provider_cost_shock_active": metrics.provider_cost_shock_active,
+                "provider_cost_shocked_providers": metrics.provider_cost_shocked_providers,
+                "provider_cost_shock_fixed_multiplier_bps": metrics.provider_cost_shock_fixed_multiplier_bps,
+                "provider_cost_shock_storage_multiplier_bps": metrics.provider_cost_shock_storage_multiplier_bps,
+                "provider_cost_shock_bandwidth_multiplier_bps": metrics.provider_cost_shock_bandwidth_multiplier_bps,
                 "performance_reward_paid": metrics.performance_reward_paid,
                 "latency_sample_count": metrics.latency_sample_count,
                 "average_latency_ms": metrics.total_latency_ms / metrics.latency_sample_count if metrics.latency_sample_count else 0.0,
@@ -1747,6 +1788,66 @@ class PolicySimulator:
                 "elasticity_rejections": metrics.elasticity_rejections,
             }
         )
+
+    def _provider_cost_multipliers(self, provider: Provider, epoch: int) -> tuple[float, float, float]:
+        fixed_bps = 10_000
+        storage_bps = 10_000
+        bandwidth_bps = 10_000
+        for shock in self.config.provider_cost_shocks:
+            if not self._provider_cost_shock_applies(shock, provider, epoch):
+                continue
+            fixed_bps = fixed_bps * int(shock.get("fixed_cost_multiplier_bps", 10_000)) // 10_000
+            storage_bps = storage_bps * int(shock.get("storage_cost_multiplier_bps", 10_000)) // 10_000
+            bandwidth_bps = bandwidth_bps * int(shock.get("bandwidth_cost_multiplier_bps", 10_000)) // 10_000
+        return fixed_bps / 10_000, storage_bps / 10_000, bandwidth_bps / 10_000
+
+    def _provider_cost_shock_stats(self, epoch: int) -> dict[str, int]:
+        active_shocks = 0
+        shocked_providers: set[str] = set()
+        max_fixed_bps = 10_000
+        max_storage_bps = 10_000
+        max_bandwidth_bps = 10_000
+        for shock in self.config.provider_cost_shocks:
+            if not self._cost_shock_epoch_applies(shock, epoch):
+                continue
+            active_shocks += 1
+            for provider in self.providers.values():
+                if not self._provider_cost_shock_applies(shock, provider, epoch):
+                    continue
+                shocked_providers.add(provider.provider_id)
+                fixed_multiplier, storage_multiplier, bandwidth_multiplier = self._provider_cost_multipliers(provider, epoch)
+                max_fixed_bps = max(max_fixed_bps, int(round(fixed_multiplier * 10_000)))
+                max_storage_bps = max(max_storage_bps, int(round(storage_multiplier * 10_000)))
+                max_bandwidth_bps = max(max_bandwidth_bps, int(round(bandwidth_multiplier * 10_000)))
+        return {
+            "active": active_shocks,
+            "shocked_providers": len(shocked_providers),
+            "fixed_multiplier_bps": max_fixed_bps,
+            "storage_multiplier_bps": max_storage_bps,
+            "bandwidth_multiplier_bps": max_bandwidth_bps,
+        }
+
+    def _provider_cost_shock_applies(self, shock: dict[str, Any], provider: Provider, epoch: int) -> bool:
+        if not self._cost_shock_epoch_applies(shock, epoch):
+            return False
+        provider_id = shock.get("provider_id")
+        if provider_id and str(provider_id) != provider.provider_id:
+            return False
+        provider_ids = {str(item) for item in shock.get("provider_ids", [])}
+        if provider_ids and provider.provider_id not in provider_ids:
+            return False
+        operator_id = shock.get("operator_id")
+        if operator_id and str(operator_id) != provider.operator_id:
+            return False
+        region = shock.get("region")
+        if region and str(region) != provider.region:
+            return False
+        return True
+
+    def _cost_shock_epoch_applies(self, shock: dict[str, Any], epoch: int) -> bool:
+        start_epoch = int(shock.get("start_epoch", shock.get("epoch", 1)))
+        end_epoch = int(shock.get("end_epoch", self.config.epochs))
+        return start_epoch <= epoch <= end_epoch
 
     def _update_provider_capabilities(self, epoch: int, metrics: EpochMetrics) -> None:
         if not self.config.high_bandwidth_promotion_enabled:
@@ -1872,6 +1973,7 @@ class PolicySimulator:
             "evidence_spam_bounty_paid",
             "evidence_spam_net_gain",
             "provider_cost",
+            "provider_cost_shock_active",
             "elasticity_spent",
             "elasticity_rejections",
         ]
@@ -1915,6 +2017,22 @@ class PolicySimulator:
         totals["performance_fail_rate"] = totals["fail_serves"] / tiered_serves if tiered_serves else 0.0
         totals["min_provider_pnl"] = min((p.pnl for p in self.providers.values()), default=0.0)
         totals["max_provider_pnl"] = max((p.pnl for p in self.providers.values()), default=0.0)
+        totals["max_provider_cost_shocked_providers"] = max(
+            (m.provider_cost_shocked_providers for m in self.metrics),
+            default=0,
+        )
+        totals["max_provider_cost_shock_fixed_multiplier_bps"] = max(
+            (m.provider_cost_shock_fixed_multiplier_bps for m in self.metrics),
+            default=10_000,
+        )
+        totals["max_provider_cost_shock_storage_multiplier_bps"] = max(
+            (m.provider_cost_shock_storage_multiplier_bps for m in self.metrics),
+            default=10_000,
+        )
+        totals["max_provider_cost_shock_bandwidth_multiplier_bps"] = max(
+            (m.provider_cost_shock_bandwidth_multiplier_bps for m in self.metrics),
+            default=10_000,
+        )
         assigned_counts = self._assigned_counts()
         totals["providers_over_capacity"] = sum(
             1 for pid, provider in self.providers.items() if assigned_counts.get(pid, 0) > provider.capacity_slots
@@ -1983,6 +2101,8 @@ class PolicySimulator:
                     "average_latency_ms": provider.total_latency_ms / provider.latency_sample_count if provider.latency_sample_count else 0.0,
                     "repair_success_probability": provider.repair_success_probability,
                     "online_probability": provider.behavior.online_probability,
+                    "storage_cost_multiplier": provider.storage_cost_multiplier,
+                    "bandwidth_cost_multiplier": provider.bandwidth_cost_multiplier,
                     "hard_faults": provider.hard_faults,
                     "retrieval_attempts": provider.retrieval_attempts,
                     "retrieval_successes": provider.retrieval_successes,

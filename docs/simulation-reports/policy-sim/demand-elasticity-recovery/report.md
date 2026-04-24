@@ -71,6 +71,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Base reward per slot | `0.0200` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
+| Provider cost shocks | `[]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
 | Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
 | Evidence spam claims/epoch | `0` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |
@@ -129,6 +130,8 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Final storage utilization | `31.87%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `31.25%` / `32.81%` / `32.81%` | Detects assignment concentration and capacity cliffs. |
 | Provider P&L p10 / p50 / p90 | `1.5666` / `1.7997` / `2.0385` | Shows whether aggregate P&L hides marginal-provider distress. |
+| Provider cost shock epochs/providers | `0` / `0` | Shows when external cost pressure was active and how much of the provider population it affected. |
+| Max cost shock fixed/storage/bandwidth | `100.00%` / `100.00%` / `100.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
 | Storage price start/end/range | `2.0000` -> `0.7748` (`0.7748`-`2.0000`) | Shows dynamic pricing movement and bounds. |
 | Retrieval price start/end/range | `0.0100` -> `0.0236` (`0.0100`-`0.0236`) | Shows whether demand pressure moved retrieval pricing. |
 
@@ -286,6 +289,12 @@ Shows active slots and repair slots; spikes indicate reassignment churn.
 Shows aggregate provider economics over time.
 
 ![Provider P&L](graphs/provider_pnl.svg)
+
+### Provider Cost Shock
+
+Shows modeled provider cost pressure against provider revenue.
+
+![Provider Cost Shock](graphs/provider_cost_shock.svg)
 
 ### Burn / Mint Ratio
 
