@@ -1,0 +1,86 @@
+{
+  "name": "expired-retrieval-rejection-controls",
+  "description": "Sensitivity sweep for post-expiry retrieval rejection timing, no-bill accounting, and larger expired-content read demand.",
+  "base_scenario": "../scenarios/expired_retrieval_rejection.yaml",
+  "cases": [
+    {
+      "name": "baseline-duration4"
+    },
+    {
+      "name": "short-duration2-more-expired-reads",
+      "config": {
+        "deal_duration_epochs": 2
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "min_expired_retrieval_attempts": 300,
+        "max_owner_retrieval_escrow_debited": 0.0,
+        "max_data_loss_events": 0,
+        "max_storage_escrow_outstanding": 0.0,
+        "exact_final_open_deals": 0,
+        "exact_final_closed_deals": 12,
+        "exact_final_expired_deals": 12,
+        "exact_deals_expired": 12
+      }
+    },
+    {
+      "name": "one-epoch-duration-immediate-rejection",
+      "config": {
+        "deal_duration_epochs": 1
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "min_expired_retrieval_attempts": 390,
+        "max_owner_retrieval_escrow_debited": 0.0,
+        "max_data_loss_events": 0,
+        "max_storage_escrow_outstanding": 0.0,
+        "exact_final_open_deals": 0,
+        "exact_final_closed_deals": 12,
+        "exact_final_expired_deals": 12,
+        "exact_deals_expired": 12
+      }
+    },
+    {
+      "name": "not-yet-expired-open-control",
+      "config": {
+        "deal_duration_epochs": 8
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "min_expired_retrieval_attempts": 0,
+        "max_expired_retrieval_attempts": 0,
+        "max_owner_retrieval_escrow_debited": 0.0,
+        "max_data_loss_events": 0,
+        "min_storage_escrow_outstanding": 200.0,
+        "max_storage_escrow_outstanding": 250.0,
+        "exact_final_open_deals": 12,
+        "exact_final_closed_deals": 0,
+        "exact_final_expired_deals": 0,
+        "exact_deals_expired": 0
+      }
+    },
+    {
+      "name": "larger-expired-read-demand",
+      "config": {
+        "providers": 120,
+        "users": 500,
+        "deals": 40
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "max_unavailable_reads": 0,
+        "min_expired_retrieval_attempts": 900,
+        "max_owner_retrieval_escrow_debited": 0.0,
+        "max_data_loss_events": 0,
+        "max_storage_escrow_outstanding": 0.0,
+        "exact_final_open_deals": 0,
+        "exact_final_closed_deals": 40,
+        "exact_final_expired_deals": 40,
+        "exact_deals_expired": 40
+      }
+    }
+  ]
+}

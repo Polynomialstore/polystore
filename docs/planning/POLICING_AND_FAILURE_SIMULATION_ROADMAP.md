@@ -1323,7 +1323,13 @@ recovery defaults are chosen; and
 expiry duration, run length, disabled-expiry behavior, and larger escrow books
 so committed storage expires when fully mature, immature deals remain visibly
 open with outstanding escrow, and missing expiry enforcement is surfaced before
-keeper expiry semantics are chosen.
+keeper expiry semantics are chosen; and
+`tools/policy_sim/sweeps/expired_retrieval_rejection_controls.yaml` plus
+`tools/policy_sim/sweeps/closed_retrieval_rejection_controls.yaml`, which
+compare inactive-content retrieval timing, no-bill owner-escrow guards,
+partial close behavior, refund accounting, and larger read demand so expired
+and intentionally closed content fail explicitly instead of becoming live
+availability failures or billable retrieval sessions.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models

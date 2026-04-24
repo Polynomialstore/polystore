@@ -2528,7 +2528,11 @@ def write_risk_register(
                 "followup": "Review sponsored-session funding, owner escrow isolation, gateway quote display, and close/refund semantics.",
             }
         )
-    if fnum(totals.get("storage_escrow_outstanding")) > 0 and fnum(totals.get("final_closed_deals")) > 0:
+    if (
+        fnum(totals.get("storage_escrow_outstanding")) > 0
+        and fnum(totals.get("final_closed_deals")) > 0
+        and fnum(totals.get("final_open_deals")) == 0
+    ):
         rows.append(
             {
                 "risk": "Storage escrow left outstanding after close",
@@ -3789,7 +3793,11 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "elasticity overlays activated but did not serve reads")
     if fnum(totals.get("owner_retrieval_escrow_debited")) > 0:
         raise_to("medium", "owner retrieval escrow was debited")
-    if fnum(totals.get("storage_escrow_outstanding")) > 0 and fnum(totals.get("final_closed_deals")) > 0:
+    if (
+        fnum(totals.get("storage_escrow_outstanding")) > 0
+        and fnum(totals.get("final_closed_deals")) > 0
+        and fnum(totals.get("final_open_deals")) == 0
+    ):
         raise_to("medium", "storage escrow remained outstanding after deal close")
     if (
         scenario == "storage-escrow-expiry"

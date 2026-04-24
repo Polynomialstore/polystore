@@ -19,8 +19,10 @@ python3 tools/policy_sim/run_sweeps.py \
 | Sweep | Cases | Assertion Failures | Description | Report |
 |---|---:|---:|---|---|
 | `audit-budget-controls` | 6 | 0 | Sensitivity sweep for protocol audit-budget funding versus miss-driven audit demand, backlog, and carryover. | [summary](audit-budget-controls/sweep_summary.md) |
+| `closed-retrieval-rejection-controls` | 5 | 0 | Sensitivity sweep for post-close retrieval rejection timing, partial close behavior, refund accounting, and larger closed-content read demand. | [summary](closed-retrieval-rejection-controls/sweep_summary.md) |
 | `elasticity-overlay-controls` | 6 | 1 | Sensitivity sweep for user-funded elasticity overlay readiness, TTL, spend cap, and per-deal route caps. | [summary](elasticity-overlay-controls/sweep_summary.md) |
 | `evidence-spam-economics` | 8 | 0 | Sensitivity sweep for deputy evidence-spam bond, bounty, conviction, and claim-volume economics. | [summary](evidence-spam-economics/sweep_summary.md) |
+| `expired-retrieval-rejection-controls` | 5 | 0 | Sensitivity sweep for post-expiry retrieval rejection timing, no-bill accounting, and larger expired-content read demand. | [summary](expired-retrieval-rejection-controls/sweep_summary.md) |
 | `high-bandwidth-thresholds` | 9 | 5 | Sensitivity sweep for high-bandwidth capacity and demotion-saturation thresholds under hot retrieval pressure. | [summary](high-bandwidth-thresholds/sweep_summary.md) |
 | `operator-concentration-controls` | 7 | 0 | Sensitivity sweep for per-deal operator assignment caps under dominant-operator Sybil pressure. | [summary](operator-concentration-controls/sweep_summary.md) |
 | `performance-market-latency-controls` | 9 | 0 | Sensitivity sweep for Hot-service latency tier windows, reward multipliers, jitter, routing, and slow-provider tails. | [summary](performance-market-latency-controls/sweep_summary.md) |
