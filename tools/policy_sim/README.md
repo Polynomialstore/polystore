@@ -164,6 +164,7 @@ are supported in scenario files:
 - `sponsored_retrieval_bps`
 - `owner_retrieval_debit_bps`
 - `storage_lockin_enabled`
+- `deal_expiry_enabled`
 - `deal_duration_epochs`
 - `deal_close_epoch`
 - `deal_close_count`
@@ -233,7 +234,7 @@ The simulator mirrors current protocol concepts:
 - Storage lock-in accounting that charges committed deals upfront, earns
   storage fees over service epochs, pays eligible providers, burns the
   delinquent share under reward-exclusion semantics, and refunds unearned
-  escrow on early close.
+  escrow on early close or auto-expires fully earned deals.
 - Staged upload grief pressure where provisional generations are bounded by
   retention TTL, preflight rejection, and pending-generation caps.
 - Demand-side storage admission accounting for latent new deal requests,

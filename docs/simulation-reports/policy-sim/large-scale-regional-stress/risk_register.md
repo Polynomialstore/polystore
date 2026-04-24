@@ -24,7 +24,7 @@ Model a population-scale network with more than one thousand storage providers a
 - Owner retrieval escrow debited: `0.0000`
 - Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `0.0000` / `0.0000`
-- Final open/closed deals: `1500` / `0`
+- Final open/closed/expired deals: `1500` / `0` / `0`
 - Data-loss events: `0`
 - Saturated responses: `15482`
 - Performance Fail-tier serves: `0`

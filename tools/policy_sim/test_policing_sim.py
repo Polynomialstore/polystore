@@ -687,6 +687,18 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertGreater(result.totals["quota_misses"], 0)
         self.assertTrue(any(row["reason"] == "quota_shortfall" for row in result.evidence))
 
+    def test_storage_escrow_auto_expires_fully_earned_deals(self):
+        fixture = Path(__file__).with_name("scenarios") / "storage_escrow_expiry.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(0, result.totals["final_open_deals"])
+        self.assertEqual(result.config["deals"], result.totals["final_expired_deals"])
+        self.assertEqual(result.config["deals"], result.totals["deals_expired"])
+        self.assertEqual(0.0, result.totals["storage_escrow_outstanding"])
+        self.assertTrue(any(row["reason"] == "deal_storage_escrow_expired" for row in result.evidence))
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)

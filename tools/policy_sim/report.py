@@ -316,6 +316,15 @@ SCENARIO_GUIDES = {
         "expected": "Storage escrow still locks and earns, compliant slots are paid, non-compliant slot share is burned, repairs start, and outstanding escrow reaches zero by run end.",
         "review": "Use this before implementing keeper storage-fee payout gates, reward-exclusion accounting, and burn-ledger tests for delinquent storage responsibility.",
     },
+    "storage-escrow-expiry": {
+        "title": "Storage Escrow Expiry",
+        "intent": (
+            "Model end-of-duration storage accounting. The policy question is whether a fully earned deal auto-expires, "
+            "leaves no hidden escrow, and stops contributing active responsibility after its duration."
+        ),
+        "expected": "Storage escrow locks, earns exactly through the configured duration, every deal expires, no unearned refund is needed, and final open deals reach zero.",
+        "review": "Use this before implementing keeper expiry auto-close, deal GC, and final payout/escrow settlement tests.",
+    },
     "coordinated-regional-outage": {
         "title": "Coordinated Regional Outage",
         "intent": (
@@ -496,6 +505,8 @@ SWEEP_METRICS = [
     "storage_fee_provider_payouts",
     "storage_fee_burned",
     "deals_closed",
+    "deals_expired",
+    "final_expired_deals",
     "final_open_deals",
     "final_closed_deals",
     "sponsored_retrieval_attempts",
@@ -610,6 +621,7 @@ SWEEP_CONFIG_KEYS = [
     "storage_price",
     "storage_lockin_enabled",
     "deal_duration_epochs",
+    "deal_expiry_enabled",
     "deal_close_epoch",
     "deal_close_count",
     "deal_close_bps",
@@ -899,8 +911,10 @@ def compute_signals(
             "storage_fee_provider_payouts": fnum(totals.get("storage_fee_provider_payouts")),
             "storage_fee_burned": fnum(totals.get("storage_fee_burned")),
             "deals_closed": fnum(totals.get("deals_closed")),
+            "deals_expired": fnum(totals.get("deals_expired")),
             "final_open_deals": fnum(totals.get("final_open_deals")),
             "final_closed_deals": fnum(totals.get("final_closed_deals")),
+            "final_expired_deals": fnum(totals.get("final_expired_deals")),
             "sponsored_retrieval_attempts": fnum(totals.get("sponsored_retrieval_attempts")),
             "owner_funded_retrieval_attempts": fnum(totals.get("owner_funded_retrieval_attempts")),
             "sponsored_retrieval_base_spent": fnum(totals.get("sponsored_retrieval_base_spent")),
@@ -1158,6 +1172,7 @@ def write_report_md(
         f"| Dynamic pricing | `{str(config.get('dynamic_pricing')).lower()}` |",
         f"| Storage price | `{fmt_money(config.get('storage_price'))}` |",
         f"| Storage lock-in | `{str(config.get('storage_lockin_enabled')).lower()}`; duration `{fmt_num(config.get('deal_duration_epochs'))}` epochs |",
+        f"| Deal expiry | `{str(config.get('deal_expiry_enabled')).lower()}` |",
         f"| Deal close policy | epoch `{fmt_num(config.get('deal_close_epoch'))}`; count `{fmt_num(config.get('deal_close_count'))}`; share `{fmt_bps(config.get('deal_close_bps'))}` |",
         f"| New deal requests/epoch | `{fmt_num(config.get('new_deal_requests_per_epoch'))}` |",
         f"| Storage demand price ceiling | `{fmt_money(config.get('storage_demand_price_ceiling'))}` (`0` means disabled) |",
@@ -1538,7 +1553,8 @@ def build_behavior_narrative(
             f"`{fmt_money(totals.get('storage_escrow_earned'))}` was earned over modeled service epochs, "
             f"`{fmt_money(totals.get('storage_escrow_refunded'))}` was refunded on close, and final outstanding storage escrow was "
             f"`{fmt_money(totals.get('storage_escrow_outstanding'))}`. Closed deals ended at "
-            f"`{fmt_num(totals.get('final_closed_deals'))}` and open deals ended at `{fmt_num(totals.get('final_open_deals'))}`."
+            f"`{fmt_num(totals.get('final_closed_deals'))}`, expired deals ended at "
+            f"`{fmt_num(totals.get('final_expired_deals'))}`, and open deals ended at `{fmt_num(totals.get('final_open_deals'))}`."
         )
     if fnum(totals.get("elasticity_overlay_activations")) > 0:
         parts.append(
@@ -1641,6 +1657,7 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         "|---|---:|---|",
         f"| Storage price | `{fmt_money(config.get('storage_price'))}` | Unitless price applied by the controller, demand-elasticity curve, and optional affordability gate. |",
         f"| Storage lock-in | enabled `{bool(config.get('storage_lockin_enabled'))}`, duration `{fmt_num(config.get('deal_duration_epochs'))}` epochs | If enabled, committed deals lock storage escrow upfront at the quoted storage price and earn it over the modeled duration. |",
+        f"| Deal expiry | enabled `{bool(config.get('deal_expiry_enabled'))}` | If enabled, deals auto-expire once their modeled duration has fully earned. |",
         f"| Deal close/refund | epoch `{fmt_num(config.get('deal_close_epoch'))}`, count `{fmt_num(config.get('deal_close_count'))}`, share `{fmt_bps(config.get('deal_close_bps'))}` | Optional early close refunds unearned storage escrow and removes closed deals from active responsibility. |",
         f"| New deal requests/epoch | `{fmt_num(config.get('new_deal_requests_per_epoch'))}` | Latent modeled write demand before optional price elasticity suppression. Effective requests are accepted only when price and capacity gates pass. |",
         f"| Storage demand price ceiling | `{fmt_money(config.get('storage_demand_price_ceiling'))}` | If non-zero, new deal demand above this storage price is rejected as unaffordable. |",
@@ -1727,7 +1744,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Storage escrow locked/earned/refunded | `{fmt_money(economics['storage_escrow_locked'])}` / `{fmt_money(economics['storage_escrow_earned'])}` / `{fmt_money(economics['storage_escrow_refunded'])}` | Shows quote-to-lock, provider earning, and close/refund accounting for committed storage. |",
         f"| Storage escrow outstanding | `{fmt_money(economics['storage_escrow_outstanding'])}` final; peak `{fmt_money(economics['max_storage_escrow_outstanding'])}` | Detects funds left locked after close/expiry semantics should have released them. |",
         f"| Storage fee provider payout/burned | `{fmt_money(economics['storage_fee_provider_payouts'])}` / `{fmt_money(economics['storage_fee_burned'])}` | Separates earned storage fees paid to eligible providers from fees withheld from non-compliant responsibility. |",
-        f"| Deals open/closed | `{fmt_num(economics['final_open_deals'])}` / `{fmt_num(economics['final_closed_deals'])}` | Confirms close/refund semantics remove deals from active responsibility instead of continuing to accrue rewards. |",
+        f"| Deals open/closed/expired | `{fmt_num(economics['final_open_deals'])}` / `{fmt_num(economics['final_closed_deals'])}` / `{fmt_num(economics['final_expired_deals'])}` | Confirms close/refund/expiry semantics remove deals from active responsibility instead of continuing to accrue rewards. |",
         f"| Audit demand / spent | `{fmt_money(economics['audit_budget_demand'])}` / `{fmt_money(economics['audit_budget_spent'])}` | Shows whether enforcement evidence consumed the available audit budget. |",
         f"| Audit backlog / exhausted epochs | `{fmt_money(economics['audit_budget_backlog'])}` / `{fmt_num(economics['audit_budget_exhausted_epochs'])}` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |",
         f"| Evidence spam claims / convictions | `{fmt_num(economics['evidence_spam_claims'])}` / `{fmt_num(economics['evidence_spam_convictions'])}` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |",
@@ -2073,6 +2090,8 @@ def assertion_meaning(name: str) -> str:
         "max_storage_escrow_outstanding": "Storage escrow should not remain locked after the modeled close/expiry path should have released it.",
         "min_storage_fee_provider_payouts": "Earned storage fees should pay eligible providers.",
         "max_storage_fee_burned": "Healthy storage escrow fixture should not burn storage fees from non-compliance.",
+        "exact_deals_expired": "Deal expiry fixture should expire the expected number of deals.",
+        "exact_final_expired_deals": "Run-end expired deal count should match the scenario contract.",
         "exact_final_closed_deals": "Close/refund fixture should end with the configured number of closed deals.",
         "exact_deals_closed": "Close/refund fixture should close the configured number of deals.",
         "min_sponsored_retrieval_attempts": "Sponsored public retrieval fixture must route demand through sponsor/requester-funded sessions.",
@@ -2628,7 +2647,7 @@ def write_risk_register(
             f"- Owner retrieval escrow debited: `{fmt_money(totals.get('owner_retrieval_escrow_debited'))}`",
             f"- Storage escrow locked/earned/refunded/outstanding: `{fmt_money(totals.get('storage_escrow_locked'))}` / `{fmt_money(totals.get('storage_escrow_earned'))}` / `{fmt_money(totals.get('storage_escrow_refunded'))}` / `{fmt_money(totals.get('storage_escrow_outstanding'))}`",
             f"- Storage fee provider payout/burned: `{fmt_money(totals.get('storage_fee_provider_payouts'))}` / `{fmt_money(totals.get('storage_fee_burned'))}`",
-            f"- Final open/closed deals: `{fmt_num(totals.get('final_open_deals'))}` / `{fmt_num(totals.get('final_closed_deals'))}`",
+            f"- Final open/closed/expired deals: `{fmt_num(totals.get('final_open_deals'))}` / `{fmt_num(totals.get('final_closed_deals'))}` / `{fmt_num(totals.get('final_expired_deals'))}`",
             f"- Data-loss events: `{fmt_num(totals.get('data_loss_events'))}`",
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
             f"- Performance Fail-tier serves: `{fmt_num(totals.get('fail_serves'))}`",
@@ -2710,6 +2729,7 @@ def graduation_semantics(scenario: str) -> str:
         "subsidy-farming": "Graduation means non-compliant responsibility is not profitably subsidized by base rewards.",
         "storage-escrow-close-refund": "Graduation means storage lock-in, earned-fee payout, early close refund, and run-end outstanding escrow are deterministic before keeper close/refund semantics are implemented.",
         "storage-escrow-noncompliance-burn": "Graduation means earned storage fees can be withheld from non-compliant responsibility and burned without confusing storage lock-in or availability accounting.",
+        "storage-escrow-expiry": "Graduation means fully earned storage deals can auto-expire without continuing active responsibility or leaving hidden escrow.",
         "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
         "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
         "replacement-grinding": "Graduation means pending-provider readiness failures are bounded by timeout, cooldown, and attempt caps instead of leaving unbounded in-flight repairs.",
@@ -2778,6 +2798,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "viral-public-retrieval",
         "storage-escrow-close-refund",
         "storage-escrow-noncompliance-burn",
+        "storage-escrow-expiry",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -2834,6 +2855,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a keeper/gateway planning ticket that names storage quote parity, upfront lock-in, per-epoch earned-fee payout, early close refund, expiry auto-close, and refund rounding semantics.")
     elif recommendation == "Candidate for implementation planning." and scenario == "storage-escrow-noncompliance-burn":
         lines.append("Create a keeper/gateway planning ticket that names storage-fee reward eligibility, burn ledger attribution, delinquency windows, repair interaction, and provider payout query semantics.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "storage-escrow-expiry":
+        lines.append("Create a keeper/gateway planning ticket that names expiry auto-close, final earned-fee settlement, deal GC timing, query state, and retrieval behavior after expiry.")
     elif recommendation == "Candidate for implementation planning." and scenario == "deputy-evidence-spam":
         lines.append("Create a keeper/runtime planning ticket that names evidence bond escrow, burn-on-expiry, conviction-gated bounty payout, spam throttles, and deputy reputation inputs.")
     elif recommendation == "Candidate for implementation planning.":
@@ -3310,7 +3333,9 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("storage_escrow_outstanding", "Whether any storage escrow remained locked at run end."),
         ("storage_fee_provider_payouts", "How much earned storage fee was paid to providers."),
         ("storage_fee_burned", "How much earned storage fee was withheld or burned."),
+        ("deals_expired", "How many deal expiry events occurred."),
         ("final_closed_deals", "How many deals closed by run end."),
+        ("final_expired_deals", "How many deals expired by run end."),
         ("new_deal_latent_requests", "How much write demand existed before price elasticity."),
         ("new_deal_requests", "How much modeled write demand remained after price elasticity."),
         ("new_deals_accepted", "How much new storage demand entered the network."),
@@ -3438,8 +3463,10 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         "storage_fee_provider_payouts",
         "storage_fee_burned",
         "deals_closed",
+        "deals_expired",
         "final_open_deals",
         "final_closed_deals",
+        "final_expired_deals",
     }:
         return "Storage escrow lifecycle changed; inspect quote parity, earned-fee payout, close/refund timing, and outstanding escrow."
     if key in {
@@ -3853,8 +3880,10 @@ def sweep_metric_meaning(key: str) -> str:
         "storage_fee_provider_payouts": "Earned storage fees paid to eligible providers.",
         "storage_fee_burned": "Earned storage fees withheld from non-compliant slots.",
         "deals_closed": "Deal close events executed across the run.",
+        "deals_expired": "Deal expiry events executed across the run.",
         "final_open_deals": "Deals still active at run end.",
         "final_closed_deals": "Deals closed by run end.",
+        "final_expired_deals": "Deals expired by run end.",
         "sponsored_retrieval_attempts": "Retrieval attempts funded by requester/sponsor sessions.",
         "sponsored_retrieval_spent": "Total sponsored retrieval base plus variable spend.",
         "owner_retrieval_escrow_debited": "Deal-owner escrow debited for non-sponsored retrievals.",

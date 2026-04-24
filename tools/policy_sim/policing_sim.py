@@ -85,6 +85,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "subsidy-farming",
     "storage-escrow-close-refund",
     "storage-escrow-noncompliance-burn",
+    "storage-escrow-expiry",
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
     "replacement-grinding",
@@ -136,6 +137,7 @@ class SimConfig:
     dynamic_pricing: bool = False
     storage_price: float = 1.0
     storage_lockin_enabled: bool = False
+    deal_expiry_enabled: bool = False
     deal_duration_epochs: int = 0
     deal_close_epoch: int = 0
     deal_close_count: int = 0
@@ -585,6 +587,7 @@ class DealState:
     slots: list[SlotState]
     opened_epoch: int = 1
     closed_epoch: int = 0
+    closed_reason: str = ""
     storage_escrow_locked: float = 0.0
     storage_fee_per_epoch: float = 0.0
     storage_fee_earned: float = 0.0
@@ -672,6 +675,7 @@ class EpochMetrics:
     storage_fee_burned: float = 0.0
     open_deals: int = 0
     deals_closed: int = 0
+    deals_expired: int = 0
     sponsored_retrieval_attempts: int = 0
     owner_funded_retrieval_attempts: int = 0
     sponsored_retrieval_base_spent: float = 0.0
@@ -2325,6 +2329,7 @@ class PolicySimulator:
                 self._earn_deal_storage_fee(deal, metrics)
 
         self._close_configured_deals(epoch, metrics)
+        self._expire_deals(epoch, metrics)
         metrics.open_deals = len(self._open_deals())
         metrics.storage_escrow_outstanding = self._storage_escrow_outstanding()
 
@@ -2380,6 +2385,7 @@ class PolicySimulator:
             refundable = max(0.0, deal.storage_escrow_locked - deal.storage_fee_earned - deal.storage_escrow_refunded)
             deal.storage_escrow_refunded += refundable
             deal.closed_epoch = epoch
+            deal.closed_reason = "closed"
             metrics.storage_escrow_refunded += refundable
             metrics.deals_closed += 1
             self.evidence_rows.append(
@@ -2391,6 +2397,34 @@ class PolicySimulator:
                     "evidence_class": "market",
                     "reason": "deal_storage_escrow_closed",
                     "consequence": "refund_unearned",
+                }
+            )
+
+    def _expire_deals(self, epoch: int, metrics: EpochMetrics) -> None:
+        if not self.config.deal_expiry_enabled or self.config.deal_duration_epochs <= 0:
+            return
+        for deal in sorted(self._open_deals(), key=lambda item: item.deal_id):
+            expiry_epoch = deal.opened_epoch + self.config.deal_duration_epochs - 1
+            if epoch < expiry_epoch:
+                continue
+            if self.config.storage_lockin_enabled:
+                self._ensure_deal_storage_lock(deal, metrics)
+            refundable = max(0.0, deal.storage_escrow_locked - deal.storage_fee_earned - deal.storage_escrow_refunded)
+            deal.storage_escrow_refunded += refundable
+            deal.closed_epoch = epoch
+            deal.closed_reason = "expired"
+            metrics.storage_escrow_refunded += refundable
+            metrics.deals_closed += 1
+            metrics.deals_expired += 1
+            self.evidence_rows.append(
+                {
+                    "epoch": epoch,
+                    "deal_id": deal.deal_id,
+                    "slot": "",
+                    "provider_id": "chain",
+                    "evidence_class": "market",
+                    "reason": "deal_storage_escrow_expired",
+                    "consequence": "expire_deal",
                 }
             )
 
@@ -2508,6 +2542,7 @@ class PolicySimulator:
                 "storage_fee_burned": metrics.storage_fee_burned,
                 "open_deals": metrics.open_deals,
                 "deals_closed": metrics.deals_closed,
+                "deals_expired": metrics.deals_expired,
                 "sponsored_retrieval_attempts": metrics.sponsored_retrieval_attempts,
                 "owner_funded_retrieval_attempts": metrics.owner_funded_retrieval_attempts,
                 "sponsored_retrieval_base_spent": metrics.sponsored_retrieval_base_spent,
@@ -2948,6 +2983,7 @@ class PolicySimulator:
             "storage_fee_provider_payouts",
             "storage_fee_burned",
             "deals_closed",
+            "deals_expired",
             "sponsored_retrieval_attempts",
             "owner_funded_retrieval_attempts",
             "sponsored_retrieval_base_spent",
@@ -3004,6 +3040,7 @@ class PolicySimulator:
         totals["final_deals"] = len(self.deals)
         totals["final_open_deals"] = len(self._open_deals())
         totals["final_closed_deals"] = sum(1 for deal in self.deals if deal.closed_epoch)
+        totals["final_expired_deals"] = sum(1 for deal in self.deals if deal.closed_reason == "expired")
         totals["storage_escrow_outstanding"] = self._storage_escrow_outstanding()
         totals["max_storage_escrow_outstanding"] = max(
             (m.storage_escrow_outstanding for m in self.metrics),
@@ -3565,6 +3602,8 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
         data["dynamic_pricing"] = True
     if args.storage_lockin:
         data["storage_lockin_enabled"] = True
+    if args.deal_expiry:
+        data["deal_expiry_enabled"] = True
     if args.elasticity_overlay:
         data["elasticity_overlay_enabled"] = True
     faults.extend(args.fault or [])
@@ -3679,7 +3718,7 @@ def print_summary(result: SimResult) -> None:
         print(
             "storage_escrow locked={storage_escrow_locked:.4f} earned={storage_escrow_earned:.4f} "
             "refunded={storage_escrow_refunded:.4f} outstanding={storage_escrow_outstanding:.4f} "
-            "closed_deals={final_closed_deals}".format(**totals)
+            "closed_deals={final_closed_deals} expired_deals={final_expired_deals}".format(**totals)
         )
     if result.assertions:
         failed = [item for item in result.assertions if not item.passed]
@@ -3740,6 +3779,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-pending-timeout-epochs", type=int)
     parser.add_argument("--enforcement-mode", choices=sorted(ENFORCEMENT_ORDER))
     parser.add_argument("--storage-lockin", action="store_true")
+    parser.add_argument("--deal-expiry", action="store_true")
     parser.add_argument("--deal-duration-epochs", type=int)
     parser.add_argument("--deal-close-epoch", type=int)
     parser.add_argument("--deal-close-count", type=int)

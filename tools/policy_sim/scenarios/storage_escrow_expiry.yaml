@@ -1,0 +1,35 @@
+{
+  "name": "storage-escrow-expiry",
+  "description": "Committed storage escrow earns through the configured deal duration and then auto-expires every deal without leaving hidden escrow or active responsibility.",
+  "config": {
+    "scenario": "storage-escrow-expiry",
+    "seed": 107,
+    "providers": 48,
+    "users": 80,
+    "deals": 12,
+    "epochs": 4,
+    "retrievals_per_user_per_epoch": 1,
+    "storage_price": 0.05,
+    "storage_lockin_enabled": true,
+    "deal_expiry_enabled": true,
+    "deal_duration_epochs": 4,
+    "base_reward_per_slot": 0.02,
+    "provider_storage_cost_per_slot_epoch": 0.005,
+    "provider_fixed_cost_per_epoch": 0.01
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_unavailable_reads": 0,
+    "max_data_loss_events": 0,
+    "min_storage_escrow_locked": 450.0,
+    "min_storage_escrow_earned": 450.0,
+    "max_storage_escrow_refunded": 0.0,
+    "max_storage_escrow_outstanding": 0.0,
+    "min_storage_fee_provider_payouts": 450.0,
+    "max_storage_fee_burned": 0.0,
+    "exact_final_open_deals": 0,
+    "exact_final_closed_deals": 12,
+    "exact_final_expired_deals": 12,
+    "exact_deals_expired": 12
+  }
+}

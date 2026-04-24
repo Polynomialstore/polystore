@@ -21,7 +21,7 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 - Owner retrieval escrow debited: `0.0000`
 - Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `0.0000` / `0.0000`
-- Final open/closed deals: `80` / `0`
+- Final open/closed/expired deals: `80` / `0` / `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`

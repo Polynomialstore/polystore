@@ -23,7 +23,7 @@ Model reserve providers entering the active set after churn reduces supply. The 
 - Owner retrieval escrow debited: `0.0000`
 - Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `0.0000` / `0.0000`
-- Final open/closed deals: `36` / `0`
+- Final open/closed/expired deals: `36` / `0` / `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`

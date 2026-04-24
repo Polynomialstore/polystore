@@ -63,6 +63,8 @@ This report aggregates `5` completed simulator run output directories. It does n
 | `storage_fee_provider_payouts` | 691.200000 | 921.600000 | 230.400000 | 787.200000 | Earned storage fees paid to eligible providers. |
 | `storage_fee_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Earned storage fees withheld from non-compliant slots. |
 | `deals_closed` | 0.000000 | 6.000000 | 6.000000 | 3.400000 | Deal close events executed across the run. |
+| `deals_expired` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal expiry events executed across the run. |
+| `final_expired_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals expired by run end. |
 | `final_open_deals` | 6.000000 | 12.000000 | 6.000000 | 8.600000 | Deals still active at run end. |
 | `final_closed_deals` | 0.000000 | 6.000000 | 6.000000 | 3.400000 | Deals closed by run end. |
 | `sponsored_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval attempts funded by requester/sponsor sessions. |
