@@ -19,6 +19,21 @@
       "detail": "retrieval_base_burned=45, required>=1",
       "name": "min_retrieval_base_burned",
       "passed": true
+    },
+    {
+      "detail": "sponsored_retrieval_attempts=9000, required>=1",
+      "name": "min_sponsored_retrieval_attempts",
+      "passed": true
+    },
+    {
+      "detail": "sponsored_retrieval_spent=1125, required>=1",
+      "name": "min_sponsored_retrieval_spent",
+      "passed": true
+    },
+    {
+      "detail": "owner_retrieval_escrow_debited=0, required=0",
+      "name": "exact_owner_retrieval_escrow_debited",
+      "passed": true
     }
   ],
   "config": {
@@ -65,6 +80,7 @@
     "new_deal_requests_per_epoch": 0,
     "operator_assignment_cap_per_deal": 0,
     "operator_count": 0,
+    "owner_retrieval_debit_bps": 10000,
     "performance_market_enabled": false,
     "performance_reward_per_serve": 0.0,
     "platinum_latency_ms": 100.0,
@@ -131,6 +147,7 @@
     "silver_latency_ms": 500.0,
     "silver_reward_multiplier_bps": 5000,
     "slash_hard_fault": 1.0,
+    "sponsored_retrieval_bps": 10000,
     "staged_upload_attempts_per_epoch": 0,
     "staged_upload_commit_rate_bps": 10000,
     "staged_upload_max_pending_generations": 0,
@@ -250,6 +267,8 @@
     "offline_responses": 0,
     "operator_count": 96,
     "operator_deal_cap_violations": 0,
+    "owner_funded_retrieval_attempts": 0,
+    "owner_retrieval_escrow_debited": 0.0,
     "paid_corrupt_bytes": 0,
     "performance_fail_rate": 0.0,
     "performance_reward_paid": 0.0,
@@ -294,6 +313,10 @@
     "reward_pool_minted": 69.12,
     "saturated_responses": 0,
     "silver_serves": 0,
+    "sponsored_retrieval_attempts": 9000,
+    "sponsored_retrieval_base_spent": 45.0,
+    "sponsored_retrieval_spent": 1125.0,
+    "sponsored_retrieval_variable_spent": 1080.0,
     "staged_upload_accepted": 0,
     "staged_upload_attempts": 0,
     "staged_upload_cleaned": 0,

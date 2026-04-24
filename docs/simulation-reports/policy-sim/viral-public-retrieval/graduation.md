@@ -1,10 +1,10 @@
 # Graduation Assessment: Viral Public Retrieval Spike
 
-Model a legitimate public-demand spike. The system should pay providers for real bandwidth, burn the configured fees, and avoid treating popularity as misbehavior.
+Model a legitimate public-demand spike. The system should pay providers for real bandwidth, burn the configured fees, avoid treating popularity as misbehavior, and isolate deal-owner escrow from sponsored public demand.
 
 ## Recommendation
 
-**Candidate for further simulation review.** The fixture passed, but it primarily informs economic/product policy rather than immediate keeper enforcement.
+**Candidate for implementation planning.** The fixture passed its assertion contract and exercised the expected enforcement path.
 
 ## Readiness Checklist
 
@@ -23,7 +23,7 @@ Graduation is case-by-case: define which invariant is being proven, which thresh
 
 ## Candidate Next Artifact
 
-Create a policy-review note that compares this scenario against at least one baseline and one adversarial variant.
+Create a keeper/gateway planning ticket that names sponsored-session funding, owner escrow isolation, retrieval burn/payout accounting, quote display, and close/refund semantics.
 
 ## Missing Human Decisions
 

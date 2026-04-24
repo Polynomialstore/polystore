@@ -1244,7 +1244,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `provider_bond_headroom.yaml` | Hard-fault slashing leaves a provider below minimum/per-slot collateral. | Underbonded providers are visible, new assignments exclude insufficient bond headroom, active underbonded slots repair away, and data-loss events remain zero. |
 | `retrieval_demand_shock.yaml` | Temporary read-demand spike tests retrieval-price response and oscillation bounds. | Retrieval shock windows are visible, price direction changes stay bounded, reads remain available, and price remains within configured limits. |
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
-| `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
+| `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost, sponsor spend is visible, and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
 | `elasticity_overlay_scaleup.yaml` | Sustained hot retrieval demand buys temporary overflow routes. | Overlay activations, serves, and TTL expirations are visible; spend caps are respected and durability is unaffected. |
 | `high_bandwidth_promotion.yaml` | Hot retrieval demand is routed across heterogeneous providers after measured high-bandwidth promotion. | Providers promote only after success/capacity/saturation checks, hot traffic uses promoted providers, no demotion or over-capacity assignment occurs. |
@@ -1684,7 +1684,7 @@ The canonical economic scenarios should run alongside reliability scenarios:
 | Overpriced storage | Does demand collapse or escrow funding fail? | Deal creation or committed bytes fall below target; quote rejection rises. |
 | Storage price shock | Does the controller converge after supply/demand changes? | Price changes stay within step bounds and settle near target utilization. |
 | Retrieval demand spike | Does retrieval pricing and elasticity absorb burst demand? | Reads remain paid and attributable; overlays spawn only when funded. |
-| Viral public content | Can third-party demand pay without draining owner escrow? | Sponsored sessions carry public retrieval cost; owner escrow stays stable. |
+| Viral public content | Can third-party demand pay without draining owner escrow? | Sponsored sessions carry public retrieval cost; sponsor spend is visible; owner escrow stays stable. |
 | Wash retrieval | Can fake reads profit from rewards or credits? | Base burns, variable burns, and credit caps make the strategy negative EV. |
 | Subsidy farming | Can inactive providers farm emissions from slot responsibility? | Non-compliant slots earn zero or insufficient rewards; remainders burn. |
 | Audit budget exhaustion | Does protocol audit load exceed funding? | Backlog and alerts grow, but minting remains capped. |

@@ -358,6 +358,9 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "retrieval_demand_shock_active": totals.get("retrieval_demand_shock_active", 0),
         "max_retrieval_demand_multiplier_bps": totals.get("max_retrieval_demand_multiplier_bps", 10_000),
         "retrieval_price_direction_changes": totals.get("retrieval_price_direction_changes", 0),
+        "sponsored_retrieval_attempts": totals.get("sponsored_retrieval_attempts", 0),
+        "sponsored_retrieval_spent": totals.get("sponsored_retrieval_spent", 0),
+        "owner_retrieval_escrow_debited": totals.get("owner_retrieval_escrow_debited", 0),
         "new_deal_latent_requests": totals.get("new_deal_latent_requests", 0),
         "new_deal_requests": totals.get("new_deal_requests", 0),
         "new_deals_accepted": totals.get("new_deals_accepted", 0),
@@ -410,10 +413,10 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Churn` is `provider exits/final churned providers/exited capacity/peak assigned slots on churned providers`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `Overlay` is `activations/serves/expired/peak ready/peak active`. `Staged` is `attempts/rejections/cleaned/peak pending generations/peak pending MDUs`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Churn` is `provider exits/final churned providers/exited capacity/peak assigned slots on churned providers`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Sponsored` is `attempts/spend/owner escrow debit`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `Overlay` is `activations/serves/expired/peak ready/peak active`. `Staged` is `attempts/rejections/cleaned/peak pending generations/peak pending MDUs`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Churn | ReadShock | Demand | Overlay | Staged | OpCap | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Churn | ReadShock | Sponsored | Demand | Overlay | Staged | OpCap | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
@@ -429,6 +432,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['provider_cost_shock_active']}/{row['max_provider_cost_shocked_providers']}/{row['max_provider_cost_shock_storage_multiplier_bps']} | "
             f"{row['provider_churn_events']}/{row['churned_providers']}/{row['final_exited_provider_capacity']}/{row['max_churned_assigned_slots']} | "
             f"{row['retrieval_demand_shock_active']}/{row['max_retrieval_demand_multiplier_bps']}/{row['retrieval_price_direction_changes']} | "
+            f"{row['sponsored_retrieval_attempts']}/{row['sponsored_retrieval_spent']:.2f}/{row['owner_retrieval_escrow_debited']:.2f} | "
             f"{row['new_deal_latent_requests']}/{row['new_deal_requests']}/{row['new_deals_accepted']}/{row['new_deals_suppressed_price']}/{row['new_deals_rejected_price']}/{row['new_deals_rejected_capacity']} | "
             f"{row['elasticity_overlay_activations']}/{row['elasticity_overlay_serves']}/{row['elasticity_overlay_expired']}/{row['max_elasticity_overlay_ready']}/{row['max_elasticity_overlay_active']} | "
             f"{row['staged_upload_attempts']}/{row['staged_upload_rejections']}/{row['staged_upload_cleaned']}/{row['max_staged_upload_pending_generations']}/{row['max_staged_upload_pending_mdus']} | "
@@ -554,6 +558,9 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "retrieval_demand_shock_active": row.get("retrieval_demand_shock_active", 0),
             "max_retrieval_demand_multiplier_bps": row.get("max_retrieval_demand_multiplier_bps", 10_000),
             "retrieval_price_direction_changes": row.get("retrieval_price_direction_changes", 0),
+            "sponsored_retrieval_attempts": row.get("sponsored_retrieval_attempts", 0),
+            "sponsored_retrieval_spent": row.get("sponsored_retrieval_spent", 0),
+            "owner_retrieval_escrow_debited": row.get("owner_retrieval_escrow_debited", 0),
             "new_deal_latent_requests": row.get("new_deal_latent_requests", 0),
             "new_deal_requests": row.get("new_deal_requests", 0),
             "new_deals_accepted": row.get("new_deals_accepted", 0),
@@ -609,6 +616,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "replacement-grinding",
         "staged-upload-grief",
         "elasticity-overlay-scaleup",
+        "viral-public-retrieval",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
@@ -642,6 +650,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "replacement-grinding",
         "staged-upload-grief",
         "elasticity-overlay-scaleup",
+        "viral-public-retrieval",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",

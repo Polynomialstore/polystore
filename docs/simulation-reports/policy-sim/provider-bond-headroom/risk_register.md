@@ -18,6 +18,8 @@ Model provider assignment collateral as a first-class placement constraint. The 
 - Elasticity rejections: `0`
 - Elasticity overlay activations/serves/expired: `0` / `0` / `0`
 - Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
+- Sponsored retrieval attempts/spend: `0` / `0.0000`
+- Owner retrieval escrow debited: `0.0000`
 - Data-loss events: `0`
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`

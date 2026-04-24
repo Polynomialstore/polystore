@@ -10,12 +10,17 @@
     "epochs": 6,
     "retrievals_per_user_per_epoch": 3,
     "retrieval_base_fee": 0.005,
-    "retrieval_price_per_slot": 0.015
+    "retrieval_price_per_slot": 0.015,
+    "sponsored_retrieval_bps": 10000,
+    "owner_retrieval_debit_bps": 10000
   },
   "assertions": {
     "min_success_rate": 1.0,
     "min_retrieval_provider_payouts": 100.0,
     "max_data_loss_events": 0,
-    "min_retrieval_base_burned": 1.0
+    "min_retrieval_base_burned": 1.0,
+    "min_sponsored_retrieval_attempts": 1,
+    "min_sponsored_retrieval_spent": 1.0,
+    "exact_owner_retrieval_escrow_debited": 0.0
   }
 }

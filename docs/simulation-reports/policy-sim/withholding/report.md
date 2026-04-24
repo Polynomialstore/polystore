@@ -47,6 +47,8 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Staged upload retention | `0` epochs (`0` disables age cleanup) |
 | Staged upload pending cap | `0` generations (`0` means unlimited) |
 | Retrieval price/slot | `0.0100` |
+| Sponsored retrieval share | `0.00%` |
+| Owner retrieval debit share | `0.00%` |
 | Provider capacity range | `16`-`16` slots |
 | Provider bandwidth range | `0`-`0` serves/epoch (`0` means unlimited) |
 | Service class | `General` |
@@ -76,6 +78,8 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Retrieval price per slot | `0.0100` | Paid per successful provider slot served, before the configured variable burn. |
 | Retrieval target per epoch | `80` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |
 | Retrieval demand shocks | `[]` | Optional epoch-scoped retrieval demand multipliers used to test price shock response and oscillation. |
+| Sponsored retrieval share | `0.00%` | Share of retrieval attempts paid by requester/sponsor session funds instead of owner deal escrow. |
+| Owner retrieval escrow debit | `0.00%` | Share of non-sponsored retrieval base and variable cost debited to owner escrow in scenarios that explicitly model owner-paid reads. |
 | Dynamic pricing max step | `5.00%` | Per-epoch controller movement cap. Lower values are safer but slower to equilibrate. |
 | Base reward per slot | `0.0200` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
@@ -148,6 +152,8 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Elasticity spend / rejections | `0.0000` / `0` | Shows whether user-funded overflow expansion stayed inside the spend window. |
 | Elasticity overlays activated/served/expired | `0` / `0` / `0` | Confirms temporary overflow routes are created, actually used, and later removed. |
 | Elasticity overlay ready/active peak | `0` / `0` | Shows catch-up/readiness lag and total temporary routing footprint. |
+| Sponsored retrieval attempts/spend | `0` / `0.0000` | Shows public or requester-funded demand separately from owner-funded deal escrow. |
+| Owner-funded attempts / owner escrow debit | `800` / `0.0000` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |
 | Audit demand / spent | `0.0600` / `0.0600` | Shows whether enforcement evidence consumed the available audit budget. |
 | Audit backlog / exhausted epochs | `0.0000` / `0` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
 | Evidence spam claims / convictions | `0` / `0` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |
@@ -278,6 +284,8 @@ The run minted `67.3600` reward/audit units and burned `4.1200` units, for a bur
 Providers earned `118.0400` in modeled revenue against `59.2000` in modeled cost, ending with aggregate P&L `58.8400`.
 
 Retrieval accounting paid providers `60.8000`, burned `0.8000` in base fees, and burned `3.2000` in variable retrieval fees.
+
+Sponsored retrieval accounting spent `0.0000` across `0` sponsor-funded attempts; owner retrieval escrow debit was `0.0000`.
 
 Performance-tier accounting paid `0.0000` in QoS rewards.
 
@@ -471,6 +479,12 @@ Shows whether miss-driven audit demand is spending budget or accumulating carryo
 Shows unmet audit demand and exhausted-budget epochs when evidence exceeds available enforcement budget.
 
 ![Audit Backlog](graphs/audit_backlog.svg)
+
+### Sponsored Retrieval Accounting
+
+Shows sponsor-funded public retrieval spend against any owner deal-escrow debit.
+
+![Sponsored Retrieval Accounting](graphs/sponsored_retrieval_accounting.svg)
 
 ### Elasticity Spend
 

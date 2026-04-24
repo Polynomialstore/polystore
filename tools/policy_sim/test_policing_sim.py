@@ -646,6 +646,18 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertGreater(result.totals["max_retrieval_price"], result.totals["min_retrieval_price"])
         self.assertLessEqual(result.totals["retrieval_price_direction_changes"], 2)
 
+    def test_viral_public_retrieval_uses_sponsored_session_accounting(self):
+        fixture = Path(__file__).with_name("scenarios") / "viral_public_retrieval.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(result.totals["retrieval_attempts"], result.totals["sponsored_retrieval_attempts"])
+        self.assertGreater(result.totals["sponsored_retrieval_spent"], 0)
+        self.assertEqual(0, result.totals["owner_funded_retrieval_attempts"])
+        self.assertEqual(0.0, result.totals["owner_retrieval_escrow_debited"])
+        self.assertIn("sponsored_retrieval_base_spent", result.economy[0])
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)
@@ -712,6 +724,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "evidence_spam.svg").exists())
             self.assertTrue((report_dir / "graphs" / "audit_budget.svg").exists())
             self.assertTrue((report_dir / "graphs" / "audit_backlog.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "sponsored_retrieval_accounting.svg").exists())
             self.assertTrue((report_dir / "graphs" / "elasticity_spend.svg").exists())
             self.assertTrue((report_dir / "graphs" / "elasticity_overlay_routes.svg").exists())
             self.assertTrue((report_dir / "graphs" / "staged_upload_pressure.svg").exists())
@@ -753,6 +766,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Evidence Spam Economics](graphs/evidence_spam.svg)", report_text)
             self.assertIn("![Audit Budget](graphs/audit_budget.svg)", report_text)
             self.assertIn("![Audit Backlog](graphs/audit_backlog.svg)", report_text)
+            self.assertIn("![Sponsored Retrieval Accounting](graphs/sponsored_retrieval_accounting.svg)", report_text)
             self.assertIn("![Elasticity Spend](graphs/elasticity_spend.svg)", report_text)
             self.assertIn("![Elasticity Overlay Routes](graphs/elasticity_overlay_routes.svg)", report_text)
             self.assertIn("![Staged Upload Pressure](graphs/staged_upload_pressure.svg)", report_text)
@@ -764,6 +778,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("max_underbonded_providers", signal_text)
             self.assertIn("repair_timeouts", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)
+            self.assertIn("sponsored_retrieval_spent", signal_text)
             self.assertIn("elasticity_overlay_activations", signal_text)
             self.assertIn("staged_uploads", signal_text)
             risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")

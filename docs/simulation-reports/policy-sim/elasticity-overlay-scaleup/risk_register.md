@@ -19,6 +19,8 @@ Model the positive path for user-funded overflow capacity. Sustained hot retriev
 - Elasticity rejections: `0`
 - Elasticity overlay activations/serves/expired: `48` / `393` / `18`
 - Elasticity overlay rejections/final active/peak ready: `0` / `30` / `24`
+- Sponsored retrieval attempts/spend: `0` / `0.0000`
+- Owner retrieval escrow debited: `0.0000`
 - Data-loss events: `0`
 - Saturated responses: `2463`
 - Performance Fail-tier serves: `0`

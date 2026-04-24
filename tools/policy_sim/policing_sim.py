@@ -149,6 +149,8 @@ class SimConfig:
     retrieval_demand_shocks: tuple[dict[str, Any], ...] = ()
     retrieval_base_fee: float = 0.001
     retrieval_burn_bps: int = 500
+    sponsored_retrieval_bps: int = 0
+    owner_retrieval_debit_bps: int = 0
     dynamic_pricing_max_step_bps: int = 500
     base_reward_per_slot: float = 0.02
     audit_budget_per_epoch: float = 1.0
@@ -263,6 +265,10 @@ class SimConfig:
             raise ValueError(f"unknown enforcement_mode {self.enforcement_mode!r}")
         if self.retrieval_burn_bps < 0 or self.retrieval_burn_bps > 10_000:
             raise ValueError("retrieval_burn_bps must be in [0, 10000]")
+        if self.sponsored_retrieval_bps < 0 or self.sponsored_retrieval_bps > 10_000:
+            raise ValueError("sponsored_retrieval_bps must be in [0, 10000]")
+        if self.owner_retrieval_debit_bps < 0 or self.owner_retrieval_debit_bps > 10_000:
+            raise ValueError("owner_retrieval_debit_bps must be in [0, 10000]")
         if self.new_deal_requests_per_epoch < 0:
             raise ValueError("new_deal_requests_per_epoch must be non-negative")
         if self.storage_demand_price_ceiling < 0:
@@ -631,6 +637,11 @@ class EpochMetrics:
     retrieval_base_burned: float = 0.0
     retrieval_variable_burned: float = 0.0
     retrieval_provider_payouts: float = 0.0
+    sponsored_retrieval_attempts: int = 0
+    owner_funded_retrieval_attempts: int = 0
+    sponsored_retrieval_base_spent: float = 0.0
+    sponsored_retrieval_variable_spent: float = 0.0
+    owner_retrieval_escrow_debited: float = 0.0
     reward_pool_minted: float = 0.0
     reward_paid: float = 0.0
     reward_burned: float = 0.0
@@ -1419,6 +1430,15 @@ class PolicySimulator:
     ) -> None:
         metrics.retrieval_attempts += 1
         metrics.retrieval_base_burned += self.config.retrieval_base_fee
+        sponsored = self._retrieval_is_sponsored()
+        if sponsored:
+            metrics.sponsored_retrieval_attempts += 1
+            metrics.sponsored_retrieval_base_spent += self.config.retrieval_base_fee
+        else:
+            metrics.owner_funded_retrieval_attempts += 1
+            metrics.owner_retrieval_escrow_debited += (
+                self.config.retrieval_base_fee * self.config.owner_retrieval_debit_bps / 10_000
+            )
         deal = self.rng.choice(self.deals)
         self.deal_epoch_retrievals[deal.deal_id] = self.deal_epoch_retrievals.get(deal.deal_id, 0) + 1
         order = list(range(deal.n))
@@ -1492,7 +1512,7 @@ class PolicySimulator:
 
         if successes >= deal.k:
             metrics.retrieval_successes += 1
-            self._settle_retrieval_payment(served_providers[: deal.k], metrics)
+            self._settle_retrieval_payment(served_providers[: deal.k], metrics, sponsored=sponsored)
             for slot in failed_slots:
                 if slot.direct_served == 0:
                     slot.deputy_served += 1
@@ -1521,6 +1541,13 @@ class PolicySimulator:
                 provider_id,
             ),
         )
+
+    def _retrieval_is_sponsored(self) -> bool:
+        if self.config.sponsored_retrieval_bps <= 0:
+            return False
+        if self.config.sponsored_retrieval_bps >= 10_000:
+            return True
+        return self.rng.randrange(10_000) < self.config.sponsored_retrieval_bps
 
     def _serve_from_provider(self, provider_id: str, online: dict[str, bool]) -> tuple[str, float, str]:
         provider = self.providers[provider_id]
@@ -1614,7 +1641,12 @@ class PolicySimulator:
             return self.config.silver_reward_multiplier_bps
         return self.config.fail_reward_multiplier_bps
 
-    def _settle_retrieval_payment(self, provider_ids: list[tuple[str, str]], metrics: EpochMetrics) -> None:
+    def _settle_retrieval_payment(
+        self,
+        provider_ids: list[tuple[str, str]],
+        metrics: EpochMetrics,
+        sponsored: bool = False,
+    ) -> None:
         if not provider_ids:
             return
         variable = self.retrieval_price_per_slot * len(provider_ids)
@@ -1623,6 +1655,10 @@ class PolicySimulator:
         per_provider = payout / len(provider_ids)
         metrics.retrieval_variable_burned += burn
         metrics.retrieval_provider_payouts += payout
+        if sponsored:
+            metrics.sponsored_retrieval_variable_spent += variable
+        else:
+            metrics.owner_retrieval_escrow_debited += variable * self.config.owner_retrieval_debit_bps / 10_000
         for provider_id, _tier in provider_ids:
             self.providers[provider_id].retrieval_revenue += per_provider
 
@@ -2324,6 +2360,11 @@ class PolicySimulator:
                 "retrieval_base_burned": metrics.retrieval_base_burned,
                 "retrieval_variable_burned": metrics.retrieval_variable_burned,
                 "retrieval_provider_payouts": metrics.retrieval_provider_payouts,
+                "sponsored_retrieval_attempts": metrics.sponsored_retrieval_attempts,
+                "owner_funded_retrieval_attempts": metrics.owner_funded_retrieval_attempts,
+                "sponsored_retrieval_base_spent": metrics.sponsored_retrieval_base_spent,
+                "sponsored_retrieval_variable_spent": metrics.sponsored_retrieval_variable_spent,
+                "owner_retrieval_escrow_debited": metrics.owner_retrieval_escrow_debited,
                 "reward_pool_minted": metrics.reward_pool_minted,
                 "reward_paid": metrics.reward_paid,
                 "reward_burned": metrics.reward_burned,
@@ -2753,6 +2794,11 @@ class PolicySimulator:
             "retrieval_base_burned",
             "retrieval_variable_burned",
             "retrieval_provider_payouts",
+            "sponsored_retrieval_attempts",
+            "owner_funded_retrieval_attempts",
+            "sponsored_retrieval_base_spent",
+            "sponsored_retrieval_variable_spent",
+            "owner_retrieval_escrow_debited",
             "reward_pool_minted",
             "reward_paid",
             "reward_burned",
@@ -2825,6 +2871,9 @@ class PolicySimulator:
         )
         totals["platinum_share"] = totals["platinum_serves"] / tiered_serves if tiered_serves else 0.0
         totals["performance_fail_rate"] = totals["fail_serves"] / tiered_serves if tiered_serves else 0.0
+        totals["sponsored_retrieval_spent"] = (
+            totals["sponsored_retrieval_base_spent"] + totals["sponsored_retrieval_variable_spent"]
+        )
         totals["min_provider_pnl"] = min((p.pnl for p in self.providers.values()), default=0.0)
         totals["max_provider_pnl"] = max((p.pnl for p in self.providers.values()), default=0.0)
         totals["max_provider_cost_shocked_providers"] = max(
@@ -3331,6 +3380,8 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
         "repair_backoff_epochs": args.repair_backoff_epochs,
         "repair_pending_timeout_epochs": args.repair_pending_timeout_epochs,
         "enforcement_mode": args.enforcement_mode,
+        "sponsored_retrieval_bps": args.sponsored_retrieval_bps,
+        "owner_retrieval_debit_bps": args.owner_retrieval_debit_bps,
         "elasticity_overlay_providers_per_epoch": args.elasticity_overlay_providers_per_epoch,
         "elasticity_overlay_max_providers_per_deal": args.elasticity_overlay_max_providers_per_deal,
         "elasticity_overlay_ready_delay_epochs": args.elasticity_overlay_ready_delay_epochs,
@@ -3451,6 +3502,11 @@ def print_summary(result: SimResult) -> None:
             "serves={elasticity_overlay_serves} rejections={elasticity_overlay_rejections} "
             "final_active={final_elasticity_overlay_active}".format(**totals)
         )
+    if totals.get("sponsored_retrieval_attempts", 0) or totals.get("owner_retrieval_escrow_debited", 0):
+        print(
+            "sponsored_retrievals attempts={sponsored_retrieval_attempts} "
+            "spent={sponsored_retrieval_spent:.4f} owner_escrow_debited={owner_retrieval_escrow_debited:.4f}".format(**totals)
+        )
     if result.assertions:
         failed = [item for item in result.assertions if not item.passed]
         status = "failed" if failed else "passed"
@@ -3509,6 +3565,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-backoff-epochs", type=int)
     parser.add_argument("--repair-pending-timeout-epochs", type=int)
     parser.add_argument("--enforcement-mode", choices=sorted(ENFORCEMENT_ORDER))
+    parser.add_argument("--sponsored-retrieval-bps", type=int)
+    parser.add_argument("--owner-retrieval-debit-bps", type=int)
     parser.add_argument("--elasticity-overlay", action="store_true")
     parser.add_argument("--elasticity-overlay-providers-per-epoch", type=int)
     parser.add_argument("--elasticity-overlay-max-providers-per-deal", type=int)

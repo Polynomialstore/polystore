@@ -161,6 +161,8 @@ are supported in scenario files:
 - `dominant_operator_provider_bps`
 - `operator_assignment_cap_per_deal`
 - `retrieval_demand_shocks`
+- `sponsored_retrieval_bps`
+- `owner_retrieval_debit_bps`
 - `new_deal_requests_per_epoch`
 - `storage_demand_price_ceiling`
 - `storage_demand_reference_price`
@@ -219,6 +221,8 @@ The simulator mirrors current protocol concepts:
 - User-funded elasticity overlays that activate temporary overflow routes,
   wait for readiness, serve retrievals, and expire by TTL without becoming
   base durable slots.
+- Sponsored retrieval sessions that separate requester-funded public demand
+  from deal-owner escrow debit.
 - Staged upload grief pressure where provisional generations are bounded by
   retention TTL, preflight rejection, and pending-generation caps.
 - Demand-side storage admission accounting for latent new deal requests,
@@ -284,12 +288,13 @@ provider P&L, provider churn, burn/mint ratio, price trajectory, capacity
 utilization, saturation/repair pressure, repair backlog, repair readiness,
 provider supply entry, provider bond headroom, high-bandwidth promotion, and hot
 retrieval routing, performance tiers, operator concentration, evidence pressure,
-audit budget, elasticity spend, elasticity overlay routes, and staged upload
-pressure.
+audit budget, sponsored retrieval accounting, elasticity spend, elasticity
+overlay routes, and staged upload pressure.
 `signals.json` records derived
-availability, saturation, repair, capacity, economic, elasticity-overlay,
-staged-upload, regional, high-bandwidth, performance-market, concentration, and
-provider bottleneck signals for downstream analysis.
+availability, saturation, repair, capacity, economic, sponsored-retrieval,
+elasticity-overlay, staged-upload, regional, high-bandwidth,
+performance-market, concentration, and provider bottleneck signals for
+downstream analysis.
 
 The economics in these reports are unitless simulator accounting. They are
 intended to make assumptions explicit: storage price, retrieval price, base

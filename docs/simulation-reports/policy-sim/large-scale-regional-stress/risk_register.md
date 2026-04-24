@@ -20,6 +20,8 @@ Model a population-scale network with more than one thousand storage providers a
 - Elasticity rejections: `0`
 - Elasticity overlay activations/serves/expired: `0` / `0` / `0`
 - Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
+- Sponsored retrieval attempts/spend: `0` / `0.0000`
+- Owner retrieval escrow debited: `0.0000`
 - Data-loss events: `0`
 - Saturated responses: `15482`
 - Performance Fail-tier serves: `0`

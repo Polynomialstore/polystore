@@ -202,10 +202,10 @@ SCENARIO_GUIDES = {
         "title": "Viral Public Retrieval Spike",
         "intent": (
             "Model a legitimate public-demand spike. The system should pay providers for real bandwidth, burn the configured fees, "
-            "and avoid treating popularity as misbehavior."
+            "avoid treating popularity as misbehavior, and isolate deal-owner escrow from sponsored public demand."
         ),
-        "expected": "High retrieval volume succeeds, provider payouts rise, and base burns are visible without unnecessary repair.",
-        "review": "Use this to separate anti-wash controls from legitimate popularity handling.",
+        "expected": "High retrieval volume succeeds, provider payouts rise, base burns and sponsored-session spend are visible, owner escrow is not debited, and unnecessary repair stays quiet.",
+        "review": "Use this to separate anti-wash controls from legitimate popularity handling and to plan sponsored-session keeper/accounting tests.",
     },
     "high-bandwidth-promotion": {
         "title": "High-Bandwidth Provider Promotion",
@@ -471,6 +471,9 @@ SWEEP_METRICS = [
     "average_latency_ms",
     "performance_fail_rate",
     "performance_reward_paid",
+    "sponsored_retrieval_attempts",
+    "sponsored_retrieval_spent",
+    "owner_retrieval_escrow_debited",
     "retrieval_latent_attempts",
     "retrieval_demand_shock_active",
     "max_retrieval_demand_multiplier_bps",
@@ -579,6 +582,8 @@ SWEEP_CONFIG_KEYS = [
     "storage_demand_max_bps",
     "storage_price",
     "retrieval_price_per_slot",
+    "sponsored_retrieval_bps",
+    "owner_retrieval_debit_bps",
     "base_reward_per_slot",
     "audit_budget_per_epoch",
     "evidence_spam_claims_per_epoch",
@@ -854,6 +859,12 @@ def compute_signals(
             "max_retrieval_demand_multiplier_bps": fnum(totals.get("max_retrieval_demand_multiplier_bps")),
             "storage_price_direction_changes": fnum(totals.get("storage_price_direction_changes")),
             "retrieval_price_direction_changes": fnum(totals.get("retrieval_price_direction_changes")),
+            "sponsored_retrieval_attempts": fnum(totals.get("sponsored_retrieval_attempts")),
+            "owner_funded_retrieval_attempts": fnum(totals.get("owner_funded_retrieval_attempts")),
+            "sponsored_retrieval_base_spent": fnum(totals.get("sponsored_retrieval_base_spent")),
+            "sponsored_retrieval_variable_spent": fnum(totals.get("sponsored_retrieval_variable_spent")),
+            "sponsored_retrieval_spent": fnum(totals.get("sponsored_retrieval_spent")),
+            "owner_retrieval_escrow_debited": fnum(totals.get("owner_retrieval_escrow_debited")),
             "elasticity_spent": fnum(totals.get("elasticity_spent")),
             "elasticity_rejections": fnum(totals.get("elasticity_rejections")),
             "elasticity_overlay_activations": fnum(totals.get("elasticity_overlay_activations")),
@@ -1116,6 +1127,8 @@ def write_report_md(
         f"| Staged upload retention | `{fmt_num(config.get('staged_upload_retention_epochs'))}` epochs (`0` disables age cleanup) |",
         f"| Staged upload pending cap | `{fmt_num(config.get('staged_upload_max_pending_generations'))}` generations (`0` means unlimited) |",
         f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
+        f"| Sponsored retrieval share | `{fmt_bps(config.get('sponsored_retrieval_bps'))}` |",
+        f"| Owner retrieval debit share | `{fmt_bps(config.get('owner_retrieval_debit_bps'))}` |",
         f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
         f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
         f"| Service class | `{config.get('service_class')}` |",
@@ -1369,6 +1382,12 @@ def write_report_md(
             "",
             "![Audit Backlog](graphs/audit_backlog.svg)",
             "",
+            "### Sponsored Retrieval Accounting",
+            "",
+            "Shows sponsor-funded public retrieval spend against any owner deal-escrow debit.",
+            "",
+            "![Sponsored Retrieval Accounting](graphs/sponsored_retrieval_accounting.svg)",
+            "",
             "### Elasticity Spend",
             "",
             "Shows demand-funded elasticity spend and rejected expansion attempts.",
@@ -1571,6 +1590,8 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Retrieval price per slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` | Paid per successful provider slot served, before the configured variable burn. |",
         f"| Retrieval target per epoch | `{fmt_num(config.get('retrieval_target_per_epoch'))}` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |",
         f"| Retrieval demand shocks | `{json.dumps(config.get('retrieval_demand_shocks') or [])}` | Optional epoch-scoped retrieval demand multipliers used to test price shock response and oscillation. |",
+        f"| Sponsored retrieval share | `{fmt_bps(config.get('sponsored_retrieval_bps'))}` | Share of retrieval attempts paid by requester/sponsor session funds instead of owner deal escrow. |",
+        f"| Owner retrieval escrow debit | `{fmt_bps(config.get('owner_retrieval_debit_bps'))}` | Share of non-sponsored retrieval base and variable cost debited to owner escrow in scenarios that explicitly model owner-paid reads. |",
         f"| Dynamic pricing max step | `{fmt_bps(config.get('dynamic_pricing_max_step_bps'))}` | Per-epoch controller movement cap. Lower values are safer but slower to equilibrate. |",
         f"| Base reward per slot | `{fmt_money(config.get('base_reward_per_slot'))}` | Modeled issuance/subsidy paid only to reward-eligible active slots. |",
         f"| Provider storage cost/slot/epoch | `{fmt_money(config.get('provider_storage_cost_per_slot_epoch'))}` | Simplified provider cost basis; jitter may create marginal-provider distress. |",
@@ -1641,6 +1662,8 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Elasticity spend / rejections | `{fmt_money(economics['elasticity_spent'])}` / `{fmt_num(economics['elasticity_rejections'])}` | Shows whether user-funded overflow expansion stayed inside the spend window. |",
         f"| Elasticity overlays activated/served/expired | `{fmt_num(economics['elasticity_overlay_activations'])}` / `{fmt_num(economics['elasticity_overlay_serves'])}` / `{fmt_num(economics['elasticity_overlay_expired'])}` | Confirms temporary overflow routes are created, actually used, and later removed. |",
         f"| Elasticity overlay ready/active peak | `{fmt_num(economics['max_elasticity_overlay_ready'])}` / `{fmt_num(economics['max_elasticity_overlay_active'])}` | Shows catch-up/readiness lag and total temporary routing footprint. |",
+        f"| Sponsored retrieval attempts/spend | `{fmt_num(economics['sponsored_retrieval_attempts'])}` / `{fmt_money(economics['sponsored_retrieval_spent'])}` | Shows public or requester-funded demand separately from owner-funded deal escrow. |",
+        f"| Owner-funded attempts / owner escrow debit | `{fmt_num(economics['owner_funded_retrieval_attempts'])}` / `{fmt_money(economics['owner_retrieval_escrow_debited'])}` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |",
         f"| Audit demand / spent | `{fmt_money(economics['audit_budget_demand'])}` / `{fmt_money(economics['audit_budget_spent'])}` | Shows whether enforcement evidence consumed the available audit budget. |",
         f"| Audit backlog / exhausted epochs | `{fmt_money(economics['audit_budget_backlog'])}` / `{fmt_num(economics['audit_budget_exhausted_epochs'])}` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |",
         f"| Evidence spam claims / convictions | `{fmt_num(economics['evidence_spam_claims'])}` / `{fmt_num(economics['evidence_spam_convictions'])}` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |",
@@ -1980,6 +2003,10 @@ def assertion_meaning(name: str) -> str:
         "min_retrieval_base_burned": "Requester/session demand must pay a non-zero base burn.",
         "min_retrieval_variable_burned": "Variable retrieval activity must contribute non-zero burn.",
         "min_retrieval_provider_payouts": "Legitimate high demand must pay providers for bandwidth.",
+        "min_sponsored_retrieval_attempts": "Sponsored public retrieval fixture must route demand through sponsor/requester-funded sessions.",
+        "min_sponsored_retrieval_spent": "Sponsored public retrieval fixture must pay non-zero session spend.",
+        "max_owner_retrieval_escrow_debited": "Sponsored public retrieval should not unexpectedly debit owner deal escrow.",
+        "exact_owner_retrieval_escrow_debited": "Sponsored public retrieval should keep owner deal escrow unchanged.",
         "min_elasticity_rejections": "Spend cap must reject excess elasticity demand.",
         "max_elasticity_spent": "Elasticity spend must not exceed the configured cap.",
         "min_withheld_responses": "Withholding fixture must create visible withheld-response evidence.",
@@ -2057,6 +2084,9 @@ def build_economic_narrative(
         f"ending with aggregate P&L `{fmt_money(totals.get('provider_pnl'))}`.",
         f"Retrieval accounting paid providers `{fmt_money(totals.get('retrieval_provider_payouts'))}`, burned `{fmt_money(totals.get('retrieval_base_burned'))}` in base fees, "
         f"and burned `{fmt_money(totals.get('retrieval_variable_burned'))}` in variable retrieval fees.",
+        f"Sponsored retrieval accounting spent `{fmt_money(totals.get('sponsored_retrieval_spent'))}` across "
+        f"`{fmt_num(totals.get('sponsored_retrieval_attempts'))}` sponsor-funded attempts; owner retrieval escrow debit was "
+        f"`{fmt_money(totals.get('owner_retrieval_escrow_debited'))}`.",
         f"Performance-tier accounting paid `{fmt_money(totals.get('performance_reward_paid'))}` in QoS rewards.",
         f"Audit accounting saw `{fmt_money(totals.get('audit_budget_demand'))}` of demand, spent `{fmt_money(totals.get('audit_budget_spent'))}`, "
         f"and ended with `{fmt_money(totals.get('audit_budget_backlog'))}` backlog after `{fmt_num(totals.get('audit_budget_exhausted'))}` exhausted epochs.",
@@ -2295,6 +2325,19 @@ def write_risk_register(
                 "followup": "Review overlay readiness proofs, TTL defaults, spend-window UX, gateway route ordering, and whether overlay providers affect audit or reward eligibility.",
             }
         )
+    if fnum(totals.get("owner_retrieval_escrow_debited")) > 0:
+        rows.append(
+            {
+                "risk": "Owner escrow drained by retrieval demand",
+                "severity": "medium",
+                "evidence": (
+                    f"Owner retrieval escrow was debited {fmt_money(totals.get('owner_retrieval_escrow_debited'))} while "
+                    f"sponsored retrieval spend was {fmt_money(totals.get('sponsored_retrieval_spent'))}."
+                ),
+                "impact": "Public demand can unexpectedly consume deal-owner funds if sponsor/requester-funded session accounting is absent or incomplete.",
+                "followup": "Review sponsored-session funding, owner escrow isolation, gateway quote display, and close/refund semantics.",
+            }
+        )
     if fnum(totals.get("saturated_responses")):
         rows.append(
             {
@@ -2483,6 +2526,8 @@ def write_risk_register(
             f"- Elasticity rejections: `{fmt_num(elasticity_rejections)}`",
             f"- Elasticity overlay activations/serves/expired: `{fmt_num(totals.get('elasticity_overlay_activations'))}` / `{fmt_num(totals.get('elasticity_overlay_serves'))}` / `{fmt_num(totals.get('elasticity_overlay_expired'))}`",
             f"- Elasticity overlay rejections/final active/peak ready: `{fmt_num(totals.get('elasticity_overlay_rejections'))}` / `{fmt_num(totals.get('final_elasticity_overlay_active'))}` / `{fmt_num(totals.get('max_elasticity_overlay_ready'))}`",
+            f"- Sponsored retrieval attempts/spend: `{fmt_num(totals.get('sponsored_retrieval_attempts'))}` / `{fmt_money(totals.get('sponsored_retrieval_spent'))}`",
+            f"- Owner retrieval escrow debited: `{fmt_money(totals.get('owner_retrieval_escrow_debited'))}`",
             f"- Data-loss events: `{fmt_num(totals.get('data_loss_events'))}`",
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
             f"- Performance Fail-tier serves: `{fmt_num(totals.get('fail_serves'))}`",
@@ -2627,6 +2672,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "operator-concentration-cap",
         "staged-upload-grief",
         "elasticity-overlay-scaleup",
+        "viral-public-retrieval",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -2677,6 +2723,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a gateway/provider-daemon planning ticket that names staged-generation TTL, pending-generation caps, preflight rejection semantics, cleanup events, and operator dry-run/apply tooling.")
     elif recommendation == "Candidate for implementation planning." and scenario == "elasticity-overlay-scaleup":
         lines.append("Create a keeper/gateway/provider-daemon planning ticket that names MsgSignalSaturation inputs, overlay readiness proof, spend-window accounting, TTL expiration, route preference, and overlay reward/audit rules.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "viral-public-retrieval":
+        lines.append("Create a keeper/gateway planning ticket that names sponsored-session funding, owner escrow isolation, retrieval burn/payout accounting, quote display, and close/refund semantics.")
     elif recommendation == "Candidate for implementation planning." and scenario == "deputy-evidence-spam":
         lines.append("Create a keeper/runtime planning ticket that names evidence bond escrow, burn-on-expiry, conviction-gated bounty payout, spam throttles, and deputy reputation inputs.")
     elif recommendation == "Candidate for implementation planning.":
@@ -2853,6 +2901,17 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("audit_budget_backlog")) for row in economy],
         secondary=[fnum(row.get("audit_budget_exhausted")) for row in economy],
         secondary_label="Exhausted Epoch",
+    )
+    write_line_svg(
+        graphs_dir / "sponsored_retrieval_accounting.svg",
+        "Sponsored Retrieval Spend",
+        [
+            fnum(row.get("sponsored_retrieval_base_spent"))
+            + fnum(row.get("sponsored_retrieval_variable_spent"))
+            for row in economy
+        ],
+        secondary=[fnum(row.get("owner_retrieval_escrow_debited")) for row in economy],
+        secondary_label="Owner Escrow Debit",
     )
     write_line_svg(
         graphs_dir / "elasticity_spend.svg",
@@ -3126,6 +3185,9 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("retrieval_demand_shock_active", "Whether a retrieval demand shock was active."),
         ("max_retrieval_demand_multiplier_bps", "Peak modeled retrieval-demand multiplier."),
         ("retrieval_price_direction_changes", "Whether retrieval pricing oscillated."),
+        ("sponsored_retrieval_attempts", "How many retrieval attempts used sponsor/requester-funded sessions."),
+        ("sponsored_retrieval_spent", "How much sponsor/requester-funded retrieval spend was modeled."),
+        ("owner_retrieval_escrow_debited", "Whether public reads drained owner deal escrow."),
         ("new_deal_latent_requests", "How much write demand existed before price elasticity."),
         ("new_deal_requests", "How much modeled write demand remained after price elasticity."),
         ("new_deals_accepted", "How much new storage demand entered the network."),
@@ -3204,7 +3266,14 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         if delta > 0:
             return "More providers are economically distressed."
         return "Provider distress did not increase."
-    if key in {"retrieval_base_burned", "retrieval_variable_burned", "retrieval_provider_payouts"}:
+    if key in {
+        "retrieval_base_burned",
+        "retrieval_variable_burned",
+        "retrieval_provider_payouts",
+        "sponsored_retrieval_attempts",
+        "sponsored_retrieval_spent",
+        "owner_retrieval_escrow_debited",
+    }:
         return "Retrieval market accounting changed with demand volume or price settings."
     if key in {
         "retrieval_latent_attempts",
@@ -3392,6 +3461,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "elasticity overlay expansion was rejected")
     if fnum(totals.get("elasticity_overlay_activations")) > 0 and fnum(totals.get("elasticity_overlay_serves")) == 0:
         raise_to("medium", "elasticity overlays activated but did not serve reads")
+    if fnum(totals.get("owner_retrieval_escrow_debited")) > 0:
+        raise_to("medium", "owner retrieval escrow was debited")
     if fnum(totals.get("staged_upload_rejections")) > 0:
         raise_to("medium", "staged upload preflight rejections occurred")
     if not reasons:
@@ -3636,6 +3707,9 @@ def sweep_metric_meaning(key: str) -> str:
         "max_retrieval_demand_multiplier_bps": "Peak modeled read-demand multiplier.",
         "storage_price_direction_changes": "Storage price controller direction changes across the run.",
         "retrieval_price_direction_changes": "Retrieval price controller direction changes across the run.",
+        "sponsored_retrieval_attempts": "Retrieval attempts funded by requester/sponsor sessions.",
+        "sponsored_retrieval_spent": "Total sponsored retrieval base plus variable spend.",
+        "owner_retrieval_escrow_debited": "Deal-owner escrow debited for non-sponsored retrievals.",
         "elasticity_overlay_activations": "Temporary overflow routes activated by user-funded elasticity.",
         "elasticity_overlay_expired": "Temporary overflow routes removed by TTL.",
         "elasticity_overlay_serves": "Retrieval serves completed by overlay routes.",

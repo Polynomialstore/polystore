@@ -6,8 +6,8 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 21 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
-| `further simulation review` | 13 | The fixture passed but should inform parameter or product policy before implementation work. |
+| `implementation planning` | 22 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `further simulation review` | 12 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
 ## Scenario-to-Implementation Map
@@ -45,7 +45,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`subsidy-farming`](subsidy-farming/report.md) | `implementation planning` | base reward compliance tests | Add tests proving idle or non-compliant responsibility cannot farm base rewards profitably. | `compliance-gated base rewards`, `subsidy leakage metrics`, `operator concentration checks` | No process e2e until keeper reward gating is complete. |
 | [`sustained-non-response`](sustained-non-response/report.md) | `implementation planning` | keeper delinquency repair | Add per-slot delinquency tests for repeated non-response, reward exclusion, repair start, and replacement selection. | `non-response accumulator`, `delinquency reason codes`, `reward exclusion event` | Provider timeout/blackhole e2e after keeper state is deterministic. |
 | [`underpriced-storage`](underpriced-storage/report.md) | `further simulation review` | economic policy calibration | Compare storage floors, base rewards, and provider cost assumptions before encoding governance defaults. | `dynamic pricing state`, `provider cost assumptions`, `profitability dashboards` | No process e2e yet; this is a parameter-calibration fixture. |
-| [`viral-public-retrieval`](viral-public-retrieval/report.md) | `further simulation review` | sponsored retrieval accounting | Add sponsored-session tests proving public demand pays providers without draining owner escrow unexpectedly. | `sponsored session funding`, `owner escrow isolation`, `hot route observability` | Public retrieval spike against one deal with requester/sponsor funding. |
+| [`viral-public-retrieval`](viral-public-retrieval/report.md) | `implementation planning` | sponsored retrieval accounting | Add sponsored-session tests proving public demand pays providers without draining owner escrow unexpectedly. | `sponsored session funding`, `owner escrow isolation`, `hot route observability` | Public retrieval spike against one deal with requester/sponsor funding. |
 | [`wash-retrieval`](wash-retrieval/report.md) | `further simulation review` | session fee and credit-cap keeper tests | Add retrieval fee, burn, credit-cap, and requester-paid session accounting tests. | `requester-paid session accounting`, `burn ledger`, `credit cap enforcement` | Synthetic wash traffic e2e only after keeper accounting exists. |
 | [`withholding`](withholding/report.md) | `implementation planning` | gateway fallback plus keeper evidence | Add tests for threshold non-response evidence and deputy-served miss accounting before punitive policy. | `threshold evidence case`, `deputy transcript accounting`, `gateway fallback telemetry` | Provider refuses retrieval responses; gateway routes around and records attributable failure. |
 
