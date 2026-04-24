@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
@@ -67,6 +68,57 @@ func setupManualSlotRepair(t *testing.T, serviceHint string) manualSlotRepairSet
 		owner:     owner,
 		candidate: deal.Mode2Slots[1].Provider,
 	}
+}
+
+func TestStartSlotRepairClearsStaleReadiness(t *testing.T) {
+	setup := setupManualSlotRepair(t, "General:rs=8+4")
+
+	markMode2RepairReadyForTest(t, setup.f, setup.ctx, setup.deal.Id, 0, 0)
+
+	_, err := setup.msgServer.StartSlotRepair(setup.ctx, &types.MsgStartSlotRepair{
+		Creator:         setup.owner,
+		DealId:          setup.deal.Id,
+		Slot:            0,
+		PendingProvider: setup.candidate,
+	})
+	require.NoError(t, err)
+
+	_, err = setup.f.keeper.Mode2RepairReadiness.Get(setup.ctx, collections.Join(setup.deal.Id, uint32(0)))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+}
+
+func TestCompleteSlotRepairRejectsStaleReadinessGeneration(t *testing.T) {
+	setup := setupManualSlotRepair(t, "General:rs=8+4")
+
+	_, err := setup.msgServer.StartSlotRepair(setup.ctx, &types.MsgStartSlotRepair{
+		Creator:         setup.owner,
+		DealId:          setup.deal.Id,
+		Slot:            0,
+		PendingProvider: setup.candidate,
+	})
+	require.NoError(t, err)
+
+	deal, err := setup.f.keeper.Deals.Get(setup.ctx, setup.deal.Id)
+	require.NoError(t, err)
+	targetGen := deal.Mode2Slots[0].RepairTargetGen
+	require.NoError(t, setup.f.keeper.Mode2RepairReadiness.Set(
+		setup.ctx,
+		collections.Join(setup.deal.Id, uint32(0)),
+		targetGen+2,
+	))
+
+	_, err = setup.msgServer.CompleteSlotRepair(setup.ctx, &types.MsgCompleteSlotRepair{
+		Creator: setup.candidate,
+		DealId:  setup.deal.Id,
+		Slot:    0,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "slot repair is not ready")
+
+	deal, err = setup.f.keeper.Deals.Get(setup.ctx, setup.deal.Id)
+	require.NoError(t, err)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_REPAIRING, deal.Mode2Slots[0].Status)
+	require.Equal(t, setup.candidate, deal.Mode2Slots[0].PendingProvider)
 }
 
 func TestStartSlotRepairRejectsIneligiblePendingProvider(t *testing.T) {
