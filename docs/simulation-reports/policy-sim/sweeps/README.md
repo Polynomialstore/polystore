@@ -25,6 +25,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `price-step-controller` | 4 | 0 | Controller sensitivity sweep for dynamic pricing max-step parameters in the pricing-bounds fixture. | [summary](price-step-controller/sweep_summary.md) |
 | `provider-churn-caps` | 7 | 0 | Sensitivity sweep for provider economic churn caps versus repair throughput under the economic churn fixture. | [summary](provider-churn-caps/sweep_summary.md) |
 | `provider-reliability-large-scale` | 3 | 0 | Population-scale sensitivity sweep for heterogeneous provider online-probability floors. | [summary](provider-reliability-large-scale/sweep_summary.md) |
+| `repair-candidate-exhaustion-controls` | 7 | 0 | Sensitivity sweep for replacement capacity, retry caps, and cooldowns when repair candidates are exhausted or saturated. | [summary](repair-candidate-exhaustion-controls/sweep_summary.md) |
 | `repair-throughput-large-scale` | 3 | 0 | Population-scale sensitivity sweep for repair-start throughput under the large regional stress fixture. | [summary](repair-throughput-large-scale/sweep_summary.md) |
 | `replacement-grinding-controls` | 7 | 0 | Sensitivity sweep for pending-repair timeout, cooldown, and per-slot attempt-cap controls under replacement grinding. | [summary](replacement-grinding-controls/sweep_summary.md) |
 | `route-attempt-large-scale` | 3 | 1 | Population-scale sensitivity sweep for retrieval route-attempt limits during correlated regional stress. | [summary](route-attempt-large-scale/sweep_summary.md) |
