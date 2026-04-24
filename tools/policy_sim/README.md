@@ -220,6 +220,9 @@ The simulator mirrors current protocol concepts:
 - Explicit post-expiry retrieval rejection accounting so expired content
   requests are not confused with live availability failures or billable
   retrieval sessions.
+- Explicit post-close retrieval rejection accounting so intentionally closed
+  content requests are not confused with live availability failures or billable
+  retrieval sessions.
 - Basic economic accounting for retrieval fees, rewards, audit budget, provider
   P&L, slashing, and elasticity spend caps.
 - Epoch-scoped provider cost shocks that surface churn pressure.

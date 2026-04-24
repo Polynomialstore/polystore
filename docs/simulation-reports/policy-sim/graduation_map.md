@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 26 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 27 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 12 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -15,6 +15,7 @@ This report converts the committed simulator corpus into implementation planning
 | Scenario | Status | Target | Next Test Slice | Missing Surfaces | E2E Posture |
 |---|---|---|---|---|---|
 | [`audit-budget-exhaustion`](audit-budget-exhaustion/report.md) | `implementation planning` | audit budget keeper tests | Add audit-budget demand/spend/backlog tests proving audit demand is capped and backlog is explicit. | `audit budget state`, `audit backlog query`, `evidence bounty accounting` | No process e2e until audit sessions are wired through provider-daemon. |
+| [`closed-retrieval-rejection`](closed-retrieval-rejection/report.md) | `implementation planning` | post-close retrieval semantics | Add keeper/gateway tests proving post-close reads return explicit closed-content responses, do not count as live unavailable reads, and do not debit retrieval escrow. | `closed deal query state`, `post-close retrieval response code`, `retrieval accounting guard`, `closed content UX` | Create, commit, close early, then fetch after close and assert a closed-content response with no owner retrieval debit. |
 | [`coordinated-regional-outage`](coordinated-regional-outage/report.md) | `further simulation review` | placement diversity and nightly stress | Keep as simulator calibration until placement-diversity params exist, then add keeper candidate-selection tests. | `regional/provider-class placement metadata`, `operator concentration limits`, `nightly stress harness` | Manual or nightly multi-provider outage, not PR-blocking CI. |
 | [`corrupt-provider`](corrupt-provider/report.md) | `implementation planning` | hard-fault keeper path | Add invalid-proof or wrong-data keeper tests proving no corrupt payment, repair start, and slash/jail simulation gates. | `hard evidence submission`, `corrupt-byte reward exclusion`, `jail/slash params` | Provider returns corrupt bytes or invalid proof and user-gateway rejects the response. |
 | [`demand-elasticity-recovery`](demand-elasticity-recovery/report.md) | `further simulation review` | economic policy calibration | Compare elasticity slope, reference price, price-step timing, and demand recovery before encoding governance defaults. | `quote rejection telemetry`, `affordability dashboards`, `demand forecasting` | No process e2e yet; this is a parameter-calibration fixture. |
@@ -76,6 +77,7 @@ This report converts the committed simulator corpus into implementation planning
 | `jail/slash params` | 2 |
 | `profitability dashboards` | 2 |
 | `quote rejection telemetry` | 2 |
+| `retrieval accounting guard` | 2 |
 | `retrieval demand accumulator` | 2 |
 | `CI artifact retention` | 1 |
 | `MsgSignalSaturation` | 1 |
@@ -94,6 +96,8 @@ This report converts the committed simulator corpus into implementation planning
 | `candidate diversity diagnostics` | 1 |
 | `churn caps` | 1 |
 | `cleanup events` | 1 |
+| `closed content UX` | 1 |
+| `closed deal query state` | 1 |
 | `compliance-gated base rewards` | 1 |
 | `conviction state` | 1 |
 | `corrupt-byte reward exclusion` | 1 |
@@ -144,6 +148,7 @@ This report converts the committed simulator corpus into implementation planning
 | `per-deal operator cap params` | 1 |
 | `per-slot suspect state` | 1 |
 | `placement diversity params` | 1 |
+| `post-close retrieval response code` | 1 |
 | `post-expiry retrieval behavior` | 1 |
 | `post-expiry retrieval response code` | 1 |
 | `price-floor governance policy` | 1 |
@@ -169,7 +174,6 @@ This report converts the committed simulator corpus into implementation planning
 | `replacement capacity query` | 1 |
 | `requester-paid session accounting` | 1 |
 | `reserve supply telemetry` | 1 |
-| `retrieval accounting guard` | 1 |
 | `retry cooldown state` | 1 |
 | `reward eligibility queries` | 1 |
 | `reward exclusion event` | 1 |

@@ -14,13 +14,13 @@ This report aggregates `5` completed simulator run output directories. It does n
 
 ## Run Matrix
 
-| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
-|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `baseline-count4-close-epoch4` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `early-count4-close-epoch2` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `full-duration-no-close` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `half-close-bps-epoch4` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `late-close-bps-epoch6` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
+|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `baseline-count4-close-epoch4` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `early-count4-close-epoch2` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `full-duration-no-close` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `half-close-bps-epoch4` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `late-close-bps-epoch6` | `storage-escrow-close-refund` | `101` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
 
 ## Key Metric Ranges
 
@@ -29,6 +29,7 @@ This report aggregates `5` completed simulator run output directories. It does n
 | `success_rate` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary user-facing misses; allowed only in explicit stress contracts. |
 | `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
+| `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Shows whether compliant responsibility remains economically recognized. |
 | `repairs_started` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Detection and repair activation pressure. |

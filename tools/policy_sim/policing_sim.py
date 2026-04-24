@@ -87,6 +87,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "storage-escrow-noncompliance-burn",
     "storage-escrow-expiry",
     "expired-retrieval-rejection",
+    "closed-retrieval-rejection",
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
     "replacement-grinding",
@@ -619,6 +620,7 @@ class EpochMetrics:
     retrieval_successes: int = 0
     unavailable_reads: int = 0
     expired_retrieval_attempts: int = 0
+    closed_retrieval_attempts: int = 0
     data_loss_events: int = 0
     direct_served: int = 0
     deputy_served: int = 0
@@ -1485,6 +1487,9 @@ class PolicySimulator:
         if not open_deals:
             if any(deal.closed_reason == "expired" for deal in self.deals):
                 metrics.expired_retrieval_attempts += 1
+                return
+            if any(deal.closed_reason == "closed" for deal in self.deals):
+                metrics.closed_retrieval_attempts += 1
                 return
             metrics.unavailable_reads += 1
             return
@@ -2937,6 +2942,7 @@ class PolicySimulator:
             "retrieval_successes",
             "unavailable_reads",
             "expired_retrieval_attempts",
+            "closed_retrieval_attempts",
             "data_loss_events",
             "direct_served",
             "deputy_served",
@@ -3697,6 +3703,7 @@ def print_summary(result: SimResult) -> None:
         "quota_misses={quota_misses} deputy_misses={deputy_misses} "
         "invalid_proofs={invalid_proofs} unavailable_reads={unavailable_reads} "
         "expired_retrieval_attempts={expired_retrieval_attempts} "
+        "closed_retrieval_attempts={closed_retrieval_attempts} "
         "data_loss_events={data_loss_events} saturated_responses={saturated_responses} "
         "suspect_slots={suspect_slots} delinquent_slots={delinquent_slots}".format(**totals)
     )

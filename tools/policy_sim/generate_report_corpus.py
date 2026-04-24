@@ -178,6 +178,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["expired deal query state", "post-expiry retrieval response code", "retrieval accounting guard", "expired content UX"],
         "e2e": "Create, commit, wait through duration, then fetch after expiry and assert an expired-content response with no owner retrieval debit.",
     },
+    "closed-retrieval-rejection": {
+        "target": "post-close retrieval semantics",
+        "next_test": "Add keeper/gateway tests proving post-close reads return explicit closed-content responses, do not count as live unavailable reads, and do not debit retrieval escrow.",
+        "missing_surfaces": ["closed deal query state", "post-close retrieval response code", "retrieval accounting guard", "closed content UX"],
+        "e2e": "Create, commit, close early, then fetch after close and assert a closed-content response with no owner retrieval debit.",
+    },
     "elasticity-cap-hit": {
         "target": "elasticity spend-window tests",
         "next_test": "Add spend-window tests for saturation signaling, fail-closed expansion, TTL, and cap-bound rejection.",
@@ -348,6 +354,7 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "success_rate": totals.get("success_rate", 0.0),
         "unavailable_reads": totals.get("unavailable_reads", 0),
         "expired_retrieval_attempts": totals.get("expired_retrieval_attempts", 0),
+        "closed_retrieval_attempts": totals.get("closed_retrieval_attempts", 0),
         "data_loss_events": totals.get("data_loss_events", 0),
         "repairs_started": totals.get("repairs_started", 0),
         "repairs_ready": totals.get("repairs_ready", 0),
@@ -446,16 +453,16 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Expired Reads` counts post-expiry requests rejected as expired content, not live availability failures. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Churn` is `provider exits/final churned providers/exited capacity/peak assigned slots on churned providers`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Sponsored` is `attempts/spend/owner escrow debit`. `StorageEscrow` is `locked/earned/refunded/outstanding/provider payout/burned/final closed/final expired deals`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `Overlay` is `activations/serves/expired/peak ready/peak active`. `Staged` is `attempts/rejections/cleaned/peak pending generations/peak pending MDUs`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Expired Reads` counts post-expiry requests rejected as expired content, not live availability failures. `Closed Reads` counts post-close requests rejected as closed content, not live availability failures. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Churn` is `provider exits/final churned providers/exited capacity/peak assigned slots on churned providers`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Sponsored` is `attempts/spend/owner escrow debit`. `StorageEscrow` is `locked/earned/refunded/outstanding/provider payout/burned/final closed/final expired deals`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `Overlay` is `activations/serves/expired/peak ready/peak active`. `Staged` is `attempts/rejections/cleaned/peak pending generations/peak pending MDUs`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Expired Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Churn | ReadShock | Sponsored | StorageEscrow | Demand | Overlay | Staged | OpCap | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Churn | ReadShock | Sponsored | StorageEscrow | Demand | Overlay | Staged | OpCap | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
         lines.append(
             f"| `{scenario}` | `{row['verdict']}` | {row['success_rate']:.4f} | "
-            f"{row['unavailable_reads']} | {row['expired_retrieval_attempts']} | {row['data_loss_events']} | "
+            f"{row['unavailable_reads']} | {row['expired_retrieval_attempts']} | {row['closed_retrieval_attempts']} | {row['data_loss_events']} | "
             f"{row['repairs_started']}/{row['repairs_ready']}/{row['repairs_completed']} | "
             f"{row['suspect_slots']}/{row['delinquent_slots']} | {row['repair_attempts']} | {row['repair_backoffs']} | "
             f"{row['high_bandwidth_promotions']}/{row['high_bandwidth_providers']} | "
@@ -566,6 +573,7 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "success_rate": row["success_rate"],
             "unavailable_reads": row["unavailable_reads"],
             "expired_retrieval_attempts": row.get("expired_retrieval_attempts", 0),
+            "closed_retrieval_attempts": row.get("closed_retrieval_attempts", 0),
             "data_loss_events": row["data_loss_events"],
             "repairs_started": row["repairs_started"],
             "repairs_ready": row.get("repairs_ready", 0),
@@ -664,6 +672,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "storage-escrow-noncompliance-burn",
         "storage-escrow-expiry",
         "expired-retrieval-rejection",
+        "closed-retrieval-rejection",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
@@ -702,6 +711,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "storage-escrow-noncompliance-burn",
         "storage-escrow-expiry",
         "expired-retrieval-rejection",
+        "closed-retrieval-rejection",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",

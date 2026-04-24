@@ -8,7 +8,7 @@ Model a population-scale network with more than one thousand storage providers a
 
 Expected policy behavior: Availability should stay above the configured floor, price should remain bounded, saturation and repair backoffs should be visible, and no provider should be assigned above modeled capacity.
 
-Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` expired retrieval rejections, `0` modeled data-loss events, `15482` bandwidth saturation responses and `12436` repair backoffs across `16060` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `361` suspect slot-epochs and `25634` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
+Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` expired retrieval rejections, `0` closed retrieval rejections, `0` modeled data-loss events, `15482` bandwidth saturation responses and `12436` repair backoffs across `16060` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `361` suspect slot-epochs and `25634` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
 
 ## Review Focus
 
@@ -134,6 +134,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Worst epoch success | `96.33%` at epoch `10` | Identifies the availability cliff instead of hiding it in aggregate success. |
 | Unavailable reads | `1065` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |
 | Expired retrieval rejections | `0` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
+| Closed retrieval rejections | `0` | Post-close requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
 | Modeled data-loss events | `0` | Durability-loss signal. This should remain zero for current scale fixtures. |
 | Degraded epochs | `19` | Counts epochs with unavailable reads or success below 99.9%. |
 | Recovery epoch after worst | `18` | Shows whether the network returned to clean steady state after the worst point. |

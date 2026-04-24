@@ -202,6 +202,7 @@
     "average_latency_ms": 0.0,
     "churn_pressure_provider_epochs": 0,
     "churned_providers": 0,
+    "closed_retrieval_attempts": 0,
     "compliant_slots": 960,
     "corrupt_responses": 0,
     "data_loss_events": 0,

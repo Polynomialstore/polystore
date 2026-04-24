@@ -4,6 +4,7 @@
       "blockers": [],
       "e2e": "No process e2e until audit sessions are wired through provider-daemon.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 64,
         "elasticity_overlay_activations": 0,
@@ -83,8 +84,92 @@
     },
     {
       "blockers": [],
+      "e2e": "Create, commit, close early, then fetch after close and assert a closed-content response with no owner retrieval debit.",
+      "metrics": {
+        "closed_retrieval_attempts": 160,
+        "data_loss_events": 0,
+        "delinquent_slots": 0,
+        "elasticity_overlay_activations": 0,
+        "elasticity_overlay_expired": 0,
+        "elasticity_overlay_serves": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
+        "expired_retrieval_attempts": 0,
+        "fail_serves": 0,
+        "final_closed_deals": 12,
+        "final_expired_deals": 0,
+        "gold_serves": 0,
+        "high_bandwidth_demotions": 0,
+        "high_bandwidth_promotions": 0,
+        "high_bandwidth_providers": 0,
+        "hot_high_bandwidth_serves": 0,
+        "hot_retrieval_attempts": 0,
+        "max_elasticity_overlay_active": 0,
+        "max_elasticity_overlay_ready": 0,
+        "max_operator_deal_slots": 1,
+        "max_provider_cost_shock_storage_multiplier_bps": 10000,
+        "max_provider_cost_shocked_providers": 0,
+        "max_retrieval_demand_multiplier_bps": 10000,
+        "max_staged_upload_pending_generations": 0,
+        "max_staged_upload_pending_mdus": 0,
+        "new_deal_latent_requests": 0,
+        "new_deal_requests": 0,
+        "new_deals_accepted": 0,
+        "new_deals_rejected_capacity": 0,
+        "new_deals_rejected_price": 0,
+        "new_deals_suppressed_price": 0,
+        "operator_deal_cap_violations": 0,
+        "owner_retrieval_escrow_debited": 0.0,
+        "performance_reward_paid": 0.0,
+        "platinum_serves": 0,
+        "provider_cost_shock_active": 0,
+        "providers_negative_pnl": 0,
+        "repair_attempt_caps": 0,
+        "repair_attempts": 0,
+        "repair_backoffs": 0,
+        "repair_cooldowns": 0,
+        "repairs_completed": 0,
+        "repairs_ready": 0,
+        "repairs_started": 0,
+        "retrieval_demand_shock_active": 0,
+        "retrieval_price_direction_changes": 0,
+        "saturated_responses": 0,
+        "silver_serves": 0,
+        "sponsored_retrieval_attempts": 0,
+        "sponsored_retrieval_spent": 0.0,
+        "staged_upload_attempts": 0,
+        "staged_upload_cleaned": 0,
+        "staged_upload_rejections": 0,
+        "storage_escrow_earned": 460.8,
+        "storage_escrow_locked": 691.2,
+        "storage_escrow_outstanding": 0.0,
+        "storage_escrow_refunded": 230.4,
+        "storage_fee_burned": 0.0,
+        "storage_fee_provider_payouts": 460.8,
+        "success_rate": 1.0,
+        "suspect_slots": 0,
+        "top_operator_assignment_share_bps": 0,
+        "top_operator_provider_share_bps": 208,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "closed deal query state",
+        "post-close retrieval response code",
+        "retrieval accounting guard",
+        "closed content UX"
+      ],
+      "next_test": "Add keeper/gateway tests proving post-close reads return explicit closed-content responses, do not count as live unavailable reads, and do not debit retrieval escrow.",
+      "scenario": "closed-retrieval-rejection",
+      "status": "implementation planning",
+      "target": "post-close retrieval semantics"
+    },
+    {
+      "blockers": [],
       "e2e": "Manual or nightly multi-provider outage, not PR-blocking CI.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 925,
         "elasticity_overlay_activations": 0,
@@ -166,6 +251,7 @@
       "blockers": [],
       "e2e": "Provider returns corrupt bytes or invalid proof and user-gateway rejects the response.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 6,
         "elasticity_overlay_activations": 0,
@@ -247,6 +333,7 @@
       "blockers": [],
       "e2e": "No process e2e yet; this is a parameter-calibration fixture.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -328,6 +415,7 @@
       "blockers": [],
       "e2e": "No process e2e until MsgSubmitEvidence and protocol retrieval sessions exist.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -410,6 +498,7 @@
       "blockers": [],
       "e2e": "Burst traffic e2e after overlay semantics are implemented.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -491,6 +580,7 @@
       "blockers": [],
       "e2e": "Drive hot retrieval pressure, trigger funded overflow capacity, assert overlay routes serve reads after readiness and expire without changing base slot durability.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 48,
@@ -574,6 +664,7 @@
       "blockers": [],
       "e2e": "Create, commit, wait through duration, then fetch after expiry and assert an expired-content response with no owner retrieval debit.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -656,6 +747,7 @@
       "blockers": [],
       "e2e": "Optional provider restart e2e; keeper coverage should be the first artifact.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -737,6 +829,7 @@
       "blockers": [],
       "e2e": "Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -819,6 +912,7 @@
       "blockers": [],
       "e2e": "Hot retrieval burst that intentionally saturates promoted providers; assert demotion events fire and retrievals continue through fallback capacity.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -901,6 +995,7 @@
       "blockers": [],
       "e2e": "Gateway happy-path smoke remains sufficient; do not add a slow failure e2e for the control case.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -981,6 +1076,7 @@
       "blockers": [],
       "e2e": "Provider submits an invalid liveness proof while retrieval bytes remain clean; assert proof rejection and repair.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 12,
         "elasticity_overlay_activations": 0,
@@ -1062,6 +1158,7 @@
       "blockers": [],
       "e2e": "Do not mirror this as process e2e; keep it as simulator/CI artifact work.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 25634,
         "elasticity_overlay_activations": 0,
@@ -1144,6 +1241,7 @@
       "blockers": [],
       "e2e": "Slow-path only after keeper reward accounting is stable.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 12,
         "elasticity_overlay_activations": 0,
@@ -1225,6 +1323,7 @@
       "blockers": [],
       "e2e": "Provider set with one dominant operator; assert hot and normal deal placement stay within operator caps and replacement falls back only with explicit evidence.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -1307,6 +1406,7 @@
       "blockers": [],
       "e2e": "No process e2e yet; this is a parameter-calibration fixture.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -1387,6 +1487,7 @@
       "blockers": [],
       "e2e": "Hot-service retrieval burst after telemetry exists; assert tier counts and provider payouts reflect latency without breaking read availability.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -1469,6 +1570,7 @@
       "blockers": [],
       "e2e": "No process e2e; validate with keeper tests and simulator sweeps first.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -1550,6 +1652,7 @@
       "blockers": [],
       "e2e": "No process e2e yet; validate collateral policy with simulator scenarios before provider bond keeper tests.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -1632,6 +1735,7 @@
       "blockers": [],
       "e2e": "No process e2e yet; this is a parameter-calibration fixture.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -1713,6 +1817,7 @@
       "blockers": [],
       "e2e": "No process e2e yet; validate churn policy with simulator sweeps and then add keeper drain/replacement tests.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 48,
         "elasticity_overlay_activations": 0,
@@ -1795,6 +1900,7 @@
       "blockers": [],
       "e2e": "No process e2e yet; validate supply recovery with simulator scenarios before provider registration or promotion keeper tests.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 60,
         "elasticity_overlay_activations": 0,
@@ -1877,6 +1983,7 @@
       "blockers": [],
       "e2e": "Small devnet with no spare provider capacity after keeper behavior is stable.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 40,
         "elasticity_overlay_activations": 0,
@@ -1958,6 +2065,7 @@
       "blockers": [],
       "e2e": "Provider replacement with a pending SP that never catches up; assert timeout/retry state before process-level promotion.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 60,
         "elasticity_overlay_activations": 0,
@@ -2040,6 +2148,7 @@
       "blockers": [],
       "e2e": "No process e2e yet; validate with keeper pricing tests and simulator sweeps first.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -2121,6 +2230,7 @@
       "blockers": [],
       "e2e": "Create deal with one failing provider upload and verify replacement before first content commit.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 12,
         "elasticity_overlay_activations": 0,
@@ -2202,6 +2312,7 @@
       "blockers": [],
       "e2e": "Kill one provider-daemon during retrieval and assert reads stay available while repair starts.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 12,
         "elasticity_overlay_activations": 0,
@@ -2284,6 +2395,7 @@
       "blockers": [],
       "e2e": "Client repeatedly stages uploads without commit; assert provider-daemon cleanup bounds disk pressure and committed reads remain available.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -2366,6 +2478,7 @@
       "blockers": [],
       "e2e": "Create, commit, close early, and assert unearned storage escrow is refunded while earned fees remain paid to eligible providers.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -2449,6 +2562,7 @@
       "blockers": [],
       "e2e": "Create, commit, wait through duration, assert the deal expires with no outstanding escrow and no active slots.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -2532,6 +2646,7 @@
       "blockers": [],
       "e2e": "Commit content, force one provider through quota delinquency, assert earned fees for non-compliant responsibility are burned while compliant providers are paid and reads remain available.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 6,
         "elasticity_overlay_activations": 0,
@@ -2615,6 +2730,7 @@
       "blockers": [],
       "e2e": "No process e2e until keeper reward gating is complete.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 96,
         "elasticity_overlay_activations": 0,
@@ -2696,6 +2812,7 @@
       "blockers": [],
       "e2e": "Provider timeout/blackhole e2e after keeper state is deterministic.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 12,
         "elasticity_overlay_activations": 0,
@@ -2777,6 +2894,7 @@
       "blockers": [],
       "e2e": "No process e2e yet; this is a parameter-calibration fixture.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -2858,6 +2976,7 @@
       "blockers": [],
       "e2e": "Public retrieval spike against one deal with requester/sponsor funding.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -2939,6 +3058,7 @@
       "blockers": [],
       "e2e": "Synthetic wash traffic e2e only after keeper accounting exists.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 0,
         "elasticity_overlay_activations": 0,
@@ -3020,6 +3140,7 @@
       "blockers": [],
       "e2e": "Provider refuses retrieval responses; gateway routes around and records attributable failure.",
       "metrics": {
+        "closed_retrieval_attempts": 0,
         "data_loss_events": 0,
         "delinquent_slots": 12,
         "elasticity_overlay_activations": 0,
@@ -3100,6 +3221,6 @@
   ],
   "status_counts": {
     "further simulation review": 12,
-    "implementation planning": 26
+    "implementation planning": 27
   }
 }

@@ -14,11 +14,11 @@ This report aggregates `3` completed simulator run output directories. It does n
 
 ## Run Matrix
 
-| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
-|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `provider-online-probability-min-0p975` | `large-scale-regional-stress` | `29` | `medium` | `PASS` | 99.21% | 1132 | 0 | 0 | 4208/3540 | 14228 | 17494 | 0 | 0.4407 | 0.0243 |
-| `provider-online-probability-min-0p985` | `large-scale-regional-stress` | `29` | `medium` | `PASS` | 99.26% | 1065 | 0 | 0 | 3624/3050 | 12436 | 15482 | 4 | 0.4407 | 0.0243 |
-| `provider-online-probability-min-0p995` | `large-scale-regional-stress` | `29` | `medium` | `PASS` | 99.52% | 697 | 0 | 0 | 1947/1805 | 12263 | 12704 | 1 | 0.4407 | 0.0243 |
+| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
+|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `provider-online-probability-min-0p975` | `large-scale-regional-stress` | `29` | `medium` | `PASS` | 99.21% | 1132 | 0 | 0 | 0 | 4208/3540 | 14228 | 17494 | 0 | 0.4407 | 0.0243 |
+| `provider-online-probability-min-0p985` | `large-scale-regional-stress` | `29` | `medium` | `PASS` | 99.26% | 1065 | 0 | 0 | 0 | 3624/3050 | 12436 | 15482 | 4 | 0.4407 | 0.0243 |
+| `provider-online-probability-min-0p995` | `large-scale-regional-stress` | `29` | `medium` | `PASS` | 99.52% | 697 | 0 | 0 | 0 | 1947/1805 | 12263 | 12704 | 1 | 0.4407 | 0.0243 |
 
 ## Key Metric Ranges
 
@@ -27,6 +27,7 @@ This report aggregates `3` completed simulator run output directories. It does n
 | `success_rate` | 0.992139 | 0.995160 | 0.003021 | 0.993301 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 697.000000 | 1132.000000 | 435.000000 | 964.666667 | Temporary user-facing misses; allowed only in explicit stress contracts. |
 | `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
+| `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 0.955321 | 0.966307 | 0.010986 | 0.960934 | Shows whether compliant responsibility remains economically recognized. |
 | `repairs_started` | 1947.000000 | 4208.000000 | 2261.000000 | 3259.666667 | Detection and repair activation pressure. |

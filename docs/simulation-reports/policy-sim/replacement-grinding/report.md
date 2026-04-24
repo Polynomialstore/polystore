@@ -8,7 +8,7 @@ Model a repair path where pending replacement providers never prove readiness. T
 
 Expected policy behavior: Repairs start, pending readiness times out, cooldowns and attempt caps are visible, no pending provider is promoted without readiness, and durability remains intact.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `98.04%`, repairs started/ready/completed were `18` / `0` / `0`, and `1` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` expired retrieval rejections, `0` modeled data-loss events, `0` bandwidth saturation responses and `24` repair backoffs across `18` repair attempts, with `18` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `60` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
+Observed result: retrieval success was `100.00%`, reward coverage was `98.04%`, repairs started/ready/completed were `18` / `0` / `0`, and `1` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` expired retrieval rejections, `0` closed retrieval rejections, `0` modeled data-loss events, `0` bandwidth saturation responses and `24` repair backoffs across `18` repair attempts, with `18` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `60` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
 
 ## Review Focus
 
@@ -132,6 +132,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Worst epoch success | `100.00%` at epoch `1` | Identifies the availability cliff instead of hiding it in aggregate success. |
 | Unavailable reads | `0` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |
 | Expired retrieval rejections | `0` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
+| Closed retrieval rejections | `0` | Post-close requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
 | Modeled data-loss events | `0` | Durability-loss signal. This should remain zero for current scale fixtures. |
 | Degraded epochs | `0` | Counts epochs with unavailable reads or success below 99.9%. |
 | Recovery epoch after worst | `2` | Shows whether the network returned to clean steady state after the worst point. |

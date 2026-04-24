@@ -334,6 +334,15 @@ SCENARIO_GUIDES = {
         "expected": "Deals expire cleanly, later retrieval attempts are rejected as expired, unavailable reads remain zero, and no retrieval escrow is debited after expiry.",
         "review": "Use this before implementing gateway/keeper post-expiry query behavior, expired-deal response codes, and retrieval accounting guards.",
     },
+    "closed-retrieval-rejection": {
+        "title": "Closed Retrieval Rejection",
+        "intent": (
+            "Model retrieval semantics after an intentional deal close and storage-escrow refund. The policy question is whether "
+            "requests after close are counted as explicit closed-content rejections instead of availability failures or billable retrievals."
+        ),
+        "expected": "Deals close cleanly, unearned storage escrow is refunded, later retrieval attempts are rejected as closed content, unavailable reads remain zero, and no retrieval escrow is debited after close.",
+        "review": "Use this before implementing gateway/keeper post-close query behavior, closed-deal response codes, and retrieval accounting guards.",
+    },
     "coordinated-regional-outage": {
         "title": "Coordinated Regional Outage",
         "intent": (
@@ -480,6 +489,7 @@ SWEEP_METRICS = [
     "success_rate",
     "unavailable_reads",
     "expired_retrieval_attempts",
+    "closed_retrieval_attempts",
     "data_loss_events",
     "reward_coverage",
     "repairs_started",
@@ -805,6 +815,7 @@ def compute_signals(
             "success_rate": fnum(totals.get("success_rate")),
             "unavailable_reads": fnum(totals.get("unavailable_reads")),
             "expired_retrieval_attempts": fnum(totals.get("expired_retrieval_attempts")),
+            "closed_retrieval_attempts": fnum(totals.get("closed_retrieval_attempts")),
             "data_loss_events": fnum(totals.get("data_loss_events")),
             "worst_epoch": int(fnum(worst_epoch.get("epoch"))),
             "worst_epoch_success_rate": safe_rate(worst_epoch, "retrieval_successes", "retrieval_attempts") if worst_epoch else 0.0,
@@ -1148,6 +1159,7 @@ def write_report_md(
         f"`{len(negative_pnl)}` providers ended with negative modeled P&L. The run recorded "
         f"`{fmt_num(totals.get('unavailable_reads'))}` unavailable reads, "
         f"`{fmt_num(totals.get('expired_retrieval_attempts'))}` expired retrieval rejections, "
+        f"`{fmt_num(totals.get('closed_retrieval_attempts'))}` closed retrieval rejections, "
         f"`{fmt_num(totals.get('data_loss_events'))}` modeled data-loss events, "
         f"`{fmt_num(totals.get('saturated_responses'))}` bandwidth saturation responses and "
         f"`{fmt_num(totals.get('repair_backoffs'))}` repair backoffs across "
@@ -1533,6 +1545,11 @@ def build_behavior_narrative(
             f"Post-expiry retrieval behavior was exercised: `{fmt_num(totals.get('expired_retrieval_attempts'))}` requests arrived after all active deals had expired. "
             "The simulator counted them as explicit expired-content rejections, not live availability failures or billable retrieval attempts."
         )
+    if fnum(totals.get("closed_retrieval_attempts")) > 0:
+        parts.append(
+            f"Post-close retrieval behavior was exercised: `{fmt_num(totals.get('closed_retrieval_attempts'))}` requests arrived after all active deals had been intentionally closed. "
+            "The simulator counted them as explicit closed-content rejections, not live availability failures or billable retrieval attempts."
+        )
 
     if evidence:
         class_counts = Counter(row.get("evidence_class") or "unknown" for row in evidence)
@@ -1728,6 +1745,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Worst epoch success | `{fmt_pct(availability['worst_epoch_success_rate'])}` at epoch `{availability['worst_epoch']}` | Identifies the availability cliff instead of hiding it in aggregate success. |",
         f"| Unavailable reads | `{fmt_num(availability['unavailable_reads'])}` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |",
         f"| Expired retrieval rejections | `{fmt_num(availability['expired_retrieval_attempts'])}` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |",
+        f"| Closed retrieval rejections | `{fmt_num(availability['closed_retrieval_attempts'])}` | Post-close requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |",
         f"| Modeled data-loss events | `{fmt_num(availability['data_loss_events'])}` | Durability-loss signal. This should remain zero for current scale fixtures. |",
         f"| Degraded epochs | `{fmt_num(availability['degraded_epochs'])}` | Counts epochs with unavailable reads or success below 99.9%. |",
         f"| Recovery epoch after worst | `{availability['recovery_epoch_after_worst'] or 'not recovered'}` | Shows whether the network returned to clean steady state after the worst point. |",
@@ -2010,7 +2028,7 @@ def assertion_meaning(name: str) -> str:
         "max_data_loss_events": "Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero.",
         "max_unavailable_reads": "Availability invariant: live retrievals should not fail outside explicit stress contracts.",
         "min_expired_retrieval_attempts": "Post-expiry behavior: expired content requests must be counted separately from live availability failures.",
-        "max_owner_retrieval_escrow_debited": "Retrieval accounting invariant: scenarios can require that owner escrow is not charged for the modeled requests.",
+        "min_closed_retrieval_attempts": "Post-close behavior: intentionally closed content requests must be counted separately from live availability failures.",
         "max_repairs_started": "No-repair invariant for healthy baseline runs.",
         "min_repairs_started": "Repair liveness: policy must start reassignment when evidence warrants it.",
         "min_repairs_ready": "Repair readiness: pending providers must produce catch-up evidence before promotion.",
@@ -2117,7 +2135,7 @@ def assertion_meaning(name: str) -> str:
         "exact_deals_closed": "Close/refund fixture should close the configured number of deals.",
         "min_sponsored_retrieval_attempts": "Sponsored public retrieval fixture must route demand through sponsor/requester-funded sessions.",
         "min_sponsored_retrieval_spent": "Sponsored public retrieval fixture must pay non-zero session spend.",
-        "max_owner_retrieval_escrow_debited": "Sponsored public retrieval should not unexpectedly debit owner deal escrow.",
+        "max_owner_retrieval_escrow_debited": "Retrieval accounting invariant: owner deal escrow should not be charged for sponsored, expired, or closed-content requests.",
         "exact_owner_retrieval_escrow_debited": "Sponsored public retrieval should keep owner deal escrow unchanged.",
         "min_elasticity_rejections": "Spend cap must reject excess elasticity demand.",
         "max_elasticity_spent": "Elasticity spend must not exceed the configured cap.",
@@ -2347,6 +2365,19 @@ def write_risk_register(
                 ),
                 "impact": "Post-expiry reads should fail as expired content rather than charging the deal owner for unavailable service.",
                 "followup": "Block graduation. Add keeper/gateway guards so expired deals are not selected for billable retrieval sessions.",
+            }
+        )
+    if fnum(totals.get("closed_retrieval_attempts")) and fnum(totals.get("owner_retrieval_escrow_debited")):
+        rows.append(
+            {
+                "risk": "Closed retrievals debited owner escrow",
+                "severity": "high",
+                "evidence": (
+                    f"{fmt_num(totals.get('closed_retrieval_attempts'))} closed retrieval rejections and "
+                    f"{fmt_money(totals.get('owner_retrieval_escrow_debited'))} owner retrieval escrow debit."
+                ),
+                "impact": "Post-close reads should fail as closed content rather than charging the deal owner for unavailable service.",
+                "followup": "Block graduation. Add keeper/gateway guards so closed deals are not selected for billable retrieval sessions.",
             }
         )
     if negative_pnl:
@@ -2765,6 +2796,7 @@ def graduation_semantics(scenario: str) -> str:
         "storage-escrow-noncompliance-burn": "Graduation means earned storage fees can be withheld from non-compliant responsibility and burned without confusing storage lock-in or availability accounting.",
         "storage-escrow-expiry": "Graduation means fully earned storage deals can auto-expire without continuing active responsibility or leaving hidden escrow.",
         "expired-retrieval-rejection": "Graduation means post-expiry reads return explicit expired-content rejection semantics without counting as unavailable reads or debiting retrieval escrow.",
+        "closed-retrieval-rejection": "Graduation means post-close reads return explicit closed-content rejection semantics without counting as unavailable reads or debiting retrieval escrow.",
         "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
         "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
         "replacement-grinding": "Graduation means pending-provider readiness failures are bounded by timeout, cooldown, and attempt caps instead of leaving unbounded in-flight repairs.",
@@ -2835,6 +2867,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "storage-escrow-noncompliance-burn",
         "storage-escrow-expiry",
         "expired-retrieval-rejection",
+        "closed-retrieval-rejection",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -2895,6 +2928,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a keeper/gateway planning ticket that names expiry auto-close, final earned-fee settlement, deal GC timing, query state, and retrieval behavior after expiry.")
     elif recommendation == "Candidate for implementation planning." and scenario == "expired-retrieval-rejection":
         lines.append("Create a keeper/gateway planning ticket that names expired-deal query state, post-expiry retrieval response codes, no-bill retrieval accounting, and UI/API messaging for expired content.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "closed-retrieval-rejection":
+        lines.append("Create a keeper/gateway planning ticket that names closed-deal query state, post-close retrieval response codes, no-bill retrieval accounting, and UI/API messaging for intentionally closed content.")
     elif recommendation == "Candidate for implementation planning." and scenario == "deputy-evidence-spam":
         lines.append("Create a keeper/runtime planning ticket that names evidence bond escrow, burn-on-expiry, conviction-gated bounty payout, spam throttles, and deputy reputation inputs.")
     elif recommendation == "Candidate for implementation planning.":
@@ -3334,6 +3369,7 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("success_rate", "Availability invariant."),
         ("unavailable_reads", "Temporary read failures; acceptable only in explicitly bounded stress cases."),
         ("expired_retrieval_attempts", "Post-expiry read requests rejected as expired content instead of live availability failures."),
+        ("closed_retrieval_attempts", "Post-close read requests rejected as closed content instead of live availability failures."),
         ("data_loss_events", "Durability invariant; should stay zero for current fixtures."),
         ("reward_coverage", "Whether compliant slots remain economically recognized."),
         ("repairs_started", "Whether the candidate exercised repair."),
@@ -3420,6 +3456,10 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         if delta > 0:
             return "More post-expiry reads were rejected explicitly instead of treated as live availability failures."
         return "Post-expiry rejection volume did not increase."
+    if key == "closed_retrieval_attempts":
+        if delta > 0:
+            return "More post-close reads were rejected explicitly instead of treated as live availability failures."
+        return "Post-close rejection volume did not increase."
     if key == "data_loss_events":
         if candidate > 0:
             return "Durability invariant failed; this should block graduation."
@@ -3757,8 +3797,8 @@ def write_sweep_summary_md(path: Path, payload: dict[str, Any]) -> None:
         "",
         "## Run Matrix",
         "",
-        "| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |",
-        "|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |",
+        "|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in sorted(rows, key=lambda item: (item["scenario"], stable_param(item.get("seed")), item["label"])):
         totals = row["totals"]
@@ -3766,6 +3806,7 @@ def write_sweep_summary_md(path: Path, payload: dict[str, Any]) -> None:
             f"| `{row['label']}` | `{row['scenario']}` | `{row.get('seed')}` | `{row['risk_level']}` | "
             f"`{'PASS' if row['assertions_passed'] else 'FAIL'}` | {fmt_pct(totals.get('success_rate'))} | "
             f"{fmt_num(totals.get('unavailable_reads'))} | {fmt_num(totals.get('expired_retrieval_attempts'))} | "
+            f"{fmt_num(totals.get('closed_retrieval_attempts'))} | "
             f"{fmt_num(totals.get('data_loss_events'))} | "
             f"{fmt_num(totals.get('repairs_started'))}/{fmt_num(totals.get('repairs_completed'))} | "
             f"{fmt_num(totals.get('repair_backoffs'))} | {fmt_num(totals.get('saturated_responses'))} | "
@@ -3853,6 +3894,7 @@ def sweep_metric_meaning(key: str) -> str:
         "success_rate": "Primary availability outcome; should not regress silently.",
         "unavailable_reads": "Temporary user-facing misses; allowed only in explicit stress contracts.",
         "expired_retrieval_attempts": "Post-expiry read requests rejected as expired content, not live availability misses.",
+        "closed_retrieval_attempts": "Post-close read requests rejected as closed content, not live availability misses.",
         "data_loss_events": "Durability invariant; non-zero values block graduation.",
         "reward_coverage": "Shows whether compliant responsibility remains economically recognized.",
         "repairs_started": "Detection and repair activation pressure.",

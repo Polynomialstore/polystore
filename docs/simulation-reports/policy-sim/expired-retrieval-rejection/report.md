@@ -8,7 +8,7 @@ Model post-expiry retrieval semantics. The policy question is whether requests a
 
 Expected policy behavior: Deals expire cleanly, later retrieval attempts are rejected as expired, unavailable reads remain zero, and no retrieval escrow is debited after expiry.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `160` expired retrieval rejections, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
+Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `160` expired retrieval rejections, `0` closed retrieval rejections, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `0` and final high-bandwidth providers were `0`.
 
 ## Review Focus
 
@@ -130,6 +130,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Worst epoch success | `0.00%` at epoch `5` | Identifies the availability cliff instead of hiding it in aggregate success. |
 | Unavailable reads | `0` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |
 | Expired retrieval rejections | `160` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
+| Closed retrieval rejections | `0` | Post-close requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
 | Modeled data-loss events | `0` | Durability-loss signal. This should remain zero for current scale fixtures. |
 | Degraded epochs | `2` | Counts epochs with unavailable reads or success below 99.9%. |
 | Recovery epoch after worst | `not recovered` | Shows whether the network returned to clean steady state after the worst point. |
@@ -310,7 +311,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 | `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=1 |
 | `max_unavailable_reads` | `PASS` | Availability invariant: live retrievals should not fail outside explicit stress contracts. | unavailable_reads=0, required<=0 |
 | `min_expired_retrieval_attempts` | `PASS` | Post-expiry behavior: expired content requests must be counted separately from live availability failures. | expired_retrieval_attempts=160, required>=160 |
-| `max_owner_retrieval_escrow_debited` | `PASS` | Sponsored public retrieval should not unexpectedly debit owner deal escrow. | owner_retrieval_escrow_debited=0, required<=0 |
+| `max_owner_retrieval_escrow_debited` | `PASS` | Retrieval accounting invariant: owner deal escrow should not be charged for sponsored, expired, or closed-content requests. | owner_retrieval_escrow_debited=0, required<=0 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `max_storage_escrow_outstanding` | `PASS` | Storage escrow should not remain locked after the modeled close/expiry path should have released it. | storage_escrow_outstanding=0, required<=0 |
 | `exact_final_open_deals` | `PASS` | Custom assertion. Review the detail and fixture threshold. | final_open_deals=0, required=0 |

@@ -14,11 +14,11 @@ This report aggregates `3` completed simulator run output directories. It does n
 
 ## Run Matrix
 
-| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
-|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `measure-only-observe` | `storage-escrow-noncompliance-burn` | `103` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `repair-only-heal` | `storage-escrow-noncompliance-burn` | `103` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 3/3 | 0 | 0 | 0 | 0.0500 | 0.0100 |
-| `reward-exclusion-burn` | `storage-escrow-noncompliance-burn` | `103` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 3/3 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
+|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `measure-only-observe` | `storage-escrow-noncompliance-burn` | `103` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `repair-only-heal` | `storage-escrow-noncompliance-burn` | `103` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 3/3 | 0 | 0 | 0 | 0.0500 | 0.0100 |
+| `reward-exclusion-burn` | `storage-escrow-noncompliance-burn` | `103` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 3/3 | 0 | 0 | 0 | 0.0500 | 0.0100 |
 
 ## Key Metric Ranges
 
@@ -27,6 +27,7 @@ This report aggregates `3` completed simulator run output directories. It does n
 | `success_rate` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary user-facing misses; allowed only in explicit stress contracts. |
 | `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
+| `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 0.994764 | 1.000000 | 0.005236 | 0.998255 | Shows whether compliant responsibility remains economically recognized. |
 | `repairs_started` | 0.000000 | 3.000000 | 3.000000 | 2.000000 | Detection and repair activation pressure. |

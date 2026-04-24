@@ -14,14 +14,14 @@ This report aggregates `6` completed simulator run output directories. It does n
 
 ## Run Matrix
 
-| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
-|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `aggressive-scaleup` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 94.38% | 108 | 0 | 0 | 0/0 | 0 | 2493 | 0 | 1.0000 | 0.0100 |
-| `baseline` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 94.32% | 109 | 0 | 0 | 0/0 | 0 | 2463 | 0 | 1.0000 | 0.0100 |
-| `low-spend-cap` | `elasticity-overlay-scaleup` | `71` | `critical` | `FAIL` | 91.82% | 157 | 0 | 0 | 0/0 | 0 | 2111 | 0 | 1.0000 | 0.0100 |
-| `short-ttl` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 93.49% | 125 | 0 | 0 | 0/0 | 0 | 2151 | 0 | 1.0000 | 0.0100 |
-| `slow-readiness` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 93.49% | 125 | 0 | 0 | 0/0 | 0 | 2208 | 0 | 1.0000 | 0.0100 |
-| `tight-per-deal-cap` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 92.40% | 146 | 0 | 0 | 0/0 | 0 | 2129 | 0 | 1.0000 | 0.0100 |
+| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
+|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `aggressive-scaleup` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 94.38% | 108 | 0 | 0 | 0 | 0/0 | 0 | 2493 | 0 | 1.0000 | 0.0100 |
+| `baseline` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 94.32% | 109 | 0 | 0 | 0 | 0/0 | 0 | 2463 | 0 | 1.0000 | 0.0100 |
+| `low-spend-cap` | `elasticity-overlay-scaleup` | `71` | `critical` | `FAIL` | 91.82% | 157 | 0 | 0 | 0 | 0/0 | 0 | 2111 | 0 | 1.0000 | 0.0100 |
+| `short-ttl` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 93.49% | 125 | 0 | 0 | 0 | 0/0 | 0 | 2151 | 0 | 1.0000 | 0.0100 |
+| `slow-readiness` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 93.49% | 125 | 0 | 0 | 0 | 0/0 | 0 | 2208 | 0 | 1.0000 | 0.0100 |
+| `tight-per-deal-cap` | `elasticity-overlay-scaleup` | `71` | `high` | `PASS` | 92.40% | 146 | 0 | 0 | 0 | 0/0 | 0 | 2129 | 0 | 1.0000 | 0.0100 |
 
 ## Key Metric Ranges
 
@@ -30,6 +30,7 @@ This report aggregates `6` completed simulator run output directories. It does n
 | `success_rate` | 0.918229 | 0.943750 | 0.025521 | 0.933160 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 108.000000 | 157.000000 | 49.000000 | 128.333333 | Temporary user-facing misses; allowed only in explicit stress contracts. |
 | `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
+| `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Shows whether compliant responsibility remains economically recognized. |
 | `repairs_started` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Detection and repair activation pressure. |

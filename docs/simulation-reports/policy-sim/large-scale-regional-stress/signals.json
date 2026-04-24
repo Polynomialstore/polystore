@@ -1,5 +1,6 @@
 {
   "availability": {
+    "closed_retrieval_attempts": 0.0,
     "data_loss_events": 0.0,
     "degraded_epochs": 19,
     "expired_retrieval_attempts": 0.0,
