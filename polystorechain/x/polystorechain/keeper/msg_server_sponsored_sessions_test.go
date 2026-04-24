@@ -243,6 +243,114 @@ func TestSponsoredOpen_Public_RefundsLockedFeeToPayerOnCancel(t *testing.T) {
 	require.Equal(t, "99stake", bank.accountBalances[sponsorAddr.String()].String())
 }
 
+func TestSponsoredRetrievalCompletionPaysProofProviderWithoutOwnerEscrowDebit(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyNewDec(0)
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 10)
+	p.RetrievalBurnBps = 2000
+	require.NoError(t, f.keeper.Params.Set(ctx, p))
+
+	for i := 0; i < 10; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte("provider_settle_v1"))
+		providerBz[19] = byte('0' + i)
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	ownerBz := make([]byte, 20)
+	copy(ownerBz, []byte("owner_settle_v1___"))
+	owner, _ := f.addressCodec.BytesToString(ownerBz)
+
+	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		InitialEscrowAmount: math.NewInt(0),
+		MaxMonthlySpend:     math.NewInt(0),
+	})
+	require.NoError(t, err)
+	assignedProvider := resDeal.AssignedProviders[0]
+	providerAddr, err := sdk.AccAddressFromBech32(assignedProvider)
+	require.NoError(t, err)
+
+	manifestCid, proof := commitValidMode2ContentAndProof(t, f, ctx, msgServer, owner, resDeal.DealId)
+
+	_, err = msgServer.UpdateDealRetrievalPolicy(ctx, &types.MsgUpdateDealRetrievalPolicy{
+		Creator: owner,
+		DealId:  resDeal.DealId,
+		Policy: types.RetrievalPolicy{
+			Mode: types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_PUBLIC,
+		},
+	})
+	require.NoError(t, err)
+
+	before, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(0), before.EscrowBalance)
+
+	sponsorBz := make([]byte, 20)
+	copy(sponsorBz, []byte("sponsor_settle_v1"))
+	sponsor, _ := f.addressCodec.BytesToString(sponsorBz)
+	sponsorAddr, err := sdk.AccAddressFromBech32(sponsor)
+	require.NoError(t, err)
+	bank.setAccountBalance(sponsorAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	openRes, err := msgServer.OpenRetrievalSessionSponsored(ctx, &types.MsgOpenRetrievalSessionSponsored{
+		Creator:        sponsor,
+		DealId:         resDeal.DealId,
+		Provider:       assignedProvider,
+		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
+		StartMduIndex:  0,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          1,
+		ExpiresAt:      0,
+		MaxTotalFee:    math.NewInt(0),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "89stake", bank.accountBalances[sponsorAddr.String()].String())
+	require.Equal(t, "10stake", bank.moduleBalances[types.ModuleName].String())
+
+	_, err = msgServer.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{
+		Creator:   assignedProvider,
+		SessionId: openRes.SessionId,
+		Proofs:    []types.ChainedProof{proof},
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{
+		Creator:   sponsor,
+		SessionId: openRes.SessionId,
+	})
+	require.NoError(t, err)
+
+	session, err := f.keeper.RetrievalSessions.Get(ctx, openRes.SessionId)
+	require.NoError(t, err)
+	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED, session.Status)
+	require.True(t, session.LockedFee.IsZero())
+	require.Equal(t, types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER, session.Funding)
+	require.Equal(t, sponsor, session.Payer)
+
+	after, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, before.EscrowBalance, after.EscrowBalance)
+	require.Equal(t, "8stake", bank.accountBalances[providerAddr.String()].String())
+	require.True(t, bank.moduleBalances[types.ModuleName].IsZero())
+}
+
 func TestSponsoredOpen_Voucher_ReplayRejected(t *testing.T) {
 	bank := newTrackingBankKeeper()
 	f := initFixtureWithBankKeeper(t, bank)
