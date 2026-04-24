@@ -218,6 +218,7 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "unavailable_reads": totals.get("unavailable_reads", 0),
         "data_loss_events": totals.get("data_loss_events", 0),
         "repairs_started": totals.get("repairs_started", 0),
+        "repairs_ready": totals.get("repairs_ready", 0),
         "repairs_completed": totals.get("repairs_completed", 0),
         "repair_backoffs": totals.get("repair_backoffs", 0),
         "providers_negative_pnl": totals.get("providers_negative_pnl", 0),
@@ -249,6 +250,8 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion.",
+        "",
         "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Backoffs | Saturated | Negative P&L | Report |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
@@ -257,7 +260,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         lines.append(
             f"| `{scenario}` | `{row['verdict']}` | {row['success_rate']:.4f} | "
             f"{row['unavailable_reads']} | {row['data_loss_events']} | "
-            f"{row['repairs_started']}/{row['repairs_completed']} | {row['repair_backoffs']} | "
+            f"{row['repairs_started']}/{row['repairs_ready']}/{row['repairs_completed']} | {row['repair_backoffs']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
             f"[report]({scenario}/report.md) |"
         )
@@ -354,6 +357,7 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "unavailable_reads": row["unavailable_reads"],
             "data_loss_events": row["data_loss_events"],
             "repairs_started": row["repairs_started"],
+            "repairs_ready": row.get("repairs_ready", 0),
             "repairs_completed": row["repairs_completed"],
             "repair_backoffs": row["repair_backoffs"],
             "providers_negative_pnl": row["providers_negative_pnl"],

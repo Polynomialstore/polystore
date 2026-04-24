@@ -11,7 +11,7 @@ Model a provider returning bad data or invalid synthetic proofs. This is the har
 ## Evidence Counters
 
 - Evidence events: `12`
-- Repair events: `12`
+- Repair events: `18`
 - Failed assertions: `0`
 - Providers with negative P&L: `1`
 - Elasticity rejections: `0`

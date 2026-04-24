@@ -11,7 +11,7 @@ Model a provider that does not satisfy liveness quota even when user-facing read
 ## Evidence Counters
 
 - Evidence events: `12`
-- Repair events: `12`
+- Repair events: `18`
 - Failed assertions: `0`
 - Providers with negative P&L: `1`
 - Elasticity rejections: `0`

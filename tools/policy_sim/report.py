@@ -275,6 +275,7 @@ SWEEP_METRICS = [
     "data_loss_events",
     "reward_coverage",
     "repairs_started",
+    "repairs_ready",
     "repairs_completed",
     "repair_backoffs",
     "quota_misses",
@@ -383,6 +384,7 @@ def compute_signals(
             break
 
     repair_started = fnum(totals.get("repairs_started"))
+    repair_ready = fnum(totals.get("repairs_ready"))
     repair_completed = fnum(totals.get("repairs_completed"))
     retrieval_attempts = max(1.0, fnum(totals.get("retrieval_attempts")))
     storage_prices = [fnum(row.get("storage_price")) for row in economy]
@@ -413,7 +415,9 @@ def compute_signals(
         },
         "repair": {
             "started": repair_started,
+            "ready": repair_ready,
             "completed": repair_completed,
+            "readiness_ratio": repair_ready / repair_started if repair_started else 1.0,
             "completion_ratio": repair_completed / repair_started if repair_started else 1.0,
             "backoffs": fnum(totals.get("repair_backoffs")),
             "backoffs_per_started_repair": fnum(totals.get("repair_backoffs")) / max(1.0, repair_started),
@@ -534,6 +538,7 @@ def write_report_md(
     evidence_by_reason = Counter(row.get("reason", "unknown") for row in evidence)
     evidence_by_provider = Counter(row.get("provider_id", "unknown") for row in evidence)
     repairs_started = [row for row in repairs if row.get("event") == "repair_started"]
+    repairs_ready = [row for row in repairs if row.get("event") == "repair_ready"]
     repairs_completed = [row for row in repairs if row.get("event") == "repair_completed"]
     worst_providers = sorted(providers, key=lambda row: fnum(row.get("pnl")))[:5]
     active_end_slots = [row for row in slots if row.get("epoch") == str(config.get("epochs")) and row.get("status") == "ACTIVE"]
@@ -557,8 +562,8 @@ def write_report_md(
         f"Expected policy behavior: {guide['expected']}",
         "",
         f"Observed result: retrieval success was `{fmt_pct(totals.get('success_rate'))}`, reward coverage was "
-        f"`{fmt_pct(totals.get('reward_coverage'))}`, repairs started/completed were "
-        f"`{fmt_num(totals.get('repairs_started'))}` / `{fmt_num(totals.get('repairs_completed'))}`, and "
+        f"`{fmt_pct(totals.get('reward_coverage'))}`, repairs started/ready/completed were "
+        f"`{fmt_num(totals.get('repairs_started'))}` / `{fmt_num(totals.get('repairs_ready'))}` / `{fmt_num(totals.get('repairs_completed'))}`, and "
         f"`{len(negative_pnl)}` providers ended with negative modeled P&L. The run recorded "
         f"`{fmt_num(totals.get('unavailable_reads'))}` unavailable reads, "
         f"`{fmt_num(totals.get('data_loss_events'))}` modeled data-loss events, "
@@ -616,8 +621,8 @@ def write_report_md(
         "",
         "### Timeline",
         "",
-        "| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |",
-        "|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     lines.extend(timeline_rows)
     lines.extend(
@@ -640,6 +645,7 @@ def write_report_md(
             "Repair summary:",
             "",
             f"- Repairs started: `{len(repairs_started)}`",
+            f"- Repairs marked ready: `{len(repairs_ready)}`",
             f"- Repairs completed: `{len(repairs_completed)}`",
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Final active slots in last epoch: `{len(active_end_slots)}`",
@@ -733,7 +739,7 @@ def write_report_md(
             "- `providers.csv`: final provider-level economics and fault counters.",
             "- `slots.csv`: per-slot epoch ledger.",
             "- `evidence.csv`: policy evidence events.",
-            "- `repairs.csv`: repair start/completion events.",
+            "- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.",
             "- `economy.csv`: per-epoch market and accounting ledger.",
             "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.",
         ]
@@ -783,10 +789,12 @@ def build_behavior_narrative(
 
     if repairs:
         started = sum(1 for row in repairs if row.get("event") == "repair_started")
+        ready = sum(1 for row in repairs if row.get("event") == "repair_ready")
         completed = sum(1 for row in repairs if row.get("event") == "repair_completed")
         parts.append(
-            f"Repair was exercised: `{started}` repair operations started and `{completed}` completed. "
-            "The simulator models this as make-before-break reassignment, so the old assignment remains visible while replacement work catches up."
+            f"Repair was exercised: `{started}` repair operations started, `{ready}` produced pending-provider readiness evidence, "
+            f"and `{completed}` completed. The simulator models this as make-before-break reassignment, so the old assignment remains "
+            "visible until replacement work catches up and the readiness gate is satisfied."
         )
     else:
         parts.append("No repair events occurred. For healthy or economic-only scenarios this is correct; for fault scenarios it may mean the policy is too passive.")
@@ -860,6 +868,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Recovery epoch after worst | `{availability['recovery_epoch_after_worst'] or 'not recovered'}` | Shows whether the network returned to clean steady state after the worst point. |",
         f"| Saturation rate | `{fmt_pct(saturation['saturation_per_retrieval_attempt'])}` | Provider bandwidth saturation per retrieval attempt. |",
         f"| Peak saturation | `{fmt_num(saturation['peak_saturated_responses'])}` at epoch `{saturation['peak_saturation_epoch']}` | Reveals when bandwidth, not storage correctness, became the bottleneck. |",
+        f"| Repair readiness ratio | `{fmt_pct(repair['readiness_ratio'])}` | Measures whether pending providers catch up before promotion. |",
         f"| Repair completion ratio | `{fmt_pct(repair['completion_ratio'])}` | Measures whether healing catches up with detection. |",
         f"| Repair backoff pressure | `{fmt_num(repair['backoffs_per_started_repair'])}` backoffs per started repair | Shows whether repair coordination is saturated. |",
         f"| Final repair backlog | `{fmt_num(repair['final_repair_backlog'])}` slots | Started repairs minus completed repairs at run end. |",
@@ -938,11 +947,12 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
         if not notes:
             notes.append("steady state")
         rows.append(
-            "| {epoch} | {success} | {evidence} | {started} | {completed} | {burned} | {pnl} | {notes} |".format(
+            "| {epoch} | {success} | {evidence} | {started} | {ready} | {completed} | {burned} | {pnl} | {notes} |".format(
                 epoch=row.get("epoch", ""),
                 success=fmt_pct(safe_rate(row, "retrieval_successes", "retrieval_attempts")),
                 evidence=fmt_num(evidence_count),
                 started=fmt_num(row.get("repairs_started")),
+                ready=fmt_num(row.get("repairs_ready")),
                 completed=fmt_num(row.get("repairs_completed")),
                 burned=fmt_money(row.get("reward_burned")),
                 pnl=fmt_money(row.get("provider_pnl")),
@@ -996,6 +1006,7 @@ def assertion_meaning(name: str) -> str:
         "max_data_loss_events": "Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero.",
         "max_repairs_started": "No-repair invariant for healthy baseline runs.",
         "min_repairs_started": "Repair liveness: policy must start reassignment when evidence warrants it.",
+        "min_repairs_ready": "Repair readiness: pending providers must produce catch-up evidence before promotion.",
         "min_repairs_completed": "Repair completion: make-before-break reassignment must finish within the run.",
         "max_quota_misses": "Healthy providers should not miss liveness quota.",
         "min_quota_misses": "Fault fixture must generate quota evidence.",
@@ -1282,7 +1293,11 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
     corrupt_ready = fnum(totals.get("paid_corrupt_bytes")) == 0
     repair_ready = True
     if scenario in {"single-outage", "withholding", "corrupt-provider", "malicious-corrupt", "lazy-provider", "setup-failure"}:
-        repair_ready = fnum(totals.get("repairs_started")) > 0 and fnum(totals.get("repairs_completed")) > 0
+        repair_ready = (
+            fnum(totals.get("repairs_started")) > 0
+            and fnum(totals.get("repairs_ready")) > 0
+            and fnum(totals.get("repairs_completed")) > 0
+        )
     hard_enforcement_ready = scenario not in {"corrupt-provider", "malicious-corrupt"} or fnum(totals.get("provider_slashed")) > 0
     ready = assertions_ready and data_loss_ready and availability_ready and corrupt_ready and repair_ready and hard_enforcement_ready
 
@@ -1313,7 +1328,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         f"| No modeled data loss | `{str(data_loss_ready).lower()}` | Temporary unavailable reads can be scenario-specific, but durability loss should block graduation. |",
         f"| Availability within scenario contract | `{str(availability_ready).lower()}` | Enforcement must not harm users beyond the availability bounds chosen for this case. |",
         f"| Corrupt bytes not paid | `{str(corrupt_ready).lower()}` | Bad data must never be economically rewarded. |",
-        f"| Repair path exercised when expected | `{str(repair_ready).lower()}` | Fault scenarios should prove recovery, not only detection. |",
+        f"| Repair path exercised when expected | `{str(repair_ready).lower()}` | Fault scenarios should prove detection, pending-provider readiness, and promotion. |",
         f"| Hard enforcement represented when expected | `{str(hard_enforcement_ready).lower()}` | Corruption fixtures should prove the simulated slash/jail accounting path before keeper work. |",
         "",
         "## Scenario-Specific Graduation Semantics",

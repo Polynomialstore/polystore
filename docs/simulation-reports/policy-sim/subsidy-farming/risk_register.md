@@ -11,7 +11,7 @@ Model providers attempting to collect base rewards while skipping useful livenes
 ## Evidence Counters
 
 - Evidence events: `96`
-- Repair events: `96`
+- Repair events: `144`
 - Failed assertions: `0`
 - Providers with negative P&L: `6`
 - Elasticity rejections: `0`

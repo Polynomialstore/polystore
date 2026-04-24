@@ -8,7 +8,7 @@ Model a population-scale network with more than one thousand storage providers a
 
 Expected policy behavior: Availability should stay above the configured floor, price should remain bounded, saturation and repair backoffs should be visible, and no provider should be assigned above modeled capacity.
 
-Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/completed were `3624` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` modeled data-loss events, `15482` bandwidth saturation responses and `21150` repair backoffs.
+Observed result: retrieval success was `99.26%`, reward coverage was `96.12%`, repairs started/ready/completed were `3624` / `3050` / `3050`, and `4` providers ended with negative modeled P&L. The run recorded `1065` unavailable reads, `0` modeled data-loss events, `15482` bandwidth saturation responses and `21150` repair backoffs.
 
 ## Review Focus
 
@@ -60,7 +60,7 @@ Availability was degraded: the run succeeded on `99.26%` of retrievals and recor
 
 The policy layer recorded `31338` evidence events: `31338` soft events and `0` hard events. Soft evidence is suitable for repair and reward exclusion; hard evidence is the category that can later justify slashing or stronger sanctions.
 
-Repair was exercised: `3624` repair operations started and `3050` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible while replacement work catches up.
+Repair was exercised: `3624` repair operations started, `3050` produced pending-provider readiness evidence, and `3050` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible until replacement work catches up and the readiness gate is satisfied.
 
 Reward exclusion was active: `292.9860` modeled reward units were burned instead of paid to non-compliant slots.
 
@@ -83,6 +83,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Recovery epoch after worst | `18` | Shows whether the network returned to clean steady state after the worst point. |
 | Saturation rate | `10.75%` | Provider bandwidth saturation per retrieval attempt. |
 | Peak saturation | `1534` at epoch `10` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
+| Repair readiness ratio | `84.16%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `84.16%` | Measures whether healing catches up with detection. |
 | Repair backoff pressure | `5.8361` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Final repair backlog | `574` slots | Started repairs minus completed repairs at run end. |
@@ -118,36 +119,36 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 ### Timeline
 
-| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
-|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | 99.78% | 1379 | 180 | 0 | 3.6900 | 472.3180 | 511 offline responses, 497 saturated, 180 quota misses, 11 repair backoffs |
-| 2 | 100.00% | 1085 | 138 | 0 | 2.6640 | 488.1882 | 391 offline responses, 421 saturated, 135 quota misses, 180 slots repairing |
-| 3 | 100.00% | 1009 | 126 | 0 | 2.3940 | 503.6600 | 316 offline responses, 459 saturated, 108 quota misses, 318 slots repairing |
-| 4 | 100.00% | 958 | 121 | 102 | 2.3220 | 519.8743 | 267 offline responses, 468 saturated, 102 quota misses, 444 slots repairing |
-| 5 | 99.90% | 1204 | 168 | 121 | 3.1500 | 537.0365 | 452 offline responses, 434 saturated, 150 quota misses, 463 slots repairing |
-| 6 | 99.97% | 907 | 113 | 139 | 2.1960 | 556.9552 | 306 offline responses, 378 saturated, 110 quota misses, 510 slots repairing |
-| 7 | 99.75% | 1230 | 168 | 117 | 3.3120 | 575.4129 | 461 offline responses, 436 saturated, 165 quota misses, 484 slots repairing |
-| 8 | 96.65% | 16790 | 180 | 114 | 54.4680 | 525.4441 | 9595 offline responses, 1288 saturated, 3025 quota misses, 2708 repair backoffs, 535 slots repairing |
-| 9 | 96.35% | 16131 | 180 | 108 | 51.1200 | 546.8025 | 9148 offline responses, 1413 saturated, 2836 quota misses, 5095 repair backoffs, 601 slots repairing |
-| 10 | 96.33% | 15270 | 180 | 134 | 47.5380 | 570.5596 | 8585 offline responses, 1534 saturated, 2635 quota misses, 4725 repair backoffs, 673 slots repairing |
-| 11 | 97.47% | 14159 | 180 | 127 | 44.7660 | 602.6376 | 7982 offline responses, 1340 saturated, 2475 quota misses, 4423 repair backoffs, 719 slots repairing |
-| 12 | 97.65% | 13782 | 180 | 150 | 42.4800 | 628.6651 | 7827 offline responses, 1378 saturated, 2342 quota misses, 4166 repair backoffs, 772 slots repairing |
-| 13 | 99.92% | 950 | 119 | 175 | 2.2140 | 709.0768 | 296 offline responses, 432 saturated, 105 quota misses, 802 slots repairing |
-| 14 | 99.25% | 1385 | 152 | 180 | 2.8620 | 730.3403 | 434 offline responses, 664 saturated, 135 quota misses, 746 slots repairing |
-| 15 | 99.93% | 1186 | 170 | 267 | 3.2760 | 762.3572 | 434 offline responses, 425 saturated, 157 quota misses, 718 slots repairing |
-| 16 | 99.87% | 952 | 111 | 168 | 2.2140 | 792.1959 | 283 offline responses, 451 saturated, 107 quota misses, 621 slots repairing |
-| 17 | 99.83% | 917 | 99 | 173 | 1.8540 | 821.7166 | 256 offline responses, 479 saturated, 83 quota misses, 564 slots repairing |
-| 18 | 100.00% | 971 | 153 | 157 | 2.8980 | 853.1627 | 388 offline responses, 287 saturated, 143 quota misses, 490 slots repairing |
-| 19 | 99.82% | 1285 | 157 | 138 | 3.0420 | 882.1683 | 420 offline responses, 562 saturated, 146 quota misses, 486 slots repairing |
-| 20 | 99.97% | 1239 | 164 | 111 | 3.0960 | 914.7988 | 455 offline responses, 461 saturated, 159 quota misses, 505 slots repairing |
-| 21 | 99.97% | 965 | 123 | 137 | 2.3760 | 947.3959 | 323 offline responses, 402 saturated, 117 quota misses, 558 slots repairing |
-| 22 | 99.88% | 893 | 118 | 156 | 2.1960 | 980.9474 | 268 offline responses, 411 saturated, 96 quota misses, 544 slots repairing |
-| 23 | 100.00% | 1137 | 164 | 141 | 3.1140 | 1017.0526 | 445 offline responses, 374 saturated, 154 quota misses, 506 slots repairing |
-| 24 | 99.97% | 1429 | 180 | 135 | 3.7440 | 1052.1894 | 550 offline responses, 488 saturated, 189 quota misses, 22 repair backoffs, 529 slots repairing |
+| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |
+|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | 99.78% | 1379 | 180 | 0 | 0 | 3.6900 | 472.3180 | 511 offline responses, 497 saturated, 180 quota misses, 11 repair backoffs |
+| 2 | 100.00% | 1085 | 138 | 0 | 0 | 2.6640 | 488.1882 | 391 offline responses, 421 saturated, 135 quota misses, 180 slots repairing |
+| 3 | 100.00% | 1009 | 126 | 0 | 0 | 2.3940 | 503.6600 | 316 offline responses, 459 saturated, 108 quota misses, 318 slots repairing |
+| 4 | 100.00% | 958 | 121 | 102 | 102 | 2.3220 | 519.8743 | 267 offline responses, 468 saturated, 102 quota misses, 444 slots repairing |
+| 5 | 99.90% | 1204 | 168 | 121 | 121 | 3.1500 | 537.0365 | 452 offline responses, 434 saturated, 150 quota misses, 463 slots repairing |
+| 6 | 99.97% | 907 | 113 | 139 | 139 | 2.1960 | 556.9552 | 306 offline responses, 378 saturated, 110 quota misses, 510 slots repairing |
+| 7 | 99.75% | 1230 | 168 | 117 | 117 | 3.3120 | 575.4129 | 461 offline responses, 436 saturated, 165 quota misses, 484 slots repairing |
+| 8 | 96.65% | 16790 | 180 | 114 | 114 | 54.4680 | 525.4441 | 9595 offline responses, 1288 saturated, 3025 quota misses, 2708 repair backoffs, 535 slots repairing |
+| 9 | 96.35% | 16131 | 180 | 108 | 108 | 51.1200 | 546.8025 | 9148 offline responses, 1413 saturated, 2836 quota misses, 5095 repair backoffs, 601 slots repairing |
+| 10 | 96.33% | 15270 | 180 | 134 | 134 | 47.5380 | 570.5596 | 8585 offline responses, 1534 saturated, 2635 quota misses, 4725 repair backoffs, 673 slots repairing |
+| 11 | 97.47% | 14159 | 180 | 127 | 127 | 44.7660 | 602.6376 | 7982 offline responses, 1340 saturated, 2475 quota misses, 4423 repair backoffs, 719 slots repairing |
+| 12 | 97.65% | 13782 | 180 | 150 | 150 | 42.4800 | 628.6651 | 7827 offline responses, 1378 saturated, 2342 quota misses, 4166 repair backoffs, 772 slots repairing |
+| 13 | 99.92% | 950 | 119 | 175 | 175 | 2.2140 | 709.0768 | 296 offline responses, 432 saturated, 105 quota misses, 802 slots repairing |
+| 14 | 99.25% | 1385 | 152 | 180 | 180 | 2.8620 | 730.3403 | 434 offline responses, 664 saturated, 135 quota misses, 746 slots repairing |
+| 15 | 99.93% | 1186 | 170 | 267 | 267 | 3.2760 | 762.3572 | 434 offline responses, 425 saturated, 157 quota misses, 718 slots repairing |
+| 16 | 99.87% | 952 | 111 | 168 | 168 | 2.2140 | 792.1959 | 283 offline responses, 451 saturated, 107 quota misses, 621 slots repairing |
+| 17 | 99.83% | 917 | 99 | 173 | 173 | 1.8540 | 821.7166 | 256 offline responses, 479 saturated, 83 quota misses, 564 slots repairing |
+| 18 | 100.00% | 971 | 153 | 157 | 157 | 2.8980 | 853.1627 | 388 offline responses, 287 saturated, 143 quota misses, 490 slots repairing |
+| 19 | 99.82% | 1285 | 157 | 138 | 138 | 3.0420 | 882.1683 | 420 offline responses, 562 saturated, 146 quota misses, 486 slots repairing |
+| 20 | 99.97% | 1239 | 164 | 111 | 111 | 3.0960 | 914.7988 | 455 offline responses, 461 saturated, 159 quota misses, 505 slots repairing |
+| 21 | 99.97% | 965 | 123 | 137 | 137 | 2.3760 | 947.3959 | 323 offline responses, 402 saturated, 117 quota misses, 558 slots repairing |
+| 22 | 99.88% | 893 | 118 | 156 | 156 | 2.1960 | 980.9474 | 268 offline responses, 411 saturated, 96 quota misses, 544 slots repairing |
+| 23 | 100.00% | 1137 | 164 | 141 | 141 | 3.1140 | 1017.0526 | 445 offline responses, 374 saturated, 154 quota misses, 506 slots repairing |
+| 24 | 99.97% | 1429 | 180 | 135 | 135 | 3.7440 | 1052.1894 | 550 offline responses, 488 saturated, 189 quota misses, 22 repair backoffs, 529 slots repairing |
 
 ## Enforcement Interpretation
 
-The simulator recorded `31338` evidence events and `27824` repair ledger events. The first evidence epoch was `1` and the first repair-start epoch was `1`.
+The simulator recorded `31338` evidence events and `30874` repair ledger events. The first evidence epoch was `1` and the first repair-start epoch was `1`.
 
 Evidence by reason:
 
@@ -168,6 +169,7 @@ Evidence by provider:
 Repair summary:
 
 - Repairs started: `3624`
+- Repairs marked ready: `3050`
 - Repairs completed: `3050`
 - Repair backoffs: `21150`
 - Final active slots in last epoch: `17426`
@@ -188,7 +190,7 @@ Repair summary:
 | 1 | `repair_started` | 91 | 6 | `sp-1086` | `sp-000` | `deputy_served_zero_direct` |
 | 1 | `repair_started` | 96 | 7 | `sp-1147` | `sp-587` | `deputy_served_zero_direct` |
 | 1 | `repair_started` | 96 | 11 | `sp-1151` | `sp-372` | `deputy_served_zero_direct` |
-| ... | ... | ... | ... | ... | ... | `27812` more events omitted |
+| ... | ... | ... | ... | ... | ... | `30862` more events omitted |
 
 ## Economic Interpretation
 
@@ -221,6 +223,7 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 | `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=0.992604167, required>=0.985 |
 | `min_saturated_responses` | `PASS` | Scale fixture must expose provider bandwidth saturation. | saturated_responses=15482, required>=1 |
 | `min_repairs_started` | `PASS` | Repair liveness: policy must start reassignment when evidence warrants it. | repairs_started=3624, required>=1 |
+| `min_repairs_ready` | `PASS` | Repair readiness: pending providers must produce catch-up evidence before promotion. | repairs_ready=3050, required>=1 |
 | `min_repairs_completed` | `PASS` | Repair completion: make-before-break reassignment must finish within the run. | repairs_completed=3050, required>=1 |
 | `min_repair_backoffs` | `PASS` | Scale fixture must expose healing coordination pressure. | repair_backoffs=21150, required>=1 |
 | `max_providers_over_capacity` | `PASS` | Assignment must respect modeled provider capacity. | providers_over_capacity=0, required<=0 |
@@ -308,6 +311,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start/completion events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

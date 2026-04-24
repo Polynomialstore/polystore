@@ -11,7 +11,7 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 ## Evidence Counters
 
 - Evidence events: `64`
-- Repair events: `64`
+- Repair events: `96`
 - Failed assertions: `0`
 - Providers with negative P&L: `4`
 - Elasticity rejections: `0`

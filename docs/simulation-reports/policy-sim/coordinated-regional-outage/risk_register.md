@@ -11,7 +11,7 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 ## Evidence Counters
 
 - Evidence events: `1540`
-- Repair events: `1336`
+- Repair events: `1432`
 - Failed assertions: `0`
 - Providers with negative P&L: `0`
 - Elasticity rejections: `0`

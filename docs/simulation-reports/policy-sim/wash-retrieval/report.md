@@ -8,7 +8,7 @@ Model artificial retrieval demand. The policy question is whether fake activity 
 
 Expected policy behavior: Retrievals succeed, but base fees and variable burns are visible and non-zero.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/completed were `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
+Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs.
 
 ## Review Focus
 
@@ -75,6 +75,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Recovery epoch after worst | `2` | Shows whether the network returned to clean steady state after the worst point. |
 | Saturation rate | `0.00%` | Provider bandwidth saturation per retrieval attempt. |
 | Peak saturation | `0` at epoch `1` | Reveals when bandwidth, not storage correctness, became the bottleneck. |
+| Repair readiness ratio | `100.00%` | Measures whether pending providers catch up before promotion. |
 | Repair completion ratio | `100.00%` | Measures whether healing catches up with detection. |
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
@@ -105,14 +106,14 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 ### Timeline
 
-| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Completed | Reward Burned | Provider P&L | Notes |
-|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | 100.00% | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
-| 2 | 100.00% | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
-| 3 | 100.00% | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
-| 4 | 100.00% | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
-| 5 | 100.00% | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
-| 6 | 100.00% | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
+| Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |
+|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
+| 2 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
+| 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
+| 4 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
+| 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
+| 6 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 65.7600 | steady state |
 
 ## Enforcement Interpretation
 
@@ -129,6 +130,7 @@ Evidence by provider:
 Repair summary:
 
 - Repairs started: `0`
+- Repairs marked ready: `0`
 - Repairs completed: `0`
 - Repair backoffs: `0`
 - Final active slots in last epoch: `288`
@@ -237,6 +239,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start/completion events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

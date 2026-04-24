@@ -61,6 +61,8 @@
     "peak_repair_backoffs": 0.0,
     "peak_repairing_epoch": 3,
     "peak_repairing_slots": 32.0,
+    "readiness_ratio": 1.0,
+    "ready": 32.0,
     "started": 32.0
   },
   "saturation": {

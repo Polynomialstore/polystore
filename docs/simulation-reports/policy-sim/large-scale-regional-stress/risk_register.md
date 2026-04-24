@@ -14,7 +14,7 @@ Model a population-scale network with more than one thousand storage providers a
 ## Evidence Counters
 
 - Evidence events: `31338`
-- Repair events: `27824`
+- Repair events: `30874`
 - Failed assertions: `0`
 - Providers with negative P&L: `4`
 - Elasticity rejections: `0`

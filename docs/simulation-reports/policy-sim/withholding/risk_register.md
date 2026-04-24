@@ -11,7 +11,7 @@ Model a provider that stays nominally online but withholds retrieval responses a
 ## Evidence Counters
 
 - Evidence events: `12`
-- Repair events: `12`
+- Repair events: `18`
 - Failed assertions: `0`
 - Providers with negative P&L: `1`
 - Elasticity rejections: `0`

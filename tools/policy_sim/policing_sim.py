@@ -233,6 +233,7 @@ class SlotState:
     status: str = SLOT_ACTIVE
     pending_provider_id: str | None = None
     repair_remaining_epochs: int = 0
+    repair_ready: bool = False
     missed_epochs: int = 0
     deputy_missed_epochs: int = 0
     current_gen: int = 1
@@ -298,6 +299,7 @@ class EpochMetrics:
     active_slots: int = 0
     repairing_slots: int = 0
     repairs_started: int = 0
+    repairs_ready: int = 0
     repairs_completed: int = 0
     repair_backoffs: int = 0
     paid_corrupt_bytes: int = 0
@@ -750,16 +752,36 @@ class PolicySimulator:
             online.get(pending, False)
             and self.rng.random() <= provider.repair_success_probability
         )
-        if can_coordinate_repair and slot.repair_remaining_epochs > 0:
+        if not can_coordinate_repair:
+            return
+
+        if slot.repair_remaining_epochs > 0:
             slot.repair_remaining_epochs -= 1
         if slot.repair_remaining_epochs > 0:
             return
+
+        if not slot.repair_ready:
+            slot.repair_ready = True
+            metrics.repairs_ready += 1
+            self.repair_rows.append(
+                {
+                    "epoch": epoch,
+                    "event": "repair_ready",
+                    "deal_id": deal.deal_id,
+                    "slot": slot.slot,
+                    "old_provider": slot.provider_id,
+                    "new_provider": pending,
+                    "reason": "catchup_ready",
+                    "generation": slot.current_gen,
+                }
+            )
 
         old_provider = slot.provider_id
         slot.provider_id = pending
         slot.pending_provider_id = None
         slot.status = SLOT_ACTIVE
         slot.repair_remaining_epochs = 0
+        slot.repair_ready = False
         slot.missed_epochs = 0
         slot.deputy_missed_epochs = 0
         slot.durability_suspect = False
@@ -843,6 +865,7 @@ class PolicySimulator:
         slot.status = SLOT_REPAIRING
         slot.pending_provider_id = pending
         slot.repair_remaining_epochs = self.config.repair_epochs
+        slot.repair_ready = False
         slot.last_reason = reason
         metrics.repairs_started += 1
         self.repairs_started_this_epoch += 1
@@ -968,6 +991,7 @@ class PolicySimulator:
                 "status": slot.status,
                 "pending_provider_id": slot.pending_provider_id or "",
                 "generation": slot.current_gen,
+                "repair_ready": int(slot.repair_ready),
                 "missed_epochs": slot.missed_epochs,
                 "deputy_missed_epochs": slot.deputy_missed_epochs,
                 "credits_raw": slot.credits_raw,
@@ -1108,6 +1132,7 @@ class PolicySimulator:
             "active_slots",
             "repairing_slots",
             "repairs_started",
+            "repairs_ready",
             "repairs_completed",
             "repair_backoffs",
             "paid_corrupt_bytes",
@@ -1254,11 +1279,13 @@ def evaluate_assertions(
             f"success_rate={totals['success_rate']:.4f}",
         )
         add("outage_triggers_repair", totals["repairs_started"] >= 1, str(totals["repairs_started"]))
+        add("outage_marks_repair_ready", totals["repairs_ready"] >= 1, str(totals["repairs_ready"]))
         add("outage_completes_repair", totals["repairs_completed"] >= 1, str(totals["repairs_completed"]))
         add("outage_no_corrupt_payment", totals["paid_corrupt_bytes"] == 0, str(totals["paid_corrupt_bytes"]))
     elif scenario in {"malicious-corrupt", "corrupt-provider"}:
         add("malicious_detected", totals["invalid_proofs"] >= 1, str(totals["invalid_proofs"]))
         add("malicious_triggers_repair", totals["repairs_started"] >= 1, str(totals["repairs_started"]))
+        add("malicious_marks_repair_ready", totals["repairs_ready"] >= 1, str(totals["repairs_ready"]))
         add(
             "malicious_corrupt_bytes_not_paid",
             totals["paid_corrupt_bytes"] == 0,
@@ -1272,6 +1299,7 @@ def evaluate_assertions(
     elif scenario == "withholding":
         add("withholding_detected", totals["withheld_responses"] >= 1, str(totals["withheld_responses"]))
         add("withholding_triggers_repair", totals["repairs_started"] >= 1, str(totals["repairs_started"]))
+        add("withholding_marks_repair_ready", totals["repairs_ready"] >= 1, str(totals["repairs_ready"]))
         add(
             "withholding_route_around",
             totals["success_rate"] >= 0.95,
@@ -1280,6 +1308,7 @@ def evaluate_assertions(
     elif scenario == "lazy-provider":
         add("lazy_quota_miss_detected", totals["quota_misses"] >= 1, str(totals["quota_misses"]))
         add("lazy_triggers_repair", totals["repairs_started"] >= 1, str(totals["repairs_started"]))
+        add("lazy_marks_repair_ready", totals["repairs_ready"] >= 1, str(totals["repairs_ready"]))
 
     result.assertions = checks
     return checks
@@ -1514,7 +1543,8 @@ def print_summary(result: SimResult) -> None:
     )
     print(
         "success_rate={success_rate:.4f} reward_coverage={reward_coverage:.4f} "
-        "repairs_started={repairs_started} repairs_completed={repairs_completed}".format(**totals)
+        "repairs_started={repairs_started} repairs_ready={repairs_ready} "
+        "repairs_completed={repairs_completed}".format(**totals)
     )
     print(
         "quota_misses={quota_misses} deputy_misses={deputy_misses} "

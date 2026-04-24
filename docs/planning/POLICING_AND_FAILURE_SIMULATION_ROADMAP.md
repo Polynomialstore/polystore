@@ -597,7 +597,10 @@ Current implementation already has `ACTIVE`, `REPAIRING`, `pending_provider`,
 `repair_target_gen`, and a first-generation `Mode2RepairReadiness` keeper
 ledger. The readiness ledger is set by valid pending-provider proof activity
 while a slot is repairing, and promotion checks that readiness before swapping
-the active provider. Missing desired-state pieces include:
+the active provider. The policy simulator now mirrors this lifecycle by
+emitting repair ledger events in `started/ready/completed` order, where `ready`
+represents pending-provider catch-up evidence before promotion. Missing
+desired-state pieces include:
 
 1. Explicit `SUSPECT` / `DELINQUENT` reason codes.
 2. Repair attempt counters and cooldown windows.
