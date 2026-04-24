@@ -4199,30 +4199,49 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		DealID         uint64 `json:"deal_id"`
-		Owner          string `json:"owner"`
-		Provider       string `json:"provider"`
-		ManifestRoot   string `json:"manifest_root"`
-		FilePath       string `json:"file_path"`
-		RangeStart     uint64 `json:"range_start"`
-		RangeLen       uint64 `json:"range_len"`
-		StartMduIndex  uint64 `json:"start_mdu_index"`
-		StartBlobIndex uint32 `json:"start_blob_index"`
-		BlobCount      uint64 `json:"blob_count"`
+		DealID               uint64  `json:"deal_id"`
+		Owner                string  `json:"owner"`
+		Provider             string  `json:"provider"`
+		ProviderSource       string  `json:"provider_source"`
+		Mode2Slot            *uint64 `json:"mode2_slot,omitempty"`
+		Mode2SlotStatus      *int    `json:"mode2_slot_status,omitempty"`
+		Mode2ActiveProvider  string  `json:"mode2_active_provider,omitempty"`
+		Mode2PendingProvider string  `json:"mode2_pending_provider,omitempty"`
+		ManifestRoot         string  `json:"manifest_root"`
+		FilePath             string  `json:"file_path"`
+		RangeStart           uint64  `json:"range_start"`
+		RangeLen             uint64  `json:"range_len"`
+		StartMduIndex        uint64  `json:"start_mdu_index"`
+		StartBlobIndex       uint32  `json:"start_blob_index"`
+		BlobCount            uint64  `json:"blob_count"`
+	}
+
+	var mode2SlotPtr *uint64
+	var mode2SlotStatusPtr *int
+	if stripe.mode == 2 {
+		slot := providerResolution.Mode2Slot
+		status := providerResolution.SlotStatus
+		mode2SlotPtr = &slot
+		mode2SlotStatusPtr = &status
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response{
-		DealID:         dealID,
-		Owner:          owner,
-		Provider:       providerAddr,
-		ManifestRoot:   dealRoot.Canonical,
-		FilePath:       filePath,
-		RangeStart:     rangeStart,
-		RangeLen:       rangeLen,
-		StartMduIndex:  startMdu,
-		StartBlobIndex: startBlob,
-		BlobCount:      blobCount,
+		DealID:               dealID,
+		Owner:                owner,
+		Provider:             providerAddr,
+		ProviderSource:       providerResolution.Source,
+		Mode2Slot:            mode2SlotPtr,
+		Mode2SlotStatus:      mode2SlotStatusPtr,
+		Mode2ActiveProvider:  providerResolution.ActiveProvider,
+		Mode2PendingProvider: providerResolution.PendingProvider,
+		ManifestRoot:         dealRoot.Canonical,
+		FilePath:             filePath,
+		RangeStart:           rangeStart,
+		RangeLen:             rangeLen,
+		StartMduIndex:        startMdu,
+		StartBlobIndex:       startBlob,
+		BlobCount:            blobCount,
 	})
 }
 

@@ -78,6 +78,10 @@ type retrievalProviderResolution struct {
 	Provider          string
 	Source            string
 	UsedLocalFallback bool
+	Mode2Slot         uint64
+	SlotStatus        int
+	ActiveProvider    string
+	PendingProvider   string
 }
 
 func providerHTTPBaseOverrides() map[string]string {
@@ -307,10 +311,12 @@ func resolveProviderForRetrievalPlan(ctx context.Context, dealID uint64, stripe 
 
 		assign := slots[mode2Slot]
 		provider := strings.TrimSpace(assign.Provider)
+		activeProvider := provider
+		pendingProvider := strings.TrimSpace(assign.PendingProvider)
 		source := "mode2_slot_provider"
 		if assign.Status == 2 {
-			if pending := strings.TrimSpace(assign.PendingProvider); pending != "" {
-				provider = pending
+			if pendingProvider != "" {
+				provider = pendingProvider
 				source = "mode2_slot_pending_provider"
 			}
 		}
@@ -329,8 +335,12 @@ func resolveProviderForRetrievalPlan(ctx context.Context, dealID uint64, stripe 
 			expires:  time.Now().Add(dealProviderTTL),
 		})
 		return retrievalProviderResolution{
-			Provider: provider,
-			Source:   source,
+			Provider:        provider,
+			Source:          source,
+			Mode2Slot:       mode2Slot,
+			SlotStatus:      assign.Status,
+			ActiveProvider:  activeProvider,
+			PendingProvider: pendingProvider,
 		}, nil
 	}
 
