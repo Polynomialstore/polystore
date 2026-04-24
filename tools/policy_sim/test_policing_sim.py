@@ -179,6 +179,35 @@ class PolicySimulatorTests(unittest.TestCase):
             1,
         )
 
+    def test_flapping_provider_marks_suspect_without_delinquent_repair_churn(self):
+        config = SimConfig(
+            scenario="flapping-provider",
+            providers=48,
+            deals=24,
+            users=80,
+            epochs=10,
+            evict_after_missed_epochs=3,
+            deputy_evict_after_missed_epochs=3,
+        )
+        result = PolicySimulator(config, extra_faults=["offline:sp-000:2,4,6,8"]).run()
+
+        self.assertGreater(result.totals["suspect_slots"], 0)
+        self.assertEqual(0, result.totals["delinquent_slots"])
+        self.assertEqual(0, result.totals["repairs_started"])
+        self.assertTrue(
+            any(row["health_state"] == "SUSPECT" and row["health_reason"] for row in result.slots),
+            "flapping slots should expose suspect reason codes without crossing delinquency",
+        )
+
+    def test_sustained_outage_marks_delinquent_reason_code(self):
+        result = self.run_scenario("single-outage", providers=48, deals=24, users=80, epochs=10)
+
+        self.assertGreater(result.totals["delinquent_slots"], 0)
+        self.assertTrue(
+            any(row["health_state"] == "DELINQUENT" and row["health_reason"] for row in result.slots),
+            "sustained outage should expose delinquent reason codes before or during repair",
+        )
+
     def test_jail_window_is_exclusive(self):
         simulator = PolicySimulator(
             SimConfig(

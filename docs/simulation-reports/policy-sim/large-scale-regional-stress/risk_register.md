@@ -20,6 +20,8 @@ Model a population-scale network with more than one thousand storage providers a
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `15482`
+- Suspect slot-epochs: `361`
+- Delinquent slot-epochs: `25634`
 - Repair attempts: `16060`
 - Repair backoffs: `12436`
 - Repair cooldowns: `0`

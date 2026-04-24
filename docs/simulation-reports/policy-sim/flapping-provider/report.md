@@ -8,7 +8,7 @@ Model a provider with intermittent outages that recover before the delinquency t
 
 Expected policy behavior: Offline responses are visible, retrieval success stays high, no data loss occurs, and repair stays below the configured threshold.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `99.17%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts.
+Observed result: retrieval success was `100.00%`, reward coverage was `99.17%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts. Slot health recorded `24` suspect slot-epochs and `0` delinquent slot-epochs.
 
 ## Review Focus
 
@@ -87,6 +87,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Repair backoffs per attempt | `0` | Distinguishes capacity/cooldown pressure from successful repair starts. |
 | Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
+| Suspect / delinquent slot-epochs | `24` / `0` | Separates early warning state from threshold-crossed delinquency. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `37.50%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `37.50%` / `37.50%` / `37.50%` | Detects assignment concentration and capacity cliffs. |
@@ -118,13 +119,13 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 1 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 2 | 100.00% | 25 | 0 | 0 | 0 | 0.1200 | 5.8000 | 14 offline responses, 6 quota misses |
+| 2 | 100.00% | 25 | 0 | 0 | 0 | 0.1200 | 5.8000 | 14 offline responses, 6 quota misses, 6 suspect slots |
 | 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 4 | 100.00% | 21 | 0 | 0 | 0 | 0.1200 | 5.8000 | 9 offline responses, 6 quota misses |
+| 4 | 100.00% | 21 | 0 | 0 | 0 | 0.1200 | 5.8000 | 9 offline responses, 6 quota misses, 6 suspect slots |
 | 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 6 | 100.00% | 21 | 0 | 0 | 0 | 0.1200 | 5.8000 | 9 offline responses, 6 quota misses |
+| 6 | 100.00% | 21 | 0 | 0 | 0 | 0.1200 | 5.8000 | 9 offline responses, 6 quota misses, 6 suspect slots |
 | 7 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
-| 8 | 100.00% | 23 | 0 | 0 | 0 | 0.1200 | 5.8000 | 12 offline responses, 6 quota misses |
+| 8 | 100.00% | 23 | 0 | 0 | 0 | 0.1200 | 5.8000 | 12 offline responses, 6 quota misses, 6 suspect slots |
 | 9 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
 | 10 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
 
@@ -150,6 +151,8 @@ Repair summary:
 - Repair backoffs: `0`
 - Repair cooldown backoffs: `0`
 - Repair attempt-cap backoffs: `0`
+- Suspect slot-epochs: `24`
+- Delinquent slot-epochs: `0`
 - Final active slots in last epoch: `288`
 
 ### Repair Ledger Excerpt
@@ -186,6 +189,8 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 |---|---|---|---|
 | `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.99 |
 | `min_offline_responses` | `PASS` | Custom assertion. Review the detail and fixture threshold. | offline_responses=44, required>=1 |
+| `min_suspect_slots` | `PASS` | Health-state observability: soft failures should become suspect before punitive consequences. | suspect_slots=24, required>=1 |
+| `max_delinquent_slots` | `PASS` | Transient jitter should not cross into delinquent slot state. | delinquent_slots=0, required<=0 |
 | `max_repairs_started` | `PASS` | No-repair invariant for healthy baseline runs. | repairs_started=0, required<=0 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `max_paid_corrupt_bytes` | `PASS` | Corrupt data must not earn payment. | paid_corrupt_bytes=0, required<=0 |
@@ -267,7 +272,7 @@ Shows whether started repairs are accumulating faster than they complete.
 - `summary.json`: compact machine-readable run summary.
 - `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.
 - `providers.csv`: final provider-level economics and fault counters.
-- `slots.csv`: per-slot epoch ledger.
+- `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.

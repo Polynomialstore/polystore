@@ -17,6 +17,8 @@ Model an honest provider that becomes unavailable for several epochs. The policy
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Suspect slot-epochs: `1`
+- Delinquent slot-epochs: `12`
 - Repair attempts: `6`
 - Repair backoffs: `0`
 - Repair cooldowns: `0`

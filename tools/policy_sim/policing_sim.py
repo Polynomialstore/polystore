@@ -25,6 +25,9 @@ BLOB_SIZE_BYTES = 128 * 1024
 BLOBS_PER_MDU = 64
 SLOT_ACTIVE = "ACTIVE"
 SLOT_REPAIRING = "REPAIRING"
+HEALTH_HEALTHY = "HEALTHY"
+HEALTH_SUSPECT = "SUSPECT"
+HEALTH_DELINQUENT = "DELINQUENT"
 
 ENFORCEMENT_ORDER = {
     "MEASURE_ONLY": 0,
@@ -253,6 +256,8 @@ class SlotState:
     deputy_served: int = 0
     hard_faulted_this_epoch: bool = False
     durability_suspect: bool = False
+    health_state: str = HEALTH_HEALTHY
+    health_reason: str = ""
     compliant_this_epoch: bool = False
     reward_eligible_this_epoch: bool = False
     last_reason: str = ""
@@ -307,6 +312,8 @@ class EpochMetrics:
     reward_eligible_slots: int = 0
     active_slots: int = 0
     repairing_slots: int = 0
+    suspect_slots: int = 0
+    delinquent_slots: int = 0
     repairs_started: int = 0
     repairs_ready: int = 0
     repairs_completed: int = 0
@@ -550,16 +557,25 @@ class PolicySimulator:
                 if slot.status == SLOT_REPAIRING:
                     metrics.repairing_slots += 1
                     self._advance_repair(epoch, online, deal, slot, metrics)
+                    self._count_slot_health(slot, metrics)
                     self._record_slot_row(epoch, slot)
                     continue
                 metrics.active_slots += 1
                 self._settle_slot_epoch(epoch, online, deal, slot, metrics)
+                self._count_slot_health(slot, metrics)
                 self._record_slot_row(epoch, slot)
 
         self._record_data_loss_events(metrics)
         self._settle_epoch_economy(epoch, metrics)
         self._maybe_update_prices(metrics)
         return metrics
+
+    @staticmethod
+    def _count_slot_health(slot: SlotState, metrics: EpochMetrics) -> None:
+        if slot.health_state == HEALTH_SUSPECT:
+            metrics.suspect_slots += 1
+        elif slot.health_state == HEALTH_DELINQUENT:
+            metrics.delinquent_slots += 1
 
     def _epoch_online_map(self, epoch: int) -> dict[str, bool]:
         out: dict[str, bool] = {}
@@ -721,6 +737,7 @@ class PolicySimulator:
         if slot.deputy_served > 0 and slot.direct_served == 0:
             slot.deputy_missed_epochs += 1
             metrics.deputy_misses += 1
+            self._mark_suspect(slot, "deputy_served_zero_direct")
             self._record_evidence(epoch, deal, slot, slot.provider_id, "soft", "deputy_served_zero_direct")
             if slot.deputy_missed_epochs >= self.config.deputy_evict_after_missed_epochs:
                 self._start_repair(epoch, deal, slot, "deputy_served_zero_direct", metrics)
@@ -731,6 +748,7 @@ class PolicySimulator:
             slot.missed_epochs += 1
             metrics.quota_misses += 1
             slot.last_reason = "quota_shortfall"
+            self._mark_suspect(slot, "quota_shortfall")
             self._record_evidence(epoch, deal, slot, slot.provider_id, "soft", "quota_shortfall")
             if slot.missed_epochs >= self.config.evict_after_missed_epochs:
                 self._start_repair(epoch, deal, slot, "quota_shortfall", metrics)
@@ -741,6 +759,8 @@ class PolicySimulator:
             return
 
         slot.missed_epochs = 0
+        if slot.status == SLOT_ACTIVE and not slot.durability_suspect:
+            self._mark_healthy(slot)
         slot.compliant_this_epoch = True
         metrics.compliant_slots += 1
         if not slot.hard_faulted_this_epoch and slot.status == SLOT_ACTIVE:
@@ -819,6 +839,26 @@ class PolicySimulator:
         slot.repair_attempts = 0
         slot.repair_backoff_until_epoch = 0
         slot.last_repair_attempt_epoch = 0
+        self._mark_healthy(slot)
+
+    @staticmethod
+    def _mark_suspect(slot: SlotState, reason: str) -> None:
+        if slot.health_state != HEALTH_DELINQUENT:
+            slot.health_state = HEALTH_SUSPECT
+            slot.health_reason = reason
+
+    @staticmethod
+    def _mark_delinquent(slot: SlotState, reason: str) -> None:
+        slot.health_state = HEALTH_DELINQUENT
+        slot.health_reason = reason
+
+    @staticmethod
+    def _mark_healthy(slot: SlotState) -> None:
+        slot.health_state = HEALTH_HEALTHY
+        slot.health_reason = ""
+        slot.repair_attempts = 0
+        slot.repair_backoff_until_epoch = 0
+        slot.last_repair_attempt_epoch = 0
 
     def _start_repair(
         self,
@@ -833,6 +873,7 @@ class PolicySimulator:
         is_hard_fault = reason in {"corrupt_retrieval", "invalid_synthetic_proof"}
         slot.hard_faulted_this_epoch = slot.hard_faulted_this_epoch or is_hard_fault
         slot.durability_suspect = slot.durability_suspect or is_hard_fault
+        self._mark_delinquent(slot, reason)
         if not self.mode_at_least("REPAIR_ONLY"):
             self.repair_rows.append(
                 {
@@ -1041,6 +1082,8 @@ class PolicySimulator:
                 "slot": slot.slot,
                 "provider_id": slot.provider_id,
                 "status": slot.status,
+                "health_state": slot.health_state,
+                "health_reason": slot.health_reason,
                 "pending_provider_id": slot.pending_provider_id or "",
                 "generation": slot.current_gen,
                 "repair_ready": int(slot.repair_ready),
@@ -1185,6 +1228,8 @@ class PolicySimulator:
             "reward_eligible_slots",
             "active_slots",
             "repairing_slots",
+            "suspect_slots",
+            "delinquent_slots",
             "repairs_started",
             "repairs_ready",
             "repairs_completed",
@@ -1609,7 +1654,8 @@ def print_summary(result: SimResult) -> None:
     print(
         "quota_misses={quota_misses} deputy_misses={deputy_misses} "
         "invalid_proofs={invalid_proofs} unavailable_reads={unavailable_reads} "
-        "data_loss_events={data_loss_events} saturated_responses={saturated_responses}".format(**totals)
+        "data_loss_events={data_loss_events} saturated_responses={saturated_responses} "
+        "suspect_slots={suspect_slots} delinquent_slots={delinquent_slots}".format(**totals)
     )
     print(
         "provider_pnl={provider_pnl:.4f} negative_pnl={providers_negative_pnl} "

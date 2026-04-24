@@ -8,7 +8,7 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 
 Expected policy behavior: Quota misses create audit demand, audit spend is capped by budget, repair starts where allowed, and data-loss events remain zero.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `98.11%`, repairs started/ready/completed were `32` / `32` / `32`, and `4` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `32` repair attempts.
+Observed result: retrieval success was `100.00%`, reward coverage was `98.11%`, repairs started/ready/completed were `32` / `32` / `32`, and `4` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `32` repair attempts. Slot health recorded `32` suspect slot-epochs and `64` delinquent slot-epochs.
 
 ## Review Focus
 
@@ -85,6 +85,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Repair backoff pressure | `0` backoffs per started repair | Shows whether repair coordination is saturated. |
 | Repair backoffs per attempt | `0` | Distinguishes capacity/cooldown pressure from successful repair starts. |
 | Repair cooldowns / attempt caps | `0` / `0` | Shows whether throttling, rather than candidate selection alone, is bounding repair churn. |
+| Suspect / delinquent slot-epochs | `32` / `64` | Separates early warning state from threshold-crossed delinquency. |
 | Final repair backlog | `0` slots | Started repairs minus completed repairs at run end. |
 | Final storage utilization | `45.00%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `50.00%` / `56.25%` / `62.50%` | Detects assignment concentration and capacity cliffs. |
@@ -115,9 +116,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | 100.00% | 32 | 0 | 0 | 0 | 0.6400 | 8.8400 | 32 quota misses |
-| 2 | 100.00% | 32 | 32 | 0 | 0 | 0.6400 | 8.8400 | 32 quota misses |
-| 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 8.8400 | 32 slots repairing |
+| 1 | 100.00% | 32 | 0 | 0 | 0 | 0.6400 | 8.8400 | 32 quota misses, 32 suspect slots |
+| 2 | 100.00% | 32 | 32 | 0 | 0 | 0.6400 | 8.8400 | 32 quota misses, 32 delinquent slots |
+| 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 8.8400 | 32 slots repairing, 32 delinquent slots |
 | 4 | 100.00% | 0 | 0 | 32 | 32 | 0.0000 | 8.8400 | 32 slots repairing |
 | 5 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
 | 6 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 9.4800 | steady state |
@@ -148,6 +149,8 @@ Repair summary:
 - Repair backoffs: `0`
 - Repair cooldown backoffs: `0`
 - Repair attempt-cap backoffs: `0`
+- Suspect slot-epochs: `32`
+- Delinquent slot-epochs: `64`
 - Final active slots in last epoch: `432`
 
 ### Repair Ledger Excerpt
@@ -279,7 +282,7 @@ Shows whether started repairs are accumulating faster than they complete.
 - `summary.json`: compact machine-readable run summary.
 - `epochs.csv`: per-epoch availability, liveness, reward, repair, and economics metrics.
 - `providers.csv`: final provider-level economics and fault counters.
-- `slots.csv`: per-slot epoch ledger.
+- `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.

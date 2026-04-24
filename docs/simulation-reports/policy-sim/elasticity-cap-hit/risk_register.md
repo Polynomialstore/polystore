@@ -17,6 +17,8 @@ Model demand above the user-funded elasticity budget. The desired behavior is fa
 - Elasticity rejections: `5`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Suspect slot-epochs: `0`
+- Delinquent slot-epochs: `0`
 - Repair attempts: `0`
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
