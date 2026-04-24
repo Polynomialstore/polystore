@@ -185,6 +185,17 @@ steps, high-bandwidth capability thresholds, elasticity overlay controls,
 sponsored retrieval funding, storage escrow close/refund accounting, and
 storage escrow noncompliance enforcement modes.
 
+CI enforces direct sweep coverage for every scenario fixture:
+
+```bash
+python3 tools/policy_sim/check_sweep_coverage.py
+```
+
+This check ensures each `tools/policy_sim/scenarios/*.yaml` file has at least
+one sweep whose `base_scenario` points directly at that fixture. Scenario
+fixtures may still share broader population-scale sweeps, but a new fixture
+should not land without its own reviewable parameter sweep.
+
 ## Model Scope
 
 The simulator mirrors current protocol concepts:

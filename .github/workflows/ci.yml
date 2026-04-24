@@ -121,6 +121,9 @@ jobs:
       - name: Run policy simulator unit tests
         run: python3 -m unittest discover -s tools/policy_sim
 
+      - name: Verify policy sweep coverage
+        run: python3 tools/policy_sim/check_sweep_coverage.py
+
       - name: Run full policy fixture suite and regenerate reports
         run: |
           python3 tools/policy_sim/generate_report_corpus.py \
