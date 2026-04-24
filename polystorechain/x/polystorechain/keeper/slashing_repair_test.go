@@ -87,15 +87,34 @@ func markMode2RepairReadyForTest(t *testing.T, f *fixture, ctx sdk.Context, deal
 
 func hasEvidenceSummary(t *testing.T, f *fixture, ctx sdk.Context, kind string) bool {
 	t.Helper()
+	return len(evidenceSummaries(t, f, ctx, kind)) > 0
+}
 
-	var found bool
+func evidenceSummaries(t *testing.T, f *fixture, ctx sdk.Context, kind string) []types.Proof {
+	t.Helper()
+
+	matches := make([]types.Proof, 0)
 	require.NoError(t, f.keeper.Proofs.Walk(ctx, nil, func(_ uint64, proof types.Proof) (bool, error) {
-		if strings.Contains(proof.Commitment, "evidence:"+kind) {
-			found = true
+		if kind == "" {
+			if strings.HasPrefix(proof.Commitment, "evidence:") {
+				matches = append(matches, proof)
+			}
+			return false, nil
+		}
+		if strings.Contains(proof.Commitment, "evidence:"+kind+" ") {
+			matches = append(matches, proof)
 		}
 		return false, nil
 	}))
-	return found
+	return matches
+}
+
+func requireEvidenceSummary(t *testing.T, f *fixture, ctx sdk.Context, kind string) types.Proof {
+	t.Helper()
+
+	matches := evidenceSummaries(t, f, ctx, kind)
+	require.NotEmpty(t, matches, "missing evidence summary: %s", kind)
+	return matches[0]
 }
 
 func requireNoPolicyRepairEvidence(t *testing.T, f *fixture, ctx sdk.Context) {
@@ -484,7 +503,34 @@ func TestCheckMissedProofs_Mode2RepairBackoffWhenNoCandidate(t *testing.T) {
 	missed, err := f.keeper.Mode2MissedEpochs.Get(sdkCtx, collections.Join(dealID, uint32(0)))
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), missed)
-	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered"))
+	backoff := requireEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered")
+	require.Equal(t, providerA, backoff.Creator)
+	require.False(t, backoff.Valid)
+	require.Contains(t, backoff.Commitment, "reporter=chain:no replacement provider candidates available")
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_repair_started"))
+
+	sdkCtx = sdkCtx.WithBlockHeight(10)
+	setMode2EpochCredits(t, f, sdkCtx, dealID, 2, 1, 2)
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	updated, err = f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	slot0 = updated.Mode2Slots[0]
+	require.NotNil(t, slot0)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, slot0.Status)
+	require.Empty(t, slot0.PendingProvider)
+
+	missed, err = f.keeper.Mode2MissedEpochs.Get(sdkCtx, collections.Join(dealID, uint32(0)))
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), missed)
+	backoffs := evidenceSummaries(t, f, sdkCtx, "repair_backoff_entered")
+	require.Len(t, backoffs, 2)
+	for _, proof := range backoffs {
+		require.Equal(t, providerA, proof.Creator)
+		require.False(t, proof.Valid)
+		require.Contains(t, proof.Commitment, "reporter=chain:no replacement provider candidates available")
+	}
 	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_repair_started"))
 }
 
