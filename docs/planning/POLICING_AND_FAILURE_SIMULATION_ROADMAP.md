@@ -1268,16 +1268,19 @@ full-duration service, early close timing, close count, close-by-bps storage
 escrow outcomes, and post-close rejection counts;
 `tools/policy_sim/sweeps/storage_escrow_noncompliance_modes.yaml`, which
 compares measure-only, repair-only, and reward-exclusion treatment for earned
-storage-fee payout and burn behavior; and
+storage-fee payout and burn behavior;
 `tools/policy_sim/sweeps/audit_budget_controls.yaml`, which compares
 miss-driven audit demand against tight, moderate, clearing, reserve, high-cost,
 and low-cost budget assumptions before keeper audit-budget defaults are chosen;
-and `tools/policy_sim/sweeps/operator_concentration_controls.yaml`, which
+`tools/policy_sim/sweeps/operator_concentration_controls.yaml`, which
 compares per-deal operator caps, disabled caps, dominant-operator share, and
-operator-count assumptions before placement-diversity defaults are chosen; and
+operator-count assumptions before placement-diversity defaults are chosen;
 `tools/policy_sim/sweeps/staged_upload_controls.yaml`, which compares
 retention TTL, pending-generation caps, no-cap behavior, and partial commit
-pressure before provider-daemon staged-generation cleanup defaults are chosen.
+pressure before provider-daemon staged-generation cleanup defaults are chosen;
+and `tools/policy_sim/sweeps/replacement_grinding_controls.yaml`, which
+compares pending-provider readiness timeout, repair cooldown, and per-slot
+attempt-cap assumptions before keeper replacement retry defaults are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
