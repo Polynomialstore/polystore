@@ -143,3 +143,70 @@ func TestOpenSponsoredRetrievalSessionRejectsExpiredDealWithoutBilling(t *testin
 	require.Equal(t, "100stake", bank.accountBalances[requesterAddr.String()].String())
 	require.Equal(t, "100stake", bank.moduleBalances[types.ModuleName].String())
 }
+
+func TestOpenProtocolRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing.T) {
+	f, bank, msgServer, _, resDeal, deal := setupRetrievalExpiryDeal(t)
+	expiredCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(int64(deal.EndBlock))
+
+	protocolActor := resDeal.AssignedProviders[0]
+	servingProvider := resDeal.AssignedProviders[1]
+	bank.moduleBalances[types.ProtocolBudgetModuleName] = sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100))
+	initialProtocolBudget := bank.moduleBalances[types.ProtocolBudgetModuleName]
+	initialModuleBalance := bank.moduleBalances[types.ModuleName]
+
+	tests := []struct {
+		name      string
+		purpose   types.RetrievalSessionPurpose
+		configure func(*types.MsgOpenProtocolRetrievalSession)
+	}{
+		{
+			name:    "audit",
+			purpose: types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_AUDIT,
+			configure: func(msg *types.MsgOpenProtocolRetrievalSession) {
+				msg.Auth = &types.MsgOpenProtocolRetrievalSession_AuditTask{
+					AuditTask: &types.AuditTaskRef{
+						EpochId: 1,
+						TaskId:  1,
+					},
+				}
+			},
+		},
+		{
+			name:    "repair",
+			purpose: types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR,
+			configure: func(msg *types.MsgOpenProtocolRetrievalSession) {
+				msg.Auth = &types.MsgOpenProtocolRetrievalSession_Repair{
+					Repair: &types.RepairAuth{
+						Slot: 0,
+					},
+				}
+			},
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := &types.MsgOpenProtocolRetrievalSession{
+				Creator:        protocolActor,
+				DealId:         resDeal.DealId,
+				Provider:       servingProvider,
+				ManifestRoot:   deal.ManifestRoot,
+				StartMduIndex:  0,
+				StartBlobIndex: 0,
+				BlobCount:      1,
+				Nonce:          uint64(i + 1),
+				ExpiresAt:      0,
+				MaxTotalFee:    math.NewInt(5),
+				Purpose:        tt.purpose,
+			}
+			tt.configure(msg)
+
+			_, err := msgServer.OpenProtocolRetrievalSession(expiredCtx, msg)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "expired")
+
+			require.Equal(t, initialProtocolBudget.String(), bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+			require.Equal(t, initialModuleBalance.String(), bank.moduleBalances[types.ModuleName].String())
+		})
+	}
+}
