@@ -1,0 +1,9 @@
+{
+  "name": "high-bandwidth-thresholds",
+  "description": "Sensitivity sweep for high-bandwidth capacity and demotion-saturation thresholds under hot retrieval pressure.",
+  "base_scenario": "../scenarios/high_bandwidth_regression.yaml",
+  "matrix": {
+    "high_bandwidth_capacity_threshold": [100, 110, 120],
+    "high_bandwidth_demotion_saturation_bps": [100, 300, 600]
+  }
+}

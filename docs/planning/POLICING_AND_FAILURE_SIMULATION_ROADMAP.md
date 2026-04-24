@@ -761,7 +761,10 @@ Current simulator coverage:
 5. Reports expose promotion count, final high-bandwidth provider count,
    demotions, hot retrieval attempts, saturation responses, and hot serves by
    high-bandwidth providers.
-6. The missing live surfaces are provider capability state, probe telemetry,
+6. `tools/policy_sim/sweeps/high_bandwidth_thresholds.yaml` compares capacity
+   and demotion-saturation thresholds so the implementation default can be
+   chosen from parameter evidence instead of one fixture.
+7. The missing live surfaces are provider capability state, probe telemetry,
    hot-route preference queries, saturation evidence accumulation, and demotion
    policy.
 
