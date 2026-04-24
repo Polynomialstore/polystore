@@ -14,7 +14,7 @@ try:
     )
     from .report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
     from .generate_report_corpus import write_graduation_map
-    from .run_sweeps import load_sweep_spec, run_sweep_spec
+    from .run_sweeps import load_sweep_spec, run_sweep_spec, run_sweep_specs
 except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`.
     from policing_sim import (
         PolicySimulator,
@@ -26,7 +26,7 @@ except ImportError:  # Allows `python3 -m unittest discover -s tools/policy_sim`
     )
     from report import generate_policy_delta, generate_run_report, generate_sweep_report, main as report_main
     from generate_report_corpus import write_graduation_map
-    from run_sweeps import load_sweep_spec, run_sweep_spec
+    from run_sweeps import load_sweep_spec, run_sweep_spec, run_sweep_specs
 
 
 class PolicySimulatorTests(unittest.TestCase):
@@ -604,6 +604,71 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((root / "reports" / "test-sweep" / "sweep_summary.md").exists())
             self.assertTrue((root / "reports" / "test-sweep" / "sweep_summary.json").exists())
             self.assertTrue((root / "reports" / "test-sweep" / "manifest.json").exists())
+
+    def test_sweep_directory_runner_uses_one_pool_across_specs(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenario = root / "base.yaml"
+            scenario.write_text(
+                """
+{
+  "name": "ideal",
+  "config": {
+    "scenario": "ideal",
+    "seed": 7,
+    "providers": 24,
+    "users": 8,
+    "deals": 4,
+    "epochs": 3
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_repairs_started": 0
+  }
+}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            sweep_a = root / "sweep-a.yaml"
+            sweep_a.write_text(
+                """
+{
+  "name": "sweep-a",
+  "description": "Small unit-test sweep A.",
+  "base_scenario": "base.yaml",
+  "matrix": {
+    "seed": [7, 8]
+  }
+}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            sweep_b = root / "sweep-b.yaml"
+            sweep_b.write_text(
+                """
+{
+  "name": "sweep-b",
+  "description": "Small unit-test sweep B.",
+  "base_scenario": "base.yaml",
+  "matrix": {
+    "seed": [9, 10]
+  }
+}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            manifests = run_sweep_specs([sweep_a, sweep_b], root / "runs", root / "reports", jobs=2)
+
+            self.assertEqual(["sweep-a", "sweep-b"], [manifest["name"] for manifest in manifests])
+            self.assertEqual([2, 2], [manifest["case_count"] for manifest in manifests])
+            self.assertTrue((root / "reports" / "sweep-a" / "manifest.json").exists())
+            self.assertTrue((root / "reports" / "sweep-b" / "manifest.json").exists())
+            self.assertTrue((root / "runs" / "sweep-a" / "seed-7" / "summary.json").exists())
+            self.assertTrue((root / "runs" / "sweep-b" / "seed-10" / "summary.json").exists())
 
 
 if __name__ == "__main__":

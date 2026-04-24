@@ -73,8 +73,10 @@ python3 tools/policy_sim/run_sweeps.py \
   --jobs 0
 ```
 
-`--jobs 0` auto-detects CPU count and caps parallel workers at 8. Use
-`--jobs 1` for single-process debugging or exact profiler traces.
+`--jobs 0` auto-detects CPU count and caps parallel workers at 8. Directory
+sweeps share one bounded worker pool across all selected sweep cases, so small
+sweep specs still utilize available cores. Use `--jobs 1` for single-process
+debugging or exact profiler traces.
 
 If `--out-dir` is omitted, `report.py` writes to a dedicated subdirectory
 instead of polluting raw simulator outputs: `<run-dir>/report` for single-run
