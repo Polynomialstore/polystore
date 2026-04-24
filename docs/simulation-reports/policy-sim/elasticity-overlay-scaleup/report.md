@@ -8,7 +8,7 @@ Model the positive path for user-funded overflow capacity. Sustained hot retriev
 
 Expected policy behavior: Overlay activations, spend, ready routes, serves, and expirations are visible; spend caps do not reject this fixture; durable slot repair and data-loss paths stay quiet.
 
-Observed result: retrieval success was `94.32%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `109` unavailable reads, `0` modeled data-loss events, `2463` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `5` and final high-bandwidth providers were `5`.
+Observed result: retrieval success was `94.32%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `109` unavailable reads, `0` expired retrieval rejections, `0` modeled data-loss events, `2463` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `5` and final high-bandwidth providers were `5`.
 
 ## Review Focus
 
@@ -131,6 +131,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 |---|---:|---|
 | Worst epoch success | `91.25%` at epoch `1` | Identifies the availability cliff instead of hiding it in aggregate success. |
 | Unavailable reads | `109` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |
+| Expired retrieval rejections | `0` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
 | Modeled data-loss events | `0` | Durability-loss signal. This should remain zero for current scale fixtures. |
 | Degraded epochs | `8` | Counts epochs with unavailable reads or success below 99.9%. |
 | Recovery epoch after worst | `not recovered` | Shows whether the network returned to clean steady state after the worst point. |

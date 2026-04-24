@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 25 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 26 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 12 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -21,6 +21,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`deputy-evidence-spam`](deputy-evidence-spam/report.md) | `implementation planning` | evidence-market keeper tests | Add evidence-bond escrow, burn-on-expiry, conviction gating, bounty payout, spam-throttle, and deputy-reputation tests. | `evidence bond escrow`, `conviction state`, `bounty payout ledger`, `deputy reputation` | No process e2e until MsgSubmitEvidence and protocol retrieval sessions exist. |
 | [`elasticity-cap-hit`](elasticity-cap-hit/report.md) | `further simulation review` | elasticity spend-window tests | Add spend-window tests for saturation signaling, fail-closed expansion, TTL, and cap-bound rejection. | `MsgSignalSaturation hardening`, `overlay accountability`, `deal spend window` | Burst traffic e2e after overlay semantics are implemented. |
 | [`elasticity-overlay-scaleup`](elasticity-overlay-scaleup/report.md) | `implementation planning` | elasticity overlay keeper/gateway/provider-daemon tests | Add tests proving saturation signals can buy bounded temporary overlay routes, providers prove readiness before routing, routes expire by TTL, and spend caps fail closed. | `MsgSignalSaturation`, `overlay readiness proof`, `overlay TTL`, `overlay route telemetry`, `spend-window accounting` | Drive hot retrieval pressure, trigger funded overflow capacity, assert overlay routes serve reads after readiness and expire without changing base slot durability. |
+| [`expired-retrieval-rejection`](expired-retrieval-rejection/report.md) | `implementation planning` | post-expiry retrieval semantics | Add keeper/gateway tests proving post-expiry reads return explicit expired-content responses, do not count as live unavailable reads, and do not debit retrieval escrow. | `expired deal query state`, `post-expiry retrieval response code`, `retrieval accounting guard`, `expired content UX` | Create, commit, wait through duration, then fetch after expiry and assert an expired-content response with no owner retrieval debit. |
 | [`flapping-provider`](flapping-provider/report.md) | `implementation planning` | keeper soft-fault window | Add missed-epoch window tests proving intermittent failures create health evidence without triggering repair churn. | `soft-fault decay`, `per-slot suspect state`, `operator health query` | Optional provider restart e2e; keeper coverage should be the first artifact. |
 | [`high-bandwidth-promotion`](high-bandwidth-promotion/report.md) | `implementation planning` | provider capability and hot-route policy tests | Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment. | `provider capability tier state`, `bandwidth probe telemetry`, `hot-route preference query`, `capability demotion rule` | Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression. |
 | [`high-bandwidth-regression`](high-bandwidth-regression/report.md) | `implementation planning` | capability demotion and hot-route failover tests | Add keeper/runtime tests proving promoted providers demote after sustained saturation and hot routing falls back without data-loss or over-capacity assignment. | `capability demotion rule`, `saturation evidence accumulator`, `hot-route failover telemetry`, `operator regression alert` | Hot retrieval burst that intentionally saturates promoted providers; assert demotion events fire and retrievals continue through fallback capacity. |
@@ -112,7 +113,9 @@ This report converts the committed simulator corpus into implementation planning
 | `entry and promotion caps` | 1 |
 | `evidence bond escrow` | 1 |
 | `evidence bounty accounting` | 1 |
+| `expired content UX` | 1 |
 | `expired deal queries` | 1 |
+| `expired deal query state` | 1 |
 | `failed catch-up reputation signal` | 1 |
 | `final earned-fee settlement` | 1 |
 | `gateway fallback telemetry` | 1 |
@@ -142,6 +145,7 @@ This report converts the committed simulator corpus into implementation planning
 | `per-slot suspect state` | 1 |
 | `placement diversity params` | 1 |
 | `post-expiry retrieval behavior` | 1 |
+| `post-expiry retrieval response code` | 1 |
 | `price-floor governance policy` | 1 |
 | `pricing smoothing params` | 1 |
 | `probation readiness checks` | 1 |
@@ -165,6 +169,7 @@ This report converts the committed simulator corpus into implementation planning
 | `replacement capacity query` | 1 |
 | `requester-paid session accounting` | 1 |
 | `reserve supply telemetry` | 1 |
+| `retrieval accounting guard` | 1 |
 | `retry cooldown state` | 1 |
 | `reward eligibility queries` | 1 |
 | `reward exclusion event` | 1 |

@@ -1,0 +1,23 @@
+{
+  "committed_artifacts": [
+    "report.md",
+    "risk_register.md",
+    "graduation.md",
+    "signals.json",
+    "summary.json",
+    "assertions.json",
+    "graphs/*.svg"
+  ],
+  "description": "After committed storage fully expires, later retrieval attempts are rejected as expired content instead of being counted as live availability failures or billable retrieval sessions.",
+  "omission_reason": "CSV ledgers are generated in CI/local artifacts to keep the committed report corpus reviewable.",
+  "omitted_artifacts": [
+    "epochs.csv",
+    "providers.csv",
+    "operators.csv",
+    "slots.csv",
+    "evidence.csv",
+    "repairs.csv",
+    "economy.csv"
+  ],
+  "scenario_fixture": "tools/policy_sim/scenarios/expired_retrieval_rejection.yaml"
+}

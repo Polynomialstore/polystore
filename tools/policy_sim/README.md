@@ -217,6 +217,9 @@ The simulator mirrors current protocol concepts:
 - Explicit distinction between temporary unavailable reads and modeled
   data-loss events. Stress scenarios may allow bounded unavailable reads, but
   current durability assertions expect data-loss events to remain zero.
+- Explicit post-expiry retrieval rejection accounting so expired content
+  requests are not confused with live availability failures or billable
+  retrieval sessions.
 - Basic economic accounting for retrieval fees, rewards, audit budget, provider
   P&L, slashing, and elasticity spend caps.
 - Epoch-scoped provider cost shocks that surface churn pressure.

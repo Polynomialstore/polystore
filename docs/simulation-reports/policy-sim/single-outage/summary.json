@@ -213,6 +213,7 @@
     "evidence_spam_claims": 0,
     "evidence_spam_convictions": 0,
     "evidence_spam_net_gain": 0.0,
+    "expired_retrieval_attempts": 0,
     "fail_serves": 0,
     "final_active_provider_capacity": 768,
     "final_closed_deals": 0,

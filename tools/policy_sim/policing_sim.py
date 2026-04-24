@@ -86,6 +86,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "storage-escrow-close-refund",
     "storage-escrow-noncompliance-burn",
     "storage-escrow-expiry",
+    "expired-retrieval-rejection",
     "coordinated-regional-outage",
     "repair-candidate-exhaustion",
     "replacement-grinding",
@@ -617,6 +618,7 @@ class EpochMetrics:
     retrieval_attempts: int = 0
     retrieval_successes: int = 0
     unavailable_reads: int = 0
+    expired_retrieval_attempts: int = 0
     data_loss_events: int = 0
     direct_served: int = 0
     deputy_served: int = 0
@@ -1479,6 +1481,13 @@ class PolicySimulator:
         online: dict[str, bool],
         metrics: EpochMetrics,
     ) -> None:
+        open_deals = self._open_deals()
+        if not open_deals:
+            if any(deal.closed_reason == "expired" for deal in self.deals):
+                metrics.expired_retrieval_attempts += 1
+                return
+            metrics.unavailable_reads += 1
+            return
         metrics.retrieval_attempts += 1
         metrics.retrieval_base_burned += self.config.retrieval_base_fee
         sponsored = self._retrieval_is_sponsored()
@@ -1490,10 +1499,6 @@ class PolicySimulator:
             metrics.owner_retrieval_escrow_debited += (
                 self.config.retrieval_base_fee * self.config.owner_retrieval_debit_bps / 10_000
             )
-        open_deals = self._open_deals()
-        if not open_deals:
-            metrics.unavailable_reads += 1
-            return
         deal = self.rng.choice(open_deals)
         self.deal_epoch_retrievals[deal.deal_id] = self.deal_epoch_retrievals.get(deal.deal_id, 0) + 1
         order = list(range(deal.n))
@@ -2931,6 +2936,7 @@ class PolicySimulator:
             "retrieval_demand_shock_active",
             "retrieval_successes",
             "unavailable_reads",
+            "expired_retrieval_attempts",
             "data_loss_events",
             "direct_served",
             "deputy_served",
@@ -3690,6 +3696,7 @@ def print_summary(result: SimResult) -> None:
     print(
         "quota_misses={quota_misses} deputy_misses={deputy_misses} "
         "invalid_proofs={invalid_proofs} unavailable_reads={unavailable_reads} "
+        "expired_retrieval_attempts={expired_retrieval_attempts} "
         "data_loss_events={data_loss_events} saturated_responses={saturated_responses} "
         "suspect_slots={suspect_slots} delinquent_slots={delinquent_slots}".format(**totals)
     )

@@ -699,6 +699,19 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(0.0, result.totals["storage_escrow_outstanding"])
         self.assertTrue(any(row["reason"] == "deal_storage_escrow_expired" for row in result.evidence))
 
+    def test_expired_retrievals_are_rejected_without_availability_loss(self):
+        fixture = Path(__file__).with_name("scenarios") / "expired_retrieval_rejection.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertEqual(320, result.totals["retrieval_attempts"])
+        self.assertEqual(160, result.totals["expired_retrieval_attempts"])
+        self.assertEqual(0, result.totals["unavailable_reads"])
+        self.assertEqual(0.0, result.totals["owner_retrieval_escrow_debited"])
+        self.assertEqual(result.config["deals"], result.totals["final_expired_deals"])
+        self.assertTrue(any(row["reason"] == "deal_storage_escrow_expired" for row in result.evidence))
+
     def test_fixture_run_emits_output_contract(self):
         fixture = Path(__file__).with_name("scenarios") / "ideal.yaml"
         spec = load_scenario_spec(fixture)

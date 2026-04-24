@@ -14,11 +14,11 @@ This report aggregates `3` completed simulator run output directories. It does n
 
 ## Run Matrix
 
-| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
-|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `full-sponsored` | `viral-public-retrieval` | `19` | `low` | `PASS` | 100.00% | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0150 |
-| `half-sponsored-owner-debit` | `viral-public-retrieval` | `19` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0150 |
-| `unsponsored-owner-debit` | `viral-public-retrieval` | `19` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0150 |
+| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
+|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `full-sponsored` | `viral-public-retrieval` | `19` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0150 |
+| `half-sponsored-owner-debit` | `viral-public-retrieval` | `19` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0150 |
+| `unsponsored-owner-debit` | `viral-public-retrieval` | `19` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0150 |
 
 ## Key Metric Ranges
 
@@ -26,6 +26,7 @@ This report aggregates `3` completed simulator run output directories. It does n
 |---|---:|---:|---:|---:|---|
 | `success_rate` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary user-facing misses; allowed only in explicit stress contracts. |
+| `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Shows whether compliant responsibility remains economically recognized. |
 | `repairs_started` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Detection and repair activation pressure. |

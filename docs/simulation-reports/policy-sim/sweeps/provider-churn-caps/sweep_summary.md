@@ -14,15 +14,15 @@ This report aggregates `7` completed simulator run output directories. It does n
 
 ## Run Matrix
 
-| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
-|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `baseline-churn-base-repair` | `provider-economic-churn` | `91` | `medium` | `PASS` | 100.00% | 0 | 0 | 48/48 | 0 | 0 | 8 | 1.3121 | 0.0131 |
-| `burst-churn-constrained-repair` | `provider-economic-churn` | `91` | `high` | `PASS` | 98.08% | 23 | 0 | 48/48 | 48 | 0 | 8 | 1.3121 | 0.0131 |
-| `burst-churn-wide-repair` | `provider-economic-churn` | `91` | `high` | `PASS` | 98.75% | 15 | 0 | 48/48 | 16 | 0 | 8 | 1.3121 | 0.0131 |
-| `fast-churn-constrained-repair` | `provider-economic-churn` | `91` | `high` | `PASS` | 97.58% | 29 | 0 | 40/40 | 112 | 0 | 8 | 1.3121 | 0.0131 |
-| `fast-churn-wide-repair` | `provider-economic-churn` | `91` | `medium` | `PASS` | 100.00% | 0 | 0 | 48/48 | 0 | 0 | 8 | 1.3121 | 0.0131 |
-| `slow-churn-base-repair` | `provider-economic-churn` | `91` | `medium` | `PASS` | 100.00% | 0 | 0 | 42/35 | 0 | 0 | 8 | 1.3121 | 0.0131 |
-| `slow-churn-constrained-repair` | `provider-economic-churn` | `91` | `medium` | `PASS` | 99.67% | 4 | 0 | 28/24 | 56 | 0 | 8 | 1.3121 | 0.0131 |
+| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
+|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `baseline-churn-base-repair` | `provider-economic-churn` | `91` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 48/48 | 0 | 0 | 8 | 1.3121 | 0.0131 |
+| `burst-churn-constrained-repair` | `provider-economic-churn` | `91` | `high` | `PASS` | 98.08% | 23 | 0 | 0 | 48/48 | 48 | 0 | 8 | 1.3121 | 0.0131 |
+| `burst-churn-wide-repair` | `provider-economic-churn` | `91` | `high` | `PASS` | 98.75% | 15 | 0 | 0 | 48/48 | 16 | 0 | 8 | 1.3121 | 0.0131 |
+| `fast-churn-constrained-repair` | `provider-economic-churn` | `91` | `high` | `PASS` | 97.58% | 29 | 0 | 0 | 40/40 | 112 | 0 | 8 | 1.3121 | 0.0131 |
+| `fast-churn-wide-repair` | `provider-economic-churn` | `91` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 48/48 | 0 | 0 | 8 | 1.3121 | 0.0131 |
+| `slow-churn-base-repair` | `provider-economic-churn` | `91` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 42/35 | 0 | 0 | 8 | 1.3121 | 0.0131 |
+| `slow-churn-constrained-repair` | `provider-economic-churn` | `91` | `medium` | `PASS` | 99.67% | 4 | 0 | 0 | 28/24 | 56 | 0 | 8 | 1.3121 | 0.0131 |
 
 ## Key Metric Ranges
 
@@ -30,6 +30,7 @@ This report aggregates `7` completed simulator run output directories. It does n
 |---|---:|---:|---:|---:|---|
 | `success_rate` | 0.975833 | 1.000000 | 0.024167 | 0.991548 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 0.000000 | 29.000000 | 29.000000 | 10.142857 | Temporary user-facing misses; allowed only in explicit stress contracts. |
+| `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 0.970451 | 0.991837 | 0.021386 | 0.985166 | Shows whether compliant responsibility remains economically recognized. |
 | `repairs_started` | 28.000000 | 48.000000 | 20.000000 | 43.142857 | Detection and repair activation pressure. |

@@ -2,6 +2,7 @@
   "availability": {
     "data_loss_events": 0.0,
     "degraded_epochs": 19,
+    "expired_retrieval_attempts": 0.0,
     "recovery_epoch_after_worst": 18,
     "success_rate": 0.992604167,
     "unavailable_reads": 1065.0,

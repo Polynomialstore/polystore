@@ -1,0 +1,52 @@
+[
+  {
+    "detail": "success_rate=1, required>=1",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "unavailable_reads=0, required<=0",
+    "name": "max_unavailable_reads",
+    "passed": true
+  },
+  {
+    "detail": "expired_retrieval_attempts=160, required>=160",
+    "name": "min_expired_retrieval_attempts",
+    "passed": true
+  },
+  {
+    "detail": "owner_retrieval_escrow_debited=0, required<=0",
+    "name": "max_owner_retrieval_escrow_debited",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  },
+  {
+    "detail": "storage_escrow_outstanding=0, required<=0",
+    "name": "max_storage_escrow_outstanding",
+    "passed": true
+  },
+  {
+    "detail": "final_open_deals=0, required=0",
+    "name": "exact_final_open_deals",
+    "passed": true
+  },
+  {
+    "detail": "final_closed_deals=12, required=12",
+    "name": "exact_final_closed_deals",
+    "passed": true
+  },
+  {
+    "detail": "final_expired_deals=12, required=12",
+    "name": "exact_final_expired_deals",
+    "passed": true
+  },
+  {
+    "detail": "deals_expired=12, required=12",
+    "name": "exact_deals_expired",
+    "passed": true
+  }
+]

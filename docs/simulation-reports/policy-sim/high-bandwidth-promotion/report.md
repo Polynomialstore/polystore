@@ -8,7 +8,7 @@ Model hot retrieval demand with heterogeneous provider bandwidth. The policy que
 
 Expected policy behavior: Providers above the bandwidth and success thresholds are promoted, hot retrievals route through them, no demotion occurs, and availability remains intact.
 
-Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `55` and final high-bandwidth providers were `55`.
+Observed result: retrieval success was `100.00%`, reward coverage was `100.00%`, repairs started/ready/completed were `0` / `0` / `0`, and `0` providers ended with negative modeled P&L. The run recorded `0` unavailable reads, `0` expired retrieval rejections, `0` modeled data-loss events, `0` bandwidth saturation responses and `0` repair backoffs across `0` repair attempts, with `0` pending-repair readiness timeouts. Slot health recorded `0` suspect slot-epochs and `0` delinquent slot-epochs. High-bandwidth promotions were `55` and final high-bandwidth providers were `55`.
 
 ## Review Focus
 
@@ -127,6 +127,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 |---|---:|---|
 | Worst epoch success | `100.00%` at epoch `1` | Identifies the availability cliff instead of hiding it in aggregate success. |
 | Unavailable reads | `0` | Temporary read failures are a scale/reliability signal; they are not automatically permanent data loss. |
+| Expired retrieval rejections | `0` | Post-expiry requests should be rejected explicitly instead of counted as live availability failures or billable retrievals. |
 | Modeled data-loss events | `0` | Durability-loss signal. This should remain zero for current scale fixtures. |
 | Degraded epochs | `0` | Counts epochs with unavailable reads or success below 99.9%. |
 | Recovery epoch after worst | `2` | Shows whether the network returned to clean steady state after the worst point. |

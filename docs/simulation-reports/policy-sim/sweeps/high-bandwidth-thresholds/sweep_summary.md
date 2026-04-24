@@ -14,17 +14,17 @@ This report aggregates `9` completed simulator run output directories. It does n
 
 ## Run Matrix
 
-| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
-|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-100` | `high-bandwidth-regression` | `44` | `medium` | `PASS` | 100.00% | 0 | 0 | 0/0 | 0 | 43 | 0 | 1.0000 | 0.0140 |
-| `high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-300` | `high-bandwidth-regression` | `44` | `medium` | `PASS` | 100.00% | 0 | 0 | 0/0 | 0 | 68 | 0 | 1.0000 | 0.0140 |
-| `high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-600` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0/0 | 0 | 61 | 0 | 1.0000 | 0.0140 |
-| `high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-100` | `high-bandwidth-regression` | `44` | `medium` | `PASS` | 100.00% | 0 | 0 | 0/0 | 0 | 21 | 0 | 1.0000 | 0.0140 |
-| `high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-300` | `high-bandwidth-regression` | `44` | `medium` | `PASS` | 100.00% | 0 | 0 | 0/0 | 0 | 21 | 0 | 1.0000 | 0.0140 |
-| `high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-600` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0/0 | 0 | 21 | 0 | 1.0000 | 0.0140 |
-| `high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-100` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0/0 | 0 | 10 | 0 | 1.0000 | 0.0140 |
-| `high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-300` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0/0 | 0 | 10 | 0 | 1.0000 | 0.0140 |
-| `high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-600` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0/0 | 0 | 10 | 0 | 1.0000 | 0.0140 |
+| Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
+|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-100` | `high-bandwidth-regression` | `44` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 43 | 0 | 1.0000 | 0.0140 |
+| `high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-300` | `high-bandwidth-regression` | `44` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 68 | 0 | 1.0000 | 0.0140 |
+| `high-bandwidth-capacity-threshold-100__high-bandwidth-demotion-saturation-bps-600` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 61 | 0 | 1.0000 | 0.0140 |
+| `high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-100` | `high-bandwidth-regression` | `44` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 21 | 0 | 1.0000 | 0.0140 |
+| `high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-300` | `high-bandwidth-regression` | `44` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 21 | 0 | 1.0000 | 0.0140 |
+| `high-bandwidth-capacity-threshold-110__high-bandwidth-demotion-saturation-bps-600` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 21 | 0 | 1.0000 | 0.0140 |
+| `high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-100` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 10 | 0 | 1.0000 | 0.0140 |
+| `high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-300` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 10 | 0 | 1.0000 | 0.0140 |
+| `high-bandwidth-capacity-threshold-120__high-bandwidth-demotion-saturation-bps-600` | `high-bandwidth-regression` | `44` | `critical` | `FAIL` | 100.00% | 0 | 0 | 0 | 0/0 | 0 | 10 | 0 | 1.0000 | 0.0140 |
 
 ## Key Metric Ranges
 
@@ -32,6 +32,7 @@ This report aggregates `9` completed simulator run output directories. It does n
 |---|---:|---:|---:|---:|---|
 | `success_rate` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Primary availability outcome; should not regress silently. |
 | `unavailable_reads` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Temporary user-facing misses; allowed only in explicit stress contracts. |
+| `expired_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-expiry read requests rejected as expired content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Shows whether compliant responsibility remains economically recognized. |
 | `repairs_started` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Detection and repair activation pressure. |

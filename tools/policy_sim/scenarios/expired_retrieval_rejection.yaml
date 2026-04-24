@@ -1,0 +1,32 @@
+{
+  "name": "expired-retrieval-rejection",
+  "description": "After committed storage fully expires, later retrieval attempts are rejected as expired content instead of being counted as live availability failures or billable retrieval sessions.",
+  "config": {
+    "scenario": "expired-retrieval-rejection",
+    "seed": 109,
+    "providers": 48,
+    "users": 80,
+    "deals": 12,
+    "epochs": 6,
+    "retrievals_per_user_per_epoch": 1,
+    "storage_price": 0.05,
+    "storage_lockin_enabled": true,
+    "deal_expiry_enabled": true,
+    "deal_duration_epochs": 4,
+    "base_reward_per_slot": 0.02,
+    "provider_storage_cost_per_slot_epoch": 0.005,
+    "provider_fixed_cost_per_epoch": 0.01
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "max_unavailable_reads": 0,
+    "min_expired_retrieval_attempts": 160,
+    "max_owner_retrieval_escrow_debited": 0.0,
+    "max_data_loss_events": 0,
+    "max_storage_escrow_outstanding": 0.0,
+    "exact_final_open_deals": 0,
+    "exact_final_closed_deals": 12,
+    "exact_final_expired_deals": 12,
+    "exact_deals_expired": 12
+  }
+}
