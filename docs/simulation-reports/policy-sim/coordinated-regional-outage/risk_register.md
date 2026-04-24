@@ -17,6 +17,8 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Performance Fail-tier serves: `0`
+- Performance reward paid: `0.0000`
 - Suspect slot-epochs: `22`
 - Delinquent slot-epochs: `925`
 - Repair attempts: `794`

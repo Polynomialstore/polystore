@@ -128,6 +128,14 @@ are supported in scenario files:
 - `high_bandwidth_demotion_saturation_bps`
 - `high_bandwidth_routing_enabled`
 - `hot_retrieval_bps`
+- `service_class`
+- `performance_market_enabled`
+- `provider_latency_ms_min` / `provider_latency_ms_max`
+- `provider_latency_jitter_bps`
+- `platinum_latency_ms` / `gold_latency_ms` / `silver_latency_ms`
+- `performance_reward_per_serve`
+- `platinum_reward_multiplier_bps` / `gold_reward_multiplier_bps` /
+  `silver_reward_multiplier_bps` / `fail_reward_multiplier_bps`
 
 Versioned sweep specs live in `tools/policy_sim/sweeps`. They are strict JSON
 documents with a `.yaml` extension, matching scenario fixture conventions. A
@@ -155,6 +163,8 @@ The simulator mirrors current protocol concepts:
   saturation regression.
 - Hot retrieval routing that can prefer promoted high-bandwidth providers
   without bypassing capacity and availability assertions.
+- Performance-market service tiers that classify modeled retrieval latency into
+  Platinum/Gold/Silver/Fail and pay optional tiered QoS rewards.
 - Simulated enforcement modes before live chain/runtime rollout.
 - Large-scale heterogeneous-provider runs with regional outages, bandwidth
   saturation, and repair coordination limits.
@@ -217,9 +227,10 @@ questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
 provider P&L, burn/mint ratio, price trajectory, capacity utilization,
 saturation/repair pressure, repair backlog, high-bandwidth promotion, and hot
-retrieval routing. `signals.json` records derived availability, saturation,
-repair, capacity, economic, regional, high-bandwidth, and provider bottleneck
-signals for downstream analysis.
+retrieval routing, and performance tiers. `signals.json` records derived
+availability, saturation, repair, capacity, economic, regional,
+high-bandwidth, performance-market, and provider bottleneck signals for
+downstream analysis.
 
 The economics in these reports are unitless simulator accounting. They are
 intended to make assumptions explicit: storage price, retrieval price, base

@@ -806,6 +806,21 @@ should not be able to dominate hot placement or earn high-bandwidth rewards.
 Likewise, `Platinum` providers should receive more opportunity only while
 assignment caps, operator concentration limits, and bond headroom stay healthy.
 
+Current simulator coverage:
+
+1. `tools/policy_sim/scenarios/performance_market_latency.yaml` models Hot
+   service demand across providers with heterogeneous latency.
+2. Providers are classified into Platinum/Gold/Silver/Fail tiers using
+   configured latency windows while retrieval correctness remains separate from
+   QoS tiering.
+3. Tiered performance rewards are accounted separately from baseline storage
+   rewards and retrieval fee settlement.
+4. Reports expose tier counts, average latency, Fail-tier share, performance
+   reward paid, provider latency distribution, and a performance-tier graph.
+5. The missing live surfaces are service-class params, latency telemetry
+   accumulation, tiered reward multipliers, and explicit policy that slow QoS
+   evidence is not slashable hard-fault evidence.
+
 ## 22. Elasticity and Overflow Scaling
 
 The spec describes user-funded elasticity and saturation signaling. The current

@@ -49,6 +49,19 @@
     "provider_count_from_rows": 0,
     "providers": 0.0
   },
+  "performance": {
+    "average_latency_ms": 0.0,
+    "fail_serves": 0.0,
+    "gold_serves": 0.0,
+    "performance_fail_rate": 0.0,
+    "performance_reward_paid": 0.0,
+    "platinum_serves": 0.0,
+    "platinum_share": 0.0,
+    "provider_latency_p10_ms": 0.0,
+    "provider_latency_p50_ms": 0.0,
+    "provider_latency_p90_ms": 0.0,
+    "silver_serves": 0.0
+  },
   "regions": [
     {
       "assigned_slots": 288.0,

@@ -17,6 +17,8 @@ Model a provider with intermittent outages that recover before the delinquency t
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Performance Fail-tier serves: `0`
+- Performance reward paid: `0.0000`
 - Suspect slot-epochs: `24`
 - Delinquent slot-epochs: `0`
 - Repair attempts: `0`

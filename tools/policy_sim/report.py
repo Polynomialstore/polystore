@@ -144,6 +144,16 @@ SCENARIO_GUIDES = {
         "expected": "Providers promote first, some promoted providers demote after sustained saturation, hot retrievals continue to succeed, and no data-loss event occurs.",
         "review": "Use this before implementing capability demotion thresholds, hot-route failover behavior, or provider/operator alerting for regressed high-bandwidth service.",
     },
+    "performance-market-latency": {
+        "title": "Performance Market Latency Tiers",
+        "intent": (
+            "Model Hot-service retrieval demand across providers with heterogeneous latency. The policy question is whether the simulator can "
+            "separate correctness from QoS by recording Platinum/Gold/Silver/Fail service tiers and paying tiered performance rewards without "
+            "treating slow-but-correct service as corrupt data."
+        ),
+        "expected": "Retrievals remain available, all latency tiers appear, Fail-tier serves earn no performance reward, and provider economics expose the tiered reward effect.",
+        "review": "Use this before implementing latency-tier keeper params, provider telemetry, service-class reward multipliers, or hot-service placement priority.",
+    },
     "elasticity-cap-hit": {
         "title": "Elasticity Cap Hit",
         "intent": (
@@ -252,6 +262,22 @@ def fmt_bps(value: Any) -> str:
     return fmt_pct(fnum(value) / 10_000)
 
 
+def performance_summary_sentence(totals: dict[str, Any]) -> str:
+    tiered_serves = (
+        fnum(totals.get("platinum_serves"))
+        + fnum(totals.get("gold_serves"))
+        + fnum(totals.get("silver_serves"))
+        + fnum(totals.get("fail_serves"))
+    )
+    if not tiered_serves:
+        return ""
+    return (
+        f" Performance tiers recorded `{fmt_num(totals.get('platinum_serves'))}` Platinum, "
+        f"`{fmt_num(totals.get('gold_serves'))}` Gold, `{fmt_num(totals.get('silver_serves'))}` Silver, "
+        f"and `{fmt_num(totals.get('fail_serves'))}` Fail serves."
+    )
+
+
 def metric_sum(rows: list[dict[str, str]], key: str) -> float:
     return sum(fnum(row.get(key)) for row in rows)
 
@@ -305,6 +331,13 @@ SWEEP_METRICS = [
     "high_bandwidth_serves",
     "hot_retrieval_attempts",
     "hot_high_bandwidth_serves",
+    "platinum_serves",
+    "gold_serves",
+    "silver_serves",
+    "fail_serves",
+    "average_latency_ms",
+    "performance_fail_rate",
+    "performance_reward_paid",
     "suspect_slots",
     "delinquent_slots",
     "quota_misses",
@@ -346,6 +379,19 @@ SWEEP_CONFIG_KEYS = [
     "provider_capacity_max",
     "provider_bandwidth_capacity_min",
     "provider_bandwidth_capacity_max",
+    "service_class",
+    "performance_market_enabled",
+    "provider_latency_ms_min",
+    "provider_latency_ms_max",
+    "provider_latency_jitter_bps",
+    "platinum_latency_ms",
+    "gold_latency_ms",
+    "silver_latency_ms",
+    "performance_reward_per_serve",
+    "platinum_reward_multiplier_bps",
+    "gold_reward_multiplier_bps",
+    "silver_reward_multiplier_bps",
+    "fail_reward_multiplier_bps",
     "high_bandwidth_promotion_enabled",
     "high_bandwidth_capacity_threshold",
     "high_bandwidth_min_retrievals",
@@ -434,6 +480,7 @@ def compute_signals(
     pnls = [fnum(row.get("pnl")) for row in providers]
     high_bandwidth_providers = [row for row in providers if row.get("capability_tier") == "HIGH_BANDWIDTH"]
     bandwidth_caps = [fnum(row.get("bandwidth_capacity_per_epoch")) for row in providers if fnum(row.get("bandwidth_capacity_per_epoch")) > 0]
+    provider_latencies = [fnum(row.get("average_latency_ms")) for row in providers if fnum(row.get("latency_sample_count")) > 0]
     online_probs = [fnum(row.get("online_probability")) for row in providers]
     assigned_slots = sum(fnum(row.get("assigned_slots")) for row in providers)
     capacity_slots = sum(fnum(row.get("capacity_slots")) for row in providers)
@@ -520,6 +567,19 @@ def compute_signals(
                 [fnum(row.get("bandwidth_capacity_per_epoch")) for row in high_bandwidth_providers],
                 50,
             ),
+        },
+        "performance": {
+            "platinum_serves": fnum(totals.get("platinum_serves")),
+            "gold_serves": fnum(totals.get("gold_serves")),
+            "silver_serves": fnum(totals.get("silver_serves")),
+            "fail_serves": fnum(totals.get("fail_serves")),
+            "average_latency_ms": fnum(totals.get("average_latency_ms")),
+            "performance_fail_rate": fnum(totals.get("performance_fail_rate")),
+            "platinum_share": fnum(totals.get("platinum_share")),
+            "performance_reward_paid": fnum(totals.get("performance_reward_paid")),
+            "provider_latency_p10_ms": percentile(provider_latencies, 10),
+            "provider_latency_p50_ms": percentile(provider_latencies, 50),
+            "provider_latency_p90_ms": percentile(provider_latencies, 90),
         },
         "regions": regions,
         "top_bottleneck_providers": top_bottleneck_providers(providers),
@@ -637,7 +697,7 @@ def write_report_md(
         f"`{fmt_num(totals.get('suspect_slots'))}` suspect slot-epochs and "
         f"`{fmt_num(totals.get('delinquent_slots'))}` delinquent slot-epochs. "
         f"High-bandwidth promotions were `{fmt_num(totals.get('high_bandwidth_promotions'))}` and final high-bandwidth providers were "
-        f"`{fmt_num(totals.get('high_bandwidth_providers'))}`.",
+        f"`{fmt_num(totals.get('high_bandwidth_providers'))}`.{performance_summary_sentence(totals)}",
         "",
         "## Review Focus",
         "",
@@ -666,6 +726,10 @@ def write_report_md(
             f"| Retrieval price/slot | `{fmt_money(config.get('retrieval_price_per_slot'))}` |",
             f"| Provider capacity range | `{config.get('provider_capacity_min') or config.get('provider_slot_capacity')}`-`{config.get('provider_capacity_max') or config.get('provider_slot_capacity')}` slots |",
             f"| Provider bandwidth range | `{config.get('provider_bandwidth_capacity_min') or config.get('provider_bandwidth_capacity_per_epoch')}`-`{config.get('provider_bandwidth_capacity_max') or config.get('provider_bandwidth_capacity_per_epoch')}` serves/epoch (`0` means unlimited) |",
+            f"| Service class | `{config.get('service_class')}` |",
+            f"| Performance market | `{str(config.get('performance_market_enabled')).lower()}` |",
+            f"| Provider latency range | `{fmt_num(config.get('provider_latency_ms_min'))}`-`{fmt_num(config.get('provider_latency_ms_max'))}` ms |",
+            f"| Latency tier windows | Platinum <= `{fmt_num(config.get('platinum_latency_ms'))}` ms, Gold <= `{fmt_num(config.get('gold_latency_ms'))}` ms, Silver <= `{fmt_num(config.get('silver_latency_ms'))}` ms |",
             f"| High-bandwidth promotion | `{str(config.get('high_bandwidth_promotion_enabled')).lower()}` |",
             f"| High-bandwidth capacity threshold | `{fmt_num(config.get('high_bandwidth_capacity_threshold'))}` serves/epoch |",
             f"| Hot retrieval share | `{fmt_bps(config.get('hot_retrieval_bps'))}` |",
@@ -827,6 +891,12 @@ def write_report_md(
             "",
             "![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)",
             "",
+            "### Performance Tiers",
+            "",
+            "Shows the fast positive tier and Fail-tier service counts under the performance market.",
+            "",
+            "![Performance Tiers](graphs/performance_tiers.svg)",
+            "",
             "## Raw Artifacts",
             "",
             "- `summary.json`: compact machine-readable run summary.",
@@ -913,6 +983,13 @@ def build_behavior_narrative(
             f"`{fmt_num(totals.get('high_bandwidth_demotions'))}` were demoted, and hot retrievals received "
             f"`{fmt_num(totals.get('hot_high_bandwidth_serves'))}` serves from high-bandwidth providers."
         )
+    if fnum(totals.get("platinum_serves")) or fnum(totals.get("gold_serves")) or fnum(totals.get("silver_serves")) or fnum(totals.get("fail_serves")):
+        parts.append(
+            f"Performance-market tiering was exercised: average modeled latency was `{fmt_num(totals.get('average_latency_ms'))}` ms, "
+            f"with `{fmt_num(totals.get('platinum_serves'))}` Platinum, `{fmt_num(totals.get('gold_serves'))}` Gold, "
+            f"`{fmt_num(totals.get('silver_serves'))}` Silver, and `{fmt_num(totals.get('fail_serves'))}` Fail serves. "
+            f"Tiered performance rewards paid `{fmt_money(totals.get('performance_reward_paid'))}`."
+        )
     if fnum(totals.get("repair_backoffs")) > 0:
         parts.append(
             f"Repair coordination was constrained: `{fmt_num(totals.get('repair_backoffs'))}` repair backoffs occurred across "
@@ -951,6 +1028,7 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Base reward per slot | `{fmt_money(config.get('base_reward_per_slot'))}` | Modeled issuance/subsidy paid only to reward-eligible active slots. |",
         f"| Provider storage cost/slot/epoch | `{fmt_money(config.get('provider_storage_cost_per_slot_epoch'))}` | Simplified provider cost basis; jitter may create marginal-provider distress. |",
         f"| Provider bandwidth cost/retrieval | `{fmt_money(config.get('provider_bandwidth_cost_per_retrieval'))}` | Simplified egress cost basis for retrieval-heavy scenarios. |",
+        f"| Performance reward per serve | `{fmt_money(config.get('performance_reward_per_serve'))}` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |",
         f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and miss-driven demand. |",
         f"| Retrieval burn | `{fmt_bps(config.get('retrieval_burn_bps'))}` | Fraction of variable retrieval fees burned before provider payout. |",
     ]
@@ -963,6 +1041,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
     capacity = signals["capacity"]
     economics = signals["economics"]
     high_bandwidth = signals["high_bandwidth"]
+    performance = signals["performance"]
     return [
         "| Signal | Value | Why It Matters |",
         "|---|---:|---|",
@@ -984,6 +1063,10 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| High-bandwidth providers | `{fmt_num(high_bandwidth['providers'])}` | Providers currently eligible for hot/high-bandwidth routing. |",
         f"| High-bandwidth promotions/demotions | `{fmt_num(high_bandwidth['promotions'])}` / `{fmt_num(high_bandwidth['demotions'])}` | Shows capability changes under measured demand. |",
         f"| Hot high-bandwidth serves/retrieval | `{fmt_num(high_bandwidth['hot_high_bandwidth_serves_per_hot_retrieval'])}` | Measures whether hot retrievals actually use promoted providers. |",
+        f"| Avg latency / Fail tier rate | `{fmt_num(performance['average_latency_ms'])}` ms / `{fmt_pct(performance['performance_fail_rate'])}` | Separates correctness from QoS: slow-but-valid service can be available while still earning lower or no performance rewards. |",
+        f"| Platinum / Gold / Silver / Fail serves | `{fmt_num(performance['platinum_serves'])}` / `{fmt_num(performance['gold_serves'])}` / `{fmt_num(performance['silver_serves'])}` / `{fmt_num(performance['fail_serves'])}` | Shows the latency-tier distribution for performance-market policy. |",
+        f"| Performance reward paid | `{fmt_money(performance['performance_reward_paid'])}` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |",
+        f"| Provider latency p10 / p50 / p90 | `{fmt_num(performance['provider_latency_p10_ms'])}` / `{fmt_num(performance['provider_latency_p50_ms'])}` / `{fmt_num(performance['provider_latency_p90_ms'])}` ms | Shows whether aggregate averages hide slow provider tails. |",
         f"| Final storage utilization | `{fmt_bps(capacity['final_utilization_bps'])}` | Active slots versus modeled provider capacity. |",
         f"| Provider utilization p50 / p90 / max | `{fmt_bps(capacity['provider_capacity_utilization_p50_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_p90_bps'])}` / `{fmt_bps(capacity['provider_capacity_utilization_max_bps'])}` | Detects assignment concentration and capacity cliffs. |",
         f"| Provider P&L p10 / p50 / p90 | `{fmt_money(economics['provider_pnl_p10'])}` / `{fmt_money(economics['provider_pnl_p50'])}` / `{fmt_money(economics['provider_pnl_p90'])}` | Shows whether aggregate P&L hides marginal-provider distress. |",
@@ -1172,6 +1255,13 @@ def assertion_meaning(name: str) -> str:
         "max_high_bandwidth_demotions": "Promotion fixture should not immediately demote providers unless regression is modeled.",
         "min_hot_retrieval_attempts": "Hot-service fixture must exercise hot retrieval demand.",
         "min_hot_high_bandwidth_serves": "Hot-service routing must use promoted high-bandwidth providers.",
+        "min_platinum_serves": "Performance market must exercise the fastest service tier.",
+        "min_gold_serves": "Performance market must exercise the middle positive service tier.",
+        "min_silver_serves": "Performance market must exercise the low positive service tier.",
+        "min_fail_serves": "Performance market fixture must expose slow or failed service that earns no QoS reward.",
+        "max_fail_serves": "Healthy performance fixtures should keep Fail-tier service bounded.",
+        "min_performance_reward_paid": "Tiered QoS rewards must pay non-zero reward in performance fixtures.",
+        "max_performance_fail_rate": "Fail-tier service share must remain below the chosen service-class threshold.",
         "min_suspect_slots": "Health-state observability: soft failures should become suspect before punitive consequences.",
         "max_suspect_slots": "Healthy baseline should not produce suspect slot state.",
         "min_delinquent_slots": "Delinquency observability: threshold-crossed slots should expose delinquent state.",
@@ -1238,7 +1328,11 @@ def build_economic_narrative(
     churn_risk: list[dict[str, str]],
 ) -> str:
     retrieval_burned = fnum(totals.get("retrieval_base_burned")) + fnum(totals.get("retrieval_variable_burned"))
-    minted = fnum(totals.get("reward_pool_minted")) + fnum(totals.get("audit_budget_minted"))
+    minted = (
+        fnum(totals.get("reward_pool_minted"))
+        + fnum(totals.get("audit_budget_minted"))
+        + fnum(totals.get("performance_reward_paid"))
+    )
     burned = retrieval_burned + fnum(totals.get("reward_burned"))
     burn_ratio = burned / minted if minted else 0.0
     parts = [
@@ -1248,6 +1342,7 @@ def build_economic_narrative(
         f"ending with aggregate P&L `{fmt_money(totals.get('provider_pnl'))}`.",
         f"Retrieval accounting paid providers `{fmt_money(totals.get('retrieval_provider_payouts'))}`, burned `{fmt_money(totals.get('retrieval_base_burned'))}` in base fees, "
         f"and burned `{fmt_money(totals.get('retrieval_variable_burned'))}` in variable retrieval fees.",
+        f"Performance-tier accounting paid `{fmt_money(totals.get('performance_reward_paid'))}` in QoS rewards.",
     ]
     if negative_pnl:
         parts.append(
@@ -1346,6 +1441,16 @@ def write_risk_register(
                 "followup": "Review bandwidth admission, route_attempt_limit, retrieval pricing, and elasticity policy.",
             }
         )
+    if fnum(totals.get("performance_fail_rate")) > 0.25:
+        rows.append(
+            {
+                "risk": "High Fail-tier QoS share",
+                "severity": "medium",
+                "evidence": f"Fail-tier serves were {fmt_pct(totals.get('performance_fail_rate'))} of tiered serves.",
+                "impact": "Reads may remain available while many providers miss the intended performance market window.",
+                "followup": "Review service-class placement, latency tier windows, high-bandwidth routing, and performance reward multipliers.",
+            }
+        )
     if fnum(totals.get("repair_backoffs")):
         rows.append(
             {
@@ -1416,6 +1521,8 @@ def write_risk_register(
             f"- Elasticity rejections: `{fmt_num(elasticity_rejections)}`",
             f"- Data-loss events: `{fmt_num(totals.get('data_loss_events'))}`",
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
+            f"- Performance Fail-tier serves: `{fmt_num(totals.get('fail_serves'))}`",
+            f"- Performance reward paid: `{fmt_money(totals.get('performance_reward_paid'))}`",
             f"- Suspect slot-epochs: `{fmt_num(totals.get('suspect_slots'))}`",
             f"- Delinquent slot-epochs: `{fmt_num(totals.get('delinquent_slots'))}`",
             f"- Repair attempts: `{fmt_num(totals.get('repair_attempts'))}`",
@@ -1450,6 +1557,7 @@ def graduation_semantics(scenario: str) -> str:
         "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
         "high-bandwidth-promotion": "Graduation means measured provider capability can promote hot-path eligibility without degrading availability or over-assigning capacity.",
         "high-bandwidth-regression": "Graduation means hot-path eligibility can be revoked when measured saturation regresses without causing durability loss.",
+        "performance-market-latency": "Graduation means latency-tier windows, service-class attribution, and tiered performance rewards are deterministic and inspectable before keeper params are implemented.",
         "large-scale-regional-stress": "Graduation means the scale model preserves durability, exposes bottlenecks, and gives humans enough context to tune availability and economics.",
     }
     return semantics.get(
@@ -1491,6 +1599,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "setup-failure",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
+        "performance-market-latency",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -1533,6 +1642,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "high-bandwidth-regression",
     }:
         lines.append("Create a keeper/runtime planning ticket that names the capability thresholds, probe telemetry, hot-route preference, assignment caps, and demotion conditions this fixture should enforce.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "performance-market-latency":
+        lines.append("Create a keeper/runtime planning ticket that names service-class params, latency-tier windows, reward multipliers, telemetry inputs, and which QoS tiers affect placement without becoming slashable evidence.")
     elif recommendation == "Candidate for implementation planning.":
         lines.append("Create a keeper/e2e planning ticket that names the exact evidence rows, reward-accounting rule, and repair transition this fixture should enforce.")
     elif recommendation == "Candidate for further simulation review.":
@@ -1613,6 +1724,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("hot_retrieval_attempts")) for row in epochs],
         secondary=[fnum(row.get("hot_high_bandwidth_serves")) for row in epochs],
         secondary_label="Hot High-BW Serves",
+    )
+    write_line_svg(
+        graphs_dir / "performance_tiers.svg",
+        "Platinum Serves",
+        [fnum(row.get("platinum_serves")) for row in epochs],
+        secondary=[fnum(row.get("fail_serves")) for row in epochs],
+        secondary_label="Fail Serves",
     )
 
 
@@ -1845,6 +1963,9 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("high_bandwidth_promotions", "Whether measured fast providers became hot-route eligible."),
         ("high_bandwidth_demotions", "Whether capability regression removed hot-route eligibility."),
         ("hot_high_bandwidth_serves", "Whether hot traffic actually used promoted providers."),
+        ("platinum_serves", "Whether the fastest performance tier was exercised."),
+        ("fail_serves", "Whether slow/failed QoS service appeared."),
+        ("performance_reward_paid", "Whether tiered performance rewards were paid."),
         ("final_storage_utilization_bps", "Final active-slot utilization against modeled provider capacity."),
     ]
     lines = []
@@ -1888,6 +2009,8 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         return "Provider distress did not increase."
     if key in {"retrieval_base_burned", "retrieval_variable_burned", "retrieval_provider_payouts"}:
         return "Retrieval market accounting changed with demand volume or price settings."
+    if key in {"platinum_serves", "gold_serves", "silver_serves", "fail_serves", "performance_reward_paid"}:
+        return "Performance-market tiering changed; inspect service-class latency and reward assumptions."
     if key == "saturated_responses":
         if delta > 0:
             return "Candidate exposed provider bandwidth saturation."

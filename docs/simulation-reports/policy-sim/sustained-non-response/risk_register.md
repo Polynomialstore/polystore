@@ -17,6 +17,8 @@ Model a provider that remains unavailable long enough to cross soft-fault thresh
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Performance Fail-tier serves: `0`
+- Performance reward paid: `0.0000`
 - Suspect slot-epochs: `0`
 - Delinquent slot-epochs: `12`
 - Repair attempts: `6`

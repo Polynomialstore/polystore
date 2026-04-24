@@ -274,6 +274,45 @@ class PolicySimulatorTests(unittest.TestCase):
             "demoted providers should expose the regression reason",
         )
 
+    def test_performance_market_latency_records_tiers_and_rewards(self):
+        config = SimConfig(
+            scenario="performance-market-latency",
+            seed=47,
+            providers=48,
+            users=120,
+            deals=24,
+            epochs=5,
+            retrievals_per_user_per_epoch=3,
+            service_class="Hot",
+            performance_market_enabled=True,
+            provider_latency_ms_min=20,
+            provider_latency_ms_max=360,
+            provider_latency_jitter_bps=1200,
+            platinum_latency_ms=80,
+            gold_latency_ms=170,
+            silver_latency_ms=300,
+            performance_reward_per_serve=0.002,
+            provider_bandwidth_capacity_min=80,
+            provider_bandwidth_capacity_max=220,
+            high_bandwidth_promotion_enabled=True,
+            high_bandwidth_capacity_threshold=120,
+            high_bandwidth_min_retrievals=12,
+            high_bandwidth_min_success_rate_bps=9800,
+            high_bandwidth_max_saturation_bps=300,
+            high_bandwidth_routing_enabled=True,
+            hot_retrieval_bps=10000,
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertGreater(result.totals["platinum_serves"], 0)
+        self.assertGreater(result.totals["gold_serves"], 0)
+        self.assertGreater(result.totals["silver_serves"], 0)
+        self.assertGreater(result.totals["fail_serves"], 0)
+        self.assertGreater(result.totals["performance_reward_paid"], 0)
+        self.assertGreater(result.totals["average_latency_ms"], 0)
+        self.assertLess(result.totals["performance_fail_rate"], 0.35)
+        self.assertTrue(any(row["performance_reward_revenue"] > 0 for row in result.providers))
+
     def test_jail_window_is_exclusive(self):
         simulator = PolicySimulator(
             SimConfig(
@@ -351,6 +390,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
             self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
             self.assertTrue((report_dir / "graphs" / "hot_retrieval_routing.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "performance_tiers.svg").exists())
             graph_text = (report_dir / "graphs" / "retrieval_success_rate.svg").read_text(encoding="utf-8")
             self.assertNotIn("Scale: x=epoch", graph_text)
             self.assertIn('y1="52"', graph_text)
@@ -375,6 +415,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Repair Backlog](graphs/repair_backlog.svg)", report_text)
             self.assertIn("![High-Bandwidth Promotion](graphs/high_bandwidth_promotion.svg)", report_text)
             self.assertIn("![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)", report_text)
+            self.assertIn("![Performance Tiers](graphs/performance_tiers.svg)", report_text)
             signal_text = (report_dir / "signals.json").read_text(encoding="utf-8")
             self.assertIn("availability", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)

@@ -17,6 +17,8 @@ Model providers attempting to collect base rewards while skipping useful livenes
 - Elasticity rejections: `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
+- Performance Fail-tier serves: `0`
+- Performance reward paid: `0.0000`
 - Suspect slot-epochs: `48`
 - Delinquent slot-epochs: `96`
 - Repair attempts: `48`
