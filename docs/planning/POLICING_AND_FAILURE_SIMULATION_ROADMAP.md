@@ -1344,7 +1344,12 @@ are chosen; and `tools/policy_sim/sweeps/flapping_provider_thresholds.yaml`
 plus `tools/policy_sim/sweeps/sustained_non_response_thresholds.yaml`, which
 compare intermittent outage thresholds, repair-churn risk, sustained
 non-response repair timing, and repair-readiness timeouts before liveness
-threshold defaults are chosen.
+threshold defaults are chosen; and
+`tools/policy_sim/sweeps/corrupt_provider_enforcement_controls.yaml` plus
+`tools/policy_sim/sweeps/invalid_synthetic_proof_enforcement_controls.yaml`,
+which compare hard-fault behavior across measure-only, repair-only, jail, and
+slash-simulated modes, slash sizing, multi-provider abuse, and repair
+throughput limits before punitive keeper enforcement defaults are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
