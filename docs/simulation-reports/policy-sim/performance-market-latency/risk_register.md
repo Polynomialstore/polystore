@@ -15,6 +15,8 @@ Model Hot-service retrieval demand across providers with heterogeneous latency. 
 - Failed assertions: `0`
 - Providers with negative P&L: `0`
 - Elasticity rejections: `0`
+- Elasticity overlay activations/serves/expired: `0` / `0` / `0`
+- Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
 - Performance Fail-tier serves: `7779`

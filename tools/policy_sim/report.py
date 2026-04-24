@@ -253,6 +253,15 @@ SCENARIO_GUIDES = {
         "expected": "Elasticity rejections are visible and spend remains at or below the cap.",
         "review": "Confirm this matches product expectations for burst handling and user-funded capacity expansion.",
     },
+    "elasticity-overlay-scaleup": {
+        "title": "Elasticity Overlay Scale-Up",
+        "intent": (
+            "Model the positive path for user-funded overflow capacity. Sustained hot retrieval pressure buys temporary overlay routes, "
+            "the routes become ready after a delay, serve reads, and expire instead of becoming permanent unpaid responsibility."
+        ),
+        "expected": "Overlay activations, spend, ready routes, serves, and expirations are visible; spend caps do not reject this fixture; durable slot repair and data-loss paths stay quiet.",
+        "review": "Use this before implementing MsgSignalSaturation, overlay readiness, overlay TTL, and gateway routing expansion in the live stack.",
+    },
     "audit-budget-exhaustion": {
         "title": "Audit Budget Exhaustion",
         "intent": (
@@ -423,7 +432,12 @@ def scenario_guide(name: str) -> dict[str, str]:
 
 
 def scenario_allows_unavailable_reads(name: str) -> bool:
-    return name in {"large-scale-regional-stress", "coordinated-regional-outage", "provider-economic-churn"}
+    return name in {
+        "large-scale-regional-stress",
+        "coordinated-regional-outage",
+        "provider-economic-churn",
+        "elasticity-overlay-scaleup",
+    }
 
 
 SWEEP_METRICS = [
@@ -468,6 +482,14 @@ SWEEP_METRICS = [
     "new_deals_rejected_capacity",
     "new_deal_acceptance_rate",
     "new_deal_latent_acceptance_rate",
+    "elasticity_overlay_activations",
+    "elasticity_overlay_expired",
+    "elasticity_overlay_serves",
+    "elasticity_overlay_rejections",
+    "final_elasticity_overlay_active",
+    "max_elasticity_overlay_active",
+    "final_elasticity_overlay_ready",
+    "max_elasticity_overlay_ready",
     "staged_upload_attempts",
     "staged_upload_accepted",
     "staged_upload_committed",
@@ -612,6 +634,14 @@ SWEEP_CONFIG_KEYS = [
     "provider_entry_trigger_utilization_bps",
     "provider_entry_trigger_storage_price",
     "provider_entry_probation_epochs",
+    "elasticity_trigger_retrievals_per_epoch",
+    "elasticity_base_cost",
+    "elasticity_max_spend",
+    "elasticity_overlay_enabled",
+    "elasticity_overlay_providers_per_epoch",
+    "elasticity_overlay_max_providers_per_deal",
+    "elasticity_overlay_ready_delay_epochs",
+    "elasticity_overlay_ttl_epochs",
     "staged_upload_attempts_per_epoch",
     "staged_upload_mdu_per_attempt",
     "staged_upload_commit_rate_bps",
@@ -824,6 +854,16 @@ def compute_signals(
             "max_retrieval_demand_multiplier_bps": fnum(totals.get("max_retrieval_demand_multiplier_bps")),
             "storage_price_direction_changes": fnum(totals.get("storage_price_direction_changes")),
             "retrieval_price_direction_changes": fnum(totals.get("retrieval_price_direction_changes")),
+            "elasticity_spent": fnum(totals.get("elasticity_spent")),
+            "elasticity_rejections": fnum(totals.get("elasticity_rejections")),
+            "elasticity_overlay_activations": fnum(totals.get("elasticity_overlay_activations")),
+            "elasticity_overlay_expired": fnum(totals.get("elasticity_overlay_expired")),
+            "elasticity_overlay_serves": fnum(totals.get("elasticity_overlay_serves")),
+            "elasticity_overlay_rejections": fnum(totals.get("elasticity_overlay_rejections")),
+            "final_elasticity_overlay_active": fnum(totals.get("final_elasticity_overlay_active")),
+            "max_elasticity_overlay_active": fnum(totals.get("max_elasticity_overlay_active")),
+            "final_elasticity_overlay_ready": fnum(totals.get("final_elasticity_overlay_ready")),
+            "max_elasticity_overlay_ready": fnum(totals.get("max_elasticity_overlay_ready")),
         },
         "high_bandwidth": {
             "providers": fnum(totals.get("high_bandwidth_providers")),
@@ -1068,6 +1108,10 @@ def write_report_md(
         f"| Storage demand price ceiling | `{fmt_money(config.get('storage_demand_price_ceiling'))}` (`0` means disabled) |",
         f"| Storage demand reference price | `{fmt_money(config.get('storage_demand_reference_price'))}` (`0` disables elasticity) |",
         f"| Storage demand elasticity | `{fmt_bps(config.get('storage_demand_elasticity_bps'))}` |",
+        f"| Elasticity trigger | `{fmt_num(config.get('elasticity_trigger_retrievals_per_epoch'))}` retrievals/epoch (`0` disables) |",
+        f"| Elasticity spend cap | `{fmt_money(config.get('elasticity_max_spend'))}` total |",
+        f"| Elasticity overlay | `{str(config.get('elasticity_overlay_enabled')).lower()}`; `{fmt_num(config.get('elasticity_overlay_providers_per_epoch'))}` providers/epoch; max `{fmt_num(config.get('elasticity_overlay_max_providers_per_deal'))}`/deal |",
+        f"| Elasticity overlay timing | ready delay `{fmt_num(config.get('elasticity_overlay_ready_delay_epochs'))}` epochs; TTL `{fmt_num(config.get('elasticity_overlay_ttl_epochs'))}` epochs (`0` means no expiry) |",
         f"| Staged uploads/epoch | `{fmt_num(config.get('staged_upload_attempts_per_epoch'))}` provisional attempts |",
         f"| Staged upload retention | `{fmt_num(config.get('staged_upload_retention_epochs'))}` epochs (`0` disables age cleanup) |",
         f"| Staged upload pending cap | `{fmt_num(config.get('staged_upload_max_pending_generations'))}` generations (`0` means unlimited) |",
@@ -1331,6 +1375,12 @@ def write_report_md(
             "",
             "![Elasticity Spend](graphs/elasticity_spend.svg)",
             "",
+            "### Elasticity Overlay Routes",
+            "",
+            "Shows temporary overflow routes that are active or serving reads after user-funded elasticity scale-up.",
+            "",
+            "![Elasticity Overlay Routes](graphs/elasticity_overlay_routes.svg)",
+            "",
             "### Staged Upload Pressure",
             "",
             "Shows provisional-generation preflight rejections and retention cleanup for abandoned staged uploads.",
@@ -1346,8 +1396,8 @@ def write_report_md(
             "- `slots.csv`: per-slot epoch ledger, including health state and reason.",
             "- `evidence.csv`: policy evidence events.",
             "- `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
-            "- `economy.csv`: per-epoch market, staged upload, and accounting ledger.",
-            "- `signals.json`: derived availability, saturation, repair, capacity, economic, staged upload, regional, concentration, and provider bottleneck signals.",
+            "- `economy.csv`: per-epoch market, elasticity overlay, staged upload, and accounting ledger.",
+            "- `signals.json`: derived availability, saturation, repair, capacity, economic, elasticity overlay, staged upload, regional, concentration, and provider bottleneck signals.",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1412,6 +1462,14 @@ def build_behavior_narrative(
             f"`{fmt_num(totals.get('new_deals_rejected_price'))}` price rejections, and "
             f"`{fmt_num(totals.get('new_deals_rejected_capacity'))}` capacity rejections. "
             f"The effective-request acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}` and latent-demand acceptance was `{fmt_pct(totals.get('new_deal_latent_acceptance_rate'))}`."
+        )
+    if fnum(totals.get("elasticity_overlay_activations")) > 0:
+        parts.append(
+            f"Elasticity overlay scaling was exercised: `{fmt_num(totals.get('elasticity_overlay_activations'))}` temporary overlay routes were activated, "
+            f"`{fmt_num(totals.get('elasticity_overlay_serves'))}` overlay serves completed, and "
+            f"`{fmt_num(totals.get('elasticity_overlay_expired'))}` routes expired by TTL. "
+            f"Peak ready overlay routes were `{fmt_num(totals.get('max_elasticity_overlay_ready'))}` and peak active routes were "
+            f"`{fmt_num(totals.get('max_elasticity_overlay_active'))}`."
         )
     if fnum(totals.get("staged_upload_attempts")) > 0:
         parts.append(
@@ -1525,6 +1583,9 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Provider supply entry | enabled `{bool(config.get('provider_entry_enabled'))}`, reserve `{fmt_num(config.get('provider_entry_reserve_count'))}`, cap `{fmt_num(config.get('provider_entry_max_per_epoch'))}`/epoch, probation `{fmt_num(config.get('provider_entry_probation_epochs'))}` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |",
         f"| Supply entry triggers | utilization >= `{fmt_bps(config.get('provider_entry_trigger_utilization_bps'))}` or storage price >= `{fmt_optional_money_threshold(config.get('provider_entry_trigger_storage_price'))}` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |",
         f"| Performance reward per serve | `{fmt_money(config.get('performance_reward_per_serve'))}` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |",
+        f"| Elasticity trigger/spend | `{fmt_num(config.get('elasticity_trigger_retrievals_per_epoch'))}` retrievals/epoch / `{fmt_money(config.get('elasticity_max_spend'))}` cap | User-funded overflow spending starts only after the configured demand trigger and must stay inside the spend cap. |",
+        f"| Elasticity overlay policy | enabled `{bool(config.get('elasticity_overlay_enabled'))}`, `{fmt_num(config.get('elasticity_overlay_providers_per_epoch'))}` providers/epoch, max `{fmt_num(config.get('elasticity_overlay_max_providers_per_deal'))}`/deal | Temporary overlay routes expand retrieval options without becoming durable base slots. |",
+        f"| Elasticity overlay timing | ready delay `{fmt_num(config.get('elasticity_overlay_ready_delay_epochs'))}` epochs, TTL `{fmt_num(config.get('elasticity_overlay_ttl_epochs'))}` epochs | Models catch-up/readiness delay and scale-down expiration for overflow routes. |",
         f"| Staged upload attempts/epoch | `{fmt_num(config.get('staged_upload_attempts_per_epoch'))}` | Provisional generations that consume local provider-daemon staging space before content commit. |",
         f"| Staged upload commit rate | `{fmt_bps(config.get('staged_upload_commit_rate_bps'))}` | Share of provisional uploads that become committed content instead of remaining abandoned local state. |",
         f"| Staged upload retention/cap | `{fmt_num(config.get('staged_upload_retention_epochs'))}` epochs / `{fmt_num(config.get('staged_upload_max_pending_generations'))}` generations | Local cleanup and preflight limits used to bound abandoned provisional-generation storage pressure. |",
@@ -1577,6 +1638,9 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Staged upload attempts/accepted/committed | `{fmt_num(staged['attempts'])}` / `{fmt_num(staged['accepted'])}` / `{fmt_num(staged['committed'])}` | Shows provisional upload pressure separately from committed storage demand. |",
         f"| Staged upload rejections/cleaned | `{fmt_num(staged['rejections'])}` / `{fmt_num(staged['cleaned'])}` | Preflight rejection and retention cleanup should bound abandoned provisional generations. |",
         f"| Staged pending generations/MDUs peak | `{fmt_num(staged['max_pending_generations'])}` / `{fmt_num(staged['max_pending_mdus'])}` | Detects whether local staged storage pressure exceeded configured caps. |",
+        f"| Elasticity spend / rejections | `{fmt_money(economics['elasticity_spent'])}` / `{fmt_num(economics['elasticity_rejections'])}` | Shows whether user-funded overflow expansion stayed inside the spend window. |",
+        f"| Elasticity overlays activated/served/expired | `{fmt_num(economics['elasticity_overlay_activations'])}` / `{fmt_num(economics['elasticity_overlay_serves'])}` / `{fmt_num(economics['elasticity_overlay_expired'])}` | Confirms temporary overflow routes are created, actually used, and later removed. |",
+        f"| Elasticity overlay ready/active peak | `{fmt_num(economics['max_elasticity_overlay_ready'])}` / `{fmt_num(economics['max_elasticity_overlay_active'])}` | Shows catch-up/readiness lag and total temporary routing footprint. |",
         f"| Audit demand / spent | `{fmt_money(economics['audit_budget_demand'])}` / `{fmt_money(economics['audit_budget_spent'])}` | Shows whether enforcement evidence consumed the available audit budget. |",
         f"| Audit backlog / exhausted epochs | `{fmt_money(economics['audit_budget_backlog'])}` / `{fmt_num(economics['audit_budget_exhausted_epochs'])}` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |",
         f"| Evidence spam claims / convictions | `{fmt_num(economics['evidence_spam_claims'])}` / `{fmt_num(economics['evidence_spam_convictions'])}` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |",
@@ -1673,6 +1737,8 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             + fnum(row.get("new_deals_suppressed_price"))
             + fnum(row.get("new_deals_rejected_price"))
             + fnum(row.get("new_deals_rejected_capacity"))
+            + fnum(row.get("elasticity_overlay_activations"))
+            + fnum(row.get("elasticity_overlay_rejections"))
             + fnum(row.get("staged_upload_rejections"))
             + fnum(row.get("staged_upload_cleaned"))
         )
@@ -1697,6 +1763,14 @@ def build_timeline_rows(epochs: list[dict[str, str]]) -> list[str]:
             notes.append(f"{fmt_num(row.get('new_deals_rejected_price'))} price-rejected deals")
         if fnum(row.get("new_deals_rejected_capacity")):
             notes.append(f"{fmt_num(row.get('new_deals_rejected_capacity'))} capacity-rejected deals")
+        if fnum(row.get("elasticity_overlay_activations")):
+            notes.append(f"{fmt_num(row.get('elasticity_overlay_activations'))} overlay routes activated")
+        if fnum(row.get("elasticity_overlay_serves")):
+            notes.append(f"{fmt_num(row.get('elasticity_overlay_serves'))} overlay serves")
+        if fnum(row.get("elasticity_overlay_expired")):
+            notes.append(f"{fmt_num(row.get('elasticity_overlay_expired'))} overlay routes expired")
+        if fnum(row.get("elasticity_overlay_rejections")):
+            notes.append(f"{fmt_num(row.get('elasticity_overlay_rejections'))} overlay expansion rejections")
         if fnum(row.get("staged_upload_rejections")):
             notes.append(f"{fmt_num(row.get('staged_upload_rejections'))} staged preflight rejections")
         if fnum(row.get("staged_upload_cleaned")):
@@ -1849,6 +1923,13 @@ def assertion_meaning(name: str) -> str:
         "max_new_deal_acceptance_rate": "Demand collapse fixture should keep accepted demand below this ceiling.",
         "min_new_deal_acceptance_rate": "Healthy demand fixture should accept at least this share of requested new deals.",
         "min_new_deal_latent_acceptance_rate": "Recovery fixture should accept at least this share of latent demand after price response.",
+        "min_elasticity_overlay_activations": "Elasticity overlay fixture must activate temporary overflow routes.",
+        "min_elasticity_overlay_serves": "Elasticity overlay routes must actually serve user reads after readiness.",
+        "min_elasticity_overlay_expired": "Elasticity overlay TTL must remove temporary overflow routes.",
+        "max_elasticity_overlay_rejections": "Positive-path overlay fixture should not hit spend-cap or candidate-selection rejection.",
+        "max_final_elasticity_overlay_active": "Overlay scale-down should bound temporary active routes by run end.",
+        "min_elasticity_spent": "Elasticity fixture must spend non-zero user-funded overflow budget.",
+        "max_elasticity_spent": "Elasticity fixture must stay within the configured user-funded spend cap.",
         "min_staged_upload_attempts": "Staged upload fixture must exercise provisional generation pressure.",
         "min_staged_upload_rejections": "Staged upload grief must hit preflight rejection once pending provisional state reaches the cap.",
         "max_staged_upload_rejections": "Healthy staged upload flows should keep preflight rejection bounded.",
@@ -1993,6 +2074,14 @@ def build_economic_narrative(
             f"`{fmt_num(totals.get('new_deals_accepted'))}`, suppressed `{fmt_num(totals.get('new_deals_suppressed_price'))}` by price response, rejected `{fmt_num(totals.get('new_deals_rejected_price'))}` on price, "
             f"and rejected `{fmt_num(totals.get('new_deals_rejected_capacity'))}` on capacity. "
             f"Effective-request acceptance rate was `{fmt_pct(totals.get('new_deal_acceptance_rate'))}`."
+        )
+    if fnum(totals.get("elasticity_overlay_activations")) > 0:
+        parts.append(
+            f"Elasticity overlay accounting spent `{fmt_money(totals.get('elasticity_spent'))}` to activate "
+            f"`{fmt_num(totals.get('elasticity_overlay_activations'))}` temporary routes, served "
+            f"`{fmt_num(totals.get('elasticity_overlay_serves'))}` reads through overlay providers, rejected "
+            f"`{fmt_num(totals.get('elasticity_overlay_rejections'))}` expansion attempts, and expired "
+            f"`{fmt_num(totals.get('elasticity_overlay_expired'))}` routes by TTL."
         )
     if fnum(totals.get("staged_upload_attempts")) > 0:
         parts.append(
@@ -2190,6 +2279,22 @@ def write_risk_register(
                 "followup": "Decide whether this is acceptable UX or whether user-funded burst budgets need product controls.",
             }
         )
+    if fnum(totals.get("elasticity_overlay_activations")) > 0:
+        severity = "medium" if fnum(totals.get("elasticity_overlay_rejections")) > 0 else "low"
+        rows.append(
+            {
+                "risk": "Elasticity overlay routing pressure",
+                "severity": severity,
+                "evidence": (
+                    f"{fmt_num(totals.get('elasticity_overlay_activations'))} overlays activated, "
+                    f"{fmt_num(totals.get('elasticity_overlay_serves'))} overlay serves completed, "
+                    f"{fmt_num(totals.get('elasticity_overlay_expired'))} overlays expired, and "
+                    f"{fmt_num(totals.get('elasticity_overlay_rejections'))} overlay expansions were rejected."
+                ),
+                "impact": "Temporary overflow capacity can preserve reads under hot demand, but it needs explicit readiness, TTL, spend accounting, and routing visibility.",
+                "followup": "Review overlay readiness proofs, TTL defaults, spend-window UX, gateway route ordering, and whether overlay providers affect audit or reward eligibility.",
+            }
+        )
     if fnum(totals.get("saturated_responses")):
         rows.append(
             {
@@ -2320,6 +2425,7 @@ def write_risk_register(
         "wash-retrieval",
         "viral-public-retrieval",
         "elasticity-cap-hit",
+        "elasticity-overlay-scaleup",
         "deputy-evidence-spam",
         "staged-upload-grief",
     }:
@@ -2375,6 +2481,8 @@ def write_risk_register(
             f"- Failed assertions: `{len(failed)}`",
             f"- Providers with negative P&L: `{len(negative_pnl)}`",
             f"- Elasticity rejections: `{fmt_num(elasticity_rejections)}`",
+            f"- Elasticity overlay activations/serves/expired: `{fmt_num(totals.get('elasticity_overlay_activations'))}` / `{fmt_num(totals.get('elasticity_overlay_serves'))}` / `{fmt_num(totals.get('elasticity_overlay_expired'))}`",
+            f"- Elasticity overlay rejections/final active/peak ready: `{fmt_num(totals.get('elasticity_overlay_rejections'))}` / `{fmt_num(totals.get('final_elasticity_overlay_active'))}` / `{fmt_num(totals.get('max_elasticity_overlay_ready'))}`",
             f"- Data-loss events: `{fmt_num(totals.get('data_loss_events'))}`",
             f"- Saturated responses: `{fmt_num(totals.get('saturated_responses'))}`",
             f"- Performance Fail-tier serves: `{fmt_num(totals.get('fail_serves'))}`",
@@ -2442,6 +2550,7 @@ def graduation_semantics(scenario: str) -> str:
         "malicious-corrupt": "Graduation means hard evidence, reward exclusion, repair, and simulated slash accounting are all deterministic.",
         "lazy-provider": "Graduation means subsidy/reward gating catches useful-work failures even if user reads are still available.",
         "staged-upload-grief": "Graduation means abandoned provisional generations are bounded by visible preflight rejection and retention cleanup without triggering repair, slash, or committed-data availability loss.",
+        "elasticity-overlay-scaleup": "Graduation means user-funded overflow routes can be activated, become ready, serve reads, and expire without turning into permanent base responsibility or bypassing spend caps.",
         "overpriced-storage": "Graduation means demand-side affordability failures are visible as price rejections rather than being mistaken for healthy market equilibrium.",
         "demand-elasticity-recovery": "Graduation means price-sensitive demand suppression and recovery are visible before governance tunes storage-price defaults.",
         "provider-cost-shock": "Graduation means provider cost stress is visible as churn pressure and pricing mismatch before it is turned into live governance parameters.",
@@ -2517,6 +2626,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "performance-market-latency",
         "operator-concentration-cap",
         "staged-upload-grief",
+        "elasticity-overlay-scaleup",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -2565,6 +2675,8 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         lines.append("Create a keeper/runtime planning ticket that names operator identity source, per-deal assignment caps, replacement fallback behavior, and concentration alert thresholds.")
     elif recommendation == "Candidate for implementation planning." and scenario == "staged-upload-grief":
         lines.append("Create a gateway/provider-daemon planning ticket that names staged-generation TTL, pending-generation caps, preflight rejection semantics, cleanup events, and operator dry-run/apply tooling.")
+    elif recommendation == "Candidate for implementation planning." and scenario == "elasticity-overlay-scaleup":
+        lines.append("Create a keeper/gateway/provider-daemon planning ticket that names MsgSignalSaturation inputs, overlay readiness proof, spend-window accounting, TTL expiration, route preference, and overlay reward/audit rules.")
     elif recommendation == "Candidate for implementation planning." and scenario == "deputy-evidence-spam":
         lines.append("Create a keeper/runtime planning ticket that names evidence bond escrow, burn-on-expiry, conviction-gated bounty payout, spam throttles, and deputy reputation inputs.")
     elif recommendation == "Candidate for implementation planning.":
@@ -2748,6 +2860,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("elasticity_spent")) for row in economy],
         secondary=[fnum(row.get("elasticity_rejections")) for row in economy],
         secondary_label="Rejected Expansions",
+    )
+    write_line_svg(
+        graphs_dir / "elasticity_overlay_routes.svg",
+        "Elasticity Overlay Active Routes",
+        [fnum(row.get("elasticity_overlay_active")) for row in economy],
+        secondary=[fnum(row.get("elasticity_overlay_serves")) for row in economy],
+        secondary_label="Overlay Serves",
     )
     write_line_svg(
         graphs_dir / "staged_upload_pressure.svg",
@@ -3015,6 +3134,12 @@ def decision_metric_lines(baseline: dict[str, Any], candidate: dict[str, Any]) -
         ("new_deals_rejected_capacity", "How much demand was rejected because placement capacity was exhausted."),
         ("new_deal_acceptance_rate", "Demand-side market health among effective requests."),
         ("new_deal_latent_acceptance_rate", "Demand-side market health relative to latent demand."),
+        ("elasticity_overlay_activations", "How many temporary overflow routes were activated."),
+        ("elasticity_overlay_serves", "Whether overflow routes actually served retrievals."),
+        ("elasticity_overlay_expired", "Whether temporary routes aged out by TTL."),
+        ("elasticity_overlay_rejections", "Whether spend caps or candidate selection rejected overlay expansion."),
+        ("max_elasticity_overlay_ready", "Peak ready overflow route footprint."),
+        ("max_elasticity_overlay_active", "Peak active overflow route footprint including pending readiness."),
         ("staged_upload_attempts", "How much provisional upload pressure was modeled."),
         ("staged_upload_rejections", "Whether preflight caps rejected abandoned provisional generations."),
         ("staged_upload_cleaned", "Whether retention cleanup removed abandoned provisional generations."),
@@ -3102,6 +3227,17 @@ def delta_interpretation(key: str, baseline: float, candidate: float, delta: flo
         "new_deal_latent_acceptance_rate",
     }:
         return "Storage demand changed; inspect price affordability and capacity admission assumptions."
+    if key in {
+        "elasticity_overlay_activations",
+        "elasticity_overlay_expired",
+        "elasticity_overlay_serves",
+        "elasticity_overlay_rejections",
+        "final_elasticity_overlay_active",
+        "max_elasticity_overlay_active",
+        "final_elasticity_overlay_ready",
+        "max_elasticity_overlay_ready",
+    }:
+        return "Elasticity overlay pressure changed; inspect spend caps, readiness delay, TTL, and route preference semantics."
     if key in {
         "staged_upload_attempts",
         "staged_upload_accepted",
@@ -3252,6 +3388,10 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "new storage demand was rejected by price")
     if fnum(totals.get("new_deals_suppressed_price")) > 0:
         raise_to("medium", "latent storage demand was suppressed by price elasticity")
+    if fnum(totals.get("elasticity_overlay_rejections")) > 0:
+        raise_to("medium", "elasticity overlay expansion was rejected")
+    if fnum(totals.get("elasticity_overlay_activations")) > 0 and fnum(totals.get("elasticity_overlay_serves")) == 0:
+        raise_to("medium", "elasticity overlays activated but did not serve reads")
     if fnum(totals.get("staged_upload_rejections")) > 0:
         raise_to("medium", "staged upload preflight rejections occurred")
     if not reasons:
@@ -3496,6 +3636,14 @@ def sweep_metric_meaning(key: str) -> str:
         "max_retrieval_demand_multiplier_bps": "Peak modeled read-demand multiplier.",
         "storage_price_direction_changes": "Storage price controller direction changes across the run.",
         "retrieval_price_direction_changes": "Retrieval price controller direction changes across the run.",
+        "elasticity_overlay_activations": "Temporary overflow routes activated by user-funded elasticity.",
+        "elasticity_overlay_expired": "Temporary overflow routes removed by TTL.",
+        "elasticity_overlay_serves": "Retrieval serves completed by overlay routes.",
+        "elasticity_overlay_rejections": "Overlay expansion rejected by spend cap or candidate selection.",
+        "final_elasticity_overlay_active": "Run-end temporary overlay routes, including routes pending readiness.",
+        "max_elasticity_overlay_active": "Peak temporary overlay routes, including routes pending readiness.",
+        "final_elasticity_overlay_ready": "Run-end overlay routes ready for routing.",
+        "max_elasticity_overlay_ready": "Peak overlay routes ready for routing.",
         "providers_negative_pnl": "Market sustainability and churn pressure.",
         "saturated_responses": "Provider bandwidth bottleneck signal.",
         "providers_over_capacity": "Placement/capacity invariant; should remain zero.",

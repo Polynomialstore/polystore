@@ -18,6 +18,8 @@ Model a population-scale network with more than one thousand storage providers a
 - Failed assertions: `0`
 - Providers with negative P&L: `4`
 - Elasticity rejections: `0`
+- Elasticity overlay activations/serves/expired: `0` / `0` / `0`
+- Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
 - Data-loss events: `0`
 - Saturated responses: `15482`
 - Performance Fail-tier serves: `0`

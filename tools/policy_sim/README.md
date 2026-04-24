@@ -127,6 +127,11 @@ are supported in scenario files:
 - `provider_cost_shocks`
 - `provider_regions`
 - `regional_outages`
+- `elasticity_overlay_enabled`
+- `elasticity_overlay_providers_per_epoch`
+- `elasticity_overlay_max_providers_per_deal`
+- `elasticity_overlay_ready_delay_epochs`
+- `elasticity_overlay_ttl_epochs`
 - `staged_upload_attempts_per_epoch`
 - `staged_upload_mdu_per_attempt`
 - `staged_upload_commit_rate_bps`
@@ -211,6 +216,9 @@ The simulator mirrors current protocol concepts:
   become eligible for normal placement.
 - Provider bond-headroom checks that exclude undercollateralized SPs from new
   responsibility and can repair active slots away from underbonded providers.
+- User-funded elasticity overlays that activate temporary overflow routes,
+  wait for readiness, serve retrievals, and expire by TTL without becoming
+  base durable slots.
 - Staged upload grief pressure where provisional generations are bounded by
   retention TTL, preflight rejection, and pending-generation caps.
 - Demand-side storage admission accounting for latent new deal requests,
@@ -276,11 +284,12 @@ provider P&L, provider churn, burn/mint ratio, price trajectory, capacity
 utilization, saturation/repair pressure, repair backlog, repair readiness,
 provider supply entry, provider bond headroom, high-bandwidth promotion, and hot
 retrieval routing, performance tiers, operator concentration, evidence pressure,
-audit budget, elasticity spend, and staged upload pressure.
+audit budget, elasticity spend, elasticity overlay routes, and staged upload
+pressure.
 `signals.json` records derived
-availability, saturation, repair, capacity, economic, staged-upload, regional,
-high-bandwidth, performance-market, concentration, and provider bottleneck
-signals for downstream analysis.
+availability, saturation, repair, capacity, economic, elasticity-overlay,
+staged-upload, regional, high-bandwidth, performance-market, concentration, and
+provider bottleneck signals for downstream analysis.
 
 The economics in these reports are unitless simulator accounting. They are
 intended to make assumptions explicit: storage price, retrieval price, base

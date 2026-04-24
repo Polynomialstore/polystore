@@ -68,6 +68,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "wash-retrieval",
     "viral-public-retrieval",
     "elasticity-cap-hit",
+    "elasticity-overlay-scaleup",
     "large-scale-regional-stress",
     "flapping-provider",
     "sustained-non-response",
@@ -220,6 +221,11 @@ class SimConfig:
     elasticity_trigger_retrievals_per_epoch: int = 0
     elasticity_base_cost: float = 1.0
     elasticity_max_spend: float = 0.0
+    elasticity_overlay_enabled: bool = False
+    elasticity_overlay_providers_per_epoch: int = 0
+    elasticity_overlay_max_providers_per_deal: int = 0
+    elasticity_overlay_ready_delay_epochs: int = 1
+    elasticity_overlay_ttl_epochs: int = 0
     staged_upload_attempts_per_epoch: int = 0
     staged_upload_mdu_per_attempt: int = 1
     staged_upload_commit_rate_bps: int = 10_000
@@ -406,6 +412,18 @@ class SimConfig:
             raise ValueError("provider_entry_trigger_storage_price must be non-negative")
         if self.provider_entry_probation_epochs < 0:
             raise ValueError("provider_entry_probation_epochs must be non-negative")
+        if self.elasticity_base_cost < 0:
+            raise ValueError("elasticity_base_cost must be non-negative")
+        if self.elasticity_max_spend < 0:
+            raise ValueError("elasticity_max_spend must be non-negative")
+        if self.elasticity_overlay_providers_per_epoch < 0:
+            raise ValueError("elasticity_overlay_providers_per_epoch must be non-negative")
+        if self.elasticity_overlay_max_providers_per_deal < 0:
+            raise ValueError("elasticity_overlay_max_providers_per_deal must be non-negative")
+        if self.elasticity_overlay_ready_delay_epochs < 0:
+            raise ValueError("elasticity_overlay_ready_delay_epochs must be non-negative")
+        if self.elasticity_overlay_ttl_epochs < 0:
+            raise ValueError("elasticity_overlay_ttl_epochs must be non-negative")
         if self.staged_upload_attempts_per_epoch < 0:
             raise ValueError("staged_upload_attempts_per_epoch must be non-negative")
         if self.staged_upload_mdu_per_attempt <= 0:
@@ -549,6 +567,15 @@ class DealState:
 
 
 @dataclass
+class ElasticityOverlay:
+    deal_id: int
+    provider_id: str
+    activated_epoch: int
+    ready_epoch: int
+    expire_epoch: int
+
+
+@dataclass
 class EpochMetrics:
     epoch: int
     retrieval_attempts: int = 0
@@ -650,6 +677,12 @@ class EpochMetrics:
     storage_utilization_bps: int = 0
     elasticity_spent: float = 0.0
     elasticity_rejections: int = 0
+    elasticity_overlay_activations: int = 0
+    elasticity_overlay_ready: int = 0
+    elasticity_overlay_active: int = 0
+    elasticity_overlay_expired: int = 0
+    elasticity_overlay_serves: int = 0
+    elasticity_overlay_rejections: int = 0
     staged_upload_attempts: int = 0
     staged_upload_accepted: int = 0
     staged_upload_committed: int = 0
@@ -719,7 +752,9 @@ class PolicySimulator:
         self.slot_rows: list[dict[str, Any]] = []
         self.economy_rows: list[dict[str, Any]] = []
         self.staged_uploads: list[dict[str, int]] = []
+        self.elasticity_overlays: list[ElasticityOverlay] = []
         self.provider_epoch_serves: dict[str, int] = {}
+        self.deal_epoch_retrievals: dict[int, int] = {}
         self.audit_budget_carryover = 0.0
         self.audit_budget_backlog = 0.0
         self.elasticity_spent_total = 0.0
@@ -936,7 +971,9 @@ class PolicySimulator:
         metrics.storage_price = self.storage_price
         metrics.retrieval_price_per_slot = self.retrieval_price_per_slot
         self.provider_epoch_serves = {pid: 0 for pid in self.providers}
+        self.deal_epoch_retrievals = {deal.deal_id: 0 for deal in self.deals}
         self.repairs_started_this_epoch = 0
+        self._expire_elasticity_overlays(epoch, metrics)
         self._promote_probationary_providers(epoch, metrics)
         online = self._epoch_online_map(epoch)
         self._simulate_new_deal_demand(epoch, metrics)
@@ -1168,6 +1205,149 @@ class PolicySimulator:
                 return provider_id
         return None
 
+    def _expire_elasticity_overlays(self, epoch: int, metrics: EpochMetrics) -> None:
+        if not self.elasticity_overlays:
+            return
+        kept: list[ElasticityOverlay] = []
+        expired = 0
+        for overlay in self.elasticity_overlays:
+            if overlay.expire_epoch > 0 and epoch >= overlay.expire_epoch:
+                expired += 1
+            else:
+                kept.append(overlay)
+        self.elasticity_overlays = kept
+        metrics.elasticity_overlay_expired = expired
+
+    def _maybe_scale_elasticity_overlays(self, epoch: int, metrics: EpochMetrics) -> None:
+        if not self.config.elasticity_overlay_enabled:
+            return
+        if self.config.elasticity_trigger_retrievals_per_epoch <= 0:
+            return
+        if metrics.retrieval_attempts < self.config.elasticity_trigger_retrievals_per_epoch:
+            return
+        if self.config.elasticity_overlay_providers_per_epoch <= 0:
+            return
+
+        target_deals = sorted(
+            self.deals,
+            key=lambda deal: (-self.deal_epoch_retrievals.get(deal.deal_id, 0), deal.deal_id),
+        )
+        activations = 0
+        while activations < self.config.elasticity_overlay_providers_per_epoch:
+            progressed = False
+            for deal in target_deals:
+                if activations >= self.config.elasticity_overlay_providers_per_epoch:
+                    break
+                if self.deal_epoch_retrievals.get(deal.deal_id, 0) <= 0:
+                    continue
+                max_per_deal = self.config.elasticity_overlay_max_providers_per_deal
+                if max_per_deal > 0 and self._elasticity_overlay_count(deal.deal_id) >= max_per_deal:
+                    continue
+
+                cost = self.config.elasticity_base_cost
+                if cost > 0 and self.elasticity_spent_total + cost > self.config.elasticity_max_spend:
+                    metrics.elasticity_rejections += 1
+                    metrics.elasticity_overlay_rejections += 1
+                    self._record_elasticity_overlay_rejection(epoch, deal.deal_id, "spend_cap")
+                    return
+
+                provider_id = self._select_elasticity_overlay_provider(epoch, deal)
+                if not provider_id:
+                    metrics.elasticity_rejections += 1
+                    metrics.elasticity_overlay_rejections += 1
+                    self._record_elasticity_overlay_rejection(epoch, deal.deal_id, "no_candidate")
+                    continue
+
+                ready_epoch = epoch + self.config.elasticity_overlay_ready_delay_epochs
+                ttl = self.config.elasticity_overlay_ttl_epochs
+                expire_epoch = 0 if ttl <= 0 else epoch + ttl
+                self.elasticity_overlays.append(
+                    ElasticityOverlay(
+                        deal_id=deal.deal_id,
+                        provider_id=provider_id,
+                        activated_epoch=epoch,
+                        ready_epoch=ready_epoch,
+                        expire_epoch=expire_epoch,
+                    )
+                )
+                self.elasticity_spent_total += cost
+                metrics.elasticity_spent += cost
+                metrics.elasticity_overlay_activations += 1
+                activations += 1
+                progressed = True
+                self._record_overlay_evidence(
+                    epoch,
+                    deal.deal_id,
+                    provider_id,
+                    "market",
+                    "elasticity_overlay_activated",
+                    "overflow_route",
+                )
+            if not progressed:
+                break
+
+    def _elasticity_overlay_count(self, deal_id: int) -> int:
+        return sum(1 for overlay in self.elasticity_overlays if overlay.deal_id == deal_id)
+
+    def _select_elasticity_overlay_provider(self, epoch: int, deal: DealState) -> str | None:
+        excluded = {self._slot_route_provider_id(slot) for slot in deal.slots}
+        excluded.update(
+            overlay.provider_id
+            for overlay in self.elasticity_overlays
+            if overlay.deal_id == deal.deal_id
+        )
+        operator_counts = self._deal_operator_counts(deal)
+        for overlay in self.elasticity_overlays:
+            if overlay.deal_id != deal.deal_id:
+                continue
+            operator_id = self.providers[overlay.provider_id].operator_id
+            operator_counts[operator_id] = operator_counts.get(operator_id, 0) + 1
+
+        candidates = []
+        for provider_id, provider in self.providers.items():
+            if provider_id in excluded:
+                continue
+            if not self._provider_lifecycle_assignable(provider):
+                continue
+            if not self._provider_has_bond_headroom(provider, self._assigned_counts().get(provider_id, 0)):
+                continue
+            if provider.behavior.draining or self._is_jailed(provider, epoch):
+                continue
+            if (
+                self.config.operator_assignment_cap_per_deal > 0
+                and operator_counts.get(provider.operator_id, 0) >= self.config.operator_assignment_cap_per_deal
+            ):
+                continue
+            candidates.append(provider_id)
+
+        if not candidates:
+            return None
+        seed = f"{self.config.seed}:overlay:{epoch}:{deal.deal_id}:{self._elasticity_overlay_count(deal.deal_id)}"
+        return min(
+            candidates,
+            key=lambda provider_id: (
+                0 if self.providers[provider_id].capability_tier == CAPABILITY_HIGH_BANDWIDTH else 1,
+                -self.providers[provider_id].bandwidth_capacity_per_epoch,
+                stable_digest(seed, provider_id),
+            ),
+        )
+
+    def _record_elasticity_overlay_rejection(self, epoch: int, deal_id: int, reason: str) -> None:
+        self._record_overlay_evidence(
+            epoch,
+            deal_id,
+            "user-gateway",
+            "market",
+            "elasticity_overlay_rejected",
+            reason,
+        )
+
+    def _record_elasticity_overlay_snapshot(self, epoch: int, metrics: EpochMetrics) -> None:
+        metrics.elasticity_overlay_active = len(self.elasticity_overlays)
+        metrics.elasticity_overlay_ready = sum(
+            1 for overlay in self.elasticity_overlays if overlay.ready_epoch <= epoch
+        )
+
     def _simulate_evidence_spam(self, epoch: int, metrics: EpochMetrics) -> None:
         claims = self.config.evidence_spam_claims_per_epoch
         if claims <= 0:
@@ -1240,6 +1420,7 @@ class PolicySimulator:
         metrics.retrieval_attempts += 1
         metrics.retrieval_base_burned += self.config.retrieval_base_fee
         deal = self.rng.choice(self.deals)
+        self.deal_epoch_retrievals[deal.deal_id] = self.deal_epoch_retrievals.get(deal.deal_id, 0) + 1
         order = list(range(deal.n))
         self.rng.shuffle(order)
         is_hot = self.config.hot_retrieval_bps > 0 and self.rng.randrange(10_000) < self.config.hot_retrieval_bps
@@ -1254,15 +1435,20 @@ class PolicySimulator:
                     else 1
                 )
             )
-        max_attempts = min(len(order), self.config.route_attempt_limit)
+        routes: list[tuple[SlotState | None, str, str]] = [
+            (deal.slots[slot_idx], self._slot_route_provider_id(deal.slots[slot_idx]), "base")
+            for slot_idx in order
+        ]
+        routes.extend(
+            (None, provider_id, "elasticity_overlay")
+            for provider_id in self._ready_elasticity_overlay_provider_ids(deal.deal_id, epoch)
+        )
+        max_attempts = min(len(routes), self.config.route_attempt_limit)
         successes = 0
         failed_slots: list[SlotState] = []
         served_providers: list[tuple[str, str]] = []
 
-        for slot_idx in order[:max_attempts]:
-            slot = deal.slots[slot_idx]
-            provider_id = self._slot_route_provider_id(slot)
-
+        for slot, provider_id, route_kind in routes[:max_attempts]:
             outcome, latency_ms, performance_tier = self._serve_from_provider(provider_id, online)
             if outcome == "ok":
                 successes += 1
@@ -1273,22 +1459,30 @@ class PolicySimulator:
                     if is_hot:
                         metrics.hot_high_bandwidth_serves += 1
                 self.provider_epoch_serves[provider_id] += 1
-                slot.credits_raw += 1
-                slot.direct_served += 1
-                metrics.direct_served += 1
+                if route_kind == "elasticity_overlay":
+                    metrics.elasticity_overlay_serves += 1
+                elif slot is not None:
+                    slot.credits_raw += 1
+                    slot.direct_served += 1
+                    metrics.direct_served += 1
                 if successes >= deal.k:
                     break
                 continue
 
-            failed_slots.append(slot)
+            if slot is not None:
+                failed_slots.append(slot)
             self._record_performance_fail(provider_id, metrics)
             if outcome == "corrupt":
                 metrics.corrupt_responses += 1
                 metrics.invalid_proofs += 1
                 self.providers[provider_id].hard_faults += 1
-                self._record_evidence(epoch, deal, slot, provider_id, "hard", "corrupt_retrieval")
+                if slot is None:
+                    self._record_overlay_evidence(epoch, deal.deal_id, provider_id, "hard", "overlay_corrupt_retrieval", "slash_candidate")
+                else:
+                    self._record_evidence(epoch, deal, slot, provider_id, "hard", "corrupt_retrieval")
                 self._hard_fault_consequence(epoch, provider_id, "corrupt_retrieval")
-                self._start_repair(epoch, deal, slot, "corrupt_retrieval", metrics)
+                if slot is not None:
+                    self._start_repair(epoch, deal, slot, "corrupt_retrieval", metrics)
             elif outcome == "withheld":
                 metrics.withheld_responses += 1
             elif outcome == "saturated":
@@ -1312,6 +1506,21 @@ class PolicySimulator:
         if slot.status == SLOT_REPAIRING and slot.pending_provider_id:
             return slot.pending_provider_id
         return slot.provider_id
+
+    def _ready_elasticity_overlay_provider_ids(self, deal_id: int, epoch: int) -> list[str]:
+        provider_ids = {
+            overlay.provider_id
+            for overlay in self.elasticity_overlays
+            if overlay.deal_id == deal_id and overlay.ready_epoch <= epoch
+        }
+        return sorted(
+            provider_ids,
+            key=lambda provider_id: (
+                0 if self.providers[provider_id].capability_tier == CAPABILITY_HIGH_BANDWIDTH else 1,
+                -self.providers[provider_id].bandwidth_capacity_per_epoch,
+                provider_id,
+            ),
+        )
 
     def _serve_from_provider(self, provider_id: str, online: dict[str, bool]) -> tuple[str, float, str]:
         provider = self.providers[provider_id]
@@ -1965,6 +2174,27 @@ class PolicySimulator:
             }
         )
 
+    def _record_overlay_evidence(
+        self,
+        epoch: int,
+        deal_id: int | str,
+        provider_id: str,
+        evidence_class: str,
+        reason: str,
+        consequence: str,
+    ) -> None:
+        self.evidence_rows.append(
+            {
+                "epoch": epoch,
+                "deal_id": deal_id,
+                "slot": "overlay",
+                "provider_id": provider_id,
+                "evidence_class": evidence_class,
+                "reason": reason,
+                "consequence": consequence,
+            }
+        )
+
     def _record_slot_row(self, epoch: int, slot: SlotState) -> None:
         self.slot_rows.append(
             {
@@ -2035,11 +2265,14 @@ class PolicySimulator:
             self.config.elasticity_trigger_retrievals_per_epoch > 0
             and metrics.retrieval_attempts >= self.config.elasticity_trigger_retrievals_per_epoch
         ):
-            if self.elasticity_spent_total + self.config.elasticity_base_cost > self.config.elasticity_max_spend:
+            if self.config.elasticity_overlay_enabled:
+                self._maybe_scale_elasticity_overlays(epoch, metrics)
+            elif self.elasticity_spent_total + self.config.elasticity_base_cost > self.config.elasticity_max_spend:
                 metrics.elasticity_rejections += 1
             else:
                 self.elasticity_spent_total += self.config.elasticity_base_cost
                 metrics.elasticity_spent += self.config.elasticity_base_cost
+        self._record_elasticity_overlay_snapshot(epoch, metrics)
 
         shock_stats = self._provider_cost_shock_stats(epoch)
         metrics.provider_cost_shock_active = shock_stats["active"]
@@ -2143,6 +2376,12 @@ class PolicySimulator:
                 "average_latency_ms": metrics.total_latency_ms / metrics.latency_sample_count if metrics.latency_sample_count else 0.0,
                 "elasticity_spent": metrics.elasticity_spent,
                 "elasticity_rejections": metrics.elasticity_rejections,
+                "elasticity_overlay_activations": metrics.elasticity_overlay_activations,
+                "elasticity_overlay_ready": metrics.elasticity_overlay_ready,
+                "elasticity_overlay_active": metrics.elasticity_overlay_active,
+                "elasticity_overlay_expired": metrics.elasticity_overlay_expired,
+                "elasticity_overlay_serves": metrics.elasticity_overlay_serves,
+                "elasticity_overlay_rejections": metrics.elasticity_overlay_rejections,
                 "staged_upload_attempts": metrics.staged_upload_attempts,
                 "staged_upload_accepted": metrics.staged_upload_accepted,
                 "staged_upload_committed": metrics.staged_upload_committed,
@@ -2534,6 +2773,10 @@ class PolicySimulator:
             "provider_underbonded_repairs",
             "elasticity_spent",
             "elasticity_rejections",
+            "elasticity_overlay_activations",
+            "elasticity_overlay_expired",
+            "elasticity_overlay_serves",
+            "elasticity_overlay_rejections",
             "staged_upload_attempts",
             "staged_upload_accepted",
             "staged_upload_committed",
@@ -2620,6 +2863,10 @@ class PolicySimulator:
         totals["final_provider_bond_available"] = self.metrics[-1].provider_bond_available if self.metrics else 0.0
         totals["final_provider_bond_deficit"] = self.metrics[-1].provider_bond_deficit if self.metrics else 0.0
         totals["max_provider_bond_deficit"] = max((m.provider_bond_deficit for m in self.metrics), default=0.0)
+        totals["final_elasticity_overlay_active"] = self.metrics[-1].elasticity_overlay_active if self.metrics else 0
+        totals["max_elasticity_overlay_active"] = max((m.elasticity_overlay_active for m in self.metrics), default=0)
+        totals["final_elasticity_overlay_ready"] = self.metrics[-1].elasticity_overlay_ready if self.metrics else 0
+        totals["max_elasticity_overlay_ready"] = max((m.elasticity_overlay_ready for m in self.metrics), default=0)
         totals["final_staged_upload_pending_generations"] = (
             self.metrics[-1].staged_upload_pending_generations if self.metrics else 0
         )
@@ -3084,6 +3331,10 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
         "repair_backoff_epochs": args.repair_backoff_epochs,
         "repair_pending_timeout_epochs": args.repair_pending_timeout_epochs,
         "enforcement_mode": args.enforcement_mode,
+        "elasticity_overlay_providers_per_epoch": args.elasticity_overlay_providers_per_epoch,
+        "elasticity_overlay_max_providers_per_deal": args.elasticity_overlay_max_providers_per_deal,
+        "elasticity_overlay_ready_delay_epochs": args.elasticity_overlay_ready_delay_epochs,
+        "elasticity_overlay_ttl_epochs": args.elasticity_overlay_ttl_epochs,
         "staged_upload_attempts_per_epoch": args.staged_upload_attempts_per_epoch,
         "staged_upload_mdu_per_attempt": args.staged_upload_mdu_per_attempt,
         "staged_upload_commit_rate_bps": args.staged_upload_commit_rate_bps,
@@ -3095,6 +3346,8 @@ def config_from_args(args: argparse.Namespace, spec: ScenarioSpec | None = None)
             data[key] = value
     if args.dynamic_pricing:
         data["dynamic_pricing"] = True
+    if args.elasticity_overlay:
+        data["elasticity_overlay_enabled"] = True
     faults.extend(args.fault or [])
     return SimConfig(**data), faults, assertions
 
@@ -3192,6 +3445,12 @@ def print_summary(result: SimResult) -> None:
             "rejected={staged_upload_rejections} cleaned={staged_upload_cleaned} "
             "final_pending={final_staged_upload_pending_generations}".format(**totals)
         )
+    if totals.get("elasticity_overlay_activations", 0) or totals.get("elasticity_overlay_rejections", 0):
+        print(
+            "elasticity_overlays activations={elasticity_overlay_activations} "
+            "serves={elasticity_overlay_serves} rejections={elasticity_overlay_rejections} "
+            "final_active={final_elasticity_overlay_active}".format(**totals)
+        )
     if result.assertions:
         failed = [item for item in result.assertions if not item.passed]
         status = "failed" if failed else "passed"
@@ -3250,6 +3509,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-backoff-epochs", type=int)
     parser.add_argument("--repair-pending-timeout-epochs", type=int)
     parser.add_argument("--enforcement-mode", choices=sorted(ENFORCEMENT_ORDER))
+    parser.add_argument("--elasticity-overlay", action="store_true")
+    parser.add_argument("--elasticity-overlay-providers-per-epoch", type=int)
+    parser.add_argument("--elasticity-overlay-max-providers-per-deal", type=int)
+    parser.add_argument("--elasticity-overlay-ready-delay-epochs", type=int)
+    parser.add_argument("--elasticity-overlay-ttl-epochs", type=int)
     parser.add_argument("--staged-upload-attempts-per-epoch", type=int)
     parser.add_argument("--staged-upload-mdu-per-attempt", type=int)
     parser.add_argument("--staged-upload-commit-rate-bps", type=int)

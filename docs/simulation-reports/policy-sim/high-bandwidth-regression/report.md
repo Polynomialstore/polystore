@@ -39,6 +39,10 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Storage demand price ceiling | `0.0000` (`0` means disabled) |
 | Storage demand reference price | `0.0000` (`0` disables elasticity) |
 | Storage demand elasticity | `0.00%` |
+| Elasticity trigger | `0` retrievals/epoch (`0` disables) |
+| Elasticity spend cap | `0.0000` total |
+| Elasticity overlay | `false`; `0` providers/epoch; max `0`/deal |
+| Elasticity overlay timing | ready delay `1` epochs; TTL `0` epochs (`0` means no expiry) |
 | Staged uploads/epoch | `0` provisional attempts |
 | Staged upload retention | `0` epochs (`0` disables age cleanup) |
 | Staged upload pending cap | `0` generations (`0` means unlimited) |
@@ -84,6 +88,9 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider supply entry | enabled `False`, reserve `0`, cap `1`/epoch, probation `1` epochs | Moves reserve providers through probation before they become assignment-eligible active supply. |
 | Supply entry triggers | utilization >= `0.00%` or storage price >= `disabled` | If both are zero, configured reserve supply enters as soon as the epoch window opens. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
+| Elasticity trigger/spend | `0` retrievals/epoch / `0.0000` cap | User-funded overflow spending starts only after the configured demand trigger and must stay inside the spend cap. |
+| Elasticity overlay policy | enabled `False`, `0` providers/epoch, max `0`/deal | Temporary overlay routes expand retrieval options without becoming durable base slots. |
+| Elasticity overlay timing | ready delay `1` epochs, TTL `0` epochs | Models catch-up/readiness delay and scale-down expiration for overflow routes. |
 | Staged upload attempts/epoch | `0` | Provisional generations that consume local provider-daemon staging space before content commit. |
 | Staged upload commit rate | `100.00%` | Share of provisional uploads that become committed content instead of remaining abandoned local state. |
 | Staged upload retention/cap | `0` epochs / `0` generations | Local cleanup and preflight limits used to bound abandoned provisional-generation storage pressure. |
@@ -138,6 +145,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Staged upload attempts/accepted/committed | `0` / `0` / `0` | Shows provisional upload pressure separately from committed storage demand. |
 | Staged upload rejections/cleaned | `0` / `0` | Preflight rejection and retention cleanup should bound abandoned provisional generations. |
 | Staged pending generations/MDUs peak | `0` / `0` | Detects whether local staged storage pressure exceeded configured caps. |
+| Elasticity spend / rejections | `0.0000` / `0` | Shows whether user-funded overflow expansion stayed inside the spend window. |
+| Elasticity overlays activated/served/expired | `0` / `0` / `0` | Confirms temporary overflow routes are created, actually used, and later removed. |
+| Elasticity overlay ready/active peak | `0` / `0` | Shows catch-up/readiness lag and total temporary routing footprint. |
 | Audit demand / spent | `0.0000` / `0.0000` | Shows whether enforcement evidence consumed the available audit budget. |
 | Audit backlog / exhausted epochs | `0.0000` / `0` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
 | Evidence spam claims / convictions | `0` / `0` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |
@@ -442,6 +452,12 @@ Shows demand-funded elasticity spend and rejected expansion attempts.
 
 ![Elasticity Spend](graphs/elasticity_spend.svg)
 
+### Elasticity Overlay Routes
+
+Shows temporary overflow routes that are active or serving reads after user-funded elasticity scale-up.
+
+![Elasticity Overlay Routes](graphs/elasticity_overlay_routes.svg)
+
 ### Staged Upload Pressure
 
 Shows provisional-generation preflight rejections and retention cleanup for abandoned staged uploads.
@@ -457,5 +473,5 @@ Shows provisional-generation preflight rejections and retention cleanup for aban
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
 - `repairs.csv`: repair start, pending-provider readiness, readiness timeout, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
-- `economy.csv`: per-epoch market, staged upload, and accounting ledger.
-- `signals.json`: derived availability, saturation, repair, capacity, economic, staged upload, regional, concentration, and provider bottleneck signals.
+- `economy.csv`: per-epoch market, elasticity overlay, staged upload, and accounting ledger.
+- `signals.json`: derived availability, saturation, repair, capacity, economic, elasticity overlay, staged upload, regional, concentration, and provider bottleneck signals.

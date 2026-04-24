@@ -116,6 +116,7 @@ were:
 | Price oscillation | Dynamic pricing overreacts to utilization or retrieval bursts. | Chain state / simulator | Step clamps, EMA windows, dampening, delayed activation. |
 | Wash retrieval traffic | Actors create fake retrievals to farm rewards or credits. | Session accounting / burn economics | Mandatory burns, credit caps, requester-paid sessions, anomaly alerts. |
 | Viral debt | Public or hot content exhausts escrow during a traffic spike. | Escrow/spend-window state | Sponsored sessions, top-ups, rate limiting, bounded elasticity. |
+| Elasticity overlay churn | Temporary overflow routes activate but do not become ready, serve, or expire cleanly. | Market/runtime telemetry | Readiness gate, spend-window accounting, TTL cleanup, route visibility. |
 | Subsidy farming | Providers create storage responsibility mainly to extract emissions. | Reward/accounting analysis | Fee-backed rent base, compliance gating, burn unearned rewards. |
 
 ## 7. Evidence Classes
@@ -305,6 +306,7 @@ Human decisions still required:
 | Wash traffic | Can fake retrievals profit from rewards or credits? | Burn and fees exceed expected reward or credit value. | Session fee, credit cap, and anomaly tests. |
 | Viral public retrieval | Does public demand scale without draining owner escrow? | Sponsored sessions fund retrieval; owner escrow remains stable. | Sponsored-session e2e. |
 | Elasticity cap hit | What happens when demand exceeds user budget? | Scaling stops cleanly and service is rate-limited, not unbounded. | `MsgSignalSaturation` spend-window e2e. |
+| Elasticity overlay scale-up | Does funded overflow capacity become useful and temporary? | Overlay routes activate, become ready, serve reads, and expire without data loss. | Overlay readiness, routing expansion, and TTL e2e. |
 | Subsidy farming | Can providers earn emissions without useful service? | Non-compliant or idle responsibility is unrewarded or uneconomic. | Base reward compliance tests. |
 | Repair candidate exhaustion | Does the network expose lack of spare capacity safely? | Repair backoffs occur, capacity is respected, no silent over-assignment. | Keeper candidate-selection and backoff tests. |
 | Price controller bounds | Does dynamic pricing stay bounded under sustained demand? | Prices move within configured floors/ceilings and reports expose provider P&L. | Epoch pricing keeper tests. |
@@ -1230,6 +1232,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `wash_retrieval.yaml` | Fake reads attempt to farm rewards or credits. | Burns/fees/caps make the strategy negative expected value. |
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
+| `elasticity_overlay_scaleup.yaml` | Sustained hot retrieval demand buys temporary overflow routes. | Overlay activations, serves, and TTL expirations are visible; spend caps are respected and durability is unaffected. |
 | `high_bandwidth_promotion.yaml` | Hot retrieval demand is routed across heterogeneous providers after measured high-bandwidth promotion. | Providers promote only after success/capacity/saturation checks, hot traffic uses promoted providers, no demotion or over-capacity assignment occurs. |
 | `high_bandwidth_regression.yaml` | Promoted high-bandwidth providers experience sustained saturation under concentrated hot routing. | Demotion occurs, hot retrievals continue, capacity remains respected, and data-loss events stay zero. |
 | `large_scale_regional_stress.yaml` | More than 1,000 heterogeneous SPs and thousands of users experience a correlated regional outage, bandwidth saturation, dynamic pricing, and constrained repair coordination. | Availability remains above floor, saturation and repair backoffs are visible, price remains bounded, and no provider is assigned beyond modeled capacity. |

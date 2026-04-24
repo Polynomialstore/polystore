@@ -15,6 +15,8 @@ Model demand above the user-funded elasticity budget. The desired behavior is fa
 - Failed assertions: `0`
 - Providers with negative P&L: `0`
 - Elasticity rejections: `5`
+- Elasticity overlay activations/serves/expired: `0` / `0` / `0`
+- Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
 - Data-loss events: `0`
 - Saturated responses: `0`
 - Performance Fail-tier serves: `0`

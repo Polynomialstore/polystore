@@ -601,6 +601,21 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertTrue(any(row["reason"] == "staged_upload_retention_cleanup" for row in result.evidence))
         self.assertIn("staged_upload_pending_generations", result.economy[0])
 
+    def test_elasticity_overlay_scaleup_adds_temporary_overflow_routes(self):
+        fixture = Path(__file__).with_name("scenarios") / "elasticity_overlay_scaleup.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreater(result.totals["elasticity_overlay_activations"], 0)
+        self.assertGreater(result.totals["elasticity_overlay_serves"], 0)
+        self.assertGreater(result.totals["elasticity_overlay_expired"], 0)
+        self.assertGreater(result.totals["max_elasticity_overlay_ready"], 0)
+        self.assertEqual(0, result.totals["elasticity_overlay_rejections"])
+        self.assertEqual(0, result.totals["data_loss_events"])
+        self.assertTrue(any(row["reason"] == "elasticity_overlay_activated" for row in result.evidence))
+        self.assertIn("elasticity_overlay_active", result.economy[0])
+
     def test_retrieval_demand_shock_tracks_price_oscillation(self):
         config = SimConfig(
             scenario="retrieval-demand-shock",
@@ -698,6 +713,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "audit_budget.svg").exists())
             self.assertTrue((report_dir / "graphs" / "audit_backlog.svg").exists())
             self.assertTrue((report_dir / "graphs" / "elasticity_spend.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "elasticity_overlay_routes.svg").exists())
             self.assertTrue((report_dir / "graphs" / "staged_upload_pressure.svg").exists())
             graph_text = (report_dir / "graphs" / "retrieval_success_rate.svg").read_text(encoding="utf-8")
             self.assertNotIn("Scale: x=epoch", graph_text)
@@ -738,6 +754,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Audit Budget](graphs/audit_budget.svg)", report_text)
             self.assertIn("![Audit Backlog](graphs/audit_backlog.svg)", report_text)
             self.assertIn("![Elasticity Spend](graphs/elasticity_spend.svg)", report_text)
+            self.assertIn("![Elasticity Overlay Routes](graphs/elasticity_overlay_routes.svg)", report_text)
             self.assertIn("![Staged Upload Pressure](graphs/staged_upload_pressure.svg)", report_text)
             signal_text = (report_dir / "signals.json").read_text(encoding="utf-8")
             self.assertIn("availability", signal_text)
@@ -747,6 +764,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("max_underbonded_providers", signal_text)
             self.assertIn("repair_timeouts", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)
+            self.assertIn("elasticity_overlay_activations", signal_text)
             self.assertIn("staged_uploads", signal_text)
             risk_text = (report_dir / "risk_register.md").read_text(encoding="utf-8")
             self.assertIn("## Material Risks", risk_text)

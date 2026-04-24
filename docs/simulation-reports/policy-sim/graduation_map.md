@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 20 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 21 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 13 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -20,6 +20,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`demand-elasticity-recovery`](demand-elasticity-recovery/report.md) | `further simulation review` | economic policy calibration | Compare elasticity slope, reference price, price-step timing, and demand recovery before encoding governance defaults. | `quote rejection telemetry`, `affordability dashboards`, `demand forecasting` | No process e2e yet; this is a parameter-calibration fixture. |
 | [`deputy-evidence-spam`](deputy-evidence-spam/report.md) | `implementation planning` | evidence-market keeper tests | Add evidence-bond escrow, burn-on-expiry, conviction gating, bounty payout, spam-throttle, and deputy-reputation tests. | `evidence bond escrow`, `conviction state`, `bounty payout ledger`, `deputy reputation` | No process e2e until MsgSubmitEvidence and protocol retrieval sessions exist. |
 | [`elasticity-cap-hit`](elasticity-cap-hit/report.md) | `further simulation review` | elasticity spend-window tests | Add spend-window tests for saturation signaling, fail-closed expansion, TTL, and cap-bound rejection. | `MsgSignalSaturation hardening`, `overlay accountability`, `deal spend window` | Burst traffic e2e after overlay semantics are implemented. |
+| [`elasticity-overlay-scaleup`](elasticity-overlay-scaleup/report.md) | `implementation planning` | elasticity overlay keeper/gateway/provider-daemon tests | Add tests proving saturation signals can buy bounded temporary overlay routes, providers prove readiness before routing, routes expire by TTL, and spend caps fail closed. | `MsgSignalSaturation`, `overlay readiness proof`, `overlay TTL`, `overlay route telemetry`, `spend-window accounting` | Drive hot retrieval pressure, trigger funded overflow capacity, assert overlay routes serve reads after readiness and expire without changing base slot durability. |
 | [`flapping-provider`](flapping-provider/report.md) | `implementation planning` | keeper soft-fault window | Add missed-epoch window tests proving intermittent failures create health evidence without triggering repair churn. | `soft-fault decay`, `per-slot suspect state`, `operator health query` | Optional provider restart e2e; keeper coverage should be the first artifact. |
 | [`high-bandwidth-promotion`](high-bandwidth-promotion/report.md) | `implementation planning` | provider capability and hot-route policy tests | Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment. | `provider capability tier state`, `bandwidth probe telemetry`, `hot-route preference query`, `capability demotion rule` | Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression. |
 | [`high-bandwidth-regression`](high-bandwidth-regression/report.md) | `implementation planning` | capability demotion and hot-route failover tests | Add keeper/runtime tests proving promoted providers demote after sustained saturation and hot routing falls back without data-loss or over-capacity assignment. | `capability demotion rule`, `saturation evidence accumulator`, `hot-route failover telemetry`, `operator regression alert` | Hot retrieval burst that intentionally saturates promoted providers; assert demotion events fire and retrievals continue through fallback capacity. |
@@ -72,6 +73,7 @@ This report converts the committed simulator corpus into implementation planning
 | `quote rejection telemetry` | 2 |
 | `retrieval demand accumulator` | 2 |
 | `CI artifact retention` | 1 |
+| `MsgSignalSaturation` | 1 |
 | `MsgSignalSaturation hardening` | 1 |
 | `QoS-only health notes` | 1 |
 | `Sybil concentration alerts` | 1 |
@@ -118,7 +120,10 @@ This report converts the committed simulator corpus into implementation planning
 | `operator health query` | 1 |
 | `operator identity registry` | 1 |
 | `operator regression alert` | 1 |
+| `overlay TTL` | 1 |
 | `overlay accountability` | 1 |
+| `overlay readiness proof` | 1 |
+| `overlay route telemetry` | 1 |
 | `owner escrow isolation` | 1 |
 | `pending generation cap` | 1 |
 | `pending-provider readiness proof` | 1 |
@@ -157,6 +162,7 @@ This report converts the committed simulator corpus into implementation planning
 | `slot health state` | 1 |
 | `soft fault consequence ceiling` | 1 |
 | `soft-fault decay` | 1 |
+| `spend-window accounting` | 1 |
 | `sponsored session funding` | 1 |
 | `staged generation TTL` | 1 |
 | `storage utilization accumulator` | 1 |

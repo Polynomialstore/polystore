@@ -88,6 +88,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["staged generation TTL", "pending generation cap", "cleanup events", "gateway preflight rejection"],
         "e2e": "Client repeatedly stages uploads without commit; assert provider-daemon cleanup bounds disk pressure and committed reads remain available.",
     },
+    "elasticity-overlay-scaleup": {
+        "target": "elasticity overlay keeper/gateway/provider-daemon tests",
+        "next_test": "Add tests proving saturation signals can buy bounded temporary overlay routes, providers prove readiness before routing, routes expire by TTL, and spend caps fail closed.",
+        "missing_surfaces": ["MsgSignalSaturation", "overlay readiness proof", "overlay TTL", "overlay route telemetry", "spend-window accounting"],
+        "e2e": "Drive hot retrieval pressure, trigger funded overflow capacity, assert overlay routes serve reads after readiness and expire without changing base slot durability.",
+    },
     "underpriced-storage": {
         "target": "economic policy calibration",
         "next_test": "Compare storage floors, base rewards, and provider cost assumptions before encoding governance defaults.",
@@ -358,6 +364,11 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "new_deals_suppressed_price": totals.get("new_deals_suppressed_price", 0),
         "new_deals_rejected_price": totals.get("new_deals_rejected_price", 0),
         "new_deals_rejected_capacity": totals.get("new_deals_rejected_capacity", 0),
+        "elasticity_overlay_activations": totals.get("elasticity_overlay_activations", 0),
+        "elasticity_overlay_serves": totals.get("elasticity_overlay_serves", 0),
+        "elasticity_overlay_expired": totals.get("elasticity_overlay_expired", 0),
+        "max_elasticity_overlay_ready": totals.get("max_elasticity_overlay_ready", 0),
+        "max_elasticity_overlay_active": totals.get("max_elasticity_overlay_active", 0),
         "top_operator_provider_share_bps": totals.get("top_operator_provider_share_bps", 0),
         "top_operator_assignment_share_bps": totals.get("top_operator_assignment_share_bps", 0),
         "max_operator_deal_slots": totals.get("max_operator_deal_slots", 0),
@@ -399,10 +410,10 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Churn` is `provider exits/final churned providers/exited capacity/peak assigned slots on churned providers`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `Staged` is `attempts/rejections/cleaned/peak pending generations/peak pending MDUs`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `CostShock` is `active shock-epochs/max shocked providers/peak storage multiplier bps`. `Churn` is `provider exits/final churned providers/exited capacity/peak assigned slots on churned providers`. `ReadShock` is `active shock-epochs/peak multiplier bps/retrieval price direction changes`. `Demand` is `latent/effective/accepted/price-suppressed/price-rejected/capacity-rejected`. `Overlay` is `activations/serves/expired/peak ready/peak active`. `Staged` is `attempts/rejections/cleaned/peak pending generations/peak pending MDUs`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Churn | ReadShock | Demand | Staged | OpCap | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | CostShock | Churn | ReadShock | Demand | Overlay | Staged | OpCap | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
@@ -419,6 +430,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['provider_churn_events']}/{row['churned_providers']}/{row['final_exited_provider_capacity']}/{row['max_churned_assigned_slots']} | "
             f"{row['retrieval_demand_shock_active']}/{row['max_retrieval_demand_multiplier_bps']}/{row['retrieval_price_direction_changes']} | "
             f"{row['new_deal_latent_requests']}/{row['new_deal_requests']}/{row['new_deals_accepted']}/{row['new_deals_suppressed_price']}/{row['new_deals_rejected_price']}/{row['new_deals_rejected_capacity']} | "
+            f"{row['elasticity_overlay_activations']}/{row['elasticity_overlay_serves']}/{row['elasticity_overlay_expired']}/{row['max_elasticity_overlay_ready']}/{row['max_elasticity_overlay_active']} | "
             f"{row['staged_upload_attempts']}/{row['staged_upload_rejections']}/{row['staged_upload_cleaned']}/{row['max_staged_upload_pending_generations']}/{row['max_staged_upload_pending_mdus']} | "
             f"{row['top_operator_assignment_share_bps']}/{row['max_operator_deal_slots']}/{row['operator_deal_cap_violations']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
@@ -548,6 +560,11 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "new_deals_suppressed_price": row.get("new_deals_suppressed_price", 0),
             "new_deals_rejected_price": row.get("new_deals_rejected_price", 0),
             "new_deals_rejected_capacity": row.get("new_deals_rejected_capacity", 0),
+            "elasticity_overlay_activations": row.get("elasticity_overlay_activations", 0),
+            "elasticity_overlay_serves": row.get("elasticity_overlay_serves", 0),
+            "elasticity_overlay_expired": row.get("elasticity_overlay_expired", 0),
+            "max_elasticity_overlay_ready": row.get("max_elasticity_overlay_ready", 0),
+            "max_elasticity_overlay_active": row.get("max_elasticity_overlay_active", 0),
             "staged_upload_attempts": row.get("staged_upload_attempts", 0),
             "staged_upload_rejections": row.get("staged_upload_rejections", 0),
             "staged_upload_cleaned": row.get("staged_upload_cleaned", 0),
@@ -591,6 +608,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "repair-candidate-exhaustion",
         "replacement-grinding",
         "staged-upload-grief",
+        "elasticity-overlay-scaleup",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
@@ -623,6 +641,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "repair-candidate-exhaustion",
         "replacement-grinding",
         "staged-upload-grief",
+        "elasticity-overlay-scaleup",
         "high-bandwidth-promotion",
         "high-bandwidth-regression",
         "performance-market-latency",
