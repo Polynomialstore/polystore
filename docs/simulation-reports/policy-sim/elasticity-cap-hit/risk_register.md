@@ -32,6 +32,10 @@ Model demand above the user-funded elasticity budget. The desired behavior is fa
 - Audit budget spent: `0.0000`
 - Audit budget backlog: `0.0000`
 - Audit budget exhausted epochs: `0`
+- Evidence spam claims: `0`
+- Evidence spam bond burned: `0.0000`
+- Evidence spam bounty paid: `0.0000`
+- Evidence spam net gain: `0.0000`
 
 ## Review Questions
 

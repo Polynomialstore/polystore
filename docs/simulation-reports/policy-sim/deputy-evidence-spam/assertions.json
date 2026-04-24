@@ -1,0 +1,42 @@
+[
+  {
+    "detail": "success_rate=1, required>=1",
+    "name": "min_success_rate",
+    "passed": true
+  },
+  {
+    "detail": "evidence_spam_claims=240, required>=1",
+    "name": "min_evidence_spam_claims",
+    "passed": true
+  },
+  {
+    "detail": "evidence_spam_bond_burned=12, required>=1",
+    "name": "min_evidence_spam_bond_burned",
+    "passed": true
+  },
+  {
+    "detail": "evidence_spam_bounty_paid=0, required<=0",
+    "name": "max_evidence_spam_bounty_paid",
+    "passed": true
+  },
+  {
+    "detail": "evidence_spam_net_gain=-12, required<=0",
+    "name": "max_evidence_spam_net_gain",
+    "passed": true
+  },
+  {
+    "detail": "repairs_started=0, required<=0",
+    "name": "max_repairs_started",
+    "passed": true
+  },
+  {
+    "detail": "provider_slashed=0, required<=0",
+    "name": "max_provider_slashed",
+    "passed": true
+  },
+  {
+    "detail": "data_loss_events=0, required<=0",
+    "name": "max_data_loss_events",
+    "passed": true
+  }
+]

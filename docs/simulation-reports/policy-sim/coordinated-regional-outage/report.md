@@ -65,13 +65,15 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
 | Audit budget per epoch | `1.0000` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
+| Evidence spam claims/epoch | `0` | Synthetic low-quality deputy claims used to test bond burn and bounty gating economics. |
+| Evidence bond / bounty | `0.0000` / `0.0000` | Spam claims burn bond unless convicted; bounty is paid only on convicted evidence. |
 | Retrieval burn | `5.00%` | Fraction of variable retrieval fees burned before provider payout. |
 
 ## What Happened
 
 User-facing retrieval availability stayed intact: every modeled retrieval completed successfully. That does not mean every provider behaved correctly; it means redundancy, routing, or deputy service absorbed the fault.
 
-The policy layer recorded `1540` evidence events: `1540` soft events and `0` hard events. Soft evidence is suitable for repair and reward exclusion; hard evidence is the category that can later justify slashing or stronger sanctions.
+The policy layer recorded `1540` evidence events: `1540` soft, `0` threshold, `0` hard, and `0` spam events. Soft evidence is suitable for repair and reward exclusion; hard or convicted threshold evidence is the category that can later justify slashing or stronger sanctions.
 
 Repair was exercised: `96` repair operations started, `96` produced pending-provider readiness evidence, and `96` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible until replacement work catches up and the readiness gate is satisfied.
 
@@ -111,6 +113,8 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Provider latency p10 / p50 / p90 | `0` / `0` / `0` ms | Shows whether aggregate averages hide slow provider tails. |
 | Audit demand / spent | `8.4800` / `7.7000` | Shows whether enforcement evidence consumed the available audit budget. |
 | Audit backlog / exhausted epochs | `0.0000` / `2` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
+| Evidence spam claims / convictions | `0` / `0` | Shows whether the evidence-market spam fixture exercised low-quality claims and any successful convictions. |
+| Evidence spam bond / net gain | `0.0000` / `0.0000` | Spam should be negative-EV unless conviction-gated bounties justify the claim volume. |
 | Top operator provider share | `0.83%` | Shows whether many SP identities are controlled by one operator. |
 | Top operator assignment share | `1.14%` | Shows whether placement caps translate identity concentration into slot concentration. |
 | Max operator slots/deal | `1` | Checks per-deal blast-radius limits against operator Sybil concentration. |
@@ -369,6 +373,12 @@ Shows whether operator assignment share is bounded despite provider identity con
 Shows soft liveness evidence and hard invalid-proof evidence by epoch.
 
 ![Evidence Pressure](graphs/evidence_pressure.svg)
+
+### Evidence Spam Economics
+
+Shows bond burn and bounty payout for low-quality deputy evidence claims.
+
+![Evidence Spam Economics](graphs/evidence_spam.svg)
 
 ### Audit Budget
 

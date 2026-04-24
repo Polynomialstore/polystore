@@ -6,6 +6,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 64,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -50,6 +53,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 925,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -94,6 +100,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 6,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -134,10 +143,61 @@
     },
     {
       "blockers": [],
+      "e2e": "No process e2e until MsgSubmitEvidence and protocol retrieval sessions exist.",
+      "metrics": {
+        "data_loss_events": 0,
+        "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 12.0,
+        "evidence_spam_claims": 240,
+        "evidence_spam_net_gain": -12.0,
+        "fail_serves": 0,
+        "gold_serves": 0,
+        "high_bandwidth_demotions": 0,
+        "high_bandwidth_promotions": 0,
+        "high_bandwidth_providers": 0,
+        "hot_high_bandwidth_serves": 0,
+        "hot_retrieval_attempts": 0,
+        "max_operator_deal_slots": 1,
+        "operator_deal_cap_violations": 0,
+        "performance_reward_paid": 0.0,
+        "platinum_serves": 0,
+        "providers_negative_pnl": 0,
+        "repair_attempt_caps": 0,
+        "repair_attempts": 0,
+        "repair_backoffs": 0,
+        "repair_cooldowns": 0,
+        "repairs_completed": 0,
+        "repairs_ready": 0,
+        "repairs_started": 0,
+        "saturated_responses": 0,
+        "silver_serves": 0,
+        "success_rate": 1.0,
+        "suspect_slots": 0,
+        "top_operator_assignment_share_bps": 208,
+        "top_operator_provider_share_bps": 208,
+        "unavailable_reads": 0,
+        "verdict": "PASS"
+      },
+      "missing_surfaces": [
+        "evidence bond escrow",
+        "conviction state",
+        "bounty payout ledger",
+        "deputy reputation"
+      ],
+      "next_test": "Add evidence-bond escrow, burn-on-expiry, conviction gating, bounty payout, spam-throttle, and deputy-reputation tests.",
+      "scenario": "deputy-evidence-spam",
+      "status": "implementation planning",
+      "target": "evidence-market keeper tests"
+    },
+    {
+      "blockers": [],
       "e2e": "Burst traffic e2e after overlay semantics are implemented.",
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -182,6 +242,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -226,6 +289,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -271,6 +337,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 2,
@@ -316,6 +385,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -359,6 +431,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 25634,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -404,6 +479,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 12,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -448,6 +526,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -493,6 +574,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 7779,
         "gold_serves": 14584,
         "high_bandwidth_demotions": 0,
@@ -538,6 +622,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -582,6 +669,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 40,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -626,6 +716,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 12,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -670,6 +763,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 12,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -715,6 +811,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 96,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -759,6 +858,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 12,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -803,6 +905,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -847,6 +952,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -891,6 +999,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 0,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -935,6 +1046,9 @@
       "metrics": {
         "data_loss_events": 0,
         "delinquent_slots": 12,
+        "evidence_spam_bond_burned": 0.0,
+        "evidence_spam_claims": 0,
+        "evidence_spam_net_gain": 0.0,
         "fail_serves": 0,
         "gold_serves": 0,
         "high_bandwidth_demotions": 0,
@@ -976,6 +1090,6 @@
   ],
   "status_counts": {
     "further simulation review": 6,
-    "implementation planning": 16
+    "implementation planning": 17
   }
 }

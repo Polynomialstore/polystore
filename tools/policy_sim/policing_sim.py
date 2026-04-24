@@ -66,6 +66,7 @@ BUILTIN_NOOP_SCENARIOS = {
     "flapping-provider",
     "sustained-non-response",
     "audit-budget-exhaustion",
+    "deputy-evidence-spam",
     "price-controller-bounds",
     "subsidy-farming",
     "coordinated-regional-outage",
@@ -127,6 +128,10 @@ class SimConfig:
     base_reward_per_slot: float = 0.02
     audit_budget_per_epoch: float = 1.0
     audit_cost_per_miss: float = 0.005
+    evidence_spam_claims_per_epoch: int = 0
+    evidence_spam_bond: float = 0.0
+    evidence_spam_bounty: float = 0.0
+    evidence_spam_conviction_bps: int = 0
     provider_slot_capacity: int = 16
     provider_capacity_min: int = 0
     provider_capacity_max: int = 0
@@ -231,6 +236,12 @@ class SimConfig:
             raise ValueError("latency tier thresholds must satisfy platinum <= gold <= silver")
         if self.performance_reward_per_serve < 0:
             raise ValueError("performance_reward_per_serve must be non-negative")
+        if self.evidence_spam_claims_per_epoch < 0:
+            raise ValueError("evidence_spam_claims_per_epoch must be non-negative")
+        if self.evidence_spam_bond < 0 or self.evidence_spam_bounty < 0:
+            raise ValueError("evidence spam bond and bounty must be non-negative")
+        if not 0 <= self.evidence_spam_conviction_bps <= 10_000:
+            raise ValueError("evidence_spam_conviction_bps must be in [0, 10000]")
         for key, value in {
             "platinum_reward_multiplier_bps": self.platinum_reward_multiplier_bps,
             "gold_reward_multiplier_bps": self.gold_reward_multiplier_bps,
@@ -448,6 +459,11 @@ class EpochMetrics:
     audit_budget_carryover: float = 0.0
     audit_budget_backlog: float = 0.0
     audit_budget_exhausted: int = 0
+    evidence_spam_claims: int = 0
+    evidence_spam_convictions: int = 0
+    evidence_spam_bond_burned: float = 0.0
+    evidence_spam_bounty_paid: float = 0.0
+    evidence_spam_net_gain: float = 0.0
     provider_cost: float = 0.0
     provider_revenue: float = 0.0
     provider_pnl: float = 0.0
@@ -745,12 +761,42 @@ class PolicySimulator:
                 self._count_slot_health(slot, metrics)
                 self._record_slot_row(epoch, slot)
 
+        self._simulate_evidence_spam(epoch, metrics)
         self._record_data_loss_events(metrics)
         self._settle_epoch_economy(epoch, metrics)
         self._update_provider_capabilities(epoch, metrics)
         self._record_concentration_metrics(metrics)
         self._maybe_update_prices(metrics)
         return metrics
+
+    def _simulate_evidence_spam(self, epoch: int, metrics: EpochMetrics) -> None:
+        claims = self.config.evidence_spam_claims_per_epoch
+        if claims <= 0:
+            return
+
+        convictions = claims * self.config.evidence_spam_conviction_bps // 10_000
+        burned_claims = claims - convictions
+        bond_burned = burned_claims * self.config.evidence_spam_bond
+        bounty_paid = convictions * self.config.evidence_spam_bounty
+        metrics.evidence_spam_claims = claims
+        metrics.evidence_spam_convictions = convictions
+        metrics.evidence_spam_bond_burned = bond_burned
+        metrics.evidence_spam_bounty_paid = bounty_paid
+        metrics.evidence_spam_net_gain = bounty_paid - bond_burned
+
+        for claim_index in range(claims):
+            convicted = claim_index < convictions
+            self.evidence_rows.append(
+                {
+                    "epoch": epoch,
+                    "deal_id": "",
+                    "slot": "",
+                    "provider_id": "deputy-spammer",
+                    "evidence_class": "threshold" if convicted else "spam",
+                    "reason": "deputy_evidence_spam",
+                    "consequence": "bounty_paid" if convicted else "bond_burned",
+                }
+            )
 
     @staticmethod
     def _count_slot_health(slot: SlotState, metrics: EpochMetrics) -> None:
@@ -1547,6 +1593,11 @@ class PolicySimulator:
                 "audit_budget_carryover": metrics.audit_budget_carryover,
                 "audit_budget_backlog": metrics.audit_budget_backlog,
                 "audit_budget_exhausted": metrics.audit_budget_exhausted,
+                "evidence_spam_claims": metrics.evidence_spam_claims,
+                "evidence_spam_convictions": metrics.evidence_spam_convictions,
+                "evidence_spam_bond_burned": metrics.evidence_spam_bond_burned,
+                "evidence_spam_bounty_paid": metrics.evidence_spam_bounty_paid,
+                "evidence_spam_net_gain": metrics.evidence_spam_net_gain,
                 "provider_cost": metrics.provider_cost,
                 "provider_revenue": metrics.provider_revenue,
                 "provider_pnl": metrics.provider_pnl,
@@ -1670,6 +1721,11 @@ class PolicySimulator:
             "audit_budget_demand",
             "audit_budget_spent",
             "audit_budget_exhausted",
+            "evidence_spam_claims",
+            "evidence_spam_convictions",
+            "evidence_spam_bond_burned",
+            "evidence_spam_bounty_paid",
+            "evidence_spam_net_gain",
             "provider_cost",
             "elasticity_spent",
             "elasticity_rejections",

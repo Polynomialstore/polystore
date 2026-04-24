@@ -1,0 +1,26 @@
+{
+  "name": "deputy-evidence-spam",
+  "description": "Low-quality deputy evidence claims should burn bond and receive no bounty.",
+  "config": {
+    "scenario": "deputy-evidence-spam",
+    "seed": 41,
+    "providers": 48,
+    "users": 80,
+    "deals": 24,
+    "epochs": 6,
+    "evidence_spam_claims_per_epoch": 40,
+    "evidence_spam_bond": 0.05,
+    "evidence_spam_bounty": 0.2,
+    "evidence_spam_conviction_bps": 0
+  },
+  "assertions": {
+    "min_success_rate": 1.0,
+    "min_evidence_spam_claims": 1,
+    "min_evidence_spam_bond_burned": 1.0,
+    "max_evidence_spam_bounty_paid": 0.0,
+    "max_evidence_spam_net_gain": 0.0,
+    "max_repairs_started": 0,
+    "max_provider_slashed": 0.0,
+    "max_data_loss_events": 0
+  }
+}

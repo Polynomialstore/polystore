@@ -106,6 +106,12 @@ GRADUATION_TARGETS = {
         "missing_surfaces": ["audit budget state", "audit backlog query", "evidence bounty accounting"],
         "e2e": "No process e2e until audit sessions are wired through provider-daemon.",
     },
+    "deputy-evidence-spam": {
+        "target": "evidence-market keeper tests",
+        "next_test": "Add evidence-bond escrow, burn-on-expiry, conviction gating, bounty payout, spam-throttle, and deputy-reputation tests.",
+        "missing_surfaces": ["evidence bond escrow", "conviction state", "bounty payout ledger", "deputy reputation"],
+        "e2e": "No process e2e until MsgSubmitEvidence and protocol retrieval sessions exist.",
+    },
     "price-controller-bounds": {
         "target": "dynamic pricing keeper tests",
         "next_test": "Add epoch pricing tests for floors, ceilings, utilization target, retrieval-demand target, and max step bps.",
@@ -286,6 +292,9 @@ def index_row(name: str, result, failed: list[Any]) -> dict[str, Any]:
         "audit_budget_spent": totals.get("audit_budget_spent", 0),
         "audit_budget_backlog": totals.get("audit_budget_backlog", 0),
         "audit_budget_exhausted": totals.get("audit_budget_exhausted", 0),
+        "evidence_spam_claims": totals.get("evidence_spam_claims", 0),
+        "evidence_spam_bond_burned": totals.get("evidence_spam_bond_burned", 0),
+        "evidence_spam_net_gain": totals.get("evidence_spam_net_gain", 0),
         "top_operator_provider_share_bps": totals.get("top_operator_provider_share_bps", 0),
         "top_operator_assignment_share_bps": totals.get("top_operator_assignment_share_bps", 0),
         "max_operator_deal_slots": totals.get("max_operator_deal_slots", 0),
@@ -322,10 +331,10 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
         "",
         "The [sweep reports](sweeps/README.md) compare parameter ranges for scale, routing, reliability, and pricing decisions. Regenerate them with `tools/policy_sim/run_sweeps.py` after regenerating this scenario corpus.",
         "",
-        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
+        "`Repairs` is reported as `started/ready/completed`; `ready` is pending-provider catch-up evidence before promotion. `Backoffs` includes no-candidate, coordination-limit, cooldown, and attempt-cap throttling events. `High-BW` is reported as `promotions/final providers`. `Perf` is reported as Platinum/Gold/Silver/Fail serves. `Audit` is `demand/spent/backlog/exhausted epochs`. `Spam` is `claims/bond burned/net gain`. `OpCap` is `top operator assignment share / max same-operator slots per deal / cap violations`.",
         "",
-        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | OpCap | Saturated | Negative P&L | Report |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Scenario | Verdict | Success | Unavailable Reads | Data Loss Events | Repairs | Health | Attempts | Backoffs | High-BW | Perf | Audit | Spam | OpCap | Saturated | Negative P&L | Report |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in sorted(rows, key=lambda item: item["scenario"]):
         scenario = row["scenario"]
@@ -337,6 +346,7 @@ def write_index(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"{row['high_bandwidth_promotions']}/{row['high_bandwidth_providers']} | "
             f"{row['platinum_serves']}/{row['gold_serves']}/{row['silver_serves']}/{row['fail_serves']} | "
             f"{row['audit_budget_demand']:.2f}/{row['audit_budget_spent']:.2f}/{row['audit_budget_backlog']:.2f}/{row['audit_budget_exhausted']} | "
+            f"{row['evidence_spam_claims']}/{row['evidence_spam_bond_burned']:.2f}/{row['evidence_spam_net_gain']:.2f} | "
             f"{row['top_operator_assignment_share_bps']}/{row['max_operator_deal_slots']}/{row['operator_deal_cap_violations']} | "
             f"{row['saturated_responses']} | {row['providers_negative_pnl']} | "
             f"[report]({scenario}/report.md) |"
@@ -450,6 +460,9 @@ def graduation_map_row(row: dict[str, Any]) -> dict[str, Any]:
             "silver_serves": row.get("silver_serves", 0),
             "fail_serves": row.get("fail_serves", 0),
             "performance_reward_paid": row.get("performance_reward_paid", 0),
+            "evidence_spam_claims": row.get("evidence_spam_claims", 0),
+            "evidence_spam_bond_burned": row.get("evidence_spam_bond_burned", 0),
+            "evidence_spam_net_gain": row.get("evidence_spam_net_gain", 0),
             "top_operator_provider_share_bps": row.get("top_operator_provider_share_bps", 0),
             "top_operator_assignment_share_bps": row.get("top_operator_assignment_share_bps", 0),
             "max_operator_deal_slots": row.get("max_operator_deal_slots", 0),
@@ -481,6 +494,7 @@ def graduation_status(row: dict[str, Any]) -> tuple[str, list[str]]:
         "lazy-provider",
         "setup-failure",
         "audit-budget-exhaustion",
+        "deputy-evidence-spam",
         "price-controller-bounds",
         "subsidy-farming",
         "repair-candidate-exhaustion",
@@ -518,6 +532,7 @@ def recommended_graduation_lines(rows: list[dict[str, Any]]) -> list[str]:
         "performance-market-latency",
         "operator-concentration-cap",
         "price-controller-bounds",
+        "deputy-evidence-spam",
     ]
     ready.sort(key=lambda row: (priority.index(row["scenario"]) if row["scenario"] in priority else 99, row["scenario"]))
     if not ready:

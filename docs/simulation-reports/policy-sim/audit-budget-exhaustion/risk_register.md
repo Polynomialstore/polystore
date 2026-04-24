@@ -33,6 +33,10 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 - Audit budget spent: `0.4000`
 - Audit budget backlog: `15.6000`
 - Audit budget exhausted epochs: `8`
+- Evidence spam claims: `0`
+- Evidence spam bond burned: `0.0000`
+- Evidence spam bounty paid: `0.0000`
+- Evidence spam net gain: `0.0000`
 
 ## Review Questions
 
