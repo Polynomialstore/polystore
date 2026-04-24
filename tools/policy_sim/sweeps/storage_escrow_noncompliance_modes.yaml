@@ -1,0 +1,36 @@
+{
+  "name": "storage-escrow-noncompliance-modes",
+  "description": "Sensitivity sweep for storage-fee payout and burn behavior across measure-only, repair-only, and reward-exclusion enforcement modes.",
+  "base_scenario": "../scenarios/storage_escrow_noncompliance_burn.yaml",
+  "cases": [
+    {
+      "name": "measure-only-observe",
+      "config": {
+        "enforcement_mode": "MEASURE_ONLY"
+      },
+      "assertions": {
+        "min_repairs_started": 0,
+        "min_repairs_ready": 0,
+        "min_storage_fee_burned": 0.0,
+        "max_storage_fee_burned": 0.0,
+        "min_storage_fee_provider_payouts": 900.0
+      }
+    },
+    {
+      "name": "repair-only-heal",
+      "config": {
+        "enforcement_mode": "REPAIR_ONLY"
+      },
+      "assertions": {
+        "min_storage_fee_burned": 1.0,
+        "min_storage_fee_provider_payouts": 900.0
+      }
+    },
+    {
+      "name": "reward-exclusion-burn",
+      "config": {
+        "enforcement_mode": "REWARD_EXCLUSION"
+      }
+    }
+  ]
+}

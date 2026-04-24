@@ -181,7 +181,8 @@ ledgers are generated locally while committed reports contain only
 `sweep_summary.md`, `sweep_summary.json`, and `manifest.json`. Current sweeps
 cover repair throughput, route attempts, provider reliability, price-controller
 steps, high-bandwidth capability thresholds, elasticity overlay controls,
-sponsored retrieval funding, and storage escrow close/refund accounting.
+sponsored retrieval funding, storage escrow close/refund accounting, and
+storage escrow noncompliance enforcement modes.
 
 ## Model Scope
 

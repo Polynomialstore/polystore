@@ -1260,7 +1260,9 @@ which compares full, partial, and absent sponsored-session funding so owner
 escrow-drain risk is visible before keeper defaults are chosen, and
 `tools/policy_sim/sweeps/storage_escrow_close_refund.yaml`, which compares
 full-duration service, early close timing, close count, and close-by-bps
-storage escrow outcomes.
+storage escrow outcomes. `tools/policy_sim/sweeps/storage_escrow_noncompliance_modes.yaml`
+compares measure-only, repair-only, and reward-exclusion treatment for earned
+storage-fee payout and burn behavior.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
