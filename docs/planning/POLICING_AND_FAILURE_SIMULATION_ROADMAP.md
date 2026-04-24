@@ -922,8 +922,10 @@ For the next engineering milestone, prioritize:
    audit budget, provider P&L, and elasticity spend.
 6. Add simulated enforcement modes for measure-only, repair-only, reward
    exclusion, jail, slash, dynamic pricing, and elasticity rejection.
-7. Add scenario comparison reports for parameter changes.
-8. Produce a graduation map from simulator scenario to keeper/e2e test target.
+7. Add a separate report tool that consumes simulator outputs and generates
+   human-readable summaries, charts, comparisons, and graduation analysis.
+8. Add scenario comparison reports for parameter changes.
+9. Produce a graduation map from simulator scenario to keeper/e2e test target.
 
 ### 27.1 Model Dimensions
 
@@ -978,18 +980,32 @@ assertions:
 
 ### 27.3 Outputs
 
-Standard outputs:
+The simulator should emit stable machine-readable outputs. A separate reporting
+tool should consume those outputs and generate human-facing assets. This keeps
+simulation deterministic and lightweight while allowing richer analysis,
+graphs, and reports to evolve independently.
+
+Simulator raw outputs:
 
 1. Per-epoch JSON and CSV metrics.
 2. Per-provider summary.
 3. Per-slot repair history.
 4. Evidence and consequence ledger.
-5. Parameter sensitivity report.
-6. Scenario comparison report for changed policy parameters.
-7. Price trajectory and convergence report.
-8. Provider P&L and churn report.
-9. Fee, burn, mint, reward, and audit-budget accounting report.
-10. Escrow runway and elasticity-spend report.
+5. Economy ledger.
+6. Assertion results.
+7. No precomputed baseline-vs-candidate deltas; simulator outputs are
+   single-run artifacts only.
+
+Report-tool outputs:
+
+1. Run summary report.
+2. Scenario comparison report for changed policy parameters, computed by the
+   report tool from separate baseline and candidate run directories.
+3. Price trajectory and convergence report.
+4. Provider P&L and churn report.
+5. Fee, burn, mint, reward, and audit-budget accounting report.
+6. Escrow runway and elasticity-spend report.
+7. Graduation-readiness report for keeper/e2e tests.
 
 ### 27.4 Simulator Tests
 
@@ -1019,8 +1035,9 @@ repository with passing tests and useful outputs.
 | S2 | Reliability ledgers | Per-provider summary, per-slot history, evidence ledger, repair ledger, reward eligibility ledger. | Every repair, miss, hard fault, and reward exclusion has a reason in output. |
 | S3 | Economic ledgers | Escrow ledger, retrieval settlement ledger, base reward ledger, audit budget ledger, provider P&L ledger. | Economic scenarios can assert fee, burn, mint, payout, and provider-profit outcomes. |
 | S4 | Simulated enforcement modes | Scenario-level consequences for measure-only, repair-only, reward exclusion, jail, slash, dynamic pricing, and elasticity rejection. | Live rollout modes have simulator evidence before keeper or runtime enablement. |
-| S5 | Parameter comparison | Baseline vs candidate report, sensitivity sweeps, metric delta summaries. | A policy parameter change can be evaluated before keeper work begins. |
-| S6 | Graduation report | Scenario-to-chain/e2e mapping, missing implementation surfaces, recommended next keeper tests. | The team can choose the next keeper test slice from simulator evidence. |
+| S5 | Reporting assets | Markdown reports, charts, risk summaries, and analysis bundles generated from raw simulator outputs. | Humans can review a run without reading raw CSV/JSON. |
+| S6 | Parameter comparison | Baseline vs candidate report, sensitivity sweeps, metric delta summaries. | A policy parameter change can be evaluated before keeper work begins. |
+| S7 | Graduation report | Scenario-to-chain/e2e mapping, missing implementation surfaces, recommended next keeper tests. | The team can choose the next keeper test slice from simulator evidence. |
 
 ### 27.6 Scenario Fixture Inventory
 
@@ -1054,10 +1071,74 @@ Each simulator run should be able to emit:
    backoff events.
 7. `economy.csv`: storage charges, retrieval burns, payouts, reward mint/burn,
    audit budget, escrow runway, and elasticity spend.
-8. `comparison.json`: optional baseline-vs-candidate metric deltas.
+8. No `comparison.json` or other precomputed baseline-vs-candidate artifact in
+   single-run simulator outputs.
 
 Schema stability matters. Once S1 lands, any schema change should update tests
 and a small fixture expectation.
+
+The report tool should read only these raw outputs. It should not rerun the
+simulation, mutate fixtures, or invent hidden metrics that are not present in
+the machine-readable artifacts.
+
+### 27.7.1 Report Tool Contract
+
+Add `tools/policy_sim/report.py` as a separate reporting layer.
+
+Inputs:
+
+1. A single run output directory containing `summary.json` and CSV ledgers.
+2. Optionally, a baseline run directory and a candidate run directory for
+   comparison mode; the report tool computes deltas from those two directories.
+3. Optionally, a sweep directory containing many run outputs.
+
+Outputs:
+
+1. `report.md`: narrative summary of the scenario, seed, pass/fail state,
+   important metrics, and notable events.
+2. `graphs/`: static charts generated from raw outputs. The initial contract is
+   stdlib-only SVG written directly by the report tool, so every report bundle
+   emits at least the canonical minimal SVG set without optional dependencies.
+3. `policy_delta.md`: baseline-vs-candidate comparison for changed params.
+4. `risk_register.md`: failed assertions, unstable metrics, cap hits,
+   concentration risks, and open review items.
+5. `graduation.md`: recommended keeper/e2e graduation targets and missing
+   implementation surfaces.
+
+The first report implementation must be stdlib-only and Markdown/CSV focused.
+Graph generation starts with SVG written directly by the report tool. Optional
+plotting dependencies can add richer assets later, but they must not be required
+for the canonical `graphs/` bundle or change the raw simulator output contract.
+
+### 27.7.2 Graph Inventory
+
+The reporting layer should eventually generate:
+
+1. Retrieval success rate by epoch.
+2. Active, repairing, and backoff slots by epoch.
+3. Quota misses, hard faults, and threshold evidence by epoch.
+4. Repair backlog and repair completion latency.
+5. Storage price and retrieval price trajectories.
+6. Storage utilization and retrieval demand versus targets.
+7. Provider P&L distribution and churn-risk bands.
+8. Provider concentration and top-N assignment share.
+9. Fee-vs-issuance share.
+10. Burn/mint ratio.
+11. Audit budget minted, spent, exhausted, and carried over.
+12. Escrow runway, sponsored-session volume, and elasticity spend.
+
+### 27.7.3 Analysis Modes
+
+The report tool should support:
+
+1. **Single-run analysis:** Did this scenario pass, and why?
+2. **Baseline-vs-candidate comparison:** Did a policy change improve or
+   regress the target metrics?
+3. **Sensitivity sweep:** Which threshold or parameter ranges are stable?
+4. **Regression suite summary:** Which canonical scenarios changed
+   unexpectedly?
+5. **Graduation assessment:** Which simulator behaviors are ready for keeper
+   tests or process-level e2e?
 
 ### 27.8 Implementation Order
 
@@ -1071,8 +1152,10 @@ Recommended implementation order:
 6. Add economic state to the model.
 7. Add economic fixtures and regression tests.
 8. Add simulated enforcement mode switches and assertions.
-9. Add comparison reports and parameter sweeps.
-10. Generate the first graduation report for keeper/e2e work.
+9. Add `report.py` with Markdown reports over existing raw outputs.
+10. Add graph generation and risk/graduation reports.
+11. Add comparison reports and parameter sweeps.
+12. Generate the first graduation report for keeper/e2e work.
 
 Do not add new chain enforcement from this roadmap until at least S2 is done
 for reliability behavior, S3 is done for economic behavior, and the relevant
@@ -1112,6 +1195,7 @@ This program should be split into workstreams that can land independently.
 | Bonding/slashing | Make penalties economically meaningful. | Chain keeper/bank/staking integration |
 | Elasticity overlays | Add user-funded overflow capacity. | Chain state, gateway routing, provider storage |
 | Market simulator | Model price, demand, supply, provider P&L, burn/mint, and elasticity convergence. | `tools/policy_sim`, future economics reports |
+| Reporting and analysis | Turn simulator outputs into summaries, graphs, risk reports, comparisons, and graduation recommendations. | `tools/policy_sim/report.py`, generated artifacts |
 | Pricing and escrow | Implement storage lock-in, retrieval settlement, sponsored sessions, spend windows, and close/refund semantics. | Chain keeper, EVM bridge, website quoting |
 | Rewards and audit funding | Implement base rewards, compliance gating, reward burns, audit budget, and protocol session funding. | Chain keeper, epoch hooks |
 | Observability | Explain state and consequences. | Queries, events, website, dashboards |
@@ -1305,8 +1389,11 @@ For the current simulator-first milestone, the immediate punch list is:
 4. Implement reliability ledgers before adding new reliability behavior.
 5. Implement economic ledgers before attempting dynamic pricing calibration.
 6. Add simulated enforcement mode switches before planning live rollout.
-7. Run the first canonical fixture set and review the output quality.
-8. Update this roadmap with what the simulator reveals before graduating keeper
+7. Add `tools/policy_sim/report.py` after raw outputs are stable enough to
+   support report generation.
+8. Run the first canonical fixture set and review both raw output quality and
+   generated report quality.
+9. Update this roadmap with what the simulator reveals before graduating keeper
    tests.
 
 ## 33. Financial Market and Self-Calibration
