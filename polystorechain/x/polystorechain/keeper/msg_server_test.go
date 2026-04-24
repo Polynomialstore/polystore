@@ -1189,4 +1189,37 @@ func TestSignalSaturation(t *testing.T) {
 	}
 	_, err = msgServer.SignalSaturation(f.ctx, msgSigBad)
 	require.Error(t, err) // Should be unauthorized
+
+	// 5. Spend cap hit should fail closed without adding another stripe or debiting escrow.
+	capBaseline := deal
+	capBaseline.MaxMonthlySpend = capBaseline.SpendWindowSpent
+	require.NoError(t, f.keeper.Deals.Set(f.ctx, dealID, capBaseline))
+
+	_, err = msgServer.SignalSaturation(f.ctx, msgSig)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds max monthly spend")
+
+	afterCapHit, err := f.keeper.Deals.Get(f.ctx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, capBaseline.CurrentReplication, afterCapHit.CurrentReplication)
+	require.Equal(t, capBaseline.Providers, afterCapHit.Providers)
+	require.Equal(t, capBaseline.EscrowBalance, afterCapHit.EscrowBalance)
+	require.Equal(t, capBaseline.SpendWindowSpent, afterCapHit.SpendWindowSpent)
+
+	// 6. Escrow exhaustion should also fail closed when the spend cap allows scaling.
+	escrowBaseline := capBaseline
+	escrowBaseline.MaxMonthlySpend = escrowBaseline.SpendWindowSpent.Add(elasticityCost)
+	escrowBaseline.EscrowBalance = elasticityCost.Sub(math.NewInt(1))
+	require.NoError(t, f.keeper.Deals.Set(f.ctx, dealID, escrowBaseline))
+
+	_, err = msgServer.SignalSaturation(f.ctx, msgSig)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "escrow balance")
+
+	afterEscrowHit, err := f.keeper.Deals.Get(f.ctx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, escrowBaseline.CurrentReplication, afterEscrowHit.CurrentReplication)
+	require.Equal(t, escrowBaseline.Providers, afterEscrowHit.Providers)
+	require.Equal(t, escrowBaseline.EscrowBalance, afterEscrowHit.EscrowBalance)
+	require.Equal(t, escrowBaseline.SpendWindowSpent, afterEscrowHit.SpendWindowSpent)
 }
