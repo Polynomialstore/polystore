@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"crypto/ecdsa"
 	"math/big"
+	"os"
 	"testing"
 
 	"cosmossdk.io/math"
@@ -11,6 +12,7 @@ import (
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
+	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
@@ -241,6 +243,159 @@ func TestSponsoredOpen_Public_RefundsLockedFeeToPayerOnCancel(t *testing.T) {
 
 	// Sponsor receives locked fee refund (variable fee = 2); net cost is base fee burned (1).
 	require.Equal(t, "99stake", bank.accountBalances[sponsorAddr.String()].String())
+}
+
+func TestSponsoredRetrievalCompletionPaysProofProviderWithoutOwnerEscrowDebit(t *testing.T) {
+	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
+	if _, err := os.Stat("../../../trusted_setup.txt"); os.IsNotExist(err) {
+		t.Skip("trusted_setup.txt not found at ../../../trusted_setup.txt, skipping sponsored settlement test")
+	}
+
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyNewDec(0)
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 10)
+	p.RetrievalBurnBps = 2000
+	require.NoError(t, f.keeper.Params.Set(ctx, p))
+
+	for i := 0; i < 10; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte("provider_settle_v1"))
+		providerBz[19] = byte('0' + i)
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	ownerBz := make([]byte, 20)
+	copy(ownerBz, []byte("owner_settle_v1___"))
+	owner, _ := f.addressCodec.BytesToString(ownerBz)
+
+	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		InitialEscrowAmount: math.NewInt(0),
+		MaxMonthlySpend:     math.NewInt(0),
+	})
+	require.NoError(t, err)
+	assignedProvider := resDeal.AssignedProviders[0]
+	providerAddr, err := sdk.AccAddressFromBech32(assignedProvider)
+	require.NoError(t, err)
+
+	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
+	mduData := make([]byte, 8*1024*1024)
+	dealAfterCreate, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.NotNil(t, dealAfterCreate.Mode2Profile)
+	rsK := uint64(dealAfterCreate.Mode2Profile.K)
+	rsM := uint64(dealAfterCreate.Mode2Profile.M)
+
+	witnessFlat, shards, err := crypto_ffi.ExpandMduRs(mduData, rsK, rsM)
+	require.NoError(t, err)
+	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
+	require.NoError(t, err)
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
+	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
+	require.NoError(t, err)
+
+	const leafIndex = uint64(0)
+	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, rsK, rsM, witnessFlat, shards, leafIndex, 0)
+	require.Equal(t, root, root2)
+
+	_, err = msgServer.UpdateDealContent(ctx, &types.MsgUpdateDealContent{
+		Creator:     owner,
+		DealId:      resDeal.DealId,
+		Cid:         manifestCid,
+		Size_:       8 * 1024 * 1024,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.UpdateDealRetrievalPolicy(ctx, &types.MsgUpdateDealRetrievalPolicy{
+		Creator: owner,
+		DealId:  resDeal.DealId,
+		Policy: types.RetrievalPolicy{
+			Mode: types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_PUBLIC,
+		},
+	})
+	require.NoError(t, err)
+
+	before, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(0), before.EscrowBalance)
+
+	sponsorBz := make([]byte, 20)
+	copy(sponsorBz, []byte("sponsor_settle_v1"))
+	sponsor, _ := f.addressCodec.BytesToString(sponsorBz)
+	sponsorAddr, err := sdk.AccAddressFromBech32(sponsor)
+	require.NoError(t, err)
+	bank.setAccountBalance(sponsorAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	openRes, err := msgServer.OpenRetrievalSessionSponsored(ctx, &types.MsgOpenRetrievalSessionSponsored{
+		Creator:        sponsor,
+		DealId:         resDeal.DealId,
+		Provider:       assignedProvider,
+		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
+		StartMduIndex:  0,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          1,
+		ExpiresAt:      0,
+		MaxTotalFee:    math.NewInt(0),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "89stake", bank.accountBalances[sponsorAddr.String()].String())
+	require.Equal(t, "10stake", bank.moduleBalances[types.ModuleName].String())
+
+	proof := types.ChainedProof{
+		MduIndex:        0,
+		MduRootFr:       root,
+		ManifestOpening: manifestProof,
+		BlobCommitment:  commitment,
+		MerklePath:      merklePath,
+		BlobIndex:       uint32(leafIndex),
+		ZValue:          z,
+		YValue:          y,
+		KzgOpeningProof: kzgProof,
+	}
+
+	_, err = msgServer.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{
+		Creator:   assignedProvider,
+		SessionId: openRes.SessionId,
+		Proofs:    []types.ChainedProof{proof},
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{
+		Creator:   sponsor,
+		SessionId: openRes.SessionId,
+	})
+	require.NoError(t, err)
+
+	session, err := f.keeper.RetrievalSessions.Get(ctx, openRes.SessionId)
+	require.NoError(t, err)
+	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED, session.Status)
+	require.True(t, session.LockedFee.IsZero())
+	require.Equal(t, types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER, session.Funding)
+	require.Equal(t, sponsor, session.Payer)
+
+	after, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, before.EscrowBalance, after.EscrowBalance)
+	require.Equal(t, "8stake", bank.accountBalances[providerAddr.String()].String())
+	require.True(t, bank.moduleBalances[types.ModuleName].IsZero())
 }
 
 func TestSponsoredOpen_Voucher_ReplayRejected(t *testing.T) {
