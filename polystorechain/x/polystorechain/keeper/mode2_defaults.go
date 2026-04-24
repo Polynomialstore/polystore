@@ -32,6 +32,24 @@ func providerMatchesBaseHint(provider types.Provider, baseHint string) bool {
 	}
 }
 
+func preferProvidersForServiceHint(candidates []types.Provider, baseHint string, count uint64) []types.Provider {
+	if normalizeServiceHintBase(baseHint) != "Hot" {
+		return candidates
+	}
+
+	edgeProviders := make([]types.Provider, 0, len(candidates))
+	for _, provider := range candidates {
+		if provider.Capabilities == "Edge" {
+			edgeProviders = append(edgeProviders, provider)
+		}
+	}
+	if uint64(len(edgeProviders)) >= count {
+		return edgeProviders
+	}
+
+	return candidates
+}
+
 func autoSelectMode2Profile(eligibleProviders uint64) (k uint64, m uint64, err error) {
 	if eligibleProviders < minMode2Slots {
 		return 0, 0, fmt.Errorf("not enough eligible providers for Mode 2 (need >= %d, got %d)", minMode2Slots, eligibleProviders)
