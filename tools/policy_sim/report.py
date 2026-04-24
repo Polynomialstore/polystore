@@ -3791,6 +3791,13 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "owner retrieval escrow was debited")
     if fnum(totals.get("storage_escrow_outstanding")) > 0 and fnum(totals.get("final_closed_deals")) > 0:
         raise_to("medium", "storage escrow remained outstanding after deal close")
+    if (
+        scenario == "storage-escrow-expiry"
+        and fnum(config.get("deal_duration_epochs")) > 0
+        and fnum(config.get("deal_duration_epochs")) <= fnum(config.get("epochs"))
+        and fnum(totals.get("final_open_deals")) > 0
+    ):
+        raise_to("high", "matured storage deals remained open after configured duration")
     if fnum(totals.get("storage_fee_burned")) > 0:
         raise_to("medium", "storage fees were burned instead of paid")
     if fnum(totals.get("final_underbonded_assigned_slots")) > 0:

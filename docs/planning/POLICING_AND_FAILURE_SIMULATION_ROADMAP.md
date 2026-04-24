@@ -1318,7 +1318,12 @@ and smoothing defaults are chosen; and
 `tools/policy_sim/sweeps/storage_demand_elasticity_controls.yaml`, which
 compares storage-demand elasticity, reference price, minimum demand floor,
 price-step speed, and disabled-controller behavior before storage price
-recovery defaults are chosen.
+recovery defaults are chosen; and
+`tools/policy_sim/sweeps/storage_escrow_expiry_controls.yaml`, which compares
+expiry duration, run length, disabled-expiry behavior, and larger escrow books
+so committed storage expires when fully mature, immature deals remain visibly
+open with outstanding escrow, and missing expiry enforcement is surfaced before
+keeper expiry semantics are chosen.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models

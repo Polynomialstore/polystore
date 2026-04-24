@@ -1,0 +1,80 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/storage_escrow_expiry.yaml",
+  "case_count": 6,
+  "cases": [
+    {
+      "case": "baseline-duration4",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "storage-escrow-expiry",
+      "seed": 107,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "short-duration2-post-expiry-rejections",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "storage-escrow-expiry",
+      "seed": 107,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "one-epoch-duration-immediate-expiry",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "storage-escrow-expiry",
+      "seed": 107,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "not-yet-mature-open-control",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "storage-escrow-expiry",
+      "seed": 107,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "expiry-disabled-unsafe",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "storage-escrow-expiry",
+      "seed": 107,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "larger-escrow-book",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "storage-escrow-expiry",
+      "seed": 107,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for committed-storage expiry timing, run length, disabled-expiry behavior, and larger escrow books.",
+  "name": "storage-escrow-expiry-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/storage-escrow-expiry-controls"
+}
