@@ -373,7 +373,7 @@ def scenario_guide(name: str) -> dict[str, str]:
 
 
 def scenario_allows_unavailable_reads(name: str) -> bool:
-    return name in {"large-scale-regional-stress", "coordinated-regional-outage"}
+    return name in {"large-scale-regional-stress", "coordinated-regional-outage", "provider-economic-churn"}
 
 
 SWEEP_METRICS = [
