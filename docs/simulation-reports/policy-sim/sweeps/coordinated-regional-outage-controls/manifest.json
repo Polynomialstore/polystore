@@ -1,0 +1,80 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/coordinated_regional_outage.yaml",
+  "case_count": 6,
+  "cases": [
+    {
+      "case": "baseline-regional-outage",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "coordinated-regional-outage",
+      "seed": 36,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "route-attempt-tight-stress",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "coordinated-regional-outage",
+      "seed": 36,
+      "success_rate": 0.6897727272727273,
+      "unavailable_reads": 819
+    },
+    {
+      "case": "route-attempt-wide",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "coordinated-regional-outage",
+      "seed": 36,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "repair-throughput-tight",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "coordinated-regional-outage",
+      "seed": 36,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "longer-regional-outage",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "coordinated-regional-outage",
+      "seed": 36,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "larger-heterogeneous-population",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "coordinated-regional-outage",
+      "seed": 36,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Direct sweep for correlated regional outage handling across repair throughput, route attempts, outage severity, and larger heterogeneous populations.",
+  "name": "coordinated-regional-outage-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/coordinated-regional-outage-controls"
+}
