@@ -826,7 +826,11 @@ Current simulator coverage:
    rewards and retrieval fee settlement.
 4. Reports expose tier counts, average latency, Fail-tier share, performance
    reward paid, provider latency distribution, and a performance-tier graph.
-5. The missing live surfaces are service-class params, latency telemetry
+5. `tools/policy_sim/sweeps/performance_market_latency_controls.yaml` compares
+   latency tier windows, slow-provider tails, jitter, route-attempt limits,
+   high-bandwidth routing, and reward multipliers before keeper/runtime QoS
+   defaults are chosen.
+6. The missing live surfaces are service-class params, latency telemetry
    accumulation, tiered reward multipliers, and explicit policy that slow QoS
    evidence is not slashable hard-fault evidence.
 
@@ -1284,6 +1288,10 @@ attempt-cap assumptions before keeper replacement retry defaults are chosen;
 and `tools/policy_sim/sweeps/repair_candidate_exhaustion_controls.yaml`,
 which compares replacement capacity, attempt caps, and cooldowns before
 candidate-selection fallback and capacity-guard defaults are chosen; and
+`tools/policy_sim/sweeps/performance_market_latency_controls.yaml`, which
+compares Hot-service latency tier windows, reward multipliers, slow-provider
+tails, jitter, route attempts, and high-bandwidth routing before QoS reward and
+placement-priority defaults are chosen; and
 `tools/policy_sim/sweeps/provider_bond_headroom_controls.yaml`, which compares
 minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing
 before collateral and underbonded-repair defaults are chosen; and

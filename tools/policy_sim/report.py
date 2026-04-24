@@ -517,6 +517,7 @@ SWEEP_METRICS = [
     "fail_serves",
     "average_latency_ms",
     "performance_fail_rate",
+    "platinum_share",
     "performance_reward_paid",
     "storage_escrow_locked",
     "storage_escrow_earned",
@@ -3704,6 +3705,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "pending repair readiness timeouts occurred")
     if fnum(totals.get("saturated_responses")) > 0:
         raise_to("medium", "provider bandwidth saturation occurred")
+    if fnum(totals.get("performance_fail_rate")) > 0.25:
+        raise_to("medium", "high Fail-tier QoS share")
     if fnum(totals.get("providers_negative_pnl")) > 0:
         raise_to("medium", "some providers ended with negative modeled P&L")
     if fnum(totals.get("provider_churn_events")) > 0:
@@ -3930,6 +3933,14 @@ def sweep_metric_meaning(key: str) -> str:
         "high_bandwidth_serves": "Serves attributed to high-bandwidth providers.",
         "hot_retrieval_attempts": "Hot-service demand exercised by the run.",
         "hot_high_bandwidth_serves": "Hot retrieval serves handled by promoted high-bandwidth providers.",
+        "platinum_serves": "Serves in the fastest latency tier.",
+        "gold_serves": "Serves in the middle positive latency tier.",
+        "silver_serves": "Serves in the low positive latency tier.",
+        "fail_serves": "Serves slower than the configured positive latency tiers.",
+        "average_latency_ms": "Average modeled successful-service latency.",
+        "performance_fail_rate": "Share of tiered serves that landed in the Fail tier.",
+        "platinum_share": "Share of tiered serves that landed in the fastest performance tier.",
+        "performance_reward_paid": "Tiered QoS rewards paid separately from baseline storage and retrieval settlement.",
         "top_operator_assignment_share_bps": "Final assignment share of the largest operator.",
         "max_operator_assignment_share_bps": "Worst observed assignment share of any operator across epochs.",
         "top_operator_provider_share_bps": "Provider identity share controlled by the largest operator.",
