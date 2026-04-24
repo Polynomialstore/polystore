@@ -443,8 +443,11 @@ class EpochMetrics:
     reward_paid: float = 0.0
     reward_burned: float = 0.0
     audit_budget_minted: float = 0.0
+    audit_budget_demand: float = 0.0
     audit_budget_spent: float = 0.0
     audit_budget_carryover: float = 0.0
+    audit_budget_backlog: float = 0.0
+    audit_budget_exhausted: int = 0
     provider_cost: float = 0.0
     provider_revenue: float = 0.0
     provider_pnl: float = 0.0
@@ -516,6 +519,7 @@ class PolicySimulator:
         self.economy_rows: list[dict[str, Any]] = []
         self.provider_epoch_serves: dict[str, int] = {}
         self.audit_budget_carryover = 0.0
+        self.audit_budget_backlog = 0.0
         self.elasticity_spent_total = 0.0
         self.storage_price = config.storage_price
         self.retrieval_price_per_slot = config.retrieval_price_per_slot
@@ -1479,14 +1483,18 @@ class PolicySimulator:
                         self.providers[slot.provider_id].reward_revenue += self.config.base_reward_per_slot
 
         audit_minted = self.config.audit_budget_per_epoch
-        audit_spent = min(
-            self.audit_budget_carryover + audit_minted,
-            (metrics.quota_misses + metrics.deputy_misses) * self.config.audit_cost_per_miss,
-        )
-        self.audit_budget_carryover = self.audit_budget_carryover + audit_minted - audit_spent
+        current_audit_demand = (metrics.quota_misses + metrics.deputy_misses) * self.config.audit_cost_per_miss
+        audit_demand = self.audit_budget_backlog + current_audit_demand
+        audit_available = self.audit_budget_carryover + audit_minted
+        audit_spent = min(audit_available, audit_demand)
+        self.audit_budget_backlog = max(0.0, audit_demand - audit_spent)
+        self.audit_budget_carryover = max(0.0, audit_available - audit_spent)
         metrics.audit_budget_minted = audit_minted
+        metrics.audit_budget_demand = audit_demand
         metrics.audit_budget_spent = audit_spent
         metrics.audit_budget_carryover = self.audit_budget_carryover
+        metrics.audit_budget_backlog = self.audit_budget_backlog
+        metrics.audit_budget_exhausted = int(self.audit_budget_backlog > 0)
 
         if (
             self.config.elasticity_trigger_retrievals_per_epoch > 0
@@ -1534,8 +1542,11 @@ class PolicySimulator:
                 "reward_paid": metrics.reward_paid,
                 "reward_burned": metrics.reward_burned,
                 "audit_budget_minted": metrics.audit_budget_minted,
+                "audit_budget_demand": metrics.audit_budget_demand,
                 "audit_budget_spent": metrics.audit_budget_spent,
                 "audit_budget_carryover": metrics.audit_budget_carryover,
+                "audit_budget_backlog": metrics.audit_budget_backlog,
+                "audit_budget_exhausted": metrics.audit_budget_exhausted,
                 "provider_cost": metrics.provider_cost,
                 "provider_revenue": metrics.provider_revenue,
                 "provider_pnl": metrics.provider_pnl,
@@ -1656,7 +1667,9 @@ class PolicySimulator:
             "reward_paid",
             "reward_burned",
             "audit_budget_minted",
+            "audit_budget_demand",
             "audit_budget_spent",
+            "audit_budget_exhausted",
             "provider_cost",
             "elasticity_spent",
             "elasticity_rejections",
@@ -1725,6 +1738,7 @@ class PolicySimulator:
         totals["min_provider_bandwidth_capacity"] = min((p.bandwidth_capacity_per_epoch for p in self.providers.values()), default=0)
         totals["max_provider_bandwidth_capacity"] = max((p.bandwidth_capacity_per_epoch for p in self.providers.values()), default=0)
         totals["audit_budget_carryover"] = self.audit_budget_carryover
+        totals["audit_budget_backlog"] = self.audit_budget_backlog
         if self.economy_rows:
             storage_prices = [row["storage_price"] for row in self.economy_rows]
             retrieval_prices = [row["retrieval_price_per_slot"] for row in self.economy_rows]

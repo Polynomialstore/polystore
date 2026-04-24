@@ -31,6 +31,10 @@ Model a population-scale network with more than one thousand storage providers a
 - Repair backoffs: `12436`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Audit budget demand: `313.3800`
+- Audit budget spent: `313.3800`
+- Audit budget backlog: `0.0000`
+- Audit budget exhausted epochs: `0`
 
 ## Review Questions
 

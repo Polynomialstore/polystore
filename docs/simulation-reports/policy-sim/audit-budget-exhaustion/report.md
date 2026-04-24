@@ -64,7 +64,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
 | Performance reward per serve | `0.0000` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |
-| Audit budget per epoch | `0.0500` | Minted audit budget; spending is capped by available budget and miss-driven demand. |
+| Audit budget per epoch | `0.0500` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |
 | Retrieval burn | `5.00%` | Fraction of variable retrieval fees burned before provider payout. |
 
 ## What Happened
@@ -76,6 +76,8 @@ The policy layer recorded `64` evidence events: `64` soft events and `0` hard ev
 Repair was exercised: `32` repair operations started, `32` produced pending-provider readiness evidence, and `32` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible until replacement work catches up and the readiness gate is satisfied.
 
 Reward exclusion was active: `1.2800` modeled reward units were burned instead of paid to non-compliant slots.
+
+Audit demand exceeded available budget: `15.6000` of unmet audit work remained after `8` exhausted epochs.
 
 ## Diagnostic Signals
 
@@ -105,6 +107,8 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Platinum / Gold / Silver / Fail serves | `0` / `0` / `0` / `0` | Shows the latency-tier distribution for performance-market policy. |
 | Performance reward paid | `0.0000` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |
 | Provider latency p10 / p50 / p90 | `0` / `0` / `0` ms | Shows whether aggregate averages hide slow provider tails. |
+| Audit demand / spent | `118.6000` / `0.4000` | Shows whether enforcement evidence consumed the available audit budget. |
+| Audit backlog / exhausted epochs | `15.6000` / `8` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |
 | Top operator provider share | `1.66%` | Shows whether many SP identities are controlled by one operator. |
 | Top operator assignment share | `2.31%` | Shows whether placement caps translate identity concentration into slot concentration. |
 | Max operator slots/deal | `1` | Checks per-deal blast-radius limits against operator Sybil concentration. |
@@ -220,6 +224,8 @@ Retrieval accounting paid providers `72.9600`, burned `0.9600` in base fees, and
 
 Performance-tier accounting paid `0.0000` in QoS rewards.
 
+Audit accounting saw `118.6000` of demand, spent `0.4000`, and ended with `15.6000` backlog after `8` exhausted epochs.
+
 `4` providers ended with negative P&L and `4` were marked as churn risk. That is economically important even when retrieval success is perfect.
 
 Final modeled storage price was `1.0000` and retrieval price per slot was `0.0100`.
@@ -242,7 +248,10 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 |---|---|---|---|
 | `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.99 |
 | `min_quota_misses` | `PASS` | Fault fixture must generate quota evidence. | quota_misses=64, required>=1 |
-| `min_audit_budget_spent` | `PASS` | Audit demand should spend at least this much budget in the fixture. | audit_budget_spent=0.1, required>=0.1 |
+| `min_audit_budget_demand` | `PASS` | Fault fixtures should create non-zero audit demand from miss-driven evidence. | audit_budget_demand=118.6, required>=1 |
+| `min_audit_budget_spent` | `PASS` | Audit demand should spend at least this much budget in the fixture. | audit_budget_spent=0.4, required>=0.1 |
+| `min_audit_budget_backlog` | `PASS` | Tight audit-budget fixtures should expose unmet audit demand instead of hiding capped spend. | audit_budget_backlog=15.6, required>=0.1 |
+| `min_audit_budget_exhausted` | `PASS` | Tight audit-budget fixtures should record at least this many budget-exhausted epochs. | audit_budget_exhausted=8, required>=1 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `max_paid_corrupt_bytes` | `PASS` | Corrupt data must not earn payment. | paid_corrupt_bytes=0, required<=0 |
 
@@ -353,6 +362,12 @@ Shows soft liveness evidence and hard invalid-proof evidence by epoch.
 Shows whether miss-driven audit demand is spending budget or accumulating carryover.
 
 ![Audit Budget](graphs/audit_budget.svg)
+
+### Audit Backlog
+
+Shows unmet audit demand and exhausted-budget epochs when evidence exceeds available enforcement budget.
+
+![Audit Backlog](graphs/audit_backlog.svg)
 
 ### Elasticity Spend
 

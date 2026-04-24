@@ -7,6 +7,7 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 | Risk | Severity | Evidence | Impact | Recommended Follow-Up |
 |---|---|---|---|---|
 | Provider economic churn pressure | `medium` | 4 of 60 providers ended with negative modeled P&L. | A technically healthy network may still be unstable if rational providers exit. | Review storage price, retrieval price, reward pool, provider cost assumptions, and dynamic-pricing thresholds. |
+| Audit budget exhaustion | `medium` | 15.6000 audit backlog after 8 exhausted epochs. | The policy may detect more soft-failure work than the configured audit budget can process. | Review audit budget per epoch, audit cost per miss, escalation semantics, and whether backlog should trigger governance review. |
 
 ## Evidence Counters
 
@@ -28,6 +29,10 @@ Model many soft failures with an intentionally tight audit budget. The policy co
 - Repair backoffs: `0`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Audit budget demand: `118.6000`
+- Audit budget spent: `0.4000`
+- Audit budget backlog: `15.6000`
+- Audit budget exhausted epochs: `8`
 
 ## Review Questions
 

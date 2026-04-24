@@ -28,6 +28,10 @@ Model a smaller correlated regional outage than the expensive scale case. This p
 - Repair backoffs: `698`
 - Repair cooldowns: `0`
 - Repair attempt-cap events: `0`
+- Audit budget demand: `8.4800`
+- Audit budget spent: `7.7000`
+- Audit budget backlog: `0.0000`
+- Audit budget exhausted epochs: `2`
 
 ## Review Questions
 

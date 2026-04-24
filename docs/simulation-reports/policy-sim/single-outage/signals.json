@@ -36,6 +36,11 @@
     "top_operator_provider_share_bps": 208.0
   },
   "economics": {
+    "audit_budget_backlog": 0.0,
+    "audit_budget_carryover": 9.935,
+    "audit_budget_demand": 0.065,
+    "audit_budget_exhausted_epochs": 0.0,
+    "audit_budget_spent": 0.065,
     "provider_pnl": 58.82,
     "provider_pnl_p10": 1.103,
     "provider_pnl_p50": 1.256,

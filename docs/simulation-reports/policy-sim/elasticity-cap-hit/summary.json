@@ -117,7 +117,10 @@
   },
   "totals": {
     "active_slots": 1440,
+    "audit_budget_backlog": 0.0,
     "audit_budget_carryover": 5.0,
+    "audit_budget_demand": 0.0,
+    "audit_budget_exhausted": 0,
     "audit_budget_minted": 5.0,
     "audit_budget_spent": 0.0,
     "average_latency_ms": 0.0,

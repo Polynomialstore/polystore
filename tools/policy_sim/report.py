@@ -357,6 +357,10 @@ SWEEP_METRICS = [
     "quota_misses",
     "invalid_proofs",
     "paid_corrupt_bytes",
+    "audit_budget_demand",
+    "audit_budget_spent",
+    "audit_budget_backlog",
+    "audit_budget_exhausted",
     "providers_negative_pnl",
     "saturated_responses",
     "providers_over_capacity",
@@ -564,6 +568,11 @@ def compute_signals(
             "provider_pnl_p10": percentile(pnls, 10),
             "provider_pnl_p50": percentile(pnls, 50),
             "provider_pnl_p90": percentile(pnls, 90),
+            "audit_budget_demand": fnum(totals.get("audit_budget_demand")),
+            "audit_budget_spent": fnum(totals.get("audit_budget_spent")),
+            "audit_budget_carryover": fnum(totals.get("audit_budget_carryover")),
+            "audit_budget_backlog": fnum(totals.get("audit_budget_backlog")),
+            "audit_budget_exhausted_epochs": fnum(totals.get("audit_budget_exhausted")),
             "storage_price_start": storage_prices[0] if storage_prices else 0.0,
             "storage_price_end": storage_prices[-1] if storage_prices else 0.0,
             "storage_price_min": min(storage_prices, default=0.0),
@@ -980,6 +989,12 @@ def write_report_md(
             "",
             "![Audit Budget](graphs/audit_budget.svg)",
             "",
+            "### Audit Backlog",
+            "",
+            "Shows unmet audit demand and exhausted-budget epochs when evidence exceeds available enforcement budget.",
+            "",
+            "![Audit Backlog](graphs/audit_backlog.svg)",
+            "",
             "### Elasticity Spend",
             "",
             "Shows demand-funded elasticity spend and rejected expansion attempts.",
@@ -1098,6 +1113,11 @@ def build_behavior_narrative(
         parts.append(
             f"Elasticity spend failed closed: `{fmt_num(metric_sum(economy, 'elasticity_rejections'))}` expansion attempts were rejected rather than exceeding the cap."
         )
+    if fnum(totals.get("audit_budget_backlog")) > 0:
+        parts.append(
+            f"Audit demand exceeded available budget: `{fmt_money(totals.get('audit_budget_backlog'))}` of unmet audit work remained after "
+            f"`{fmt_num(totals.get('audit_budget_exhausted'))}` exhausted epochs."
+        )
 
     faulty = [
         row
@@ -1126,7 +1146,7 @@ def economic_assumption_lines(config: dict[str, Any]) -> list[str]:
         f"| Provider storage cost/slot/epoch | `{fmt_money(config.get('provider_storage_cost_per_slot_epoch'))}` | Simplified provider cost basis; jitter may create marginal-provider distress. |",
         f"| Provider bandwidth cost/retrieval | `{fmt_money(config.get('provider_bandwidth_cost_per_retrieval'))}` | Simplified egress cost basis for retrieval-heavy scenarios. |",
         f"| Performance reward per serve | `{fmt_money(config.get('performance_reward_per_serve'))}` | Optional tiered QoS reward. Multipliers are applied by latency tier and Fail tier receives the configured fail multiplier. |",
-        f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and miss-driven demand. |",
+        f"| Audit budget per epoch | `{fmt_money(config.get('audit_budget_per_epoch'))}` | Minted audit budget; spending is capped by available budget and unmet miss-driven demand carries forward as backlog. |",
         f"| Retrieval burn | `{fmt_bps(config.get('retrieval_burn_bps'))}` | Fraction of variable retrieval fees burned before provider payout. |",
     ]
 
@@ -1165,6 +1185,8 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Platinum / Gold / Silver / Fail serves | `{fmt_num(performance['platinum_serves'])}` / `{fmt_num(performance['gold_serves'])}` / `{fmt_num(performance['silver_serves'])}` / `{fmt_num(performance['fail_serves'])}` | Shows the latency-tier distribution for performance-market policy. |",
         f"| Performance reward paid | `{fmt_money(performance['performance_reward_paid'])}` | Quantifies the tiered QoS reward stream separately from baseline storage and retrieval settlement. |",
         f"| Provider latency p10 / p50 / p90 | `{fmt_num(performance['provider_latency_p10_ms'])}` / `{fmt_num(performance['provider_latency_p50_ms'])}` / `{fmt_num(performance['provider_latency_p90_ms'])}` ms | Shows whether aggregate averages hide slow provider tails. |",
+        f"| Audit demand / spent | `{fmt_money(economics['audit_budget_demand'])}` / `{fmt_money(economics['audit_budget_spent'])}` | Shows whether enforcement evidence consumed the available audit budget. |",
+        f"| Audit backlog / exhausted epochs | `{fmt_money(economics['audit_budget_backlog'])}` / `{fmt_num(economics['audit_budget_exhausted_epochs'])}` | Makes budget exhaustion explicit instead of hiding unmet audit work behind capped spending. |",
         f"| Top operator provider share | `{fmt_bps(concentration['top_operator_provider_share_bps'])}` | Shows whether many SP identities are controlled by one operator. |",
         f"| Top operator assignment share | `{fmt_bps(concentration['top_operator_assignment_share_bps'])}` | Shows whether placement caps translate identity concentration into slot concentration. |",
         f"| Max operator slots/deal | `{fmt_num(concentration['max_operator_deal_slots'])}` | Checks per-deal blast-radius limits against operator Sybil concentration. |",
@@ -1414,7 +1436,10 @@ def assertion_meaning(name: str) -> str:
         "min_final_retrieval_price": "Dynamic pricing should move retrieval price to or above this value by run end.",
         "max_final_retrieval_price": "Dynamic pricing should keep retrieval price at or below this value by run end.",
         "max_audit_budget_carryover": "Tight audit-budget fixtures should not accumulate unused budget while misses remain.",
+        "min_audit_budget_demand": "Fault fixtures should create non-zero audit demand from miss-driven evidence.",
         "min_audit_budget_spent": "Audit demand should spend at least this much budget in the fixture.",
+        "min_audit_budget_backlog": "Tight audit-budget fixtures should expose unmet audit demand instead of hiding capped spend.",
+        "min_audit_budget_exhausted": "Tight audit-budget fixtures should record at least this many budget-exhausted epochs.",
     }
     return meanings.get(name, "Custom assertion. Review the detail and fixture threshold.")
 
@@ -1467,6 +1492,8 @@ def build_economic_narrative(
         f"Retrieval accounting paid providers `{fmt_money(totals.get('retrieval_provider_payouts'))}`, burned `{fmt_money(totals.get('retrieval_base_burned'))}` in base fees, "
         f"and burned `{fmt_money(totals.get('retrieval_variable_burned'))}` in variable retrieval fees.",
         f"Performance-tier accounting paid `{fmt_money(totals.get('performance_reward_paid'))}` in QoS rewards.",
+        f"Audit accounting saw `{fmt_money(totals.get('audit_budget_demand'))}` of demand, spent `{fmt_money(totals.get('audit_budget_spent'))}`, "
+        f"and ended with `{fmt_money(totals.get('audit_budget_backlog'))}` backlog after `{fmt_num(totals.get('audit_budget_exhausted'))}` exhausted epochs.",
     ]
     if negative_pnl:
         parts.append(
@@ -1600,6 +1627,19 @@ def write_risk_register(
                 "followup": "Review max repair starts per epoch, replacement capacity, retry cooldowns, attempt caps, and catch-up probability assumptions.",
             }
         )
+    if fnum(totals.get("audit_budget_backlog")):
+        rows.append(
+            {
+                "risk": "Audit budget exhaustion",
+                "severity": "medium",
+                "evidence": (
+                    f"{fmt_money(totals.get('audit_budget_backlog'))} audit backlog after "
+                    f"{fmt_num(totals.get('audit_budget_exhausted'))} exhausted epochs."
+                ),
+                "impact": "The policy may detect more soft-failure work than the configured audit budget can process.",
+                "followup": "Review audit budget per epoch, audit cost per miss, escalation semantics, and whether backlog should trigger governance review.",
+            }
+        )
     if evidence and not repairs and str(config["scenario"]) not in {"ideal", "underpriced-storage", "wash-retrieval", "viral-public-retrieval", "elasticity-cap-hit"}:
         rows.append(
             {
@@ -1666,6 +1706,10 @@ def write_risk_register(
             f"- Repair backoffs: `{fmt_num(totals.get('repair_backoffs'))}`",
             f"- Repair cooldowns: `{fmt_num(totals.get('repair_cooldowns'))}`",
             f"- Repair attempt-cap events: `{fmt_num(totals.get('repair_attempt_caps'))}`",
+            f"- Audit budget demand: `{fmt_money(totals.get('audit_budget_demand'))}`",
+            f"- Audit budget spent: `{fmt_money(totals.get('audit_budget_spent'))}`",
+            f"- Audit budget backlog: `{fmt_money(totals.get('audit_budget_backlog'))}`",
+            f"- Audit budget exhausted epochs: `{fmt_num(totals.get('audit_budget_exhausted'))}`",
             "",
             "## Review Questions",
             "",
@@ -1893,6 +1937,13 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("audit_budget_spent")) for row in economy],
         secondary=[fnum(row.get("audit_budget_carryover")) for row in economy],
         secondary_label="Carryover",
+    )
+    write_line_svg(
+        graphs_dir / "audit_backlog.svg",
+        "Audit Backlog",
+        [fnum(row.get("audit_budget_backlog")) for row in economy],
+        secondary=[fnum(row.get("audit_budget_exhausted")) for row in economy],
+        secondary_label="Exhausted Epoch",
     )
     write_line_svg(
         graphs_dir / "elasticity_spend.svg",
@@ -2309,6 +2360,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "provider bandwidth saturation occurred")
     if fnum(totals.get("providers_negative_pnl")) > 0:
         raise_to("medium", "some providers ended with negative modeled P&L")
+    if fnum(totals.get("audit_budget_backlog")) > 0:
+        raise_to("medium", "audit budget backlog remained at run end")
     if not reasons:
         reasons.append("assertions passed and no material sweep risk surfaced")
     return level, reasons
@@ -2510,6 +2563,10 @@ def sweep_metric_meaning(key: str) -> str:
         "quota_misses": "Soft liveness evidence generated by the run.",
         "invalid_proofs": "Hard-fault evidence generated by the run.",
         "paid_corrupt_bytes": "Payment safety invariant; should remain zero.",
+        "audit_budget_demand": "Total audit work implied by soft-failure evidence and carried backlog.",
+        "audit_budget_spent": "Audit budget actually consumed under the configured cap.",
+        "audit_budget_backlog": "Unmet audit demand remaining at run end.",
+        "audit_budget_exhausted": "Epochs where audit demand exceeded available budget.",
         "providers_negative_pnl": "Market sustainability and churn pressure.",
         "saturated_responses": "Provider bandwidth bottleneck signal.",
         "providers_over_capacity": "Placement/capacity invariant; should remain zero.",

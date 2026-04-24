@@ -67,6 +67,10 @@
     "scenario": "high-bandwidth-regression",
     "seed": 44,
     "totals": {
+      "audit_budget_backlog": 0.0,
+      "audit_budget_demand": 0.0,
+      "audit_budget_exhausted": 0.0,
+      "audit_budget_spent": 0.0,
       "average_latency_ms": 0.0,
       "data_loss_events": 0.0,
       "delinquent_slots": 0.0,
@@ -182,6 +186,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -296,6 +304,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -410,6 +422,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -524,6 +540,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -638,6 +658,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -749,6 +773,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -860,6 +888,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -971,6 +1003,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -1082,6 +1118,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -1127,6 +1167,30 @@
     }
   ],
   "metric_ranges": {
+    "audit_budget_backlog": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "audit_budget_demand": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "audit_budget_exhausted": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "audit_budget_spent": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
     "average_latency_ms": {
       "delta": 0.0,
       "max": 0.0,
@@ -1445,6 +1509,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -1556,6 +1624,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -1670,6 +1742,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -1781,6 +1857,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -1892,6 +1972,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -2006,6 +2090,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -2120,6 +2208,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -2234,6 +2326,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,
@@ -2348,6 +2444,10 @@
       "scenario": "high-bandwidth-regression",
       "seed": 44,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 0.0,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 0.0,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 0.0,

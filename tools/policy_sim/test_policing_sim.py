@@ -96,6 +96,19 @@ class PolicySimulatorTests(unittest.TestCase):
 
         self.assertEqual(["min_success_rate"], [item.name for item in assertions])
 
+    def test_audit_budget_exhaustion_tracks_unmet_backlog(self):
+        fixture = Path(__file__).with_name("scenarios") / "audit_budget_exhaustion.yaml"
+        spec = load_scenario_spec(fixture)
+        result = run_one(SimConfig(**spec.config), spec.faults, spec.assertions, None)
+
+        self.assert_assertions_pass(result)
+        self.assertGreater(result.totals["audit_budget_demand"], result.totals["audit_budget_spent"])
+        self.assertGreater(result.totals["audit_budget_backlog"], 0)
+        self.assertGreater(result.totals["audit_budget_exhausted"], 0)
+        self.assertIn("audit_budget_demand", result.economy[0])
+        self.assertIn("audit_budget_backlog", result.economy[0])
+        self.assertTrue(any(row["audit_budget_exhausted"] for row in result.economy))
+
     def test_heterogeneous_scale_controls_surface_saturation_and_repair_backoff(self):
         config = SimConfig(
             scenario="large-scale-regional-stress",
@@ -417,6 +430,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "operator_concentration.svg").exists())
             self.assertTrue((report_dir / "graphs" / "evidence_pressure.svg").exists())
             self.assertTrue((report_dir / "graphs" / "audit_budget.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "audit_backlog.svg").exists())
             self.assertTrue((report_dir / "graphs" / "elasticity_spend.svg").exists())
             graph_text = (report_dir / "graphs" / "retrieval_success_rate.svg").read_text(encoding="utf-8")
             self.assertNotIn("Scale: x=epoch", graph_text)
@@ -447,6 +461,7 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Operator Concentration](graphs/operator_concentration.svg)", report_text)
             self.assertIn("![Evidence Pressure](graphs/evidence_pressure.svg)", report_text)
             self.assertIn("![Audit Budget](graphs/audit_budget.svg)", report_text)
+            self.assertIn("![Audit Backlog](graphs/audit_backlog.svg)", report_text)
             self.assertIn("![Elasticity Spend](graphs/elasticity_spend.svg)", report_text)
             signal_text = (report_dir / "signals.json").read_text(encoding="utf-8")
             self.assertIn("availability", signal_text)

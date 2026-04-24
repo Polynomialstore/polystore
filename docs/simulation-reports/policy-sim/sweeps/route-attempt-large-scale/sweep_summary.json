@@ -70,6 +70,10 @@
     "scenario": "large-scale-regional-stress",
     "seed": 29,
     "totals": {
+      "audit_budget_backlog": 0.0,
+      "audit_budget_demand": 313.38,
+      "audit_budget_exhausted": 0.0,
+      "audit_budget_spent": 313.38,
       "average_latency_ms": 0.0,
       "data_loss_events": 0.0,
       "delinquent_slots": 25634.0,
@@ -188,6 +192,10 @@
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 168.27,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 168.27,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 13109.0,
@@ -302,6 +310,10 @@
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 313.38,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 313.38,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 25634.0,
@@ -416,6 +428,10 @@
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 313.38,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 313.38,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 25634.0,
@@ -461,6 +477,30 @@
     }
   ],
   "metric_ranges": {
+    "audit_budget_backlog": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "audit_budget_demand": {
+      "delta": 145.11,
+      "max": 313.38,
+      "mean": 265.01,
+      "min": 168.27
+    },
+    "audit_budget_exhausted": {
+      "delta": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0
+    },
+    "audit_budget_spent": {
+      "delta": 145.11,
+      "max": 313.38,
+      "mean": 265.01,
+      "min": 168.27
+    },
     "average_latency_ms": {
       "delta": 0.0,
       "max": 0.0,
@@ -782,6 +822,10 @@
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 313.38,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 313.38,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 25634.0,
@@ -896,6 +940,10 @@
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 313.38,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 313.38,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 25634.0,
@@ -1013,6 +1061,10 @@
       "scenario": "large-scale-regional-stress",
       "seed": 29,
       "totals": {
+        "audit_budget_backlog": 0.0,
+        "audit_budget_demand": 168.27,
+        "audit_budget_exhausted": 0.0,
+        "audit_budget_spent": 168.27,
         "average_latency_ms": 0.0,
         "data_loss_events": 0.0,
         "delinquent_slots": 13109.0,
