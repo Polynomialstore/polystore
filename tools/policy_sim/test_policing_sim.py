@@ -241,6 +241,39 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(0, result.totals["high_bandwidth_demotions"])
         self.assertTrue(any(row["capability_tier"] == "HIGH_BANDWIDTH" for row in result.providers))
 
+    def test_high_bandwidth_regression_demotes_saturated_providers(self):
+        config = SimConfig(
+            scenario="high-bandwidth-regression",
+            seed=44,
+            providers=72,
+            users=200,
+            deals=36,
+            epochs=8,
+            retrievals_per_user_per_epoch=3,
+            route_attempt_limit=12,
+            provider_bandwidth_capacity_min=70,
+            provider_bandwidth_capacity_max=140,
+            high_bandwidth_promotion_enabled=True,
+            high_bandwidth_capacity_threshold=110,
+            high_bandwidth_min_retrievals=12,
+            high_bandwidth_min_success_rate_bps=9800,
+            high_bandwidth_max_saturation_bps=0,
+            high_bandwidth_demotion_saturation_bps=300,
+            high_bandwidth_routing_enabled=True,
+            hot_retrieval_bps=10000,
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertGreater(result.totals["high_bandwidth_promotions"], 0)
+        self.assertGreater(result.totals["high_bandwidth_demotions"], 0)
+        self.assertGreater(result.totals["saturated_responses"], 0)
+        self.assertGreater(result.totals["hot_high_bandwidth_serves"], 0)
+        self.assertEqual(0, result.totals["data_loss_events"])
+        self.assertTrue(
+            any(row["capability_reason"] == "demoted:saturation_regression" for row in result.providers),
+            "demoted providers should expose the regression reason",
+        )
+
     def test_jail_window_is_exclusive(self):
         simulator = PolicySimulator(
             SimConfig(
@@ -316,6 +349,8 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertTrue((report_dir / "graphs" / "saturation_and_repair.svg").exists())
             self.assertTrue((report_dir / "graphs" / "capacity_utilization.svg").exists())
             self.assertTrue((report_dir / "graphs" / "repair_backlog.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "high_bandwidth_promotion.svg").exists())
+            self.assertTrue((report_dir / "graphs" / "hot_retrieval_routing.svg").exists())
             graph_text = (report_dir / "graphs" / "retrieval_success_rate.svg").read_text(encoding="utf-8")
             self.assertNotIn("Scale: x=epoch", graph_text)
             self.assertIn('y1="52"', graph_text)
@@ -338,6 +373,8 @@ class PolicySimulatorTests(unittest.TestCase):
             self.assertIn("![Saturation And Repair Pressure](graphs/saturation_and_repair.svg)", report_text)
             self.assertIn("![Capacity Utilization](graphs/capacity_utilization.svg)", report_text)
             self.assertIn("![Repair Backlog](graphs/repair_backlog.svg)", report_text)
+            self.assertIn("![High-Bandwidth Promotion](graphs/high_bandwidth_promotion.svg)", report_text)
+            self.assertIn("![Hot Retrieval Routing](graphs/hot_retrieval_routing.svg)", report_text)
             signal_text = (report_dir / "signals.json").read_text(encoding="utf-8")
             self.assertIn("availability", signal_text)
             self.assertIn("top_bottleneck_providers", signal_text)

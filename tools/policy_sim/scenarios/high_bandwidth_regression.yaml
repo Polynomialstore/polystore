@@ -1,0 +1,37 @@
+{
+  "name": "high-bandwidth-regression",
+  "description": "Hot retrieval demand should revoke high-bandwidth eligibility from providers that regress into sustained saturation while preserving availability.",
+  "config": {
+    "scenario": "high-bandwidth-regression",
+    "seed": 44,
+    "providers": 72,
+    "users": 200,
+    "deals": 36,
+    "epochs": 8,
+    "retrievals_per_user_per_epoch": 3,
+    "route_attempt_limit": 12,
+    "provider_bandwidth_capacity_min": 70,
+    "provider_bandwidth_capacity_max": 140,
+    "high_bandwidth_promotion_enabled": true,
+    "high_bandwidth_capacity_threshold": 110,
+    "high_bandwidth_min_retrievals": 12,
+    "high_bandwidth_min_success_rate_bps": 9800,
+    "high_bandwidth_max_saturation_bps": 0,
+    "high_bandwidth_demotion_saturation_bps": 300,
+    "high_bandwidth_routing_enabled": true,
+    "hot_retrieval_bps": 10000,
+    "retrieval_base_fee": 0.003,
+    "retrieval_price_per_slot": 0.014
+  },
+  "assertions": {
+    "min_success_rate": 0.99,
+    "min_high_bandwidth_promotions": 1,
+    "min_high_bandwidth_demotions": 1,
+    "min_saturated_responses": 1,
+    "min_hot_retrieval_attempts": 1,
+    "min_hot_high_bandwidth_serves": 1,
+    "max_providers_over_capacity": 0,
+    "max_data_loss_events": 0,
+    "max_paid_corrupt_bytes": 0
+  }
+}

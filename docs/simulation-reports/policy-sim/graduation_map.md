@@ -6,7 +6,7 @@ This report converts the committed simulator corpus into implementation planning
 
 | Status | Count | Meaning |
 |---|---:|---|
-| `implementation planning` | 13 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
+| `implementation planning` | 14 | The fixture passed and maps to a concrete keeper, gateway/provider, or e2e artifact. |
 | `further simulation review` | 6 | The fixture passed but should inform parameter or product policy before implementation work. |
 | `blocked` | 0 | The fixture failed assertions or durability safety and should not graduate. |
 
@@ -20,6 +20,7 @@ This report converts the committed simulator corpus into implementation planning
 | [`elasticity-cap-hit`](elasticity-cap-hit/report.md) | `further simulation review` | elasticity spend-window tests | Add spend-window tests for saturation signaling, fail-closed expansion, TTL, and cap-bound rejection. | `MsgSignalSaturation hardening`, `overlay accountability`, `deal spend window` | Burst traffic e2e after overlay semantics are implemented. |
 | [`flapping-provider`](flapping-provider/report.md) | `implementation planning` | keeper soft-fault window | Add missed-epoch window tests proving intermittent failures create health evidence without triggering repair churn. | `soft-fault decay`, `per-slot suspect state`, `operator health query` | Optional provider restart e2e; keeper coverage should be the first artifact. |
 | [`high-bandwidth-promotion`](high-bandwidth-promotion/report.md) | `implementation planning` | provider capability and hot-route policy tests | Add capability-tier keeper/runtime tests proving measured providers can become high-bandwidth eligible and hot retrieval routing prefers them without over-capacity assignment. | `provider capability tier state`, `bandwidth probe telemetry`, `hot-route preference query`, `capability demotion rule` | Hot retrieval burst against heterogeneous providers after gateway/provider telemetry exists; assert promoted providers receive hot traffic and can later demote on regression. |
+| [`high-bandwidth-regression`](high-bandwidth-regression/report.md) | `implementation planning` | capability demotion and hot-route failover tests | Add keeper/runtime tests proving promoted providers demote after sustained saturation and hot routing falls back without data-loss or over-capacity assignment. | `capability demotion rule`, `saturation evidence accumulator`, `hot-route failover telemetry`, `operator regression alert` | Hot retrieval burst that intentionally saturates promoted providers; assert demotion events fire and retrievals continue through fallback capacity. |
 | [`ideal`](ideal/report.md) | `implementation planning` | keeper control tests | Add no-op epoch tests proving healthy providers do not accrue evidence, repair, reward exclusion, jail, or slash state. | `keeper epoch hooks`, `reward eligibility queries` | Gateway happy-path smoke remains sufficient; do not add a slow failure e2e for the control case. |
 | [`large-scale-regional-stress`](large-scale-regional-stress/report.md) | `further simulation review` | scale calibration and regression reporting | Use sweep reports to tune repair throughput, placement headroom, retrieval pricing, and provider P&L before keeper defaults. | `scale sweep corpus`, `placement diversity params`, `operator concentration analysis`, `CI artifact retention` | Do not mirror this as process e2e; keep it as simulator/CI artifact work. |
 | [`lazy-provider`](lazy-provider/report.md) | `implementation planning` | reward eligibility keeper tests | Add quota shortfall and synthetic-fill tests proving lazy responsibility is excluded from base rewards without soft-fault slashing. | `quota miss ledger`, `reward exclusion reason query`, `soft fault consequence ceiling` | Slow-path only after keeper reward accounting is stable. |
@@ -50,13 +51,13 @@ This report converts the committed simulator corpus into implementation planning
 | Surface | Scenario Count |
 |---|---:|
 | `candidate exclusion reasons` | 2 |
+| `capability demotion rule` | 2 |
 | `CI artifact retention` | 1 |
 | `MsgSignalSaturation hardening` | 1 |
 | `audit backlog query` | 1 |
 | `audit budget state` | 1 |
 | `bandwidth probe telemetry` | 1 |
 | `burn ledger` | 1 |
-| `capability demotion rule` | 1 |
 | `compliance-gated base rewards` | 1 |
 | `corrupt-byte reward exclusion` | 1 |
 | `credit cap enforcement` | 1 |
@@ -70,6 +71,7 @@ This report converts the committed simulator corpus into implementation planning
 | `gateway repair-aware routing` | 1 |
 | `hard evidence submission` | 1 |
 | `hot route observability` | 1 |
+| `hot-route failover telemetry` | 1 |
 | `hot-route preference query` | 1 |
 | `jail/slash params` | 1 |
 | `keeper epoch hooks` | 1 |
@@ -79,6 +81,7 @@ This report converts the committed simulator corpus into implementation planning
 | `operator concentration checks` | 1 |
 | `operator concentration limits` | 1 |
 | `operator health query` | 1 |
+| `operator regression alert` | 1 |
 | `overlay accountability` | 1 |
 | `owner escrow isolation` | 1 |
 | `per-slot suspect state` | 1 |
@@ -97,6 +100,7 @@ This report converts the committed simulator corpus into implementation planning
 | `reward eligibility queries` | 1 |
 | `reward exclusion event` | 1 |
 | `reward exclusion reason query` | 1 |
+| `saturation evidence accumulator` | 1 |
 | `scale sweep corpus` | 1 |
 | `setup bump event` | 1 |
 | `setup slot state` | 1 |

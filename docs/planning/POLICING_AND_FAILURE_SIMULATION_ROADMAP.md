@@ -750,16 +750,20 @@ Current simulator coverage:
 
 1. `tools/policy_sim/scenarios/high_bandwidth_promotion.yaml` models a
    heterogeneous provider population with hot retrieval demand.
-2. Providers promote to `HIGH_BANDWIDTH` only after satisfying configured
+2. `tools/policy_sim/scenarios/high_bandwidth_regression.yaml` models the
+   revocation side of the same policy when promoted providers saturate under
+   concentrated hot traffic.
+3. Providers promote to `HIGH_BANDWIDTH` only after satisfying configured
    bandwidth capacity, retrieval-count, success-rate, saturation, and
    hard-fault checks.
-3. Hot retrieval routing can prefer promoted providers while retaining the
+4. Hot retrieval routing can prefer promoted providers while retaining the
    existing route-attempt, availability, and over-capacity assertions.
-4. Reports expose promotion count, final high-bandwidth provider count,
-   demotions, hot retrieval attempts, and hot serves by high-bandwidth
-   providers.
-5. The missing live surfaces are provider capability state, probe telemetry,
-   hot-route preference queries, and demotion policy.
+5. Reports expose promotion count, final high-bandwidth provider count,
+   demotions, hot retrieval attempts, saturation responses, and hot serves by
+   high-bandwidth providers.
+6. The missing live surfaces are provider capability state, probe telemetry,
+   hot-route preference queries, saturation evidence accumulation, and demotion
+   policy.
 
 ## 21. Performance Market and Service Classes
 
@@ -1195,6 +1199,7 @@ Start with these fixture files under `tools/policy_sim/scenarios/`:
 | `viral_public_retrieval.yaml` | Public content receives a demand spike. | Sponsored sessions pay retrieval cost and owner escrow remains stable. |
 | `elasticity_cap_hit.yaml` | Demand exceeds user spend cap. | Scaling fails closed and rate-limit state is emitted. |
 | `high_bandwidth_promotion.yaml` | Hot retrieval demand is routed across heterogeneous providers after measured high-bandwidth promotion. | Providers promote only after success/capacity/saturation checks, hot traffic uses promoted providers, no demotion or over-capacity assignment occurs. |
+| `high_bandwidth_regression.yaml` | Promoted high-bandwidth providers experience sustained saturation under concentrated hot routing. | Demotion occurs, hot retrievals continue, capacity remains respected, and data-loss events stay zero. |
 | `large_scale_regional_stress.yaml` | More than 1,000 heterogeneous SPs and thousands of users experience a correlated regional outage, bandwidth saturation, dynamic pricing, and constrained repair coordination. | Availability remains above floor, saturation and repair backoffs are visible, price remains bounded, and no provider is assigned beyond modeled capacity. |
 
 ### 27.7 Output Contract

@@ -135,6 +135,15 @@ SCENARIO_GUIDES = {
         "expected": "Providers above the bandwidth and success thresholds are promoted, hot retrievals route through them, no demotion occurs, and availability remains intact.",
         "review": "Use this before implementing provider capability state, hot-deal placement priority, or high-bandwidth reward multipliers in keeper/runtime code.",
     },
+    "high-bandwidth-regression": {
+        "title": "High-Bandwidth Capability Regression",
+        "intent": (
+            "Model hot retrieval demand after providers have become high-bandwidth eligible. The policy question is whether "
+            "the system can revoke hot-path eligibility when promoted providers begin saturating under concentrated traffic."
+        ),
+        "expected": "Providers promote first, some promoted providers demote after sustained saturation, hot retrievals continue to succeed, and no data-loss event occurs.",
+        "review": "Use this before implementing capability demotion thresholds, hot-route failover behavior, or provider/operator alerting for regressed high-bandwidth service.",
+    },
     "elasticity-cap-hit": {
         "title": "Elasticity Cap Hit",
         "intent": (
@@ -1440,6 +1449,7 @@ def graduation_semantics(scenario: str) -> str:
         "coordinated-regional-outage": "Graduation means regional placement assumptions preserve durability and make temporary availability misses explicit.",
         "repair-candidate-exhaustion": "Graduation means repair backoff is visible and capacity is respected rather than silently over-assigning providers.",
         "high-bandwidth-promotion": "Graduation means measured provider capability can promote hot-path eligibility without degrading availability or over-assigning capacity.",
+        "high-bandwidth-regression": "Graduation means hot-path eligibility can be revoked when measured saturation regresses without causing durability loss.",
         "large-scale-regional-stress": "Graduation means the scale model preserves durability, exposes bottlenecks, and gives humans enough context to tune availability and economics.",
     }
     return semantics.get(
@@ -1480,6 +1490,7 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "lazy-provider",
         "setup-failure",
         "high-bandwidth-promotion",
+        "high-bandwidth-regression",
     }:
         recommendation = "Candidate for implementation planning."
         rationale = "The fixture passed its assertion contract and exercised the expected enforcement path."
@@ -1517,7 +1528,10 @@ def write_graduation_report(path: Path, summary: dict[str, Any]) -> None:
         "## Candidate Next Artifact",
         "",
     ]
-    if recommendation == "Candidate for implementation planning." and scenario == "high-bandwidth-promotion":
+    if recommendation == "Candidate for implementation planning." and scenario in {
+        "high-bandwidth-promotion",
+        "high-bandwidth-regression",
+    }:
         lines.append("Create a keeper/runtime planning ticket that names the capability thresholds, probe telemetry, hot-route preference, assignment caps, and demotion conditions this fixture should enforce.")
     elif recommendation == "Candidate for implementation planning.":
         lines.append("Create a keeper/e2e planning ticket that names the exact evidence rows, reward-accounting rule, and repair transition this fixture should enforce.")
