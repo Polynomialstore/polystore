@@ -4,12 +4,90 @@ import (
 	"strings"
 	"testing"
 
+	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
 	"polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
+
+func invalidPolicyChainedProof() *types.ChainedProof {
+	return &types.ChainedProof{
+		MduIndex:        0,
+		MduRootFr:       make([]byte, 32),
+		ManifestOpening: make([]byte, 48),
+		BlobCommitment:  make([]byte, 48),
+		MerklePath:      [][]byte{make([]byte, 32)},
+		BlobIndex:       0,
+		ZValue:          make([]byte, 32),
+		YValue:          make([]byte, 32),
+		KzgOpeningProof: make([]byte, 48),
+	}
+}
+
+func TestProveLiveness_InvalidSystemProofRecordsHardEvidenceWithoutPayment(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	require.NoError(t, f.keeper.Params.Set(f.ctx, params))
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1)
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	providerD := makePolicyTestAddr(t, f, 0xD4)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC, providerD)
+	beforeProvider, err := f.keeper.Providers.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	beforeReputation := beforeProvider.ReputationScore
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	res, err := msgServer.ProveLiveness(sdkCtx, &types.MsgProveLiveness{
+		Creator: providerA,
+		DealId:  dealID,
+		EpochId: 1,
+		ProofType: &types.MsgProveLiveness_SystemProof{
+			SystemProof: invalidPolicyChainedProof(),
+		},
+	})
+	require.NoError(t, err)
+	require.False(t, res.Success)
+	require.Equal(t, uint32(3), res.Tier)
+	require.Equal(t, "0", res.RewardAmount)
+
+	failures, err := f.keeper.DealProviderFailures.Get(sdkCtx, collections.Join(dealID, providerA))
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), failures)
+
+	evidence := requireEvidenceSummary(t, f, sdkCtx, "system_proof_invalid")
+	require.Equal(t, providerA, evidence.Creator)
+	require.False(t, evidence.Valid)
+	require.Contains(t, evidence.Commitment, "deal=1")
+	require.Contains(t, evidence.Commitment, "provider="+providerA)
+
+	_, err = f.keeper.Mode2EpochCredits.Get(sdkCtx, collections.Join(collections.Join(dealID, uint32(0)), uint64(1)))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "provider_degraded_repair_started"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered"))
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, updated.Mode2Slots[0].Status)
+	require.Empty(t, updated.Mode2Slots[0].PendingProvider)
+
+	provider, err := f.keeper.Providers.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, beforeReputation, provider.ReputationScore)
+	require.Equal(t, "Active", provider.Status)
+	require.False(t, provider.Draining)
+}
 
 func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
 	f := initFixture(t)
