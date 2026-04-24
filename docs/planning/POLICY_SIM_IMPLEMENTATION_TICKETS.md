@@ -55,7 +55,7 @@ surface can advance a ticket without completing the full runtime/e2e goal.
 | T5. Repair Candidate Exhaustion and Backoff | Landed, first pass | Keeper coverage now emits explicit repair-backoff evidence instead of silently over-assigning. |
 | T6. Hard Evidence: Corrupt Data and Invalid Proofs | Landed, first pass | Invalid proof paths reject bad work, record hard evidence, and avoid rewarding invalid liveness proofs. |
 | T7. Provider and Gateway Fault Injection Harness | Landed, first pass | Dev/test fault injection hooks exist; the next gap is selecting the smallest stable e2e that should be CI-grade. |
-| T8. Storage Escrow Lifecycle Accounting | Not ready for full implementation | Simulator evidence exists, but keeper close/refund/expiry semantics still need human decisions on rounding, quote signing, and close authority. |
+| T8. Storage Escrow Lifecycle Accounting | Partial, in PR stack | Expired retrieval session guards are covered; full keeper close/refund/expiry semantics still need human decisions on rounding, quote signing, and close authority. |
 | T9. Retrieval Session Accounting and Sponsored Reads | Landed, first pass | Keeper tests cover owner-funded and requester/sponsor-funded settlement, burn, payout, and owner-escrow isolation. |
 | T10. High-Bandwidth Promotion and Demotion | Partial, in PR stack | Current work uses existing `Edge` capability as the Hot-placement/high-bandwidth proxy; telemetry, explicit promotion/demotion, and operator UX remain open. |
 | T11. Performance Market Latency Tiers | Partial | Latency tier boundaries are covered; telemetry accumulation and tiered payout integration remain broader performance-market work. |
