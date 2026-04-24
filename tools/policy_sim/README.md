@@ -243,9 +243,10 @@ questions. The generated SVG graphs are embedded inline in `report.md` with
 relative Markdown image links. Graphs include retrieval success, slot state,
 provider P&L, burn/mint ratio, price trajectory, capacity utilization,
 saturation/repair pressure, repair backlog, high-bandwidth promotion, and hot
-retrieval routing, performance tiers, and operator concentration. `signals.json` records derived
-availability, saturation, repair, capacity, economic, regional,
-high-bandwidth, performance-market, concentration, and provider bottleneck signals for
+retrieval routing, performance tiers, operator concentration, evidence
+pressure, audit budget, and elasticity spend. `signals.json` records derived
+availability, saturation, repair, capacity, economic, regional, high-bandwidth,
+performance-market, concentration, and provider bottleneck signals for
 downstream analysis.
 
 The economics in these reports are unitless simulator accounting. They are

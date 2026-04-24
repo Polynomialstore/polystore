@@ -968,6 +968,24 @@ def write_report_md(
             "",
             "![Operator Concentration](graphs/operator_concentration.svg)",
             "",
+            "### Evidence Pressure",
+            "",
+            "Shows soft liveness evidence and hard invalid-proof evidence by epoch.",
+            "",
+            "![Evidence Pressure](graphs/evidence_pressure.svg)",
+            "",
+            "### Audit Budget",
+            "",
+            "Shows whether miss-driven audit demand is spending budget or accumulating carryover.",
+            "",
+            "![Audit Budget](graphs/audit_budget.svg)",
+            "",
+            "### Elasticity Spend",
+            "",
+            "Shows demand-funded elasticity spend and rejected expansion attempts.",
+            "",
+            "![Elasticity Spend](graphs/elasticity_spend.svg)",
+            "",
             "## Raw Artifacts",
             "",
             "- `summary.json`: compact machine-readable run summary.",
@@ -1861,6 +1879,27 @@ def write_graphs(graphs_dir: Path, epochs: list[dict[str, str]], economy: list[d
         [fnum(row.get("max_operator_assignment_share_bps")) for row in epochs],
         secondary=[fnum(row.get("operator_deal_cap_violations")) for row in epochs],
         secondary_label="Cap Violations",
+    )
+    write_line_svg(
+        graphs_dir / "evidence_pressure.svg",
+        "Soft Evidence Events",
+        [fnum(row.get("quota_misses")) + fnum(row.get("deputy_misses")) for row in epochs],
+        secondary=[fnum(row.get("invalid_proofs")) for row in epochs],
+        secondary_label="Invalid Proofs",
+    )
+    write_line_svg(
+        graphs_dir / "audit_budget.svg",
+        "Audit Budget Spent",
+        [fnum(row.get("audit_budget_spent")) for row in economy],
+        secondary=[fnum(row.get("audit_budget_carryover")) for row in economy],
+        secondary_label="Carryover",
+    )
+    write_line_svg(
+        graphs_dir / "elasticity_spend.svg",
+        "Elasticity Spend",
+        [fnum(row.get("elasticity_spent")) for row in economy],
+        secondary=[fnum(row.get("elasticity_rejections")) for row in economy],
+        secondary_label="Rejected Expansions",
     )
 
 
