@@ -3678,6 +3678,8 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("critical", "corrupt bytes were paid")
     if fnum(totals.get("providers_over_capacity")) > 0:
         raise_to("critical", "providers were assigned above modeled capacity")
+    if fnum(totals.get("operator_deal_cap_violations")) > 0:
+        raise_to("high", "operator per-deal assignment caps were violated")
     if fnum(totals.get("unavailable_reads")) > 0:
         if scenario_allows_unavailable_reads(scenario):
             raise_to("medium", "temporary unavailable reads are present in an allowed stress fixture")

@@ -21,6 +21,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `audit-budget-controls` | 6 | 0 | Sensitivity sweep for protocol audit-budget funding versus miss-driven audit demand, backlog, and carryover. | [summary](audit-budget-controls/sweep_summary.md) |
 | `elasticity-overlay-controls` | 6 | 1 | Sensitivity sweep for user-funded elasticity overlay readiness, TTL, spend cap, and per-deal route caps. | [summary](elasticity-overlay-controls/sweep_summary.md) |
 | `high-bandwidth-thresholds` | 9 | 5 | Sensitivity sweep for high-bandwidth capacity and demotion-saturation thresholds under hot retrieval pressure. | [summary](high-bandwidth-thresholds/sweep_summary.md) |
+| `operator-concentration-controls` | 7 | 0 | Sensitivity sweep for per-deal operator assignment caps under dominant-operator Sybil pressure. | [summary](operator-concentration-controls/sweep_summary.md) |
 | `price-step-controller` | 4 | 0 | Controller sensitivity sweep for dynamic pricing max-step parameters in the pricing-bounds fixture. | [summary](price-step-controller/sweep_summary.md) |
 | `provider-churn-caps` | 7 | 0 | Sensitivity sweep for provider economic churn caps versus repair throughput under the economic churn fixture. | [summary](provider-churn-caps/sweep_summary.md) |
 | `provider-reliability-large-scale` | 3 | 0 | Population-scale sensitivity sweep for heterogeneous provider online-probability floors. | [summary](provider-reliability-large-scale/sweep_summary.md) |
