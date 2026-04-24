@@ -75,6 +75,16 @@ func setMode2EpochCredits(t *testing.T, f *fixture, ctx sdk.Context, dealID uint
 	}
 }
 
+func markMode2RepairReadyForTest(t *testing.T, f *fixture, ctx sdk.Context, dealID uint64, slot uint32, repairTargetGen uint64) {
+	t.Helper()
+
+	require.NoError(t, f.keeper.Mode2RepairReadiness.Set(
+		ctx,
+		collections.Join(dealID, slot),
+		repairTargetGen+1,
+	))
+}
+
 func hasEvidenceSummary(t *testing.T, f *fixture, ctx sdk.Context, kind string) bool {
 	t.Helper()
 
@@ -498,6 +508,7 @@ func TestCheckMissedProofs_CompletesMode2SlotRepairWhenQuotaMet(t *testing.T) {
 		collections.Join(collections.Join(dealID, uint32(0)), epochID),
 		1,
 	))
+	markMode2RepairReadyForTest(t, f, sdkCtx, dealID, 0, 1)
 
 	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
 
@@ -523,6 +534,49 @@ func TestCheckMissedProofs_CompletesMode2SlotRepairWhenQuotaMet(t *testing.T) {
 		return false, nil
 	}))
 	require.True(t, foundEvidence)
+}
+
+func TestCheckMissedProofs_Mode2RepairWaitsForReadinessWhenQuotaMet(t *testing.T) {
+	f := initFixture(t)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	providerD := makePolicyTestAddr(t, f, 0xD4)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC, providerD)
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	deal.Mode2Slots[0].Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+	deal.Mode2Slots[0].PendingProvider = providerD
+	deal.Mode2Slots[0].StatusSinceHeight = 4
+	deal.Mode2Slots[0].RepairTargetGen = deal.CurrentGen
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	epochID := uint64(1)
+	require.NoError(t, f.keeper.Mode2EpochSynthetic.Set(
+		sdkCtx,
+		collections.Join(collections.Join(dealID, uint32(0)), epochID),
+		1,
+	))
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	slot0 := updated.Mode2Slots[0]
+	require.NotNil(t, slot0)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_REPAIRING, slot0.Status)
+	require.Equal(t, providerA, slot0.Provider)
+	require.Equal(t, providerD, slot0.PendingProvider)
+	require.Equal(t, uint64(1), updated.CurrentGen)
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "slot_repair_completed"))
 }
 
 func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T) {

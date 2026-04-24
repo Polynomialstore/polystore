@@ -63,6 +63,7 @@ var (
 	Mode2EpochSyntheticKey     = collections.NewPrefix("Mode2EpochSynthetic/value/")
 	Mode2EpochSlotServedKey    = collections.NewPrefix("Mode2EpochSlotServed/value/")
 	Mode2EpochDeputyServedKey  = collections.NewPrefix("Mode2EpochDeputyServed/value/")
+	Mode2RepairReadinessKey    = collections.NewPrefix("Mode2RepairReadiness/value/")
 	Mode2MissedEpochsKey       = collections.NewPrefix("Mode2MissedEpochs/value/")
 	Mode2DeputyMissedEpochsKey = collections.NewPrefix("Mode2DeputyMissedEpochs/value/")
 	CreditSeenKey              = collections.NewPrefix("CreditSeen/value/")

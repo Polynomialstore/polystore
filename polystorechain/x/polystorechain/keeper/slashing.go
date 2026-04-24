@@ -139,6 +139,14 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					entry := deal.Mode2Slots[slot]
 					if entry != nil && entry.Status == types.SlotStatus_SLOT_STATUS_REPAIRING && strings.TrimSpace(entry.PendingProvider) != "" {
 						if total >= quota {
+							ready, err := k.mode2RepairReady(sdkCtx, dealID, slot, entry.RepairTargetGen)
+							if err != nil {
+								return false, err
+							}
+							if !ready {
+								continue
+							}
+
 							oldProvider := entry.Provider
 							newProvider := strings.TrimSpace(entry.PendingProvider)
 
@@ -156,6 +164,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 
 							deal.CurrentGen++
 							dealChanged = true
+							if err := k.clearMode2RepairReadiness(sdkCtx, dealID, slot); err != nil {
+								return false, err
+							}
 							_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
 							_ = k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey)
 
@@ -240,6 +251,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						entry.PendingProvider = strings.TrimSpace(pending)
 						entry.StatusSinceHeight = sdkCtx.BlockHeight()
 						entry.RepairTargetGen = deal.CurrentGen
+						if err := k.clearMode2RepairReadiness(sdkCtx, dealID, slot); err != nil {
+							return false, err
+						}
 						deal.Mode2Slots[slot] = entry
 						dealChanged = true
 						_ = k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey)
@@ -318,6 +332,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						entry.PendingProvider = strings.TrimSpace(pending)
 						entry.StatusSinceHeight = sdkCtx.BlockHeight()
 						entry.RepairTargetGen = deal.CurrentGen
+						if err := k.clearMode2RepairReadiness(sdkCtx, dealID, slot); err != nil {
+							return false, err
+						}
 						deal.Mode2Slots[slot] = entry
 						dealChanged = true
 						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
