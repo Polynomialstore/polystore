@@ -17,8 +17,9 @@ Model artificial retrieval demand. The policy question is whether fake activity 
 - Elasticity rejections: `0`
 - Elasticity overlay activations/serves/expired: `0` / `0` / `0`
 - Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
-- Sponsored retrieval attempts/spend: `0` / `0.0000`
+- Sponsored retrieval attempts/spend: `2880` / `489.6000`
 - Owner retrieval escrow debited: `0.0000`
+- Wash retrieval accounted spend/net gain: `489.6000` / `-74.8800`
 - Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `0.0000` / `0.0000`
 - Final open/closed/expired deals: `24` / `0` / `0`

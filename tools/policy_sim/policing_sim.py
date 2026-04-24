@@ -3091,6 +3091,25 @@ class PolicySimulator:
         totals["sponsored_retrieval_spent"] = (
             totals["sponsored_retrieval_base_spent"] + totals["sponsored_retrieval_variable_spent"]
         )
+        owner_base_debited = (
+            totals["owner_funded_retrieval_attempts"]
+            * self.config.retrieval_base_fee
+            * self.config.owner_retrieval_debit_bps
+            / 10_000
+        )
+        totals["owner_retrieval_base_debited"] = owner_base_debited
+        totals["owner_retrieval_variable_debited"] = max(
+            0.0,
+            totals["owner_retrieval_escrow_debited"] - owner_base_debited,
+        )
+        totals["retrieval_wash_accounted_spend"] = (
+            totals["retrieval_base_burned"]
+            + totals["sponsored_retrieval_variable_spent"]
+            + totals["owner_retrieval_variable_debited"]
+        )
+        totals["retrieval_wash_net_gain"] = (
+            totals["retrieval_provider_payouts"] - totals["retrieval_wash_accounted_spend"]
+        )
         totals["min_provider_pnl"] = min((p.pnl for p in self.providers.values()), default=0.0)
         totals["max_provider_pnl"] = max((p.pnl for p in self.providers.values()), default=0.0)
         totals["max_provider_cost_shocked_providers"] = max(

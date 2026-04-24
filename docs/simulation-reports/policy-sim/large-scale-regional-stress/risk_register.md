@@ -22,6 +22,7 @@ Model a population-scale network with more than one thousand storage providers a
 - Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
 - Sponsored retrieval attempts/spend: `0` / `0.0000`
 - Owner retrieval escrow debited: `0.0000`
+- Wash retrieval accounted spend/net gain: `288.0000` / `17500.5065`
 - Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `0.0000` / `0.0000`
 - Final open/closed/expired deals: `1500` / `0` / `0`

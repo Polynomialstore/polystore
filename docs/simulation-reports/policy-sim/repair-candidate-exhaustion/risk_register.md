@@ -19,6 +19,7 @@ Model a network with no spare replacement capacity. The expected behavior is exp
 - Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
 - Sponsored retrieval attempts/spend: `0` / `0.0000`
 - Owner retrieval escrow debited: `0.0000`
+- Wash retrieval accounted spend/net gain: `0.6400` / `48.0000`
 - Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `0.0000` / `0.0000`
 - Final open/closed/expired deals: `8` / `0` / `0`

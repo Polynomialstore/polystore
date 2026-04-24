@@ -50,7 +50,7 @@ A human reviewer should focus less on the pass/fail label and more on whether th
 | Staged upload retention | `0` epochs (`0` disables age cleanup) |
 | Staged upload pending cap | `0` generations (`0` means unlimited) |
 | Retrieval price/slot | `0.0200` |
-| Sponsored retrieval share | `0.00%` |
+| Sponsored retrieval share | `100.00%` |
 | Owner retrieval debit share | `0.00%` |
 | Provider capacity range | `16`-`16` slots |
 | Provider bandwidth range | `0`-`0` serves/epoch (`0` means unlimited) |
@@ -84,7 +84,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Retrieval price per slot | `0.0200` | Paid per successful provider slot served, before the configured variable burn. |
 | Retrieval target per epoch | `80` | If dynamic pricing is enabled, retrieval attempts above this target step retrieval price up, otherwise down. |
 | Retrieval demand shocks | `[]` | Optional epoch-scoped retrieval demand multipliers used to test price shock response and oscillation. |
-| Sponsored retrieval share | `0.00%` | Share of retrieval attempts paid by requester/sponsor session funds instead of owner deal escrow. |
+| Sponsored retrieval share | `100.00%` | Share of retrieval attempts paid by requester/sponsor session funds instead of owner deal escrow. |
 | Owner retrieval escrow debit | `0.00%` | Share of non-sponsored retrieval base and variable cost debited to owner escrow in scenarios that explicitly model owner-paid reads. |
 | Dynamic pricing max step | `5.00%` | Per-epoch controller movement cap. Lower values are safer but slower to equilibrate. |
 | Base reward per slot | `0.0200` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
@@ -156,8 +156,9 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Elasticity spend / rejections | `0.0000` / `0` | Shows whether user-funded overflow expansion stayed inside the spend window. |
 | Elasticity overlays activated/served/expired | `0` / `0` / `0` | Confirms temporary overflow routes are created, actually used, and later removed. |
 | Elasticity overlay ready/active peak | `0` / `0` | Shows catch-up/readiness lag and total temporary routing footprint. |
-| Sponsored retrieval attempts/spend | `0` / `0.0000` | Shows public or requester-funded demand separately from owner-funded deal escrow. |
-| Owner-funded attempts / owner escrow debit | `2880` / `0.0000` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |
+| Sponsored retrieval attempts/spend | `2880` / `489.6000` | Shows public or requester-funded demand separately from owner-funded deal escrow. |
+| Owner-funded attempts / owner escrow debit | `0` / `0.0000` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |
+| Wash accounted spend / net gain | `489.6000` / `-74.8800` | Worst-case colluding requester/provider economics after explicit base, sponsor, and owner-funded variable spend. |
 | Storage escrow locked/earned/refunded | `0.0000` / `0.0000` / `0.0000` | Shows quote-to-lock, provider earning, and close/refund accounting for committed storage. |
 | Storage escrow outstanding | `0.0000` final; peak `0.0000` | Detects funds left locked after close/expiry semantics should have released them. |
 | Storage fee provider payout/burned | `0.0000` / `0.0000` | Separates earned storage fees paid to eligible providers from fees withheld from non-compliant responsibility. |
@@ -274,7 +275,9 @@ Providers earned `449.2800` in modeled revenue against `54.7200` in modeled cost
 
 Retrieval accounting paid providers `414.7200`, burned `28.8000` in base fees, and burned `46.0800` in variable retrieval fees.
 
-Sponsored retrieval accounting spent `0.0000` across `0` sponsor-funded attempts; owner retrieval escrow debit was `0.0000`.
+Wash-retrieval accounting shows explicit spend `489.6000` against possible colluding-provider gain `-74.8800`.
+
+Sponsored retrieval accounting spent `489.6000` across `2880` sponsor-funded attempts; owner retrieval escrow debit was `0.0000`.
 
 Storage escrow accounting locked `0.0000`, earned `0.0000`, refunded `0.0000`, paid providers `0.0000`, burned `0.0000`, and ended with outstanding escrow `0.0000`.
 
@@ -306,6 +309,8 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 | `min_retrieval_base_burned` | `PASS` | Requester/session demand must pay a non-zero base burn. | retrieval_base_burned=28.8, required>=1 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `min_retrieval_variable_burned` | `PASS` | Variable retrieval activity must contribute non-zero burn. | retrieval_variable_burned=46.08, required>=1 |
+| `min_retrieval_wash_accounted_spend` | `PASS` | Wash-retrieval fixture must record explicit requester, sponsor, or owner-funded spend. | retrieval_wash_accounted_spend=489.6, required>=1 |
+| `max_retrieval_wash_net_gain` | `PASS` | Wash retrieval should be uneconomic for a colluding requester/provider. | retrieval_wash_net_gain=-74.88, required<=0 |
 
 ## Evidence Ledger Excerpt
 

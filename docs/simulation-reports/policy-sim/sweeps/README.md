@@ -38,6 +38,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `staged-upload-controls` | 7 | 0 | Sensitivity sweep for staged upload retention, pending-generation caps, and partial commit pressure under abandoned provisional uploads. | [summary](staged-upload-controls/sweep_summary.md) |
 | `storage-escrow-close-refund` | 5 | 0 | Sensitivity sweep for storage lock-in, earned storage fees, early close refunds, and end-of-run outstanding escrow. | [summary](storage-escrow-close-refund/sweep_summary.md) |
 | `storage-escrow-noncompliance-modes` | 3 | 0 | Sensitivity sweep for storage-fee payout and burn behavior across measure-only, repair-only, and reward-exclusion enforcement modes. | [summary](storage-escrow-noncompliance-modes/sweep_summary.md) |
+| `wash-retrieval-economics` | 8 | 0 | Sensitivity sweep for requester-paid retrieval funding, burn rates, and wash-traffic profitability. | [summary](wash-retrieval-economics/sweep_summary.md) |
 
 ## Review Rule
 

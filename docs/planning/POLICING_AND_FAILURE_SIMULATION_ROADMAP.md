@@ -1307,6 +1307,10 @@ semantics are chosen; and
 evidence-spam claim volume, bond size, conviction rate, and bounty sizing so
 unconvicted spam remains negative-EV, zero-bond spam is surfaced as unsafe, and
 profitable bounty farming is visible before evidence-market keeper defaults are
+chosen; and `tools/policy_sim/sweeps/wash_retrieval_economics.yaml`, which
+compares requester-funded retrieval sessions, owner-funded variable debits,
+retrieval burn rates, base fees, and wash-traffic volume so fake reads cannot
+profitably recycle provider payouts before retrieval-accounting defaults are
 chosen.
 
 Current storage-escrow coverage includes

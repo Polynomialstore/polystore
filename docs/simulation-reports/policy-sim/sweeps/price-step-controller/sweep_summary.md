@@ -69,9 +69,14 @@ This report aggregates `4` completed simulator run output directories. It does n
 | `final_expired_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals expired by run end. |
 | `final_open_deals` | 96.000000 | 96.000000 | 0.000000 | 96.000000 | Deals still active at run end. |
 | `final_closed_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals closed by run end. |
+| `retrieval_base_burned` | 22.400000 | 22.400000 | 0.000000 | 22.400000 | Base retrieval fees burned across live retrieval attempts. |
+| `retrieval_variable_burned` | 96.644041 | 236.766402 | 140.122361 | 155.166049 | Variable retrieval fee burn withheld from provider payout. |
+| `retrieval_provider_payouts` | 1836.236782 | 4498.561640 | 2662.324858 | 2948.154925 | Retrieval fees paid to providers for served slots. |
 | `sponsored_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval attempts funded by requester/sponsor sessions. |
 | `sponsored_retrieval_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Total sponsored retrieval base plus variable spend. |
 | `owner_retrieval_escrow_debited` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal-owner escrow debited for non-sponsored retrievals. |
+| `retrieval_wash_accounted_spend` | 22.400000 | 22.400000 | 0.000000 | 22.400000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
+| `retrieval_wash_net_gain` | 1813.836782 | 4476.161640 | 2662.324858 | 2925.754925 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
 | `retrieval_latent_attempts` | 22400.000000 | 22400.000000 | 0.000000 | 22400.000000 | Baseline read demand before demand-shock multipliers. |
 | `retrieval_demand_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where read-demand shock multipliers were active. |
 | `max_retrieval_demand_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled read-demand multiplier. |

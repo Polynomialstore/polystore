@@ -21,6 +21,7 @@ Model rational provider exit after sustained negative P&L. The policy question i
 - Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
 - Sponsored retrieval attempts/spend: `0` / `0.0000`
 - Owner retrieval escrow debited: `0.0000`
+- Wash retrieval accounted spend/net gain: `1.2000` / `103.6462`
 - Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `0.0000` / `0.0000`
 - Final open/closed/expired deals: `36` / `0` / `0`

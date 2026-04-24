@@ -19,6 +19,7 @@ Model end-of-duration storage accounting. The policy question is whether a fully
 - Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
 - Sponsored retrieval attempts/spend: `0` / `0.0000`
 - Owner retrieval escrow debited: `0.0000`
+- Wash retrieval accounted spend/net gain: `0.3200` / `24.0000`
 - Storage escrow locked/earned/refunded/outstanding: `460.8000` / `460.8000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `460.8000` / `0.0000`
 - Final open/closed/expired deals: `0` / `12` / `12`

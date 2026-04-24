@@ -11,12 +11,15 @@
     "retrievals_per_user_per_epoch": 4,
     "retrieval_base_fee": 0.01,
     "retrieval_price_per_slot": 0.02,
-    "retrieval_burn_bps": 1000
+    "retrieval_burn_bps": 1000,
+    "sponsored_retrieval_bps": 10000
   },
   "assertions": {
     "min_success_rate": 1.0,
     "min_retrieval_base_burned": 1.0,
     "max_data_loss_events": 0,
-    "min_retrieval_variable_burned": 1.0
+    "min_retrieval_variable_burned": 1.0,
+    "min_retrieval_wash_accounted_spend": 1.0,
+    "max_retrieval_wash_net_gain": 0.0
   }
 }

@@ -19,6 +19,7 @@ Model a Sybil-shaped provider set where one operator controls many SP identities
 - Elasticity overlay rejections/final active/peak ready: `0` / `0` / `0`
 - Sponsored retrieval attempts/spend: `0` / `0.0000`
 - Owner retrieval escrow debited: `0.0000`
+- Wash retrieval accounted spend/net gain: `1.9200` / `173.1840`
 - Storage escrow locked/earned/refunded/outstanding: `0.0000` / `0.0000` / `0.0000` / `0.0000`
 - Storage fee provider payout/burned: `0.0000` / `0.0000`
 - Final open/closed/expired deals: `40` / `0` / `0`

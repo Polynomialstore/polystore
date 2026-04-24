@@ -530,9 +530,14 @@ SWEEP_METRICS = [
     "final_expired_deals",
     "final_open_deals",
     "final_closed_deals",
+    "retrieval_base_burned",
+    "retrieval_variable_burned",
+    "retrieval_provider_payouts",
     "sponsored_retrieval_attempts",
     "sponsored_retrieval_spent",
     "owner_retrieval_escrow_debited",
+    "retrieval_wash_accounted_spend",
+    "retrieval_wash_net_gain",
     "retrieval_latent_attempts",
     "retrieval_demand_shock_active",
     "max_retrieval_demand_multiplier_bps",
@@ -955,6 +960,8 @@ def compute_signals(
             "sponsored_retrieval_variable_spent": fnum(totals.get("sponsored_retrieval_variable_spent")),
             "sponsored_retrieval_spent": fnum(totals.get("sponsored_retrieval_spent")),
             "owner_retrieval_escrow_debited": fnum(totals.get("owner_retrieval_escrow_debited")),
+            "retrieval_wash_accounted_spend": fnum(totals.get("retrieval_wash_accounted_spend")),
+            "retrieval_wash_net_gain": fnum(totals.get("retrieval_wash_net_gain")),
             "elasticity_spent": fnum(totals.get("elasticity_spent")),
             "elasticity_rejections": fnum(totals.get("elasticity_rejections")),
             "elasticity_overlay_activations": fnum(totals.get("elasticity_overlay_activations")),
@@ -1789,6 +1796,7 @@ def diagnostic_signal_lines(signals: dict[str, Any]) -> list[str]:
         f"| Elasticity overlay ready/active peak | `{fmt_num(economics['max_elasticity_overlay_ready'])}` / `{fmt_num(economics['max_elasticity_overlay_active'])}` | Shows catch-up/readiness lag and total temporary routing footprint. |",
         f"| Sponsored retrieval attempts/spend | `{fmt_num(economics['sponsored_retrieval_attempts'])}` / `{fmt_money(economics['sponsored_retrieval_spent'])}` | Shows public or requester-funded demand separately from owner-funded deal escrow. |",
         f"| Owner-funded attempts / owner escrow debit | `{fmt_num(economics['owner_funded_retrieval_attempts'])}` / `{fmt_money(economics['owner_retrieval_escrow_debited'])}` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |",
+        f"| Wash accounted spend / net gain | `{fmt_money(economics['retrieval_wash_accounted_spend'])}` / `{fmt_money(economics['retrieval_wash_net_gain'])}` | Worst-case colluding requester/provider economics after explicit base, sponsor, and owner-funded variable spend. |",
         f"| Storage escrow locked/earned/refunded | `{fmt_money(economics['storage_escrow_locked'])}` / `{fmt_money(economics['storage_escrow_earned'])}` / `{fmt_money(economics['storage_escrow_refunded'])}` | Shows quote-to-lock, provider earning, and close/refund accounting for committed storage. |",
         f"| Storage escrow outstanding | `{fmt_money(economics['storage_escrow_outstanding'])}` final; peak `{fmt_money(economics['max_storage_escrow_outstanding'])}` | Detects funds left locked after close/expiry semantics should have released them. |",
         f"| Storage fee provider payout/burned | `{fmt_money(economics['storage_fee_provider_payouts'])}` / `{fmt_money(economics['storage_fee_burned'])}` | Separates earned storage fees paid to eligible providers from fees withheld from non-compliant responsibility. |",
@@ -2136,6 +2144,9 @@ def assertion_meaning(name: str) -> str:
         "min_retrieval_base_burned": "Requester/session demand must pay a non-zero base burn.",
         "min_retrieval_variable_burned": "Variable retrieval activity must contribute non-zero burn.",
         "min_retrieval_provider_payouts": "Legitimate high demand must pay providers for bandwidth.",
+        "min_retrieval_wash_accounted_spend": "Wash-retrieval fixture must record explicit requester, sponsor, or owner-funded spend.",
+        "max_retrieval_wash_net_gain": "Wash retrieval should be uneconomic for a colluding requester/provider.",
+        "min_retrieval_wash_net_gain": "Unsafe wash-retrieval fixture should expose positive colluding requester/provider gain.",
         "min_storage_escrow_locked": "Storage lock-in fixture must lock non-zero storage escrow at commit.",
         "min_storage_escrow_earned": "Storage lock-in fixture must earn storage fees over modeled service epochs.",
         "min_storage_escrow_refunded": "Early-close fixture must refund unearned storage escrow.",
@@ -2227,6 +2238,8 @@ def build_economic_narrative(
         f"ending with aggregate P&L `{fmt_money(totals.get('provider_pnl'))}`.",
         f"Retrieval accounting paid providers `{fmt_money(totals.get('retrieval_provider_payouts'))}`, burned `{fmt_money(totals.get('retrieval_base_burned'))}` in base fees, "
         f"and burned `{fmt_money(totals.get('retrieval_variable_burned'))}` in variable retrieval fees.",
+        f"Wash-retrieval accounting shows explicit spend `{fmt_money(totals.get('retrieval_wash_accounted_spend'))}` against possible colluding-provider gain "
+        f"`{fmt_money(totals.get('retrieval_wash_net_gain'))}`.",
         f"Sponsored retrieval accounting spent `{fmt_money(totals.get('sponsored_retrieval_spent'))}` across "
         f"`{fmt_num(totals.get('sponsored_retrieval_attempts'))}` sponsor-funded attempts; owner retrieval escrow debit was "
         f"`{fmt_money(totals.get('owner_retrieval_escrow_debited'))}`.",
@@ -2615,6 +2628,20 @@ def write_risk_register(
                 "followup": "Increase evidence bond, reduce bounty, add spam throttles, or require stronger conviction gating before keeper work.",
             }
         )
+    if str(config.get("scenario", "")) == "wash-retrieval" and fnum(totals.get("retrieval_wash_net_gain")) >= 0:
+        severity = "high" if fnum(totals.get("retrieval_wash_net_gain")) > 0 else "medium"
+        rows.append(
+            {
+                "risk": "Wash retrieval remains profitable",
+                "severity": severity,
+                "evidence": (
+                    f"{fmt_money(totals.get('retrieval_wash_net_gain'))} net gain after "
+                    f"{fmt_money(totals.get('retrieval_wash_accounted_spend'))} explicit retrieval spend."
+                ),
+                "impact": "Colluding requesters and providers can turn fake traffic into provider payouts unless requester/session funding and burns cover the payout path.",
+                "followup": "Require requester-paid variable fees, sufficient base burns, credit caps, and explicit burn/payout ledger accounting before keeper defaults.",
+            }
+        )
     if fnum(totals.get("new_deals_rejected_price")) > 0:
         rows.append(
             {
@@ -2723,6 +2750,7 @@ def write_risk_register(
             f"- Elasticity overlay rejections/final active/peak ready: `{fmt_num(totals.get('elasticity_overlay_rejections'))}` / `{fmt_num(totals.get('final_elasticity_overlay_active'))}` / `{fmt_num(totals.get('max_elasticity_overlay_ready'))}`",
             f"- Sponsored retrieval attempts/spend: `{fmt_num(totals.get('sponsored_retrieval_attempts'))}` / `{fmt_money(totals.get('sponsored_retrieval_spent'))}`",
             f"- Owner retrieval escrow debited: `{fmt_money(totals.get('owner_retrieval_escrow_debited'))}`",
+            f"- Wash retrieval accounted spend/net gain: `{fmt_money(totals.get('retrieval_wash_accounted_spend'))}` / `{fmt_money(totals.get('retrieval_wash_net_gain'))}`",
             f"- Storage escrow locked/earned/refunded/outstanding: `{fmt_money(totals.get('storage_escrow_locked'))}` / `{fmt_money(totals.get('storage_escrow_earned'))}` / `{fmt_money(totals.get('storage_escrow_refunded'))}` / `{fmt_money(totals.get('storage_escrow_outstanding'))}`",
             f"- Storage fee provider payout/burned: `{fmt_money(totals.get('storage_fee_provider_payouts'))}` / `{fmt_money(totals.get('storage_fee_burned'))}`",
             f"- Final open/closed/expired deals: `{fmt_num(totals.get('final_open_deals'))}` / `{fmt_num(totals.get('final_closed_deals'))}` / `{fmt_num(totals.get('final_expired_deals'))}`",
@@ -3715,6 +3743,12 @@ def sweep_risk(summary: dict[str, Any]) -> tuple[str, list[str]]:
         raise_to("medium", "audit budget backlog remained at run end")
     if fnum(totals.get("evidence_spam_net_gain")) > 0:
         raise_to("high", "evidence spam was profitable")
+    if scenario == "wash-retrieval":
+        wash_net = fnum(totals.get("retrieval_wash_net_gain"))
+        if wash_net > 0:
+            raise_to("high", "wash retrieval was profitable after explicit spend")
+        elif fnum(totals.get("retrieval_attempts")) > 0 and wash_net == 0:
+            raise_to("medium", "wash retrieval carried no net cost")
     if (
         fnum(totals.get("evidence_spam_claims")) > 0
         and fnum(totals.get("evidence_spam_bond_burned")) == 0
@@ -3966,6 +4000,8 @@ def sweep_metric_meaning(key: str) -> str:
         "evidence_spam_bond_burned": "Evidence bond burned for unconvicted spam claims.",
         "evidence_spam_bounty_paid": "Conviction-gated bounty paid to the evidence spammer.",
         "evidence_spam_net_gain": "Spammer net economics; positive values indicate an abuse risk.",
+        "retrieval_wash_accounted_spend": "Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic.",
+        "retrieval_wash_net_gain": "Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk.",
         "provider_cost_shock_active": "Epochs where external provider cost pressure was active.",
         "max_provider_cost_shocked_providers": "Largest provider population affected by cost shock in any epoch.",
         "max_provider_cost_shock_fixed_multiplier_bps": "Peak modeled fixed-cost multiplier during cost shock.",
@@ -4010,6 +4046,9 @@ def sweep_metric_meaning(key: str) -> str:
         "final_open_deals": "Deals still active at run end.",
         "final_closed_deals": "Deals closed by run end.",
         "final_expired_deals": "Deals expired by run end.",
+        "retrieval_base_burned": "Base retrieval fees burned across live retrieval attempts.",
+        "retrieval_variable_burned": "Variable retrieval fee burn withheld from provider payout.",
+        "retrieval_provider_payouts": "Retrieval fees paid to providers for served slots.",
         "sponsored_retrieval_attempts": "Retrieval attempts funded by requester/sponsor sessions.",
         "sponsored_retrieval_spent": "Total sponsored retrieval base plus variable spend.",
         "owner_retrieval_escrow_debited": "Deal-owner escrow debited for non-sponsored retrievals.",

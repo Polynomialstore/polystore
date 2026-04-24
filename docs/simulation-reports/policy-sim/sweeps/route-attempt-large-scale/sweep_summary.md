@@ -68,9 +68,14 @@ This report aggregates `3` completed simulator run output directories. It does n
 | `final_expired_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals expired by run end. |
 | `final_open_deals` | 1500.000000 | 1500.000000 | 0.000000 | 1500.000000 | Deals still active at run end. |
 | `final_closed_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals closed by run end. |
+| `retrieval_base_burned` | 288.000000 | 288.000000 | 0.000000 | 288.000000 | Base retrieval fees burned across live retrieval attempts. |
+| `retrieval_variable_burned` | 1092.429344 | 1442.311335 | 349.881991 | 1325.684004 | Variable retrieval fee burn withheld from provider payout. |
+| `retrieval_provider_payouts` | 13473.295241 | 17788.506462 | 4315.211221 | 16350.102722 | Retrieval fees paid to providers for served slots. |
 | `sponsored_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval attempts funded by requester/sponsor sessions. |
 | `sponsored_retrieval_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Total sponsored retrieval base plus variable spend. |
 | `owner_retrieval_escrow_debited` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal-owner escrow debited for non-sponsored retrievals. |
+| `retrieval_wash_accounted_spend` | 288.000000 | 288.000000 | 0.000000 | 288.000000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
+| `retrieval_wash_net_gain` | 13185.295241 | 17500.506462 | 4315.211221 | 16062.102722 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
 | `retrieval_latent_attempts` | 144000.000000 | 144000.000000 | 0.000000 | 144000.000000 | Baseline read demand before demand-shock multipliers. |
 | `retrieval_demand_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where read-demand shock multipliers were active. |
 | `max_retrieval_demand_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled read-demand multiplier. |

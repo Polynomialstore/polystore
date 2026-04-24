@@ -158,6 +158,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Elasticity overlay ready/active peak | `0` / `0` | Shows catch-up/readiness lag and total temporary routing footprint. |
 | Sponsored retrieval attempts/spend | `0` / `0.0000` | Shows public or requester-funded demand separately from owner-funded deal escrow. |
 | Owner-funded attempts / owner escrow debit | `640` / `0.0000` | Detects whether public demand is unexpectedly draining the deal owner's escrow. |
+| Wash accounted spend / net gain | `0.6400` / `48.0000` | Worst-case colluding requester/provider economics after explicit base, sponsor, and owner-funded variable spend. |
 | Storage escrow locked/earned/refunded | `0.0000` / `0.0000` / `0.0000` | Shows quote-to-lock, provider earning, and close/refund accounting for committed storage. |
 | Storage escrow outstanding | `0.0000` final; peak `0.0000` | Detects funds left locked after close/expiry semantics should have released them. |
 | Storage fee provider payout/burned | `0.0000` / `0.0000` | Separates earned storage fees paid to eligible providers from fees withheld from non-compliant responsibility. |
@@ -275,6 +276,8 @@ The run minted `54.0800` reward/audit units and burned `3.2000` units, for a bur
 Providers earned `94.7200` in modeled revenue against `47.3600` in modeled cost, ending with aggregate P&L `47.3600`.
 
 Retrieval accounting paid providers `48.6400`, burned `0.6400` in base fees, and burned `2.5600` in variable retrieval fees.
+
+Wash-retrieval accounting shows explicit spend `0.6400` against possible colluding-provider gain `48.0000`.
 
 Sponsored retrieval accounting spent `0.0000` across `0` sponsor-funded attempts; owner retrieval escrow debit was `0.0000`.
 

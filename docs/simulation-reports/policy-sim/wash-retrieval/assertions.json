@@ -18,5 +18,15 @@
     "detail": "retrieval_variable_burned=46.08, required>=1",
     "name": "min_retrieval_variable_burned",
     "passed": true
+  },
+  {
+    "detail": "retrieval_wash_accounted_spend=489.6, required>=1",
+    "name": "min_retrieval_wash_accounted_spend",
+    "passed": true
+  },
+  {
+    "detail": "retrieval_wash_net_gain=-74.88, required<=0",
+    "name": "max_retrieval_wash_net_gain",
+    "passed": true
   }
 ]

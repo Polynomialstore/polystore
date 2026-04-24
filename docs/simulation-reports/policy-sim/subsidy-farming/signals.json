@@ -121,6 +121,8 @@
     "retrieval_price_max": 0.01,
     "retrieval_price_min": 0.01,
     "retrieval_price_start": 0.01,
+    "retrieval_wash_accounted_spend": 1.0,
+    "retrieval_wash_net_gain": 75.0,
     "sponsored_retrieval_attempts": 0.0,
     "sponsored_retrieval_base_spent": 0.0,
     "sponsored_retrieval_spent": 0.0,

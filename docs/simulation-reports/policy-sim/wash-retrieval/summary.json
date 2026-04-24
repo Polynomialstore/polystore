@@ -19,6 +19,16 @@
       "detail": "retrieval_variable_burned=46.08, required>=1",
       "name": "min_retrieval_variable_burned",
       "passed": true
+    },
+    {
+      "detail": "retrieval_wash_accounted_spend=489.6, required>=1",
+      "name": "min_retrieval_wash_accounted_spend",
+      "passed": true
+    },
+    {
+      "detail": "retrieval_wash_net_gain=-74.88, required<=0",
+      "name": "max_retrieval_wash_net_gain",
+      "passed": true
     }
   ],
   "config": {
@@ -137,7 +147,7 @@
     "silver_latency_ms": 500.0,
     "silver_reward_multiplier_bps": 5000,
     "slash_hard_fault": 1.0,
-    "sponsored_retrieval_bps": 0,
+    "sponsored_retrieval_bps": 10000,
     "staged_upload_attempts_per_epoch": 0,
     "staged_upload_commit_rate_bps": 10000,
     "staged_upload_max_pending_generations": 0,
@@ -266,8 +276,10 @@
     "offline_responses": 0,
     "operator_count": 48,
     "operator_deal_cap_violations": 0,
-    "owner_funded_retrieval_attempts": 2880,
+    "owner_funded_retrieval_attempts": 0,
+    "owner_retrieval_base_debited": 0.0,
     "owner_retrieval_escrow_debited": 0.0,
+    "owner_retrieval_variable_debited": 0.0,
     "paid_corrupt_bytes": 0,
     "performance_fail_rate": 0.0,
     "performance_reward_paid": 0.0,
@@ -305,6 +317,8 @@
     "retrieval_provider_payouts": 414.72,
     "retrieval_successes": 2880,
     "retrieval_variable_burned": 46.08,
+    "retrieval_wash_accounted_spend": 489.6,
+    "retrieval_wash_net_gain": -74.88,
     "reward_burned": 0.0,
     "reward_coverage": 1.0,
     "reward_eligible_slots": 1728,
@@ -312,10 +326,10 @@
     "reward_pool_minted": 34.56,
     "saturated_responses": 0,
     "silver_serves": 0,
-    "sponsored_retrieval_attempts": 0,
-    "sponsored_retrieval_base_spent": 0.0,
-    "sponsored_retrieval_spent": 0.0,
-    "sponsored_retrieval_variable_spent": 0.0,
+    "sponsored_retrieval_attempts": 2880,
+    "sponsored_retrieval_base_spent": 28.8,
+    "sponsored_retrieval_spent": 489.6,
+    "sponsored_retrieval_variable_spent": 460.8,
     "staged_upload_accepted": 0,
     "staged_upload_attempts": 0,
     "staged_upload_cleaned": 0,

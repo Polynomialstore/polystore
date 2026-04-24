@@ -1,0 +1,118 @@
+{
+  "name": "wash-retrieval-economics",
+  "description": "Sensitivity sweep for requester-paid retrieval funding, burn rates, and wash-traffic profitability.",
+  "base_scenario": "../scenarios/wash_retrieval.yaml",
+  "cases": [
+    {
+      "name": "baseline-sponsored-variable-funded"
+    },
+    {
+      "name": "unsponsored-no-variable-funding-unsafe",
+      "config": {
+        "sponsored_retrieval_bps": 0,
+        "owner_retrieval_debit_bps": 0
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_retrieval_base_burned": 1.0,
+        "min_retrieval_variable_burned": 1.0,
+        "min_retrieval_wash_accounted_spend": 1.0,
+        "min_retrieval_wash_net_gain": 1.0,
+        "max_retrieval_wash_net_gain": 400.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "partial-owner-variable-funding-unsafe",
+      "config": {
+        "sponsored_retrieval_bps": 0,
+        "owner_retrieval_debit_bps": 5000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_retrieval_base_burned": 1.0,
+        "min_retrieval_variable_burned": 1.0,
+        "min_retrieval_wash_accounted_spend": 1.0,
+        "min_retrieval_wash_net_gain": 1.0,
+        "max_retrieval_wash_net_gain": 200.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "full-owner-variable-funded",
+      "config": {
+        "sponsored_retrieval_bps": 0,
+        "owner_retrieval_debit_bps": 10000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_retrieval_base_burned": 1.0,
+        "min_retrieval_variable_burned": 1.0,
+        "min_retrieval_wash_accounted_spend": 1.0,
+        "max_retrieval_wash_net_gain": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "zero-burn-sponsored-still-costly",
+      "config": {
+        "retrieval_burn_bps": 0,
+        "sponsored_retrieval_bps": 10000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_retrieval_base_burned": 1.0,
+        "min_retrieval_variable_burned": 0.0,
+        "min_retrieval_wash_accounted_spend": 1.0,
+        "max_retrieval_wash_net_gain": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "zero-base-zero-burn-no-cost-unsafe",
+      "config": {
+        "retrieval_base_fee": 0.0,
+        "retrieval_burn_bps": 0,
+        "sponsored_retrieval_bps": 10000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_retrieval_base_burned": 0.0,
+        "min_retrieval_variable_burned": 0.0,
+        "min_retrieval_wash_accounted_spend": 1.0,
+        "max_retrieval_wash_net_gain": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "high-burn-sponsored",
+      "config": {
+        "retrieval_burn_bps": 3000,
+        "sponsored_retrieval_bps": 10000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_retrieval_base_burned": 1.0,
+        "min_retrieval_variable_burned": 100.0,
+        "min_retrieval_wash_accounted_spend": 1.0,
+        "max_retrieval_wash_net_gain": 0.0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "high-volume-sponsored",
+      "config": {
+        "retrievals_per_user_per_epoch": 8,
+        "sponsored_retrieval_bps": 10000
+      },
+      "assertions": {
+        "min_success_rate": 1.0,
+        "min_retrieval_base_burned": 50.0,
+        "min_retrieval_variable_burned": 90.0,
+        "min_retrieval_wash_accounted_spend": 1.0,
+        "max_retrieval_wash_net_gain": 0.0,
+        "max_data_loss_events": 0
+      }
+    }
+  ]
+}
