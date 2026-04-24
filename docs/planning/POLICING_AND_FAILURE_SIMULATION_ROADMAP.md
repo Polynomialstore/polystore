@@ -993,12 +993,14 @@ Simulator raw outputs:
 4. Evidence and consequence ledger.
 5. Economy ledger.
 6. Assertion results.
-7. Optional baseline-vs-candidate metric deltas.
+7. No precomputed baseline-vs-candidate deltas; simulator outputs are
+   single-run artifacts only.
 
 Report-tool outputs:
 
 1. Run summary report.
-2. Scenario comparison report for changed policy parameters.
+2. Scenario comparison report for changed policy parameters, computed by the
+   report tool from separate baseline and candidate run directories.
 3. Price trajectory and convergence report.
 4. Provider P&L and churn report.
 5. Fee, burn, mint, reward, and audit-budget accounting report.
@@ -1069,7 +1071,8 @@ Each simulator run should be able to emit:
    backoff events.
 7. `economy.csv`: storage charges, retrieval burns, payouts, reward mint/burn,
    audit budget, escrow runway, and elasticity spend.
-8. `comparison.json`: optional baseline-vs-candidate metric deltas.
+8. No `comparison.json` or other precomputed baseline-vs-candidate artifact in
+   single-run simulator outputs.
 
 Schema stability matters. Once S1 lands, any schema change should update tests
 and a small fixture expectation.
@@ -1086,24 +1089,26 @@ Inputs:
 
 1. A single run output directory containing `summary.json` and CSV ledgers.
 2. Optionally, a baseline run directory and a candidate run directory for
-   comparison mode.
+   comparison mode; the report tool computes deltas from those two directories.
 3. Optionally, a sweep directory containing many run outputs.
 
 Outputs:
 
 1. `report.md`: narrative summary of the scenario, seed, pass/fail state,
    important metrics, and notable events.
-2. `graphs/`: static charts generated from raw outputs.
+2. `graphs/`: static charts generated from raw outputs. The initial contract is
+   stdlib-only SVG written directly by the report tool, so every report bundle
+   emits at least the canonical minimal SVG set without optional dependencies.
 3. `policy_delta.md`: baseline-vs-candidate comparison for changed params.
 4. `risk_register.md`: failed assertions, unstable metrics, cap hits,
    concentration risks, and open review items.
 5. `graduation.md`: recommended keeper/e2e graduation targets and missing
    implementation surfaces.
 
-The first report implementation can be stdlib-only and Markdown/CSV focused.
-Graph generation may start with SVG written directly by the report tool, or be
-added later behind an optional plotting dependency. The raw simulator outputs
-remain the stable source of truth either way.
+The first report implementation must be stdlib-only and Markdown/CSV focused.
+Graph generation starts with SVG written directly by the report tool. Optional
+plotting dependencies can add richer assets later, but they must not be required
+for the canonical `graphs/` bundle or change the raw simulator output contract.
 
 ### 27.7.2 Graph Inventory
 
