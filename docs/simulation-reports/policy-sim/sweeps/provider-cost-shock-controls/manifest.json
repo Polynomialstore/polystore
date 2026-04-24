@@ -1,0 +1,98 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/provider_cost_shock.yaml",
+  "case_count": 8,
+  "cases": [
+    {
+      "case": "baseline-cost-shock",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-cost-shock",
+      "seed": 71,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "mild-shock-with-buffer",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-cost-shock",
+      "seed": 71,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "severe-storage-cost-shock",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-cost-shock",
+      "seed": 71,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "bandwidth-heavy-cost-shock",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-cost-shock",
+      "seed": 71,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "weak-reward-buffer",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-cost-shock",
+      "seed": 71,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "stronger-reward-buffer",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-cost-shock",
+      "seed": 71,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "slow-price-response",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-cost-shock",
+      "seed": 71,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "faster-price-response",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "provider-cost-shock",
+      "seed": 71,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for provider cost-shock severity, reward buffer, and dynamic-pricing response.",
+  "name": "provider-cost-shock-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/provider-cost-shock-controls"
+}

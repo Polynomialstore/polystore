@@ -1286,7 +1286,11 @@ which compares replacement capacity, attempt caps, and cooldowns before
 candidate-selection fallback and capacity-guard defaults are chosen; and
 `tools/policy_sim/sweeps/provider_bond_headroom_controls.yaml`, which compares
 minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing
-before collateral and underbonded-repair defaults are chosen.
+before collateral and underbonded-repair defaults are chosen; and
+`tools/policy_sim/sweeps/provider_cost_shock_controls.yaml`, which compares
+cost-shock severity, bandwidth-heavy demand, reward-buffer sizing, and
+dynamic-pricing response speed before storage-price floors, issuance buffers,
+or provider-cost telemetry assumptions are promoted into keeper work.
 
 Current storage-escrow coverage includes
 `tools/policy_sim/scenarios/storage_escrow_close_refund.yaml`, which models
