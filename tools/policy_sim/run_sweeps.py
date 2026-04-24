@@ -37,6 +37,13 @@ class SweepSpec:
     cases: list[SweepCase]
 
 
+@dataclass
+class SweepRunPlan:
+    spec: SweepSpec
+    run_dir: Path
+    report_dir: Path
+
+
 def load_sweep_spec(path: Path) -> SweepSpec:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -125,8 +132,37 @@ def build_case(
 
 
 def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bool = True, jobs: int = 1) -> dict[str, Any]:
-    spec = load_sweep_spec(spec_path)
-    jobs = resolve_jobs(jobs, len(spec.cases))
+    return run_sweep_specs([spec_path], run_root, report_root, clean=clean, jobs=jobs)[0]
+
+
+def run_sweep_specs(spec_paths: list[Path], run_root: Path, report_root: Path, clean: bool = True, jobs: int = 1) -> list[dict[str, Any]]:
+    plans = [prepare_sweep_run(load_sweep_spec(path), run_root, report_root, clean=clean) for path in spec_paths]
+    tasks = [
+        (plan.spec.name, index, case, plan.run_dir)
+        for plan in plans
+        for index, case in enumerate(plan.spec.cases)
+    ]
+    jobs = resolve_jobs(jobs, len(tasks))
+    if jobs == 1:
+        results = [_run_sweep_case(task) for task in tasks]
+    else:
+        with ProcessPoolExecutor(max_workers=jobs) as executor:
+            results = list(executor.map(_run_sweep_case, tasks))
+
+    grouped: dict[str, list[tuple[int, dict[str, Any], int]]] = {plan.spec.name: [] for plan in plans}
+    for spec_name, case_index, row, failed_count in results:
+        grouped[spec_name].append((case_index, row, failed_count))
+
+    manifests = []
+    for plan in plans:
+        case_results = sorted(grouped[plan.spec.name], key=lambda item: item[0])
+        case_rows = [row for _case_index, row, _failed_count in case_results]
+        failures = sum(failed_count for _case_index, _row, failed_count in case_results)
+        manifests.append(write_sweep_manifest(plan, case_rows, failures))
+    return manifests
+
+
+def prepare_sweep_run(spec: SweepSpec, run_root: Path, report_root: Path, clean: bool) -> SweepRunPlan:
     sweep_run_dir = run_root / spec.name
     sweep_report_dir = report_root / spec.name
     if clean:
@@ -135,18 +171,12 @@ def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bo
                 shutil.rmtree(path)
     sweep_run_dir.mkdir(parents=True, exist_ok=True)
     sweep_report_dir.mkdir(parents=True, exist_ok=True)
+    return SweepRunPlan(spec=spec, run_dir=sweep_run_dir, report_dir=sweep_report_dir)
 
-    tasks = [(case, sweep_run_dir) for case in spec.cases]
-    if jobs == 1:
-        results = [_run_sweep_case(task) for task in tasks]
-    else:
-        with ProcessPoolExecutor(max_workers=jobs) as executor:
-            results = list(executor.map(_run_sweep_case, tasks))
 
-    case_rows = [row for row, _failed_count in results]
-    failures = sum(failed_count for _row, failed_count in results)
-
-    generate_sweep_report(sweep_run_dir, sweep_report_dir)
+def write_sweep_manifest(plan: SweepRunPlan, case_rows: list[dict[str, Any]], failures: int) -> dict[str, Any]:
+    spec = plan.spec
+    generate_sweep_report(plan.run_dir, plan.report_dir)
     manifest = {
         "name": spec.name,
         "description": spec.description,
@@ -159,20 +189,22 @@ def run_sweep_spec(spec_path: Path, run_root: Path, report_root: Path, clean: bo
         "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
         "cases": case_rows,
     }
-    sweep_report_dir.joinpath("manifest.json").write_text(
+    plan.report_dir.joinpath("manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     return manifest
 
 
-def _run_sweep_case(task: tuple[SweepCase, Path]) -> tuple[dict[str, Any], int]:
-    case, sweep_run_dir = task
+def _run_sweep_case(task: tuple[str, int, SweepCase, Path]) -> tuple[str, int, dict[str, Any], int]:
+    spec_name, case_index, case, sweep_run_dir = task
     result = run_one(SimConfig(**case.config), case.faults, case.assertions, None)
     failed = [item for item in result.assertions if not item.passed]
     run_dir = sweep_run_dir / case.name
     write_output_dir(run_dir, result)
     return (
+        spec_name,
+        case_index,
         {
             "case": case.name,
             "scenario": result.config.get("scenario"),
@@ -294,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.sweep_dir:
         paths.extend(sweep_paths(args.sweep_dir))
 
-    manifests = [run_sweep_spec(path, args.run_dir, args.out_dir, clean=not args.no_clean, jobs=args.jobs) for path in paths]
+    manifests = run_sweep_specs(paths, args.run_dir, args.out_dir, clean=not args.no_clean, jobs=args.jobs)
     write_sweep_index(args.out_dir, manifests)
     failures = sum(int(manifest["assertion_failures"]) for manifest in manifests)
     return 1 if args.fail_on_assertion and failures else 0
