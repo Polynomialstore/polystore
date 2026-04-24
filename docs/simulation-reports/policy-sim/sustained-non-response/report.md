@@ -155,6 +155,10 @@ Repair summary:
 - Delinquent slot-epochs: `12`
 - Final active slots in last epoch: `288`
 
+Candidate exclusion summary:
+
+- No no-candidate repair backoffs were recorded.
+
 ### Repair Ledger Excerpt
 
 | Epoch | Event | Deal | Slot | Old Provider | New Provider | Reason | Attempt | Cooldown Until |
@@ -288,6 +292,6 @@ Shows whether started repairs are accumulating faster than they complete.
 - `providers.csv`: final provider-level economics and fault counters.
 - `slots.csv`: per-slot epoch ledger, including health state and reason.
 - `evidence.csv`: policy evidence events.
-- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.
+- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.
 - `economy.csv`: per-epoch market and accounting ledger.
 - `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.

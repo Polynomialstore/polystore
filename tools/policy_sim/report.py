@@ -675,6 +675,10 @@ def write_report_md(
             f"- Delinquent slot-epochs: `{fmt_num(totals.get('delinquent_slots'))}`",
             f"- Final active slots in last epoch: `{len(active_end_slots)}`",
             "",
+            "Candidate exclusion summary:",
+            "",
+            *candidate_exclusion_lines(repairs),
+            "",
             "### Repair Ledger Excerpt",
             "",
             *repair_excerpt_lines(repairs),
@@ -764,7 +768,7 @@ def write_report_md(
             "- `providers.csv`: final provider-level economics and fault counters.",
             "- `slots.csv`: per-slot epoch ledger, including health state and reason.",
             "- `evidence.csv`: policy evidence events.",
-            "- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, attempt-cap, and backoff events.",
+            "- `repairs.csv`: repair start, pending-provider readiness, completion, attempt-count, cooldown, candidate-exclusion, attempt-cap, and backoff events.",
             "- `economy.csv`: per-epoch market and accounting ledger.",
             "- `signals.json`: derived availability, saturation, repair, capacity, economic, regional, and provider bottleneck signals.",
         ]
@@ -1006,6 +1010,34 @@ def counter_lines(counter: Counter[str]) -> list[str]:
     if not counter:
         return ["- None recorded."]
     return [f"- `{key}`: `{value}`" for key, value in counter.most_common(8)]
+
+
+def candidate_exclusion_lines(repairs: list[dict[str, str]]) -> list[str]:
+    rows = [row for row in repairs if row.get("reason") == "no_candidate"]
+    if not rows:
+        return ["- No no-candidate repair backoffs were recorded."]
+    fields = [
+        ("eligible_candidates", "Eligible candidates"),
+        ("excluded_current_deal", "Excluded current deal providers"),
+        ("excluded_current_provider", "Excluded current provider"),
+        ("excluded_draining", "Excluded draining providers"),
+        ("excluded_jailed", "Excluded jailed providers"),
+        ("excluded_capacity", "Excluded capacity-bound providers"),
+    ]
+    lines = [
+        "| Candidate Mode | No-Candidate Events | Eligible | Current Deal | Current Provider | Draining | Jailed | Capacity-Bound |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for mode in sorted({row.get("candidate_mode", "") or "unknown" for row in rows}):
+        mode_rows = [row for row in rows if (row.get("candidate_mode", "") or "unknown") == mode]
+        sums = {key: sum(fnum(row.get(key)) for row in mode_rows) for key, _ in fields}
+        lines.append(
+            f"| `{mode}` | {len(mode_rows)} | {fmt_num(sums['eligible_candidates'])} | "
+            f"{fmt_num(sums['excluded_current_deal'])} | {fmt_num(sums['excluded_current_provider'])} | "
+            f"{fmt_num(sums['excluded_draining'])} | {fmt_num(sums['excluded_jailed'])} | "
+            f"{fmt_num(sums['excluded_capacity'])} |"
+        )
+    return lines
 
 
 def repair_excerpt_lines(repairs: list[dict[str, str]]) -> list[str]:
