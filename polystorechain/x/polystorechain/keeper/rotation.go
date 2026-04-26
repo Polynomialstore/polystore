@@ -155,6 +155,37 @@ func (k Keeper) scheduleRoutineRotations(ctx sdk.Context, epochID uint64) error 
 			if err := k.recordEvidenceSummary(ctx, dealID, strings.TrimSpace(entry.Provider), "rotation_repair_started", eid[:], "chain", false); err != nil {
 				ctx.Logger().Error("failed to record evidence summary", "error", err)
 			}
+			caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+				DealID:             dealID,
+				Slot:               slot,
+				Provider:           strings.TrimSpace(entry.Provider),
+				Reporter:           "chain",
+				Reason:             "rotation_repair_started",
+				Class:              types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+				Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+				Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+				EvidenceID:         eid[:],
+				EpochID:            epochID,
+				Summary:            fmt.Sprintf("routine rotation scheduled replacement %s", entry.PendingProvider),
+				ConsequenceCeiling: "routine churn repair; no penalty by itself",
+			})
+			if err != nil {
+				ctx.Logger().Error("failed to record structured rotation repair evidence", "error", err)
+			} else if err := k.setSlotHealthState(ctx, slotHealthUpdate{
+				DealID:          dealID,
+				Slot:            slot,
+				Provider:        strings.TrimSpace(entry.Provider),
+				Status:          types.SlotHealthStatus_SLOT_HEALTH_STATUS_REPAIRING,
+				Reason:          "rotation_repair_started",
+				Class:           types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+				Severity:        types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+				EpochID:         epochID,
+				EvidenceCaseID:  caseID,
+				PendingProvider: entry.PendingProvider,
+				RepairTargetGen: entry.RepairTargetGen,
+			}); err != nil {
+				ctx.Logger().Error("failed to update rotation repair slot health", "error", err)
+			}
 
 			ctx.Logger().Info(
 				"slot repair started (rotation)",

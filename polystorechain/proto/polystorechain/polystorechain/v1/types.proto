@@ -18,6 +18,125 @@ enum SlotStatus {
   SLOT_STATUS_REPAIRING = 2;
 }
 
+// EvidenceClass describes the strongest evidence quality currently attached to
+// a policing case. It is intentionally coarser than a reason code so policy can
+// set consequence ceilings before economics are enabled.
+enum EvidenceClass {
+  // EVIDENCE_CLASS_UNSPECIFIED is the default unset value.
+  EVIDENCE_CLASS_UNSPECIFIED = 0;
+  // EVIDENCE_CLASS_CRYPTOGRAPHIC_HARD is deterministic proof or fraud evidence.
+  EVIDENCE_CLASS_CRYPTOGRAPHIC_HARD = 1;
+  // EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT is chain-observed liveness evidence.
+  EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT = 2;
+  // EVIDENCE_CLASS_THRESHOLD is repeated evidence that crossed conviction policy.
+  EVIDENCE_CLASS_THRESHOLD = 3;
+  // EVIDENCE_CLASS_CLIENT_OBSERVED is non-consensus client or gateway evidence.
+  EVIDENCE_CLASS_CLIENT_OBSERVED = 4;
+  // EVIDENCE_CLASS_STATISTICAL is aggregate behavior evidence.
+  EVIDENCE_CLASS_STATISTICAL = 5;
+  // EVIDENCE_CLASS_OPERATIONAL is maintenance or coordination evidence.
+  EVIDENCE_CLASS_OPERATIONAL = 6;
+  // EVIDENCE_CLASS_POSITIVE_READINESS is repair/readiness progress evidence.
+  EVIDENCE_CLASS_POSITIVE_READINESS = 7;
+}
+
+// EvidenceSeverity is the live policy interpretation of an evidence case.
+enum EvidenceSeverity {
+  // EVIDENCE_SEVERITY_UNSPECIFIED is the default unset value.
+  EVIDENCE_SEVERITY_UNSPECIFIED = 0;
+  // EVIDENCE_SEVERITY_INFO is informational and non-punitive.
+  EVIDENCE_SEVERITY_INFO = 1;
+  // EVIDENCE_SEVERITY_SOFT is weak or early evidence.
+  EVIDENCE_SEVERITY_SOFT = 2;
+  // EVIDENCE_SEVERITY_DEGRADED means health decay or operator alert.
+  EVIDENCE_SEVERITY_DEGRADED = 3;
+  // EVIDENCE_SEVERITY_DELINQUENT means threshold-crossed soft evidence.
+  EVIDENCE_SEVERITY_DELINQUENT = 4;
+  // EVIDENCE_SEVERITY_HARD means slash or jail candidate evidence.
+  EVIDENCE_SEVERITY_HARD = 5;
+  // EVIDENCE_SEVERITY_REPAIR means repair coordination evidence.
+  EVIDENCE_SEVERITY_REPAIR = 6;
+}
+
+// EvidenceCaseStatus tracks whether an evidence case is only observed,
+// threshold-convicted, or resolved by repair/readiness.
+enum EvidenceCaseStatus {
+  // EVIDENCE_CASE_STATUS_UNSPECIFIED is the default unset value.
+  EVIDENCE_CASE_STATUS_UNSPECIFIED = 0;
+  // EVIDENCE_CASE_STATUS_OBSERVED means evidence has not crossed conviction.
+  EVIDENCE_CASE_STATUS_OBSERVED = 1;
+  // EVIDENCE_CASE_STATUS_CONVICTED means threshold policy accepted the case.
+  EVIDENCE_CASE_STATUS_CONVICTED = 2;
+  // EVIDENCE_CASE_STATUS_RESOLVED means repair or readiness closed the case.
+  EVIDENCE_CASE_STATUS_RESOLVED = 3;
+}
+
+// SlotHealthStatus is the derived per-slot lifecycle used for operator and UI
+// visibility. DealSlot.status remains the canonical placement status.
+enum SlotHealthStatus {
+  // SLOT_HEALTH_STATUS_UNSPECIFIED is the default unset value.
+  SLOT_HEALTH_STATUS_UNSPECIFIED = 0;
+  // SLOT_HEALTH_STATUS_HEALTHY means no current health issue is recorded.
+  SLOT_HEALTH_STATUS_HEALTHY = 1;
+  // SLOT_HEALTH_STATUS_SUSPECT means soft evidence is below repair threshold.
+  SLOT_HEALTH_STATUS_SUSPECT = 2;
+  // SLOT_HEALTH_STATUS_DELINQUENT means soft evidence crossed threshold.
+  SLOT_HEALTH_STATUS_DELINQUENT = 3;
+  // SLOT_HEALTH_STATUS_REPAIRING means a pending provider is catching up.
+  SLOT_HEALTH_STATUS_REPAIRING = 4;
+  // SLOT_HEALTH_STATUS_CATCHUP_READY means the pending provider proved readiness.
+  SLOT_HEALTH_STATUS_CATCHUP_READY = 5;
+  // SLOT_HEALTH_STATUS_ACTIVE_PROMOTED means repair promotion just completed.
+  SLOT_HEALTH_STATUS_ACTIVE_PROMOTED = 6;
+  // SLOT_HEALTH_STATUS_REPAIR_BACKOFF means repair could not start safely.
+  SLOT_HEALTH_STATUS_REPAIR_BACKOFF = 7;
+  // SLOT_HEALTH_STATUS_EXPIRED means the slot is no longer active.
+  SLOT_HEALTH_STATUS_EXPIRED = 8;
+}
+
+// EvidenceCase is the structured policing ledger for failures, repair
+// milestones, and hard-fault records. The legacy Proof summary remains for
+// compatibility, while this object carries machine-readable attribution.
+message EvidenceCase {
+  uint64 id = 1;
+  bytes evidence_id = 2; // deterministic 32-byte case hash when available
+  uint64 deal_id = 3;
+  uint32 slot = 4;
+  string provider = 5 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string reporter = 6;
+  string reason = 7;
+  EvidenceClass evidence_class = 8;
+  EvidenceSeverity severity = 9;
+  EvidenceCaseStatus status = 10;
+  bool slashable = 11;
+  bool counts_as_failure = 12;
+  uint64 epoch_id = 13;
+  uint64 count = 14;
+  int64 first_height = 15;
+  int64 last_height = 16;
+  bytes session_id = 17;
+  string summary = 18;
+  string consequence_ceiling = 19;
+}
+
+// SlotHealthState is the latest explainable health state for a Mode 2 slot.
+message SlotHealthState {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+  string provider = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  SlotHealthStatus status = 4;
+  string reason = 5;
+  EvidenceClass evidence_class = 6;
+  EvidenceSeverity severity = 7;
+  uint64 missed_epochs = 8;
+  uint64 deputy_missed_epochs = 9;
+  uint64 last_epoch_id = 10;
+  int64 updated_height = 11;
+  uint64 last_evidence_case_id = 12;
+  string pending_provider = 13 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 repair_target_gen = 14;
+}
+
 // RetrievalPolicyMode controls who may open USER-funded retrieval sessions
 // for a deal (i.e. sponsored sessions). Protocol sessions (audit/repair) are
 // authorized separately and bypass this policy.

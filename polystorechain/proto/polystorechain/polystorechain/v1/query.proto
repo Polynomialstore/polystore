@@ -97,6 +97,21 @@ service Query {
   rpc ListVirtualStripesByDeal(QueryListVirtualStripesByDealRequest) returns (QueryListVirtualStripesByDealResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/virtual-stripes";
   }
+
+  // Queries the latest structured health state for a Mode 2 slot.
+  rpc GetSlotHealth(QueryGetSlotHealthRequest) returns (QueryGetSlotHealthResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/slots/{slot}/health";
+  }
+
+  // Lists structured slot health states for a deal.
+  rpc ListSlotHealthByDeal(QueryListSlotHealthByDealRequest) returns (QueryListSlotHealthByDealResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/slot-health";
+  }
+
+  // Lists structured evidence cases, optionally filtered by deal.
+  rpc ListEvidenceCases(QueryListEvidenceCasesRequest) returns (QueryListEvidenceCasesResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/evidence";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -247,5 +262,40 @@ message QueryListVirtualStripesByDealRequest {
 
 message QueryListVirtualStripesByDealResponse {
   repeated VirtualStripe stripes = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetSlotHealthRequest requests the latest health state for a slot.
+message QueryGetSlotHealthRequest {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+}
+
+// QueryGetSlotHealthResponse returns the latest health state for a slot.
+message QueryGetSlotHealthResponse {
+  SlotHealthState health = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListSlotHealthByDealRequest requests all slot health states for a deal.
+message QueryListSlotHealthByDealRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListSlotHealthByDealResponse returns all slot health states for a deal.
+message QueryListSlotHealthByDealResponse {
+  repeated SlotHealthState health = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryListEvidenceCasesRequest lists structured evidence cases.
+message QueryListEvidenceCasesRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListEvidenceCasesResponse returns structured evidence cases.
+message QueryListEvidenceCasesResponse {
+  repeated EvidenceCase evidence = 1 [(gogoproto.nullable) = false];
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }

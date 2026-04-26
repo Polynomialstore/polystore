@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strings"
 
 	"cosmossdk.io/collections"
@@ -468,6 +469,23 @@ func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types
 				eid := deriveEvidenceID("deputy_served", deal.Id, epochID, extra)
 				if err := k.recordEvidenceSummary(ctx, deal.Id, active, "deputy_served", eid[:], "chain", false); err != nil {
 					ctx.Logger().Error("failed to record deputy evidence summary", "error", err)
+				}
+				if _, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+					DealID:             deal.Id,
+					Slot:               slotU,
+					Provider:           active,
+					Reporter:           "chain",
+					Reason:             "deputy_served",
+					Class:              types.EvidenceClass_EVIDENCE_CLASS_STATISTICAL,
+					Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_SOFT,
+					Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+					CountsAsFailure:    shouldCountEvidenceAsFailedChallenge("deputy_served", false),
+					EpochID:            epochID,
+					EvidenceID:         eid[:],
+					Summary:            fmt.Sprintf("slot %d was served by deputy provider %s", slotU, creator),
+					ConsequenceCeiling: "audit debt and ghosting signal; no slash",
+				}); err != nil {
+					ctx.Logger().Error("failed to record deputy evidence case", "error", err)
 				}
 
 				// Audit debt: track deputy-served leaf proofs so epoch-end enforcement

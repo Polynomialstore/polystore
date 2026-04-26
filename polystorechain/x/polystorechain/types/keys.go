@@ -54,6 +54,10 @@ var (
 	VirtualStripesKey                = collections.NewPrefix("VirtualStripes/value/")
 	DynamicPricingLastEpochKey       = collections.NewPrefix("DynamicPricingLastEpoch/value/")
 	RetrievalDemandByEpochKey        = collections.NewPrefix("RetrievalDemandByEpoch/value/")
+	EvidenceCountKey                 = collections.NewPrefix("EvidenceCount/value/")
+	EvidenceCasesKey                 = collections.NewPrefix("EvidenceCases/value/")
+	EvidenceCasesByDealKey           = collections.NewPrefix("EvidenceCasesByDeal/value/")
+	SlotHealthStatesKey              = collections.NewPrefix("SlotHealthStates/value/")
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeedKey               = collections.NewPrefix("EpochSeed/value/")

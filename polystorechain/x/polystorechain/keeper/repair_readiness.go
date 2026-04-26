@@ -79,5 +79,37 @@ func (k Keeper) markMode2RepairReady(ctx sdk.Context, deal types.Deal, slot uint
 	extra = binary.BigEndian.AppendUint32(extra, slot)
 	extra = binary.BigEndian.AppendUint64(extra, entry.RepairTargetGen)
 	eid := deriveEvidenceID("slot_repair_ready", deal.Id, epochID, extra)
-	return k.recordEvidenceSummary(ctx, deal.Id, pending, "slot_repair_ready", eid[:], "chain", true)
+	if err := k.recordEvidenceSummary(ctx, deal.Id, pending, "slot_repair_ready", eid[:], "chain", true); err != nil {
+		return err
+	}
+	caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+		DealID:             deal.Id,
+		Slot:               slot,
+		Provider:           pending,
+		Reporter:           "chain",
+		Reason:             "slot_repair_ready",
+		Class:              types.EvidenceClass_EVIDENCE_CLASS_POSITIVE_READINESS,
+		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO,
+		Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+		EvidenceID:         eid[:],
+		EpochID:            epochID,
+		Summary:            fmt.Sprintf("pending provider proved readiness for repair target generation %d", entry.RepairTargetGen),
+		ConsequenceCeiling: "promotion guardrail only",
+	})
+	if err != nil {
+		return err
+	}
+	return k.setSlotHealthState(ctx, slotHealthUpdate{
+		DealID:          deal.Id,
+		Slot:            slot,
+		Provider:        strings.TrimSpace(entry.Provider),
+		Status:          types.SlotHealthStatus_SLOT_HEALTH_STATUS_CATCHUP_READY,
+		Reason:          "slot_repair_ready",
+		Class:           types.EvidenceClass_EVIDENCE_CLASS_POSITIVE_READINESS,
+		Severity:        types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO,
+		EpochID:         epochID,
+		EvidenceCaseID:  caseID,
+		PendingProvider: pending,
+		RepairTargetGen: entry.RepairTargetGen,
+	})
 }
