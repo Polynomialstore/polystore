@@ -1957,7 +1957,67 @@ it by default. If nested `AGENTS.md` files add local guidance, they should not
 weaken the repo-wide requirement that agent work uses branches, PRs, and human
 approval before merge.
 
-## 35. Open Questions
+## 35. Current PR Stack Testing Contract
+
+This section captures the behavior implied by the current policy graduation PR
+stack and the tests that must exist before the stack should be treated as
+review-ready. It is intentionally narrower than the full roadmap: these are the
+behaviors changed or surfaced by the stack, not every policing feature planned
+for later work.
+
+### 35.1 Behavior Inventory
+
+| Behavior | Runtime meaning | Current enforcement level |
+|---|---|---|
+| Hot placement prefers `Edge` providers | `AssignProviders(..., "Hot", count)` filters to Hot-eligible providers and, when at least `count` active non-draining Edge providers exist, selects only Edge providers. | Keeper-level assignment policy. |
+| Hot placement falls back when Edge is underfilled | If fewer than `count` Edge providers are available, Hot placement uses the broader Hot-eligible set (`General` + `Edge`) rather than failing or under-replicating solely because Edge is scarce. | Keeper-level assignment policy. |
+| Non-Hot placement is not accidentally Edge-biased | `General` and `Cold` assignments must continue to use their existing capability eligibility rules and must not inherit the Hot-only Edge preference. | Regression requirement. |
+| Saturation creates explicit overlay route state | A successful `MsgSignalSaturation` appends a funded Hot overlay provider set, increases `current_replication`, debits escrow, increments spend-window usage, and stores a `VirtualStripe` keyed by `(deal_id, stripe_index)`. | Keeper state transition. |
+| Saturation fails closed | Unauthorized providers, expired deals, spend-cap exhaustion, escrow exhaustion, or assignment failure must not mutate deal provider state, deal accounting, or virtual stripe state. | Keeper state transition. |
+| Overlay route state is queryable | `GetVirtualStripe` and `ListVirtualStripesByDeal` expose stored overlay route state through gRPC/REST. Missing stripes return `NotFound`; malformed requests return `InvalidArgument`. | Query API. |
+| Expired user-funded retrieval sessions do not bill | `OpenRetrievalSession` must reject expired deals before escrow is debited or session state is created. | Keeper message guard. |
+| Expired sponsored retrieval sessions do not bill | `OpenRetrievalSessionSponsored` must reject expired deals before requester funds move or session state is created. | Keeper message guard. |
+| Expired protocol retrieval sessions do not bill | `OpenProtocolRetrievalSession` must reject expired deals before protocol budget moves or session state is created, for both audit and repair purposes. | Keeper message guard. |
+| Ghosting remains a soft-fault path | Provider non-response/ghosting is handled through missed service, reward exclusion, deputy evidence, and repair readiness; it is not automatically slash/jail behavior in this stack. | Existing keeper policy; e2e evidence still incomplete. |
+
+### 35.2 Required Test Layers
+
+| Layer | Required coverage for this stack | Merge gate |
+|---|---|---|
+| Keeper unit tests | Edge preference, Edge fallback, inactive/draining exclusion, non-Hot regression, repeated saturation indexes, fail-closed saturation accounting, virtual stripe query validation, expired retrieval no-billing across user/sponsored/protocol paths. | `cd polystorechain && go test ./x/polystorechain/keeper -run '<focused regex>'` plus full `go test ./...` before pushing code PRs. |
+| Query/API tests | Direct query-server coverage for stored, missing, empty-deal, invalid, and multi-stripe list cases. REST coverage belongs in e2e because gateway routes are generated and exercised there. | Keeper query tests for fast feedback; devnet REST smoke for generated route correctness. |
+| Simulator fixtures | Existing `elasticity_overlay_*`, `expired_retrieval_rejection`, and ghost/non-response scenarios must remain current. If keeper behavior diverges from simulation assumptions, update scenario assertions in the same PR. | `python3 -m unittest discover -s tools/policy_sim` and sweep/report freshness checks for simulator-touching PRs. |
+| Process-level e2e | A devnet script should prove `signal-saturation` creates queryable virtual stripe state and, when enough Edge providers exist, the overlay provider set is Edge-only. It should also prove the second saturation fails closed when the spend cap is exhausted. | Add to CI once locally stable; otherwise keep as explicit manual gate with documented flake/root cause. |
+| Ghost/repair e2e | The existing deputy ghost repair script is the target scenario for SP-ghost behavior, but this stack does not need to complete the full ghost automation unless it changes repair or routing code. | Manual/nightly until stable enough for CI. |
+
+### 35.3 PR Slicing for Test Hardening
+
+1. Roadmap/testing-contract PR: update this section and any status tables before
+   expanding tests.
+2. Keeper unit/query PR: add focused tests and minimal fixes for assignment,
+   saturation, query, and expired retrieval guard behavior.
+3. E2E/CI PR: harden `e2e_elasticity.sh` or successor script, assert virtual
+   stripe REST visibility, assert Edge-only overlays when enough Edge providers
+   exist, and wire the script into CI if stable locally.
+4. Ghost/repair PR: separately graduate the deputy ghost repair script when the
+   provider-daemon/gateway behavior is stable enough for a non-flaky gate.
+
+### 35.4 Acceptance Criteria
+
+The current stack can be considered testing-complete when:
+
+1. Every behavior in 35.1 has either a keeper test, process-level e2e test, or
+   a documented reason it is intentionally deferred.
+2. At least one process-level test proves generated query routes for virtual
+   stripes, not only direct keeper calls.
+3. Fail-closed cases assert both the returned error and the absence of state or
+   accounting mutation.
+4. The remaining "does not do yet" items stay documented in the gap report and
+   implementation tickets, especially overlay readiness, TTL cleanup, service
+   accounting, gateway route selection, automatic Edge promotion/demotion, and
+   full ghost-repair automation.
+
+## 36. Open Questions
 
 1. Should hot and cold deals use separate missed-epoch thresholds from the start?
 2. What false-positive repair rate is acceptable during trusted devnet?
