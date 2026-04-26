@@ -191,6 +191,11 @@ func (k Keeper) recordEvidenceCase(ctx sdk.Context, in evidenceCaseInput) (uint6
 	if err := k.EvidenceCases.Set(ctx, id, caseRecord); err != nil {
 		return 0, fmt.Errorf("failed to store evidence case: %w", err)
 	}
+	if in.DealID != 0 {
+		if err := k.EvidenceCasesByDeal.Set(ctx, collections.Join(in.DealID, id), true); err != nil {
+			return 0, fmt.Errorf("failed to index evidence case by deal: %w", err)
+		}
+	}
 	return id, nil
 }
 

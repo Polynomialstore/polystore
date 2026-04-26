@@ -46,7 +46,7 @@ The current repo already contains several enforcement surfaces:
 | Repair | Make-before-break slot repair and deterministic replacement selection exist. |
 | Draining | Provider draining and bounded repair scheduling exist. |
 | Audit and deputy paths | Protocol audit tasks, deputy-served accounting, and protocol sessions are partially wired. |
-| Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with queryable reason codes. |
+| Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with indexed, paginated query surfaces. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -934,7 +934,8 @@ Potential state additions:
 6. `RepairReadinessProof(deal_id, slot, pending_provider, gen)`.
 7. `EvidenceCase(evidence_id)`. **Landed first pass:** records structured
    reason, provider, slot, reporter, evidence class, severity, status,
-   slashability, failure accounting, epoch, and consequence ceiling.
+   slashability, failure accounting, epoch, and consequence ceiling. Evidence
+   is also indexed by deal for bounded operator queries.
 8. `NonResponseAccumulator(provider, deal_id, slot, window)`.
 9. `ProviderBondState(provider)`.
 10. `AssignmentCollateral(provider, deal_id, slot)`.
@@ -996,11 +997,11 @@ Queries/events should make the system explainable:
 1. Provider lifecycle state and reason.
 2. Provider health summary.
 3. Slot health and current repair status. **Landed first pass:** `GetSlotHealth`
-   and `ListSlotHealthByDeal`.
+   and paginated `ListSlotHealthByDeal`.
 4. Pending provider and repair target generation. **Landed first pass:** exposed
    through `SlotHealthState` and existing deal slot state.
-5. Evidence case status. **Landed first pass:** `ListEvidenceCases` with
-   optional deal filter.
+5. Evidence case status. **Landed first pass:** paginated `ListEvidenceCases`
+   with optional deal-indexed filtering.
 6. Repair attempt history.
 7. Audit debt by provider/slot.
 8. Reward eligibility and exclusion reason.

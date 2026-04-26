@@ -60,6 +60,7 @@ type Keeper struct {
 	RetrievalDemandByEpoch        collections.Map[uint64, uint64]
 	EvidenceCount                 collections.Sequence
 	EvidenceCases                 collections.Map[uint64, types.EvidenceCase]
+	EvidenceCasesByDeal           collections.Map[collections.Pair[uint64, uint64], bool]
 	SlotHealthStates              collections.Map[collections.Pair[uint64, uint32], types.SlotHealthState]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
@@ -173,9 +174,10 @@ func NewKeeper(
 			collections.Uint64Key,
 			collections.Uint64Value,
 		),
-		EvidenceCount:    collections.NewSequence(sb, types.EvidenceCountKey, "evidence_count"),
-		EvidenceCases:    collections.NewMap(sb, types.EvidenceCasesKey, "evidence_cases", collections.Uint64Key, codec.CollValue[types.EvidenceCase](cdc)),
-		SlotHealthStates: collections.NewMap(sb, types.SlotHealthStatesKey, "slot_health_states", collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), codec.CollValue[types.SlotHealthState](cdc)),
+		EvidenceCount:       collections.NewSequence(sb, types.EvidenceCountKey, "evidence_count"),
+		EvidenceCases:       collections.NewMap(sb, types.EvidenceCasesKey, "evidence_cases", collections.Uint64Key, codec.CollValue[types.EvidenceCase](cdc)),
+		EvidenceCasesByDeal: collections.NewMap(sb, types.EvidenceCasesByDealKey, "evidence_cases_by_deal", collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key), collections.BoolValue),
+		SlotHealthStates:    collections.NewMap(sb, types.SlotHealthStatesKey, "slot_health_states", collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), codec.CollValue[types.SlotHealthState](cdc)),
 
 		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
 		Mode1EpochCredits: collections.NewMap(

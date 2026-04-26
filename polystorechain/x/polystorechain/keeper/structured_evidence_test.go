@@ -5,6 +5,7 @@ import (
 
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/stretchr/testify/require"
 
 	"polystorechain/x/polystorechain/keeper"
@@ -183,6 +184,15 @@ func TestSlotHealthAndEvidenceQueries(t *testing.T) {
 	require.Equal(t, types.SlotHealthStatus_SLOT_HEALTH_STATUS_HEALTHY, listHealth.Health[1].Status)
 	require.Equal(t, types.SlotHealthStatus_SLOT_HEALTH_STATUS_HEALTHY, listHealth.Health[2].Status)
 
+	pagedHealth, err := queryServer.ListSlotHealthByDeal(sdkCtx, &types.QueryListSlotHealthByDealRequest{
+		DealId:     dealID,
+		Pagination: &sdkquery.PageRequest{Limit: 2, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, pagedHealth.Health, 2)
+	require.NotNil(t, pagedHealth.Pagination)
+	require.Equal(t, uint64(3), pagedHealth.Pagination.Total)
+
 	listEvidence, err := queryServer.ListEvidenceCases(sdkCtx, &types.QueryListEvidenceCasesRequest{DealId: dealID})
 	require.NoError(t, err)
 	require.NotEmpty(t, listEvidence.Evidence)
@@ -191,4 +201,29 @@ func TestSlotHealthAndEvidenceQueries(t *testing.T) {
 		require.NotEmpty(t, item.Reason)
 		require.NotEmpty(t, item.ConsequenceCeiling)
 	}
+
+	otherEvidenceID, err := f.keeper.EvidenceCount.Next(sdkCtx)
+	require.NoError(t, err)
+	require.NoError(t, f.keeper.EvidenceCases.Set(sdkCtx, otherEvidenceID, types.EvidenceCase{
+		Id:                 otherEvidenceID,
+		DealId:             dealID + 1,
+		Reason:             "other_deal",
+		ConsequenceCeiling: "test-only",
+	}))
+	require.NoError(t, f.keeper.EvidenceCasesByDeal.Set(sdkCtx, collections.Join(dealID+1, otherEvidenceID), true))
+
+	pagedEvidence, err := queryServer.ListEvidenceCases(sdkCtx, &types.QueryListEvidenceCasesRequest{
+		DealId:     dealID,
+		Pagination: &sdkquery.PageRequest{Limit: 1, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, pagedEvidence.Evidence, 1)
+	require.NotNil(t, pagedEvidence.Pagination)
+	require.Equal(t, uint64(len(listEvidence.Evidence)), pagedEvidence.Pagination.Total)
+	require.Equal(t, dealID, pagedEvidence.Evidence[0].DealId)
+
+	otherDealEvidence, err := queryServer.ListEvidenceCases(sdkCtx, &types.QueryListEvidenceCasesRequest{DealId: dealID + 1})
+	require.NoError(t, err)
+	require.Len(t, otherDealEvidence.Evidence, 1)
+	require.Equal(t, dealID+1, otherDealEvidence.Evidence[0].DealId)
 }
