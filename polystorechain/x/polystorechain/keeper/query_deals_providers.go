@@ -6,6 +6,7 @@ import (
 
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -106,6 +107,55 @@ func (k queryServer) GetProvider(goCtx context.Context, req *types.QueryGetProvi
 	}
 
 	return &types.QueryGetProviderResponse{Provider: &val}, nil
+}
+
+func (k queryServer) GetProviderHealth(goCtx context.Context, req *types.QueryGetProviderHealthRequest) (*types.QueryGetProviderHealthResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	address, err := canonicalProviderAddress(req.Address)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	health, err := k.k.deriveProviderHealthState(ctx, address)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "provider not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryGetProviderHealthResponse{Health: health}, nil
+}
+
+func (k queryServer) ListProviderHealth(goCtx context.Context, req *types.QueryListProviderHealthRequest) (*types.QueryListProviderHealthResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	health, pageRes, err := sdkquery.CollectionPaginate(
+		goCtx,
+		k.k.Providers,
+		req.Pagination,
+		func(address string, provider types.Provider) (types.ProviderHealthState, error) {
+			explicit, err := k.k.ProviderHealthStates.Get(ctx, address)
+			if err == nil {
+				return explicit, nil
+			}
+			if err != nil && !errors.Is(err, collections.ErrNotFound) {
+				return types.ProviderHealthState{}, err
+			}
+			return providerHealthFromProvider(provider, ctx.BlockHeight()), nil
+		},
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListProviderHealthResponse{Health: health, Pagination: pageRes}, nil
 }
 
 func (k queryServer) GetProviderPairing(goCtx context.Context, req *types.QueryGetProviderPairingRequest) (*types.QueryGetProviderPairingResponse, error) {

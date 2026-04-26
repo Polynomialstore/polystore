@@ -196,6 +196,9 @@ func (k Keeper) recordEvidenceCase(ctx sdk.Context, in evidenceCaseInput) (uint6
 			return 0, fmt.Errorf("failed to index evidence case by deal: %w", err)
 		}
 	}
+	if err := k.updateProviderHealthFromEvidence(ctx, caseRecord); err != nil {
+		return 0, fmt.Errorf("failed to update provider health: %w", err)
+	}
 	return id, nil
 }
 

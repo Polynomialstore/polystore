@@ -47,6 +47,7 @@ The current repo already contains several enforcement surfaces:
 | Draining | Provider draining and bounded repair scheduling exist. |
 | Audit and deputy paths | Protocol audit tasks, deputy-served accounting, and protocol sessions are partially wired. |
 | Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with indexed, paginated query surfaces. |
+| Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates latest provider-centric lifecycle signals from structured evidence and registration state for operator queries. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -617,11 +618,18 @@ surfaces derived `HEALTHY`, `SUSPECT`, `DELINQUENT`, `REPAIRING`,
 codes and the last structured evidence id. The policy simulator mirrors this
 lifecycle by emitting repair ledger events in `started/ready/completed` order,
 where `ready` represents pending-provider catch-up evidence before promotion.
+Keeper state now also includes a first-pass `ProviderHealthState` view. It
+updates from structured evidence and derives healthy/default state from provider
+registration so operators can ask "what is this provider's current lifecycle
+signal?" without manually joining slot health and evidence cases. This state is
+observable only; placement, rewards, jail, and slash gates have not yet been
+made dependent on it.
+
 Missing desired-state pieces include:
 
-1. Provider-wide lifecycle aggregation from per-slot `SlotHealthState` into
-   global `DEGRADED`, `DELINQUENT`, `JAILED`, and `EXITED` states. The current
-   keeper slice is per-slot and queryable, not a global placement gate.
+1. Provider-wide lifecycle enforcement from `ProviderHealthState` into
+   placement, reward eligibility, jail, slash, and exit gates. The current
+   keeper slice is queryable and explanatory, not a global placement gate.
 2. Keeper/runtime repair attempt counters and cooldown windows. The simulator
    now models these with `repair_attempt_cap_per_slot`,
    `repair_backoff_epochs`, per-slot attempt state, cooldown backoff events,
@@ -924,8 +932,12 @@ hardening beyond current devnet behavior.
 
 Potential state additions:
 
-1. `ProviderLifecycleState(provider)`.
-2. `ProviderHealthState(provider, epoch_window)`.
+1. `ProviderLifecycleState(provider)`. **Landed first pass:** represented by
+   `ProviderHealthState.lifecycle_status` as observational state.
+2. `ProviderHealthState(provider, epoch_window)`. **Landed first pass:** records
+   latest provider lifecycle signal, reason, evidence class, severity, last
+   evidence/deal/slot, and soft/hard/repair counters. Epoch-window decay and
+   enforcement consumption remain pending.
 3. `ProviderCapabilityScore(provider)` or explicit capability tiers.
 4. `SlotHealthState(deal_id, slot)`. **Landed first pass:** records latest
    per-slot health, reason, evidence class, severity, counters, pending
@@ -994,8 +1006,10 @@ Likely messages:
 
 Queries/events should make the system explainable:
 
-1. Provider lifecycle state and reason.
-2. Provider health summary.
+1. Provider lifecycle state and reason. **Landed first pass:**
+   `GetProviderHealth` and paginated `ListProviderHealth`.
+2. Provider health summary. **Landed first pass:** `ProviderHealthState`
+   exposes latest evidence, lifecycle status, and counters.
 3. Slot health and current repair status. **Landed first pass:** `GetSlotHealth`
    and paginated `ListSlotHealthByDeal`.
 4. Pending provider and repair target generation. **Landed first pass:** exposed

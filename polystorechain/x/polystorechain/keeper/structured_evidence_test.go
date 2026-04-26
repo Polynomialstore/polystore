@@ -99,6 +99,16 @@ func TestMode2QuotaMissStoresStructuredEvidenceAndSlotHealth(t *testing.T) {
 	require.Equal(t, types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_CONVICTED, repairStarted.Status)
 	require.True(t, repairStarted.CountsAsFailure)
 	require.Equal(t, repairStarted.Id, repairHealth.LastEvidenceCaseId)
+
+	providerHealth, err := f.keeper.ProviderHealthStates.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT, providerHealth.LifecycleStatus)
+	require.Equal(t, "quota_miss_repair_started", providerHealth.Reason)
+	require.Equal(t, repairStarted.Id, providerHealth.LastEvidenceCaseId)
+	require.Equal(t, dealID, providerHealth.LastDealId)
+	require.Equal(t, uint32(0), providerHealth.LastSlot)
+	require.Positive(t, providerHealth.SoftFaultCount)
+	require.Positive(t, providerHealth.RepairEventCount)
 }
 
 func TestDeputyMissStoresStructuredEvidenceAndRepairHealth(t *testing.T) {
@@ -226,4 +236,25 @@ func TestSlotHealthAndEvidenceQueries(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, otherDealEvidence.Evidence, 1)
 	require.Equal(t, dealID+1, otherDealEvidence.Evidence[0].DealId)
+
+	providerHealth, err := queryServer.GetProviderHealth(sdkCtx, &types.QueryGetProviderHealthRequest{Address: providerA})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT, providerHealth.Health.LifecycleStatus)
+	require.Equal(t, "quota_miss_repair_started", providerHealth.Health.Reason)
+	require.Equal(t, dealID, providerHealth.Health.LastDealId)
+	require.Equal(t, uint32(0), providerHealth.Health.LastSlot)
+	require.Positive(t, providerHealth.Health.SoftFaultCount)
+
+	derivedProviderHealth, err := queryServer.GetProviderHealth(sdkCtx, &types.QueryGetProviderHealthRequest{Address: providerD})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_ACTIVE, derivedProviderHealth.Health.LifecycleStatus)
+	require.Equal(t, "provider_active", derivedProviderHealth.Health.Reason)
+
+	listProviderHealth, err := queryServer.ListProviderHealth(sdkCtx, &types.QueryListProviderHealthRequest{
+		Pagination: &sdkquery.PageRequest{Limit: 2, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, listProviderHealth.Health, 2)
+	require.NotNil(t, listProviderHealth.Pagination)
+	require.Equal(t, uint64(4), listProviderHealth.Pagination.Total)
 }

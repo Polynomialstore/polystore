@@ -94,6 +94,34 @@ enum SlotHealthStatus {
   SLOT_HEALTH_STATUS_EXPIRED = 8;
 }
 
+// ProviderLifecycleStatus is the provider-centric health/lifecycle view used
+// for operator status and future placement/economics gates. It is observational
+// until explicit enforcement parameters are enabled.
+enum ProviderLifecycleStatus {
+  // PROVIDER_LIFECYCLE_STATUS_UNSPECIFIED is the default unset value.
+  PROVIDER_LIFECYCLE_STATUS_UNSPECIFIED = 0;
+  // PROVIDER_LIFECYCLE_STATUS_PAIRED means identity pairing exists.
+  PROVIDER_LIFECYCLE_STATUS_PAIRED = 1;
+  // PROVIDER_LIFECYCLE_STATUS_PROBATIONARY means limited assignment eligible.
+  PROVIDER_LIFECYCLE_STATUS_PROBATIONARY = 2;
+  // PROVIDER_LIFECYCLE_STATUS_ACTIVE means normal assignment eligible.
+  PROVIDER_LIFECYCLE_STATUS_ACTIVE = 3;
+  // PROVIDER_LIFECYCLE_STATUS_PREFERRED means sustained good performance.
+  PROVIDER_LIFECYCLE_STATUS_PREFERRED = 4;
+  // PROVIDER_LIFECYCLE_STATUS_HIGH_BANDWIDTH means hot-path eligible.
+  PROVIDER_LIFECYCLE_STATUS_HIGH_BANDWIDTH = 5;
+  // PROVIDER_LIFECYCLE_STATUS_DEGRADED means soft evidence requires attention.
+  PROVIDER_LIFECYCLE_STATUS_DEGRADED = 6;
+  // PROVIDER_LIFECYCLE_STATUS_DELINQUENT means threshold evidence crossed.
+  PROVIDER_LIFECYCLE_STATUS_DELINQUENT = 7;
+  // PROVIDER_LIFECYCLE_STATUS_DRAINING means voluntary exit is in progress.
+  PROVIDER_LIFECYCLE_STATUS_DRAINING = 8;
+  // PROVIDER_LIFECYCLE_STATUS_JAILED means provider is explicitly ineligible.
+  PROVIDER_LIFECYCLE_STATUS_JAILED = 9;
+  // PROVIDER_LIFECYCLE_STATUS_EXITED means provider is no longer active.
+  PROVIDER_LIFECYCLE_STATUS_EXITED = 10;
+}
+
 // EvidenceCase is the structured policing ledger for failures, repair
 // milestones, and hard-fault records. The legacy Proof summary remains for
 // compatibility, while this object carries machine-readable attribution.
@@ -135,6 +163,26 @@ message SlotHealthState {
   uint64 last_evidence_case_id = 12;
   string pending_provider = 13 [(cosmos_proto.scalar) = "cosmos.AddressString"];
   uint64 repair_target_gen = 14;
+}
+
+// ProviderHealthState is the latest provider-centric lifecycle summary derived
+// from structured evidence and provider registration state. It is intentionally
+// non-punitive until explicit enforcement params consume it.
+message ProviderHealthState {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  ProviderLifecycleStatus lifecycle_status = 2;
+  string reason = 3;
+  EvidenceClass evidence_class = 4;
+  EvidenceSeverity severity = 5;
+  uint64 last_evidence_case_id = 6;
+  uint64 last_deal_id = 7;
+  uint32 last_slot = 8;
+  uint64 last_epoch_id = 9;
+  int64 updated_height = 10;
+  uint64 soft_fault_count = 11;
+  uint64 hard_fault_count = 12;
+  uint64 repair_event_count = 13;
+  string consequence_ceiling = 14;
 }
 
 // RetrievalPolicyMode controls who may open USER-funded retrieval sessions

@@ -43,6 +43,16 @@ service Query {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{address}";
   }
 
+  // Queries the provider-centric health and lifecycle summary.
+  rpc GetProviderHealth(QueryGetProviderHealthRequest) returns (QueryGetProviderHealthResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{address}/health";
+  }
+
+  // Lists provider-centric health and lifecycle summaries.
+  rpc ListProviderHealth(QueryListProviderHealthRequest) returns (QueryListProviderHealthResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-health";
+  }
+
   // Queries the operator pairing for a provider address.
   rpc GetProviderPairing(QueryGetProviderPairingRequest) returns (QueryGetProviderPairingResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-pairings/{provider}";
@@ -167,6 +177,27 @@ message QueryGetProviderRequest {
 
 message QueryGetProviderResponse {
   Provider provider = 1;
+}
+
+// QueryGetProviderHealthRequest requests provider health by address.
+message QueryGetProviderHealthRequest {
+  string address = 1;
+}
+
+// QueryGetProviderHealthResponse returns provider-centric health state.
+message QueryGetProviderHealthResponse {
+  ProviderHealthState health = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListProviderHealthRequest lists provider health summaries.
+message QueryListProviderHealthRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+// QueryListProviderHealthResponse returns provider health summaries.
+message QueryListProviderHealthResponse {
+  repeated ProviderHealthState health = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 
 message QueryGetProviderPairingRequest {
