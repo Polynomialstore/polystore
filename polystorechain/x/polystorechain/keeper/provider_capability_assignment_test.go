@@ -77,3 +77,61 @@ func TestAssignProvidersFallsBackToGeneralForHotWhenEdgeUnderfilled(t *testing.T
 	}
 	require.Positive(t, generalCount)
 }
+
+func TestAssignProvidersHotPreferenceIgnoresInactiveAndDrainingEdge(t *testing.T) {
+	f := initFixture(t)
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx)
+	providers := registerCapabilityProviders(t, f, "hot_edge_health", []string{
+		"Edge", "Edge", "Edge", "Edge",
+		"General", "General",
+	})
+
+	offlineEdge, err := f.keeper.Providers.Get(sdkCtx, providers[0])
+	require.NoError(t, err)
+	offlineEdge.Status = "Offline"
+	require.NoError(t, f.keeper.Providers.Set(sdkCtx, providers[0], offlineEdge))
+
+	drainingEdge, err := f.keeper.Providers.Get(sdkCtx, providers[1])
+	require.NoError(t, err)
+	drainingEdge.Draining = true
+	require.NoError(t, f.keeper.Providers.Set(sdkCtx, providers[1], drainingEdge))
+
+	assigned, err := f.keeper.AssignProviders(sdkCtx, 79, []byte("hot-edge-health"), "Hot", 2)
+	require.NoError(t, err)
+	require.Len(t, assigned, 2)
+	require.NotContains(t, assigned, providers[0])
+	require.NotContains(t, assigned, providers[1])
+
+	for _, providerAddr := range assigned {
+		provider, err := f.keeper.Providers.Get(sdkCtx, providerAddr)
+		require.NoError(t, err)
+		require.Equal(t, "Edge", provider.Capabilities)
+		require.Equal(t, "Active", provider.Status)
+		require.False(t, provider.Draining)
+	}
+}
+
+func TestAssignProvidersDoesNotApplyEdgePreferenceToCold(t *testing.T) {
+	f := initFixture(t)
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx)
+	registerCapabilityProviders(t, f, "cold_no_edge_pref", []string{
+		"Edge", "Edge",
+		"Archive", "Archive",
+		"General",
+	})
+
+	assigned, err := f.keeper.AssignProviders(sdkCtx, 80, []byte("cold-no-edge-preference"), "Cold", 3)
+	require.NoError(t, err)
+	require.Len(t, assigned, 3)
+
+	var archiveCount int
+	for _, providerAddr := range assigned {
+		provider, err := f.keeper.Providers.Get(sdkCtx, providerAddr)
+		require.NoError(t, err)
+		require.NotEqual(t, "Edge", provider.Capabilities)
+		if provider.Capabilities == "Archive" {
+			archiveCount++
+		}
+	}
+	require.Positive(t, archiveCount)
+}

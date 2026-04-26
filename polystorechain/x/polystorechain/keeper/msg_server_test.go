@@ -1196,6 +1196,29 @@ func TestSignalSaturation(t *testing.T) {
 	_, err = msgServer.SignalSaturation(f.ctx, msgSigBad)
 	require.Error(t, err) // Should be unauthorized
 
+	afterUnauthorized, err := f.keeper.Deals.Get(f.ctx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, deal.CurrentReplication, afterUnauthorized.CurrentReplication)
+	require.Equal(t, deal.Providers, afterUnauthorized.Providers)
+	require.Equal(t, deal.EscrowBalance, afterUnauthorized.EscrowBalance)
+	require.Equal(t, deal.SpendWindowSpent, afterUnauthorized.SpendWindowSpent)
+	_, err = f.keeper.VirtualStripes.Get(f.ctx, collections.Join(dealID, uint32(3)))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+
+	expiredCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(int64(deal.EndBlock))
+	_, err = msgServer.SignalSaturation(expiredCtx, msgSig)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "expired")
+
+	afterExpired, err := f.keeper.Deals.Get(expiredCtx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, deal.CurrentReplication, afterExpired.CurrentReplication)
+	require.Equal(t, deal.Providers, afterExpired.Providers)
+	require.Equal(t, deal.EscrowBalance, afterExpired.EscrowBalance)
+	require.Equal(t, deal.SpendWindowSpent, afterExpired.SpendWindowSpent)
+	_, err = f.keeper.VirtualStripes.Get(expiredCtx, collections.Join(dealID, uint32(3)))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+
 	// 5. Spend cap hit should fail closed without adding another stripe or debiting escrow.
 	capBaseline := deal
 	capBaseline.MaxMonthlySpend = capBaseline.SpendWindowSpent
@@ -1232,4 +1255,92 @@ func TestSignalSaturation(t *testing.T) {
 	require.Equal(t, escrowBaseline.SpendWindowSpent, afterEscrowHit.SpendWindowSpent)
 	_, err = f.keeper.VirtualStripes.Get(f.ctx, collections.Join(dealID, uint32(3)))
 	require.ErrorIs(t, err, collections.ErrNotFound)
+}
+
+func TestSignalSaturationRecordsSequentialEdgeVirtualStripes(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx)
+
+	for i := 0; i < 18; i++ {
+		addrBz := []byte(fmt.Sprintf("sat_general_%02d", i))
+		addr, err := f.addressCodec.BytesToString(addrBz)
+		require.NoError(t, err)
+		_, err = msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+	for i := 0; i < 12; i++ {
+		addrBz := []byte(fmt.Sprintf("sat_edge_%02d", i))
+		addr, err := f.addressCodec.BytesToString(addrBz)
+		require.NoError(t, err)
+		_, err = msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "Edge",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_sat_edge______")
+	user, err := f.addressCodec.BytesToString(userBz)
+	require.NoError(t, err)
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		InitialEscrowAmount: math.NewInt(10000),
+		MaxMonthlySpend:     math.NewInt(10000),
+	})
+	require.NoError(t, err)
+
+	dealID := resDeal.DealId
+	assignedProv := resDeal.AssignedProviders[0]
+	msgSig := &types.MsgSignalSaturation{
+		Creator: assignedProv,
+		DealId:  dealID,
+	}
+
+	first, err := msgServer.SignalSaturation(f.ctx, msgSig)
+	require.NoError(t, err)
+	require.Len(t, first.NewProviders, int(types.DealBaseReplication))
+
+	second, err := msgServer.SignalSaturation(f.ctx, msgSig)
+	require.NoError(t, err)
+	require.Len(t, second.NewProviders, int(types.DealBaseReplication))
+
+	deal, err := f.keeper.Deals.Get(ctx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, uint64(36), deal.CurrentReplication)
+	require.Len(t, deal.Providers, 36)
+
+	params := f.keeper.GetParams(f.ctx)
+	elasticityCost := math.NewIntFromUint64(params.BaseStripeCost).Mul(math.NewIntFromUint64(types.DealBaseReplication))
+	require.Equal(t, elasticityCost.MulRaw(2), deal.SpendWindowSpent)
+	require.Equal(t, math.NewInt(10000).Sub(elasticityCost.MulRaw(2)), deal.EscrowBalance)
+
+	for _, tc := range []struct {
+		index     uint32
+		providers []string
+	}{
+		{index: 2, providers: first.NewProviders},
+		{index: 3, providers: second.NewProviders},
+	} {
+		virtualStripe, err := f.keeper.VirtualStripes.Get(ctx, collections.Join(dealID, tc.index))
+		require.NoError(t, err)
+		require.Equal(t, dealID, virtualStripe.DealId)
+		require.Equal(t, tc.index, virtualStripe.StripeIndex)
+		require.Equal(t, tc.providers, virtualStripe.OverlayProviders)
+
+		for _, providerAddr := range virtualStripe.OverlayProviders {
+			provider, err := f.keeper.Providers.Get(ctx, providerAddr)
+			require.NoError(t, err)
+			require.Equal(t, "Edge", provider.Capabilities)
+		}
+	}
 }
