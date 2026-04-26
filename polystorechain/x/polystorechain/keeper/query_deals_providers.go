@@ -33,9 +33,6 @@ func (k queryServer) GetVirtualStripe(goCtx context.Context, req *types.QueryGet
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
-	if req.DealId == 0 {
-		return nil, status.Error(codes.InvalidArgument, "deal_id is required")
-	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	stripe, err := k.k.VirtualStripes.Get(ctx, collections.Join(req.DealId, req.StripeIndex))
@@ -52,9 +49,6 @@ func (k queryServer) GetVirtualStripe(goCtx context.Context, req *types.QueryGet
 func (k queryServer) ListVirtualStripesByDeal(goCtx context.Context, req *types.QueryListVirtualStripesByDealRequest) (*types.QueryListVirtualStripesByDealResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
-	}
-	if req.DealId == 0 {
-		return nil, status.Error(codes.InvalidArgument, "deal_id is required")
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
