@@ -58,6 +58,7 @@ var (
 	EvidenceCasesKey                 = collections.NewPrefix("EvidenceCases/value/")
 	EvidenceCasesByDealKey           = collections.NewPrefix("EvidenceCasesByDeal/value/")
 	SlotHealthStatesKey              = collections.NewPrefix("SlotHealthStates/value/")
+	ProviderHealthStatesKey          = collections.NewPrefix("ProviderHealthStates/value/")
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeedKey               = collections.NewPrefix("EpochSeed/value/")

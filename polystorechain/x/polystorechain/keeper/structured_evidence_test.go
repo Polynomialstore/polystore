@@ -99,6 +99,16 @@ func TestMode2QuotaMissStoresStructuredEvidenceAndSlotHealth(t *testing.T) {
 	require.Equal(t, types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_CONVICTED, repairStarted.Status)
 	require.True(t, repairStarted.CountsAsFailure)
 	require.Equal(t, repairStarted.Id, repairHealth.LastEvidenceCaseId)
+
+	providerHealth, err := f.keeper.ProviderHealthStates.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT, providerHealth.LifecycleStatus)
+	require.Equal(t, "quota_miss_repair_started", providerHealth.Reason)
+	require.Equal(t, repairStarted.Id, providerHealth.LastEvidenceCaseId)
+	require.Equal(t, dealID, providerHealth.LastDealId)
+	require.Equal(t, uint32(0), providerHealth.LastSlot)
+	require.Positive(t, providerHealth.SoftFaultCount)
+	require.Positive(t, providerHealth.RepairEventCount)
 }
 
 func TestDeputyMissStoresStructuredEvidenceAndRepairHealth(t *testing.T) {
@@ -226,4 +236,72 @@ func TestSlotHealthAndEvidenceQueries(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, otherDealEvidence.Evidence, 1)
 	require.Equal(t, dealID+1, otherDealEvidence.Evidence[0].DealId)
+
+	providerHealth, err := queryServer.GetProviderHealth(sdkCtx, &types.QueryGetProviderHealthRequest{Address: providerA})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT, providerHealth.Health.LifecycleStatus)
+	require.Equal(t, "quota_miss_repair_started", providerHealth.Health.Reason)
+	require.Equal(t, dealID, providerHealth.Health.LastDealId)
+	require.Equal(t, uint32(0), providerHealth.Health.LastSlot)
+	require.Positive(t, providerHealth.Health.SoftFaultCount)
+
+	derivedProviderHealth, err := queryServer.GetProviderHealth(sdkCtx, &types.QueryGetProviderHealthRequest{Address: providerD})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_ACTIVE, derivedProviderHealth.Health.LifecycleStatus)
+	require.Equal(t, "provider_active", derivedProviderHealth.Health.Reason)
+
+	listProviderHealth, err := queryServer.ListProviderHealth(sdkCtx, &types.QueryListProviderHealthRequest{
+		Pagination: &sdkquery.PageRequest{Limit: 2, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, listProviderHealth.Health, 2)
+	require.NotNil(t, listProviderHealth.Pagination)
+	require.Equal(t, uint64(4), listProviderHealth.Pagination.Total)
+}
+
+func TestProviderHealthPreservesAdministrativeLifecycle(t *testing.T) {
+	f := initFixture(t)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	params.EvictAfterMissedEpochs = 1
+	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	providerD := makePolicyTestAddr(t, f, 0xD4)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC, providerD)
+
+	registeredProviderA, err := f.keeper.Providers.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	registeredProviderA.Status = "Jailed"
+	registeredProviderA.Draining = true
+	require.NoError(t, f.keeper.Providers.Set(sdkCtx, providerA, registeredProviderA))
+
+	registeredProviderD, err := f.keeper.Providers.Get(sdkCtx, providerD)
+	require.NoError(t, err)
+	registeredProviderD.Status = "Exited"
+	registeredProviderD.Draining = true
+	require.NoError(t, f.keeper.Providers.Set(sdkCtx, providerD, registeredProviderD))
+
+	dealID := uint64(88)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	setMode2EpochCredits(t, f, sdkCtx, dealID, 1, 1, 2)
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	providerHealth, err := queryServer.GetProviderHealth(sdkCtx, &types.QueryGetProviderHealthRequest{Address: providerA})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED, providerHealth.Health.LifecycleStatus)
+	require.NotZero(t, providerHealth.Health.LastEvidenceCaseId)
+	require.Equal(t, dealID, providerHealth.Health.LastDealId)
+
+	exitedHealth, err := queryServer.GetProviderHealth(sdkCtx, &types.QueryGetProviderHealthRequest{Address: providerD})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_EXITED, exitedHealth.Health.LifecycleStatus)
+	require.Equal(t, "provider_exited", exitedHealth.Health.Reason)
 }
