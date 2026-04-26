@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
@@ -76,6 +77,26 @@ func setupRetrievalExpiryDeal(t *testing.T) (*fixture, *trackingBankKeeper, type
 	return f, bank, msgServer, owner, *resDeal, deal
 }
 
+func requireNoRetrievalSessionState(t *testing.T, f *fixture, ctx sdk.Context) {
+	t.Helper()
+
+	var sessions int
+	err := f.keeper.RetrievalSessions.Walk(ctx, nil, func(_ []byte, _ types.RetrievalSession) (bool, error) {
+		sessions++
+		return false, nil
+	})
+	require.NoError(t, err)
+	require.Zero(t, sessions)
+
+	var nonces int
+	err = f.keeper.RetrievalSessionNonces.Walk(ctx, nil, func(_ collections.Pair[collections.Pair[string, uint64], string], _ uint64) (bool, error) {
+		nonces++
+		return false, nil
+	})
+	require.NoError(t, err)
+	require.Zero(t, nonces)
+}
+
 func TestOpenRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing.T) {
 	f, bank, msgServer, owner, resDeal, deal := setupRetrievalExpiryDeal(t)
 	expiredCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(int64(deal.EndBlock))
@@ -98,6 +119,7 @@ func TestOpenRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, math.NewInt(100), dealAfter.EscrowBalance)
 	require.Equal(t, "100stake", bank.moduleBalances[types.ModuleName].String())
+	requireNoRetrievalSessionState(t, f, expiredCtx)
 }
 
 func TestOpenSponsoredRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing.T) {
@@ -142,6 +164,7 @@ func TestOpenSponsoredRetrievalSessionRejectsExpiredDealWithoutBilling(t *testin
 	require.Equal(t, math.NewInt(100), dealAfter.EscrowBalance)
 	require.Equal(t, "100stake", bank.accountBalances[requesterAddr.String()].String())
 	require.Equal(t, "100stake", bank.moduleBalances[types.ModuleName].String())
+	requireNoRetrievalSessionState(t, f, expiredCtx)
 }
 
 func TestOpenProtocolRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing.T) {
@@ -207,6 +230,7 @@ func TestOpenProtocolRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing
 
 			require.Equal(t, initialProtocolBudget.String(), bank.moduleBalances[types.ProtocolBudgetModuleName].String())
 			require.Equal(t, initialModuleBalance.String(), bank.moduleBalances[types.ModuleName].String())
+			requireNoRetrievalSessionState(t, f, expiredCtx)
 		})
 	}
 }
