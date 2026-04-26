@@ -1,6 +1,6 @@
 # PolyStore Policing and Failure Simulation Roadmap
 
-Last updated: 2026-04-24
+Last updated: 2026-04-26
 
 ## 1. Purpose
 
@@ -46,6 +46,7 @@ The current repo already contains several enforcement surfaces:
 | Repair | Make-before-break slot repair and deterministic replacement selection exist. |
 | Draining | Provider draining and bounded repair scheduling exist. |
 | Audit and deputy paths | Protocol audit tasks, deputy-served accounting, and protocol sessions are partially wired. |
+| Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with queryable reason codes. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -397,6 +398,10 @@ Current landed status:
 3. The active graduation slice is repair-readiness and promotion correctness:
    a pending provider must produce deterministic readiness evidence before
    manual or automatic slot promotion can replace the active provider.
+4. The next graduation slice has landed the first explicit structured policing
+   state: `EvidenceCase` records and `SlotHealthState` records are written by
+   quota-miss, deputy-miss, repair-start, repair-backoff, repair-readiness, and
+   repair-completion paths, and are exposed through keeper queries.
 
 ### Milestone 4: Gateway and Provider Enforcement
 
@@ -606,21 +611,25 @@ Current implementation already has `ACTIVE`, `REPAIRING`, `pending_provider`,
 `repair_target_gen`, and a first-generation `Mode2RepairReadiness` keeper
 ledger. The readiness ledger is set by valid pending-provider proof activity
 while a slot is repairing, and promotion checks that readiness before swapping
-the active provider. The policy simulator now mirrors this lifecycle by
-emitting repair ledger events in `started/ready/completed` order, where `ready`
-represents pending-provider catch-up evidence before promotion. Missing
-desired-state pieces include:
+the active provider. Keeper state now also includes `SlotHealthState`, which
+surfaces derived `HEALTHY`, `SUSPECT`, `DELINQUENT`, `REPAIRING`,
+`CATCHUP_READY`, `ACTIVE_PROMOTED`, and `REPAIR_BACKOFF` states with reason
+codes and the last structured evidence id. The policy simulator mirrors this
+lifecycle by emitting repair ledger events in `started/ready/completed` order,
+where `ready` represents pending-provider catch-up evidence before promotion.
+Missing desired-state pieces include:
 
-1. Keeper/runtime `SUSPECT` / `DELINQUENT` reason codes. The simulator now
-   emits per-slot `HEALTHY`, `SUSPECT`, and `DELINQUENT` health state with
-   reason codes in `slots.csv`.
+1. Provider-wide lifecycle aggregation from per-slot `SlotHealthState` into
+   global `DEGRADED`, `DELINQUENT`, `JAILED`, and `EXITED` states. The current
+   keeper slice is per-slot and queryable, not a global placement gate.
 2. Keeper/runtime repair attempt counters and cooldown windows. The simulator
    now models these with `repair_attempt_cap_per_slot`,
    `repair_backoff_epochs`, per-slot attempt state, cooldown backoff events,
    attempt-cap backoff events, and candidate-exclusion diagnostics.
 3. Full catch-up proofs for all data/generation ranges, beyond the current
    readiness marker.
-4. Per-slot health queries for UI and operator tooling.
+4. UI and gateway consumption of the slot-health queries for operator tooling
+   and user-facing degraded-route explanations.
 5. A unified treatment of setup-phase bumping and post-commit repair.
 
 ## 19. Automatic Delinquency Repair and Promotion Flow
@@ -682,6 +691,14 @@ data-plane catch-up proof. It prevents immediate promotion without pending
 provider proof activity, but the next data-plane step is to prove that the
 pending provider reconstructed every required shard for `repair_target_gen`
 and any generations committed while repair was in progress.
+
+The current structured-evidence slice makes the loop explainable but does not
+yet make it punitive. `EvidenceCase` carries `evidence_class`, `severity`,
+`status`, `slashable`, `counts_as_failure`, and `consequence_ceiling`. Soft
+quota/deputy delinquency cases are convicted for repair and reward-exclusion
+planning, but explicitly remain non-slashable by default. Hard proof-failure
+cases are marked as slash/jail candidates for a later calibrated enforcement
+mode.
 
 ## 20. New SP Onboarding and Higher-Bandwidth Promotion
 
@@ -910,10 +927,14 @@ Potential state additions:
 1. `ProviderLifecycleState(provider)`.
 2. `ProviderHealthState(provider, epoch_window)`.
 3. `ProviderCapabilityScore(provider)` or explicit capability tiers.
-4. `SlotHealthState(deal_id, slot)`.
+4. `SlotHealthState(deal_id, slot)`. **Landed first pass:** records latest
+   per-slot health, reason, evidence class, severity, counters, pending
+   provider, and repair target generation.
 5. `SlotRepairAttempt(deal_id, slot, window)`.
 6. `RepairReadinessProof(deal_id, slot, pending_provider, gen)`.
-7. `EvidenceCase(evidence_id)`.
+7. `EvidenceCase(evidence_id)`. **Landed first pass:** records structured
+   reason, provider, slot, reporter, evidence class, severity, status,
+   slashability, failure accounting, epoch, and consequence ceiling.
 8. `NonResponseAccumulator(provider, deal_id, slot, window)`.
 9. `ProviderBondState(provider)`.
 10. `AssignmentCollateral(provider, deal_id, slot)`.
@@ -974,9 +995,12 @@ Queries/events should make the system explainable:
 
 1. Provider lifecycle state and reason.
 2. Provider health summary.
-3. Slot health and current repair status.
-4. Pending provider and repair target generation.
-5. Evidence case status.
+3. Slot health and current repair status. **Landed first pass:** `GetSlotHealth`
+   and `ListSlotHealthByDeal`.
+4. Pending provider and repair target generation. **Landed first pass:** exposed
+   through `SlotHealthState` and existing deal slot state.
+5. Evidence case status. **Landed first pass:** `ListEvidenceCases` with
+   optional deal filter.
 6. Repair attempt history.
 7. Audit debt by provider/slot.
 8. Reward eligibility and exclusion reason.

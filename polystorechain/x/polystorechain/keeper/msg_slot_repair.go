@@ -77,6 +77,44 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 
+	params := k.GetParams(ctx)
+	epochID := epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
+	eid := deriveEvidenceID("manual_slot_repair_started", deal.Id, epochID, []byte(fmt.Sprintf("%d:%s", msg.Slot, pending)))
+	if err := k.recordEvidenceSummary(ctx, deal.Id, slot.Provider, "manual_slot_repair_started", eid[:], msg.Creator, false); err != nil {
+		ctx.Logger().Error("failed to record evidence summary", "error", err)
+	}
+	caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+		DealID:             deal.Id,
+		Slot:               msg.Slot,
+		Provider:           slot.Provider,
+		Reporter:           msg.Creator,
+		Reason:             "manual_slot_repair_started",
+		Class:              types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+		Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+		EvidenceID:         eid[:],
+		EpochID:            epochID,
+		Summary:            fmt.Sprintf("manual repair started with pending provider %s", pending),
+		ConsequenceCeiling: "operator-directed repair; no slash by itself",
+	})
+	if err != nil {
+		ctx.Logger().Error("failed to record structured evidence", "error", err)
+	} else if err := k.setSlotHealthState(ctx, slotHealthUpdate{
+		DealID:          deal.Id,
+		Slot:            msg.Slot,
+		Provider:        slot.Provider,
+		Status:          types.SlotHealthStatus_SLOT_HEALTH_STATUS_REPAIRING,
+		Reason:          "manual_slot_repair_started",
+		Class:           types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+		Severity:        types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+		EpochID:         epochID,
+		EvidenceCaseID:  caseID,
+		PendingProvider: pending,
+		RepairTargetGen: slot.RepairTargetGen,
+	}); err != nil {
+		ctx.Logger().Error("failed to update slot health", "error", err)
+	}
+
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(
 			"start_slot_repair",
@@ -159,6 +197,43 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	}
 	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
+	}
+
+	params := k.GetParams(ctx)
+	epochID := epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
+	eid := deriveEvidenceID("slot_repair_completed", deal.Id, epochID, []byte(fmt.Sprintf("%d:%s", msg.Slot, slot.Provider)))
+	if err := k.recordEvidenceSummary(ctx, deal.Id, oldProvider, "slot_repair_completed", eid[:], msg.Creator, true); err != nil {
+		ctx.Logger().Error("failed to record evidence summary", "error", err)
+	}
+	caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+		DealID:             deal.Id,
+		Slot:               msg.Slot,
+		Provider:           oldProvider,
+		Reporter:           msg.Creator,
+		Reason:             "slot_repair_completed",
+		Class:              types.EvidenceClass_EVIDENCE_CLASS_POSITIVE_READINESS,
+		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+		Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_RESOLVED,
+		EvidenceID:         eid[:],
+		EpochID:            epochID,
+		Summary:            fmt.Sprintf("manual repair completed; new provider %s", slot.Provider),
+		ConsequenceCeiling: "repair completed; no penalty by itself",
+	})
+	if err != nil {
+		ctx.Logger().Error("failed to record structured evidence", "error", err)
+	} else if err := k.setSlotHealthState(ctx, slotHealthUpdate{
+		DealID:         deal.Id,
+		Slot:           msg.Slot,
+		Provider:       slot.Provider,
+		Status:         types.SlotHealthStatus_SLOT_HEALTH_STATUS_ACTIVE_PROMOTED,
+		Reason:         "slot_repair_completed",
+		Class:          types.EvidenceClass_EVIDENCE_CLASS_POSITIVE_READINESS,
+		Severity:       types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+		EpochID:        epochID,
+		EvidenceCaseID: caseID,
+		ResetCounters:  true,
+	}); err != nil {
+		ctx.Logger().Error("failed to update slot health", "error", err)
 	}
 
 	ctx.EventManager().EmitEvent(

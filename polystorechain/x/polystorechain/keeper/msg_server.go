@@ -1450,6 +1450,23 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 				if err := k.recordEvidenceSummary(ctx, msg.DealId, creator, kind, eid[:], "chain", false); err != nil {
 					ctx.Logger().Error("failed to record evidence summary", "error", err)
 				}
+				if _, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+					DealID:             msg.DealId,
+					Provider:           creator,
+					Reporter:           "chain",
+					Reason:             kind,
+					Class:              types.EvidenceClass_EVIDENCE_CLASS_CRYPTOGRAPHIC_HARD,
+					Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_HARD,
+					Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+					Slashable:          true,
+					CountsAsFailure:    shouldCountEvidenceAsFailedChallenge(kind, false),
+					EpochID:            msg.EpochId,
+					EvidenceID:         eid[:],
+					Summary:            "submitted system proof failed cryptographic verification",
+					ConsequenceCeiling: "slash or jail candidate after hard-fault policy is enabled",
+				}); err != nil {
+					ctx.Logger().Error("failed to record structured evidence", "error", err)
+				}
 			}
 			return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
 		}
@@ -1489,6 +1506,22 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 					eid := deriveEvidenceID(kind, msg.DealId, msg.EpochId, extra)
 					if errEvidence := k.recordEvidenceSummary(ctx, msg.DealId, creator, kind, eid[:], "chain", evidenceOK); errEvidence != nil {
 						ctx.Logger().Error("failed to record evidence summary", "error", errEvidence)
+					}
+					if _, errEvidence := k.recordEvidenceCase(ctx, evidenceCaseInput{
+						DealID:             msg.DealId,
+						Provider:           creator,
+						Reporter:           "chain",
+						Reason:             kind,
+						Class:              types.EvidenceClass_EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT,
+						Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_SOFT,
+						Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+						CountsAsFailure:    shouldCountEvidenceAsFailedChallenge(kind, evidenceOK),
+						EpochID:            msg.EpochId,
+						EvidenceID:         eid[:],
+						Summary:            err.Error(),
+						ConsequenceCeiling: "reward exclusion or health decay; no slash unless hard-fault policy classifies it",
+					}); errEvidence != nil {
+						ctx.Logger().Error("failed to record structured evidence", "error", errEvidence)
 					}
 
 					return &types.MsgProveLivenessResponse{Success: false, Tier: 3 /* Fail */, RewardAmount: "0"}, nil
@@ -1868,6 +1901,9 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 		eid := deriveEvidenceID("provider_degraded_repair_started", dealID, epochID, extra)
 		if err := k.recordEvidenceSummary(ctx, dealID, provider, "provider_degraded_repair_started", eid[:], "chain", false); err != nil {
 			ctx.Logger().Error("failed to record evidence summary", "error", err)
+		}
+		if err := k.recordMode2RepairStartedEvidence(ctx, dealID, provider, slot, epochID, "provider_degraded_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen); err != nil {
+			ctx.Logger().Error("failed to record structured repair evidence", "error", err)
 		}
 
 		ctx.Logger().Info(
@@ -3219,6 +3255,22 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
 		if err := k.recordEvidenceSummary(ctx, session.DealId, session.Provider, "retrieval_non_response", session.SessionId, msg.Creator, false); err != nil {
 			ctx.Logger().Error("failed to record non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
+		}
+		if _, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+			DealID:             session.DealId,
+			Provider:           session.Provider,
+			Reporter:           msg.Creator,
+			Reason:             "retrieval_non_response",
+			Class:              types.EvidenceClass_EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT,
+			Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_DEGRADED,
+			Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+			CountsAsFailure:    shouldCountEvidenceAsFailedChallenge("retrieval_non_response", false),
+			EvidenceID:         session.SessionId,
+			SessionID:          session.SessionId,
+			Summary:            "retrieval session expired without provider proof",
+			ConsequenceCeiling: "health decay and operator alert; no slash",
+		}); err != nil {
+			ctx.Logger().Error("failed to record structured non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
 		}
 		if err := k.RecordDealActivity(ctx, session.DealId, 0, true); err != nil {
 			ctx.Logger().Error("failed to record deal activity for non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
