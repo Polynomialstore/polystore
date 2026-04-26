@@ -403,8 +403,10 @@ params["active_static_precompiles"] = pre
 evm["params"] = params
 data["app_state"]["evm"] = evm
 
-# Optional devnet overrides for polystorechain params (useful for fast CI/E2E loops).
-polystorechain = data.get("app_state", {}).get("polystorechain", {})
+# Optional devnet overrides for polystore params (useful for fast CI/E2E loops).
+app_state = data.get("app_state", {})
+module_key = "nilchain" if "nilchain" in app_state else "polystorechain"
+polystorechain = app_state.get(module_key, {})
 params = polystorechain.get("params", {}) if isinstance(polystorechain, dict) else {}
 default_denom = (os.getenv("POLYSTORE_DENOM") or "stake").strip() or "stake"
 
@@ -517,7 +519,7 @@ if dynamic_enabled is True:
         params["retrieval_price_per_blob"] = params.get("retrieval_price_per_blob_min")
 if isinstance(polystorechain, dict):
     polystorechain["params"] = params
-    data["app_state"]["polystorechain"] = polystorechain
+    data["app_state"][module_key] = polystorechain
 
 json.dump(data, open(path, "w"), indent=1)
 PY
