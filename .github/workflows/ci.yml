@@ -384,6 +384,8 @@ jobs:
             smoke_script: ./e2e_open_retrieval_session_cli.sh
           - smoke_name: retrieval-session-mode2
             smoke_script: ./e2e_open_retrieval_session_mode2_cli.sh
+          - smoke_name: elasticity-overlay
+            smoke_script: ./e2e_elasticity.sh
     steps:
       - uses: actions/checkout@v5
         with:
