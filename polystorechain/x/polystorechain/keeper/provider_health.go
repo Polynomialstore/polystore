@@ -13,12 +13,12 @@ import (
 func providerLifecycleFromRegistration(provider types.Provider) types.ProviderLifecycleStatus {
 	status := strings.TrimSpace(strings.ToLower(provider.Status))
 	switch {
-	case provider.Draining:
-		return types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING
 	case status == "jailed":
 		return types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED
 	case status == "exited":
 		return types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_EXITED
+	case provider.Draining:
+		return types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING
 	case status == "offline":
 		return types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DEGRADED
 	case status == "active":
@@ -65,7 +65,17 @@ func providerHealthFromProvider(provider types.Provider, height int64) types.Pro
 	}
 }
 
+func isAdministrativeProviderLifecycle(status types.ProviderLifecycleStatus) bool {
+	return status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING ||
+		status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED ||
+		status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_EXITED
+}
+
 func providerLifecycleFromEvidence(ev types.EvidenceCase, current types.ProviderHealthState) types.ProviderLifecycleStatus {
+	if isAdministrativeProviderLifecycle(current.LifecycleStatus) {
+		return current.LifecycleStatus
+	}
+
 	switch {
 	case ev.Severity == types.EvidenceSeverity_EVIDENCE_SEVERITY_HARD || ev.Slashable:
 		return types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT

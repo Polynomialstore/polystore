@@ -94,7 +94,7 @@ func (k queryServer) GetProvider(goCtx context.Context, req *types.QueryGetProvi
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	address, err := canonicalProviderAddress(req.Address)
+	address, err := canonicalAddress(req.Address, "address")
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -115,7 +115,7 @@ func (k queryServer) GetProviderHealth(goCtx context.Context, req *types.QueryGe
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	address, err := canonicalProviderAddress(req.Address)
+	address, err := canonicalAddress(req.Address, "address")
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
