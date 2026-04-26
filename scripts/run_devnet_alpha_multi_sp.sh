@@ -405,7 +405,7 @@ data["app_state"]["evm"] = evm
 
 # Optional devnet overrides for polystore params (useful for fast CI/E2E loops).
 app_state = data.get("app_state", {})
-module_key = "polystorechain" if "polystorechain" in app_state else "nilchain"
+module_key = "nilchain" if "nilchain" in app_state else "polystorechain"
 polystorechain = app_state.get(module_key, {})
 params = polystorechain.get("params", {}) if isinstance(polystorechain, dict) else {}
 default_denom = (os.getenv("POLYSTORE_DENOM") or "stake").strip() or "stake"
