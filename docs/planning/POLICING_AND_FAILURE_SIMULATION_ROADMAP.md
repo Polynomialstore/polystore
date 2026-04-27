@@ -688,12 +688,16 @@ Missing desired-state pieces include:
    claimed. `types.DevnetPolicingParams()` now captures the first
    simulator-backed non-zero devnet profile: `150stake` minimum bond,
    `5stake` per active/pending assignment, 50% hard-fault bond burn, and an
-   unbonding queue spanning the configured hard-fault jail window. The
-   multi-provider devnet runner applies that profile by default and registers
-   local providers with `200stake` self-bond. A staking-module integration
-   guardrail now records explicit provider/delegator/validator bindings and
-   exposes observed delegation through `ProviderStakingSummary`, but the binding
-   is intentionally `observed_only_no_provider_slash` and
+   unbonding queue spanning the configured hard-fault jail window. The policy
+   simulator now models that burn through `slash_hard_fault_bps`, with
+   reason-specific override knobs for corrupt retrieval and invalid synthetic
+   proof evidence, while keeping the old absolute `slash_hard_fault` value as a
+   legacy fallback. The multi-provider devnet runner applies that profile by
+   default and registers local providers with `200stake` self-bond. A
+   staking-module integration guardrail now records explicit
+   provider/delegator/validator bindings and exposes observed delegation through
+   `ProviderStakingSummary`, but the binding is intentionally
+   `observed_only_no_provider_slash` and
    `counts_toward_assignment_collateral=false`. Remaining work is defining the
    slash-safe path from provider faults to validator/delegation liability before
    any delegated stake can back assignment headroom.

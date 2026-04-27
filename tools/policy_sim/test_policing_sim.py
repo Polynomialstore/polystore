@@ -112,6 +112,34 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(0, result.totals["corrupt_responses"])
         self.assertEqual(0, result.totals["paid_corrupt_bytes"])
 
+    def test_hard_fault_slash_bps_scales_with_remaining_bond(self):
+        faults = [f"invalid-proof:sp-{idx:03d}:1.0" for idx in range(12)]
+        base = {
+            "scenario": "ideal",
+            "seed": 119,
+            "providers": 12,
+            "users": 1,
+            "deals": 1,
+            "epochs": 1,
+            "retrievals_per_user_per_epoch": 0,
+            "enforcement_mode": "SLASH_SIMULATED",
+            "provider_initial_bond": 10.0,
+            "slash_hard_fault": 0.0,
+        }
+
+        low = PolicySimulator(
+            SimConfig(**base, slash_invalid_synthetic_proof_bps=1000),
+            extra_faults=faults,
+        ).run()
+        high = PolicySimulator(
+            SimConfig(**base, slash_invalid_synthetic_proof_bps=5000),
+            extra_faults=faults,
+        ).run()
+
+        self.assertGreater(low.totals["provider_slashed"], 0)
+        self.assertGreater(high.totals["provider_slashed"], low.totals["provider_slashed"])
+        self.assertLessEqual(high.totals["provider_slashed"], base["providers"] * base["provider_initial_bond"])
+
     def test_custom_fault_injection(self):
         config = SimConfig(scenario="ideal", providers=24, deals=8, users=40, epochs=6)
         result = PolicySimulator(
@@ -593,10 +621,7 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertEqual(200, round(cfg["provider_initial_bond"] * scale))
         self.assertEqual(150, round(cfg["provider_min_bond"] * scale))
         self.assertEqual(5, round(cfg["provider_bond_per_slot"] * scale))
-        self.assertEqual(
-            5000,
-            round((cfg["slash_hard_fault"] / cfg["provider_initial_bond"]) * 10_000),
-        )
+        self.assertEqual(5000, cfg["slash_hard_fault_bps"])
 
     def test_provider_bond_opportunity_cost_surfaces_churn_pressure(self):
         config = SimConfig(

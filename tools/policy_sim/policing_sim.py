@@ -231,6 +231,9 @@ class SimConfig:
     provider_min_bond: float = 0.0
     provider_bond_per_slot: float = 0.0
     slash_hard_fault: float = 1.0
+    slash_hard_fault_bps: int = 0
+    slash_corrupt_retrieval_bps: int = 0
+    slash_invalid_synthetic_proof_bps: int = 0
     jail_epochs: int = 3
     elasticity_trigger_retrievals_per_epoch: int = 0
     elasticity_base_cost: float = 1.0
@@ -417,6 +420,15 @@ class SimConfig:
             raise ValueError("provider_bond_per_slot must be non-negative")
         if self.provider_bond_opportunity_cost_bps_per_epoch < 0:
             raise ValueError("provider_bond_opportunity_cost_bps_per_epoch must be non-negative")
+        if self.slash_hard_fault < 0:
+            raise ValueError("slash_hard_fault must be non-negative")
+        for key, value in {
+            "slash_hard_fault_bps": self.slash_hard_fault_bps,
+            "slash_corrupt_retrieval_bps": self.slash_corrupt_retrieval_bps,
+            "slash_invalid_synthetic_proof_bps": self.slash_invalid_synthetic_proof_bps,
+        }.items():
+            if value < 0 or value > 10_000:
+                raise ValueError(f"{key} must be in [0, 10000]")
         if self.provider_entry_reserve_count < 0:
             raise ValueError("provider_entry_reserve_count must be non-negative")
         if self.provider_entry_reserve_count > self.providers:
@@ -2244,7 +2256,7 @@ class PolicySimulator:
         if self.mode_at_least("JAIL_SIMULATED"):
             provider.jailed_until_epoch = max(provider.jailed_until_epoch, epoch + self.config.jail_epochs)
         if self.mode_at_least("SLASH_SIMULATED"):
-            slash = min(provider.bond, self.config.slash_hard_fault)
+            slash = min(provider.bond, self._hard_fault_slash_amount(provider, reason))
             provider.bond -= slash
             provider.slashed += slash
             self.evidence_rows.append(
@@ -2258,6 +2270,19 @@ class PolicySimulator:
                     "consequence": "slash_simulated",
                 }
             )
+
+    def _hard_fault_slash_amount(self, provider: Provider, reason: str) -> float:
+        bps = self._hard_fault_slash_bps(reason)
+        if bps > 0:
+            return provider.bond * bps / 10_000
+        return self.config.slash_hard_fault
+
+    def _hard_fault_slash_bps(self, reason: str) -> int:
+        if reason == "corrupt_retrieval" and self.config.slash_corrupt_retrieval_bps > 0:
+            return self.config.slash_corrupt_retrieval_bps
+        if reason == "invalid_synthetic_proof" and self.config.slash_invalid_synthetic_proof_bps > 0:
+            return self.config.slash_invalid_synthetic_proof_bps
+        return self.config.slash_hard_fault_bps
 
     def _record_evidence(
         self,
