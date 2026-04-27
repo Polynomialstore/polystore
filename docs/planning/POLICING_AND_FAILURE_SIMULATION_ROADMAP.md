@@ -669,10 +669,11 @@ Missing desired-state pieces include:
    assignment summaries remain the observability surface. Provider collateral
    summaries, provider health, placement, reward eligibility, and repair
    candidate selection now consume the lock ledger as the active/pending
-   assignment count source when the policy is enabled and lock rows exist,
-   falling back to deal snapshots only for zero-collateral or pre-lock migration
-   state. Remaining work is to make unbond, staking-module integration, and
-   unbonding delays consume this ledger as canonical slash/liability state.
+   assignment count source when the policy is enabled and a complete lock set
+   exists for the active deal, falling back per deal to slot snapshots for
+   zero-collateral, pre-lock migration, or partial-lock state. Remaining work is
+   to make unbond, staking-module integration, and unbonding delays consume this
+   ledger as canonical slash/liability state.
 2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
    has explicit per-slot `RepairAttemptState`, a query surface, and
    governance-tunable `repair_backoff_epochs` cooldown suppression after

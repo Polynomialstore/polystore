@@ -248,6 +248,50 @@ func TestProviderCollateralSummaryUsesAssignmentLockLedgerWhenEnabled(t *testing
 	require.Equal(t, before.Collateral.TotalAssignments, after.Collateral.TotalAssignments)
 }
 
+func TestProviderCollateralSummaryFallsBackPerDealForPreLockAssignments(t *testing.T) {
+	f := initFixture(t)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+
+	require.NoError(t, f.keeper.Params.Set(ctx, collateralPolicyParams(0, 25)))
+	providers := make([]string, 0, 20)
+	for i := 0; i < 20; i++ {
+		providers = append(providers, makePolicyTestAddr(t, f, byte(i+1)))
+	}
+	legacyProvider := makePolicyTestAddr(t, f, 0xFA)
+	providersWithLegacy := append(append([]string{}, providers...), legacyProvider)
+	registerPolicyTestProviders(t, f, ctx, providersWithLegacy...)
+	for _, provider := range providersWithLegacy {
+		setProviderBondForTest(t, f, ctx, provider, 100)
+	}
+
+	owner := makePolicyTestAddr(t, f, 0xEE)
+	res, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		InitialEscrowAmount: math.NewInt(1_000_000),
+		MaxMonthlySpend:     math.NewInt(500_000),
+	})
+	require.NoError(t, err)
+	locks, err := queryServer.ListAssignmentCollateralLocksByDeal(ctx, &types.QueryListAssignmentCollateralLocksByDealRequest{
+		DealId:     res.DealId,
+		Pagination: &sdkquery.PageRequest{Limit: 100, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, locks.Locks)
+
+	legacyDeal := mode2PolicyTestDeal(99, owner, []string{legacyProvider})
+	require.NoError(t, f.keeper.Deals.Set(ctx, legacyDeal.Id, legacyDeal))
+
+	legacy, err := queryServer.GetProviderCollateral(ctx, &types.QueryGetProviderCollateralRequest{Address: legacyProvider})
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), legacy.Collateral.ActiveAssignments)
+	require.Equal(t, uint64(0), legacy.Collateral.PendingAssignments)
+	require.Equal(t, uint64(1), legacy.Collateral.TotalAssignments)
+}
+
 func TestProviderCollateralSummaryIgnoresExpiredAssignmentLocks(t *testing.T) {
 	f := initFixture(t)
 	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
