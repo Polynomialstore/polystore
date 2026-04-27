@@ -74,6 +74,11 @@ func TestStartSlotRepairClearsStaleReadiness(t *testing.T) {
 	setup := setupManualSlotRepair(t, "General:rs=8+4")
 
 	markMode2RepairReadyForTest(t, setup.f, setup.ctx, setup.deal.Id, 0, 0)
+	require.NoError(t, setup.f.keeper.Mode2RepairReadinessProofs.Set(
+		setup.ctx,
+		collections.Join(setup.deal.Id, uint32(0)),
+		7,
+	))
 
 	_, err := setup.msgServer.StartSlotRepair(setup.ctx, &types.MsgStartSlotRepair{
 		Creator:         setup.owner,
@@ -84,6 +89,8 @@ func TestStartSlotRepairClearsStaleReadiness(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = setup.f.keeper.Mode2RepairReadiness.Get(setup.ctx, collections.Join(setup.deal.Id, uint32(0)))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	_, err = setup.f.keeper.Mode2RepairReadinessProofs.Get(setup.ctx, collections.Join(setup.deal.Id, uint32(0)))
 	require.ErrorIs(t, err, collections.ErrNotFound)
 }
 

@@ -466,6 +466,11 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	if err := k.distributeBaseRewardPool(sdkCtx, epochID); err != nil {
 		return err
 	}
+	// Finalize health transitions after reward accounting so a provider jailed
+	// through this epoch cannot earn by expiring at the boundary height.
+	if err := k.applyProviderHealthEpochDecay(sdkCtx, epochID); err != nil {
+		return err
+	}
 	// Run controlled churn after rewards are distributed so a draining provider
 	// is still paid for the epoch they served.
 	if err := k.scheduleDrainingRepairs(sdkCtx, epochID); err != nil {

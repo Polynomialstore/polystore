@@ -792,6 +792,17 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	require.True(t, res.Success)
 	require.Equal(t, uint32(0), res.Tier) // Platinum
 	t.Logf("Proof Accepted! Reward: %s", res.RewardAmount)
+	aggregateReward, err := f.keeper.ProviderRewards.Get(f.ctx, assignedProvider)
+	require.NoError(t, err)
+	storageReward, err := f.keeper.ProviderStorageRewards.Get(f.ctx, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, aggregateReward, storageReward)
+	bandwidthReward, err := f.keeper.ProviderBandwidthRewards.Get(f.ctx, assignedProvider)
+	if err == nil {
+		require.True(t, bandwidthReward.IsZero())
+	} else {
+		require.ErrorIs(t, err, collections.ErrNotFound)
+	}
 
 	// Health stub: ensure that no failures are recorded for this
 	// (deal, provider) pair after a successful proof.

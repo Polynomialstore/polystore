@@ -43,11 +43,11 @@ The current repo already contains several enforcement surfaces:
 | Mode 2 slot state | Explicit `mode2_slots`, `ACTIVE` / `REPAIRING`, pending providers, and generation tracking exist. |
 | Retrieval sessions | Data-plane session gating exists on primary fetch paths. |
 | Quotas and credits | Epoch quotas, organic credits, synthetic proof accounting, and missed-epoch tracking exist. |
-| Repair | Make-before-break slot repair and deterministic replacement selection exist. |
+| Repair | Make-before-break slot repair, deterministic replacement selection, repair-attempt cooldown, and quota-backed catch-up readiness exist. |
 | Draining | Provider draining and bounded repair scheduling exist. |
 | Audit and deputy paths | Protocol audit tasks, deputy-served accounting, and protocol sessions are partially wired. |
 | Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with indexed, paginated query surfaces. |
-| Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates latest provider-centric lifecycle signals from structured evidence and registration state, and first enforcement gates consume it for placement, setup bumping, repair replacement, and base rewards. |
+| Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates provider lifecycle signals from structured evidence and registration state; placement, setup bumping, repair replacement, base rewards, proof-time reward eligibility, soft-fault decay, and hard-fault jail/reputation consequences consume it. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -609,10 +609,13 @@ delinquency.
 | `EXPIRED` | Deal expired; slot no longer serves. | No | No | Deal expiry / GC. |
 
 Current implementation already has `ACTIVE`, `REPAIRING`, `pending_provider`,
-`repair_target_gen`, and a first-generation `Mode2RepairReadiness` keeper
-ledger. The readiness ledger is set by valid pending-provider proof activity
-while a slot is repairing, and promotion checks that readiness before swapping
-the active provider. Keeper state now also includes `SlotHealthState`, which
+`repair_target_gen`, a `Mode2RepairReadiness` keeper ledger, and a
+`Mode2RepairReadinessProofs` progress counter. Readiness is no longer a
+single-proof marker: valid pending-provider proof activity accumulates while a
+slot is repairing, and promotion readiness flips only after the pending provider
+satisfies `repair_readiness_quota_bps` of the slot's normal liveness quota.
+Promotion checks that readiness before swapping the active provider. Keeper
+state now also includes `SlotHealthState`, which
 surfaces derived `HEALTHY`, `SUSPECT`, `DELINQUENT`, `REPAIRING`,
 `CATCHUP_READY`, `ACTIVE_PROMOTED`, and `REPAIR_BACKOFF` states with reason
 codes and the last structured evidence id. The policy simulator mirrors this
@@ -629,23 +632,30 @@ excluded from new placement, setup-bump candidates, and repair replacement
 candidates. Base reward eligibility also excludes `DELINQUENT`, `JAILED`, and
 `EXITED` provider lifecycle states while preserving the existing policy that
 draining providers can still be paid for the epoch they served before scheduled
-drain repair runs. `DEGRADED` remains observable rather than punitive until
-decay windows, caps, and calibration are explicit.
+drain repair runs. Proof-time rewards now use split storage-vs-bandwidth claim
+ledgers so storage rewards mint on withdrawal while bandwidth payouts transfer
+from escrowed module funds. Reward-ineligible provider health states can submit
+valid proofs for observability, but they do not earn storage rewards,
+bandwidth payments, or reputation. Hard/slashable evidence now applies a
+governance-parametrized first-pass consequence: reputation slash plus temporary
+provider jail recorded in `ProviderJailUntil`; token-bond slashing remains a
+separate future integration. Soft-fault health has epoch-window decay through
+`provider_health_decay_epochs` and `provider_health_decay_bps`.
 
 Missing desired-state pieces include:
 
-1. Provider-wide lifecycle enforcement from `ProviderHealthState` into
-   proof-time reward accounting, jail, slash, and exit gates. New placement,
-   setup bumping, repair replacement, and base rewards now consume provider
-   health, but proof-time storage/bandwidth reward accounting is not yet split
-   enough to safely apply calibrated reward exclusion there.
+1. Bond/collateral-backed slashing and underbonded-provider repair-away
+   semantics. Current hard-fault policy jails and reputation-slashes the
+   provider but does not yet burn bonded collateral or enforce assignment
+   collateral.
 2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
    has explicit per-slot `RepairAttemptState`, a query surface, and
    governance-tunable `repair_backoff_epochs` cooldown suppression after
-   backoff. Remaining work is calibrated attempt caps, provider/operator scoped
-   cooldowns, and jail/slash escalation rules backed by simulator sweeps.
-3. Full catch-up proofs for all data/generation ranges, beyond the current
-   readiness marker.
+   backoff. Remaining work is calibrated attempt caps and provider/operator
+   scoped cooldowns backed by simulator sweeps.
+3. Full data-plane catch-up manifests/range proofs. The keeper now requires a
+   quota-backed pending-provider proof window before promotion, but it still
+   does not prove every repaired byte or generation range.
 4. UI and deeper gateway consumption of the slot-health and provider-health
    queries for operator tooling and user-facing degraded-route explanations.
    Provider-daemon `/status` now surfaces chain-derived provider health for the
@@ -952,8 +962,11 @@ Potential state additions:
    `ProviderHealthState.lifecycle_status` as observational state.
 2. `ProviderHealthState(provider, epoch_window)`. **Landed first pass:** records
    latest provider lifecycle signal, reason, evidence class, severity, last
-   evidence/deal/slot, and soft/hard/repair counters. Epoch-window decay and
-   enforcement consumption remain pending.
+   evidence/deal/slot, and soft/hard/repair counters. **Enforcement update:**
+   placement, setup bumping, repair replacement, base rewards, proof-time reward
+   claims, reputation accrual, soft-fault decay, and hard-fault jailing now
+   consume this lifecycle state. Remaining work is simulator-backed calibration
+   plus bond/collateral integration.
 3. `ProviderCapabilityScore(provider)` or explicit capability tiers.
 4. `SlotHealthState(deal_id, slot)`. **Landed first pass:** records latest
    per-slot health, reason, evidence class, severity, counters, pending
@@ -963,7 +976,11 @@ Potential state additions:
    cooldown-until epoch, pending provider, target generation, and latest
    evidence case ID. Attempt caps and provider/operator scoped throttles remain
    pending.
-6. `RepairReadinessProof(deal_id, slot, pending_provider, gen)`.
+6. `RepairReadinessProof(deal_id, slot, pending_provider, gen)`. **Landed
+   keeper first pass:** `Mode2RepairReadinessProofs` tracks counted
+   pending-provider proofs and `Mode2RepairReadiness` flips only after the
+   configured catch-up quota share. Remaining work is data-plane catch-up
+   manifests/range coverage.
 7. `EvidenceCase(evidence_id)`. **Landed first pass:** records structured
    reason, provider, slot, reporter, evidence class, severity, status,
    slashability, failure accounting, epoch, and consequence ceiling. Evidence
@@ -971,7 +988,9 @@ Potential state additions:
 8. `NonResponseAccumulator(provider, deal_id, slot, window)`.
 9. `ProviderBondState(provider)`.
 10. `AssignmentCollateral(provider, deal_id, slot)`.
-11. `ProviderJailState(provider)`.
+11. `ProviderJailState(provider)`. **Landed first pass:** `ProviderJailUntil`
+    stores hard-fault jail expiry heights and epoch hooks restore providers
+    when the jail window expires.
 12. Overlay or elasticity state for high-demand deals.
 13. `DynamicPricingState(epoch)`.
 14. `TotalActiveSlotBytes` accumulator.
@@ -991,8 +1010,10 @@ Likely params:
 3. Repair cooldown and attempt caps. **Landed first pass:** `repair_backoff_epochs`
    controls per-slot automatic retry cooldown after backoff; calibrated attempt
    caps remain pending.
-4. Jail durations by evidence class.
-5. Slash bps by hard-fault class.
+4. Jail durations by evidence class. **Landed first pass:** `jail_hard_fault_epochs`
+   controls hard/slashable evidence jail duration.
+5. Slash bps by hard-fault class. **Partial:** `hard_fault_reputation_slash_bps`
+   controls reputation slash. Token-bond slash bps remain pending.
 6. Minimum provider bond and assignment collateral formula.
 7. Probation assignment caps.
 8. High-bandwidth promotion thresholds.
@@ -1005,6 +1026,10 @@ Likely params:
 15. Retrieval burn bps and base fee defaults.
 16. Storage and retrieval affordability floors for devnet/testnet launch.
 17. Assignment collateral formula and bond months.
+18. Soft-fault decay window and decay rate. **Landed first pass:**
+    `provider_health_decay_epochs` and `provider_health_decay_bps`.
+19. Pending-provider catch-up quota share. **Landed first pass:**
+    `repair_readiness_quota_bps`.
 
 ### 23.3 Messages
 
@@ -2045,6 +2070,11 @@ for later work.
 | Expired protocol retrieval sessions do not bill | `OpenProtocolRetrievalSession` must reject expired deals before protocol budget moves or session state is created, for both audit and repair purposes. | Keeper message guard. |
 | Ghosting remains a soft-fault path | Provider non-response/ghosting is handled through missed service, reward exclusion, deputy evidence, and repair readiness; it is not automatically slash/jail behavior in this stack. | Existing keeper policy; e2e evidence still incomplete. |
 | Repair attempts are explicit protocol state | Automatic quota/deputy/drain/rotation/health-eviction repairs and manual repairs write `RepairAttemptState`; repair backoff sets `cooldown_until_epoch` and suppresses immediate automatic retry for `repair_backoff_epochs`. | Keeper state, params, and query API. |
+| Pending repair promotion requires catch-up progress | A repairing slot's pending provider must accumulate counted proof progress and satisfy `repair_readiness_quota_bps` of the normal slot quota before `Mode2RepairReadiness` permits promotion. | Keeper state and promotion guard. |
+| Proof-time rewards are split by source | Storage/performance rewards are recorded as inflationary storage claims; retrieval bandwidth payments are recorded as escrow-funded bandwidth claims; the legacy aggregate remains compatibility-only. | Keeper reward ledgers and withdrawal accounting. |
+| Unhealthy providers do not earn proof-time rewards | `DELINQUENT`, `JAILED`, and `EXITED` provider health states can submit valid proofs for observability, but storage rewards, bandwidth payments, and reputation accrual are excluded. | Keeper reward policy. |
+| Hard proof faults jail and reputation-slash providers | Hard/slashable structured evidence applies `hard_fault_reputation_slash_bps` and, when enabled, stores `ProviderJailUntil` for `jail_hard_fault_epochs`. | Keeper evidence consequences; token-bond slashing still pending. |
+| Soft-fault health can decay | At epoch boundaries, soft-fault counters decay after `provider_health_decay_epochs` quiet epochs by `provider_health_decay_bps`, allowing degraded/delinquent providers to return to active health without manual intervention. | Keeper epoch policy. |
 
 ### 35.2 Required Test Layers
 
@@ -2096,7 +2126,9 @@ The current stack can be considered testing-complete when:
 7. What operator maintenance mode is needed before "draining" becomes the only clean exit path?
 8. Which degraded behaviors should affect placement priority before they affect economic penalties?
 9. What is the minimum proof of readiness before a pending provider can be
-   promoted?
+   promoted? Initial keeper answer: `repair_readiness_quota_bps` of the normal
+   slot liveness quota. Remaining question: whether data-plane catch-up proofs
+   must cover every repaired byte/range before mainnet.
 10. What are the promotion and demotion thresholds for high-bandwidth SPs?
 11. How should overlay elasticity be represented in `mode2_slots` or successor
     state?
