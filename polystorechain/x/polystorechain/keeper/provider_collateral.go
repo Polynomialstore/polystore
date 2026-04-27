@@ -22,6 +22,23 @@ func (s providerAssignmentCountSnapshot) countsFor(providerAddr string) (uint64,
 	return counts.active, counts.pending
 }
 
+func assignmentCountTotal(active uint64, pending uint64) uint64 {
+	total, overflow := addUint64(active, pending)
+	if overflow {
+		return ^uint64(0)
+	}
+	return total
+}
+
+func assignmentCountWithAdditional(active uint64, pending uint64, additional uint64) uint64 {
+	total := assignmentCountTotal(active, pending)
+	total, overflow := addUint64(total, additional)
+	if overflow {
+		return ^uint64(0)
+	}
+	return total
+}
+
 func (s providerAssignmentCountSnapshot) incrementPending(providerAddr string) {
 	providerAddr = strings.TrimSpace(providerAddr)
 	if providerAddr == "" {
@@ -102,12 +119,7 @@ func (k Keeper) providerAssignmentCollateralIneligibility(ctx sdk.Context, provi
 
 func (k Keeper) providerAssignmentCollateralIneligibilityWithCounts(ctx sdk.Context, provider types.Provider, additionalAssignments uint64, counts providerAssignmentCountSnapshot) string {
 	active, pending := counts.countsFor(provider.Address)
-	assignments, overflow := addUint64(active, pending)
-	if overflow {
-		assignments = ^uint64(0)
-	} else if assignments, overflow = addUint64(assignments, additionalAssignments); overflow {
-		assignments = ^uint64(0)
-	}
+	assignments := assignmentCountWithAdditional(active, pending, additionalAssignments)
 	return providerBondPlacementIneligibilityForAssignments(provider, k.GetParams(ctx), assignments)
 }
 
@@ -117,6 +129,71 @@ func (k Keeper) affordableActiveAssignments(ctx sdk.Context, provider types.Prov
 		return 0, "", err
 	}
 	return affordable, reason, nil
+}
+
+func (k Keeper) deriveProviderCollateralSummary(ctx sdk.Context, provider types.Provider, counts providerAssignmentCountSnapshot) (types.ProviderCollateralSummary, error) {
+	providerAddr := strings.TrimSpace(provider.Address)
+	params := k.GetParams(ctx)
+
+	minBond, err := normalizeMinProviderBond(params)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+	perSlot, err := normalizeAssignmentCollateralPerSlot(params)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+	active, pending := counts.countsFor(providerAddr)
+	total := assignmentCountTotal(active, pending)
+	required, err := providerBondRequirementForAssignments(params, total)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+	affordable, affordableReason, err := providerBondAffordableAssignments(provider, params)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+
+	bond := normalizeCoinAmount(provider.Bond)
+	if strings.TrimSpace(bond.Denom) == "" {
+		bond.Denom = minBond.Denom
+	}
+
+	summary := types.ProviderCollateralSummary{
+		Provider:                    providerAddr,
+		ActiveAssignments:           active,
+		PendingAssignments:          pending,
+		TotalAssignments:            total,
+		Bond:                        bond,
+		MinProviderBond:             minBond,
+		AssignmentCollateralPerSlot: perSlot,
+		RequiredCollateral:          required,
+		AffordableAssignments:       affordable,
+	}
+
+	if affordable == ^uint64(0) {
+		summary.UnlimitedAssignments = true
+	} else if affordable >= total {
+		summary.AssignmentHeadroom = affordable - total
+	} else {
+		summary.OverassignedAssignments = total - affordable
+	}
+
+	reason, err := k.providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx, provider, 1, counts)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+	if reason != "" {
+		summary.EligibleForNewAssignment = false
+		summary.IneligibilityReason = reason
+	} else {
+		summary.EligibleForNewAssignment = true
+	}
+	if summary.IneligibilityReason == "" && affordableReason != "" {
+		summary.IneligibilityReason = affordableReason
+	}
+
+	return summary, nil
 }
 
 func (k Keeper) scheduleUnderbondedRepairs(ctx sdk.Context, epochID uint64) error {

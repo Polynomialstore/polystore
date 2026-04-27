@@ -124,6 +124,24 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 					"last_evidence_case_id": "42",
 				},
 			})
+		case "/polystorechain/polystorechain/v1/providers/nil1providerstatus/collateral":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"collateral": map[string]any{
+					"provider":                       "nil1providerstatus",
+					"active_assignments":             "2",
+					"pending_assignments":            "1",
+					"total_assignments":              "3",
+					"bond":                           map[string]string{"denom": "stake", "amount": "150"},
+					"min_provider_bond":              map[string]string{"denom": "stake", "amount": "50"},
+					"assignment_collateral_per_slot": map[string]string{"denom": "stake", "amount": "25"},
+					"required_collateral":            map[string]string{"denom": "stake", "amount": "125"},
+					"affordable_assignments":         "4",
+					"unlimited_assignments":          false,
+					"assignment_headroom":            "1",
+					"overassigned_assignments":       "0",
+					"eligible_for_new_assignment":    true,
+				},
+			})
 		case "/polystorechain/polystorechain/v1/provider-pairings/nil1providerstatus":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
@@ -188,6 +206,36 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 	}
 	if status.Provider.HealthEvidenceCase != "42" {
 		t.Fatalf("unexpected health evidence case: got=%q", status.Provider.HealthEvidenceCase)
+	}
+	if status.Provider.CollateralBond != "150stake" {
+		t.Fatalf("unexpected collateral bond: got=%q", status.Provider.CollateralBond)
+	}
+	if status.Provider.CollateralRequired != "125stake" {
+		t.Fatalf("unexpected required collateral: got=%q", status.Provider.CollateralRequired)
+	}
+	if status.Provider.ActiveAssignments != "2" {
+		t.Fatalf("unexpected active assignment count: got=%q", status.Provider.ActiveAssignments)
+	}
+	if status.Provider.PendingAssignments != "1" {
+		t.Fatalf("unexpected pending assignment count: got=%q", status.Provider.PendingAssignments)
+	}
+	if status.Provider.TotalAssignments != "3" {
+		t.Fatalf("unexpected total assignment count: got=%q", status.Provider.TotalAssignments)
+	}
+	if status.Provider.AffordableSlots != "4" {
+		t.Fatalf("unexpected affordable slots: got=%q", status.Provider.AffordableSlots)
+	}
+	if status.Provider.AssignmentHeadroom != "1" {
+		t.Fatalf("unexpected assignment headroom: got=%q", status.Provider.AssignmentHeadroom)
+	}
+	if status.Provider.OverassignedSlots != "0" {
+		t.Fatalf("unexpected overassigned slots: got=%q", status.Provider.OverassignedSlots)
+	}
+	if status.Provider.UnlimitedSlots {
+		t.Fatal("expected unlimited_slots=false")
+	}
+	if !status.Provider.CanAcceptNewSlot {
+		t.Fatal("expected can_accept_new_slot=true")
 	}
 	if status.Provider.LocalBase != strings.TrimRight(localSrv.URL, "/") {
 		t.Fatalf("unexpected local base: got=%q want=%q", status.Provider.LocalBase, strings.TrimRight(localSrv.URL, "/"))

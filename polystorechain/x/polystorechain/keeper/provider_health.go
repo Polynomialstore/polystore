@@ -128,6 +128,14 @@ func providerLifecycleFromEvidence(ev types.EvidenceCase, current types.Provider
 }
 
 func (k Keeper) deriveProviderHealthState(ctx sdk.Context, providerAddr string) (types.ProviderHealthState, error) {
+	counts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return types.ProviderHealthState{}, err
+	}
+	return k.deriveProviderHealthStateWithCounts(ctx, providerAddr, counts)
+}
+
+func (k Keeper) deriveProviderHealthStateWithCounts(ctx sdk.Context, providerAddr string, counts providerAssignmentCountSnapshot) (types.ProviderHealthState, error) {
 	providerAddr = strings.TrimSpace(providerAddr)
 	if providerAddr == "" {
 		return types.ProviderHealthState{}, collections.ErrNotFound
@@ -136,12 +144,9 @@ func (k Keeper) deriveProviderHealthState(ctx sdk.Context, providerAddr string) 
 	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
 	if err == nil {
 		if provider, providerErr := k.Providers.Get(ctx, providerAddr); providerErr == nil {
-			active, pending, countErr := k.providerMode2AssignmentCounts(ctx, providerAddr)
-			if countErr != nil {
-				return types.ProviderHealthState{}, countErr
-			}
+			active, pending := counts.countsFor(providerAddr)
 			health = providerHealthFromProviderOverlay(health, provider, ctx.BlockHeight())
-			health = overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight(), active+pending)
+			health = overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight(), assignmentCountTotal(active, pending))
 		}
 		return health, nil
 	}
@@ -154,11 +159,8 @@ func (k Keeper) deriveProviderHealthState(ctx sdk.Context, providerAddr string) 
 		return types.ProviderHealthState{}, err
 	}
 	health = providerHealthFromProvider(provider, ctx.BlockHeight())
-	active, pending, err := k.providerMode2AssignmentCounts(ctx, providerAddr)
-	if err != nil {
-		return types.ProviderHealthState{}, err
-	}
-	return overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight(), active+pending), nil
+	active, pending := counts.countsFor(providerAddr)
+	return overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight(), assignmentCountTotal(active, pending)), nil
 }
 
 func providerLifecyclePlacementIneligibility(status types.ProviderLifecycleStatus) string {
