@@ -89,7 +89,7 @@ func TestAssignmentCollateralLocksSyncOnCreateDeal(t *testing.T) {
 }
 
 func TestAssignmentCollateralLocksMoveAcrossRepairLifecycle(t *testing.T) {
-	setup := setupManualSlotRepair(t, "General:rs=8+4")
+	setup := setupAssignmentCollateralLockRepair(t)
 	queryServer := keeper.NewQueryServerImpl(setup.f.keeper)
 	oldProvider := setup.deal.Mode2Slots[0].Provider
 
@@ -152,4 +152,46 @@ func TestAssignmentCollateralLocksMoveAcrossRepairLifecycle(t *testing.T) {
 	require.Equal(t, promotedDeal.CurrentGen, promoted.Lock.Generation)
 	require.Equal(t, promotedDeal.Mode2Slots[0].Provider, promoted.Lock.Provider)
 	require.Empty(t, promotedDeal.Mode2Slots[0].PendingProvider)
+}
+
+func setupAssignmentCollateralLockRepair(t *testing.T) manualSlotRepairSetup {
+	t.Helper()
+
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	require.NoError(t, f.keeper.Params.Set(ctx, collateralPolicyParams(0, 25)))
+	providers := make([]string, 0, 20)
+	for i := 0; i < 20; i++ {
+		providers = append(providers, makePolicyTestAddr(t, f, byte(i+1)))
+	}
+	registerPolicyTestProviders(t, f, ctx, providers...)
+	for _, provider := range providers {
+		setProviderBondForTest(t, f, ctx, provider, 100)
+	}
+
+	owner := makePolicyTestAddr(t, f, 0xEE)
+	res, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		MaxMonthlySpend:     math.NewInt(500_000),
+		InitialEscrowAmount: math.NewInt(1_000_000),
+	})
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(ctx, res.DealId)
+	require.NoError(t, err)
+	require.Len(t, deal.Mode2Slots, int(types.DealBaseReplication))
+	require.NotEqual(t, deal.Mode2Slots[0].Provider, deal.Mode2Slots[1].Provider)
+
+	return manualSlotRepairSetup{
+		f:         f,
+		msgServer: msgServer,
+		ctx:       ctx,
+		deal:      deal,
+		owner:     owner,
+		candidate: deal.Mode2Slots[1].Provider,
+	}
 }

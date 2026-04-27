@@ -102,6 +102,9 @@ func (k Keeper) desiredAssignmentCollateralLocksForDeal(ctx sdk.Context, deal ty
 	if err != nil {
 		return nil, err
 	}
+	if !perSlot.IsPositive() {
+		return nil, nil
+	}
 
 	locks := make([]types.AssignmentCollateralLock, 0, len(deal.Mode2Slots))
 	for _, slot := range deal.Mode2Slots {

@@ -661,13 +661,16 @@ Missing desired-state pieces include:
    assignment counts, required collateral, finite headroom, overassignment, and
    new-assignment eligibility. `MsgAddProviderBond` provides the first explicit
    rebond/top-up path for the provider or its paired operator.
+   When `assignment_collateral_per_slot` is positive,
    `AssignmentCollateralLock` now records stateful per-assignment liabilities
    for active slots and pending repair providers, including provider, deal,
-   slot, role, amount, generation, heights, and reason code. Remaining work is
-   to make unbond, staking-module integration, unbonding delays, provider
+   slot, role, amount, generation, heights, and reason code. When per-slot
+   collateral is zero, no collateral-lock entries are materialized and provider
+   assignment summaries remain the observability surface. Remaining work is to
+   make unbond, staking-module integration, unbonding delays, provider
    collateral summaries, and placement/exclusion decisions consume this ledger
    as their source of truth instead of recomputing active/pending assignment
-   counts from deal snapshots.
+   counts from deal snapshots when the policy is enabled.
 2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
    has explicit per-slot `RepairAttemptState`, a query surface, and
    governance-tunable `repair_backoff_epochs` cooldown suppression after
@@ -1019,10 +1022,11 @@ Potential state additions:
     exposes derived assignment-collateral accounting through provider-centric
     queries so operators can see active assignments, pending assignments,
     required collateral, finite headroom, overassignment, and next-assignment
-    eligibility. **Landed third pass:** `AssignmentCollateralLock` stores
-    stateful per-slot liabilities for active assigned providers and pending
-    repair providers, synced on deal writes, repair start, and repair
-    completion. Remaining work is to make collateral summaries, unbond
+    eligibility. **Landed third pass:** when
+    `assignment_collateral_per_slot` is positive,
+    `AssignmentCollateralLock` stores stateful per-slot liabilities for active
+    assigned providers and pending repair providers, synced on deal writes,
+    repair start, and repair completion. Remaining work is to make collateral summaries, unbond
     constraints, and future staking integration consume the lock ledger as the
     canonical liability source.
 11. `ProviderJailState(provider)`. **Landed first pass:** `ProviderJailUntil`
@@ -1116,7 +1120,8 @@ Queries/events should make the system explainable:
    assignments, finite headroom, overassignment, and new-assignment eligibility.
    Provider-daemon `/status` now includes the local provider's collateral
    summary when LCD collateral queries are reachable.
-4. Assignment collateral locks. **Landed first pass:**
+4. Assignment collateral locks. **Landed first pass when per-slot collateral is
+   enabled:**
    `GetAssignmentCollateralLock`, paginated
    `ListAssignmentCollateralLocksByProvider`, and paginated
    `ListAssignmentCollateralLocksByDeal` expose active and pending-repair slot
@@ -2144,8 +2149,8 @@ for later work.
 | Hard proof faults jail, slash reputation, and optionally burn provider bond | Hard/slashable structured evidence applies `hard_fault_reputation_slash_bps`, can burn registered provider bond through `hard_fault_bond_slash_bps`, and stores `ProviderJailUntil` for `jail_hard_fault_epochs` when enabled. | Keeper evidence consequences and bank burn from the isolated provider-bond module account. |
 | Underbonded providers are excluded | When `min_provider_bond` is enabled, providers below the minimum are surfaced as `provider_underbonded` / `DELINQUENT` health and excluded from new placement and rewards. | Keeper provider health, placement, reward, and query policy. |
 | Assignment collateral headroom is enforced | When `assignment_collateral_per_slot` is enabled, placement and repair candidates must have enough bond for existing active/pending assignments plus the new responsibility, and epoch processing starts repair for excess active slots on undercollateralized providers. | Keeper provider health, placement, repair, and epoch policy. |
-| Assignment collateral accounting is queryable | Provider collateral summaries expose bond, policy params, active/pending assignment counts, required collateral, finite headroom, overassignment, and next-assignment eligibility. `AssignmentCollateralLock` additionally exposes stateful active/pending-repair liabilities by provider/deal/slot. | Keeper query API and generated REST gateway routes. |
-| Assignment collateral locks follow repair lifecycle | Starting repair removes the old active slot-provider lock and creates a pending-repair lock for the candidate; completing repair promotes that candidate to the active lock for the slot and generation. | Keeper deal write hook, repair messages, and query API. |
+| Assignment collateral accounting is queryable | Provider collateral summaries expose bond, policy params, active/pending assignment counts, required collateral, finite headroom, overassignment, and next-assignment eligibility. When per-slot collateral is positive, `AssignmentCollateralLock` additionally exposes stateful active/pending-repair liabilities by provider/deal/slot. | Keeper query API and generated REST gateway routes. |
+| Assignment collateral locks follow repair lifecycle | With positive per-slot collateral, starting repair removes the old active slot-provider lock and creates a pending-repair lock for the candidate; completing repair promotes that candidate to the active lock for the slot and generation. | Keeper deal write hook, repair messages, and query API. |
 | Provider bond headroom can be restored | A provider or paired operator can submit `MsgAddProviderBond` with same-denom positive bond; funds move into the isolated provider-bond module account and derived assignment headroom/eligibility updates accordingly. | Keeper message, bank accounting, CLI, and provider-collateral query policy. |
 | Soft-fault health can decay | At epoch boundaries, soft-fault counters decay after `provider_health_decay_epochs` quiet epochs by `provider_health_decay_bps`, allowing degraded/delinquent providers to return to active health without manual intervention. | Keeper epoch policy. |
 
