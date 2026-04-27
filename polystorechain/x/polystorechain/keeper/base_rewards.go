@@ -107,10 +107,12 @@ func (k Keeper) computeBaseRewardWeights(ctx sdk.Context, epochID uint64) (baseR
 				if provider == "" {
 					continue
 				}
+				providerRecord := types.Provider{Address: provider}
 				if p, err := k.Providers.Get(ctx, provider); err == nil {
 					if strings.TrimSpace(p.Status) != "Active" {
 						continue
 					}
+					providerRecord = p
 				} else if !errors.Is(err, collections.ErrNotFound) {
 					return false, err
 				}
@@ -120,7 +122,7 @@ func (k Keeper) computeBaseRewardWeights(ctx sdk.Context, epochID uint64) (baseR
 					return false, fmt.Errorf("total slot bytes overflow")
 				}
 				out.totalActiveSlotBytes = nextActive
-				reason, err := k.providerHealthRewardIneligibility(ctx, provider)
+				reason, err := k.providerHealthRewardIneligibility(ctx, providerRecord)
 				if err != nil {
 					return false, err
 				}
@@ -170,10 +172,12 @@ func (k Keeper) computeBaseRewardWeights(ctx sdk.Context, epochID uint64) (baseR
 				if provider == "" {
 					continue
 				}
+				providerRecord := types.Provider{Address: provider}
 				if p, err := k.Providers.Get(ctx, provider); err == nil {
 					if strings.TrimSpace(p.Status) != "Active" {
 						continue
 					}
+					providerRecord = p
 				} else if !errors.Is(err, collections.ErrNotFound) {
 					return false, err
 				}
@@ -183,7 +187,7 @@ func (k Keeper) computeBaseRewardWeights(ctx sdk.Context, epochID uint64) (baseR
 					return false, fmt.Errorf("total slot bytes overflow")
 				}
 				out.totalActiveSlotBytes = nextActive
-				reason, err := k.providerHealthRewardIneligibility(ctx, provider)
+				reason, err := k.providerHealthRewardIneligibility(ctx, providerRecord)
 				if err != nil {
 					return false, err
 				}

@@ -172,28 +172,36 @@ func (k Keeper) providerHealthPlacementIneligibility(ctx sdk.Context, provider t
 	if providerAddr == "" {
 		return "", nil
 	}
-	health, err := k.deriveProviderHealthState(ctx, providerAddr)
+	if reason := providerLifecyclePlacementIneligibility(providerLifecycleFromRegistration(provider)); reason != "" {
+		return reason, nil
+	}
+	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return "", nil
 		}
 		return "", err
 	}
+	health = providerHealthFromProviderOverlay(health, provider, ctx.BlockHeight())
 	return providerLifecyclePlacementIneligibility(health.LifecycleStatus), nil
 }
 
-func (k Keeper) providerHealthRewardIneligibility(ctx sdk.Context, providerAddr string) (string, error) {
-	providerAddr = strings.TrimSpace(providerAddr)
+func (k Keeper) providerHealthRewardIneligibility(ctx sdk.Context, provider types.Provider) (string, error) {
+	providerAddr := strings.TrimSpace(provider.Address)
 	if providerAddr == "" {
 		return "", nil
 	}
-	health, err := k.deriveProviderHealthState(ctx, providerAddr)
+	if reason := providerLifecycleRewardIneligibility(providerLifecycleFromRegistration(provider)); reason != "" {
+		return reason, nil
+	}
+	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return "", nil
 		}
 		return "", err
 	}
+	health = providerHealthFromProviderOverlay(health, provider, ctx.BlockHeight())
 	return providerLifecycleRewardIneligibility(health.LifecycleStatus), nil
 }
 
