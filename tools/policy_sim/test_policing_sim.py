@@ -598,6 +598,33 @@ class PolicySimulatorTests(unittest.TestCase):
             round((cfg["slash_hard_fault"] / cfg["provider_initial_bond"]) * 10_000),
         )
 
+    def test_provider_bond_opportunity_cost_surfaces_churn_pressure(self):
+        config = SimConfig(
+            scenario="ideal",
+            seed=117,
+            providers=12,
+            users=10,
+            deals=1,
+            epochs=3,
+            retrievals_per_user_per_epoch=0,
+            base_reward_per_slot=0.0,
+            provider_fixed_cost_per_epoch=0.0,
+            provider_storage_cost_per_slot_epoch=0.0,
+            provider_bandwidth_cost_per_retrieval=0.0,
+            provider_initial_bond=10.0,
+            provider_bond_opportunity_cost_bps_per_epoch=100,
+            provider_churn_pnl_threshold=0.0,
+            provider_churn_after_epochs=1,
+        )
+        result = PolicySimulator(config).run()
+
+        self.assertGreater(result.totals["provider_bond_opportunity_cost"], 0)
+        self.assertEqual(result.totals["provider_bond_opportunity_cost"], result.totals["provider_cost"])
+        self.assertEqual(config.providers, result.totals["providers_negative_pnl"])
+        self.assertEqual(config.providers * config.epochs, result.totals["churn_pressure_provider_epochs"])
+        self.assertTrue(all("provider_bond_opportunity_cost" in row for row in result.economy))
+        self.assertTrue(all("bond_opportunity_cost" in row for row in result.providers))
+
     def test_staged_upload_grief_bounds_provisional_generation_pressure(self):
         fixture = Path(__file__).with_name("scenarios") / "staged_upload_grief.yaml"
         spec = load_scenario_spec(fixture)
