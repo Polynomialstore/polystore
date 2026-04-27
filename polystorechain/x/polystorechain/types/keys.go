@@ -11,6 +11,9 @@ const (
 	// ProtocolBudgetModuleName keeps the legacy module-account name for state
 	// compatibility with the existing devnet.
 	ProtocolBudgetModuleName = "nilchain_protocol_budget"
+	// ProviderBondModuleName isolates provider collateral from deal escrow,
+	// reward, retrieval-fee, and protocol-budget module-account flows.
+	ProviderBondModuleName = "nilchain_provider_bond"
 
 	// StoreKey defines the primary module store key
 	StoreKey = ModuleName

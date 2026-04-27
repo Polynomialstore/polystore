@@ -2,6 +2,7 @@ syntax = "proto3";
 package polystorechain.polystorechain.v1;
 
 import "amino/amino.proto";
+import "cosmos/base/v1beta1/coin.proto";
 import "cosmos/msg/v1/msg.proto";
 import "cosmos_proto/cosmos.proto";
 import "gogoproto/gogo.proto";
@@ -131,6 +132,7 @@ message MsgRegisterProvider {
   string capabilities = 2; // "Archive", "General", "Edge"
   uint64 total_storage = 3; // Total storage capacity in bytes
   repeated string endpoints = 4; // Provider endpoints as Multiaddr strings (HTTP first)
+  cosmos.base.v1beta1.Coin bond = 5 [(gogoproto.nullable) = false]; // Optional self-bond; must satisfy min_provider_bond when enabled.
 }
 
 // MsgRegisterProviderResponse defines the response structure for registering a provider.

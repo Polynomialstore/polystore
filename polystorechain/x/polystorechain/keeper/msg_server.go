@@ -334,6 +334,21 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		return nil, err
 	}
 
+	params := k.GetParams(ctx)
+	bond, err := normalizeRegistrationBond(msg.Bond, params)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
+	if bond.Amount.IsPositive() {
+		creatorAddr, err := sdk.AccAddressFromBech32(canonicalCreator)
+		if err != nil {
+			return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid provider address: %s", canonicalCreator)
+		}
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ProviderBondModuleName, sdk.NewCoins(bond)); err != nil {
+			return nil, fmt.Errorf("failed to lock provider bond: %w", err)
+		}
+	}
+
 	// Create new Provider object
 	provider := types.Provider{
 		Address:         canonicalCreator,
@@ -343,6 +358,8 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		Status:          "Active", // Initially active
 		ReputationScore: 100,      // Initial Score
 		Endpoints:       endpoints,
+		Bond:            bond,
+		BondSlashed:     zeroBondLike(bond.Denom),
 	}
 
 	if err := k.Providers.Set(ctx, provider.Address, provider); err != nil {
@@ -355,6 +372,7 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 			sdk.NewAttribute(types.AttributeKeyProvider, provider.Address),
 			sdk.NewAttribute(types.AttributeKeyCapabilities, provider.Capabilities),
 			sdk.NewAttribute(types.AttributeKeyTotalStorage, fmt.Sprintf("%d", provider.TotalStorage)),
+			sdk.NewAttribute("provider_bond", provider.Bond.String()),
 		),
 	)
 

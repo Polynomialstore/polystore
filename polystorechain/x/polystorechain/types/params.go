@@ -50,6 +50,8 @@ var (
 	KeyJailHardFaultEpochs          = []byte("JailHardFaultEpochs")
 	KeyHardFaultReputationSlashBps  = []byte("HardFaultReputationSlashBps")
 	KeyRepairReadinessQuotaBps      = []byte("RepairReadinessQuotaBps")
+	KeyMinProviderBond              = []byte("MinProviderBond")
+	KeyHardFaultBondSlashBps        = []byte("HardFaultBondSlashBps")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -111,6 +113,8 @@ func NewParams(
 	jailHardFaultEpochs uint64,
 	hardFaultReputationSlashBps uint64,
 	repairReadinessQuotaBps uint64,
+	minProviderBond sdk.Coin,
+	hardFaultBondSlashBps uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:               baseStripeCost,
@@ -162,6 +166,8 @@ func NewParams(
 		JailHardFaultEpochs:         jailHardFaultEpochs,
 		HardFaultReputationSlashBps: hardFaultReputationSlashBps,
 		RepairReadinessQuotaBps:     repairReadinessQuotaBps,
+		MinProviderBond:             minProviderBond,
+		HardFaultBondSlashBps:       hardFaultBondSlashBps,
 	}
 }
 
@@ -212,6 +218,8 @@ func DefaultParams() Params {
 		3,       // JailHardFaultEpochs (devnet hard-fault jail window)
 		50,      // HardFaultReputationSlashBps (0.5% reputation slash, min 1)
 		10000,   // RepairReadinessQuotaBps (full quota before catch-up ready)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // MinProviderBond (disabled by default)
+		0, // HardFaultBondSlashBps (disabled until governance/devnet params enable it)
 	)
 }
 
@@ -264,6 +272,8 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyJailHardFaultEpochs, &p.JailHardFaultEpochs, validateUint64Any),
 		paramtypes.NewParamSetPair(KeyHardFaultReputationSlashBps, &p.HardFaultReputationSlashBps, validateBps),
 		paramtypes.NewParamSetPair(KeyRepairReadinessQuotaBps, &p.RepairReadinessQuotaBps, validateBps),
+		paramtypes.NewParamSetPair(KeyMinProviderBond, &p.MinProviderBond, validateProviderBond),
+		paramtypes.NewParamSetPair(KeyHardFaultBondSlashBps, &p.HardFaultBondSlashBps, validateBps),
 	}
 }
 
@@ -410,6 +420,12 @@ func (p Params) Validate() error {
 	if err := validateBps(p.RepairReadinessQuotaBps); err != nil {
 		return err
 	}
+	if err := validateProviderBond(p.MinProviderBond); err != nil {
+		return err
+	}
+	if err := validateBps(p.HardFaultBondSlashBps); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -508,6 +524,26 @@ func validateDealCreationFee(i interface{}) error {
 	}
 	if strings.TrimSpace(v.Denom) != strings.TrimSpace(sdk.DefaultBondDenom) {
 		return fmt.Errorf("deal creation fee denom must be %q (got %q)", sdk.DefaultBondDenom, v.Denom)
+	}
+	return nil
+}
+
+func validateProviderBond(i interface{}) error {
+	v, ok := i.(sdk.Coin)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v.Amount.IsNil() {
+		v.Amount = math.ZeroInt()
+	}
+	if strings.TrimSpace(v.Denom) == "" && v.Amount.IsZero() {
+		return nil
+	}
+	if !v.IsValid() {
+		return fmt.Errorf("invalid provider bond: %s", v)
+	}
+	if strings.TrimSpace(v.Denom) != strings.TrimSpace(sdk.DefaultBondDenom) {
+		return fmt.Errorf("provider bond denom must be %q (got %q)", sdk.DefaultBondDenom, v.Denom)
 	}
 	return nil
 }

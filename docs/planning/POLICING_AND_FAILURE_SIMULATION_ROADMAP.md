@@ -1,6 +1,6 @@
 # PolyStore Policing and Failure Simulation Roadmap
 
-Last updated: 2026-04-26
+Last updated: 2026-04-27
 
 ## 1. Purpose
 
@@ -47,7 +47,8 @@ The current repo already contains several enforcement surfaces:
 | Draining | Provider draining and bounded repair scheduling exist. |
 | Audit and deputy paths | Protocol audit tasks, deputy-served accounting, and protocol sessions are partially wired. |
 | Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with indexed, paginated query surfaces. |
-| Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates provider lifecycle signals from structured evidence and registration state; placement, setup bumping, repair replacement, base rewards, proof-time reward eligibility, soft-fault decay, and hard-fault jail/reputation consequences consume it. |
+| Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates provider lifecycle signals from structured evidence, registration state, and bond headroom; placement, setup bumping, repair replacement, base rewards, proof-time reward eligibility, soft-fault decay, hard-fault jail/reputation consequences, and underbonded exclusion consume it. |
+| Provider bond economics | Provider registration can lock an isolated self-bond, hard/slashable evidence can burn a governance-parametrized bond share from the provider-bond account, provider records expose active/slashed bond, and underbonded providers are excluded from new placement and rewards when `min_provider_bond` is enabled. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -636,18 +637,25 @@ drain repair runs. Proof-time rewards now use split storage-vs-bandwidth claim
 ledgers so storage rewards mint on withdrawal while bandwidth payouts transfer
 from escrowed module funds. Reward-ineligible provider health states can submit
 valid proofs for observability, but they do not earn storage rewards,
-bandwidth payments, or reputation. Hard/slashable evidence now applies a
-governance-parametrized first-pass consequence: reputation slash plus temporary
-provider jail recorded in `ProviderJailUntil`; token-bond slashing remains a
-separate future integration. Soft-fault health has epoch-window decay through
-`provider_health_decay_epochs` and `provider_health_decay_bps`.
+bandwidth payments, or reputation. Hard/slashable evidence now applies
+governance-parametrized first-pass consequences: reputation slash, temporary
+provider jail recorded in `ProviderJailUntil`, and optional token-bond burn
+through `hard_fault_bond_slash_bps`. Provider registration can lock a
+self-bond into a dedicated provider-bond module account, provider records track
+active and cumulative slashed bond, and `min_provider_bond` gates
+placement/reward eligibility by surfacing underbonded providers as
+`DELINQUENT` health. Soft-fault health has
+epoch-window decay through `provider_health_decay_epochs` and
+`provider_health_decay_bps`.
 
 Missing desired-state pieces include:
 
-1. Bond/collateral-backed slashing and underbonded-provider repair-away
-   semantics. Current hard-fault policy jails and reputation-slashes the
-   provider but does not yet burn bonded collateral or enforce assignment
-   collateral.
+1. Assignment collateral and active underbonded repair-away semantics. Current
+   hard-fault policy can burn registered provider bond and exclude underbonded
+   providers from new placement/rewards, but it does not yet calculate
+   per-assignment collateral, provide rebond/unbond flows, or automatically
+   repair away existing active slots solely because the provider fell below
+   collateral headroom.
 2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
    has explicit per-slot `RepairAttemptState`, a query surface, and
    governance-tunable `repair_backoff_epochs` cooldown suppression after
@@ -986,8 +994,13 @@ Potential state additions:
    slashability, failure accounting, epoch, and consequence ceiling. Evidence
    is also indexed by deal for bounded operator queries.
 8. `NonResponseAccumulator(provider, deal_id, slot, window)`.
-9. `ProviderBondState(provider)`.
-10. `AssignmentCollateral(provider, deal_id, slot)`.
+9. `ProviderBondState(provider)`. **Landed first pass:** provider records track
+   active `bond` and cumulative `bond_slashed`; `MsgRegisterProvider` can lock
+   initial bond in the dedicated `nilchain_provider_bond` module account;
+   hard-fault policy can burn bond without touching deal escrow, reward,
+   retrieval-fee, or protocol-budget funds.
+10. `AssignmentCollateral(provider, deal_id, slot)`. Still pending as a
+    calibrated per-assignment formula and ledger.
 11. `ProviderJailState(provider)`. **Landed first pass:** `ProviderJailUntil`
     stores hard-fault jail expiry heights and epoch hooks restore providers
     when the jail window expires.
@@ -1012,9 +1025,12 @@ Likely params:
    caps remain pending.
 4. Jail durations by evidence class. **Landed first pass:** `jail_hard_fault_epochs`
    controls hard/slashable evidence jail duration.
-5. Slash bps by hard-fault class. **Partial:** `hard_fault_reputation_slash_bps`
-   controls reputation slash. Token-bond slash bps remain pending.
-6. Minimum provider bond and assignment collateral formula.
+5. Slash bps by hard-fault class. **Landed first pass:**
+   `hard_fault_reputation_slash_bps` controls reputation slash and
+   `hard_fault_bond_slash_bps` controls optional token-bond burn.
+6. Minimum provider bond and assignment collateral formula. **Partial:**
+   `min_provider_bond` gates placement/reward eligibility and underbonded
+   provider health; calibrated per-slot collateral remains pending.
 7. Probation assignment caps.
 8. High-bandwidth promotion thresholds.
 9. Performance tier windows and multipliers.
@@ -1042,7 +1058,10 @@ Likely messages:
 4. `MsgSetProviderMaintenance` distinct from full draining.
 5. `MsgRequestSlotExit` convenience path for voluntary provider exit.
 6. `MsgSignalSaturation` hardening for Mode 2 overlay elasticity.
-7. `MsgUpdateProviderBond` or staking integration.
+7. `MsgUpdateProviderBond` or staking integration. **Partial:**
+   `MsgRegisterProvider` accepts an initial self-bond and isolates it in a
+   provider-bond account; rebond, unbond, and staking-module integration remain
+   pending.
 8. `MsgUpdateProviderCapabilities` or capability attestation.
 9. `MsgOpenRetrievalSessionSponsored` for requester-funded public retrieval.
 10. `MsgOpenProtocolRetrievalSession` for audit, repair, and healing.
@@ -1070,13 +1089,18 @@ Queries/events should make the system explainable:
    and cooldown state.
 7. Audit debt by provider/slot.
 8. Reward eligibility and exclusion reason.
-9. Jail/slash history.
+9. Jail/slash history. **Partial:** provider records expose active/slashed bond
+   and hard-fault penalty events include reputation, jail, isolated
+   provider-bond account burns, and bond-burn details; indexed historical slash
+   queries remain pending.
 10. Elasticity overlays and spend-window usage.
 11. Current storage and retrieval price with prior-epoch deltas.
 12. Storage utilization and retrieval demand inputs used by pricing.
 13. Base reward pool minted, paid, and burned by epoch.
 14. Audit budget minted, spent, carried over, and exhausted by epoch.
-15. Provider revenue, slash, burn, and reward-exclusion summaries.
+15. Provider revenue, slash, burn, and reward-exclusion summaries. **Partial:**
+   provider reward ledgers and provider bond/slashed-bond fields exist; unified
+   operator-facing summaries remain pending.
 
 ## 24. Provider-Daemon Implementation Scope
 
@@ -2073,14 +2097,15 @@ for later work.
 | Pending repair promotion requires catch-up progress | A repairing slot's pending provider must accumulate counted proof progress and satisfy `repair_readiness_quota_bps` of the normal slot quota before `Mode2RepairReadiness` permits promotion. | Keeper state and promotion guard. |
 | Proof-time rewards are split by source | Storage/performance rewards are recorded as inflationary storage claims; retrieval bandwidth payments are recorded as escrow-funded bandwidth claims; the legacy aggregate remains compatibility-only. | Keeper reward ledgers and withdrawal accounting. |
 | Unhealthy providers do not earn proof-time rewards | `DELINQUENT`, `JAILED`, and `EXITED` provider health states can submit valid proofs for observability, but storage rewards, bandwidth payments, and reputation accrual are excluded. | Keeper reward policy. |
-| Hard proof faults jail and reputation-slash providers | Hard/slashable structured evidence applies `hard_fault_reputation_slash_bps` and, when enabled, stores `ProviderJailUntil` for `jail_hard_fault_epochs`. | Keeper evidence consequences; token-bond slashing still pending. |
+| Hard proof faults jail, slash reputation, and optionally burn provider bond | Hard/slashable structured evidence applies `hard_fault_reputation_slash_bps`, can burn registered provider bond through `hard_fault_bond_slash_bps`, and stores `ProviderJailUntil` for `jail_hard_fault_epochs` when enabled. | Keeper evidence consequences and bank burn from the isolated provider-bond module account. |
+| Underbonded providers are excluded | When `min_provider_bond` is enabled, providers below the minimum are surfaced as `provider_underbonded` / `DELINQUENT` health and excluded from new placement and rewards. | Keeper provider health, placement, reward, and query policy. |
 | Soft-fault health can decay | At epoch boundaries, soft-fault counters decay after `provider_health_decay_epochs` quiet epochs by `provider_health_decay_bps`, allowing degraded/delinquent providers to return to active health without manual intervention. | Keeper epoch policy. |
 
 ### 35.2 Required Test Layers
 
 | Layer | Required coverage for this stack | Merge gate |
 |---|---|---|
-| Keeper unit tests | Edge preference, Edge fallback, inactive/draining exclusion, non-Hot regression, repeated saturation indexes, fail-closed saturation accounting, virtual stripe query validation, expired retrieval no-billing across user/sponsored/protocol paths, and explicit repair attempt/cooldown state. | `cd polystorechain && go test ./x/polystorechain/keeper -run '<focused regex>'` plus full `go test ./...` before pushing code PRs. |
+| Keeper unit tests | Edge preference, Edge fallback, inactive/draining exclusion, non-Hot regression, repeated saturation indexes, fail-closed saturation accounting, virtual stripe query validation, expired retrieval no-billing across user/sponsored/protocol paths, explicit repair attempt/cooldown state, provider bond locking, hard-fault bond burn, and underbonded placement/query behavior. | `cd polystorechain && go test ./x/polystorechain/keeper -run '<focused regex>'` plus full `go test ./...` before pushing code PRs. |
 | Query/API tests | Direct query-server coverage for stored, missing, empty-deal, invalid, multi-stripe list, and repair-attempt list cases. REST coverage belongs in e2e because gateway routes are generated and exercised there. | Keeper query tests for fast feedback; devnet REST smoke for generated route correctness. |
 | Simulator fixtures | Existing `elasticity_overlay_*`, `expired_retrieval_rejection`, and ghost/non-response scenarios must remain current. If keeper behavior diverges from simulation assumptions, update scenario assertions in the same PR. | `python3 -m unittest discover -s tools/policy_sim` and sweep/report freshness checks for simulator-touching PRs. |
 | Process-level e2e | A devnet script should prove `signal-saturation` creates queryable virtual stripe state and, when enough Edge providers exist, the overlay provider set is Edge-only. It should also prove the second saturation fails closed when the spend cap is exhausted. | Add to CI once locally stable; otherwise keep as explicit manual gate with documented flake/root cause. |

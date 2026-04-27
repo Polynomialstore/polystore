@@ -269,7 +269,7 @@ sleep 2
 echo ">>> Creating Deal (MaxSpend=120, exactly one overlay stripe)..."
 CREATE_RESP=$("$BINARY" tx nilchain create-deal 100 1000 120 \
   --service-hint General \
-  --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --node "$NODE_ADDR" --broadcast-mode sync)
+  --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --node "$NODE_ADDR" --gas 300000 --broadcast-mode sync)
 CREATE_TX_HASH=$(echo "$CREATE_RESP" | awk '/txhash:/ {print $2}' | tail -n 1)
 echo "CreateDeal txhash: $CREATE_TX_HASH"
 
