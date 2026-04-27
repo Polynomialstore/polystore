@@ -308,3 +308,40 @@ func TestSpAdminRotateEndpoint_UsesUpdateTransaction(t *testing.T) {
 		t.Fatalf("unexpected tx output: got=%q", resp.TxOutput)
 	}
 }
+
+func TestProviderAdminRegisterPassesConfiguredProviderBond(t *testing.T) {
+	const provider = "nil1provideradminregister"
+	const endpoint = "/ip4/127.0.0.1/tcp/8091/http"
+
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/polystorechain/polystorechain/v1/providers/" + provider:
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcdSrv.Close()
+
+	setupProviderAdminStatusEnv(t, provider, "http://127.0.0.1:8091", lcdSrv.URL)
+	t.Setenv("POLYSTORE_PROVIDER_REGISTRATION_BOND", "275stake")
+
+	var gotArgs []string
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		gotArgs = append([]string(nil), args...)
+		return []byte("tx accepted"), nil
+	})
+
+	out, err := providerAdminRegisterOrUpdateEndpoint(context.Background(), endpoint)
+	if err != nil {
+		t.Fatalf("register endpoint: %v output=%q", err, out)
+	}
+
+	args := strings.Join(gotArgs, " ")
+	if !strings.Contains(args, "register-provider") {
+		t.Fatalf("expected register-provider args, got=%v", gotArgs)
+	}
+	if !strings.Contains(args, "--bond 275stake") {
+		t.Fatalf("expected configured provider bond in args, got=%v", gotArgs)
+	}
+}
