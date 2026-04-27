@@ -2,9 +2,11 @@ package keeper
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"strings"
 
+	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"polystorechain/x/polystorechain/types"
@@ -57,7 +59,62 @@ func incrementAssignmentCount(count *uint64) {
 	}
 }
 
-func (k Keeper) providerMode2AssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
+func addAssignmentCount(count *uint64, delta uint64) {
+	if ^uint64(0)-*count < delta {
+		*count = ^uint64(0)
+		return
+	}
+	*count += delta
+}
+
+func addProviderAssignmentCounts(dst providerAssignmentCountSnapshot, providerAddr string, activeDelta uint64, pendingDelta uint64) {
+	providerAddr = strings.TrimSpace(providerAddr)
+	if providerAddr == "" {
+		return
+	}
+	counts := dst[providerAddr]
+	addAssignmentCount(&counts.active, activeDelta)
+	addAssignmentCount(&counts.pending, pendingDelta)
+	dst[providerAddr] = counts
+}
+
+func addProviderAssignmentSnapshot(dst providerAssignmentCountSnapshot, src providerAssignmentCountSnapshot) {
+	for providerAddr, counts := range src {
+		addProviderAssignmentCounts(dst, providerAddr, counts.active, counts.pending)
+	}
+}
+
+func addMode2DealAssignmentCounts(snapshot providerAssignmentCountSnapshot, deal types.Deal) uint64 {
+	var total uint64
+	for _, slot := range deal.Mode2Slots {
+		if slot == nil {
+			continue
+		}
+		switch slot.Status {
+		case types.SlotStatus_SLOT_STATUS_ACTIVE:
+			providerAddr := strings.TrimSpace(slot.Provider)
+			if providerAddr == "" {
+				continue
+			}
+			addProviderAssignmentCounts(snapshot, providerAddr, 1, 0)
+			incrementAssignmentCount(&total)
+		case types.SlotStatus_SLOT_STATUS_REPAIRING:
+			providerAddr := strings.TrimSpace(slot.PendingProvider)
+			if providerAddr == "" {
+				continue
+			}
+			addProviderAssignmentCounts(snapshot, providerAddr, 0, 1)
+			incrementAssignmentCount(&total)
+		}
+	}
+	return total
+}
+
+func mode2DealAssignmentLiabilityCount(deal types.Deal) uint64 {
+	return addMode2DealAssignmentCounts(make(providerAssignmentCountSnapshot), deal)
+}
+
+func (k Keeper) providerMode2DealAssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
 	height := uint64(ctx.BlockHeight())
 	snapshot := make(providerAssignmentCountSnapshot)
 	err := k.Deals.Walk(ctx, nil, func(_ uint64, deal types.Deal) (bool, error) {
@@ -67,32 +124,93 @@ func (k Keeper) providerMode2AssignmentCountSnapshot(ctx sdk.Context) (providerA
 		if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 {
 			return false, nil
 		}
-		for _, slot := range deal.Mode2Slots {
-			if slot == nil {
-				continue
-			}
-			switch slot.Status {
-			case types.SlotStatus_SLOT_STATUS_ACTIVE:
-				providerAddr := strings.TrimSpace(slot.Provider)
-				if providerAddr == "" {
-					continue
-				}
-				counts := snapshot[providerAddr]
-				incrementAssignmentCount(&counts.active)
-				snapshot[providerAddr] = counts
-			case types.SlotStatus_SLOT_STATUS_REPAIRING:
-				providerAddr := strings.TrimSpace(slot.PendingProvider)
-				if providerAddr == "" {
-					continue
-				}
-				counts := snapshot[providerAddr]
-				incrementAssignmentCount(&counts.pending)
-				snapshot[providerAddr] = counts
-			}
-		}
+		addMode2DealAssignmentCounts(snapshot, deal)
 		return false, nil
 	})
 	return snapshot, err
+}
+
+func (k Keeper) providerAssignmentLockCountSnapshotForDeal(ctx sdk.Context, dealID uint64) (providerAssignmentCountSnapshot, uint64, error) {
+	snapshot := make(providerAssignmentCountSnapshot)
+	var total uint64
+	err := k.AssignmentCollateralLocksByDeal.Walk(ctx, collections.NewPrefixedPairRange[uint64, collections.Pair[uint32, string]](dealID), func(key assignmentCollateralLockByDealKey, _ bool) (bool, error) {
+		lock, err := k.assignmentCollateralLockFromDealIndex(ctx, key)
+		if err != nil {
+			if errors.Is(err, collections.ErrNotFound) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		providerAddr := strings.TrimSpace(lock.Provider)
+		if providerAddr == "" {
+			providerAddr = strings.TrimSpace(key.K2().K2())
+		}
+		if providerAddr == "" {
+			return false, nil
+		}
+
+		switch lock.Role {
+		case types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_ACTIVE:
+			addProviderAssignmentCounts(snapshot, providerAddr, 1, 0)
+		case types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_PENDING_REPAIR:
+			addProviderAssignmentCounts(snapshot, providerAddr, 0, 1)
+		default:
+			return false, nil
+		}
+		incrementAssignmentCount(&total)
+		return false, nil
+	})
+	return snapshot, total, err
+}
+
+func (k Keeper) providerMode2LockAwareAssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
+	height := uint64(ctx.BlockHeight())
+	snapshot := make(providerAssignmentCountSnapshot)
+	err := k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (bool, error) {
+		if height < deal.StartBlock || height >= deal.EndBlock {
+			return false, nil
+		}
+		if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 {
+			return false, nil
+		}
+
+		expected := mode2DealAssignmentLiabilityCount(deal)
+		if expected == 0 {
+			return false, nil
+		}
+		lockCounts, lockTotal, err := k.providerAssignmentLockCountSnapshotForDeal(ctx, dealID)
+		if err != nil {
+			return false, err
+		}
+		if lockTotal == expected {
+			addProviderAssignmentSnapshot(snapshot, lockCounts)
+			return false, nil
+		}
+		addMode2DealAssignmentCounts(snapshot, deal)
+		return false, nil
+	})
+	return snapshot, err
+}
+
+func (k Keeper) assignmentCollateralLockLedgerEnabled(ctx sdk.Context) (bool, error) {
+	perSlot, err := normalizeAssignmentCollateralPerSlot(k.GetParams(ctx))
+	if err != nil {
+		return false, err
+	}
+	return perSlot.IsPositive(), nil
+}
+
+func (k Keeper) providerMode2AssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
+	useLocks, err := k.assignmentCollateralLockLedgerEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if useLocks {
+		return k.providerMode2LockAwareAssignmentCountSnapshot(ctx)
+	}
+
+	return k.providerMode2DealAssignmentCountSnapshot(ctx)
 }
 
 func (k Keeper) providerMode2AssignmentCounts(ctx sdk.Context, providerAddr string) (active uint64, pending uint64, err error) {
