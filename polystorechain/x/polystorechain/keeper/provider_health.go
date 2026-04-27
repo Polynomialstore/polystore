@@ -66,9 +66,22 @@ func providerHealthFromProvider(provider types.Provider, height int64) types.Pro
 }
 
 func isAdministrativeProviderLifecycle(status types.ProviderLifecycleStatus) bool {
-	return status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING ||
-		status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED ||
+	return status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED ||
 		status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_EXITED
+}
+
+func shouldOverlayRegistrationLifecycle(current types.ProviderLifecycleStatus, registration types.ProviderLifecycleStatus) bool {
+	if current == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_UNSPECIFIED {
+		return true
+	}
+	if isAdministrativeProviderLifecycle(registration) {
+		return true
+	}
+	if registration == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING &&
+		current != types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT {
+		return true
+	}
+	return false
 }
 
 func providerHealthFromProviderOverlay(health types.ProviderHealthState, provider types.Provider, height int64) types.ProviderHealthState {
@@ -76,8 +89,7 @@ func providerHealthFromProviderOverlay(health types.ProviderHealthState, provide
 	if health.Provider == "" {
 		health.Provider = registration.Provider
 	}
-	if health.LifecycleStatus == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_UNSPECIFIED ||
-		isAdministrativeProviderLifecycle(registration.LifecycleStatus) {
+	if shouldOverlayRegistrationLifecycle(health.LifecycleStatus, registration.LifecycleStatus) {
 		health.LifecycleStatus = registration.LifecycleStatus
 		health.Reason = registration.Reason
 		health.EvidenceClass = registration.EvidenceClass

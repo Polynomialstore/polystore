@@ -125,3 +125,33 @@ func TestBaseRewardPoolExcludesDelinquentProviderHealth(t *testing.T) {
 		require.Equal(t, uint64(100), credits)
 	}
 }
+
+func TestBaseRewardPoolDrainingDoesNotMaskDelinquentProviderHealth(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	ctx2, dealID, assignedProviders := setupBaseRewardMode2Deal(t, f, bank, "rdrainhealth")
+
+	deal, err := f.keeper.Deals.Get(ctx2, dealID)
+	require.NoError(t, err)
+	require.Len(t, deal.Mode2Slots, 3)
+
+	setProviderLifecycleForTest(t, f, ctx2, assignedProviders[0], types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT)
+	provider, err := f.keeper.Providers.Get(ctx2, assignedProviders[0])
+	require.NoError(t, err)
+	provider.Draining = true
+	require.NoError(t, f.keeper.Providers.Set(ctx2, assignedProviders[0], provider))
+
+	epochID := uint64(1)
+	for _, slot := range deal.Mode2Slots {
+		if slot != nil {
+			setMode2BaseRewardCredits(t, f, ctx2, dealID, epochID, slot.Slot)
+		}
+	}
+
+	ctx10 := ctx2.WithBlockHeight(10)
+	require.NoError(t, f.keeper.CheckMissedProofs(ctx10))
+
+	requireProviderBalance(t, bank, assignedProviders[0], "0stake")
+	requireProviderBalance(t, bank, assignedProviders[1], "63stake")
+	requireProviderBalance(t, bank, assignedProviders[2], "63stake")
+}
