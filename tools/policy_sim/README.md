@@ -108,6 +108,28 @@ Supported fault forms:
 - `lazy:sp-004`
 - `draining:sp-005`
 
+## Devnet Provider-Bond Calibration
+
+The chain exposes `types.DevnetPolicingParams()` as the current simulator-backed
+devnet policing profile. It is calibrated from
+`tools/policy_sim/scenarios/provider_bond_headroom.yaml`:
+
+| Simulator value | Chain/devnet value | Meaning |
+| --- | --- | --- |
+| `provider_initial_bond = 2.0` | `200stake` registration self-bond | Recommended local/testnet provider bond headroom. |
+| `provider_min_bond = 1.5` | `min_provider_bond = 150stake` | Minimum bond before placement/reward eligibility. |
+| `provider_bond_per_slot = 0.05` | `assignment_collateral_per_slot = 5stake` | Extra bond reserved per active/pending assignment. |
+| `slash_hard_fault = 1.0` against `2.0` initial bond | `hard_fault_bond_slash_bps = 5000` | 50% slashable-bond burn for hard faults. |
+| `jail_epochs = 3` and `epoch_len_blocks = 100` | `provider_bond_unbonding_blocks = 300` | Withdrawal queue spans the hard-fault jail window. |
+
+`scripts/run_devnet_alpha_multi_sp.sh` applies this profile by default for
+multi-provider devnets and registers local providers with `200stake` self-bond.
+Set `POLYSTORE_DEVNET_POLICING_DEFAULTS=0` to keep compatibility-zero bond
+params, or override individual chain params with
+`POLYSTORE_MIN_PROVIDER_BOND`, `POLYSTORE_ASSIGNMENT_COLLATERAL_PER_SLOT`,
+`POLYSTORE_HARD_FAULT_BOND_SLASH_BPS`, and
+`POLYSTORE_PROVIDER_BOND_UNBONDING_BLOCKS`.
+
 Supported simulated enforcement modes:
 
 - `MEASURE_ONLY`

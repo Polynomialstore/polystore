@@ -584,6 +584,20 @@ class PolicySimulatorTests(unittest.TestCase):
         self.assertLess(provider["bond_headroom"], 0)
         self.assertTrue(any(row["reason"] == "provider_underbonded" for row in result.evidence))
 
+    def test_provider_bond_headroom_baseline_maps_to_devnet_policy_profile(self):
+        fixture = Path(__file__).with_name("scenarios") / "provider_bond_headroom.yaml"
+        spec = load_scenario_spec(fixture)
+        cfg = spec.config
+
+        scale = 100
+        self.assertEqual(200, round(cfg["provider_initial_bond"] * scale))
+        self.assertEqual(150, round(cfg["provider_min_bond"] * scale))
+        self.assertEqual(5, round(cfg["provider_bond_per_slot"] * scale))
+        self.assertEqual(
+            5000,
+            round((cfg["slash_hard_fault"] / cfg["provider_initial_bond"]) * 10_000),
+        )
+
     def test_staged_upload_grief_bounds_provisional_generation_pressure(self):
         fixture = Path(__file__).with_name("scenarios") / "staged_upload_grief.yaml"
         spec = load_scenario_spec(fixture)

@@ -685,9 +685,14 @@ Missing desired-state pieces include:
    remain slashable during the waiting period: hard-fault bond burn is computed
    over active plus queued provider bond, active bond is consumed first, and any
    remainder reduces or removes queued unbonding records before they can be
-   claimed. Remaining work is staking-module integration, simulator-backed
-   non-zero defaults, and deeper calibration of queue length versus slash/bond
-   parameters.
+   claimed. `types.DevnetPolicingParams()` now captures the first
+   simulator-backed non-zero devnet profile: `150stake` minimum bond,
+   `5stake` per active/pending assignment, 50% hard-fault bond burn, and an
+   unbonding queue spanning the configured hard-fault jail window. The
+   multi-provider devnet runner applies that profile by default and registers
+   local providers with `200stake` self-bond. Remaining work is staking-module
+   integration and deeper calibration of staking-backed liability versus the
+   isolated provider-bond account.
 2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
    has explicit per-slot `RepairAttemptState`, a query surface, and
    governance-tunable `repair_backoff_epochs` cooldown suppression after
@@ -1124,8 +1129,12 @@ Likely messages:
    refusing jailed-provider withdrawals; `MsgClaimProviderBondWithdrawal`
    releases delayed withdrawals after `provider_bond_unbonding_blocks`;
    placement and repair now consume assignment collateral headroom; provider
-   collateral accounting is queryable for operators; staking-module integration
-   and calibrated non-zero unbonding defaults remain pending.
+   collateral accounting is queryable for operators; `types.DevnetPolicingParams`
+   plus the multi-provider devnet runner provide the first simulator-calibrated
+   non-zero bond/slash/queue profile. Staking-module integration remains
+   pending because generic delegated stake should not count as provider
+   collateral until the protocol also defines a safe slash path and provider to
+   validator/delegation binding.
 8. `MsgUpdateProviderCapabilities` or capability attestation.
 9. `MsgOpenRetrievalSessionSponsored` for requester-funded public retrieval.
 10. `MsgOpenProtocolRetrievalSession` for audit, repair, and healing.
@@ -1495,7 +1504,10 @@ tails, jitter, route attempts, and high-bandwidth routing before QoS reward and
 placement-priority defaults are chosen; and
 `tools/policy_sim/sweeps/provider_bond_headroom_controls.yaml`, which compares
 minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing
-before collateral and underbonded-repair defaults are chosen; and
+before collateral and underbonded-repair defaults are chosen and is now mapped
+to the devnet policy profile (`200stake` initial self-bond, `150stake`
+minimum, `5stake` per slot, 50% hard-fault burn, queue length equal to the
+hard-fault jail window); and
 `tools/policy_sim/sweeps/provider_cost_shock_controls.yaml`, which compares
 cost-shock severity, bandwidth-heavy demand, reward-buffer sizing, and
 dynamic-pricing response speed before storage-price floors, issuance buffers,
