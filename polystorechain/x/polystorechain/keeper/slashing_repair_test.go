@@ -508,6 +508,15 @@ func TestCheckMissedProofs_Mode2RepairBackoffWhenNoCandidate(t *testing.T) {
 	require.False(t, backoff.Valid)
 	require.Contains(t, backoff.Commitment, "reporter=chain:no replacement provider candidates available")
 	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_repair_started"))
+	attempt, err := f.keeper.RepairAttemptStates.Get(sdkCtx, collections.Join(dealID, uint32(0)))
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), attempt.AttemptCount)
+	require.Equal(t, uint64(1), attempt.BackoffCount)
+	require.Equal(t, uint64(1), attempt.CandidateExhaustionCount)
+	require.Equal(t, uint64(2), attempt.CooldownUntilEpoch)
+	require.Equal(t, "repair_backoff_entered", attempt.LastReason)
+	require.Equal(t, providerA, attempt.Provider)
+	require.Empty(t, attempt.PendingProvider)
 
 	sdkCtx = sdkCtx.WithBlockHeight(10)
 	setMode2EpochCredits(t, f, sdkCtx, dealID, 2, 1, 2)
@@ -525,13 +534,32 @@ func TestCheckMissedProofs_Mode2RepairBackoffWhenNoCandidate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), missed)
 	backoffs := evidenceSummaries(t, f, sdkCtx, "repair_backoff_entered")
-	require.Len(t, backoffs, 2)
+	require.Len(t, backoffs, 1)
 	for _, proof := range backoffs {
 		require.Equal(t, providerA, proof.Creator)
 		require.False(t, proof.Valid)
 		require.Contains(t, proof.Commitment, "reporter=chain:no replacement provider candidates available")
 	}
 	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "quota_miss_repair_started"))
+	attempt, err = f.keeper.RepairAttemptStates.Get(sdkCtx, collections.Join(dealID, uint32(0)))
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), attempt.AttemptCount)
+	require.Equal(t, uint64(1), attempt.BackoffCount)
+	require.Equal(t, uint64(2), attempt.CooldownUntilEpoch)
+
+	sdkCtx = sdkCtx.WithBlockHeight(15)
+	setMode2EpochCredits(t, f, sdkCtx, dealID, 3, 1, 2)
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	attempt, err = f.keeper.RepairAttemptStates.Get(sdkCtx, collections.Join(dealID, uint32(0)))
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), attempt.AttemptCount)
+	require.Equal(t, uint64(2), attempt.BackoffCount)
+	require.Equal(t, uint64(2), attempt.CandidateExhaustionCount)
+	require.Equal(t, uint64(4), attempt.CooldownUntilEpoch)
+	backoffs = evidenceSummaries(t, f, sdkCtx, "repair_backoff_entered")
+	require.Len(t, backoffs, 2)
 }
 
 func TestCheckMissedProofs_CompletesMode2SlotRepairWhenQuotaMet(t *testing.T) {

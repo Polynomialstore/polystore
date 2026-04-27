@@ -63,6 +63,7 @@ type Keeper struct {
 	EvidenceCasesByDeal           collections.Map[collections.Pair[uint64, uint64], bool]
 	SlotHealthStates              collections.Map[collections.Pair[uint64, uint32], types.SlotHealthState]
 	ProviderHealthStates          collections.Map[string, types.ProviderHealthState]
+	RepairAttemptStates           collections.Map[collections.Pair[uint64, uint32], types.RepairAttemptState]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeeds              collections.Map[uint64, []byte]
@@ -185,6 +186,13 @@ func NewKeeper(
 			"provider_health_states",
 			collections.StringKey,
 			codec.CollValue[types.ProviderHealthState](cdc),
+		),
+		RepairAttemptStates: collections.NewMap(
+			sb,
+			types.RepairAttemptStatesKey,
+			"repair_attempt_states",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+			codec.CollValue[types.RepairAttemptState](cdc),
 		),
 
 		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),

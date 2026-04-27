@@ -117,6 +117,8 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 		RepairTargetGen: slot.RepairTargetGen,
 	}); err != nil {
 		ctx.Logger().Error("failed to update slot health", "error", err)
+	} else if err := k.recordRepairAttemptStarted(ctx, deal.Id, msg.Slot, slot.Provider, pending, epochID, "manual_slot_repair_started", slot.RepairTargetGen, caseID); err != nil {
+		ctx.Logger().Error("failed to record repair attempt state", "error", err)
 	}
 
 	ctx.EventManager().EmitEvent(

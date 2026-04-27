@@ -44,6 +44,7 @@ var (
 	KeyRetrievalTargetBlobsPerEpoch = []byte("RetrievalTargetBlobsPerEpoch")
 	KeyDynamicPricingMaxStepBps     = []byte("DynamicPricingMaxStepBps")
 	KeyMaxSetupBumpsPerSlot         = []byte("MaxSetupBumpsPerSlot")
+	KeyRepairBackoffEpochs          = []byte("RepairBackoffEpochs")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -99,6 +100,7 @@ func NewParams(
 	dynamicPricingEnabled bool,
 	dynamicPricingMaxStepBps uint64,
 	maxSetupBumpsPerSlot uint64,
+	repairBackoffEpochs uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:               baseStripeCost,
@@ -143,6 +145,7 @@ func NewParams(
 		DynamicPricingEnabled:    dynamicPricingEnabled,
 		DynamicPricingMaxStepBps: dynamicPricingMaxStepBps,
 		MaxSetupBumpsPerSlot:     maxSetupBumpsPerSlot,
+		RepairBackoffEpochs:      repairBackoffEpochs,
 	}
 }
 
@@ -187,6 +190,7 @@ func DefaultParams() Params {
 		false,   // DynamicPricingEnabled
 		500,     // DynamicPricingMaxStepBps (5% per epoch; unused when disabled)
 		3,       // MaxSetupBumpsPerSlot
+		1,       // RepairBackoffEpochs (skip the immediate next epoch after backoff)
 	)
 }
 
@@ -233,6 +237,7 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyDynamicPricingEnabled, &p.DynamicPricingEnabled, validateBool),
 		paramtypes.NewParamSetPair(KeyDynamicPricingMaxStepBps, &p.DynamicPricingMaxStepBps, validateBps),
 		paramtypes.NewParamSetPair(KeyMaxSetupBumpsPerSlot, &p.MaxSetupBumpsPerSlot, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyRepairBackoffEpochs, &p.RepairBackoffEpochs, validateUint64Any),
 	}
 }
 
@@ -359,6 +364,9 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateUint64Any(p.MaxSetupBumpsPerSlot); err != nil {
+		return err
+	}
+	if err := validateUint64Any(p.RepairBackoffEpochs); err != nil {
 		return err
 	}
 	return nil

@@ -1870,6 +1870,21 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 
 		params := k.GetParams(ctx)
 		epochID := epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
+		coolingDown, attemptState, err := k.repairAttemptCooldownActive(ctx, dealID, slot, epochID)
+		if err != nil {
+			ctx.Logger().Error("failed to check repair cooldown", "deal", dealID, "slot", slot, "error", err)
+			return
+		}
+		if coolingDown {
+			ctx.Logger().Info(
+				"provider health eviction skipped during repair cooldown",
+				"deal", dealID,
+				"slot", slotIdxU64,
+				"provider", provider,
+				"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
+			)
+			return
+		}
 
 		pending, err := k.selectMode2ReplacementProvider(ctx, deal, slot, epochID)
 		if err != nil {
@@ -1902,8 +1917,11 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 		if err := k.recordEvidenceSummary(ctx, dealID, provider, "provider_degraded_repair_started", eid[:], "chain", false); err != nil {
 			ctx.Logger().Error("failed to record evidence summary", "error", err)
 		}
-		if err := k.recordMode2RepairStartedEvidence(ctx, dealID, provider, slot, epochID, "provider_degraded_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen); err != nil {
+		caseID, err := k.recordMode2RepairStartedEvidence(ctx, dealID, provider, slot, epochID, "provider_degraded_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen)
+		if err != nil {
 			ctx.Logger().Error("failed to record structured repair evidence", "error", err)
+		} else if err := k.recordRepairAttemptStarted(ctx, dealID, slot, provider, entry.PendingProvider, epochID, "provider_degraded_repair_started", entry.RepairTargetGen, caseID); err != nil {
+			ctx.Logger().Error("failed to record repair attempt state", "error", err)
 		}
 
 		ctx.Logger().Info(

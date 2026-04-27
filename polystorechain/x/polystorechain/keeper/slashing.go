@@ -269,6 +269,20 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						if strings.TrimSpace(entry.PendingProvider) != "" {
 							continue
 						}
+						coolingDown, attemptState, err := k.repairAttemptCooldownActive(sdkCtx, dealID, slot, epochID)
+						if err != nil {
+							return false, err
+						}
+						if coolingDown {
+							sdkCtx.Logger().Info(
+								"slot repair skipped during cooldown",
+								"deal", dealID,
+								"slot", slotIdx,
+								"provider", entry.Provider,
+								"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
+							)
+							continue
+						}
 
 						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID)
 						if err != nil {
@@ -302,8 +316,11 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						if err := k.recordEvidenceSummary(sdkCtx, dealID, entry.Provider, "deputy_miss_repair_started", eid[:], "chain", false); err != nil {
 							sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
 						}
-						if err := k.recordMode2RepairStartedEvidence(sdkCtx, dealID, entry.Provider, slot, epochID, "deputy_miss_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen); err != nil {
+						caseID, err := k.recordMode2RepairStartedEvidence(sdkCtx, dealID, entry.Provider, slot, epochID, "deputy_miss_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen)
+						if err != nil {
 							sdkCtx.Logger().Error("failed to record structured repair evidence", "error", err)
+						} else if err := k.recordRepairAttemptStarted(sdkCtx, dealID, slot, entry.Provider, entry.PendingProvider, epochID, "deputy_miss_repair_started", entry.RepairTargetGen, caseID); err != nil {
+							sdkCtx.Logger().Error("failed to record repair attempt state", "error", err)
 						}
 
 						sdkCtx.Logger().Info(
@@ -363,6 +380,20 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						if strings.TrimSpace(entry.PendingProvider) != "" {
 							continue
 						}
+						coolingDown, attemptState, err := k.repairAttemptCooldownActive(sdkCtx, dealID, slot, epochID)
+						if err != nil {
+							return false, err
+						}
+						if coolingDown {
+							sdkCtx.Logger().Info(
+								"slot repair skipped during cooldown",
+								"deal", dealID,
+								"slot", slotIdx,
+								"provider", entry.Provider,
+								"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
+							)
+							continue
+						}
 
 						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID)
 						if err != nil {
@@ -395,8 +426,11 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						if err := k.recordEvidenceSummary(sdkCtx, dealID, entry.Provider, "quota_miss_repair_started", eid[:], "chain", false); err != nil {
 							sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
 						}
-						if err := k.recordMode2RepairStartedEvidence(sdkCtx, dealID, entry.Provider, slot, epochID, "quota_miss_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen); err != nil {
+						caseID, err := k.recordMode2RepairStartedEvidence(sdkCtx, dealID, entry.Provider, slot, epochID, "quota_miss_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen)
+						if err != nil {
 							sdkCtx.Logger().Error("failed to record structured repair evidence", "error", err)
+						} else if err := k.recordRepairAttemptStarted(sdkCtx, dealID, slot, entry.Provider, entry.PendingProvider, epochID, "quota_miss_repair_started", entry.RepairTargetGen, caseID); err != nil {
+							sdkCtx.Logger().Error("failed to record repair attempt state", "error", err)
 						}
 
 						sdkCtx.Logger().Info(
@@ -465,7 +499,7 @@ func (k Keeper) recordRepairBackoff(ctx sdk.Context, dealID uint64, provider str
 	if err != nil {
 		return err
 	}
-	return k.setSlotHealthState(ctx, slotHealthUpdate{
+	if err := k.setSlotHealthState(ctx, slotHealthUpdate{
 		DealID:         dealID,
 		Slot:           slot,
 		Provider:       provider,
@@ -475,7 +509,10 @@ func (k Keeper) recordRepairBackoff(ctx sdk.Context, dealID uint64, provider str
 		Severity:       types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
 		EpochID:        epochID,
 		EvidenceCaseID: caseID,
-	})
+	}); err != nil {
+		return err
+	}
+	return k.recordRepairBackoffAttempt(ctx, dealID, slot, provider, epochID, reason, caseID)
 }
 
 func (k Keeper) recordMode2RepairStartedEvidence(
@@ -488,7 +525,7 @@ func (k Keeper) recordMode2RepairStartedEvidence(
 	evidenceID []byte,
 	pendingProvider string,
 	repairTargetGen uint64,
-) error {
+) (uint64, error) {
 	caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
 		DealID:             dealID,
 		Slot:               slot,
@@ -505,9 +542,9 @@ func (k Keeper) recordMode2RepairStartedEvidence(
 		ConsequenceCeiling: "repair and reward exclusion; no soft-fault slash by default",
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return k.setSlotHealthState(ctx, slotHealthUpdate{
+	if err := k.setSlotHealthState(ctx, slotHealthUpdate{
 		DealID:          dealID,
 		Slot:            slot,
 		Provider:        provider,
@@ -519,7 +556,10 @@ func (k Keeper) recordMode2RepairStartedEvidence(
 		EvidenceCaseID:  caseID,
 		PendingProvider: pendingProvider,
 		RepairTargetGen: repairTargetGen,
-	})
+	}); err != nil {
+		return 0, err
+	}
+	return caseID, nil
 }
 
 func (k Keeper) recordMode2SoftFaultEvidence(

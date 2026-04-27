@@ -185,6 +185,26 @@ message ProviderHealthState {
   string consequence_ceiling = 14;
 }
 
+// RepairAttemptState is the explicit per-slot repair coordination ledger. It
+// turns previously implicit repair/backoff evidence into queryable protocol
+// state for replacement-grinding controls, operator status, and future
+// calibrated jail/slash policy.
+message RepairAttemptState {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+  uint64 attempt_count = 3;
+  uint64 backoff_count = 4;
+  uint64 candidate_exhaustion_count = 5;
+  uint64 cooldown_until_epoch = 6;
+  uint64 last_attempt_epoch = 7;
+  int64 last_attempt_height = 8;
+  string provider = 9 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string pending_provider = 10 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string last_reason = 11;
+  uint64 repair_target_gen = 12;
+  uint64 last_evidence_case_id = 13;
+}
+
 // RetrievalPolicyMode controls who may open USER-funded retrieval sessions
 // for a deal (i.e. sponsored sessions). Protocol sessions (audit/repair) are
 // authorized separately and bypass this policy.

@@ -87,6 +87,20 @@ func (k Keeper) scheduleRoutineRotations(ctx sdk.Context, epochID uint64) error 
 			if provider, err := k.Providers.Get(ctx, strings.TrimSpace(entry.Provider)); err == nil && provider.Draining {
 				continue
 			}
+			coolingDown, attemptState, err := k.repairAttemptCooldownActive(ctx, dealID, uint32(i), epochID)
+			if err != nil {
+				return true, err
+			}
+			if coolingDown {
+				ctx.Logger().Info(
+					"rotation repair skipped during cooldown",
+					"deal", dealID,
+					"slot", i,
+					"provider", entry.Provider,
+					"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
+				)
+				continue
+			}
 
 			// Enforce rotation budget.
 			nextScheduled, overflow := addUint64(scheduledBytes, slotBytes)
@@ -185,6 +199,8 @@ func (k Keeper) scheduleRoutineRotations(ctx sdk.Context, epochID uint64) error 
 				RepairTargetGen: entry.RepairTargetGen,
 			}); err != nil {
 				ctx.Logger().Error("failed to update rotation repair slot health", "error", err)
+			} else if err := k.recordRepairAttemptStarted(ctx, dealID, slot, entry.Provider, entry.PendingProvider, epochID, "rotation_repair_started", entry.RepairTargetGen, caseID); err != nil {
+				ctx.Logger().Error("failed to record rotation repair attempt state", "error", err)
 			}
 
 			ctx.Logger().Info(
