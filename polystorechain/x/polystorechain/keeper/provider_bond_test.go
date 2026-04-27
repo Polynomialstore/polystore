@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"testing"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
@@ -219,6 +220,80 @@ func TestAddProviderBondRestoresAssignmentCollateralHeadroom(t *testing.T) {
 	require.True(t, after.Collateral.EligibleForNewAssignment)
 }
 
+func TestWithdrawProviderBondRetainsLockAwareAssignmentCollateral(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.MinProviderBond = sdk.NewInt64Coin(sdk.DefaultBondDenom, 50)
+	params.AssignmentCollateralPerSlot = sdk.NewInt64Coin(sdk.DefaultBondDenom, 25)
+	require.NoError(t, f.keeper.Params.Set(ctx, params))
+
+	provider := makePolicyTestAddr(t, f, 0xA1)
+	replacement := makePolicyTestAddr(t, f, 0xB2)
+	providerAddr, err := sdk.AccAddressFromBech32(provider)
+	require.NoError(t, err)
+	bank.setAccountBalance(providerAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 125)))
+
+	_, err = msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+		Creator:      provider,
+		Capabilities: "General",
+		TotalStorage: 1_000_000_000,
+		Endpoints:    testProviderEndpoints,
+		Bond:         sdk.NewInt64Coin(sdk.DefaultBondDenom, 125),
+	})
+	require.NoError(t, err)
+
+	deal := mode2PolicyTestDeal(1, makePolicyTestAddr(t, f, 0xEE), []string{provider, provider})
+	for _, slot := range deal.Mode2Slots {
+		require.NotNil(t, slot)
+		lock := types.AssignmentCollateralLock{
+			Provider:       provider,
+			DealId:         deal.Id,
+			Slot:           slot.Slot,
+			Role:           types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_ACTIVE,
+			Amount:         sdk.NewInt64Coin(sdk.DefaultBondDenom, 25),
+			Generation:     deal.CurrentGen,
+			LockedAtHeight: ctx.BlockHeight(),
+			UpdatedHeight:  ctx.BlockHeight(),
+			Reason:         "slot_active",
+		}
+		require.NoError(t, f.keeper.AssignmentCollateralLocks.Set(ctx, collections.Join(provider, collections.Join(deal.Id, slot.Slot)), lock))
+		require.NoError(t, f.keeper.AssignmentCollateralLocksByDeal.Set(ctx, collections.Join(deal.Id, collections.Join(slot.Slot, provider)), true))
+	}
+
+	// Drift the deal snapshot after lock creation. A lock-aware withdrawal gate must
+	// still retain collateral for the provider's recorded live liabilities.
+	for _, slot := range deal.Mode2Slots {
+		slot.Provider = replacement
+	}
+	require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
+
+	_, err = msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 75),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "would violate required collateral 100stake for 2 active/pending assignments")
+
+	res, err := msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 25),
+	})
+	require.NoError(t, err)
+	require.True(t, res.Success)
+
+	record, err := f.keeper.Providers.Get(ctx, provider)
+	require.NoError(t, err)
+	require.Equal(t, "100stake", record.Bond.String())
+	require.Equal(t, "100stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+	require.Equal(t, "25stake", bank.GetBalance(ctx, providerAddr, sdk.DefaultBondDenom).String())
+}
+
 func TestAddProviderBondRejectsUnauthorizedAndInvalidTopUp(t *testing.T) {
 	bank := newTrackingBankKeeper()
 	f := initFixtureWithBankKeeper(t, bank)
@@ -266,6 +341,99 @@ func TestAddProviderBondRejectsUnauthorizedAndInvalidTopUp(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "provider bond denom")
+}
+
+func TestWithdrawProviderBondRejectsUnauthorizedAndInvalidWithdrawal(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1)
+
+	provider := makePolicyTestAddr(t, f, 0xA1)
+	other := makePolicyTestAddr(t, f, 0xB2)
+	providerAddr, err := sdk.AccAddressFromBech32(provider)
+	require.NoError(t, err)
+	otherAddr, err := sdk.AccAddressFromBech32(other)
+	require.NoError(t, err)
+	bank.setAccountBalance(providerAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+	bank.setAccountBalance(otherAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	_, err = msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+		Creator:      provider,
+		Capabilities: "General",
+		TotalStorage: 1_000_000_000,
+		Endpoints:    testProviderEndpoints,
+		Bond:         sdk.NewInt64Coin(sdk.DefaultBondDenom, 100),
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  other,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 10),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not authorized")
+
+	_, err = msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 0),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be positive")
+
+	_, err = msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin("otherdenom", 10),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "provider bond denom")
+
+	_, err = msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 101),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds active bond")
+}
+
+func TestWithdrawProviderBondRejectsJailedProvider(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1)
+
+	provider := makePolicyTestAddr(t, f, 0xA1)
+	providerAddr, err := sdk.AccAddressFromBech32(provider)
+	require.NoError(t, err)
+	bank.setAccountBalance(providerAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	_, err = msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+		Creator:      provider,
+		Capabilities: "General",
+		TotalStorage: 1_000_000_000,
+		Endpoints:    testProviderEndpoints,
+		Bond:         sdk.NewInt64Coin(sdk.DefaultBondDenom, 100),
+	})
+	require.NoError(t, err)
+
+	record, err := f.keeper.Providers.Get(ctx, provider)
+	require.NoError(t, err)
+	record.Status = "Jailed"
+	require.NoError(t, f.keeper.Providers.Set(ctx, provider, record))
+
+	_, err = msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 1),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "provider is jailed")
+	require.Equal(t, "100stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+	require.Equal(t, "0stake", bank.GetBalance(ctx, providerAddr, sdk.DefaultBondDenom).String())
 }
 
 func TestUnderbondedProviderHealthIsQueryableWithoutEvidence(t *testing.T) {
