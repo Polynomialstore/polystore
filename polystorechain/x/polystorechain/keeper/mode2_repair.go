@@ -3,6 +3,7 @@ package keeper
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,8 @@ import (
 
 	"polystorechain/x/polystorechain/types"
 )
+
+var errNoReplacementProviderCandidates = errors.New("no replacement provider candidates available")
 
 func providerMatchesServiceHint(provider types.Provider, serviceHint string) bool {
 	info, err := types.ParseServiceHint(serviceHint)
@@ -123,7 +126,7 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 			return "", err
 		}
 		if len(candidates) == 0 {
-			return "", fmt.Errorf("no replacement provider candidates available")
+			return "", errNoReplacementProviderCandidates
 		}
 	}
 

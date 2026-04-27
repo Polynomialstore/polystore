@@ -87,6 +87,34 @@ func TestStartSlotRepairClearsStaleReadiness(t *testing.T) {
 	require.ErrorIs(t, err, collections.ErrNotFound)
 }
 
+func TestStartSlotRepairRecordsRepairAttemptState(t *testing.T) {
+	setup := setupManualSlotRepair(t, "General:rs=8+4")
+
+	_, err := setup.msgServer.StartSlotRepair(setup.ctx, &types.MsgStartSlotRepair{
+		Creator:         setup.owner,
+		DealId:          setup.deal.Id,
+		Slot:            0,
+		PendingProvider: setup.candidate,
+	})
+	require.NoError(t, err)
+
+	attempt, err := setup.f.keeper.RepairAttemptStates.Get(setup.ctx, collections.Join(setup.deal.Id, uint32(0)))
+	require.NoError(t, err)
+	require.Equal(t, setup.deal.Id, attempt.DealId)
+	require.Equal(t, uint32(0), attempt.Slot)
+	require.Equal(t, uint64(1), attempt.AttemptCount)
+	require.Zero(t, attempt.BackoffCount)
+	require.Zero(t, attempt.CooldownUntilEpoch)
+	require.Equal(t, uint64(1), attempt.LastAttemptEpoch)
+	require.Equal(t, int64(5), attempt.LastAttemptHeight)
+	require.Equal(t, setup.deal.Mode2Slots[0].Provider, attempt.Provider)
+	require.Equal(t, setup.candidate, attempt.PendingProvider)
+	require.Equal(t, "manual_slot_repair_started", attempt.LastReason)
+	require.Equal(t, setup.deal.CurrentGen, attempt.RepairTargetGen)
+	evidence := requireEvidenceCase(t, setup.f, setup.ctx, "manual_slot_repair_started")
+	require.Equal(t, evidence.Id, attempt.LastEvidenceCaseId)
+}
+
 func TestCompleteSlotRepairRejectsStaleReadinessGeneration(t *testing.T) {
 	setup := setupManualSlotRepair(t, "General:rs=8+4")
 

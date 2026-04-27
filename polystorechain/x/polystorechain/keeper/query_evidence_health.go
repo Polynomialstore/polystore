@@ -81,6 +81,52 @@ func (k queryServer) ListSlotHealthByDeal(goCtx context.Context, req *types.Quer
 	return &types.QueryListSlotHealthByDealResponse{Health: pagedHealth, Pagination: pageRes}, nil
 }
 
+func (k queryServer) GetRepairAttempt(goCtx context.Context, req *types.QueryGetRepairAttemptRequest) (*types.QueryGetRepairAttemptResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	attempt, err := k.k.RepairAttemptStates.Get(ctx, repairAttemptKey(req.DealId, req.Slot))
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "repair attempt state not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryGetRepairAttemptResponse{RepairAttempt: attempt}, nil
+}
+
+func (k queryServer) ListRepairAttemptsByDeal(goCtx context.Context, req *types.QueryListRepairAttemptsByDealRequest) (*types.QueryListRepairAttemptsByDealResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if _, err := k.k.Deals.Get(ctx, req.DealId); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "deal not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	attempts, pageRes, err := sdkquery.CollectionPaginate(
+		goCtx,
+		k.k.RepairAttemptStates,
+		req.Pagination,
+		func(_ collections.Pair[uint64, uint32], item types.RepairAttemptState) (types.RepairAttemptState, error) {
+			return item, nil
+		},
+		sdkquery.WithCollectionPaginationPairPrefix[uint64, uint32](req.DealId),
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListRepairAttemptsByDealResponse{RepairAttempts: attempts, Pagination: pageRes}, nil
+}
+
 func (k queryServer) ListEvidenceCases(goCtx context.Context, req *types.QueryListEvidenceCasesRequest) (*types.QueryListEvidenceCasesResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")

@@ -118,6 +118,16 @@ service Query {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/slot-health";
   }
 
+  // Queries explicit repair attempt/cooldown state for a Mode 2 slot.
+  rpc GetRepairAttempt(QueryGetRepairAttemptRequest) returns (QueryGetRepairAttemptResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/slots/{slot}/repair-attempt";
+  }
+
+  // Lists explicit repair attempt/cooldown states for a deal.
+  rpc ListRepairAttemptsByDeal(QueryListRepairAttemptsByDealRequest) returns (QueryListRepairAttemptsByDealResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/repair-attempts";
+  }
+
   // Lists structured evidence cases, optionally filtered by deal.
   rpc ListEvidenceCases(QueryListEvidenceCasesRequest) returns (QueryListEvidenceCasesResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/evidence";
@@ -316,6 +326,29 @@ message QueryListSlotHealthByDealRequest {
 // QueryListSlotHealthByDealResponse returns all slot health states for a deal.
 message QueryListSlotHealthByDealResponse {
   repeated SlotHealthState health = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetRepairAttemptRequest requests repair attempt state for a slot.
+message QueryGetRepairAttemptRequest {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+}
+
+// QueryGetRepairAttemptResponse returns repair attempt state for a slot.
+message QueryGetRepairAttemptResponse {
+  RepairAttemptState repair_attempt = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListRepairAttemptsByDealRequest requests repair attempt states by deal.
+message QueryListRepairAttemptsByDealRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListRepairAttemptsByDealResponse returns repair attempt states by deal.
+message QueryListRepairAttemptsByDealResponse {
+  repeated RepairAttemptState repair_attempts = 1 [(gogoproto.nullable) = false];
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 

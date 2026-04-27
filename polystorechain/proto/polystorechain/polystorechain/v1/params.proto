@@ -138,4 +138,9 @@ message Params {
   // Maximum number of owner-triggered setup bumps allowed per slot before the
   // first content commit. 0 disables setup bumping.
   uint64 max_setup_bumps_per_slot = 38;
+
+  // --- Repair attempt/cooldown policy ---
+  // Number of liveness epochs during which automatic repair retries are
+  // suppressed after a repair backoff. 0 disables cooldown suppression.
+  uint64 repair_backoff_epochs = 39;
 }
