@@ -224,3 +224,51 @@ func TestProveLiveness_HealthFailures_RecordBackoffWhenNoReplacement(t *testing.
 	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered"))
 	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "provider_degraded_repair_started"))
 }
+
+func TestProveLiveness_HealthFailuresSkipRepairDuringCooldown(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	require.NoError(t, f.keeper.Params.Set(f.ctx, params))
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1)
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	providerD := makePolicyTestAddr(t, f, 0xD4)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC, providerD)
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+	require.NoError(t, f.keeper.RepairAttemptStates.Set(sdkCtx, collections.Join(dealID, uint32(0)), types.RepairAttemptState{
+		DealId:             dealID,
+		Slot:               0,
+		Provider:           providerA,
+		CooldownUntilEpoch: 1,
+		LastReason:         "repair_backoff_entered",
+	}))
+
+	for i := 0; i < 3; i++ {
+		res, err := msgServer.ProveLiveness(sdkCtx, &types.MsgProveLiveness{
+			Creator:   providerA,
+			DealId:    dealID,
+			EpochId:   1,
+			ProofType: &types.MsgProveLiveness_SystemProof{SystemProof: nil},
+		})
+		require.NoError(t, err)
+		require.False(t, res.Success)
+	}
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	slot0 := updated.Mode2Slots[0]
+	require.NotNil(t, slot0)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, slot0.Status)
+	require.Empty(t, slot0.PendingProvider)
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "provider_degraded_repair_started"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered"))
+}

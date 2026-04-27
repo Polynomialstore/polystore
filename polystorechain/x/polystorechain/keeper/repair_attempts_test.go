@@ -7,6 +7,8 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
@@ -68,4 +70,17 @@ func TestRepairAttemptLedgerRecordsAutomaticStartAndQueries(t *testing.T) {
 	require.Len(t, listRes.RepairAttempts, 1)
 	require.Equal(t, uint64(1), listRes.Pagination.Total)
 	require.Equal(t, attempt, listRes.RepairAttempts[0])
+}
+
+func TestListRepairAttemptsByDealRejectsMissingDeal(t *testing.T) {
+	f := initFixture(t)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx)
+
+	_, err := queryServer.ListRepairAttemptsByDeal(sdkCtx, &types.QueryListRepairAttemptsByDealRequest{
+		DealId: 99,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.NotFound, status.Code(err))
+	require.Contains(t, err.Error(), "deal not found")
 }

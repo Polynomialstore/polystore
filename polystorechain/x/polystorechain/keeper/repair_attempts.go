@@ -70,6 +70,7 @@ func (k Keeper) recordRepairBackoffAttempt(
 	epochID uint64,
 	reason string,
 	evidenceCaseID uint64,
+	candidateExhausted bool,
 ) error {
 	key := repairAttemptKey(dealID, slot)
 	state, err := k.RepairAttemptStates.Get(ctx, key)
@@ -83,7 +84,7 @@ func (k Keeper) recordRepairBackoffAttempt(
 
 	state.AttemptCount++
 	state.BackoffCount++
-	if strings.Contains(strings.ToLower(reason), "no replacement provider candidates") {
+	if candidateExhausted {
 		state.CandidateExhaustionCount++
 	}
 	state.LastAttemptEpoch = epochID

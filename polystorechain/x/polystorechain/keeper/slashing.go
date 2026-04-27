@@ -292,7 +292,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 								"slot", slotIdx,
 								"error", err,
 							)
-							if errEvidence := k.recordRepairBackoff(sdkCtx, dealID, entry.Provider, slot, epochID, err.Error()); errEvidence != nil {
+							if errEvidence := k.recordRepairBackoff(sdkCtx, dealID, entry.Provider, slot, epochID, err); errEvidence != nil {
 								sdkCtx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
 							}
 							continue
@@ -403,7 +403,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 								"slot", slotIdx,
 								"error", err,
 							)
-							if errEvidence := k.recordRepairBackoff(sdkCtx, dealID, entry.Provider, slot, epochID, err.Error()); errEvidence != nil {
+							if errEvidence := k.recordRepairBackoff(sdkCtx, dealID, entry.Provider, slot, epochID, err); errEvidence != nil {
 								sdkCtx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
 							}
 							continue
@@ -474,26 +474,30 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	return k.scheduleRoutineRotations(sdkCtx, epochID)
 }
 
-func (k Keeper) recordRepairBackoff(ctx sdk.Context, dealID uint64, provider string, slot uint32, epochID uint64, reason string) error {
-	extra := make([]byte, 0, 4+len(reason))
+func (k Keeper) recordRepairBackoff(ctx sdk.Context, dealID uint64, provider string, slot uint32, epochID uint64, reason error) error {
+	reasonText := "unknown repair backoff reason"
+	if reason != nil {
+		reasonText = reason.Error()
+	}
+	extra := make([]byte, 0, 4+len(reasonText))
 	extra = binary.BigEndian.AppendUint32(extra, slot)
-	extra = append(extra, []byte(reason)...)
+	extra = append(extra, []byte(reasonText)...)
 	eid := deriveEvidenceID("repair_backoff_entered", dealID, epochID, extra)
-	if err := k.recordEvidenceSummary(ctx, dealID, provider, "repair_backoff_entered", eid[:], "chain:"+reason, false); err != nil {
+	if err := k.recordEvidenceSummary(ctx, dealID, provider, "repair_backoff_entered", eid[:], "chain:"+reasonText, false); err != nil {
 		return err
 	}
 	caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
 		DealID:             dealID,
 		Slot:               slot,
 		Provider:           provider,
-		Reporter:           "chain:" + reason,
+		Reporter:           "chain:" + reasonText,
 		Reason:             "repair_backoff_entered",
 		Class:              types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
 		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
 		Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
 		EvidenceID:         eid[:],
 		EpochID:            epochID,
-		Summary:            reason,
+		Summary:            reasonText,
 		ConsequenceCeiling: "operator alert; no slash",
 	})
 	if err != nil {
@@ -512,7 +516,7 @@ func (k Keeper) recordRepairBackoff(ctx sdk.Context, dealID uint64, provider str
 	}); err != nil {
 		return err
 	}
-	return k.recordRepairBackoffAttempt(ctx, dealID, slot, provider, epochID, reason, caseID)
+	return k.recordRepairBackoffAttempt(ctx, dealID, slot, provider, epochID, reasonText, caseID, errors.Is(reason, errNoReplacementProviderCandidates))
 }
 
 func (k Keeper) recordMode2RepairStartedEvidence(

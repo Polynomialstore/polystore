@@ -103,6 +103,14 @@ func (k queryServer) ListRepairAttemptsByDeal(goCtx context.Context, req *types.
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if _, err := k.k.Deals.Get(ctx, req.DealId); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "deal not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
 	attempts, pageRes, err := sdkquery.CollectionPaginate(
 		goCtx,
 		k.k.RepairAttemptStates,
