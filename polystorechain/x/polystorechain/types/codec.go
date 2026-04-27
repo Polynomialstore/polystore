@@ -12,6 +12,7 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 		&MsgRegisterProvider{},
 		&MsgAddProviderBond{},
 		&MsgWithdrawProviderBond{},
+		&MsgClaimProviderBondWithdrawal{},
 		&MsgSetProviderDraining{},
 		&MsgUpdateProviderEndpoints{},
 		&MsgRequestProviderLink{},

@@ -51,24 +51,27 @@ type Keeper struct {
 	SetupBumpNonce             collections.Map[collections.Pair[uint64, uint32], uint64]
 	SetupTriedProvider         collections.Map[collections.Pair[collections.Pair[uint64, uint32], string], bool]
 
-	RetrievalSessions               collections.Map[[]byte, types.RetrievalSession]
-	RetrievalSessionsByOwner        collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionsByProvider     collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionNonces          collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
-	RetrievalSessionProofProvider   collections.Map[[]byte, string]
-	VoucherUsedNonces               collections.Map[collections.Pair[uint64, uint64], bool]
-	AuditTasks                      collections.Map[collections.Pair[uint64, uint64], types.AuditTask]
-	VirtualStripes                  collections.Map[collections.Pair[uint64, uint32], types.VirtualStripe]
-	DynamicPricingLastEpoch         collections.Item[uint64]
-	RetrievalDemandByEpoch          collections.Map[uint64, uint64]
-	EvidenceCount                   collections.Sequence
-	EvidenceCases                   collections.Map[uint64, types.EvidenceCase]
-	EvidenceCasesByDeal             collections.Map[collections.Pair[uint64, uint64], bool]
-	SlotHealthStates                collections.Map[collections.Pair[uint64, uint32], types.SlotHealthState]
-	ProviderHealthStates            collections.Map[string, types.ProviderHealthState]
-	RepairAttemptStates             collections.Map[collections.Pair[uint64, uint32], types.RepairAttemptState]
-	AssignmentCollateralLocks       collections.Map[collections.Pair[string, collections.Pair[uint64, uint32]], types.AssignmentCollateralLock]
-	AssignmentCollateralLocksByDeal collections.Map[collections.Pair[uint64, collections.Pair[uint32, string]], bool]
+	RetrievalSessions                collections.Map[[]byte, types.RetrievalSession]
+	RetrievalSessionsByOwner         collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionsByProvider      collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionNonces           collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
+	RetrievalSessionProofProvider    collections.Map[[]byte, string]
+	VoucherUsedNonces                collections.Map[collections.Pair[uint64, uint64], bool]
+	AuditTasks                       collections.Map[collections.Pair[uint64, uint64], types.AuditTask]
+	VirtualStripes                   collections.Map[collections.Pair[uint64, uint32], types.VirtualStripe]
+	DynamicPricingLastEpoch          collections.Item[uint64]
+	RetrievalDemandByEpoch           collections.Map[uint64, uint64]
+	EvidenceCount                    collections.Sequence
+	EvidenceCases                    collections.Map[uint64, types.EvidenceCase]
+	EvidenceCasesByDeal              collections.Map[collections.Pair[uint64, uint64], bool]
+	SlotHealthStates                 collections.Map[collections.Pair[uint64, uint32], types.SlotHealthState]
+	ProviderHealthStates             collections.Map[string, types.ProviderHealthState]
+	RepairAttemptStates              collections.Map[collections.Pair[uint64, uint32], types.RepairAttemptState]
+	AssignmentCollateralLocks        collections.Map[collections.Pair[string, collections.Pair[uint64, uint32]], types.AssignmentCollateralLock]
+	AssignmentCollateralLocksByDeal  collections.Map[collections.Pair[uint64, collections.Pair[uint32, string]], bool]
+	ProviderBondUnbondingCount       collections.Sequence
+	ProviderBondUnbondings           collections.Map[uint64, types.ProviderBondUnbonding]
+	ProviderBondUnbondingsByProvider collections.Map[collections.Pair[string, uint64], bool]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeeds                 collections.Map[uint64, []byte]
@@ -215,6 +218,21 @@ func NewKeeper(
 			types.AssignmentCollateralLocksByDealKey,
 			"assignment_collateral_locks_by_deal",
 			collections.PairKeyCodec(collections.Uint64Key, collections.PairKeyCodec(collections.Uint32Key, collections.StringKey)),
+			collections.BoolValue,
+		),
+		ProviderBondUnbondingCount: collections.NewSequence(sb, types.ProviderBondUnbondingCountKey, "provider_bond_unbonding_count"),
+		ProviderBondUnbondings: collections.NewMap(
+			sb,
+			types.ProviderBondUnbondingsKey,
+			"provider_bond_unbondings",
+			collections.Uint64Key,
+			codec.CollValue[types.ProviderBondUnbonding](cdc),
+		),
+		ProviderBondUnbondingsByProvider: collections.NewMap(
+			sb,
+			types.ProviderBondUnbondingsByProviderKey,
+			"provider_bond_unbondings_by_provider",
+			collections.PairKeyCodec(collections.StringKey, collections.Uint64Key),
 			collections.BoolValue,
 		),
 

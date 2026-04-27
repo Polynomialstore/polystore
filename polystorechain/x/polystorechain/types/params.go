@@ -53,6 +53,7 @@ var (
 	KeyMinProviderBond              = []byte("MinProviderBond")
 	KeyHardFaultBondSlashBps        = []byte("HardFaultBondSlashBps")
 	KeyAssignmentCollateralPerSlot  = []byte("AssignmentCollateralPerSlot")
+	KeyProviderBondUnbondingBlocks  = []byte("ProviderBondUnbondingBlocks")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -117,6 +118,7 @@ func NewParams(
 	minProviderBond sdk.Coin,
 	hardFaultBondSlashBps uint64,
 	assignmentCollateralPerSlot sdk.Coin,
+	providerBondUnbondingBlocks uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:               baseStripeCost,
@@ -171,6 +173,7 @@ func NewParams(
 		MinProviderBond:             minProviderBond,
 		HardFaultBondSlashBps:       hardFaultBondSlashBps,
 		AssignmentCollateralPerSlot: assignmentCollateralPerSlot,
+		ProviderBondUnbondingBlocks: providerBondUnbondingBlocks,
 	}
 }
 
@@ -224,6 +227,7 @@ func DefaultParams() Params {
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // MinProviderBond (disabled by default)
 		0, // HardFaultBondSlashBps (disabled until governance/devnet params enable it)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // AssignmentCollateralPerSlot (disabled by default)
+		0, // ProviderBondUnbondingBlocks (0 preserves immediate local/devnet withdrawal)
 	)
 }
 
@@ -279,6 +283,7 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyMinProviderBond, &p.MinProviderBond, validateProviderBond),
 		paramtypes.NewParamSetPair(KeyHardFaultBondSlashBps, &p.HardFaultBondSlashBps, validateBps),
 		paramtypes.NewParamSetPair(KeyAssignmentCollateralPerSlot, &p.AssignmentCollateralPerSlot, validateProviderBond),
+		paramtypes.NewParamSetPair(KeyProviderBondUnbondingBlocks, &p.ProviderBondUnbondingBlocks, validateUint64Any),
 	}
 }
 
@@ -432,6 +437,9 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateProviderBond(p.AssignmentCollateralPerSlot); err != nil {
+		return err
+	}
+	if err := validateUint64Any(p.ProviderBondUnbondingBlocks); err != nil {
 		return err
 	}
 	return nil

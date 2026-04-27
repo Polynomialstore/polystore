@@ -134,6 +134,34 @@ func CmdWithdrawProviderBond() *cobra.Command {
 	return cmd
 }
 
+func CmdClaimProviderBondWithdrawal() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "claim-provider-bond-withdrawal [unbonding-id]",
+		Short: "Claim a mature queued provider-bond withdrawal",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			unbondingID, err := strconv.ParseUint(args[0], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid unbonding id: %w", err)
+			}
+
+			msg := types.MsgClaimProviderBondWithdrawal{
+				Creator:     clientCtx.GetFromAddress().String(),
+				UnbondingId: unbondingID,
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
 func CmdUpdateProviderEndpoints() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update-provider-endpoints",

@@ -172,4 +172,7 @@ message Params {
   cosmos.base.v1beta1.Coin assignment_collateral_per_slot = 47 [
     (gogoproto.nullable) = false
   ];
+  // Number of blocks provider-bond withdrawals remain pending before claim.
+  // 0 preserves immediate withdrawal behavior for local/devnet compatibility.
+  uint64 provider_bond_unbonding_blocks = 48;
 }

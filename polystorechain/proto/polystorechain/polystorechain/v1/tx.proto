@@ -29,6 +29,10 @@ service Msg {
   // excess provider bond while retaining policy-required liability backing.
   rpc WithdrawProviderBond(MsgWithdrawProviderBond) returns (MsgWithdrawProviderBondResponse);
 
+  // MsgClaimProviderBondWithdrawal releases a mature delayed provider-bond
+  // withdrawal from the provider-bond module account to its recorded recipient.
+  rpc ClaimProviderBondWithdrawal(MsgClaimProviderBondWithdrawal) returns (MsgClaimProviderBondWithdrawalResponse);
+
   // MsgSetProviderDraining allows a provider to opt out of new assignments.
   rpc SetProviderDraining(MsgSetProviderDraining) returns (MsgSetProviderDrainingResponse);
 
@@ -172,6 +176,22 @@ message MsgWithdrawProviderBond {
 }
 
 message MsgWithdrawProviderBondResponse {
+  bool success = 1;
+  // unbonding_id is 0 when the withdrawal was released immediately.
+  uint64 unbonding_id = 2;
+  int64 mature_at_height = 3;
+}
+
+// MsgClaimProviderBondWithdrawal claims a mature queued provider-bond withdrawal.
+message MsgClaimProviderBondWithdrawal {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgClaimProviderBondWithdrawal";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 unbonding_id = 2;
+}
+
+message MsgClaimProviderBondWithdrawalResponse {
   bool success = 1;
 }
 

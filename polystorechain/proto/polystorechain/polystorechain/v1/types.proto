@@ -231,6 +231,22 @@ message AssignmentCollateralLock {
   string reason = 9;
 }
 
+// ProviderBondUnbonding is the delayed provider-bond exit ledger. Queued funds
+// are no longer counted as active provider bond/collateral headroom, but remain
+// in the provider-bond module account until the maturity height is claimable.
+message ProviderBondUnbonding {
+  uint64 id = 1;
+  string provider = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string recipient = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  cosmos.base.v1beta1.Coin amount = 4 [(gogoproto.nullable) = false];
+  int64 requested_height = 5;
+  int64 mature_at_height = 6;
+  string actor = 7 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 active_assignments = 8;
+  uint64 pending_assignments = 9;
+  cosmos.base.v1beta1.Coin required_collateral = 10 [(gogoproto.nullable) = false];
+}
+
 // RepairAttemptState is the explicit per-slot repair coordination ledger. It
 // turns previously implicit repair/backoff evidence into queryable protocol
 // state for replacement-grinding controls, operator status, and future
