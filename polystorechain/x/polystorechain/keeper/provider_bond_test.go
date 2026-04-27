@@ -149,6 +149,108 @@ func TestHardFaultBurnsProviderBondAndUnderbondedAfterJailExpiry(t *testing.T) {
 	require.ElementsMatch(t, []string{providerB, providerC, providerD}, assigned)
 }
 
+func TestHardFaultSlashesQueuedProviderBondUnbonding(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	params.MinProviderBond = sdk.NewInt64Coin(sdk.DefaultBondDenom, 50)
+	params.HardFaultBondSlashBps = 8000
+	params.ProviderBondUnbondingBlocks = 10
+	require.NoError(t, f.keeper.Params.Set(ctx, params))
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	for _, setup := range []struct {
+		provider string
+		bond     int64
+	}{
+		{provider: providerA, bond: 125},
+		{provider: providerB, bond: 50},
+		{provider: providerC, bond: 50},
+	} {
+		addr, err := sdk.AccAddressFromBech32(setup.provider)
+		require.NoError(t, err)
+		bank.setAccountBalance(addr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, setup.bond)))
+		_, err = msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      setup.provider,
+			Capabilities: "General",
+			TotalStorage: 1_000_000_000,
+			Endpoints:    testProviderEndpoints,
+			Bond:         sdk.NewInt64Coin(sdk.DefaultBondDenom, setup.bond),
+		})
+		require.NoError(t, err)
+	}
+	require.Equal(t, "225stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+
+	withdrawal, err := msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  providerA,
+		Provider: providerA,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 75),
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), withdrawal.UnbondingId)
+	require.Equal(t, int64(15), withdrawal.MatureAtHeight)
+
+	record, err := f.keeper.Providers.Get(ctx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, "50stake", record.Bond.String())
+	queued, err := queryServer.GetProviderBondUnbonding(ctx, &types.QueryGetProviderBondUnbondingRequest{Id: withdrawal.UnbondingId})
+	require.NoError(t, err)
+	require.Equal(t, "75stake", queued.Unbonding.Amount.String())
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(ctx, dealID, deal))
+
+	res, err := msgServer.ProveLiveness(ctx, &types.MsgProveLiveness{
+		Creator: providerA,
+		DealId:  dealID,
+		EpochId: 1,
+		ProofType: &types.MsgProveLiveness_SystemProof{
+			SystemProof: invalidPolicyChainedProof(),
+		},
+	})
+	require.NoError(t, err)
+	require.False(t, res.Success)
+
+	record, err = f.keeper.Providers.Get(ctx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, "0stake", record.Bond.String())
+	require.Equal(t, "100stake", record.BondSlashed.String())
+	require.Equal(t, "Jailed", record.Status)
+	require.Equal(t, "125stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+
+	queued, err = queryServer.GetProviderBondUnbonding(ctx, &types.QueryGetProviderBondUnbondingRequest{Id: withdrawal.UnbondingId})
+	require.NoError(t, err)
+	require.Equal(t, "25stake", queued.Unbonding.Amount.String())
+	health, err := f.keeper.ProviderHealthStates.Get(ctx, providerA)
+	require.NoError(t, err)
+	require.Contains(t, health.ConsequenceCeiling, "bond slash 100stake")
+	require.Contains(t, health.ConsequenceCeiling, "queued 50stake")
+
+	ctxExpired := ctx.WithBlockHeight(20)
+	require.NoError(t, f.keeper.CheckMissedProofs(ctxExpired))
+	claimRes, err := msgServer.ClaimProviderBondWithdrawal(ctxExpired, &types.MsgClaimProviderBondWithdrawal{
+		Creator:     providerA,
+		UnbondingId: withdrawal.UnbondingId,
+	})
+	require.NoError(t, err)
+	require.True(t, claimRes.Success)
+	providerAddr, err := sdk.AccAddressFromBech32(providerA)
+	require.NoError(t, err)
+	require.Equal(t, "100stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+	require.Equal(t, "25stake", bank.GetBalance(ctxExpired, providerAddr, sdk.DefaultBondDenom).String())
+
+	_, err = queryServer.GetProviderBondUnbonding(ctxExpired, &types.QueryGetProviderBondUnbondingRequest{Id: withdrawal.UnbondingId})
+	require.Error(t, err)
+}
+
 func TestAddProviderBondRestoresAssignmentCollateralHeadroom(t *testing.T) {
 	bank := newTrackingBankKeeper()
 	f := initFixtureWithBankKeeper(t, bank)

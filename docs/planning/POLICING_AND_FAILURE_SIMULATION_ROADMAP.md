@@ -48,7 +48,7 @@ The current repo already contains several enforcement surfaces:
 | Audit and deputy paths | Protocol audit tasks, deputy-served accounting, and protocol sessions are partially wired. |
 | Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with indexed, paginated query surfaces. |
 | Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates provider lifecycle signals from structured evidence, registration state, and bond headroom; placement, setup bumping, repair replacement, base rewards, proof-time reward eligibility, soft-fault decay, hard-fault jail/reputation consequences, and underbonded exclusion consume it. |
-| Provider bond economics | Provider registration can lock an isolated self-bond, authorized provider/operator top-ups can restore bond headroom, hard/slashable evidence can burn a governance-parametrized bond share from the provider-bond account, provider records expose active/slashed bond, underbonded providers are excluded or repaired away when `min_provider_bond` / `assignment_collateral_per_slot` are enabled, `AssignmentCollateralLock` state makes live slot liabilities queryable, and `provider_bond_unbonding_blocks` can force excess-bond exits through a delayed claim queue. |
+| Provider bond economics | Provider registration can lock an isolated self-bond, authorized provider/operator top-ups can restore bond headroom, hard/slashable evidence can burn a governance-parametrized bond share from active and queued provider-bond funds, provider records expose active/slashed bond, underbonded providers are excluded or repaired away when `min_provider_bond` / `assignment_collateral_per_slot` are enabled, `AssignmentCollateralLock` state makes live slot liabilities queryable, and `provider_bond_unbonding_blocks` can force excess-bond exits through a delayed slashable claim queue. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -681,9 +681,13 @@ Missing desired-state pieces include:
    withdrawals create queryable `ProviderBondUnbonding` records, remove the
    amount from active bond headroom immediately, hold funds in the isolated
    provider-bond account, and require a mature
-   `MsgClaimProviderBondWithdrawal` before payment. Remaining work is
-   staking-module integration, simulator-backed non-zero defaults, and richer
-   slashability semantics for queued unbonding funds.
+   `MsgClaimProviderBondWithdrawal` before payment. Queued unbonding funds
+   remain slashable during the waiting period: hard-fault bond burn is computed
+   over active plus queued provider bond, active bond is consumed first, and any
+   remainder reduces or removes queued unbonding records before they can be
+   claimed. Remaining work is staking-module integration, simulator-backed
+   non-zero defaults, and deeper calibration of queue length versus slash/bond
+   parameters.
 2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
    has explicit per-slot `RepairAttemptState`, a query surface, and
    governance-tunable `repair_backoff_epochs` cooldown suppression after
@@ -1156,7 +1160,9 @@ Queries/events should make the system explainable:
    `GetProviderBondUnbonding` and paginated
    `ListProviderBondUnbondingsByProvider` expose delayed bond withdrawals by
    id/provider, including recipient, amount, request height, maturity height,
-   actor, and the liability snapshot used when the request was accepted.
+   actor, and the liability snapshot used when the request was accepted. Queued
+   withdrawals remain slashable until claimed, so hard-fault burn can reduce or
+   erase pending unbonding records after active bond is exhausted.
 6. Slot health and current repair status. **Landed first pass:** `GetSlotHealth`
    and paginated `ListSlotHealthByDeal`.
 7. Pending provider and repair target generation. **Landed first pass:** exposed
@@ -2176,14 +2182,14 @@ for later work.
 | Pending repair promotion requires catch-up progress | A repairing slot's pending provider must accumulate counted proof progress and satisfy `repair_readiness_quota_bps` of the normal slot quota before `Mode2RepairReadiness` permits promotion. | Keeper state and promotion guard. |
 | Proof-time rewards are split by source | Storage/performance rewards are recorded as inflationary storage claims; retrieval bandwidth payments are recorded as escrow-funded bandwidth claims; the legacy aggregate remains compatibility-only. | Keeper reward ledgers and withdrawal accounting. |
 | Unhealthy providers do not earn proof-time rewards | `DELINQUENT`, `JAILED`, and `EXITED` provider health states can submit valid proofs for observability, but storage rewards, bandwidth payments, and reputation accrual are excluded. | Keeper reward policy. |
-| Hard proof faults jail, slash reputation, and optionally burn provider bond | Hard/slashable structured evidence applies `hard_fault_reputation_slash_bps`, can burn registered provider bond through `hard_fault_bond_slash_bps`, and stores `ProviderJailUntil` for `jail_hard_fault_epochs` when enabled. | Keeper evidence consequences and bank burn from the isolated provider-bond module account. |
+| Hard proof faults jail, slash reputation, and optionally burn provider bond | Hard/slashable structured evidence applies `hard_fault_reputation_slash_bps`, can burn registered provider bond through `hard_fault_bond_slash_bps`, computes burn over active plus queued unbonding bond, and stores `ProviderJailUntil` for `jail_hard_fault_epochs` when enabled. | Keeper evidence consequences and bank burn from the isolated provider-bond module account. |
 | Underbonded providers are excluded | When `min_provider_bond` is enabled, providers below the minimum are surfaced as `provider_underbonded` / `DELINQUENT` health and excluded from new placement and rewards. | Keeper provider health, placement, reward, and query policy. |
 | Assignment collateral headroom is enforced | When `assignment_collateral_per_slot` is enabled, placement and repair candidates must have enough bond for existing active/pending assignments plus the new responsibility, and epoch processing starts repair for excess active slots on undercollateralized providers. | Keeper provider health, placement, repair, and epoch policy. |
 | Assignment collateral accounting is queryable | Provider collateral summaries expose bond, policy params, active/pending assignment counts, required collateral, finite headroom, overassignment, and next-assignment eligibility. When per-slot collateral is positive, `AssignmentCollateralLock` additionally exposes stateful active/pending-repair liabilities by provider/deal/slot. | Keeper query API and generated REST gateway routes. |
 | Assignment collateral locks follow repair lifecycle | With positive per-slot collateral, starting repair removes the old active slot-provider lock and creates a pending-repair lock for the candidate; completing repair promotes that candidate to the active lock for the slot and generation. | Keeper deal write hook, repair messages, and query API. |
 | Provider bond headroom can be restored | A provider or paired operator can submit `MsgAddProviderBond` with same-denom positive bond; funds move into the isolated provider-bond module account and derived assignment headroom/eligibility updates accordingly. | Keeper message, bank accounting, CLI, and provider-collateral query policy. |
 | Provider bond exit is liability-gated | A provider or paired operator can submit `MsgWithdrawProviderBond`, but only excess same-denom bond can leave; the provider must retain `min_provider_bond` plus lock-aware active/pending assignment collateral, and jailed providers cannot withdraw. | Keeper message, bank accounting, CLI, and lock-aware collateral policy. |
-| Provider bond exits can be delayed | When `provider_bond_unbonding_blocks` is non-zero, accepted excess-bond withdrawals create `ProviderBondUnbonding` records, reduce active bond headroom immediately, hold funds in the isolated provider-bond account, and require `MsgClaimProviderBondWithdrawal` after maturity before payment. | Keeper message, params, bank accounting, CLI, and query API. |
+| Provider bond exits can be delayed and remain slashable | When `provider_bond_unbonding_blocks` is non-zero, accepted excess-bond withdrawals create `ProviderBondUnbonding` records, reduce active bond headroom immediately, hold funds in the isolated provider-bond account, and require `MsgClaimProviderBondWithdrawal` after maturity before payment. Hard-fault burn treats those queued funds as still slashable and reduces/removes pending records after active bond is exhausted. | Keeper message, params, bank accounting, CLI, query API, and hard-fault consequence policy. |
 | Soft-fault health can decay | At epoch boundaries, soft-fault counters decay after `provider_health_decay_epochs` quiet epochs by `provider_health_decay_bps`, allowing degraded/delinquent providers to return to active health without manual intervention. | Keeper epoch policy. |
 
 ### 35.2 Required Test Layers
