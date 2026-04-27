@@ -418,7 +418,8 @@ func (m *MsgWithdrawProviderBond) GetBond() types.Coin {
 
 type MsgWithdrawProviderBondResponse struct {
 	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	// unbonding_id is 0 when the withdrawal was released immediately.
+	// unbonding_id is set when the withdrawal is queued. The first queued id may
+	// be 0; mature_at_height is 0 for immediate withdrawals.
 	UnbondingId    uint64 `protobuf:"varint,2,opt,name=unbonding_id,json=unbondingId,proto3" json:"unbonding_id,omitempty"`
 	MatureAtHeight int64  `protobuf:"varint,3,opt,name=mature_at_height,json=matureAtHeight,proto3" json:"mature_at_height,omitempty"`
 }

@@ -199,14 +199,10 @@ func (k msgServer) WithdrawProviderBond(goCtx context.Context, msg *types.MsgWit
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("provider bond unbonding maturity height would overflow")
 		}
 		matureAt := currentHeight + int64(delayBlocks)
-		sequenceID, err := k.ProviderBondUnbondingCount.Next(ctx)
+		unbondingID, err := k.ProviderBondUnbondingCount.Next(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to allocate provider bond unbonding id: %w", err)
 		}
-		if sequenceID == ^uint64(0) {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("provider bond unbonding id sequence exhausted")
-		}
-		unbondingID := sequenceID + 1
 		unbonding := types.ProviderBondUnbonding{
 			Id:                 unbondingID,
 			Provider:           providerAddr,
@@ -287,10 +283,6 @@ func (k msgServer) ClaimProviderBondWithdrawal(goCtx context.Context, msg *types
 	if err != nil {
 		return nil, err
 	}
-	if msg.UnbondingId == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("provider bond unbonding id must be non-zero")
-	}
-
 	unbonding, err := k.ProviderBondUnbondings.Get(ctx, msg.UnbondingId)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {

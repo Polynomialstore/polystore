@@ -331,7 +331,7 @@ func TestWithdrawProviderBondQueuesAndClaimsAfterUnbondingDelay(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, res.Success)
-	require.NotZero(t, res.UnbondingId)
+	require.Equal(t, uint64(0), res.UnbondingId)
 	require.Equal(t, int64(15), res.MatureAtHeight)
 
 	record, err := f.keeper.Providers.Get(ctx, provider)

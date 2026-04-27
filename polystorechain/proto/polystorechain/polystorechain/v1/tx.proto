@@ -177,7 +177,8 @@ message MsgWithdrawProviderBond {
 
 message MsgWithdrawProviderBondResponse {
   bool success = 1;
-  // unbonding_id is 0 when the withdrawal was released immediately.
+  // unbonding_id is set when the withdrawal is queued. The first queued id may
+  // be 0; mature_at_height is 0 for immediate withdrawals.
   uint64 unbonding_id = 2;
   int64 mature_at_height = 3;
 }
