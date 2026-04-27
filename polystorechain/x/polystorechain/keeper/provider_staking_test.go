@@ -170,6 +170,8 @@ func TestPairedOperatorCanBindObservedProviderStake(t *testing.T) {
 		Validator: validator.String(),
 	})
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "bind provider stake")
+	require.NotContains(t, err.Error(), "provider bond")
 
 	_, err = msgServer.BindProviderStake(ctx, &types.MsgBindProviderStake{
 		Creator:   operator,
@@ -183,6 +185,14 @@ func TestPairedOperatorCanBindObservedProviderStake(t *testing.T) {
 	require.Equal(t, operator, stakingRes.Staking.Binding.Delegator)
 	require.Equal(t, operator, stakingRes.Staking.Binding.Operator)
 	require.Equal(t, "125stake", stakingRes.Staking.ObservedStake.String())
+
+	_, err = msgServer.UnbindProviderStake(ctx, &types.MsgUnbindProviderStake{
+		Creator:  thirdParty,
+		Provider: provider,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unbind provider stake")
+	require.NotContains(t, err.Error(), "provider bond")
 
 	_, err = msgServer.UnbindProviderStake(ctx, &types.MsgUnbindProviderStake{
 		Creator:  operator,

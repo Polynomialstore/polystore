@@ -21,7 +21,7 @@ func (k msgServer) BindProviderStake(goCtx context.Context, msg *types.MsgBindPr
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
 	}
 
-	creator, providerAddr, _, err := k.providerBondActor(ctx, msg.Creator, msg.Provider, "bind stake")
+	creator, providerAddr, _, err := k.providerStakeActor(ctx, msg.Creator, msg.Provider, "bind")
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (k msgServer) UnbindProviderStake(goCtx context.Context, msg *types.MsgUnbi
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
 	}
 
-	creator, providerAddr, _, err := k.providerBondActor(ctx, msg.Creator, msg.Provider, "unbind stake")
+	creator, providerAddr, _, err := k.providerStakeActor(ctx, msg.Creator, msg.Provider, "unbind")
 	if err != nil {
 		return nil, err
 	}
