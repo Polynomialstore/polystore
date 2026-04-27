@@ -200,7 +200,11 @@ func (k Keeper) expireProviderJails(ctx sdk.Context) error {
 		health.Severity = types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO
 		health.UpdatedHeight = ctx.BlockHeight()
 		health.ConsequenceCeiling = "jail window expired; provider restored to active eligibility"
-		health = overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight())
+		active, pending, err := k.providerMode2AssignmentCounts(ctx, providerAddr)
+		if err != nil {
+			return err
+		}
+		health = overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight(), active+pending)
 		if err := k.ProviderHealthStates.Set(ctx, providerAddr, health); err != nil {
 			return err
 		}

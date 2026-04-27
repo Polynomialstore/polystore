@@ -323,7 +323,7 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		if provider.Draining {
 			continue
 		}
-		reason, err := k.providerHealthPlacementIneligibility(ctx, provider)
+		reason, err := k.providerHealthPlacementIneligibilityForAssignments(ctx, provider, 1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check provider health for %s: %w", provider.Address, err)
 		}

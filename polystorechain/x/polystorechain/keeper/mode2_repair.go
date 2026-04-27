@@ -49,7 +49,7 @@ func (k Keeper) mode2ReplacementProviderIneligibility(ctx sdk.Context, provider 
 	if reason := mode2ReplacementProviderIneligibility(provider, serviceHint); reason != "" {
 		return reason, nil
 	}
-	return k.providerHealthPlacementIneligibility(ctx, provider)
+	return k.providerHealthPlacementIneligibilityForAssignments(ctx, provider, 1)
 }
 
 func (k Keeper) mode2ReplacementProviderEligible(ctx sdk.Context, provider types.Provider, serviceHint string) (bool, error) {

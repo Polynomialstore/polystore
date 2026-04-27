@@ -52,6 +52,7 @@ var (
 	KeyRepairReadinessQuotaBps      = []byte("RepairReadinessQuotaBps")
 	KeyMinProviderBond              = []byte("MinProviderBond")
 	KeyHardFaultBondSlashBps        = []byte("HardFaultBondSlashBps")
+	KeyAssignmentCollateralPerSlot  = []byte("AssignmentCollateralPerSlot")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -115,6 +116,7 @@ func NewParams(
 	repairReadinessQuotaBps uint64,
 	minProviderBond sdk.Coin,
 	hardFaultBondSlashBps uint64,
+	assignmentCollateralPerSlot sdk.Coin,
 ) Params {
 	return Params{
 		BaseStripeCost:               baseStripeCost,
@@ -168,6 +170,7 @@ func NewParams(
 		RepairReadinessQuotaBps:     repairReadinessQuotaBps,
 		MinProviderBond:             minProviderBond,
 		HardFaultBondSlashBps:       hardFaultBondSlashBps,
+		AssignmentCollateralPerSlot: assignmentCollateralPerSlot,
 	}
 }
 
@@ -220,6 +223,7 @@ func DefaultParams() Params {
 		10000,   // RepairReadinessQuotaBps (full quota before catch-up ready)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // MinProviderBond (disabled by default)
 		0, // HardFaultBondSlashBps (disabled until governance/devnet params enable it)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // AssignmentCollateralPerSlot (disabled by default)
 	)
 }
 
@@ -274,6 +278,7 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyRepairReadinessQuotaBps, &p.RepairReadinessQuotaBps, validateBps),
 		paramtypes.NewParamSetPair(KeyMinProviderBond, &p.MinProviderBond, validateProviderBond),
 		paramtypes.NewParamSetPair(KeyHardFaultBondSlashBps, &p.HardFaultBondSlashBps, validateBps),
+		paramtypes.NewParamSetPair(KeyAssignmentCollateralPerSlot, &p.AssignmentCollateralPerSlot, validateProviderBond),
 	}
 }
 
@@ -424,6 +429,9 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateBps(p.HardFaultBondSlashBps); err != nil {
+		return err
+	}
+	if err := validateProviderBond(p.AssignmentCollateralPerSlot); err != nil {
 		return err
 	}
 	return nil

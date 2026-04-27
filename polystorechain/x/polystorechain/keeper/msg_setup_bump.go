@@ -130,7 +130,7 @@ func (k Keeper) selectSetupBumpProvider(ctx sdk.Context, deal types.Deal, slot u
 		if provider.Draining {
 			return false, nil
 		}
-		reason, err := k.providerHealthPlacementIneligibility(ctx, provider)
+		reason, err := k.providerHealthPlacementIneligibilityForAssignments(ctx, provider, 1)
 		if err != nil {
 			return false, err
 		}

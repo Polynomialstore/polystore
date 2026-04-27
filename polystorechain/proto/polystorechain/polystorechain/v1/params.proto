@@ -167,4 +167,9 @@ message Params {
   // Bond slash applied to hard/slashable evidence, in basis points. 0 disables
   // token-bond burning while preserving reputation/jail consequences.
   uint64 hard_fault_bond_slash_bps = 46;
+  // Extra self-bond required per active or pending assignment. 0 disables
+  // assignment-headroom gating while preserving minimum-bond behavior.
+  cosmos.base.v1beta1.Coin assignment_collateral_per_slot = 47 [
+    (gogoproto.nullable) = false
+  ];
 }
