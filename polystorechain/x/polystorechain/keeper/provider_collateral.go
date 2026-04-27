@@ -2,9 +2,11 @@ package keeper
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"strings"
 
+	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"polystorechain/x/polystorechain/types"
@@ -57,7 +59,7 @@ func incrementAssignmentCount(count *uint64) {
 	}
 }
 
-func (k Keeper) providerMode2AssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
+func (k Keeper) providerMode2DealAssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
 	height := uint64(ctx.BlockHeight())
 	snapshot := make(providerAssignmentCountSnapshot)
 	err := k.Deals.Walk(ctx, nil, func(_ uint64, deal types.Deal) (bool, error) {
@@ -93,6 +95,82 @@ func (k Keeper) providerMode2AssignmentCountSnapshot(ctx sdk.Context) (providerA
 		return false, nil
 	})
 	return snapshot, err
+}
+
+func (k Keeper) providerAssignmentLockCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, uint64, error) {
+	snapshot := make(providerAssignmentCountSnapshot)
+	dealActive := make(map[uint64]bool)
+	height := uint64(ctx.BlockHeight())
+	var total uint64
+	err := k.AssignmentCollateralLocks.Walk(ctx, nil, func(key assignmentCollateralLockKey, lock types.AssignmentCollateralLock) (bool, error) {
+		dealID := lock.DealId
+		if dealID == 0 {
+			dealID = key.K2().K1()
+		}
+		active, ok := dealActive[dealID]
+		if !ok {
+			deal, err := k.Deals.Get(ctx, dealID)
+			if err != nil {
+				if errors.Is(err, collections.ErrNotFound) {
+					return false, nil
+				}
+				return false, err
+			}
+			active = deal.RedundancyMode == 2 && height >= deal.StartBlock && height < deal.EndBlock
+			dealActive[dealID] = active
+		}
+		if !active {
+			return false, nil
+		}
+
+		providerAddr := strings.TrimSpace(lock.Provider)
+		if providerAddr == "" {
+			providerAddr = strings.TrimSpace(key.K1())
+		}
+		if providerAddr == "" {
+			return false, nil
+		}
+
+		counts := snapshot[providerAddr]
+		switch lock.Role {
+		case types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_ACTIVE:
+			incrementAssignmentCount(&counts.active)
+		case types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_PENDING_REPAIR:
+			incrementAssignmentCount(&counts.pending)
+		default:
+			return false, nil
+		}
+		snapshot[providerAddr] = counts
+		incrementAssignmentCount(&total)
+		return false, nil
+	})
+	return snapshot, total, err
+}
+
+func (k Keeper) assignmentCollateralLockLedgerEnabled(ctx sdk.Context) (bool, error) {
+	perSlot, err := normalizeAssignmentCollateralPerSlot(k.GetParams(ctx))
+	if err != nil {
+		return false, err
+	}
+	return perSlot.IsPositive(), nil
+}
+
+func (k Keeper) providerMode2AssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
+	useLocks, err := k.assignmentCollateralLockLedgerEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if useLocks {
+		lockCounts, lockTotal, err := k.providerAssignmentLockCountSnapshot(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if lockTotal > 0 {
+			return lockCounts, nil
+		}
+	}
+
+	return k.providerMode2DealAssignmentCountSnapshot(ctx)
 }
 
 func (k Keeper) providerMode2AssignmentCounts(ctx sdk.Context, providerAddr string) (active uint64, pending uint64, err error) {

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"cosmossdk.io/collections"
+	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/stretchr/testify/require"
@@ -183,6 +184,113 @@ func TestProviderCollateralSummaryQueryReportsHeadroomAndOverassignment(t *testi
 	require.Equal(t, uint64(1), findProviderCollateralSummary(t, listRes.Collateral, providerC).AssignmentHeadroom)
 }
 
+func TestProviderCollateralSummaryUsesAssignmentLockLedgerWhenEnabled(t *testing.T) {
+	f := initFixture(t)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+
+	require.NoError(t, f.keeper.Params.Set(ctx, collateralPolicyParams(0, 25)))
+	providers := make([]string, 0, 20)
+	for i := 0; i < 20; i++ {
+		providers = append(providers, makePolicyTestAddr(t, f, byte(i+1)))
+	}
+	registerPolicyTestProviders(t, f, ctx, providers...)
+	for _, provider := range providers {
+		setProviderBondForTest(t, f, ctx, provider, 100)
+	}
+
+	owner := makePolicyTestAddr(t, f, 0xEE)
+	res, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		InitialEscrowAmount: math.NewInt(1_000_000),
+		MaxMonthlySpend:     math.NewInt(500_000),
+	})
+	require.NoError(t, err)
+
+	locks, err := queryServer.ListAssignmentCollateralLocksByDeal(ctx, &types.QueryListAssignmentCollateralLocksByDealRequest{
+		DealId:     res.DealId,
+		Pagination: &sdkquery.PageRequest{Limit: 100, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, locks.Locks)
+	provider := locks.Locks[0].Provider
+	expectedActive, expectedPending := countAssignmentLocksForProvider(locks.Locks, provider)
+	require.Positive(t, expectedActive)
+
+	before, err := queryServer.GetProviderCollateral(ctx, &types.QueryGetProviderCollateralRequest{Address: provider})
+	require.NoError(t, err)
+	require.Equal(t, expectedActive, before.Collateral.ActiveAssignments)
+	require.Equal(t, expectedPending, before.Collateral.PendingAssignments)
+
+	deal, err := f.keeper.Deals.Get(ctx, res.DealId)
+	require.NoError(t, err)
+	replacement := providers[0]
+	if replacement == provider {
+		replacement = providers[1]
+	}
+	mutated := false
+	for _, slot := range deal.Mode2Slots {
+		if slot != nil && slot.Provider == provider {
+			slot.Provider = replacement
+			mutated = true
+		}
+	}
+	require.True(t, mutated)
+	require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
+
+	after, err := queryServer.GetProviderCollateral(ctx, &types.QueryGetProviderCollateralRequest{Address: provider})
+	require.NoError(t, err)
+	require.Equal(t, expectedActive, after.Collateral.ActiveAssignments)
+	require.Equal(t, expectedPending, after.Collateral.PendingAssignments)
+	require.Equal(t, before.Collateral.TotalAssignments, after.Collateral.TotalAssignments)
+}
+
+func TestProviderCollateralSummaryIgnoresExpiredAssignmentLocks(t *testing.T) {
+	f := initFixture(t)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+
+	require.NoError(t, f.keeper.Params.Set(ctx, collateralPolicyParams(0, 25)))
+	providers := make([]string, 0, 20)
+	for i := 0; i < 20; i++ {
+		providers = append(providers, makePolicyTestAddr(t, f, byte(i+1)))
+	}
+	registerPolicyTestProviders(t, f, ctx, providers...)
+	for _, provider := range providers {
+		setProviderBondForTest(t, f, ctx, provider, 100)
+	}
+
+	owner := makePolicyTestAddr(t, f, 0xEE)
+	res, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		DurationBlocks:      10,
+		ServiceHint:         "General:rs=8+4",
+		InitialEscrowAmount: math.NewInt(1_000_000),
+		MaxMonthlySpend:     math.NewInt(500_000),
+	})
+	require.NoError(t, err)
+
+	locks, err := queryServer.ListAssignmentCollateralLocksByDeal(ctx, &types.QueryListAssignmentCollateralLocksByDealRequest{
+		DealId:     res.DealId,
+		Pagination: &sdkquery.PageRequest{Limit: 100, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, locks.Locks)
+
+	deal, err := f.keeper.Deals.Get(ctx, res.DealId)
+	require.NoError(t, err)
+	expiredCtx := ctx.WithBlockHeight(int64(deal.EndBlock))
+	expired, err := queryServer.GetProviderCollateral(expiredCtx, &types.QueryGetProviderCollateralRequest{Address: locks.Locks[0].Provider})
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), expired.Collateral.ActiveAssignments)
+	require.Equal(t, uint64(0), expired.Collateral.PendingAssignments)
+	require.Equal(t, uint64(0), expired.Collateral.TotalAssignments)
+}
+
 func TestProviderCollateralSummaryQueryReportsUnlimitedAssignments(t *testing.T) {
 	f := initFixture(t)
 	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
@@ -205,6 +313,23 @@ func TestProviderCollateralSummaryQueryReportsUnlimitedAssignments(t *testing.T)
 	require.Equal(t, uint64(0), res.Collateral.OverassignedAssignments)
 	require.True(t, res.Collateral.EligibleForNewAssignment)
 	require.Empty(t, res.Collateral.IneligibilityReason)
+}
+
+func countAssignmentLocksForProvider(locks []types.AssignmentCollateralLock, provider string) (uint64, uint64) {
+	var active uint64
+	var pending uint64
+	for _, lock := range locks {
+		if lock.Provider != provider {
+			continue
+		}
+		switch lock.Role {
+		case types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_ACTIVE:
+			active++
+		case types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_PENDING_REPAIR:
+			pending++
+		}
+	}
+	return active, pending
 }
 
 func findProviderCollateralSummary(t *testing.T, summaries []types.ProviderCollateralSummary, provider string) types.ProviderCollateralSummary {
