@@ -294,7 +294,7 @@ message Provider {
   int64 reputation_score = 6; // Uptime/Performance score
   repeated string endpoints = 7; // Provider transport endpoints as Multiaddrs (HTTP now; libp2p future)
   bool draining = 8; // If true, provider will not receive new assignments (see RFC provider exit/draining).
-  cosmos.base.v1beta1.Coin bond = 9 [(gogoproto.nullable) = false]; // Active self-bond locked in the module account.
+  cosmos.base.v1beta1.Coin bond = 9 [(gogoproto.nullable) = false]; // Active self-bond locked in the provider-bond module account.
   cosmos.base.v1beta1.Coin bond_slashed = 10 [(gogoproto.nullable) = false]; // Cumulative self-bond burned for hard faults.
 }
 

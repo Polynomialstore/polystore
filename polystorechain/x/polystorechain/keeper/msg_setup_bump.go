@@ -96,6 +96,10 @@ func (k Keeper) selectSetupBumpProvider(ctx sdk.Context, deal types.Deal, slot u
 		return "", 0, fmt.Errorf("failed to load setup bump nonce: %w", err)
 	}
 	seed := setupBumpSeed(deal.Id, slot, nonce)
+	assignmentCounts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to build provider assignment counts: %w", err)
+	}
 
 	excluded := make(map[string]struct{}, len(deal.Providers)+len(deal.Mode2Slots))
 	for _, provider := range deal.Providers {
@@ -130,7 +134,7 @@ func (k Keeper) selectSetupBumpProvider(ctx sdk.Context, deal types.Deal, slot u
 		if provider.Draining {
 			return false, nil
 		}
-		reason, err := k.providerHealthPlacementIneligibility(ctx, provider)
+		reason, err := k.providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx, provider, 1, assignmentCounts)
 		if err != nil {
 			return false, err
 		}

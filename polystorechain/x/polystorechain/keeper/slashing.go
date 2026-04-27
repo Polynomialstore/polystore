@@ -471,6 +471,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	if err := k.applyProviderHealthEpochDecay(sdkCtx, epochID); err != nil {
 		return err
 	}
+	if err := k.scheduleUnderbondedRepairs(sdkCtx, epochID); err != nil {
+		return err
+	}
 	// Run controlled churn after rewards are distributed so a draining provider
 	// is still paid for the epoch they served.
 	if err := k.scheduleDrainingRepairs(sdkCtx, epochID); err != nil {

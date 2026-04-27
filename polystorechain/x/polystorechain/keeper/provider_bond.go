@@ -33,6 +33,20 @@ func normalizeMinProviderBond(params types.Params) (sdk.Coin, error) {
 	return min, nil
 }
 
+func normalizeAssignmentCollateralPerSlot(params types.Params) (sdk.Coin, error) {
+	perSlot := normalizeCoinAmount(params.AssignmentCollateralPerSlot)
+	if strings.TrimSpace(perSlot.Denom) == "" {
+		perSlot.Denom = sdk.DefaultBondDenom
+	}
+	if perSlot.Amount.IsNegative() {
+		return sdk.Coin{}, fmt.Errorf("assignment_collateral_per_slot cannot be negative: %s", perSlot)
+	}
+	if !perSlot.IsValid() {
+		return sdk.Coin{}, fmt.Errorf("invalid assignment_collateral_per_slot: %s", perSlot)
+	}
+	return perSlot, nil
+}
+
 func normalizeRegistrationBond(bond sdk.Coin, params types.Params) (sdk.Coin, error) {
 	min, err := normalizeMinProviderBond(params)
 	if err != nil {
@@ -91,25 +105,104 @@ func addBondCoins(a sdk.Coin, b sdk.Coin) sdk.Coin {
 }
 
 func providerBondPlacementIneligibility(provider types.Provider, params types.Params) string {
-	min, err := normalizeMinProviderBond(params)
+	return providerBondPlacementIneligibilityForAssignments(provider, params, 0)
+}
+
+func providerBondPlacementIneligibilityForAssignments(provider types.Provider, params types.Params, assignments uint64) string {
+	required, err := providerBondRequirementForAssignments(params, assignments)
 	if err != nil {
 		return fmt.Sprintf("provider bond policy is invalid: %s", err)
 	}
-	if !min.Amount.IsPositive() {
+	return providerBondRequirementIneligibility(provider, required, assignments)
+}
+
+func providerBondRequirementForAssignments(params types.Params, assignments uint64) (sdk.Coin, error) {
+	min, err := normalizeMinProviderBond(params)
+	if err != nil {
+		return sdk.Coin{}, err
+	}
+	perSlot, err := normalizeAssignmentCollateralPerSlot(params)
+	if err != nil {
+		return sdk.Coin{}, err
+	}
+	if perSlot.Amount.IsPositive() && perSlot.Denom != min.Denom {
+		return sdk.Coin{}, fmt.Errorf("assignment_collateral_per_slot denom %q does not match min_provider_bond denom %q", perSlot.Denom, min.Denom)
+	}
+
+	required := min
+	if perSlot.Amount.IsPositive() && assignments > 0 {
+		required = sdk.NewCoin(required.Denom, required.Amount.Add(perSlot.Amount.Mul(math.NewIntFromUint64(assignments))))
+	}
+	return required, nil
+}
+
+func providerBondRequirementIneligibility(provider types.Provider, required sdk.Coin, assignments uint64) string {
+	if !required.Amount.IsPositive() {
 		return ""
 	}
 
 	bond := normalizeCoinAmount(provider.Bond)
 	if strings.TrimSpace(bond.Denom) == "" {
-		return fmt.Sprintf("provider bond is below minimum %s", min)
+		if assignments == 0 {
+			return fmt.Sprintf("provider bond is below minimum %s", required)
+		}
+		return fmt.Sprintf("provider bond is below required collateral %s for %d assignments", required, assignments)
 	}
-	if bond.Denom != min.Denom {
-		return fmt.Sprintf("provider bond denom %q does not match required denom %q", bond.Denom, min.Denom)
+	if bond.Denom != required.Denom {
+		return fmt.Sprintf("provider bond denom %q does not match required denom %q", bond.Denom, required.Denom)
 	}
-	if bond.Amount.LT(min.Amount) {
-		return fmt.Sprintf("provider bond %s is below minimum %s", bond, min)
+	if bond.Amount.LT(required.Amount) {
+		if assignments == 0 {
+			return fmt.Sprintf("provider bond %s is below minimum %s", bond, required)
+		}
+		return fmt.Sprintf("provider bond %s is below required collateral %s for %d assignments", bond, required, assignments)
 	}
 	return ""
+}
+
+func providerBondAffordableAssignments(provider types.Provider, params types.Params) (uint64, string, error) {
+	min, err := normalizeMinProviderBond(params)
+	if err != nil {
+		return 0, "", err
+	}
+	perSlot, err := normalizeAssignmentCollateralPerSlot(params)
+	if err != nil {
+		return 0, "", err
+	}
+	if perSlot.Amount.IsPositive() && perSlot.Denom != min.Denom {
+		return 0, "", fmt.Errorf("assignment_collateral_per_slot denom %q does not match min_provider_bond denom %q", perSlot.Denom, min.Denom)
+	}
+
+	bond := normalizeCoinAmount(provider.Bond)
+	if strings.TrimSpace(bond.Denom) == "" {
+		if min.Amount.IsPositive() || perSlot.Amount.IsPositive() {
+			switch {
+			case min.Amount.IsPositive() && perSlot.Amount.IsPositive():
+				return 0, fmt.Sprintf("provider bond denom/amount is unset; requires minimum %s and assignment collateral per slot %s", min, perSlot), nil
+			case perSlot.Amount.IsPositive():
+				return 0, fmt.Sprintf("provider bond denom/amount is unset; requires assignment collateral per slot %s", perSlot), nil
+			default:
+				return 0, fmt.Sprintf("provider bond denom/amount is unset; requires minimum collateral %s", min), nil
+			}
+		}
+		bond.Denom = min.Denom
+	}
+	if (min.Amount.IsPositive() || perSlot.Amount.IsPositive()) && bond.Denom != min.Denom {
+		return 0, fmt.Sprintf("provider bond denom %q does not match required denom %q", bond.Denom, min.Denom), nil
+	}
+	if bond.Amount.LT(min.Amount) {
+		return 0, fmt.Sprintf("provider bond %s is below minimum %s", bond, min), nil
+	}
+	if !perSlot.Amount.IsPositive() {
+		return ^uint64(0), "", nil
+	}
+	headroom := bond.Amount.Sub(min.Amount)
+	affordable := headroom.Quo(perSlot.Amount)
+	maxUint64 := math.NewIntFromUint64(^uint64(0))
+	if affordable.GT(maxUint64) {
+		return ^uint64(0), "", nil
+	}
+	return affordable.Uint64(), "", nil
 }
 
 func providerBondSlashAmount(bond sdk.Coin, slashBps uint64) sdk.Coin {
@@ -130,8 +223,8 @@ func providerBondSlashAmount(bond sdk.Coin, slashBps uint64) sdk.Coin {
 	return sdk.NewCoin(bond.Denom, slashInt)
 }
 
-func overlayProviderBondHealth(health types.ProviderHealthState, provider types.Provider, params types.Params, height int64) types.ProviderHealthState {
-	reason := providerBondPlacementIneligibility(provider, params)
+func overlayProviderBondHealth(health types.ProviderHealthState, provider types.Provider, params types.Params, height int64, assignments uint64) types.ProviderHealthState {
+	reason := providerBondPlacementIneligibilityForAssignments(provider, params, assignments)
 	if reason == "" {
 		return health
 	}

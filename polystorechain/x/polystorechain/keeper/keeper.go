@@ -313,6 +313,11 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		return nil, fmt.Errorf("no providers registered")
 	}
 
+	assignmentCounts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build provider assignment counts: %w", err)
+	}
+
 	var candidateProviders []types.Provider
 	// Filter by capabilities based on serviceHint
 	for _, provider := range allProviders {
@@ -323,7 +328,7 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		if provider.Draining {
 			continue
 		}
-		reason, err := k.providerHealthPlacementIneligibility(ctx, provider)
+		reason, err := k.providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx, provider, 1, assignmentCounts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check provider health for %s: %w", provider.Address, err)
 		}
