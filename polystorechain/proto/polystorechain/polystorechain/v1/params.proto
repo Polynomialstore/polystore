@@ -159,4 +159,12 @@ message Params {
   // Share of the normal liveness quota a pending provider must prove before
   // repair promotion is considered catch-up ready. 10_000 means full quota.
   uint64 repair_readiness_quota_bps = 44;
+  // Minimum self-bond required for placement/reward eligibility. 0 disables
+  // provider-bond gating while preserving the ledger surface.
+  cosmos.base.v1beta1.Coin min_provider_bond = 45 [
+    (gogoproto.nullable) = false
+  ];
+  // Bond slash applied to hard/slashable evidence, in basis points. 0 disables
+  // token-bond burning while preserving reputation/jail consequences.
+  uint64 hard_fault_bond_slash_bps = 46;
 }

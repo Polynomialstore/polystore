@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
 	"cosmossdk.io/math"
@@ -45,18 +47,31 @@ func CmdRegisterProvider() *cobra.Command {
 			if len(endpoints) == 0 {
 				return fmt.Errorf("at least one --endpoint multiaddr is required")
 			}
+			bond := sdk.NewCoin(sdk.DefaultBondDenom, math.ZeroInt())
+			bondFlag, err := cmd.Flags().GetString("bond")
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(bondFlag) != "" {
+				bond, err = sdk.ParseCoinNormalized(bondFlag)
+				if err != nil {
+					return fmt.Errorf("invalid --bond: %w", err)
+				}
+			}
 
 			msg := types.MsgRegisterProvider{
 				Creator:      clientCtx.GetFromAddress().String(),
 				Capabilities: capabilities,
 				TotalStorage: totalStorage,
 				Endpoints:    endpoints,
+				Bond:         bond,
 			}
 
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 	cmd.Flags().StringArray("endpoint", nil, "Provider endpoint multiaddr (repeatable), e.g. /dns4/host/tcp/8080/http")
+	cmd.Flags().String("bond", "", "Provider self-bond to lock on registration, e.g. 100stake")
 	flags.AddTxFlagsToCmd(cmd)
 	return cmd
 }
@@ -128,8 +143,8 @@ func CmdApproveProviderLink() *cobra.Command {
 			}
 
 			msg := types.MsgApproveProviderLink{
-				Creator:   clientCtx.GetFromAddress().String(),
-				Provider:  args[0],
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
 			}
 
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)

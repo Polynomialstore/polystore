@@ -81,6 +81,24 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 		}
 	}
 
+	bondBefore := normalizeCoinAmount(provider.Bond)
+	if strings.TrimSpace(bondBefore.Denom) == "" {
+		bondBefore.Denom = sdk.DefaultBondDenom
+	}
+	bondSlash := providerBondSlashAmount(bondBefore, params.HardFaultBondSlashBps)
+	if bondSlash.Amount.IsPositive() {
+		if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, sdk.NewCoins(bondSlash)); err != nil {
+			return fmt.Errorf("failed to burn provider bond slash: %w", err)
+		}
+		provider.Bond = sdk.NewCoin(bondBefore.Denom, bondBefore.Amount.Sub(bondSlash.Amount))
+		provider.BondSlashed = addBondCoins(provider.BondSlashed, bondSlash)
+	} else {
+		provider.Bond = bondBefore
+		if strings.TrimSpace(provider.BondSlashed.Denom) == "" {
+			provider.BondSlashed = zeroBondLike(bondBefore.Denom)
+		}
+	}
+
 	jailUntilHeight := uint64(0)
 	if params.JailHardFaultEpochs > 0 && params.EpochLenBlocks > 0 {
 		jailBlocks := saturatingMulUint64(params.JailHardFaultEpochs, params.EpochLenBlocks)
@@ -113,7 +131,7 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 		health.LastSlot = ev.Slot
 		health.LastEpochId = ev.EpochId
 		health.UpdatedHeight = ctx.BlockHeight()
-		health.ConsequenceCeiling = fmt.Sprintf("jailed until height %d; reputation slash %d", jailUntilHeight, reputationSlash)
+		health.ConsequenceCeiling = fmt.Sprintf("jailed until height %d; reputation slash %d; bond slash %s", jailUntilHeight, reputationSlash, bondSlash)
 		if err := k.ProviderHealthStates.Set(ctx, providerAddr, health); err != nil {
 			return err
 		}
@@ -127,6 +145,10 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 			sdk.NewAttribute("reputation_before", fmt.Sprintf("%d", reputationBefore)),
 			sdk.NewAttribute("reputation_slash", fmt.Sprintf("%d", reputationSlash)),
 			sdk.NewAttribute("reputation_after", fmt.Sprintf("%d", provider.ReputationScore)),
+			sdk.NewAttribute("bond_before", bondBefore.String()),
+			sdk.NewAttribute("bond_slash", bondSlash.String()),
+			sdk.NewAttribute("bond_after", provider.Bond.String()),
+			sdk.NewAttribute("bond_slashed_total", provider.BondSlashed.String()),
 			sdk.NewAttribute("jail_until_height", fmt.Sprintf("%d", jailUntilHeight)),
 		),
 	)
@@ -178,6 +200,7 @@ func (k Keeper) expireProviderJails(ctx sdk.Context) error {
 		health.Severity = types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO
 		health.UpdatedHeight = ctx.BlockHeight()
 		health.ConsequenceCeiling = "jail window expired; provider restored to active eligibility"
+		health = overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight())
 		if err := k.ProviderHealthStates.Set(ctx, providerAddr, health); err != nil {
 			return err
 		}

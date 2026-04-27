@@ -140,15 +140,8 @@ func (k queryServer) ListProviderHealth(goCtx context.Context, req *types.QueryL
 		goCtx,
 		k.k.Providers,
 		req.Pagination,
-		func(address string, provider types.Provider) (types.ProviderHealthState, error) {
-			explicit, err := k.k.ProviderHealthStates.Get(ctx, address)
-			if err == nil {
-				return explicit, nil
-			}
-			if err != nil && !errors.Is(err, collections.ErrNotFound) {
-				return types.ProviderHealthState{}, err
-			}
-			return providerHealthFromProvider(provider, ctx.BlockHeight()), nil
+		func(address string, _ types.Provider) (types.ProviderHealthState, error) {
+			return k.k.deriveProviderHealthState(ctx, address)
 		},
 	)
 	if err != nil {

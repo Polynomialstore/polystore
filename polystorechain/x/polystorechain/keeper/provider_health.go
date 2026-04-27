@@ -137,6 +137,7 @@ func (k Keeper) deriveProviderHealthState(ctx sdk.Context, providerAddr string) 
 	if err == nil {
 		if provider, providerErr := k.Providers.Get(ctx, providerAddr); providerErr == nil {
 			health = providerHealthFromProviderOverlay(health, provider, ctx.BlockHeight())
+			health = overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight())
 		}
 		return health, nil
 	}
@@ -148,7 +149,8 @@ func (k Keeper) deriveProviderHealthState(ctx sdk.Context, providerAddr string) 
 	if err != nil {
 		return types.ProviderHealthState{}, err
 	}
-	return providerHealthFromProvider(provider, ctx.BlockHeight()), nil
+	health = providerHealthFromProvider(provider, ctx.BlockHeight())
+	return overlayProviderBondHealth(health, provider, k.GetParams(ctx), ctx.BlockHeight()), nil
 }
 
 func providerLifecyclePlacementIneligibility(status types.ProviderLifecycleStatus) string {
@@ -187,6 +189,9 @@ func (k Keeper) providerHealthPlacementIneligibility(ctx sdk.Context, provider t
 	if reason := providerLifecyclePlacementIneligibility(providerLifecycleFromRegistration(provider)); reason != "" {
 		return reason, nil
 	}
+	if reason := providerBondPlacementIneligibility(provider, k.GetParams(ctx)); reason != "" {
+		return reason, nil
+	}
 	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
@@ -204,6 +209,9 @@ func (k Keeper) providerHealthRewardIneligibility(ctx sdk.Context, provider type
 		return "", nil
 	}
 	if reason := providerLifecycleRewardIneligibility(providerLifecycleFromRegistration(provider)); reason != "" {
+		return reason, nil
+	}
+	if reason := providerBondPlacementIneligibility(provider, k.GetParams(ctx)); reason != "" {
 		return reason, nil
 	}
 	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
