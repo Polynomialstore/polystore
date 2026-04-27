@@ -84,9 +84,20 @@ func TestProveLiveness_InvalidSystemProofRecordsHardEvidenceWithoutPayment(t *te
 
 	provider, err := f.keeper.Providers.Get(sdkCtx, providerA)
 	require.NoError(t, err)
-	require.Equal(t, beforeReputation, provider.ReputationScore)
-	require.Equal(t, "Active", provider.Status)
+	require.Equal(t, beforeReputation-1, provider.ReputationScore)
+	require.Equal(t, "Jailed", provider.Status)
 	require.False(t, provider.Draining)
+
+	jailUntil, err := f.keeper.ProviderJailUntil.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(16), jailUntil)
+
+	health, err := f.keeper.ProviderHealthStates.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED, health.LifecycleStatus)
+	require.Equal(t, "hard_fault_jailed", health.Reason)
+	require.Equal(t, types.EvidenceSeverity_EVIDENCE_SEVERITY_HARD, health.Severity)
+	require.Equal(t, uint64(1), health.HardFaultCount)
 }
 
 func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {

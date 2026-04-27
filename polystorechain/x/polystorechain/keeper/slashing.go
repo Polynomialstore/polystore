@@ -463,6 +463,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := k.applyProviderHealthEpochDecay(sdkCtx, epochID); err != nil {
+		return err
+	}
 	if err := k.distributeBaseRewardPool(sdkCtx, epochID); err != nil {
 		return err
 	}
