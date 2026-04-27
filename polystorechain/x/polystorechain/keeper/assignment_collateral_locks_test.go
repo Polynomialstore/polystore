@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
@@ -86,6 +87,34 @@ func TestAssignmentCollateralLocksSyncOnCreateDeal(t *testing.T) {
 	for _, lock := range byProvider.Locks {
 		require.Equal(t, first.Provider, lock.Provider)
 	}
+
+	require.NoError(t, f.keeper.AssignmentCollateralLocksByDeal.Set(
+		ctx,
+		collections.Join(res.DealId, collections.Join(uint32(99), makePolicyTestAddr(t, f, 0xFA))),
+		true,
+	))
+	listWithStaleIndex, err := queryServer.ListAssignmentCollateralLocksByDeal(ctx, &types.QueryListAssignmentCollateralLocksByDealRequest{
+		DealId:     res.DealId,
+		Pagination: &sdkquery.PageRequest{Limit: 100, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, listWithStaleIndex.Locks, len(deal.Mode2Slots))
+	require.Equal(t, uint64(len(deal.Mode2Slots)), listWithStaleIndex.Pagination.Total)
+
+	ctx2 := ctx.WithBlockHeight(8)
+	_, err = msgServer.AddCredit(ctx2, &types.MsgAddCredit{
+		Creator: owner,
+		DealId:  res.DealId,
+		Amount:  math.NewInt(1),
+	})
+	require.NoError(t, err)
+	unchanged, err := queryServer.GetAssignmentCollateralLock(ctx2, &types.QueryGetAssignmentCollateralLockRequest{
+		Provider: first.Provider,
+		DealId:   first.DealId,
+		Slot:     first.Slot,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(5), unchanged.Lock.UpdatedHeight)
 }
 
 func TestAssignmentCollateralLocksMoveAcrossRepairLifecycle(t *testing.T) {

@@ -78,6 +78,10 @@ func (k Keeper) syncAssignmentCollateralLocksForDeal(ctx sdk.Context, deal types
 		}
 	}
 	for _, lock := range desired {
+		id := assignmentCollateralLockID(lock.Provider, lock.DealId, lock.Slot)
+		if old, ok := existing[id]; ok && assignmentCollateralLocksEquivalent(old, lock) {
+			continue
+		}
 		if err := k.AssignmentCollateralLocks.Set(ctx, makeAssignmentCollateralLockKey(lock.Provider, lock.DealId, lock.Slot), lock); err != nil {
 			return err
 		}
@@ -148,4 +152,20 @@ func (k Keeper) desiredAssignmentCollateralLocksForDeal(ctx sdk.Context, deal ty
 		})
 	}
 	return locks, nil
+}
+
+func assignmentCollateralLocksEquivalent(a, b types.AssignmentCollateralLock) bool {
+	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) &&
+		a.DealId == b.DealId &&
+		a.Slot == b.Slot &&
+		a.Role == b.Role &&
+		a.Amount.Equal(&b.Amount) &&
+		a.Generation == b.Generation &&
+		a.LockedAtHeight == b.LockedAtHeight &&
+		a.Reason == b.Reason
+}
+
+func (k Keeper) assignmentCollateralLockFromDealIndex(ctx sdk.Context, key assignmentCollateralLockByDealKey) (types.AssignmentCollateralLock, error) {
+	slotProvider := key.K2()
+	return k.AssignmentCollateralLocks.Get(ctx, makeAssignmentCollateralLockKey(slotProvider.K2(), key.K1(), slotProvider.K1()))
 }

@@ -268,13 +268,22 @@ func (k queryServer) ListAssignmentCollateralLocksByDeal(goCtx context.Context, 
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	locks, pageRes, err := sdkquery.CollectionPaginate(
+	locks, pageRes, err := sdkquery.CollectionFilteredPaginate(
 		goCtx,
 		k.k.AssignmentCollateralLocksByDeal,
 		req.Pagination,
+		func(key assignmentCollateralLockByDealKey, _ bool) (bool, error) {
+			_, err := k.k.assignmentCollateralLockFromDealIndex(ctx, key)
+			if errors.Is(err, collections.ErrNotFound) {
+				return false, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		},
 		func(key assignmentCollateralLockByDealKey, _ bool) (types.AssignmentCollateralLock, error) {
-			slotProvider := key.K2()
-			return k.k.AssignmentCollateralLocks.Get(ctx, makeAssignmentCollateralLockKey(slotProvider.K2(), key.K1(), slotProvider.K1()))
+			return k.k.assignmentCollateralLockFromDealIndex(ctx, key)
 		},
 		sdkquery.WithCollectionPaginationPairPrefix[uint64, collections.Pair[uint32, string]](req.DealId),
 	)
