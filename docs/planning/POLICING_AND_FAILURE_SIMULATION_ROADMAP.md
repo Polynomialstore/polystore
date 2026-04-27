@@ -48,7 +48,7 @@ The current repo already contains several enforcement surfaces:
 | Audit and deputy paths | Protocol audit tasks, deputy-served accounting, and protocol sessions are partially wired. |
 | Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with indexed, paginated query surfaces. |
 | Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates provider lifecycle signals from structured evidence, registration state, and bond headroom; placement, setup bumping, repair replacement, base rewards, proof-time reward eligibility, soft-fault decay, hard-fault jail/reputation consequences, and underbonded exclusion consume it. |
-| Provider bond economics | Provider registration can lock a self-bond, hard/slashable evidence can burn a governance-parametrized bond share, provider records expose active/slashed bond, and underbonded providers are excluded from new placement and rewards when `min_provider_bond` is enabled. |
+| Provider bond economics | Provider registration can lock an isolated self-bond, hard/slashable evidence can burn a governance-parametrized bond share from the provider-bond account, provider records expose active/slashed bond, and underbonded providers are excluded from new placement and rewards when `min_provider_bond` is enabled. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -641,9 +641,10 @@ bandwidth payments, or reputation. Hard/slashable evidence now applies
 governance-parametrized first-pass consequences: reputation slash, temporary
 provider jail recorded in `ProviderJailUntil`, and optional token-bond burn
 through `hard_fault_bond_slash_bps`. Provider registration can lock a
-self-bond, provider records track active and cumulative slashed bond, and
-`min_provider_bond` gates placement/reward eligibility by surfacing
-underbonded providers as `DELINQUENT` health. Soft-fault health has
+self-bond into a dedicated provider-bond module account, provider records track
+active and cumulative slashed bond, and `min_provider_bond` gates
+placement/reward eligibility by surfacing underbonded providers as
+`DELINQUENT` health. Soft-fault health has
 epoch-window decay through `provider_health_decay_epochs` and
 `provider_health_decay_bps`.
 
@@ -995,7 +996,9 @@ Potential state additions:
 8. `NonResponseAccumulator(provider, deal_id, slot, window)`.
 9. `ProviderBondState(provider)`. **Landed first pass:** provider records track
    active `bond` and cumulative `bond_slashed`; `MsgRegisterProvider` can lock
-   initial bond in the module account; hard-fault policy can burn bond.
+   initial bond in the dedicated `nilchain_provider_bond` module account;
+   hard-fault policy can burn bond without touching deal escrow, reward,
+   retrieval-fee, or protocol-budget funds.
 10. `AssignmentCollateral(provider, deal_id, slot)`. Still pending as a
     calibrated per-assignment formula and ledger.
 11. `ProviderJailState(provider)`. **Landed first pass:** `ProviderJailUntil`
@@ -1056,8 +1059,9 @@ Likely messages:
 5. `MsgRequestSlotExit` convenience path for voluntary provider exit.
 6. `MsgSignalSaturation` hardening for Mode 2 overlay elasticity.
 7. `MsgUpdateProviderBond` or staking integration. **Partial:**
-   `MsgRegisterProvider` accepts an initial self-bond; rebond, unbond, and
-   staking-module integration remain pending.
+   `MsgRegisterProvider` accepts an initial self-bond and isolates it in a
+   provider-bond account; rebond, unbond, and staking-module integration remain
+   pending.
 8. `MsgUpdateProviderCapabilities` or capability attestation.
 9. `MsgOpenRetrievalSessionSponsored` for requester-funded public retrieval.
 10. `MsgOpenProtocolRetrievalSession` for audit, repair, and healing.
@@ -1086,8 +1090,9 @@ Queries/events should make the system explainable:
 7. Audit debt by provider/slot.
 8. Reward eligibility and exclusion reason.
 9. Jail/slash history. **Partial:** provider records expose active/slashed bond
-   and hard-fault penalty events include reputation, jail, and bond-burn
-   details; indexed historical slash queries remain pending.
+   and hard-fault penalty events include reputation, jail, isolated
+   provider-bond account burns, and bond-burn details; indexed historical slash
+   queries remain pending.
 10. Elasticity overlays and spend-window usage.
 11. Current storage and retrieval price with prior-epoch deltas.
 12. Storage utilization and retrieval demand inputs used by pricing.
@@ -2092,7 +2097,7 @@ for later work.
 | Pending repair promotion requires catch-up progress | A repairing slot's pending provider must accumulate counted proof progress and satisfy `repair_readiness_quota_bps` of the normal slot quota before `Mode2RepairReadiness` permits promotion. | Keeper state and promotion guard. |
 | Proof-time rewards are split by source | Storage/performance rewards are recorded as inflationary storage claims; retrieval bandwidth payments are recorded as escrow-funded bandwidth claims; the legacy aggregate remains compatibility-only. | Keeper reward ledgers and withdrawal accounting. |
 | Unhealthy providers do not earn proof-time rewards | `DELINQUENT`, `JAILED`, and `EXITED` provider health states can submit valid proofs for observability, but storage rewards, bandwidth payments, and reputation accrual are excluded. | Keeper reward policy. |
-| Hard proof faults jail, slash reputation, and optionally burn provider bond | Hard/slashable structured evidence applies `hard_fault_reputation_slash_bps`, can burn registered provider bond through `hard_fault_bond_slash_bps`, and stores `ProviderJailUntil` for `jail_hard_fault_epochs` when enabled. | Keeper evidence consequences and bank burn from module-held provider bond. |
+| Hard proof faults jail, slash reputation, and optionally burn provider bond | Hard/slashable structured evidence applies `hard_fault_reputation_slash_bps`, can burn registered provider bond through `hard_fault_bond_slash_bps`, and stores `ProviderJailUntil` for `jail_hard_fault_epochs` when enabled. | Keeper evidence consequences and bank burn from the isolated provider-bond module account. |
 | Underbonded providers are excluded | When `min_provider_bond` is enabled, providers below the minimum are surfaced as `provider_underbonded` / `DELINQUENT` health and excluded from new placement and rewards. | Keeper provider health, placement, reward, and query policy. |
 | Soft-fault health can decay | At epoch boundaries, soft-fault counters decay after `provider_health_decay_epochs` quiet epochs by `provider_health_decay_bps`, allowing degraded/delinquent providers to return to active health without manual intervention. | Keeper epoch policy. |
 

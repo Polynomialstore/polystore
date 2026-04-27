@@ -87,7 +87,7 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 	}
 	bondSlash := providerBondSlashAmount(bondBefore, params.HardFaultBondSlashBps)
 	if bondSlash.Amount.IsPositive() {
-		if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, sdk.NewCoins(bondSlash)); err != nil {
+		if err := k.BankKeeper.BurnCoins(ctx, types.ProviderBondModuleName, sdk.NewCoins(bondSlash)); err != nil {
 			return fmt.Errorf("failed to burn provider bond slash: %w", err)
 		}
 		provider.Bond = sdk.NewCoin(bondBefore.Denom, bondBefore.Amount.Sub(bondSlash.Amount))

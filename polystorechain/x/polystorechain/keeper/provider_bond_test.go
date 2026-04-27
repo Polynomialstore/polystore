@@ -39,7 +39,8 @@ func TestRegisterProviderLocksConfiguredBond(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "150stake", record.Bond.String())
 	require.Equal(t, "0stake", record.BondSlashed.String())
-	require.Equal(t, "150stake", bank.moduleBalances[types.ModuleName].String())
+	require.Equal(t, "150stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+	require.True(t, bank.moduleBalances[types.ModuleName].IsZero())
 	require.Equal(t, "100stake", bank.accountBalances[providerAddr.String()].String())
 
 	underbonded := makePolicyTestAddr(t, f, 0xB2)
@@ -96,7 +97,8 @@ func TestHardFaultBurnsProviderBondAndUnderbondedAfterJailExpiry(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	require.Equal(t, "400stake", bank.moduleBalances[types.ModuleName].String())
+	require.Equal(t, "400stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+	require.True(t, bank.moduleBalances[types.ModuleName].IsZero())
 
 	dealID := uint64(1)
 	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
@@ -118,7 +120,8 @@ func TestHardFaultBurnsProviderBondAndUnderbondedAfterJailExpiry(t *testing.T) {
 	require.Equal(t, "80stake", provider.Bond.String())
 	require.Equal(t, "20stake", provider.BondSlashed.String())
 	require.Equal(t, "Jailed", provider.Status)
-	require.Equal(t, "380stake", bank.moduleBalances[types.ModuleName].String())
+	require.Equal(t, "380stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+	require.True(t, bank.moduleBalances[types.ModuleName].IsZero())
 
 	health, err := f.keeper.ProviderHealthStates.Get(ctx, providerA)
 	require.NoError(t, err)

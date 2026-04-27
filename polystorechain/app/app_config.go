@@ -87,6 +87,7 @@ var (
 		{Account: icatypes.ModuleName},
 		{Account: polystorechainmoduletypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: polystorechainmoduletypes.ProtocolBudgetModuleName, Permissions: []string{authtypes.Minter}},
+		{Account: polystorechainmoduletypes.ProviderBondModuleName, Permissions: []string{authtypes.Burner}},
 		{Account: evmtypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: feemarkettypes.ModuleName},
 	}

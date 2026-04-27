@@ -344,7 +344,7 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		if err != nil {
 			return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid provider address: %s", canonicalCreator)
 		}
-		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, sdk.NewCoins(bond)); err != nil {
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ProviderBondModuleName, sdk.NewCoins(bond)); err != nil {
 			return nil, fmt.Errorf("failed to lock provider bond: %w", err)
 		}
 	}
