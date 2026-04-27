@@ -10,14 +10,40 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-func (k Keeper) providerMode2AssignmentCounts(ctx sdk.Context, providerAddr string) (active uint64, pending uint64, err error) {
+type providerAssignmentCounts struct {
+	active  uint64
+	pending uint64
+}
+
+type providerAssignmentCountSnapshot map[string]providerAssignmentCounts
+
+func (s providerAssignmentCountSnapshot) countsFor(providerAddr string) (uint64, uint64) {
+	counts := s[strings.TrimSpace(providerAddr)]
+	return counts.active, counts.pending
+}
+
+func (s providerAssignmentCountSnapshot) incrementPending(providerAddr string) {
 	providerAddr = strings.TrimSpace(providerAddr)
 	if providerAddr == "" {
-		return 0, 0, nil
+		return
 	}
+	counts := s[providerAddr]
+	if counts.pending < ^uint64(0) {
+		counts.pending++
+	}
+	s[providerAddr] = counts
+}
 
+func incrementAssignmentCount(count *uint64) {
+	if *count < ^uint64(0) {
+		*count++
+	}
+}
+
+func (k Keeper) providerMode2AssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
 	height := uint64(ctx.BlockHeight())
-	err = k.Deals.Walk(ctx, nil, func(_ uint64, deal types.Deal) (bool, error) {
+	snapshot := make(providerAssignmentCountSnapshot)
+	err := k.Deals.Walk(ctx, nil, func(_ uint64, deal types.Deal) (bool, error) {
 		if height < deal.StartBlock || height >= deal.EndBlock {
 			return false, nil
 		}
@@ -30,32 +56,59 @@ func (k Keeper) providerMode2AssignmentCounts(ctx sdk.Context, providerAddr stri
 			}
 			switch slot.Status {
 			case types.SlotStatus_SLOT_STATUS_ACTIVE:
-				if strings.TrimSpace(slot.Provider) == providerAddr {
-					active++
+				providerAddr := strings.TrimSpace(slot.Provider)
+				if providerAddr == "" {
+					continue
 				}
+				counts := snapshot[providerAddr]
+				incrementAssignmentCount(&counts.active)
+				snapshot[providerAddr] = counts
 			case types.SlotStatus_SLOT_STATUS_REPAIRING:
-				if strings.TrimSpace(slot.PendingProvider) == providerAddr {
-					pending++
+				providerAddr := strings.TrimSpace(slot.PendingProvider)
+				if providerAddr == "" {
+					continue
 				}
+				counts := snapshot[providerAddr]
+				incrementAssignmentCount(&counts.pending)
+				snapshot[providerAddr] = counts
 			}
 		}
 		return false, nil
 	})
-	return active, pending, err
+	return snapshot, err
+}
+
+func (k Keeper) providerMode2AssignmentCounts(ctx sdk.Context, providerAddr string) (active uint64, pending uint64, err error) {
+	providerAddr = strings.TrimSpace(providerAddr)
+	if providerAddr == "" {
+		return 0, 0, nil
+	}
+
+	snapshot, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	active, pending = snapshot.countsFor(providerAddr)
+	return active, pending, nil
 }
 
 func (k Keeper) providerAssignmentCollateralIneligibility(ctx sdk.Context, provider types.Provider, additionalAssignments uint64) (string, error) {
-	active, pending, err := k.providerMode2AssignmentCounts(ctx, provider.Address)
+	counts, err := k.providerMode2AssignmentCountSnapshot(ctx)
 	if err != nil {
 		return "", err
 	}
+	return k.providerAssignmentCollateralIneligibilityWithCounts(ctx, provider, additionalAssignments, counts), nil
+}
+
+func (k Keeper) providerAssignmentCollateralIneligibilityWithCounts(ctx sdk.Context, provider types.Provider, additionalAssignments uint64, counts providerAssignmentCountSnapshot) string {
+	active, pending := counts.countsFor(provider.Address)
 	assignments, overflow := addUint64(active, pending)
 	if overflow {
 		assignments = ^uint64(0)
 	} else if assignments, overflow = addUint64(assignments, additionalAssignments); overflow {
 		assignments = ^uint64(0)
 	}
-	return providerBondPlacementIneligibilityForAssignments(provider, k.GetParams(ctx), assignments), nil
+	return providerBondPlacementIneligibilityForAssignments(provider, k.GetParams(ctx), assignments)
 }
 
 func (k Keeper) affordableActiveAssignments(ctx sdk.Context, provider types.Provider) (uint64, string, error) {
@@ -82,6 +135,10 @@ func (k Keeper) scheduleUnderbondedRepairs(ctx sdk.Context, epochID uint64) erro
 
 	height := uint64(ctx.BlockHeight())
 	scheduledByProvider := make(map[string]uint64)
+	assignmentCounts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return err
+	}
 
 	return k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (bool, error) {
 		if height < deal.StartBlock || height >= deal.EndBlock {
@@ -109,10 +166,7 @@ func (k Keeper) scheduleUnderbondedRepairs(ctx sdk.Context, epochID uint64) erro
 			if err != nil {
 				return true, err
 			}
-			active, _, err := k.providerMode2AssignmentCounts(ctx, providerAddr)
-			if err != nil {
-				return true, err
-			}
+			active, _ := assignmentCounts.countsFor(providerAddr)
 			if active == 0 {
 				continue
 			}
@@ -147,7 +201,7 @@ func (k Keeper) scheduleUnderbondedRepairs(ctx sdk.Context, epochID uint64) erro
 				continue
 			}
 
-			pending, err := k.selectMode2ReplacementProvider(ctx, deal, slot, epochID)
+			pending, err := k.selectMode2ReplacementProviderWithCounts(ctx, deal, slot, epochID, assignmentCounts)
 			if err != nil {
 				ctx.Logger().Error(
 					"failed to select replacement provider (underbonded)",
@@ -164,6 +218,7 @@ func (k Keeper) scheduleUnderbondedRepairs(ctx sdk.Context, epochID uint64) erro
 
 			entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
 			entry.PendingProvider = strings.TrimSpace(pending)
+			assignmentCounts.incrementPending(entry.PendingProvider)
 			entry.StatusSinceHeight = ctx.BlockHeight()
 			entry.RepairTargetGen = deal.CurrentGen
 			if err := k.clearMode2RepairReadiness(ctx, dealID, slot); err != nil {

@@ -143,6 +143,9 @@ func providerBondRequirementIneligibility(provider types.Provider, required sdk.
 
 	bond := normalizeCoinAmount(provider.Bond)
 	if strings.TrimSpace(bond.Denom) == "" {
+		if assignments == 0 {
+			return fmt.Sprintf("provider bond is below minimum %s", required)
+		}
 		return fmt.Sprintf("provider bond is below required collateral %s for %d assignments", required, assignments)
 	}
 	if bond.Denom != required.Denom {
@@ -173,7 +176,14 @@ func providerBondAffordableAssignments(provider types.Provider, params types.Par
 	bond := normalizeCoinAmount(provider.Bond)
 	if strings.TrimSpace(bond.Denom) == "" {
 		if min.Amount.IsPositive() || perSlot.Amount.IsPositive() {
-			return 0, fmt.Sprintf("provider bond is below required collateral %s", min), nil
+			switch {
+			case min.Amount.IsPositive() && perSlot.Amount.IsPositive():
+				return 0, fmt.Sprintf("provider bond denom/amount is unset; requires minimum %s and assignment collateral per slot %s", min, perSlot), nil
+			case perSlot.Amount.IsPositive():
+				return 0, fmt.Sprintf("provider bond denom/amount is unset; requires assignment collateral per slot %s", perSlot), nil
+			default:
+				return 0, fmt.Sprintf("provider bond denom/amount is unset; requires minimum collateral %s", min), nil
+			}
 		}
 		bond.Denom = min.Denom
 	}

@@ -194,6 +194,14 @@ func (k Keeper) providerHealthPlacementIneligibility(ctx sdk.Context, provider t
 }
 
 func (k Keeper) providerHealthPlacementIneligibilityForAssignments(ctx sdk.Context, provider types.Provider, additionalAssignments uint64) (string, error) {
+	counts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return "", err
+	}
+	return k.providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx, provider, additionalAssignments, counts)
+}
+
+func (k Keeper) providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx sdk.Context, provider types.Provider, additionalAssignments uint64, counts providerAssignmentCountSnapshot) (string, error) {
 	providerAddr := strings.TrimSpace(provider.Address)
 	if providerAddr == "" {
 		return "", nil
@@ -201,11 +209,7 @@ func (k Keeper) providerHealthPlacementIneligibilityForAssignments(ctx sdk.Conte
 	if reason := providerLifecyclePlacementIneligibility(providerLifecycleFromRegistration(provider)); reason != "" {
 		return reason, nil
 	}
-	reason, err := k.providerAssignmentCollateralIneligibility(ctx, provider, additionalAssignments)
-	if err != nil {
-		return "", err
-	}
-	if reason != "" {
+	if reason := k.providerAssignmentCollateralIneligibilityWithCounts(ctx, provider, additionalAssignments, counts); reason != "" {
 		return reason, nil
 	}
 	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
