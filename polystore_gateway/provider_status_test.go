@@ -114,6 +114,16 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 					"draining":     false,
 				},
 			})
+		case "/polystorechain/polystorechain/v1/providers/nil1providerstatus/health":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"health": map[string]any{
+					"provider":              "nil1providerstatus",
+					"lifecycle_status":      "PROVIDER_LIFECYCLE_STATUS_ACTIVE",
+					"reason":                "provider_active",
+					"severity":              "EVIDENCE_SEVERITY_INFO",
+					"last_evidence_case_id": "42",
+				},
+			})
 		case "/polystorechain/polystorechain/v1/provider-pairings/nil1providerstatus":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"pairing": map[string]any{
@@ -166,6 +176,18 @@ func TestGatewayStatusIncludesProviderDaemonDetails(t *testing.T) {
 	}
 	if status.Provider.RegistrationStatus != "registered" {
 		t.Fatalf("unexpected registration status: got=%q want=%q", status.Provider.RegistrationStatus, "registered")
+	}
+	if status.Provider.HealthStatus != "PROVIDER_LIFECYCLE_STATUS_ACTIVE" {
+		t.Fatalf("unexpected health status: got=%q", status.Provider.HealthStatus)
+	}
+	if status.Provider.HealthReason != "provider_active" {
+		t.Fatalf("unexpected health reason: got=%q", status.Provider.HealthReason)
+	}
+	if status.Provider.HealthSeverity != "EVIDENCE_SEVERITY_INFO" {
+		t.Fatalf("unexpected health severity: got=%q", status.Provider.HealthSeverity)
+	}
+	if status.Provider.HealthEvidenceCase != "42" {
+		t.Fatalf("unexpected health evidence case: got=%q", status.Provider.HealthEvidenceCase)
 	}
 	if status.Provider.LocalBase != strings.TrimRight(localSrv.URL, "/") {
 		t.Fatalf("unexpected local base: got=%q want=%q", status.Provider.LocalBase, strings.TrimRight(localSrv.URL, "/"))

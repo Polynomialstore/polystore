@@ -639,14 +639,18 @@ Missing desired-state pieces include:
    setup bumping, repair replacement, and base rewards now consume provider
    health, but proof-time storage/bandwidth reward accounting is not yet split
    enough to safely apply calibrated reward exclusion there.
-2. Keeper/runtime repair attempt counters and cooldown windows. The simulator
-   now models these with `repair_attempt_cap_per_slot`,
-   `repair_backoff_epochs`, per-slot attempt state, cooldown backoff events,
-   attempt-cap backoff events, and candidate-exclusion diagnostics.
+2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
+   has explicit per-slot `RepairAttemptState`, a query surface, and
+   governance-tunable `repair_backoff_epochs` cooldown suppression after
+   backoff. Remaining work is calibrated attempt caps, provider/operator scoped
+   cooldowns, and jail/slash escalation rules backed by simulator sweeps.
 3. Full catch-up proofs for all data/generation ranges, beyond the current
    readiness marker.
-4. UI and gateway consumption of the slot-health and provider-health queries
-   for operator tooling and user-facing degraded-route explanations.
+4. UI and deeper gateway consumption of the slot-health and provider-health
+   queries for operator tooling and user-facing degraded-route explanations.
+   Provider-daemon `/status` now surfaces chain-derived provider health for the
+   local operator, but user-gateway routing and UI display still need to consume
+   the health queries.
 5. A unified treatment of setup-phase bumping and post-commit repair.
 
 ## 19. Automatic Delinquency Repair and Promotion Flow
@@ -954,7 +958,11 @@ Potential state additions:
 4. `SlotHealthState(deal_id, slot)`. **Landed first pass:** records latest
    per-slot health, reason, evidence class, severity, counters, pending
    provider, and repair target generation.
-5. `SlotRepairAttempt(deal_id, slot, window)`.
+5. `RepairAttemptState(deal_id, slot)`. **Landed first pass:** records
+   automatic/manual repair attempts, backoffs, candidate-exhaustion count,
+   cooldown-until epoch, pending provider, target generation, and latest
+   evidence case ID. Attempt caps and provider/operator scoped throttles remain
+   pending.
 6. `RepairReadinessProof(deal_id, slot, pending_provider, gen)`.
 7. `EvidenceCase(evidence_id)`. **Landed first pass:** records structured
    reason, provider, slot, reporter, evidence class, severity, status,
@@ -980,7 +988,9 @@ Likely params:
 
 1. Hot/cold missed-epoch thresholds.
 2. Non-response threshold and window.
-3. Repair cooldown and attempt caps.
+3. Repair cooldown and attempt caps. **Landed first pass:** `repair_backoff_epochs`
+   controls per-slot automatic retry cooldown after backoff; calibrated attempt
+   caps remain pending.
 4. Jail durations by evidence class.
 5. Slash bps by hard-fault class.
 6. Minimum provider bond and assignment collateral formula.
@@ -1021,14 +1031,18 @@ Queries/events should make the system explainable:
 1. Provider lifecycle state and reason. **Landed first pass:**
    `GetProviderHealth` and paginated `ListProviderHealth`.
 2. Provider health summary. **Landed first pass:** `ProviderHealthState`
-   exposes latest evidence, lifecycle status, and counters.
+   exposes latest evidence, lifecycle status, and counters. Provider-daemon
+   `/status` now includes the local provider's lifecycle, reason, severity, and
+   latest evidence case when LCD health queries are reachable.
 3. Slot health and current repair status. **Landed first pass:** `GetSlotHealth`
    and paginated `ListSlotHealthByDeal`.
 4. Pending provider and repair target generation. **Landed first pass:** exposed
    through `SlotHealthState` and existing deal slot state.
 5. Evidence case status. **Landed first pass:** paginated `ListEvidenceCases`
    with optional deal-indexed filtering.
-6. Repair attempt history.
+6. Repair attempt history. **Landed first pass:** `GetRepairAttempt` and
+   paginated `ListRepairAttemptsByDeal` expose explicit per-slot repair attempt
+   and cooldown state.
 7. Audit debt by provider/slot.
 8. Reward eligibility and exclusion reason.
 9. Jail/slash history.
@@ -2030,13 +2044,14 @@ for later work.
 | Expired sponsored retrieval sessions do not bill | `OpenRetrievalSessionSponsored` must reject expired deals before requester funds move or session state is created. | Keeper message guard. |
 | Expired protocol retrieval sessions do not bill | `OpenProtocolRetrievalSession` must reject expired deals before protocol budget moves or session state is created, for both audit and repair purposes. | Keeper message guard. |
 | Ghosting remains a soft-fault path | Provider non-response/ghosting is handled through missed service, reward exclusion, deputy evidence, and repair readiness; it is not automatically slash/jail behavior in this stack. | Existing keeper policy; e2e evidence still incomplete. |
+| Repair attempts are explicit protocol state | Automatic quota/deputy/drain/rotation/health-eviction repairs and manual repairs write `RepairAttemptState`; repair backoff sets `cooldown_until_epoch` and suppresses immediate automatic retry for `repair_backoff_epochs`. | Keeper state, params, and query API. |
 
 ### 35.2 Required Test Layers
 
 | Layer | Required coverage for this stack | Merge gate |
 |---|---|---|
-| Keeper unit tests | Edge preference, Edge fallback, inactive/draining exclusion, non-Hot regression, repeated saturation indexes, fail-closed saturation accounting, virtual stripe query validation, expired retrieval no-billing across user/sponsored/protocol paths. | `cd polystorechain && go test ./x/polystorechain/keeper -run '<focused regex>'` plus full `go test ./...` before pushing code PRs. |
-| Query/API tests | Direct query-server coverage for stored, missing, empty-deal, invalid, and multi-stripe list cases. REST coverage belongs in e2e because gateway routes are generated and exercised there. | Keeper query tests for fast feedback; devnet REST smoke for generated route correctness. |
+| Keeper unit tests | Edge preference, Edge fallback, inactive/draining exclusion, non-Hot regression, repeated saturation indexes, fail-closed saturation accounting, virtual stripe query validation, expired retrieval no-billing across user/sponsored/protocol paths, and explicit repair attempt/cooldown state. | `cd polystorechain && go test ./x/polystorechain/keeper -run '<focused regex>'` plus full `go test ./...` before pushing code PRs. |
+| Query/API tests | Direct query-server coverage for stored, missing, empty-deal, invalid, multi-stripe list, and repair-attempt list cases. REST coverage belongs in e2e because gateway routes are generated and exercised there. | Keeper query tests for fast feedback; devnet REST smoke for generated route correctness. |
 | Simulator fixtures | Existing `elasticity_overlay_*`, `expired_retrieval_rejection`, and ghost/non-response scenarios must remain current. If keeper behavior diverges from simulation assumptions, update scenario assertions in the same PR. | `python3 -m unittest discover -s tools/policy_sim` and sweep/report freshness checks for simulator-touching PRs. |
 | Process-level e2e | A devnet script should prove `signal-saturation` creates queryable virtual stripe state and, when enough Edge providers exist, the overlay provider set is Edge-only. It should also prove the second saturation fails closed when the spend cap is exhausted. | Add to CI once locally stable; otherwise keep as explicit manual gate with documented flake/root cause. |
 | Ghost/repair e2e | The existing deputy ghost repair script is the target scenario for SP-ghost behavior, but this stack does not need to complete the full ghost automation unless it changes repair or routing code. | Manual/nightly until stable enough for CI. |
@@ -2075,7 +2090,9 @@ The current stack can be considered testing-complete when:
 3. What false-positive slash rate is acceptable before mainnet? The likely answer is effectively zero.
 4. Which non-response evidence should count toward conviction: user reports, deputy transcripts, audit tasks, or all of them with weights?
 5. How much audit budget should be reserved for proactive checks versus repair catch-up?
-6. Should replacement cooldowns be per slot, per deal, per provider, or all three?
+6. Should replacement cooldowns be per slot, per deal, per provider, or all
+   three? Initial implementation is per slot via `RepairAttemptState`; provider
+   and operator scoped throttles remain open for replacement-grinding economics.
 7. What operator maintenance mode is needed before "draining" becomes the only clean exit path?
 8. Which degraded behaviors should affect placement priority before they affect economic penalties?
 9. What is the minimum proof of readiness before a pending provider can be

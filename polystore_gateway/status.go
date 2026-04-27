@@ -39,6 +39,10 @@ type providerDaemonStatusDetail struct {
 	PendingOperator    string   `json:"pending_operator,omitempty"`
 	RegistrationStatus string   `json:"registration_status,omitempty"`
 	OnchainStatus      string   `json:"onchain_status,omitempty"`
+	HealthStatus       string   `json:"health_status,omitempty"`
+	HealthReason       string   `json:"health_reason,omitempty"`
+	HealthSeverity     string   `json:"health_severity,omitempty"`
+	HealthEvidenceCase string   `json:"health_evidence_case,omitempty"`
 	Draining           bool     `json:"draining"`
 	Endpoints          []string `json:"endpoints,omitempty"`
 	LocalBase          string   `json:"local_base,omitempty"`
@@ -64,6 +68,16 @@ type lcdProviderStatusResponse struct {
 		Endpoints    []string `json:"endpoints"`
 		Draining     bool     `json:"draining"`
 	} `json:"provider"`
+}
+
+type lcdProviderHealthResponse struct {
+	Health struct {
+		Provider           string          `json:"provider"`
+		LifecycleStatus    json.RawMessage `json:"lifecycle_status"`
+		Reason             string          `json:"reason"`
+		Severity           json.RawMessage `json:"severity"`
+		LastEvidenceCaseID string          `json:"last_evidence_case_id"`
+	} `json:"health"`
 }
 
 type lcdProviderPairingResponse struct {
@@ -280,6 +294,14 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 		detail.RegistrationStatus = "unknown"
 	}
 
+	health, healthStatus, healthErr := fetchProviderHealthFromLCD(ctx, detail.Address)
+	if healthErr == nil && health != nil {
+		detail.HealthStatus = rawStatusLabel(health.Health.LifecycleStatus)
+		detail.HealthReason = strings.TrimSpace(health.Health.Reason)
+		detail.HealthSeverity = rawStatusLabel(health.Health.Severity)
+		detail.HealthEvidenceCase = strings.TrimSpace(health.Health.LastEvidenceCaseID)
+	}
+
 	if publicBase := firstHTTPBaseFromEndpoints(detail.Endpoints); publicBase != "" {
 		detail.PublicBase = publicBase
 		detail.PublicHealthURL = strings.TrimRight(publicBase, "/") + "/health"
@@ -312,6 +334,9 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 		if regErr != nil && lcdReachable {
 			issues = append(issues, "provider registration could not be queried from the LCD")
 		}
+	}
+	if healthStatus == "unknown" && healthErr != nil && lcdReachable {
+		issues = append(issues, "provider health could not be queried from the LCD")
 	}
 	if len(detail.Endpoints) == 0 {
 		issues = append(issues, "provider endpoints are not configured")
@@ -368,6 +393,18 @@ func firstHTTPBaseFromEndpoints(endpoints []string) string {
 	return ""
 }
 
+func rawStatusLabel(raw json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return ""
+	}
+	var label string
+	if err := json.Unmarshal(raw, &label); err == nil {
+		return strings.TrimSpace(label)
+	}
+	return trimmed
+}
+
 func fetchProviderStatusFromLCD(ctx context.Context, providerAddr string) (*lcdProviderStatusResponse, string, error) {
 	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
 	if base == "" || strings.TrimSpace(providerAddr) == "" {
@@ -381,6 +418,24 @@ func fetchProviderStatusFromLCD(ctx context.Context, providerAddr string) (*lcdP
 		return &payload, "registered", nil
 	case http.StatusNotFound:
 		return nil, "unregistered", nil
+	default:
+		return nil, "unknown", err
+	}
+}
+
+func fetchProviderHealthFromLCD(ctx context.Context, providerAddr string) (*lcdProviderHealthResponse, string, error) {
+	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
+	if base == "" || strings.TrimSpace(providerAddr) == "" {
+		return nil, "unknown", nil
+	}
+
+	var payload lcdProviderHealthResponse
+	statusCode, err := fetchStatusJSON(ctx, base+"/polystorechain/polystorechain/v1/providers/"+providerAddr+"/health", &payload)
+	switch statusCode {
+	case http.StatusOK:
+		return &payload, "found", nil
+	case http.StatusNotFound:
+		return nil, "not_found", nil
 	default:
 		return nil, "unknown", err
 	}
