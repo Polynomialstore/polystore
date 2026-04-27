@@ -1,12 +1,12 @@
 # Policy Simulation Sensitivity Sweep
 
-This report aggregates `7` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.
+This report aggregates `3` completed simulator run output directories. It does not rerun the simulator or mutate raw run artifacts.
 
 ## Executive Summary
 
 - Mode: `Sensitivity Sweep`.
-- Runs analyzed: `7`.
-- Varied parameters: `3`.
+- Runs analyzed: `3`.
+- Varied parameters: `2`.
 - Critical-risk runs: `0`.
 - Assertion failures: `0`.
 - Runs with modeled data loss: `0`.
@@ -16,13 +16,9 @@ This report aggregates `7` completed simulator run output directories. It does n
 
 | Run | Scenario | Seed | Risk | Assertions | Success | Unavailable Reads | Expired Reads | Closed Reads | Data Loss | Repairs | Backoffs | Saturated | Negative P&L | Storage Price | Retrieval Price |
 |---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `baseline-cap36-ttl2` | `staged-upload-grief` | `67` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
-| `cap36-commit25` | `staged-upload-grief` | `67` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
-| `cap36-ttl1` | `staged-upload-grief` | `67` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
-| `cap36-ttl4` | `staged-upload-grief` | `67` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
-| `no-cap-ttl2` | `staged-upload-grief` | `67` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
-| `tight-cap12-ttl2` | `staged-upload-grief` | `67` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
-| `wide-cap96-ttl2` | `staged-upload-grief` | `67` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0100 |
+| `high-carry-pressure` | `ideal` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 48 | 1.0000 | 0.0000 |
+| `modest-carry-visible` | `ideal` | `7` | `medium` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 48 | 1.0000 | 0.0000 |
+| `zero-carry-control` | `ideal` | `7` | `low` | `PASS` | 100.00% | 0 | 0 | 0 | 0 | 0/0 | 0 | 0 | 0 | 1.0000 | 0.0000 |
 
 ## Key Metric Ranges
 
@@ -35,8 +31,8 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `closed_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Post-close read requests rejected as closed content, not live availability misses. |
 | `data_loss_events` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Durability invariant; non-zero values block graduation. |
 | `reward_coverage` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Shows whether compliant responsibility remains economically recognized. |
-| `reward_pool_minted` | 46.080000 | 46.080000 | 0.000000 | 46.080000 | Modeled base subsidy made available to active slots. |
-| `reward_paid` | 46.080000 | 46.080000 | 0.000000 | 46.080000 | Base subsidy actually paid to reward-eligible slots. |
+| `reward_pool_minted` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Modeled base subsidy made available to active slots. |
+| `reward_paid` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Base subsidy actually paid to reward-eligible slots. |
 | `reward_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Base subsidy withheld from non-compliant responsibility. |
 | `repairs_started` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Detection and repair activation pressure. |
 | `repairs_ready` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Pending replacement providers that proved readiness. |
@@ -76,14 +72,14 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `final_expired_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals expired by run end. |
 | `final_open_deals` | 24.000000 | 24.000000 | 0.000000 | 24.000000 | Deals still active at run end. |
 | `final_closed_deals` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deals closed by run end. |
-| `retrieval_base_burned` | 0.640000 | 0.640000 | 0.000000 | 0.640000 | Base retrieval fees burned across live retrieval attempts. |
-| `retrieval_variable_burned` | 2.560000 | 2.560000 | 0.000000 | 2.560000 | Variable retrieval fee burn withheld from provider payout. |
-| `retrieval_provider_payouts` | 48.640000 | 48.640000 | 0.000000 | 48.640000 | Retrieval fees paid to providers for served slots. |
+| `retrieval_base_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Base retrieval fees burned across live retrieval attempts. |
+| `retrieval_variable_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Variable retrieval fee burn withheld from provider payout. |
+| `retrieval_provider_payouts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval fees paid to providers for served slots. |
 | `sponsored_retrieval_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval attempts funded by requester/sponsor sessions. |
 | `sponsored_retrieval_spent` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Total sponsored retrieval base plus variable spend. |
 | `owner_retrieval_escrow_debited` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Deal-owner escrow debited for non-sponsored retrievals. |
-| `retrieval_wash_accounted_spend` | 0.640000 | 0.640000 | 0.000000 | 0.640000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
-| `retrieval_wash_net_gain` | 48.000000 | 48.000000 | 0.000000 | 48.000000 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
+| `retrieval_wash_accounted_spend` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Explicit modeled requester, sponsor, or owner-funded retrieval spend counted against wash traffic. |
+| `retrieval_wash_net_gain` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Worst-case colluding requester/provider net gain; positive values indicate wash abuse risk. |
 | `retrieval_attempts` | 640.000000 | 640.000000 | 0.000000 | 640.000000 | Effective retrieval attempts after demand shock multipliers and inactive-content rejection. |
 | `retrieval_latent_attempts` | 640.000000 | 640.000000 | 0.000000 | 640.000000 | Baseline read demand before demand-shock multipliers. |
 | `retrieval_demand_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where read-demand shock multipliers were active. |
@@ -106,15 +102,15 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `max_elasticity_overlay_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak temporary overlay routes, including routes pending readiness. |
 | `final_elasticity_overlay_ready` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Run-end overlay routes ready for routing. |
 | `max_elasticity_overlay_ready` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak overlay routes ready for routing. |
-| `staged_upload_attempts` | 240.000000 | 240.000000 | 0.000000 | 240.000000 | Review this metric against the scenario contract. |
-| `staged_upload_accepted` | 48.000000 | 240.000000 | 192.000000 | 167.000000 | Review this metric against the scenario contract. |
-| `staged_upload_committed` | 0.000000 | 41.000000 | 41.000000 | 5.857143 | Review this metric against the scenario contract. |
-| `staged_upload_rejections` | 0.000000 | 192.000000 | 192.000000 | 73.000000 | Review this metric against the scenario contract. |
-| `staged_upload_cleaned` | 36.000000 | 210.000000 | 174.000000 | 122.571429 | Review this metric against the scenario contract. |
-| `final_staged_upload_pending_generations` | 12.000000 | 60.000000 | 48.000000 | 38.571429 | Review this metric against the scenario contract. |
-| `max_staged_upload_pending_generations` | 12.000000 | 60.000000 | 48.000000 | 38.571429 | Review this metric against the scenario contract. |
-| `final_staged_upload_pending_mdus` | 24.000000 | 120.000000 | 96.000000 | 77.142857 | Review this metric against the scenario contract. |
-| `max_staged_upload_pending_mdus` | 24.000000 | 120.000000 | 96.000000 | 77.142857 | Review this metric against the scenario contract. |
+| `staged_upload_attempts` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `staged_upload_accepted` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `staged_upload_committed` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `staged_upload_rejections` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `staged_upload_cleaned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `final_staged_upload_pending_generations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `max_staged_upload_pending_generations` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `final_staged_upload_pending_mdus` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
+| `max_staged_upload_pending_mdus` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Review this metric against the scenario contract. |
 | `suspect_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Soft warning slot-epochs before thresholded delinquency. |
 | `delinquent_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Threshold-crossed slot-epochs that should be visible to operators. |
 | `withheld_responses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Refusal-to-serve retrieval responses generated by withholding providers. |
@@ -134,7 +130,7 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `evidence_spam_bond_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Evidence bond burned for unconvicted spam claims. |
 | `evidence_spam_bounty_paid` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Conviction-gated bounty paid to the evidence spammer. |
 | `evidence_spam_net_gain` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Spammer net economics; positive values indicate an abuse risk. |
-| `provider_bond_opportunity_cost` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Modeled capital carry cost of locked provider bond included in provider P&L. |
+| `provider_bond_opportunity_cost` | 0.000000 | 19.200000 | 19.200000 | 7.680000 | Modeled capital carry cost of locked provider bond included in provider P&L. |
 | `provider_cost_shock_active` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Epochs where external provider cost pressure was active. |
 | `max_provider_cost_shocked_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Largest provider population affected by cost shock in any epoch. |
 | `max_provider_cost_shock_fixed_multiplier_bps` | 10000.000000 | 10000.000000 | 0.000000 | 10000.000000 | Peak modeled fixed-cost multiplier during cost shock. |
@@ -156,61 +152,54 @@ This report aggregates `7` completed simulator run output directories. It does n
 | `max_reserve_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers still outside normal placement as reserve supply. |
 | `max_probationary_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers simultaneously in onboarding probation. |
 | `entered_active_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Providers that entered from reserve and are active by run end. |
-| `churn_pressure_provider_epochs` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider-epochs below the churn threshold. |
-| `max_churn_pressure_providers` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak providers simultaneously eligible for churn. |
+| `churn_pressure_provider_epochs` | 0.000000 | 384.000000 | 384.000000 | 256.000000 | Provider-epochs below the churn threshold. |
+| `max_churn_pressure_providers` | 0.000000 | 48.000000 | 48.000000 | 32.000000 | Peak providers simultaneously eligible for churn. |
 | `final_active_provider_capacity` | 768.000000 | 768.000000 | 0.000000 | 768.000000 | Provider capacity remaining after economic exits. |
 | `final_exited_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity removed by economic exits. |
 | `final_reserve_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity still held outside normal placement as reserve supply. |
 | `final_probationary_provider_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider capacity in onboarding probation at run end. |
 | `max_churned_assigned_slots` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Peak assigned slots on churned providers before repair catches up. |
-| `providers_negative_pnl` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Market sustainability and churn pressure. |
+| `providers_negative_pnl` | 0.000000 | 48.000000 | 48.000000 | 32.000000 | Market sustainability and churn pressure. |
 | `saturated_responses` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Provider bandwidth bottleneck signal. |
 | `providers_over_capacity` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Placement/capacity invariant; should remain zero. |
 | `final_storage_utilization_bps` | 3750.000000 | 3750.000000 | 0.000000 | 3750.000000 | Supply utilization against modeled capacity. |
 | `min_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Lowest storage price observed during the run. |
 | `max_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Highest storage price observed during the run. |
 | `final_storage_price` | 1.000000 | 1.000000 | 0.000000 | 1.000000 | Storage-controller endpoint under this run. |
-| `min_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Lowest retrieval price observed during the run. |
-| `max_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Highest retrieval price observed during the run. |
-| `final_retrieval_price` | 0.010000 | 0.010000 | 0.000000 | 0.010000 | Retrieval-controller endpoint under this run. |
+| `min_retrieval_price` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Lowest retrieval price observed during the run. |
+| `max_retrieval_price` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Highest retrieval price observed during the run. |
+| `final_retrieval_price` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval-controller endpoint under this run. |
 | `storage_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Storage price controller direction changes across the run. |
 | `retrieval_price_direction_changes` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Retrieval price controller direction changes across the run. |
-| `provider_pnl` | 47.360000 | 47.360000 | 0.000000 | 47.360000 | Aggregate provider economics; inspect distribution before deciding. |
+| `provider_pnl` | -19.200000 | 0.000000 | 19.200000 | -7.680000 | Aggregate provider economics; inspect distribution before deciding. |
 
 ## Varied Parameters
 
 | Parameter | Values |
 |---|---|
-| `staged_upload_commit_rate_bps` | `0`, `2500` |
-| `staged_upload_max_pending_generations` | `0`, `12`, `36`, `96` |
-| `staged_upload_retention_epochs` | `1`, `2`, `4` |
+| `provider_bond_opportunity_cost_bps_per_epoch` | `0`, `100`, `50` |
+| `provider_initial_bond` | `2.0`, `5.0` |
 
 ## Parameter Sensitivity
 
 | Parameter | Value | Runs | Avg Success | Total Unavailable | Total Data Loss | Avg Backoffs | Avg Negative P&L | Avg Final Storage Price |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| `staged_upload_commit_rate_bps` | `0` | 6 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `staged_upload_commit_rate_bps` | `2500` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `staged_upload_max_pending_generations` | `0` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `staged_upload_max_pending_generations` | `12` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `staged_upload_max_pending_generations` | `36` | 4 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `staged_upload_max_pending_generations` | `96` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `staged_upload_retention_epochs` | `1` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `staged_upload_retention_epochs` | `2` | 5 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
-| `staged_upload_retention_epochs` | `4` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `provider_bond_opportunity_cost_bps_per_epoch` | `0` | 1 | 100.00% | 0 | 0 | 0 | 0 | 1.0000 |
+| `provider_bond_opportunity_cost_bps_per_epoch` | `100` | 1 | 100.00% | 0 | 0 | 0 | 48 | 1.0000 |
+| `provider_bond_opportunity_cost_bps_per_epoch` | `50` | 1 | 100.00% | 0 | 0 | 0 | 48 | 1.0000 |
+| `provider_initial_bond` | `2.0` | 2 | 100.00% | 0 | 0 | 0 | 24 | 1.0000 |
+| `provider_initial_bond` | `5.0` | 1 | 100.00% | 0 | 0 | 0 | 48 | 1.0000 |
 
 ## High-Risk Runs
 
 | Run | Scenario | Risk | Reasons |
 |---|---|---|---|
-| `tight-cap12-ttl2` | `staged-upload-grief` | `medium` | staged upload preflight rejections occurred |
-| `cap36-ttl4` | `staged-upload-grief` | `medium` | staged upload preflight rejections occurred |
-| `cap36-commit25` | `staged-upload-grief` | `medium` | staged upload preflight rejections occurred |
-| `baseline-cap36-ttl2` | `staged-upload-grief` | `medium` | staged upload preflight rejections occurred |
+| `modest-carry-visible` | `ideal` | `medium` | some providers ended with negative modeled P&L |
+| `high-carry-pressure` | `ideal` | `medium` | some providers ended with negative modeled P&L |
 
 ## Best Observed Run
 
-`baseline-cap36-ttl2` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.
+`zero-carry-control` is the best observed run under the current ordering: zero data loss first, then highest retrieval success, then fewer unavailable reads, capacity violations, negative-P&L providers, and repair backoffs.
 
 This is not an automatic policy choice. It is the run humans should inspect first when deciding which parameter set deserves keeper or e2e implementation work.
 

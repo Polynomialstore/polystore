@@ -37,6 +37,7 @@ python3 tools/policy_sim/run_sweeps.py \
 | `performance-market-latency-controls` | 9 | 0 | Sensitivity sweep for Hot-service latency tier windows, reward multipliers, jitter, routing, and slow-provider tails. | [summary](performance-market-latency-controls/sweep_summary.md) |
 | `price-step-controller` | 4 | 0 | Controller sensitivity sweep for dynamic pricing max-step parameters in the pricing-bounds fixture. | [summary](price-step-controller/sweep_summary.md) |
 | `provider-bond-headroom-controls` | 7 | 0 | Sensitivity sweep for provider minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing. | [summary](provider-bond-headroom-controls/sweep_summary.md) |
+| `provider-bond-opportunity-cost-controls` | 3 | 0 | Sensitivity sweep for locked provider-bond carry cost and its effect on P&L/churn pressure before translating bond sizing into chain defaults. | [summary](provider-bond-opportunity-cost-controls/sweep_summary.md) |
 | `provider-churn-caps` | 7 | 0 | Sensitivity sweep for provider economic churn caps versus repair throughput under the economic churn fixture. | [summary](provider-churn-caps/sweep_summary.md) |
 | `provider-cost-shock-controls` | 8 | 0 | Sensitivity sweep for provider cost-shock severity, reward buffer, and dynamic-pricing response. | [summary](provider-cost-shock-controls/sweep_summary.md) |
 | `provider-reliability-large-scale` | 3 | 0 | Population-scale sensitivity sweep for heterogeneous provider online-probability floors. | [summary](provider-reliability-large-scale/sweep_summary.md) |

@@ -90,6 +90,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Base reward per slot | `0.0400` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
+| Provider bond opportunity cost | `0.00%` / epoch | Models the capital cost of locked collateral so bond sizing can be calibrated against provider churn pressure. |
 | Provider initial/min bond | `100.0000` / `0.0000` | Simplified collateral model. Providers below the required bond are excluded from new responsibility and can trigger repair. |
 | Provider bond per assigned slot | `0.0000` | Additional modeled collateral required for each assigned storage slot. |
 | Provider cost shocks | `[{"bandwidth_cost_multiplier_bps": 40000, "end_epoch": 14, "fixed_cost_multiplier_bps": 80000, "provider_ids": ["sp-000", "sp-001", "sp-002", "sp-003", "sp-004", "sp-005", "sp-006", "sp-007"], "start_epoch": 3, "storage_cost_multiplier_bps": 80000}]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
@@ -178,6 +179,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Final storage utilization | `43.94%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `46.15%` / `60.00%` / `70.00%` | Detects assignment concentration and capacity cliffs. |
 | Provider P&L p10 / p50 / p90 | `0.0000` / `3.6646` / `4.0895` | Shows whether aggregate P&L hides marginal-provider distress. |
+| Provider bond opportunity cost | `0.0000` | Shows the modeled carry cost of locked provider bond included in P&L and churn pressure. |
 | Provider cost shock epochs/providers | `12` / `8` | Shows when external cost pressure was active and how much of the provider population it affected. |
 | Max cost shock fixed/storage/bandwidth | `800.00%` / `800.00%` / `400.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
 | Provider churn events / final churned | `8` / `8` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |

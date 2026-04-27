@@ -90,6 +90,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Base reward per slot | `0.0300` | Modeled issuance/subsidy paid only to reward-eligible active slots. |
 | Provider storage cost/slot/epoch | `0.0100` | Simplified provider cost basis; jitter may create marginal-provider distress. |
 | Provider bandwidth cost/retrieval | `0.0010` | Simplified egress cost basis for retrieval-heavy scenarios. |
+| Provider bond opportunity cost | `0.00%` / epoch | Models the capital cost of locked collateral so bond sizing can be calibrated against provider churn pressure. |
 | Provider initial/min bond | `100.0000` / `0.0000` | Simplified collateral model. Providers below the required bond are excluded from new responsibility and can trigger repair. |
 | Provider bond per assigned slot | `0.0000` | Additional modeled collateral required for each assigned storage slot. |
 | Provider cost shocks | `[{"bandwidth_cost_multiplier_bps": 20000, "end_epoch": 10, "fixed_cost_multiplier_bps": 30000, "start_epoch": 5, "storage_cost_multiplier_bps": 50000}]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
@@ -174,6 +175,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Final storage utilization | `46.87%` | Active slots versus modeled provider capacity. |
 | Provider utilization p50 / p90 / max | `50.00%` / `50.00%` / `50.00%` | Detects assignment concentration and capacity cliffs. |
 | Provider P&L p10 / p50 / p90 | `-0.8051` / `-0.7097` / `-0.6312` | Shows whether aggregate P&L hides marginal-provider distress. |
+| Provider bond opportunity cost | `0.0000` | Shows the modeled carry cost of locked provider bond included in P&L and churn pressure. |
 | Provider cost shock epochs/providers | `6` / `64` | Shows when external cost pressure was active and how much of the provider population it affected. |
 | Max cost shock fixed/storage/bandwidth | `300.00%` / `500.00%` / `200.00%` | Distinguishes fixed-cost, storage-cost, and egress-cost shocks. |
 | Provider churn events / final churned | `0` / `0` | Shows whether sustained economic distress became modeled provider exits rather than only a warning label. |
