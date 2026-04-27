@@ -63,6 +63,16 @@ service Query {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-collateral";
   }
 
+  // Queries observed staking-module binding status for a provider.
+  rpc GetProviderStaking(QueryGetProviderStakingRequest) returns (QueryGetProviderStakingResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/staking";
+  }
+
+  // Lists observed staking-module binding status for providers.
+  rpc ListProviderStaking(QueryListProviderStakingRequest) returns (QueryListProviderStakingResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-staking";
+  }
+
   // Queries one stateful assignment collateral lock.
   rpc GetAssignmentCollateralLock(QueryGetAssignmentCollateralLockRequest) returns (QueryGetAssignmentCollateralLockResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/collateral-locks/{deal_id}/{slot}";
@@ -263,6 +273,27 @@ message QueryListProviderCollateralRequest {
 // QueryListProviderCollateralResponse returns provider collateral summaries.
 message QueryListProviderCollateralResponse {
   repeated ProviderCollateralSummary collateral = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetProviderStakingRequest requests observed staking linkage by provider.
+message QueryGetProviderStakingRequest {
+  string provider = 1;
+}
+
+// QueryGetProviderStakingResponse returns observed staking linkage status.
+message QueryGetProviderStakingResponse {
+  ProviderStakingSummary staking = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListProviderStakingRequest lists observed staking linkage summaries.
+message QueryListProviderStakingRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+// QueryListProviderStakingResponse returns observed staking linkage summaries.
+message QueryListProviderStakingResponse {
+  repeated ProviderStakingSummary staking = 1 [(gogoproto.nullable) = false];
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 

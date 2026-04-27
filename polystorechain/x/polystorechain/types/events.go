@@ -6,6 +6,8 @@ const (
 	TypeMsgAddProviderBond             = "add_provider_bond"
 	TypeMsgWithdrawProviderBond        = "withdraw_provider_bond"
 	TypeMsgClaimProviderBondWithdrawal = "claim_provider_bond_withdrawal"
+	TypeMsgBindProviderStake           = "bind_provider_stake"
+	TypeMsgUnbindProviderStake         = "unbind_provider_stake"
 	TypeMsgUpdateProviderEndpoints     = "update_provider_endpoints"
 	TypeMsgRequestProviderLink         = "request_provider_link"
 	TypeMsgApproveProviderLink         = "approve_provider_link"

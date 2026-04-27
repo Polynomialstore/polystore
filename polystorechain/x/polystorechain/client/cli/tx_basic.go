@@ -162,6 +162,53 @@ func CmdClaimProviderBondWithdrawal() *cobra.Command {
 	return cmd
 }
 
+func CmdBindProviderStake() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "bind-provider-stake [provider] [validator]",
+		Short: "Record observed provider staking delegation linkage",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgBindProviderStake{
+				Creator:   clientCtx.GetFromAddress().String(),
+				Provider:  args[0],
+				Validator: args[1],
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdUnbindProviderStake() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "unbind-provider-stake [provider]",
+		Short: "Remove observed provider staking delegation linkage",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgUnbindProviderStake{
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
 func CmdUpdateProviderEndpoints() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update-provider-endpoints",
