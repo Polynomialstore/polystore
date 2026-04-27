@@ -143,4 +143,20 @@ message Params {
   // Number of liveness epochs during which automatic repair retries are
   // suppressed after a repair backoff. 0 disables cooldown suppression.
   uint64 repair_backoff_epochs = 39;
+
+  // --- Provider health economics / decay policy ---
+  // Soft-fault health counters decay only after this many quiet epochs.
+  // 0 disables epoch-window soft-fault decay.
+  uint64 provider_health_decay_epochs = 40;
+  // Share of soft-fault count removed at each decay window, in basis points.
+  // 0 disables counter reduction.
+  uint64 provider_health_decay_bps = 41;
+  // Hard-fault jail duration in liveness epochs. 0 disables automatic jailing.
+  uint64 jail_hard_fault_epochs = 42;
+  // Reputation slash applied to hard/slashable evidence, in basis points.
+  // 0 disables reputation slashing.
+  uint64 hard_fault_reputation_slash_bps = 43;
+  // Share of the normal liveness quota a pending provider must prove before
+  // repair promotion is considered catch-up ready. 10_000 means full quota.
+  uint64 repair_readiness_quota_bps = 44;
 }

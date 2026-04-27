@@ -45,6 +45,11 @@ var (
 	KeyDynamicPricingMaxStepBps     = []byte("DynamicPricingMaxStepBps")
 	KeyMaxSetupBumpsPerSlot         = []byte("MaxSetupBumpsPerSlot")
 	KeyRepairBackoffEpochs          = []byte("RepairBackoffEpochs")
+	KeyProviderHealthDecayEpochs    = []byte("ProviderHealthDecayEpochs")
+	KeyProviderHealthDecayBps       = []byte("ProviderHealthDecayBps")
+	KeyJailHardFaultEpochs          = []byte("JailHardFaultEpochs")
+	KeyHardFaultReputationSlashBps  = []byte("HardFaultReputationSlashBps")
+	KeyRepairReadinessQuotaBps      = []byte("RepairReadinessQuotaBps")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -101,6 +106,11 @@ func NewParams(
 	dynamicPricingMaxStepBps uint64,
 	maxSetupBumpsPerSlot uint64,
 	repairBackoffEpochs uint64,
+	providerHealthDecayEpochs uint64,
+	providerHealthDecayBps uint64,
+	jailHardFaultEpochs uint64,
+	hardFaultReputationSlashBps uint64,
+	repairReadinessQuotaBps uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:               baseStripeCost,
@@ -146,6 +156,12 @@ func NewParams(
 		DynamicPricingMaxStepBps: dynamicPricingMaxStepBps,
 		MaxSetupBumpsPerSlot:     maxSetupBumpsPerSlot,
 		RepairBackoffEpochs:      repairBackoffEpochs,
+
+		ProviderHealthDecayEpochs:   providerHealthDecayEpochs,
+		ProviderHealthDecayBps:      providerHealthDecayBps,
+		JailHardFaultEpochs:         jailHardFaultEpochs,
+		HardFaultReputationSlashBps: hardFaultReputationSlashBps,
+		RepairReadinessQuotaBps:     repairReadinessQuotaBps,
 	}
 }
 
@@ -191,6 +207,11 @@ func DefaultParams() Params {
 		500,     // DynamicPricingMaxStepBps (5% per epoch; unused when disabled)
 		3,       // MaxSetupBumpsPerSlot
 		1,       // RepairBackoffEpochs (skip the immediate next epoch after backoff)
+		6,       // ProviderHealthDecayEpochs (quiet epochs before soft-fault decay)
+		5000,    // ProviderHealthDecayBps (decay half the soft-fault window)
+		3,       // JailHardFaultEpochs (devnet hard-fault jail window)
+		50,      // HardFaultReputationSlashBps (0.5% reputation slash, min 1)
+		10000,   // RepairReadinessQuotaBps (full quota before catch-up ready)
 	)
 }
 
@@ -238,6 +259,11 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyDynamicPricingMaxStepBps, &p.DynamicPricingMaxStepBps, validateBps),
 		paramtypes.NewParamSetPair(KeyMaxSetupBumpsPerSlot, &p.MaxSetupBumpsPerSlot, validateUint64Any),
 		paramtypes.NewParamSetPair(KeyRepairBackoffEpochs, &p.RepairBackoffEpochs, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyProviderHealthDecayEpochs, &p.ProviderHealthDecayEpochs, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyProviderHealthDecayBps, &p.ProviderHealthDecayBps, validateBps),
+		paramtypes.NewParamSetPair(KeyJailHardFaultEpochs, &p.JailHardFaultEpochs, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyHardFaultReputationSlashBps, &p.HardFaultReputationSlashBps, validateBps),
+		paramtypes.NewParamSetPair(KeyRepairReadinessQuotaBps, &p.RepairReadinessQuotaBps, validateBps),
 	}
 }
 
@@ -367,6 +393,21 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateUint64Any(p.RepairBackoffEpochs); err != nil {
+		return err
+	}
+	if err := validateUint64Any(p.ProviderHealthDecayEpochs); err != nil {
+		return err
+	}
+	if err := validateBps(p.ProviderHealthDecayBps); err != nil {
+		return err
+	}
+	if err := validateUint64Any(p.JailHardFaultEpochs); err != nil {
+		return err
+	}
+	if err := validateBps(p.HardFaultReputationSlashBps); err != nil {
+		return err
+	}
+	if err := validateBps(p.RepairReadinessQuotaBps); err != nil {
 		return err
 	}
 	return nil
