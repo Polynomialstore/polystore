@@ -294,6 +294,94 @@ func TestWithdrawProviderBondRetainsLockAwareAssignmentCollateral(t *testing.T) 
 	require.Equal(t, "25stake", bank.GetBalance(ctx, providerAddr, sdk.DefaultBondDenom).String())
 }
 
+func TestWithdrawProviderBondQueuesAndClaimsAfterUnbondingDelay(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.MinProviderBond = sdk.NewInt64Coin(sdk.DefaultBondDenom, 50)
+	params.ProviderBondUnbondingBlocks = 10
+	require.NoError(t, f.keeper.Params.Set(ctx, params))
+
+	provider := makePolicyTestAddr(t, f, 0xA1)
+	other := makePolicyTestAddr(t, f, 0xB2)
+	providerAddr, err := sdk.AccAddressFromBech32(provider)
+	require.NoError(t, err)
+	otherAddr, err := sdk.AccAddressFromBech32(other)
+	require.NoError(t, err)
+	bank.setAccountBalance(providerAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 125)))
+	bank.setAccountBalance(otherAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)))
+
+	_, err = msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+		Creator:      provider,
+		Capabilities: "General",
+		TotalStorage: 1_000_000_000,
+		Endpoints:    testProviderEndpoints,
+		Bond:         sdk.NewInt64Coin(sdk.DefaultBondDenom, 125),
+	})
+	require.NoError(t, err)
+
+	res, err := msgServer.WithdrawProviderBond(ctx, &types.MsgWithdrawProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 75),
+	})
+	require.NoError(t, err)
+	require.True(t, res.Success)
+	require.Equal(t, uint64(0), res.UnbondingId)
+	require.Equal(t, int64(15), res.MatureAtHeight)
+
+	record, err := f.keeper.Providers.Get(ctx, provider)
+	require.NoError(t, err)
+	require.Equal(t, "50stake", record.Bond.String())
+	require.Equal(t, "125stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+	require.Equal(t, "0stake", bank.GetBalance(ctx, providerAddr, sdk.DefaultBondDenom).String())
+
+	getRes, err := queryServer.GetProviderBondUnbonding(ctx, &types.QueryGetProviderBondUnbondingRequest{Id: res.UnbondingId})
+	require.NoError(t, err)
+	require.Equal(t, provider, getRes.Unbonding.Provider)
+	require.Equal(t, provider, getRes.Unbonding.Recipient)
+	require.Equal(t, "75stake", getRes.Unbonding.Amount.String())
+	require.Equal(t, "50stake", getRes.Unbonding.RequiredCollateral.String())
+
+	listRes, err := queryServer.ListProviderBondUnbondingsByProvider(ctx, &types.QueryListProviderBondUnbondingsByProviderRequest{Provider: provider})
+	require.NoError(t, err)
+	require.Len(t, listRes.Unbondings, 1)
+	require.Equal(t, res.UnbondingId, listRes.Unbondings[0].Id)
+
+	_, err = msgServer.ClaimProviderBondWithdrawal(ctx.WithBlockHeight(14), &types.MsgClaimProviderBondWithdrawal{
+		Creator:     provider,
+		UnbondingId: res.UnbondingId,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "matures at height 15")
+
+	_, err = msgServer.ClaimProviderBondWithdrawal(ctx.WithBlockHeight(15), &types.MsgClaimProviderBondWithdrawal{
+		Creator:     other,
+		UnbondingId: res.UnbondingId,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not authorized")
+
+	claimRes, err := msgServer.ClaimProviderBondWithdrawal(ctx.WithBlockHeight(15), &types.MsgClaimProviderBondWithdrawal{
+		Creator:     provider,
+		UnbondingId: res.UnbondingId,
+	})
+	require.NoError(t, err)
+	require.True(t, claimRes.Success)
+	require.Equal(t, "50stake", bank.moduleBalances[types.ProviderBondModuleName].String())
+	require.Equal(t, "75stake", bank.GetBalance(ctx, providerAddr, sdk.DefaultBondDenom).String())
+
+	_, err = queryServer.GetProviderBondUnbonding(ctx.WithBlockHeight(15), &types.QueryGetProviderBondUnbondingRequest{Id: res.UnbondingId})
+	require.Error(t, err)
+	listRes, err = queryServer.ListProviderBondUnbondingsByProvider(ctx.WithBlockHeight(15), &types.QueryListProviderBondUnbondingsByProviderRequest{Provider: provider})
+	require.NoError(t, err)
+	require.Empty(t, listRes.Unbondings)
+}
+
 func TestAddProviderBondRejectsUnauthorizedAndInvalidTopUp(t *testing.T) {
 	bank := newTrackingBankKeeper()
 	f := initFixtureWithBankKeeper(t, bank)

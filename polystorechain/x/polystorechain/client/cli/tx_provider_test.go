@@ -102,6 +102,37 @@ func TestCmdWithdrawProviderBondBuildsMessageAndBroadcasts(t *testing.T) {
 	require.Equal(t, "25stake", captured.Bond.String())
 }
 
+func TestCmdClaimProviderBondWithdrawalBuildsMessageAndBroadcasts(t *testing.T) {
+	originalGetClientTxContext := getClientTxContextFn
+	originalBroadcast := generateOrBroadcastTxCLIFn
+	t.Cleanup(func() {
+		getClientTxContextFn = originalGetClientTxContext
+		generateOrBroadcastTxCLIFn = originalBroadcast
+	})
+
+	from := sdk.AccAddress(bytes20(9))
+	getClientTxContextFn = func(cmd *cobra.Command) (client.Context, error) {
+		return client.Context{FromAddress: from}, nil
+	}
+
+	var captured types.MsgClaimProviderBondWithdrawal
+	generateOrBroadcastTxCLIFn = func(clientCtx client.Context, flags *pflag.FlagSet, msgs ...sdk.Msg) error {
+		require.Len(t, msgs, 1)
+		msg, ok := msgs[0].(*types.MsgClaimProviderBondWithdrawal)
+		require.True(t, ok)
+		captured = *msg
+		return nil
+	}
+
+	cmd := CmdClaimProviderBondWithdrawal()
+	cmd.SetArgs([]string{"42"})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	require.Equal(t, from.String(), captured.Creator)
+	require.Equal(t, uint64(42), captured.UnbondingId)
+}
+
 func TestCmdUpdateProviderEndpointsBuildsMessageAndBroadcasts(t *testing.T) {
 	originalGetClientTxContext := getClientTxContextFn
 	originalBroadcast := generateOrBroadcastTxCLIFn

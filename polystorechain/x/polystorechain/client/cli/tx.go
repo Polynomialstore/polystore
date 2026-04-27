@@ -28,6 +28,7 @@ func GetTxCmd() *cobra.Command {
 	cmd.AddCommand(CmdRegisterProvider())
 	cmd.AddCommand(CmdAddProviderBond())
 	cmd.AddCommand(CmdWithdrawProviderBond())
+	cmd.AddCommand(CmdClaimProviderBondWithdrawal())
 	cmd.AddCommand(CmdUpdateProviderEndpoints())
 	cmd.AddCommand(CmdRequestProviderLink())
 	cmd.AddCommand(CmdApproveProviderLink())
