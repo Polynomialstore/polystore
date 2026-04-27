@@ -60,7 +60,11 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 		}
 		return nil, fmt.Errorf("failed to load pending provider: %w", err)
 	}
-	if reason := mode2ReplacementProviderIneligibility(provider, deal.ServiceHint); reason != "" {
+	reason, err := k.mode2ReplacementProviderIneligibility(ctx, provider, deal.ServiceHint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check pending provider health: %w", err)
+	}
+	if reason != "" {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("pending_provider is not eligible for slot repair: %s", reason)
 	}
 

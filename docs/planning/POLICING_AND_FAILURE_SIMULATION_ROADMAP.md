@@ -47,7 +47,7 @@ The current repo already contains several enforcement surfaces:
 | Draining | Provider draining and bounded repair scheduling exist. |
 | Audit and deputy paths | Protocol audit tasks, deputy-served accounting, and protocol sessions are partially wired. |
 | Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with indexed, paginated query surfaces. |
-| Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates latest provider-centric lifecycle signals from structured evidence and registration state for operator queries. |
+| Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates latest provider-centric lifecycle signals from structured evidence and registration state, and first enforcement gates consume it for placement, setup bumping, repair replacement, and base rewards. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -621,23 +621,32 @@ where `ready` represents pending-provider catch-up evidence before promotion.
 Keeper state now also includes a first-pass `ProviderHealthState` view. It
 updates from structured evidence and derives healthy/default state from provider
 registration so operators can ask "what is this provider's current lifecycle
-signal?" without manually joining slot health and evidence cases. This state is
-observable only; placement, rewards, jail, and slash gates have not yet been
-made dependent on it.
+signal?" without manually joining slot health and evidence cases.
+
+The first enforcement use of provider health now exists in the keeper:
+`DELINQUENT`, `DRAINING`, `JAILED`, and `EXITED` provider lifecycle states are
+excluded from new placement, setup-bump candidates, and repair replacement
+candidates. Base reward eligibility also excludes `DELINQUENT`, `JAILED`, and
+`EXITED` provider lifecycle states while preserving the existing policy that
+draining providers can still be paid for the epoch they served before scheduled
+drain repair runs. `DEGRADED` remains observable rather than punitive until
+decay windows, caps, and calibration are explicit.
 
 Missing desired-state pieces include:
 
 1. Provider-wide lifecycle enforcement from `ProviderHealthState` into
-   placement, reward eligibility, jail, slash, and exit gates. The current
-   keeper slice is queryable and explanatory, not a global placement gate.
+   proof-time reward accounting, jail, slash, and exit gates. New placement,
+   setup bumping, repair replacement, and base rewards now consume provider
+   health, but proof-time storage/bandwidth reward accounting is not yet split
+   enough to safely apply calibrated reward exclusion there.
 2. Keeper/runtime repair attempt counters and cooldown windows. The simulator
    now models these with `repair_attempt_cap_per_slot`,
    `repair_backoff_epochs`, per-slot attempt state, cooldown backoff events,
    attempt-cap backoff events, and candidate-exclusion diagnostics.
 3. Full catch-up proofs for all data/generation ranges, beyond the current
    readiness marker.
-4. UI and gateway consumption of the slot-health queries for operator tooling
-   and user-facing degraded-route explanations.
+4. UI and gateway consumption of the slot-health and provider-health queries
+   for operator tooling and user-facing degraded-route explanations.
 5. A unified treatment of setup-phase bumping and post-commit repair.
 
 ## 19. Automatic Delinquency Repair and Promotion Flow
@@ -655,8 +664,9 @@ Desired flow:
 3. **Slot is marked:** for post-commit content, the slot moves to `REPAIRING`;
    for setup-phase content, the slot uses deterministic setup bumping.
 4. **Replacement is selected:** the chain deterministically selects an eligible
-   provider, excluding jailed, draining, underbonded, insufficient-capacity,
-   already-assigned, incompatible, or recently-failed candidates.
+   provider, excluding provider-health-ineligible, jailed, draining,
+   underbonded, insufficient-capacity, already-assigned, incompatible, or
+   recently-failed candidates.
 5. **Reads route around repair:** user-gateways and clients choose any `K`
    healthy `ACTIVE` slots.
 6. **Protocol repair session opens:** pending provider fetches data using
@@ -704,9 +714,10 @@ The current structured-evidence slice makes the loop explainable but does not
 yet make it punitive. `EvidenceCase` carries `evidence_class`, `severity`,
 `status`, `slashable`, `counts_as_failure`, and `consequence_ceiling`. Soft
 quota/deputy delinquency cases are convicted for repair and reward-exclusion
-planning, but explicitly remain non-slashable by default. Hard proof-failure
-cases are marked as slash/jail candidates for a later calibrated enforcement
-mode.
+planning, and provider-level `DELINQUENT` state now affects placement,
+replacement, setup bumping, and base rewards. These cases explicitly remain
+non-slashable by default. Hard proof-failure cases are marked as slash/jail
+candidates for a later calibrated enforcement mode.
 
 ## 20. New SP Onboarding and Higher-Bandwidth Promotion
 
@@ -756,7 +767,8 @@ Promotion should affect maximum responsibility:
 | `ACTIVE` | Normal assignment caps. |
 | `PREFERRED` | Higher placement priority and higher caps. |
 | `HIGH_BANDWIDTH` | Eligible for hot deals, larger egress load, and overflow routing. |
-| `DEGRADED` | No new assignments, existing assignments watched. |
+| `DEGRADED` | Existing assignments watched; no automatic exclusion until decay/cap calibration is landed. |
+| `DELINQUENT` | No new placement, setup bump, repair replacement, or base reward eligibility. |
 
 Caps should be enforced per provider and possibly per operator to limit Sybil
 concentration.

@@ -42,8 +42,19 @@ func mode2ReplacementProviderIneligibility(provider types.Provider, serviceHint 
 	return ""
 }
 
-func mode2ReplacementProviderEligible(provider types.Provider, serviceHint string) bool {
-	return mode2ReplacementProviderIneligibility(provider, serviceHint) == ""
+func (k Keeper) mode2ReplacementProviderIneligibility(ctx sdk.Context, provider types.Provider, serviceHint string) (string, error) {
+	if reason := mode2ReplacementProviderIneligibility(provider, serviceHint); reason != "" {
+		return reason, nil
+	}
+	return k.providerHealthPlacementIneligibility(ctx, provider)
+}
+
+func (k Keeper) mode2ReplacementProviderEligible(ctx sdk.Context, provider types.Provider, serviceHint string) (bool, error) {
+	reason, err := k.mode2ReplacementProviderIneligibility(ctx, provider, serviceHint)
+	if err != nil {
+		return false, err
+	}
+	return reason == "", nil
 }
 
 func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal, slot uint32, epochID uint64) (string, error) {
@@ -73,7 +84,11 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 
 	candidates := make([]string, 0, 8)
 	if err := k.Providers.Walk(ctx, nil, func(addr string, provider types.Provider) (stop bool, err error) {
-		if !mode2ReplacementProviderEligible(provider, deal.ServiceHint) {
+		eligible, err := k.mode2ReplacementProviderEligible(ctx, provider, deal.ServiceHint)
+		if err != nil {
+			return false, err
+		}
+		if !eligible {
 			return false, nil
 		}
 		if _, blocked := exclude[strings.TrimSpace(provider.Address)]; blocked {
@@ -91,7 +106,11 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 	// one) so repairs remain possible without requiring extra providers.
 	if len(candidates) == 0 {
 		if err := k.Providers.Walk(ctx, nil, func(addr string, provider types.Provider) (stop bool, err error) {
-			if !mode2ReplacementProviderEligible(provider, deal.ServiceHint) {
+			eligible, err := k.mode2ReplacementProviderEligible(ctx, provider, deal.ServiceHint)
+			if err != nil {
+				return false, err
+			}
+			if !eligible {
 				return false, nil
 			}
 			cand := strings.TrimSpace(provider.Address)
