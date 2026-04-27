@@ -13,7 +13,7 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-func (k msgServer) providerBondActor(ctx sdk.Context, creatorRaw string, providerRaw string, action string) (string, string, types.Provider, error) {
+func (k msgServer) providerActor(ctx sdk.Context, creatorRaw string, providerRaw string, action string, subject string) (string, string, types.Provider, error) {
 	creator, err := requireCanonicalAddress(creatorRaw, "creator")
 	if err != nil {
 		return "", "", types.Provider{}, err
@@ -35,16 +35,24 @@ func (k msgServer) providerBondActor(ctx sdk.Context, creatorRaw string, provide
 		pairing, err := k.ProviderPairings.Get(ctx, providerAddr)
 		if err != nil {
 			if errors.Is(err, collections.ErrNotFound) {
-				return "", "", types.Provider{}, sdkerrors.ErrUnauthorized.Wrapf("creator is not authorized to %s provider bond", action)
+				return "", "", types.Provider{}, sdkerrors.ErrUnauthorized.Wrapf("creator is not authorized to %s %s", action, subject)
 			}
 			return "", "", types.Provider{}, err
 		}
 		if pairing.Operator != creator {
-			return "", "", types.Provider{}, sdkerrors.ErrUnauthorized.Wrapf("creator is not authorized to %s provider bond", action)
+			return "", "", types.Provider{}, sdkerrors.ErrUnauthorized.Wrapf("creator is not authorized to %s %s", action, subject)
 		}
 	}
 
 	return creator, providerAddr, provider, nil
+}
+
+func (k msgServer) providerBondActor(ctx sdk.Context, creatorRaw string, providerRaw string, action string) (string, string, types.Provider, error) {
+	return k.providerActor(ctx, creatorRaw, providerRaw, action, "provider bond")
+}
+
+func (k msgServer) providerStakeActor(ctx sdk.Context, creatorRaw string, providerRaw string, action string) (string, string, types.Provider, error) {
+	return k.providerActor(ctx, creatorRaw, providerRaw, action, "provider stake")
 }
 
 func (k msgServer) AddProviderBond(goCtx context.Context, msg *types.MsgAddProviderBond) (*types.MsgAddProviderBondResponse, error) {

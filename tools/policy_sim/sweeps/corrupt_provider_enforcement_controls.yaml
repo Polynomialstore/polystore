@@ -61,7 +61,9 @@
     {
       "name": "low-slash-hard-fault",
       "config": {
-        "slash_hard_fault": 0.1
+        "slash_hard_fault": 0.0,
+        "slash_corrupt_retrieval_bps": 1000,
+        "slash_invalid_synthetic_proof_bps": 1000
       },
       "assertions": {
         "min_success_rate": 0.95,

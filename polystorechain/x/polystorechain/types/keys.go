@@ -43,6 +43,7 @@ var (
 	ProviderJailUntilKey                = collections.NewPrefix("ProviderJailUntil/value/")
 	ProviderPairingsKey                 = collections.NewPrefix("ProviderPairings/value/")
 	ProviderPairingsByOperatorKey       = collections.NewPrefix("ProviderPairingsByOperator/value/")
+	ProviderStakingBindingsKey          = collections.NewPrefix("ProviderStakingBindings/value/")
 	PendingProviderLinksKey             = collections.NewPrefix("PendingProviderLinks/value/")
 	ReceiptNonceKey                     = collections.NewPrefix("ReceiptNonce/value/")
 	ReceiptNonceDealFileKey             = collections.NewPrefix("ReceiptNonceDealFile/value/")

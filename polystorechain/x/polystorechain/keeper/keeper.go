@@ -25,6 +25,7 @@ type Keeper struct {
 
 	BankKeeper    types.BankKeeper
 	AccountKeeper types.AuthKeeper
+	StakingKeeper types.StakingKeeper
 
 	Schema     collections.Schema
 	Params     collections.Item[types.Params]
@@ -43,6 +44,7 @@ type Keeper struct {
 	ProviderJailUntil          collections.Map[string, uint64]
 	ProviderPairings           collections.Map[string, types.ProviderPairing]
 	ProviderPairingsByOperator collections.Map[collections.Pair[string, string], bool]
+	ProviderStakingBindings    collections.Map[string, types.ProviderStakingBinding]
 	PendingProviderLinks       collections.Map[string, types.PendingProviderLink]
 	ReceiptNonces              collections.Map[string, uint64]
 	ReceiptNoncesByDealFile    collections.Map[collections.Pair[uint64, string], uint64]
@@ -98,6 +100,7 @@ func NewKeeper(
 	authority []byte,
 	bankKeeper types.BankKeeper,
 	accountKeeper types.AuthKeeper,
+	stakingKeepers ...types.StakingKeeper,
 
 ) Keeper {
 	if _, err := addressCodec.BytesToString(authority); err != nil {
@@ -105,6 +108,10 @@ func NewKeeper(
 	}
 
 	sb := collections.NewSchemaBuilder(storeService)
+	var stakingKeeper types.StakingKeeper
+	if len(stakingKeepers) > 0 {
+		stakingKeeper = stakingKeepers[0]
+	}
 
 	k := Keeper{
 		storeService:  storeService,
@@ -113,6 +120,7 @@ func NewKeeper(
 		authority:     authority,
 		BankKeeper:    bankKeeper,
 		AccountKeeper: accountKeeper,
+		StakingKeeper: stakingKeeper,
 
 		Params:     collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		ProofCount: collections.NewSequence(sb, types.ProofCountKey, "proof_count"),
@@ -129,6 +137,7 @@ func NewKeeper(
 		ProviderJailUntil:          collections.NewMap(sb, types.ProviderJailUntilKey, "provider_jail_until", collections.StringKey, collections.Uint64Value),
 		ProviderPairings:           collections.NewMap(sb, types.ProviderPairingsKey, "provider_pairings", collections.StringKey, codec.CollValue[types.ProviderPairing](cdc)),
 		ProviderPairingsByOperator: collections.NewMap(sb, types.ProviderPairingsByOperatorKey, "provider_pairings_by_operator", collections.PairKeyCodec(collections.StringKey, collections.StringKey), collections.BoolValue),
+		ProviderStakingBindings:    collections.NewMap(sb, types.ProviderStakingBindingsKey, "provider_staking_bindings", collections.StringKey, codec.CollValue[types.ProviderStakingBinding](cdc)),
 		PendingProviderLinks:       collections.NewMap(sb, types.PendingProviderLinksKey, "pending_provider_links", collections.StringKey, codec.CollValue[types.PendingProviderLink](cdc)),
 		ReceiptNonces:              collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
 		ReceiptNoncesByDealFile:    collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),

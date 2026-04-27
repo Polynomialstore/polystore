@@ -688,11 +688,19 @@ Missing desired-state pieces include:
    claimed. `types.DevnetPolicingParams()` now captures the first
    simulator-backed non-zero devnet profile: `150stake` minimum bond,
    `5stake` per active/pending assignment, 50% hard-fault bond burn, and an
-   unbonding queue spanning the configured hard-fault jail window. The
-   multi-provider devnet runner applies that profile by default and registers
-   local providers with `200stake` self-bond. Remaining work is staking-module
-   integration and deeper calibration of staking-backed liability versus the
-   isolated provider-bond account.
+   unbonding queue spanning the configured hard-fault jail window. The policy
+   simulator now models that burn through `slash_hard_fault_bps`, with
+   reason-specific override knobs for corrupt retrieval and invalid synthetic
+   proof evidence, while keeping the old absolute `slash_hard_fault` value as a
+   legacy fallback. The multi-provider devnet runner applies that profile by
+   default and registers local providers with `200stake` self-bond. A
+   staking-module integration guardrail now records explicit
+   provider/delegator/validator bindings and exposes observed delegation through
+   `ProviderStakingSummary`, but the binding is intentionally
+   `observed_only_no_provider_slash` and
+   `counts_toward_assignment_collateral=false`. Remaining work is defining the
+   slash-safe path from provider faults to validator/delegation liability before
+   any delegated stake can back assignment headroom.
 2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
    has explicit per-slot `RepairAttemptState`, a query surface, and
    governance-tunable `repair_backoff_epochs` cooldown suppression after
@@ -1057,8 +1065,12 @@ Potential state additions:
     summaries, provider health, placement, reward eligibility, repair candidate
     selection, and provider-bond withdrawal constraints consume the lock ledger
     as the canonical liability source when complete per deal, with per-deal
-    fallback for migration or zero-collateral state. Remaining work is future
-    staking integration and simulator-calibrated bond-month sizing.
+    fallback for migration or zero-collateral state. **Landed fifth pass:**
+    `ProviderStakingBinding` records provider/delegator/validator linkage and
+    `ProviderStakingSummary` observes the staking-module delegation without
+    counting it toward assignment collateral. Remaining work is a slashable
+    staking-collateral adapter, unbonding/delegation hold semantics, and
+    simulator-calibrated bond-month sizing.
 11. `ProviderJailState(provider)`. **Landed first pass:** `ProviderJailUntil`
     stores hard-fault jail expiry heights and epoch hooks restore providers
     when the jail window expires.
@@ -1102,8 +1114,10 @@ Likely params:
 16. Storage and retrieval affordability floors for devnet/testnet launch.
 17. Assignment collateral formula and bond months. **Partial:**
     `assignment_collateral_per_slot` is implemented as a static governance
-    parameter; bond-month sizing, opportunity-cost modeling, and simulator
-    default sweeps remain pending.
+    parameter; the simulator now includes
+    `provider_bond_opportunity_cost_bps_per_epoch` so locked-collateral carry
+    cost contributes to provider P&L and churn pressure. Bond-month sizing and
+    production default sweeps remain pending.
 18. Soft-fault decay window and decay rate. **Landed first pass:**
     `provider_health_decay_epochs` and `provider_health_decay_bps`.
 19. Pending-provider catch-up quota share. **Landed first pass:**
@@ -1131,10 +1145,11 @@ Likely messages:
    placement and repair now consume assignment collateral headroom; provider
    collateral accounting is queryable for operators; `types.DevnetPolicingParams`
    plus the multi-provider devnet runner provide the first simulator-calibrated
-   non-zero bond/slash/queue profile. Staking-module integration remains
-   pending because generic delegated stake should not count as provider
-   collateral until the protocol also defines a safe slash path and provider to
-   validator/delegation binding.
+   non-zero bond/slash/queue profile; `MsgBindProviderStake` and
+   `MsgUnbindProviderStake` add observed provider/delegator/validator binding
+   state. Delegated stake still does not count as provider collateral until the
+   protocol defines and implements a safe provider-fault slash path for the
+   bound validator/delegation.
 8. `MsgUpdateProviderCapabilities` or capability attestation.
 9. `MsgOpenRetrievalSessionSponsored` for requester-funded public retrieval.
 10. `MsgOpenProtocolRetrievalSession` for audit, repair, and healing.
@@ -1176,23 +1191,27 @@ Queries/events should make the system explainable:
    and paginated `ListSlotHealthByDeal`.
 7. Pending provider and repair target generation. **Landed first pass:** exposed
    through `SlotHealthState` and existing deal slot state.
-8. Evidence case status. **Landed first pass:** paginated `ListEvidenceCases`
+8. Provider staking binding. **Landed first pass:** `GetProviderStaking` and
+   paginated `ListProviderStaking` expose provider/delegator/validator binding,
+   observed delegation amount when the staking keeper is wired, and explicit
+   non-collateral semantics for delegated stake.
+9. Evidence case status. **Landed first pass:** paginated `ListEvidenceCases`
    with optional deal-indexed filtering.
-9. Repair attempt history. **Landed first pass:** `GetRepairAttempt` and
+10. Repair attempt history. **Landed first pass:** `GetRepairAttempt` and
    paginated `ListRepairAttemptsByDeal` expose explicit per-slot repair attempt
    and cooldown state.
-10. Audit debt by provider/slot.
-11. Reward eligibility and exclusion reason.
-12. Jail/slash history. **Partial:** provider records expose active/slashed bond
+11. Audit debt by provider/slot.
+12. Reward eligibility and exclusion reason.
+13. Jail/slash history. **Partial:** provider records expose active/slashed bond
    and hard-fault penalty events include reputation, jail, isolated
    provider-bond account burns, and bond-burn details; indexed historical slash
    queries remain pending.
-13. Elasticity overlays and spend-window usage.
-14. Current storage and retrieval price with prior-epoch deltas.
-15. Storage utilization and retrieval demand inputs used by pricing.
-16. Base reward pool minted, paid, and burned by epoch.
-17. Audit budget minted, spent, carried over, and exhausted by epoch.
-18. Provider revenue, slash, burn, and reward-exclusion summaries. **Partial:**
+14. Elasticity overlays and spend-window usage.
+15. Current storage and retrieval price with prior-epoch deltas.
+16. Storage utilization and retrieval demand inputs used by pricing.
+17. Base reward pool minted, paid, and burned by epoch.
+18. Audit budget minted, spent, carried over, and exhausted by epoch.
+19. Provider revenue, slash, burn, and reward-exclusion summaries. **Partial:**
    provider reward ledgers and provider bond/slashed-bond fields exist; unified
    operator-facing summaries remain pending.
 
@@ -1508,6 +1527,9 @@ before collateral and underbonded-repair defaults are chosen and is now mapped
 to the devnet policy profile (`200stake` initial self-bond, `150stake`
 minimum, `5stake` per slot, 50% hard-fault burn, queue length equal to the
 hard-fault jail window); and
+`tools/policy_sim/sweeps/provider_bond_opportunity_cost_controls.yaml`, which
+compares locked-collateral carry cost against provider P&L and churn pressure
+before bond-month sizing or staking-backed liability defaults are promoted; and
 `tools/policy_sim/sweeps/provider_cost_shock_controls.yaml`, which compares
 cost-shock severity, bandwidth-heavy demand, reward-buffer sizing, and
 dynamic-pricing response speed before storage-price floors, issuance buffers,

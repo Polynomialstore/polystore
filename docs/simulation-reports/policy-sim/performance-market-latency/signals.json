@@ -103,6 +103,7 @@
     "max_underbonded_providers": 0.0,
     "owner_funded_retrieval_attempts": 6240.0,
     "owner_retrieval_escrow_debited": 0.0,
+    "provider_bond_opportunity_cost": 0.0,
     "provider_churn_events": 0.0,
     "provider_cost_shock_epochs": 0.0,
     "provider_entries": 0.0,

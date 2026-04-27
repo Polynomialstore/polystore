@@ -135,6 +135,7 @@ This report aggregates `8` completed simulator run output directories. It does n
 | `evidence_spam_bond_burned` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Evidence bond burned for unconvicted spam claims. |
 | `evidence_spam_bounty_paid` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Conviction-gated bounty paid to the evidence spammer. |
 | `evidence_spam_net_gain` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Spammer net economics; positive values indicate an abuse risk. |
+| `provider_bond_opportunity_cost` | 0.000000 | 0.000000 | 0.000000 | 0.000000 | Modeled capital carry cost of locked provider bond included in provider P&L. |
 | `provider_cost_shock_active` | 6.000000 | 6.000000 | 0.000000 | 6.000000 | Epochs where external provider cost pressure was active. |
 | `max_provider_cost_shocked_providers` | 64.000000 | 64.000000 | 0.000000 | 64.000000 | Largest provider population affected by cost shock in any epoch. |
 | `max_provider_cost_shock_fixed_multiplier_bps` | 18000.000000 | 30000.000000 | 12000.000000 | 27875.000000 | Peak modeled fixed-cost multiplier during cost shock. |

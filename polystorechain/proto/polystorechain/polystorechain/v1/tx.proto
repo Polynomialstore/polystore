@@ -33,6 +33,13 @@ service Msg {
   // withdrawal from the provider-bond module account to its recorded recipient.
   rpc ClaimProviderBondWithdrawal(MsgClaimProviderBondWithdrawal) returns (MsgClaimProviderBondWithdrawalResponse);
 
+  // MsgBindProviderStake records an observed provider/delegator/validator
+  // binding. It does not make delegated stake assignment collateral yet.
+  rpc BindProviderStake(MsgBindProviderStake) returns (MsgBindProviderStakeResponse);
+
+  // MsgUnbindProviderStake removes an observed provider staking binding.
+  rpc UnbindProviderStake(MsgUnbindProviderStake) returns (MsgUnbindProviderStakeResponse);
+
   // MsgSetProviderDraining allows a provider to opt out of new assignments.
   rpc SetProviderDraining(MsgSetProviderDraining) returns (MsgSetProviderDrainingResponse);
 
@@ -193,6 +200,33 @@ message MsgClaimProviderBondWithdrawal {
 }
 
 message MsgClaimProviderBondWithdrawalResponse {
+  bool success = 1;
+}
+
+// MsgBindProviderStake records an observed staking delegation binding for a provider.
+message MsgBindProviderStake {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgBindProviderStake";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string provider = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string validator = 3 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
+}
+
+message MsgBindProviderStakeResponse {
+  bool success = 1;
+}
+
+// MsgUnbindProviderStake removes the observed staking delegation binding.
+message MsgUnbindProviderStake {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgUnbindProviderStake";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string provider = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+}
+
+message MsgUnbindProviderStakeResponse {
   bool success = 1;
 }
 
