@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"testing"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
@@ -32,15 +33,12 @@ func TestWithdrawRewardsSplitsStorageAndBandwidthClaims(t *testing.T) {
 	require.Equal(t, "15stake", bank.GetBalance(ctx, providerAddr, sdk.DefaultBondDenom).String())
 	require.True(t, bank.moduleBalances[types.ModuleName].IsZero())
 
-	storage, err := f.keeper.ProviderStorageRewards.Get(ctx, provider)
-	require.NoError(t, err)
-	require.True(t, storage.IsZero())
-	bandwidth, err := f.keeper.ProviderBandwidthRewards.Get(ctx, provider)
-	require.NoError(t, err)
-	require.True(t, bandwidth.IsZero())
-	aggregate, err := f.keeper.ProviderRewards.Get(ctx, provider)
-	require.NoError(t, err)
-	require.True(t, aggregate.IsZero())
+	_, err = f.keeper.ProviderStorageRewards.Get(ctx, provider)
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	_, err = f.keeper.ProviderBandwidthRewards.Get(ctx, provider)
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	_, err = f.keeper.ProviderRewards.Get(ctx, provider)
+	require.ErrorIs(t, err, collections.ErrNotFound)
 }
 
 func TestWithdrawRewardsLegacyAggregateMintsForCompatibility(t *testing.T) {
@@ -60,4 +58,7 @@ func TestWithdrawRewardsLegacyAggregateMintsForCompatibility(t *testing.T) {
 	require.Equal(t, math.NewInt(7), res.AmountWithdrawn)
 	require.Equal(t, "7stake", bank.GetBalance(ctx, providerAddr, sdk.DefaultBondDenom).String())
 	require.True(t, bank.moduleBalances[types.ModuleName].IsZero())
+
+	_, err = f.keeper.ProviderRewards.Get(ctx, provider)
+	require.ErrorIs(t, err, collections.ErrNotFound)
 }

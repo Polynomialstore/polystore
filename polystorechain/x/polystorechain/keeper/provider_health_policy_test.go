@@ -99,3 +99,55 @@ func TestProviderJailExpiresAtEpochBoundary(t *testing.T) {
 	require.Equal(t, "provider_jail_expired", health.Reason)
 	require.Equal(t, types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO, health.Severity)
 }
+
+func TestProviderJailExpiryDoesNotEarnEndingEpochBaseReward(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	ctx2, dealID, _ := setupBaseRewardMode2Deal(t, f, bank, "rjailexp")
+
+	deal, err := f.keeper.Deals.Get(ctx2, dealID)
+	require.NoError(t, err)
+	require.Len(t, deal.Mode2Slots, 3)
+	jailedProvider := deal.Mode2Slots[0].Provider
+
+	provider, err := f.keeper.Providers.Get(ctx2, jailedProvider)
+	require.NoError(t, err)
+	provider.Status = "Jailed"
+	require.NoError(t, f.keeper.Providers.Set(ctx2, jailedProvider, provider))
+	require.NoError(t, f.keeper.ProviderJailUntil.Set(ctx2, jailedProvider, 10))
+	require.NoError(t, f.keeper.ProviderHealthStates.Set(ctx2, jailedProvider, types.ProviderHealthState{
+		Provider:           jailedProvider,
+		LifecycleStatus:    types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED,
+		Reason:             "hard_fault_jailed",
+		EvidenceClass:      types.EvidenceClass_EVIDENCE_CLASS_CRYPTOGRAPHIC_HARD,
+		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_HARD,
+		UpdatedHeight:      2,
+		ConsequenceCeiling: "jailed until height 10",
+	}))
+
+	epochID := uint64(1)
+	for _, slot := range deal.Mode2Slots {
+		if slot == nil {
+			continue
+		}
+		setMode2BaseRewardCredits(t, f, ctx2, dealID, epochID, slot.Slot)
+	}
+
+	ctx10 := ctx2.WithBlockHeight(10)
+	require.NoError(t, f.keeper.CheckMissedProofs(ctx10))
+
+	requireProviderBalance(t, bank, jailedProvider, "0stake")
+	requireProviderBalance(t, bank, deal.Mode2Slots[1].Provider, "42stake")
+	requireProviderBalance(t, bank, deal.Mode2Slots[2].Provider, "42stake")
+
+	provider, err = f.keeper.Providers.Get(ctx10, jailedProvider)
+	require.NoError(t, err)
+	require.Equal(t, "Active", provider.Status)
+	_, err = f.keeper.ProviderJailUntil.Get(ctx10, jailedProvider)
+	require.ErrorIs(t, err, collections.ErrNotFound)
+
+	health, err := f.keeper.ProviderHealthStates.Get(ctx10, jailedProvider)
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_ACTIVE, health.LifecycleStatus)
+	require.Equal(t, "provider_jail_expired", health.Reason)
+}

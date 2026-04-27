@@ -118,6 +118,12 @@ func classifyEvidenceReason(reason string) (types.EvidenceClass, types.EvidenceS
 	}
 }
 
+func evidenceInputConvictsImmediately(in evidenceCaseInput) bool {
+	return in.Slashable ||
+		in.Severity == types.EvidenceSeverity_EVIDENCE_SEVERITY_HARD ||
+		in.Class == types.EvidenceClass_EVIDENCE_CLASS_CRYPTOGRAPHIC_HARD
+}
+
 func (k Keeper) recordEvidenceCase(ctx sdk.Context, in evidenceCaseInput) (uint64, error) {
 	reason := strings.TrimSpace(in.Reason)
 	if reason == "" {
@@ -150,6 +156,9 @@ func (k Keeper) recordEvidenceCase(ctx sdk.Context, in evidenceCaseInput) (uint6
 	}
 	if in.Count == 0 {
 		in.Count = 1
+	}
+	if in.Status == types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED && evidenceInputConvictsImmediately(in) {
+		in.Status = types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_CONVICTED
 	}
 
 	id, err := k.EvidenceCount.Next(ctx)

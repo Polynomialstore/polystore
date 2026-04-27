@@ -55,6 +55,9 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 	if !hardFaultEvidence(ev) {
 		return nil
 	}
+	if ev.Status != types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_CONVICTED {
+		return nil
+	}
 	providerAddr := strings.TrimSpace(ev.Provider)
 	if providerAddr == "" {
 		return nil
@@ -205,7 +208,7 @@ func quietEpochWindowElapsed(lastEpoch uint64, currentEpoch uint64, quietEpochs 
 	if currentEpoch <= lastEpoch {
 		return false
 	}
-	return currentEpoch-lastEpoch > quietEpochs
+	return currentEpoch-lastEpoch >= quietEpochs
 }
 
 func (k Keeper) applyProviderHealthEpochDecay(ctx sdk.Context, epochID uint64) error {

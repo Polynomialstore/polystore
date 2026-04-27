@@ -37,6 +37,13 @@ func addIntReward(ctx sdk.Context, rewards collections.Map[string, math.Int], pr
 	return rewards.Set(ctx, provider, current.Add(delta))
 }
 
+func removeIntReward(ctx sdk.Context, rewards collections.Map[string, math.Int], provider string) error {
+	if err := rewards.Remove(ctx, provider); err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return err
+	}
+	return nil
+}
+
 func (k Keeper) addProviderRewardClaims(ctx sdk.Context, provider string, storageReward math.Int, bandwidthReward math.Int) error {
 	if storageReward.IsNil() {
 		storageReward = math.ZeroInt()
@@ -80,11 +87,11 @@ func (k Keeper) providerRewardClaims(ctx sdk.Context, provider string) (storageR
 }
 
 func (k Keeper) clearProviderRewardClaims(ctx sdk.Context, provider string) error {
-	if err := k.ProviderStorageRewards.Set(ctx, provider, math.ZeroInt()); err != nil {
+	if err := removeIntReward(ctx, k.ProviderStorageRewards, provider); err != nil {
 		return err
 	}
-	if err := k.ProviderBandwidthRewards.Set(ctx, provider, math.ZeroInt()); err != nil {
+	if err := removeIntReward(ctx, k.ProviderBandwidthRewards, provider); err != nil {
 		return err
 	}
-	return k.ProviderRewards.Set(ctx, provider, math.ZeroInt())
+	return removeIntReward(ctx, k.ProviderRewards, provider)
 }

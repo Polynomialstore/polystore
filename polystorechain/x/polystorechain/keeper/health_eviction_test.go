@@ -71,6 +71,9 @@ func TestProveLiveness_InvalidSystemProofRecordsHardEvidenceWithoutPayment(t *te
 	require.False(t, evidence.Valid)
 	require.Contains(t, evidence.Commitment, "deal=1")
 	require.Contains(t, evidence.Commitment, "provider="+providerA)
+	evidenceCase := requireEvidenceCase(t, f, sdkCtx, "system_proof_invalid")
+	require.Equal(t, types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_CONVICTED, evidenceCase.Status)
+	require.True(t, evidenceCase.Slashable)
 
 	_, err = f.keeper.Mode2EpochCredits.Get(sdkCtx, collections.Join(collections.Join(dealID, uint32(0)), uint64(1)))
 	require.ErrorIs(t, err, collections.ErrNotFound)
