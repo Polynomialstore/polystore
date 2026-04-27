@@ -216,6 +216,84 @@ func (k queryServer) ListProviderCollateral(goCtx context.Context, req *types.Qu
 	return &types.QueryListProviderCollateralResponse{Collateral: collateral, Pagination: pageRes}, nil
 }
 
+func (k queryServer) GetAssignmentCollateralLock(goCtx context.Context, req *types.QueryGetAssignmentCollateralLockRequest) (*types.QueryGetAssignmentCollateralLockResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	provider, err := canonicalAddress(req.Provider, "provider")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	lock, err := k.k.AssignmentCollateralLocks.Get(ctx, makeAssignmentCollateralLockKey(provider, req.DealId, req.Slot))
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "assignment collateral lock not found")
+		}
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &types.QueryGetAssignmentCollateralLockResponse{Lock: lock}, nil
+}
+
+func (k queryServer) ListAssignmentCollateralLocksByProvider(goCtx context.Context, req *types.QueryListAssignmentCollateralLocksByProviderRequest) (*types.QueryListAssignmentCollateralLocksByProviderResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	provider, err := canonicalAddress(req.Provider, "provider")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	locks, pageRes, err := sdkquery.CollectionPaginate(
+		goCtx,
+		k.k.AssignmentCollateralLocks,
+		req.Pagination,
+		func(_ assignmentCollateralLockKey, lock types.AssignmentCollateralLock) (types.AssignmentCollateralLock, error) {
+			return lock, nil
+		},
+		sdkquery.WithCollectionPaginationPairPrefix[string, collections.Pair[uint64, uint32]](provider),
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListAssignmentCollateralLocksByProviderResponse{Locks: locks, Pagination: pageRes}, nil
+}
+
+func (k queryServer) ListAssignmentCollateralLocksByDeal(goCtx context.Context, req *types.QueryListAssignmentCollateralLocksByDealRequest) (*types.QueryListAssignmentCollateralLocksByDealResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	locks, pageRes, err := sdkquery.CollectionFilteredPaginate(
+		goCtx,
+		k.k.AssignmentCollateralLocksByDeal,
+		req.Pagination,
+		func(key assignmentCollateralLockByDealKey, _ bool) (bool, error) {
+			_, err := k.k.assignmentCollateralLockFromDealIndex(ctx, key)
+			if errors.Is(err, collections.ErrNotFound) {
+				return false, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		},
+		func(key assignmentCollateralLockByDealKey, _ bool) (types.AssignmentCollateralLock, error) {
+			return k.k.assignmentCollateralLockFromDealIndex(ctx, key)
+		},
+		sdkquery.WithCollectionPaginationPairPrefix[uint64, collections.Pair[uint32, string]](req.DealId),
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListAssignmentCollateralLocksByDealResponse{Locks: locks, Pagination: pageRes}, nil
+}
+
 func (k queryServer) GetProviderPairing(goCtx context.Context, req *types.QueryGetProviderPairingRequest) (*types.QueryGetProviderPairingResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")

@@ -449,7 +449,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				}
 			}
 			if dealChanged {
-				if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+				if err := k.setDealWithAssignmentCollateralLocks(sdkCtx, dealID, deal); err != nil {
 					return false, err
 				}
 			}
