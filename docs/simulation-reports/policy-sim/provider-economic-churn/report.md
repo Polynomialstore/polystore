@@ -93,6 +93,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider bond opportunity cost | `0.00%` / epoch | Models the capital cost of locked collateral so bond sizing can be calibrated against provider churn pressure. |
 | Provider initial/min bond | `100.0000` / `0.0000` | Simplified collateral model. Providers below the required bond are excluded from new responsibility and can trigger repair. |
 | Provider bond per assigned slot | `0.0000` | Additional modeled collateral required for each assigned storage slot. |
+| Hard-fault slash | `1.0000` fallback, `0.00%` generic bps, corrupt `0.00%`, invalid proof `0.00%` | Bps controls burn a share of remaining provider bond and override the legacy absolute fallback for calibrated slash sizing. |
 | Provider cost shocks | `[{"bandwidth_cost_multiplier_bps": 40000, "end_epoch": 12, "fixed_cost_multiplier_bps": 80000, "provider_ids": ["sp-000", "sp-001", "sp-002", "sp-003", "sp-004", "sp-005", "sp-006", "sp-007"], "start_epoch": 3, "storage_cost_multiplier_bps": 80000}]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
 | Provider churn policy | enabled `True`, threshold `0.0000`, after `2` epochs, cap `2`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |
 | Provider churn floor | `72` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |

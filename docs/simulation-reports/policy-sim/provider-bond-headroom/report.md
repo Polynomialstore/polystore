@@ -93,6 +93,7 @@ The economic model is intentionally simple and deterministic. It is useful for c
 | Provider bond opportunity cost | `0.00%` / epoch | Models the capital cost of locked collateral so bond sizing can be calibrated against provider churn pressure. |
 | Provider initial/min bond | `2.0000` / `1.5000` | Simplified collateral model. Providers below the required bond are excluded from new responsibility and can trigger repair. |
 | Provider bond per assigned slot | `0.0500` | Additional modeled collateral required for each assigned storage slot. |
+| Hard-fault slash | `0.0000` fallback, `50.00%` generic bps, corrupt `0.00%`, invalid proof `0.00%` | Bps controls burn a share of remaining provider bond and override the legacy absolute fallback for calibrated slash sizing. |
 | Provider cost shocks | `[]` | Optional epoch-scoped fixed/storage/bandwidth cost multipliers used to model sudden operator cost pressure. |
 | Provider churn policy | enabled `False`, threshold `0.0000`, after `1` epochs, cap `0`/epoch | Converts sustained negative economics into draining exits; cap `0` means unbounded by this policy. |
 | Provider churn floor | `0` providers | Prevents an economic shock fixture from exiting the entire active set unless intentionally configured. |
@@ -118,7 +119,7 @@ The policy layer recorded `11` evidence events: `0` soft, `0` threshold, `5` har
 
 Repair was exercised: `6` repair operations started, `6` produced pending-provider readiness evidence, and `6` completed. The simulator models this as make-before-break reassignment, so the old assignment remains visible until replacement work catches up and the readiness gate is satisfied.
 
-Simulated slashing was active: providers lost `2.0000` bond units in aggregate.
+Simulated slashing was active: providers lost `1.9375` bond units in aggregate.
 
 The directly implicated provider set begins with: `sp-000`.
 
@@ -186,7 +187,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 | Provider entries / probation promotions | `0` / `0` | Shows whether reserve supply entered and cleared readiness gating before receiving normal placement. |
 | Reserve / probationary / entered-active providers | `0` / `0` / `0` | Separates unused reserve supply, in-flight onboarding, and newly promoted active supply. |
 | Underbonded repairs / peak underbonded providers | `1` / `1` | Shows whether insufficient provider collateral became placement/repair pressure. |
-| Final underbonded assigned slots / bond deficit | `0` / `1.5000` | Checks whether repair removed responsibility from undercollateralized providers by run end. |
+| Final underbonded assigned slots / bond deficit | `0` / `1.4375` | Checks whether repair removed responsibility from undercollateralized providers by run end. |
 | Churn pressure provider-epochs / peak | `10` / `1` | Shows the breadth and duration of providers below the configured churn threshold. |
 | Active / exited / reserve provider capacity | `768` / `0` / `0` slots | Measures supply remaining, removed, and still waiting outside normal placement. |
 | Peak assigned slots on churned providers | `0` | Shows the maximum repair burden created by economic exits. |
@@ -200,7 +201,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 | Region | Providers | Utilization | Offline Responses | Saturated Responses | Negative P&L Providers | Avg P&L |
 |---|---:|---:|---:|---:|---:|---:|
-| `global` | 48 | 37.50% | 0 | 0 | 1 | 1.1892 |
+| `global` | 48 | 37.50% | 0 | 0 | 1 | 1.1905 |
 
 ### Top Bottleneck Providers
 
@@ -232,7 +233,7 @@ These are derived from the raw CSV/JSON outputs and are intended to make scale b
 
 | Epoch | Retrieval Success | Evidence | Repairs Started | Repairs Ready | Repairs Completed | Reward Burned | Provider P&L | Notes |
 |---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | 100.00% | 10 | 6 | 5 | 5 | 0.0000 | 3.8200 | 5 invalid proofs, 5 slots repairing |
+| 1 | 100.00% | 10 | 6 | 5 | 5 | 0.0000 | 3.8825 | 5 invalid proofs, 5 slots repairing |
 | 2 | 100.00% | 0 | 0 | 1 | 1 | 0.0000 | 5.9000 | 1 slots repairing |
 | 3 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
 | 4 | 100.00% | 0 | 0 | 0 | 0 | 0.0000 | 5.9200 | steady state |
@@ -297,7 +298,7 @@ Candidate exclusion summary:
 
 The run minted `67.4800` reward/audit units and burned `4.0000` units, for a burn-to-mint ratio of `5.93%`.
 
-Providers earned `118.2800` in modeled revenue against `59.2000` in modeled cost, ending with aggregate P&L `57.0800`.
+Providers earned `118.2800` in modeled revenue against `59.2000` in modeled cost, ending with aggregate P&L `57.1425`.
 
 Retrieval accounting paid providers `60.8000`, burned `0.8000` in base fees, and burned `3.2000` in variable retrieval fees.
 
@@ -321,7 +322,7 @@ Final modeled storage price was `1.0000` and retrieval price per slot was `0.010
 
 | Provider | Assigned Slots | Revenue | Cost | Slashed | P&L | Churn Risk |
 |---|---:|---:|---:|---:|---:|---:|
-| `sp-000` | 0 | 0.0200 + 0.0000 | 0.5100 | 2.0000 | -2.4900 | yes |
+| `sp-000` | 0 | 0.0200 + 0.0000 | 0.5100 | 1.9375 | -2.4275 | yes |
 | `sp-022` | 6 | 1.2000 + 0.9975 | 1.2050 | 0.0000 | 0.9925 | no |
 | `sp-020` | 6 | 1.2000 + 1.1020 | 1.2160 | 0.0000 | 1.0860 | no |
 | `sp-016` | 6 | 1.2000 + 1.1115 | 1.2170 | 0.0000 | 1.0945 | no |
@@ -334,12 +335,12 @@ Assertions are the machine-readable policy contract for this fixture. Passing me
 | Assertion | Status | Meaning | Detail |
 |---|---|---|---|
 | `min_success_rate` | `PASS` | Availability floor: user-facing reads must stay above this success rate. | success_rate=1, required>=0.95 |
-| `min_provider_slashed` | `PASS` | Simulated slashing must affect hard-fault providers. | provider_slashed=2, required>=1 |
+| `min_provider_slashed` | `PASS` | Simulated slashing must affect hard-fault providers. | provider_slashed=1.9375, required>=1 |
 | `min_invalid_proofs` | `PASS` | Hard-fault fixture must generate invalid-proof evidence. | invalid_proofs=5, required>=1 |
 | `min_provider_underbonded_repairs` | `PASS` | Bond-headroom fixture must trigger repair away from undercollateralized providers. | provider_underbonded_repairs=1, required>=1 |
 | `min_max_underbonded_providers` | `PASS` | Bond-headroom fixture must expose at least this many underbonded providers. | max_underbonded_providers=1, required>=1 |
 | `min_max_underbonded_assigned_slots` | `PASS` | Bond-headroom fixture must expose assigned responsibility on underbonded providers. | max_underbonded_assigned_slots=1, required>=1 |
-| `min_max_provider_bond_deficit` | `PASS` | Bond-headroom fixture must expose non-zero collateral deficit. | max_provider_bond_deficit=1.55, required>=0.1 |
+| `min_max_provider_bond_deficit` | `PASS` | Bond-headroom fixture must expose non-zero collateral deficit. | max_provider_bond_deficit=1.4875, required>=0.1 |
 | `max_final_underbonded_assigned_slots` | `PASS` | Bond-headroom fixture should repair away all underbonded active responsibility by run end. | final_underbonded_assigned_slots=0, required<=0 |
 | `max_data_loss_events` | `PASS` | Durability invariant: stress may allow unavailable reads, but modeled data loss must stay at zero. | data_loss_events=0, required<=0 |
 | `max_paid_corrupt_bytes` | `PASS` | Corrupt data must not earn payment. | paid_corrupt_bytes=0, required<=0 |

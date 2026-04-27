@@ -72,7 +72,7 @@
     "sweep_summary.json",
     "manifest.json"
   ],
-  "description": "Sensitivity sweep for provider minimum bond, per-slot collateral, initial bond, and hard-fault slash sizing.",
+  "description": "Sensitivity sweep for provider minimum bond, per-slot collateral, initial bond, and bps-based hard-fault slash sizing.",
   "name": "provider-bond-headroom-controls",
   "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
   "omitted_artifacts": [
