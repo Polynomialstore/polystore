@@ -22,6 +22,9 @@ service Msg {
   // MsgRegisterProvider allows a Storage Provider to register themselves with the network.
   rpc RegisterProvider(MsgRegisterProvider) returns (MsgRegisterProviderResponse);
 
+  // MsgAddProviderBond allows a provider or paired operator to top up provider bond.
+  rpc AddProviderBond(MsgAddProviderBond) returns (MsgAddProviderBondResponse);
+
   // MsgSetProviderDraining allows a provider to opt out of new assignments.
   rpc SetProviderDraining(MsgSetProviderDraining) returns (MsgSetProviderDrainingResponse);
 
@@ -137,6 +140,20 @@ message MsgRegisterProvider {
 
 // MsgRegisterProviderResponse defines the response structure for registering a provider.
 message MsgRegisterProviderResponse {
+  bool success = 1;
+}
+
+// MsgAddProviderBond tops up an existing provider's isolated bond balance.
+message MsgAddProviderBond {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgAddProviderBond";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string provider = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  cosmos.base.v1beta1.Coin bond = 3 [(gogoproto.nullable) = false];
+}
+
+message MsgAddProviderBondResponse {
   bool success = 1;
 }
 

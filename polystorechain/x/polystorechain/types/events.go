@@ -3,6 +3,7 @@ package types
 // Event types
 const (
 	TypeMsgRegisterProvider        = "register_provider"
+	TypeMsgAddProviderBond         = "add_provider_bond"
 	TypeMsgUpdateProviderEndpoints = "update_provider_endpoints"
 	TypeMsgRequestProviderLink     = "request_provider_link"
 	TypeMsgApproveProviderLink     = "approve_provider_link"
