@@ -119,7 +119,11 @@ func (k queryServer) GetProviderHealth(goCtx context.Context, req *types.QueryGe
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	health, err := k.k.deriveProviderHealthState(ctx, address)
+	counts, err := k.k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	health, err := k.k.deriveProviderHealthStateWithCounts(ctx, address, counts)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return nil, status.Error(codes.NotFound, "provider not found")
@@ -136,12 +140,16 @@ func (k queryServer) ListProviderHealth(goCtx context.Context, req *types.QueryL
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	counts, err := k.k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	health, pageRes, err := sdkquery.CollectionPaginate(
 		goCtx,
 		k.k.Providers,
 		req.Pagination,
 		func(address string, _ types.Provider) (types.ProviderHealthState, error) {
-			return k.k.deriveProviderHealthState(ctx, address)
+			return k.k.deriveProviderHealthStateWithCounts(ctx, address, counts)
 		},
 	)
 	if err != nil {
@@ -149,6 +157,63 @@ func (k queryServer) ListProviderHealth(goCtx context.Context, req *types.QueryL
 	}
 
 	return &types.QueryListProviderHealthResponse{Health: health, Pagination: pageRes}, nil
+}
+
+func (k queryServer) GetProviderCollateral(goCtx context.Context, req *types.QueryGetProviderCollateralRequest) (*types.QueryGetProviderCollateralResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	address, err := canonicalAddress(req.Address, "address")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	provider, err := k.k.Providers.Get(ctx, address)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "provider not found")
+		}
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+	counts, err := k.k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	collateral, err := k.k.deriveProviderCollateralSummary(ctx, provider, counts)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryGetProviderCollateralResponse{Collateral: collateral}, nil
+}
+
+func (k queryServer) ListProviderCollateral(goCtx context.Context, req *types.QueryListProviderCollateralRequest) (*types.QueryListProviderCollateralResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	counts, err := k.k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	collateral, pageRes, err := sdkquery.CollectionPaginate(
+		goCtx,
+		k.k.Providers,
+		req.Pagination,
+		func(address string, provider types.Provider) (types.ProviderCollateralSummary, error) {
+			if provider.Address == "" {
+				provider.Address = address
+			}
+			return k.k.deriveProviderCollateralSummary(ctx, provider, counts)
+		},
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListProviderCollateralResponse{Collateral: collateral, Pagination: pageRes}, nil
 }
 
 func (k queryServer) GetProviderPairing(goCtx context.Context, req *types.QueryGetProviderPairingRequest) (*types.QueryGetProviderPairingResponse, error) {

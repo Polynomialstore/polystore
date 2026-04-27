@@ -186,6 +186,27 @@ message ProviderHealthState {
   string consequence_ceiling = 14;
 }
 
+// ProviderCollateralSummary is a query-only, provider-centric accounting view
+// derived from registration bond state and current Mode 2 assignment counts.
+// It does not lock/unlock funds by itself; it makes the policy-visible
+// collateral requirement and placement headroom explicit for operators.
+message ProviderCollateralSummary {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 active_assignments = 2;
+  uint64 pending_assignments = 3;
+  uint64 total_assignments = 4;
+  cosmos.base.v1beta1.Coin bond = 5 [(gogoproto.nullable) = false];
+  cosmos.base.v1beta1.Coin min_provider_bond = 6 [(gogoproto.nullable) = false];
+  cosmos.base.v1beta1.Coin assignment_collateral_per_slot = 7 [(gogoproto.nullable) = false];
+  cosmos.base.v1beta1.Coin required_collateral = 8 [(gogoproto.nullable) = false];
+  uint64 affordable_assignments = 9;
+  bool unlimited_assignments = 10;
+  uint64 assignment_headroom = 11;
+  uint64 overassigned_assignments = 12;
+  bool eligible_for_new_assignment = 13;
+  string ineligibility_reason = 14;
+}
+
 // RepairAttemptState is the explicit per-slot repair coordination ledger. It
 // turns previously implicit repair/backoff evidence into queryable protocol
 // state for replacement-grinding controls, operator status, and future

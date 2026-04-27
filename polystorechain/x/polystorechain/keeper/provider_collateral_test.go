@@ -5,8 +5,10 @@ import (
 
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/stretchr/testify/require"
 
+	"polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
 
@@ -126,4 +128,93 @@ func TestUnderbondedActiveSlotsEnterRepairAtEpochBoundary(t *testing.T) {
 	repair, err := f.keeper.RepairAttemptStates.Get(ctxEpoch, collections.Join(deal.Id, health.Slot))
 	require.NoError(t, err)
 	require.Equal(t, "underbonded_repair_started", repair.LastReason)
+}
+
+func TestProviderCollateralSummaryQueryReportsHeadroomAndOverassignment(t *testing.T) {
+	f := initFixture(t)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	registerPolicyTestProviders(t, f, ctx, providerA, providerB, providerC)
+	require.NoError(t, f.keeper.Params.Set(ctx, collateralPolicyParams(50, 25)))
+
+	setProviderBondForTest(t, f, ctx, providerA, 75)
+	setProviderBondForTest(t, f, ctx, providerB, 100)
+	setProviderBondForTest(t, f, ctx, providerC, 100)
+
+	deal := mode2PolicyTestDeal(1, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerA, providerB})
+	deal.Mode2Slots[2].Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+	deal.Mode2Slots[2].PendingProvider = providerC
+	require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
+
+	res, err := queryServer.GetProviderCollateral(ctx, &types.QueryGetProviderCollateralRequest{Address: providerA})
+	require.NoError(t, err)
+	require.Equal(t, providerA, res.Collateral.Provider)
+	require.Equal(t, uint64(2), res.Collateral.ActiveAssignments)
+	require.Equal(t, uint64(0), res.Collateral.PendingAssignments)
+	require.Equal(t, uint64(2), res.Collateral.TotalAssignments)
+	require.Equal(t, sdk.NewInt64Coin(sdk.DefaultBondDenom, 75), res.Collateral.Bond)
+	require.Equal(t, sdk.NewInt64Coin(sdk.DefaultBondDenom, 100), res.Collateral.RequiredCollateral)
+	require.Equal(t, uint64(1), res.Collateral.AffordableAssignments)
+	require.Equal(t, uint64(1), res.Collateral.OverassignedAssignments)
+	require.False(t, res.Collateral.UnlimitedAssignments)
+	require.False(t, res.Collateral.EligibleForNewAssignment)
+	require.Contains(t, res.Collateral.IneligibilityReason, "below required collateral")
+
+	pendingRes, err := queryServer.GetProviderCollateral(ctx, &types.QueryGetProviderCollateralRequest{Address: providerC})
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), pendingRes.Collateral.ActiveAssignments)
+	require.Equal(t, uint64(1), pendingRes.Collateral.PendingAssignments)
+	require.Equal(t, uint64(1), pendingRes.Collateral.TotalAssignments)
+	require.Equal(t, sdk.NewInt64Coin(sdk.DefaultBondDenom, 75), pendingRes.Collateral.RequiredCollateral)
+	require.Equal(t, uint64(2), pendingRes.Collateral.AffordableAssignments)
+	require.Equal(t, uint64(1), pendingRes.Collateral.AssignmentHeadroom)
+	require.True(t, pendingRes.Collateral.EligibleForNewAssignment)
+
+	listRes, err := queryServer.ListProviderCollateral(ctx, &types.QueryListProviderCollateralRequest{
+		Pagination: &sdkquery.PageRequest{Limit: 10, CountTotal: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), listRes.Pagination.Total)
+	require.Equal(t, uint64(1), findProviderCollateralSummary(t, listRes.Collateral, providerA).OverassignedAssignments)
+	require.Equal(t, uint64(1), findProviderCollateralSummary(t, listRes.Collateral, providerC).AssignmentHeadroom)
+}
+
+func TestProviderCollateralSummaryQueryReportsUnlimitedAssignments(t *testing.T) {
+	f := initFixture(t)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	registerPolicyTestProviders(t, f, ctx, providerA)
+	require.NoError(t, f.keeper.Params.Set(ctx, collateralPolicyParams(50, 0)))
+	setProviderBondForTest(t, f, ctx, providerA, 50)
+
+	deal := mode2PolicyTestDeal(1, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerA})
+	require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
+
+	res, err := queryServer.GetProviderCollateral(ctx, &types.QueryGetProviderCollateralRequest{Address: providerA})
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), res.Collateral.TotalAssignments)
+	require.Equal(t, sdk.NewInt64Coin(sdk.DefaultBondDenom, 50), res.Collateral.RequiredCollateral)
+	require.True(t, res.Collateral.UnlimitedAssignments)
+	require.Equal(t, uint64(0), res.Collateral.AssignmentHeadroom)
+	require.Equal(t, uint64(0), res.Collateral.OverassignedAssignments)
+	require.True(t, res.Collateral.EligibleForNewAssignment)
+	require.Empty(t, res.Collateral.IneligibilityReason)
+}
+
+func findProviderCollateralSummary(t *testing.T, summaries []types.ProviderCollateralSummary, provider string) types.ProviderCollateralSummary {
+	t.Helper()
+
+	for _, summary := range summaries {
+		if summary.Provider == provider {
+			return summary
+		}
+	}
+	t.Fatalf("provider collateral summary not found for %s", provider)
+	return types.ProviderCollateralSummary{}
 }
