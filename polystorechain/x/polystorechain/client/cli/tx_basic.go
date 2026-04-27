@@ -105,6 +105,35 @@ func CmdAddProviderBond() *cobra.Command {
 	return cmd
 }
 
+func CmdWithdrawProviderBond() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "withdraw-provider-bond [provider] [bond]",
+		Short: "Withdraw excess provider bond while retaining required collateral",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			bond, err := sdk.ParseCoinNormalized(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid bond: %w", err)
+			}
+
+			msg := types.MsgWithdrawProviderBond{
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
+				Bond:     bond,
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
 func CmdUpdateProviderEndpoints() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update-provider-endpoints",

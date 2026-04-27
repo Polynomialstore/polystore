@@ -660,7 +660,10 @@ Missing desired-state pieces include:
    `ProviderCollateralSummary` now exposes each provider's active/pending
    assignment counts, required collateral, finite headroom, overassignment, and
    new-assignment eligibility. `MsgAddProviderBond` provides the first explicit
-   rebond/top-up path for the provider or its paired operator.
+   rebond/top-up path for the provider or its paired operator, and
+   `MsgWithdrawProviderBond` provides the first bond-exit gate by allowing only
+   excess bond to leave after retaining policy-required minimum and assignment
+   collateral; jailed providers cannot withdraw during the jail window.
    When `assignment_collateral_per_slot` is positive,
    `AssignmentCollateralLock` now records stateful per-assignment liabilities
    for active slots and pending repair providers, including provider, deal,
@@ -671,9 +674,11 @@ Missing desired-state pieces include:
    candidate selection now consume the lock ledger as the active/pending
    assignment count source when the policy is enabled and a complete lock set
    exists for the active deal, falling back per deal to slot snapshots for
-   zero-collateral, pre-lock migration, or partial-lock state. Remaining work is
-   to make unbond, staking-module integration, and unbonding delays consume this
-   ledger as canonical slash/liability state.
+   zero-collateral, pre-lock migration, or partial-lock state. Provider-bond
+   withdrawals now consume the same lock-aware liability view before releasing
+   funds from the isolated provider-bond account and are blocked while the
+   provider is jailed. Remaining work is delayed unbond queues, staking-module
+   integration, and governance-calibrated withdrawal waiting periods.
 2. Attempt-cap hardening beyond the first repair attempt ledger. The keeper now
    has explicit per-slot `RepairAttemptState`, a query surface, and
    governance-tunable `repair_backoff_epochs` cooldown suppression after
@@ -1016,8 +1021,11 @@ Potential state additions:
    active `bond` and cumulative `bond_slashed`; `MsgRegisterProvider` can lock
    initial bond in the dedicated `nilchain_provider_bond` module account;
    `MsgAddProviderBond` lets the provider or paired operator add same-denom
-   top-up bond to restore assignment headroom; hard-fault policy can burn bond
-   without touching deal escrow, reward, retrieval-fee, or protocol-budget funds.
+   top-up bond to restore assignment headroom; `MsgWithdrawProviderBond` lets
+   the provider or paired operator withdraw only excess same-denom bond after
+   retaining lock-aware minimum and assignment collateral, unless the provider
+   is currently jailed; hard-fault policy can burn bond without touching deal
+   escrow, reward, retrieval-fee, or protocol-budget funds.
 10. `AssignmentCollateral(provider, deal_id, slot)`. **Landed first pass:**
     `assignment_collateral_per_slot` adds deterministic bond headroom checks
     for placement, repair candidates, reward eligibility, provider health, and
@@ -1029,9 +1037,12 @@ Potential state additions:
     `assignment_collateral_per_slot` is positive,
     `AssignmentCollateralLock` stores stateful per-slot liabilities for active
     assigned providers and pending repair providers, synced on deal writes,
-    repair start, and repair completion. Remaining work is to make collateral summaries, unbond
-    constraints, and future staking integration consume the lock ledger as the
-    canonical liability source.
+    repair start, and repair completion. **Landed fourth pass:** collateral
+    summaries, provider health, placement, reward eligibility, repair candidate
+    selection, and provider-bond withdrawal constraints consume the lock ledger
+    as the canonical liability source when complete per deal, with per-deal
+    fallback for migration or zero-collateral state. Remaining work is delayed
+    unbond queues and future staking integration.
 11. `ProviderJailState(provider)`. **Landed first pass:** `ProviderJailUntil`
     stores hard-fault jail expiry heights and epoch hooks restore providers
     when the jail window expires.
@@ -1096,9 +1107,12 @@ Likely messages:
 7. `MsgUpdateProviderBond` or staking integration. **Partial:**
    `MsgRegisterProvider` accepts an initial self-bond and isolates it in a
    provider-bond account; `MsgAddProviderBond` provides the first explicit
-   top-up/rebond message for the provider or paired operator; placement and
-   repair now consume assignment collateral headroom; provider collateral
-   accounting is queryable for operators; unbond, unbonding delays, and
+   top-up/rebond message for the provider or paired operator;
+   `MsgWithdrawProviderBond` provides the first excess-bond exit message while
+   retaining lock-aware minimum and active/pending assignment liabilities and
+   refusing jailed-provider withdrawals;
+   placement and repair now consume assignment collateral headroom; provider
+   collateral accounting is queryable for operators; delayed unbond queues and
    staking-module integration remain pending.
 8. `MsgUpdateProviderCapabilities` or capability attestation.
 9. `MsgOpenRetrievalSessionSponsored` for requester-funded public retrieval.
@@ -2155,13 +2169,14 @@ for later work.
 | Assignment collateral accounting is queryable | Provider collateral summaries expose bond, policy params, active/pending assignment counts, required collateral, finite headroom, overassignment, and next-assignment eligibility. When per-slot collateral is positive, `AssignmentCollateralLock` additionally exposes stateful active/pending-repair liabilities by provider/deal/slot. | Keeper query API and generated REST gateway routes. |
 | Assignment collateral locks follow repair lifecycle | With positive per-slot collateral, starting repair removes the old active slot-provider lock and creates a pending-repair lock for the candidate; completing repair promotes that candidate to the active lock for the slot and generation. | Keeper deal write hook, repair messages, and query API. |
 | Provider bond headroom can be restored | A provider or paired operator can submit `MsgAddProviderBond` with same-denom positive bond; funds move into the isolated provider-bond module account and derived assignment headroom/eligibility updates accordingly. | Keeper message, bank accounting, CLI, and provider-collateral query policy. |
+| Provider bond exit is liability-gated | A provider or paired operator can submit `MsgWithdrawProviderBond`, but only excess same-denom bond can leave; the provider must retain `min_provider_bond` plus lock-aware active/pending assignment collateral, and jailed providers cannot withdraw. | Keeper message, bank accounting, CLI, and lock-aware collateral policy. |
 | Soft-fault health can decay | At epoch boundaries, soft-fault counters decay after `provider_health_decay_epochs` quiet epochs by `provider_health_decay_bps`, allowing degraded/delinquent providers to return to active health without manual intervention. | Keeper epoch policy. |
 
 ### 35.2 Required Test Layers
 
 | Layer | Required coverage for this stack | Merge gate |
 |---|---|---|
-| Keeper unit tests | Edge preference, Edge fallback, inactive/draining exclusion, non-Hot regression, repeated saturation indexes, fail-closed saturation accounting, virtual stripe query validation, expired retrieval no-billing across user/sponsored/protocol paths, explicit repair attempt/cooldown state, provider bond locking/top-up, hard-fault bond burn, underbonded placement/query behavior, assignment-collateral placement exclusion, repair-candidate headroom, underbonded active-slot repair-away, provider collateral summary accounting, assignment collateral lock sync/movement, and rebond-driven headroom restoration. | `cd polystorechain && go test ./x/polystorechain/keeper -run '<focused regex>'` plus full `go test ./...` before pushing code PRs. |
+| Keeper unit tests | Edge preference, Edge fallback, inactive/draining exclusion, non-Hot regression, repeated saturation indexes, fail-closed saturation accounting, virtual stripe query validation, expired retrieval no-billing across user/sponsored/protocol paths, explicit repair attempt/cooldown state, provider bond locking/top-up/withdrawal, hard-fault bond burn, underbonded placement/query behavior, assignment-collateral placement exclusion, repair-candidate headroom, underbonded active-slot repair-away, provider collateral summary accounting, assignment collateral lock sync/movement, and rebond-driven headroom restoration. | `cd polystorechain && go test ./x/polystorechain/keeper -run '<focused regex>'` plus full `go test ./...` before pushing code PRs. |
 | Query/API tests | Direct query-server coverage for stored, missing, empty-deal, invalid, multi-stripe list, repair-attempt list, provider-collateral list/get cases, and assignment-collateral lock get/list cases. REST coverage belongs in e2e because gateway routes are generated and exercised there. | Keeper query tests for fast feedback; devnet REST smoke for generated route correctness. |
 | Simulator fixtures | Existing `elasticity_overlay_*`, `expired_retrieval_rejection`, and ghost/non-response scenarios must remain current. If keeper behavior diverges from simulation assumptions, update scenario assertions in the same PR. | `python3 -m unittest discover -s tools/policy_sim` and sweep/report freshness checks for simulator-touching PRs. |
 | Process-level e2e | A devnet script should prove `signal-saturation` creates queryable virtual stripe state and, when enough Edge providers exist, the overlay provider set is Edge-only. It should also prove the second saturation fails closed when the spend cap is exhausted. | Add to CI once locally stable; otherwise keep as explicit manual gate with documented flake/root cause. |
