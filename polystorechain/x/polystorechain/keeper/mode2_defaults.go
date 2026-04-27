@@ -87,6 +87,13 @@ func (k Keeper) eligibleProviderCountForBaseHint(ctx sdk.Context, baseHint strin
 		if provider.Draining {
 			return false, nil
 		}
+		reason, err := k.providerHealthPlacementIneligibility(ctx, provider)
+		if err != nil {
+			return false, err
+		}
+		if reason != "" {
+			return false, nil
+		}
 		if providerMatchesBaseHint(provider, serviceHint) {
 			count++
 		}

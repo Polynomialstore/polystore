@@ -66,9 +66,38 @@ func providerHealthFromProvider(provider types.Provider, height int64) types.Pro
 }
 
 func isAdministrativeProviderLifecycle(status types.ProviderLifecycleStatus) bool {
-	return status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING ||
-		status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED ||
+	return status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED ||
 		status == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_EXITED
+}
+
+func shouldOverlayRegistrationLifecycle(current types.ProviderLifecycleStatus, registration types.ProviderLifecycleStatus) bool {
+	if current == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_UNSPECIFIED {
+		return true
+	}
+	if isAdministrativeProviderLifecycle(registration) {
+		return true
+	}
+	if registration == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING &&
+		current != types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT {
+		return true
+	}
+	return false
+}
+
+func providerHealthFromProviderOverlay(health types.ProviderHealthState, provider types.Provider, height int64) types.ProviderHealthState {
+	registration := providerHealthFromProvider(provider, height)
+	if health.Provider == "" {
+		health.Provider = registration.Provider
+	}
+	if shouldOverlayRegistrationLifecycle(health.LifecycleStatus, registration.LifecycleStatus) {
+		health.LifecycleStatus = registration.LifecycleStatus
+		health.Reason = registration.Reason
+		health.EvidenceClass = registration.EvidenceClass
+		health.Severity = registration.Severity
+		health.UpdatedHeight = height
+		health.ConsequenceCeiling = registration.ConsequenceCeiling
+	}
+	return health
 }
 
 func providerLifecycleFromEvidence(ev types.EvidenceCase, current types.ProviderHealthState) types.ProviderLifecycleStatus {
@@ -106,6 +135,9 @@ func (k Keeper) deriveProviderHealthState(ctx sdk.Context, providerAddr string) 
 
 	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
 	if err == nil {
+		if provider, providerErr := k.Providers.Get(ctx, providerAddr); providerErr == nil {
+			health = providerHealthFromProviderOverlay(health, provider, ctx.BlockHeight())
+		}
 		return health, nil
 	}
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {
@@ -117,6 +149,72 @@ func (k Keeper) deriveProviderHealthState(ctx sdk.Context, providerAddr string) 
 		return types.ProviderHealthState{}, err
 	}
 	return providerHealthFromProvider(provider, ctx.BlockHeight()), nil
+}
+
+func providerLifecyclePlacementIneligibility(status types.ProviderLifecycleStatus) string {
+	switch status {
+	case types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING:
+		return "provider health lifecycle is DRAINING"
+	case types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT:
+		return "provider health lifecycle is DELINQUENT"
+	case types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED:
+		return "provider health lifecycle is JAILED"
+	case types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_EXITED:
+		return "provider health lifecycle is EXITED"
+	default:
+		return ""
+	}
+}
+
+func providerLifecycleRewardIneligibility(status types.ProviderLifecycleStatus) string {
+	switch status {
+	case types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT:
+		return "provider health lifecycle is DELINQUENT"
+	case types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED:
+		return "provider health lifecycle is JAILED"
+	case types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_EXITED:
+		return "provider health lifecycle is EXITED"
+	default:
+		return ""
+	}
+}
+
+func (k Keeper) providerHealthPlacementIneligibility(ctx sdk.Context, provider types.Provider) (string, error) {
+	providerAddr := strings.TrimSpace(provider.Address)
+	if providerAddr == "" {
+		return "", nil
+	}
+	if reason := providerLifecyclePlacementIneligibility(providerLifecycleFromRegistration(provider)); reason != "" {
+		return reason, nil
+	}
+	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	health = providerHealthFromProviderOverlay(health, provider, ctx.BlockHeight())
+	return providerLifecyclePlacementIneligibility(health.LifecycleStatus), nil
+}
+
+func (k Keeper) providerHealthRewardIneligibility(ctx sdk.Context, provider types.Provider) (string, error) {
+	providerAddr := strings.TrimSpace(provider.Address)
+	if providerAddr == "" {
+		return "", nil
+	}
+	if reason := providerLifecycleRewardIneligibility(providerLifecycleFromRegistration(provider)); reason != "" {
+		return reason, nil
+	}
+	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	health = providerHealthFromProviderOverlay(health, provider, ctx.BlockHeight())
+	return providerLifecycleRewardIneligibility(health.LifecycleStatus), nil
 }
 
 func (k Keeper) updateProviderHealthFromEvidence(ctx sdk.Context, ev types.EvidenceCase) error {
