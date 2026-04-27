@@ -63,6 +63,21 @@ service Query {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-collateral";
   }
 
+  // Queries one stateful assignment collateral lock.
+  rpc GetAssignmentCollateralLock(QueryGetAssignmentCollateralLockRequest) returns (QueryGetAssignmentCollateralLockResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/collateral-locks/{deal_id}/{slot}";
+  }
+
+  // Lists stateful assignment collateral locks for a provider.
+  rpc ListAssignmentCollateralLocksByProvider(QueryListAssignmentCollateralLocksByProviderRequest) returns (QueryListAssignmentCollateralLocksByProviderResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/collateral-locks";
+  }
+
+  // Lists stateful assignment collateral locks for a deal.
+  rpc ListAssignmentCollateralLocksByDeal(QueryListAssignmentCollateralLocksByDealRequest) returns (QueryListAssignmentCollateralLocksByDealResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/collateral-locks";
+  }
+
   // Queries the operator pairing for a provider address.
   rpc GetProviderPairing(QueryGetProviderPairingRequest) returns (QueryGetProviderPairingResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-pairings/{provider}";
@@ -238,6 +253,42 @@ message QueryListProviderCollateralRequest {
 // QueryListProviderCollateralResponse returns provider collateral summaries.
 message QueryListProviderCollateralResponse {
   repeated ProviderCollateralSummary collateral = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetAssignmentCollateralLockRequest requests one lock by provider/deal/slot.
+message QueryGetAssignmentCollateralLockRequest {
+  string provider = 1;
+  uint64 deal_id = 2;
+  uint32 slot = 3;
+}
+
+// QueryGetAssignmentCollateralLockResponse returns one assignment collateral lock.
+message QueryGetAssignmentCollateralLockResponse {
+  AssignmentCollateralLock lock = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListAssignmentCollateralLocksByProviderRequest lists locks by provider.
+message QueryListAssignmentCollateralLocksByProviderRequest {
+  string provider = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListAssignmentCollateralLocksByProviderResponse returns provider locks.
+message QueryListAssignmentCollateralLocksByProviderResponse {
+  repeated AssignmentCollateralLock locks = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryListAssignmentCollateralLocksByDealRequest lists locks by deal.
+message QueryListAssignmentCollateralLocksByDealRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListAssignmentCollateralLocksByDealResponse returns deal locks.
+message QueryListAssignmentCollateralLocksByDealResponse {
+  repeated AssignmentCollateralLock locks = 1 [(gogoproto.nullable) = false];
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 

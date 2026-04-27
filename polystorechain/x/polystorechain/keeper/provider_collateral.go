@@ -363,7 +363,7 @@ func (k Keeper) scheduleUnderbondedRepairs(ctx sdk.Context, epochID uint64) erro
 		}
 
 		if dealChanged {
-			if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+			if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 				return true, err
 			}
 		}
