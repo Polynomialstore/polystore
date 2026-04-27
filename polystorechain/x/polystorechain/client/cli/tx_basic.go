@@ -76,6 +76,35 @@ func CmdRegisterProvider() *cobra.Command {
 	return cmd
 }
 
+func CmdAddProviderBond() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "add-provider-bond [provider] [bond]",
+		Short: "Top up an existing provider's locked bond",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			bond, err := sdk.ParseCoinNormalized(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid bond: %w", err)
+			}
+
+			msg := types.MsgAddProviderBond{
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
+				Bond:     bond,
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
 func CmdUpdateProviderEndpoints() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update-provider-endpoints",

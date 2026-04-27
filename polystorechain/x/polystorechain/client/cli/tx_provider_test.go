@@ -38,6 +38,38 @@ func TestCmdUpdateProviderEndpointsRequiresEndpoint(t *testing.T) {
 	require.False(t, broadcastCalled)
 }
 
+func TestCmdAddProviderBondBuildsMessageAndBroadcasts(t *testing.T) {
+	originalGetClientTxContext := getClientTxContextFn
+	originalBroadcast := generateOrBroadcastTxCLIFn
+	t.Cleanup(func() {
+		getClientTxContextFn = originalGetClientTxContext
+		generateOrBroadcastTxCLIFn = originalBroadcast
+	})
+
+	from := sdk.AccAddress(bytes20(7))
+	getClientTxContextFn = func(cmd *cobra.Command) (client.Context, error) {
+		return client.Context{FromAddress: from}, nil
+	}
+
+	var captured types.MsgAddProviderBond
+	generateOrBroadcastTxCLIFn = func(clientCtx client.Context, flags *pflag.FlagSet, msgs ...sdk.Msg) error {
+		require.Len(t, msgs, 1)
+		msg, ok := msgs[0].(*types.MsgAddProviderBond)
+		require.True(t, ok)
+		captured = *msg
+		return nil
+	}
+
+	cmd := CmdAddProviderBond()
+	cmd.SetArgs([]string{"nil1provideraddress", "75stake"})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	require.Equal(t, from.String(), captured.Creator)
+	require.Equal(t, "nil1provideraddress", captured.Provider)
+	require.Equal(t, "75stake", captured.Bond.String())
+}
+
 func TestCmdUpdateProviderEndpointsBuildsMessageAndBroadcasts(t *testing.T) {
 	originalGetClientTxContext := getClientTxContextFn
 	originalBroadcast := generateOrBroadcastTxCLIFn
