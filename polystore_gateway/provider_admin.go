@@ -384,9 +384,6 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 		if registrationBond == "" {
 			registrationBond = strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_BOND"))
 		}
-		if registrationBond == "" {
-			registrationBond = "200stake"
-		}
 		args = append(
 			args,
 			"register-provider",
@@ -394,9 +391,10 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 			envDefault("POLYSTORE_PROVIDER_TOTAL_STORAGE", "1099511627776"),
 			"--endpoint",
 			endpoint,
-			"--bond",
-			registrationBond,
 		)
+		if registrationBond != "" {
+			args = append(args, "--bond", registrationBond)
+		}
 	default:
 		return "", fmt.Errorf("unsupported provider registration state %q", registrationStatus)
 	}

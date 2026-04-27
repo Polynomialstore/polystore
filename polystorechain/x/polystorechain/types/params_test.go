@@ -3,6 +3,7 @@ package types_test
 import (
 	"testing"
 
+	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
@@ -13,11 +14,10 @@ func TestDevnetPolicingParamsValidateAndSetNonzeroCollateral(t *testing.T) {
 	params := types.DevnetPolicingParams()
 
 	require.NoError(t, params.Validate())
-	require.Equal(t, "150stake", params.MinProviderBond.String())
-	require.Equal(t, "5stake", params.AssignmentCollateralPerSlot.String())
+	require.Equal(t, sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(150)), params.MinProviderBond)
+	require.Equal(t, sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(5)), params.AssignmentCollateralPerSlot)
 	require.Equal(t, uint64(5000), params.HardFaultBondSlashBps)
 	require.Equal(t, params.EpochLenBlocks*params.JailHardFaultEpochs, params.ProviderBondUnbondingBlocks)
-	require.GreaterOrEqual(t, params.ProviderBondUnbondingBlocks, params.EpochLenBlocks*params.JailHardFaultEpochs)
 }
 
 func TestDevnetPolicingInitialProviderBondLeavesAssignmentHeadroom(t *testing.T) {
@@ -25,7 +25,7 @@ func TestDevnetPolicingInitialProviderBondLeavesAssignmentHeadroom(t *testing.T)
 	bond := types.DevnetPolicingInitialProviderBond()
 
 	require.Equal(t, sdk.DefaultBondDenom, bond.Denom)
-	require.Equal(t, "200stake", bond.String())
+	require.Equal(t, sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(200)), bond)
 	require.True(t, bond.Amount.GT(params.MinProviderBond.Amount))
 
 	headroom := bond.Amount.Sub(params.MinProviderBond.Amount)
