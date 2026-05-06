@@ -521,7 +521,8 @@ func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types
 			return err
 		}
 		if counted && pending != "" && creator == pending {
-			return k.markMode2RepairReady(ctx, deal, slotU, creator, epochID)
+			params := k.GetParams(ctx)
+			return k.markMode2RepairReady(ctx, params, deal, slotU, creator, epochID)
 		}
 		return nil
 	}
@@ -622,7 +623,7 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 			return sdkerrors.ErrInvalidRequest.Wrap("duplicate synthetic challenge proof")
 		}
 		if pending != "" && creator == pending {
-			return k.markMode2RepairReady(ctx, deal, slotU, creator, epochID)
+			return k.markMode2RepairReady(ctx, params, deal, slotU, creator, epochID)
 		}
 		return nil
 	}
