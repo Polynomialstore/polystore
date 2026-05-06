@@ -426,7 +426,8 @@ CREATE_RES_RAW="$("$POLYSTORECHAIND_BIN" tx "$CHAIN_MODULE_CLI_NAME" create-deal
   --home "$CHAIN_HOME" \
   --keyring-backend test \
   --yes \
-  --gas 250000 \
+  --gas auto \
+  --gas-adjustment 1.6 \
   --gas-prices 0.001aatom \
   --broadcast-mode sync \
   --output json)"
@@ -439,7 +440,7 @@ if [ -z "$TXHASH" ]; then
 fi
 if ! wait_for_created_deal_id "$TXHASH" 40 1; then
   echo "ERROR: failed to parse deal id from tx" >&2
-  echo "$CREATE_TX_RAW" >&2
+  echo "$CREATE_RES_RAW" >&2
   exit 1
 fi
 echo "    Deal ID: $DEAL_ID"
