@@ -87,6 +87,20 @@ func (k Keeper) scheduleRoutineRotations(ctx sdk.Context, epochID uint64) error 
 			if provider, err := k.Providers.Get(ctx, strings.TrimSpace(entry.Provider)); err == nil && provider.Draining {
 				continue
 			}
+			coolingDown, attemptState, err := k.repairAttemptCooldownActive(ctx, dealID, uint32(i), epochID)
+			if err != nil {
+				return true, err
+			}
+			if coolingDown {
+				ctx.Logger().Info(
+					"rotation repair skipped during cooldown",
+					"deal", dealID,
+					"slot", i,
+					"provider", entry.Provider,
+					"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
+				)
+				continue
+			}
 
 			// Enforce rotation budget.
 			nextScheduled, overflow := addUint64(scheduledBytes, slotBytes)
@@ -122,7 +136,7 @@ func (k Keeper) scheduleRoutineRotations(ctx sdk.Context, epochID uint64) error 
 					"provider", entry.Provider,
 					"error", err,
 				)
-				if errEvidence := k.recordRepairBackoff(ctx, dealID, entry.Provider, slot, epochID, err.Error()); errEvidence != nil {
+				if errEvidence := k.recordRepairBackoff(ctx, dealID, entry.Provider, slot, epochID, err); errEvidence != nil {
 					ctx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
 				}
 				continue
@@ -155,6 +169,39 @@ func (k Keeper) scheduleRoutineRotations(ctx sdk.Context, epochID uint64) error 
 			if err := k.recordEvidenceSummary(ctx, dealID, strings.TrimSpace(entry.Provider), "rotation_repair_started", eid[:], "chain", false); err != nil {
 				ctx.Logger().Error("failed to record evidence summary", "error", err)
 			}
+			caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+				DealID:             dealID,
+				Slot:               slot,
+				Provider:           strings.TrimSpace(entry.Provider),
+				Reporter:           "chain",
+				Reason:             "rotation_repair_started",
+				Class:              types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+				Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+				Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+				EvidenceID:         eid[:],
+				EpochID:            epochID,
+				Summary:            fmt.Sprintf("routine rotation scheduled replacement %s", entry.PendingProvider),
+				ConsequenceCeiling: "routine churn repair; no penalty by itself",
+			})
+			if err != nil {
+				ctx.Logger().Error("failed to record structured rotation repair evidence", "error", err)
+			} else if err := k.setSlotHealthState(ctx, slotHealthUpdate{
+				DealID:          dealID,
+				Slot:            slot,
+				Provider:        strings.TrimSpace(entry.Provider),
+				Status:          types.SlotHealthStatus_SLOT_HEALTH_STATUS_REPAIRING,
+				Reason:          "rotation_repair_started",
+				Class:           types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+				Severity:        types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+				EpochID:         epochID,
+				EvidenceCaseID:  caseID,
+				PendingProvider: entry.PendingProvider,
+				RepairTargetGen: entry.RepairTargetGen,
+			}); err != nil {
+				ctx.Logger().Error("failed to update rotation repair slot health", "error", err)
+			} else if err := k.recordRepairAttemptStarted(ctx, dealID, slot, entry.Provider, entry.PendingProvider, epochID, "rotation_repair_started", entry.RepairTargetGen, caseID); err != nil {
+				ctx.Logger().Error("failed to record rotation repair attempt state", "error", err)
+			}
 
 			ctx.Logger().Info(
 				"slot repair started (rotation)",
@@ -167,7 +214,7 @@ func (k Keeper) scheduleRoutineRotations(ctx sdk.Context, epochID uint64) error 
 		}
 
 		if dealChanged {
-			if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+			if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 				return true, err
 			}
 		}

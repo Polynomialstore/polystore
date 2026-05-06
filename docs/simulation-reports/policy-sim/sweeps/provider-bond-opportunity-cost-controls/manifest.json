@@ -1,0 +1,53 @@
+{
+  "assertion_failures": 0,
+  "base_scenario": "tools/policy_sim/scenarios/ideal.yaml",
+  "case_count": 3,
+  "cases": [
+    {
+      "case": "zero-carry-control",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "ideal",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "modest-carry-visible",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "ideal",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    },
+    {
+      "case": "high-carry-pressure",
+      "data_loss_events": 0,
+      "failed_assertions": [],
+      "scenario": "ideal",
+      "seed": 7,
+      "success_rate": 1.0,
+      "unavailable_reads": 0
+    }
+  ],
+  "committed_artifacts": [
+    "sweep_summary.md",
+    "sweep_summary.json",
+    "manifest.json"
+  ],
+  "description": "Sensitivity sweep for locked provider-bond carry cost and its effect on P&L/churn pressure before translating bond sizing into chain defaults.",
+  "name": "provider-bond-opportunity-cost-controls",
+  "omission_reason": "Sweep raw ledgers are generated locally or uploaded as CI artifacts to keep committed reports reviewable.",
+  "omitted_artifacts": [
+    "*/summary.json",
+    "*/epochs.csv",
+    "*/providers.csv",
+    "*/operators.csv",
+    "*/slots.csv",
+    "*/evidence.csv",
+    "*/repairs.csv",
+    "*/economy.csv"
+  ],
+  "raw_run_dir": "sweep-artifacts/provider-bond-opportunity-cost-controls"
+}

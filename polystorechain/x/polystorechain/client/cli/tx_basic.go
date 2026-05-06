@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
 	"cosmossdk.io/math"
@@ -45,18 +47,164 @@ func CmdRegisterProvider() *cobra.Command {
 			if len(endpoints) == 0 {
 				return fmt.Errorf("at least one --endpoint multiaddr is required")
 			}
+			bond := sdk.NewCoin(sdk.DefaultBondDenom, math.ZeroInt())
+			bondFlag, err := cmd.Flags().GetString("bond")
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(bondFlag) != "" {
+				bond, err = sdk.ParseCoinNormalized(bondFlag)
+				if err != nil {
+					return fmt.Errorf("invalid --bond: %w", err)
+				}
+			}
 
 			msg := types.MsgRegisterProvider{
 				Creator:      clientCtx.GetFromAddress().String(),
 				Capabilities: capabilities,
 				TotalStorage: totalStorage,
 				Endpoints:    endpoints,
+				Bond:         bond,
 			}
 
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 	cmd.Flags().StringArray("endpoint", nil, "Provider endpoint multiaddr (repeatable), e.g. /dns4/host/tcp/8080/http")
+	cmd.Flags().String("bond", "", "Provider self-bond to lock on registration, e.g. 100stake")
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdAddProviderBond() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "add-provider-bond [provider] [bond]",
+		Short: "Top up an existing provider's locked bond",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			bond, err := sdk.ParseCoinNormalized(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid bond: %w", err)
+			}
+
+			msg := types.MsgAddProviderBond{
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
+				Bond:     bond,
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdWithdrawProviderBond() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "withdraw-provider-bond [provider] [bond]",
+		Short: "Withdraw excess provider bond while retaining required collateral",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			bond, err := sdk.ParseCoinNormalized(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid bond: %w", err)
+			}
+
+			msg := types.MsgWithdrawProviderBond{
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
+				Bond:     bond,
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdClaimProviderBondWithdrawal() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "claim-provider-bond-withdrawal [unbonding-id]",
+		Short: "Claim a mature queued provider-bond withdrawal",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			unbondingID, err := strconv.ParseUint(args[0], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid unbonding id: %w", err)
+			}
+
+			msg := types.MsgClaimProviderBondWithdrawal{
+				Creator:     clientCtx.GetFromAddress().String(),
+				UnbondingId: unbondingID,
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdBindProviderStake() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "bind-provider-stake [provider] [validator]",
+		Short: "Record observed provider staking delegation linkage",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgBindProviderStake{
+				Creator:   clientCtx.GetFromAddress().String(),
+				Provider:  args[0],
+				Validator: args[1],
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+func CmdUnbindProviderStake() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "unbind-provider-stake [provider]",
+		Short: "Remove observed provider staking delegation linkage",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := getClientTxContextFn(cmd)
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgUnbindProviderStake{
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
+			}
+
+			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)
+		},
+	}
 	flags.AddTxFlagsToCmd(cmd)
 	return cmd
 }
@@ -128,8 +276,8 @@ func CmdApproveProviderLink() *cobra.Command {
 			}
 
 			msg := types.MsgApproveProviderLink{
-				Creator:   clientCtx.GetFromAddress().String(),
-				Provider:  args[0],
+				Creator:  clientCtx.GetFromAddress().String(),
+				Provider: args[0],
 			}
 
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &msg)

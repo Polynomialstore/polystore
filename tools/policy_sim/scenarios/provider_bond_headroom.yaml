@@ -15,7 +15,8 @@
     "provider_initial_bond": 2.0,
     "provider_min_bond": 1.5,
     "provider_bond_per_slot": 0.05,
-    "slash_hard_fault": 1.0
+    "slash_hard_fault": 0.0,
+    "slash_hard_fault_bps": 5000
   },
   "faults": [
     "corrupt:sp-000:1.0"
