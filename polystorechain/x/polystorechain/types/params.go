@@ -45,6 +45,15 @@ var (
 	KeyDynamicPricingMaxStepBps     = []byte("DynamicPricingMaxStepBps")
 	KeyMaxSetupBumpsPerSlot         = []byte("MaxSetupBumpsPerSlot")
 	KeyRepairBackoffEpochs          = []byte("RepairBackoffEpochs")
+	KeyProviderHealthDecayEpochs    = []byte("ProviderHealthDecayEpochs")
+	KeyProviderHealthDecayBps       = []byte("ProviderHealthDecayBps")
+	KeyJailHardFaultEpochs          = []byte("JailHardFaultEpochs")
+	KeyHardFaultReputationSlashBps  = []byte("HardFaultReputationSlashBps")
+	KeyRepairReadinessQuotaBps      = []byte("RepairReadinessQuotaBps")
+	KeyMinProviderBond              = []byte("MinProviderBond")
+	KeyHardFaultBondSlashBps        = []byte("HardFaultBondSlashBps")
+	KeyAssignmentCollateralPerSlot  = []byte("AssignmentCollateralPerSlot")
+	KeyProviderBondUnbondingBlocks  = []byte("ProviderBondUnbondingBlocks")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -101,6 +110,15 @@ func NewParams(
 	dynamicPricingMaxStepBps uint64,
 	maxSetupBumpsPerSlot uint64,
 	repairBackoffEpochs uint64,
+	providerHealthDecayEpochs uint64,
+	providerHealthDecayBps uint64,
+	jailHardFaultEpochs uint64,
+	hardFaultReputationSlashBps uint64,
+	repairReadinessQuotaBps uint64,
+	minProviderBond sdk.Coin,
+	hardFaultBondSlashBps uint64,
+	assignmentCollateralPerSlot sdk.Coin,
+	providerBondUnbondingBlocks uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:               baseStripeCost,
@@ -146,6 +164,16 @@ func NewParams(
 		DynamicPricingMaxStepBps: dynamicPricingMaxStepBps,
 		MaxSetupBumpsPerSlot:     maxSetupBumpsPerSlot,
 		RepairBackoffEpochs:      repairBackoffEpochs,
+
+		ProviderHealthDecayEpochs:   providerHealthDecayEpochs,
+		ProviderHealthDecayBps:      providerHealthDecayBps,
+		JailHardFaultEpochs:         jailHardFaultEpochs,
+		HardFaultReputationSlashBps: hardFaultReputationSlashBps,
+		RepairReadinessQuotaBps:     repairReadinessQuotaBps,
+		MinProviderBond:             minProviderBond,
+		HardFaultBondSlashBps:       hardFaultBondSlashBps,
+		AssignmentCollateralPerSlot: assignmentCollateralPerSlot,
+		ProviderBondUnbondingBlocks: providerBondUnbondingBlocks,
 	}
 }
 
@@ -191,7 +219,58 @@ func DefaultParams() Params {
 		500,     // DynamicPricingMaxStepBps (5% per epoch; unused when disabled)
 		3,       // MaxSetupBumpsPerSlot
 		1,       // RepairBackoffEpochs (skip the immediate next epoch after backoff)
+		6,       // ProviderHealthDecayEpochs (quiet epochs before soft-fault decay)
+		5000,    // ProviderHealthDecayBps (decay half the soft-fault window)
+		3,       // JailHardFaultEpochs (devnet hard-fault jail window)
+		50,      // HardFaultReputationSlashBps (0.5% reputation slash, min 1)
+		10000,   // RepairReadinessQuotaBps (full quota before catch-up ready)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // MinProviderBond (disabled by default)
+		0, // HardFaultBondSlashBps (disabled until governance/devnet params enable it)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // AssignmentCollateralPerSlot (disabled by default)
+		0, // ProviderBondUnbondingBlocks (0 preserves immediate local/devnet withdrawal)
 	)
+}
+
+const (
+	// DevnetPolicingProviderBondScale maps the unitless policy simulator
+	// provider-bond baseline onto integer stake-denominated chain params.
+	DevnetPolicingProviderBondScale int64 = 100
+
+	// DevnetPolicingInitialProviderBondAmount is the recommended provider
+	// registration self-bond for the calibrated devnet policing profile. It is
+	// not a consensus param, but scripts use it to give providers enough
+	// headroom above the minimum plus per-slot liability.
+	DevnetPolicingInitialProviderBondAmount int64 = 2 * DevnetPolicingProviderBondScale
+
+	// DevnetPolicingMinProviderBondAmount is derived from the
+	// provider_bond_headroom simulator baseline: 1.5 normalized units * 100.
+	DevnetPolicingMinProviderBondAmount int64 = 150
+
+	// DevnetPolicingAssignmentCollateralPerSlotAmount is derived from the
+	// provider_bond_headroom simulator baseline: 0.05 normalized units * 100.
+	DevnetPolicingAssignmentCollateralPerSlotAmount int64 = 5
+
+	// DevnetPolicingHardFaultBondSlashBps is calibrated from a simulated
+	// hard-fault slash of 1.0 against a 2.0 initial bond, i.e. 50%.
+	DevnetPolicingHardFaultBondSlashBps uint64 = 5000
+)
+
+// DevnetPolicingInitialProviderBond returns the recommended registration bond
+// used by devnet scripts when the calibrated policing profile is enabled.
+func DevnetPolicingInitialProviderBond() sdk.Coin {
+	return sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(DevnetPolicingInitialProviderBondAmount))
+}
+
+// DevnetPolicingParams returns a simulator-backed non-zero provider collateral
+// profile for trusted devnets. DefaultParams remains compatibility-safe for
+// tests and local flows that do not yet fund/register provider self-bonds.
+func DevnetPolicingParams() Params {
+	params := DefaultParams()
+	params.MinProviderBond = sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(DevnetPolicingMinProviderBondAmount))
+	params.AssignmentCollateralPerSlot = sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(DevnetPolicingAssignmentCollateralPerSlotAmount))
+	params.HardFaultBondSlashBps = DevnetPolicingHardFaultBondSlashBps
+	params.ProviderBondUnbondingBlocks = params.EpochLenBlocks * params.JailHardFaultEpochs
+	return params
 }
 
 // ParamSetPairs get the params.ParamSet
@@ -238,6 +317,15 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyDynamicPricingMaxStepBps, &p.DynamicPricingMaxStepBps, validateBps),
 		paramtypes.NewParamSetPair(KeyMaxSetupBumpsPerSlot, &p.MaxSetupBumpsPerSlot, validateUint64Any),
 		paramtypes.NewParamSetPair(KeyRepairBackoffEpochs, &p.RepairBackoffEpochs, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyProviderHealthDecayEpochs, &p.ProviderHealthDecayEpochs, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyProviderHealthDecayBps, &p.ProviderHealthDecayBps, validateBps),
+		paramtypes.NewParamSetPair(KeyJailHardFaultEpochs, &p.JailHardFaultEpochs, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyHardFaultReputationSlashBps, &p.HardFaultReputationSlashBps, validateBps),
+		paramtypes.NewParamSetPair(KeyRepairReadinessQuotaBps, &p.RepairReadinessQuotaBps, validateBps),
+		paramtypes.NewParamSetPair(KeyMinProviderBond, &p.MinProviderBond, validateProviderBond),
+		paramtypes.NewParamSetPair(KeyHardFaultBondSlashBps, &p.HardFaultBondSlashBps, validateBps),
+		paramtypes.NewParamSetPair(KeyAssignmentCollateralPerSlot, &p.AssignmentCollateralPerSlot, validateProviderBond),
+		paramtypes.NewParamSetPair(KeyProviderBondUnbondingBlocks, &p.ProviderBondUnbondingBlocks, validateUint64Any),
 	}
 }
 
@@ -369,6 +457,33 @@ func (p Params) Validate() error {
 	if err := validateUint64Any(p.RepairBackoffEpochs); err != nil {
 		return err
 	}
+	if err := validateUint64Any(p.ProviderHealthDecayEpochs); err != nil {
+		return err
+	}
+	if err := validateBps(p.ProviderHealthDecayBps); err != nil {
+		return err
+	}
+	if err := validateUint64Any(p.JailHardFaultEpochs); err != nil {
+		return err
+	}
+	if err := validateBps(p.HardFaultReputationSlashBps); err != nil {
+		return err
+	}
+	if err := validateBps(p.RepairReadinessQuotaBps); err != nil {
+		return err
+	}
+	if err := validateProviderBond(p.MinProviderBond); err != nil {
+		return err
+	}
+	if err := validateBps(p.HardFaultBondSlashBps); err != nil {
+		return err
+	}
+	if err := validateProviderBond(p.AssignmentCollateralPerSlot); err != nil {
+		return err
+	}
+	if err := validateUint64Any(p.ProviderBondUnbondingBlocks); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -467,6 +582,26 @@ func validateDealCreationFee(i interface{}) error {
 	}
 	if strings.TrimSpace(v.Denom) != strings.TrimSpace(sdk.DefaultBondDenom) {
 		return fmt.Errorf("deal creation fee denom must be %q (got %q)", sdk.DefaultBondDenom, v.Denom)
+	}
+	return nil
+}
+
+func validateProviderBond(i interface{}) error {
+	v, ok := i.(sdk.Coin)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v.Amount.IsNil() {
+		v.Amount = math.ZeroInt()
+	}
+	if strings.TrimSpace(v.Denom) == "" && v.Amount.IsZero() {
+		return nil
+	}
+	if !v.IsValid() {
+		return fmt.Errorf("invalid provider bond: %s", v)
+	}
+	if strings.TrimSpace(v.Denom) != strings.TrimSpace(sdk.DefaultBondDenom) {
+		return fmt.Errorf("provider bond denom must be %q (got %q)", sdk.DefaultBondDenom, v.Denom)
 	}
 	return nil
 }

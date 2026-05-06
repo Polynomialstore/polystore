@@ -25,6 +25,7 @@ type Keeper struct {
 
 	BankKeeper    types.BankKeeper
 	AccountKeeper types.AuthKeeper
+	StakingKeeper types.StakingKeeper
 
 	Schema     collections.Schema
 	Params     collections.Item[types.Params]
@@ -38,8 +39,12 @@ type Keeper struct {
 	DealProviderStatus         collections.Map[collections.Pair[uint64, string], uint64]
 	DealProviderFailures       collections.Map[collections.Pair[uint64, string], uint64]
 	ProviderRewards            collections.Map[string, math.Int]
+	ProviderStorageRewards     collections.Map[string, math.Int]
+	ProviderBandwidthRewards   collections.Map[string, math.Int]
+	ProviderJailUntil          collections.Map[string, uint64]
 	ProviderPairings           collections.Map[string, types.ProviderPairing]
 	ProviderPairingsByOperator collections.Map[collections.Pair[string, string], bool]
+	ProviderStakingBindings    collections.Map[string, types.ProviderStakingBinding]
 	PendingProviderLinks       collections.Map[string, types.PendingProviderLink]
 	ReceiptNonces              collections.Map[string, uint64]
 	ReceiptNoncesByDealFile    collections.Map[collections.Pair[uint64, string], uint64]
@@ -48,38 +53,44 @@ type Keeper struct {
 	SetupBumpNonce             collections.Map[collections.Pair[uint64, uint32], uint64]
 	SetupTriedProvider         collections.Map[collections.Pair[collections.Pair[uint64, uint32], string], bool]
 
-	RetrievalSessions             collections.Map[[]byte, types.RetrievalSession]
-	RetrievalSessionsByOwner      collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionsByProvider   collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionNonces        collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
-	RetrievalSessionProofProvider collections.Map[[]byte, string]
-	VoucherUsedNonces             collections.Map[collections.Pair[uint64, uint64], bool]
-	AuditTasks                    collections.Map[collections.Pair[uint64, uint64], types.AuditTask]
-	VirtualStripes                collections.Map[collections.Pair[uint64, uint32], types.VirtualStripe]
-	DynamicPricingLastEpoch       collections.Item[uint64]
-	RetrievalDemandByEpoch        collections.Map[uint64, uint64]
-	EvidenceCount                 collections.Sequence
-	EvidenceCases                 collections.Map[uint64, types.EvidenceCase]
-	EvidenceCasesByDeal           collections.Map[collections.Pair[uint64, uint64], bool]
-	SlotHealthStates              collections.Map[collections.Pair[uint64, uint32], types.SlotHealthState]
-	ProviderHealthStates          collections.Map[string, types.ProviderHealthState]
-	RepairAttemptStates           collections.Map[collections.Pair[uint64, uint32], types.RepairAttemptState]
+	RetrievalSessions                collections.Map[[]byte, types.RetrievalSession]
+	RetrievalSessionsByOwner         collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionsByProvider      collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionNonces           collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
+	RetrievalSessionProofProvider    collections.Map[[]byte, string]
+	VoucherUsedNonces                collections.Map[collections.Pair[uint64, uint64], bool]
+	AuditTasks                       collections.Map[collections.Pair[uint64, uint64], types.AuditTask]
+	VirtualStripes                   collections.Map[collections.Pair[uint64, uint32], types.VirtualStripe]
+	DynamicPricingLastEpoch          collections.Item[uint64]
+	RetrievalDemandByEpoch           collections.Map[uint64, uint64]
+	EvidenceCount                    collections.Sequence
+	EvidenceCases                    collections.Map[uint64, types.EvidenceCase]
+	EvidenceCasesByDeal              collections.Map[collections.Pair[uint64, uint64], bool]
+	SlotHealthStates                 collections.Map[collections.Pair[uint64, uint32], types.SlotHealthState]
+	ProviderHealthStates             collections.Map[string, types.ProviderHealthState]
+	RepairAttemptStates              collections.Map[collections.Pair[uint64, uint32], types.RepairAttemptState]
+	AssignmentCollateralLocks        collections.Map[collections.Pair[string, collections.Pair[uint64, uint32]], types.AssignmentCollateralLock]
+	AssignmentCollateralLocksByDeal  collections.Map[collections.Pair[uint64, collections.Pair[uint32, string]], bool]
+	ProviderBondUnbondingCount       collections.Sequence
+	ProviderBondUnbondings           collections.Map[uint64, types.ProviderBondUnbonding]
+	ProviderBondUnbondingsByProvider collections.Map[collections.Pair[string, uint64], bool]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
-	EpochSeeds              collections.Map[uint64, []byte]
-	Mode1EpochCredits       collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
-	Mode1EpochSynthetic     collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
-	Mode1MissedEpochs       collections.Map[collections.Pair[uint64, string], uint64]
-	Mode2EpochCredits       collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
-	Mode2EpochSynthetic     collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
-	Mode2EpochSlotServed    collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
-	Mode2EpochDeputyServed  collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
-	Mode2RepairReadiness    collections.Map[collections.Pair[uint64, uint32], uint64]
-	Mode2MissedEpochs       collections.Map[collections.Pair[uint64, uint32], uint64]
-	Mode2DeputyMissedEpochs collections.Map[collections.Pair[uint64, uint32], uint64]
-	CreditSeen              collections.Map[[]byte, bool]
-	SyntheticSeen           collections.Map[[]byte, bool]
-	DeputySeen              collections.Map[[]byte, bool]
+	EpochSeeds                 collections.Map[uint64, []byte]
+	Mode1EpochCredits          collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
+	Mode1EpochSynthetic        collections.Map[collections.Pair[collections.Pair[uint64, string], uint64], uint64]
+	Mode1MissedEpochs          collections.Map[collections.Pair[uint64, string], uint64]
+	Mode2EpochCredits          collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2EpochSynthetic        collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2EpochSlotServed       collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2EpochDeputyServed     collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
+	Mode2RepairReadiness       collections.Map[collections.Pair[uint64, uint32], uint64]
+	Mode2RepairReadinessProofs collections.Map[collections.Pair[uint64, uint32], uint64]
+	Mode2MissedEpochs          collections.Map[collections.Pair[uint64, uint32], uint64]
+	Mode2DeputyMissedEpochs    collections.Map[collections.Pair[uint64, uint32], uint64]
+	CreditSeen                 collections.Map[[]byte, bool]
+	SyntheticSeen              collections.Map[[]byte, bool]
+	DeputySeen                 collections.Map[[]byte, bool]
 }
 
 func NewKeeper(
@@ -89,6 +100,7 @@ func NewKeeper(
 	authority []byte,
 	bankKeeper types.BankKeeper,
 	accountKeeper types.AuthKeeper,
+	stakingKeepers ...types.StakingKeeper,
 
 ) Keeper {
 	if _, err := addressCodec.BytesToString(authority); err != nil {
@@ -96,6 +108,10 @@ func NewKeeper(
 	}
 
 	sb := collections.NewSchemaBuilder(storeService)
+	var stakingKeeper types.StakingKeeper
+	if len(stakingKeepers) > 0 {
+		stakingKeeper = stakingKeepers[0]
+	}
 
 	k := Keeper{
 		storeService:  storeService,
@@ -104,6 +120,7 @@ func NewKeeper(
 		authority:     authority,
 		BankKeeper:    bankKeeper,
 		AccountKeeper: accountKeeper,
+		StakingKeeper: stakingKeeper,
 
 		Params:     collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		ProofCount: collections.NewSequence(sb, types.ProofCountKey, "proof_count"),
@@ -115,8 +132,12 @@ func NewKeeper(
 		DealProviderStatus:         collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		DealProviderFailures:       collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		ProviderRewards:            collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
+		ProviderStorageRewards:     collections.NewMap(sb, types.ProviderStorageRewardsKey, "provider_storage_rewards", collections.StringKey, sdk.IntValue),
+		ProviderBandwidthRewards:   collections.NewMap(sb, types.ProviderBandwidthRewardsKey, "provider_bandwidth_rewards", collections.StringKey, sdk.IntValue),
+		ProviderJailUntil:          collections.NewMap(sb, types.ProviderJailUntilKey, "provider_jail_until", collections.StringKey, collections.Uint64Value),
 		ProviderPairings:           collections.NewMap(sb, types.ProviderPairingsKey, "provider_pairings", collections.StringKey, codec.CollValue[types.ProviderPairing](cdc)),
 		ProviderPairingsByOperator: collections.NewMap(sb, types.ProviderPairingsByOperatorKey, "provider_pairings_by_operator", collections.PairKeyCodec(collections.StringKey, collections.StringKey), collections.BoolValue),
+		ProviderStakingBindings:    collections.NewMap(sb, types.ProviderStakingBindingsKey, "provider_staking_bindings", collections.StringKey, codec.CollValue[types.ProviderStakingBinding](cdc)),
 		PendingProviderLinks:       collections.NewMap(sb, types.PendingProviderLinksKey, "pending_provider_links", collections.StringKey, codec.CollValue[types.PendingProviderLink](cdc)),
 		ReceiptNonces:              collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
 		ReceiptNoncesByDealFile:    collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
@@ -194,6 +215,35 @@ func NewKeeper(
 			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
 			codec.CollValue[types.RepairAttemptState](cdc),
 		),
+		AssignmentCollateralLocks: collections.NewMap(
+			sb,
+			types.AssignmentCollateralLocksKey,
+			"assignment_collateral_locks",
+			collections.PairKeyCodec(collections.StringKey, collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key)),
+			codec.CollValue[types.AssignmentCollateralLock](cdc),
+		),
+		AssignmentCollateralLocksByDeal: collections.NewMap(
+			sb,
+			types.AssignmentCollateralLocksByDealKey,
+			"assignment_collateral_locks_by_deal",
+			collections.PairKeyCodec(collections.Uint64Key, collections.PairKeyCodec(collections.Uint32Key, collections.StringKey)),
+			collections.BoolValue,
+		),
+		ProviderBondUnbondingCount: collections.NewSequence(sb, types.ProviderBondUnbondingCountKey, "provider_bond_unbonding_count"),
+		ProviderBondUnbondings: collections.NewMap(
+			sb,
+			types.ProviderBondUnbondingsKey,
+			"provider_bond_unbondings",
+			collections.Uint64Key,
+			codec.CollValue[types.ProviderBondUnbonding](cdc),
+		),
+		ProviderBondUnbondingsByProvider: collections.NewMap(
+			sb,
+			types.ProviderBondUnbondingsByProviderKey,
+			"provider_bond_unbondings_by_provider",
+			collections.PairKeyCodec(collections.StringKey, collections.Uint64Key),
+			collections.BoolValue,
+		),
 
 		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
 		Mode1EpochCredits: collections.NewMap(
@@ -252,6 +302,13 @@ func NewKeeper(
 			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
 			collections.Uint64Value,
 		),
+		Mode2RepairReadinessProofs: collections.NewMap(
+			sb,
+			types.Mode2RepairReadinessProofsKey,
+			"mode2_repair_readiness_proofs",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+			collections.Uint64Value,
+		),
 		Mode2MissedEpochs: collections.NewMap(
 			sb,
 			types.Mode2MissedEpochsKey,
@@ -299,6 +356,11 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		return nil, fmt.Errorf("no providers registered")
 	}
 
+	assignmentCounts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build provider assignment counts: %w", err)
+	}
+
 	var candidateProviders []types.Provider
 	// Filter by capabilities based on serviceHint
 	for _, provider := range allProviders {
@@ -309,7 +371,7 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 		if provider.Draining {
 			continue
 		}
-		reason, err := k.providerHealthPlacementIneligibility(ctx, provider)
+		reason, err := k.providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx, provider, 1, assignmentCounts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to check provider health for %s: %w", provider.Address, err)
 		}

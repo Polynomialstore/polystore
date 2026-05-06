@@ -289,7 +289,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		deal.Mode2Slots = slots
 	}
 
-	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 		return nil, fmt.Errorf("failed to set deal: %w", err)
 	}
 
@@ -334,6 +334,21 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		return nil, err
 	}
 
+	params := k.GetParams(ctx)
+	bond, err := normalizeRegistrationBond(msg.Bond, params)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
+	if bond.Amount.IsPositive() {
+		creatorAddr, err := sdk.AccAddressFromBech32(canonicalCreator)
+		if err != nil {
+			return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid provider address: %s", canonicalCreator)
+		}
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ProviderBondModuleName, sdk.NewCoins(bond)); err != nil {
+			return nil, fmt.Errorf("failed to lock provider bond: %w", err)
+		}
+	}
+
 	// Create new Provider object
 	provider := types.Provider{
 		Address:         canonicalCreator,
@@ -343,6 +358,8 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		Status:          "Active", // Initially active
 		ReputationScore: 100,      // Initial Score
 		Endpoints:       endpoints,
+		Bond:            bond,
+		BondSlashed:     zeroBondLike(bond.Denom),
 	}
 
 	if err := k.Providers.Set(ctx, provider.Address, provider); err != nil {
@@ -355,6 +372,7 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 			sdk.NewAttribute(types.AttributeKeyProvider, provider.Address),
 			sdk.NewAttribute(types.AttributeKeyCapabilities, provider.Capabilities),
 			sdk.NewAttribute(types.AttributeKeyTotalStorage, fmt.Sprintf("%d", provider.TotalStorage)),
+			sdk.NewAttribute("provider_bond", provider.Bond.String()),
 		),
 	)
 
@@ -728,7 +746,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		deal.Mode2Slots = slots
 	}
 
-	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 		return nil, fmt.Errorf("failed to set deal: %w", err)
 	}
 
@@ -857,7 +875,7 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	deal.TotalMdus = msg.TotalMdus
 	deal.WitnessMdus = msg.WitnessMdus
 
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 
@@ -1047,7 +1065,7 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	deal.TotalMdus = intent.TotalMdus
 	deal.WitnessMdus = intent.WitnessMdus
 
-	if err := k.Deals.Set(ctx, intent.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, intent.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 
@@ -1115,7 +1133,8 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, err
 	}
 	// Outer guardrail for deputy flows: only a registered provider may submit proofs.
-	if _, err := k.Providers.Get(ctx, creator); err != nil {
+	providerRecord, err := k.Providers.Get(ctx, creator)
+	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not registered", creator)
 		}
@@ -1684,9 +1703,18 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid proof type")
 	}
 
-	// Update reputation only after proof validation succeeds. Invalid proofs can
-	// still be recorded as evidence, but they must not earn reputation.
-	if tier < 3 {
+	rewardExclusionReason, err := k.providerHealthRewardIneligibility(ctx, providerRecord)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check provider reward eligibility: %w", err)
+	}
+	if rewardExclusionReason != "" {
+		storageReward = math.ZeroInt()
+	}
+
+	// Update reputation only after proof validation succeeds and the provider
+	// remains reward-eligible. Invalid or delinquent/jailed proofs can still be
+	// recorded as evidence, but they must not earn reputation.
+	if tier < 3 && rewardExclusionReason == "" {
 		provider, errGet := k.Providers.Get(ctx, creator)
 		if errGet == nil {
 			provider.ReputationScore += 1
@@ -1697,7 +1725,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	}
 
 	var bandwidthPayment math.Int
-	if isUserReceipt {
+	if isUserReceipt && rewardExclusionReason == "" {
 		// Bandwidth payment (devnet): charge proportional to bytes served so that
 		// chunked (blob-sized) receipts don't exhaust escrow immediately.
 		//
@@ -1723,35 +1751,12 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	// --- REWARD ACCUMULATION ---
 	if totalReward.IsPositive() {
-		// Accumulate to ProviderRewards store
-		currentRewards, err := k.ProviderRewards.Get(ctx, creator)
-		if err != nil {
-			if !errors.Is(err, collections.ErrNotFound) {
-				return nil, err
-			}
-			currentRewards = math.ZeroInt()
+		if err := k.addProviderRewardClaims(ctx, creator, storageReward, bandwidthPayment); err != nil {
+			return nil, err
 		}
-
-		newRewards := currentRewards.Add(totalReward)
-		if err := k.ProviderRewards.Set(ctx, creator, newRewards); err != nil {
-			return nil, fmt.Errorf("failed to set provider rewards: %w", err)
-		}
-
-		// Note: We are NOT minting coins yet. Coins are minted on Withdraw.
-		// BUT wait, BandwidthPayment comes from Escrow (User -> Module).
-		// StorageReward comes from Inflation (Mint).
-		// If we mix them, we need to be careful.
-		// For Bandwidth, funds are already in Module Account (escrow).
-		// For Storage, funds don't exist yet.
-
-		// Strategy: Keep accounting virtual.
-		// For Bandwidth: We already deducted from Deal.EscrowBalance (which is just a number field in the Deal struct).
-		// The actual tokens are in the 'polystorechain' module account.
-		// So we effectively "moved" claim from Deal to ProviderReward.
-		// For Storage: We will mint when withdrawing.
 	}
 
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal state: %w", err)
 	}
 
@@ -1767,6 +1772,9 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			sdk.NewAttribute(types.AttributeKeySuccess, "true"),
 			sdk.NewAttribute(types.AttributeKeyTier, tierName),
 			sdk.NewAttribute(types.AttributeKeyRewardAmount, totalReward.String()),
+			sdk.NewAttribute("storage_reward_amount", storageReward.String()),
+			sdk.NewAttribute("bandwidth_reward_amount", bandwidthPayment.String()),
+			sdk.NewAttribute("reward_exclusion_reason", rewardExclusionReason),
 		),
 	)
 
@@ -1905,7 +1913,7 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 		}
 		deal.Mode2Slots[slot] = entry
 
-		if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+		if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 			ctx.Logger().Error("failed to persist deal after health eviction", "deal", dealID, "error", err)
 			return
 		}
@@ -1997,7 +2005,7 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 	deal.EscrowBalance = deal.EscrowBalance.Sub(elasticityCost)
 	deal.SpendWindowSpent = newSpent
 
-	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal with new stripe: %w", err)
 	}
 	if err := k.VirtualStripes.Set(ctx, collections.Join(deal.Id, newStripeIndex), types.VirtualStripe{
@@ -2054,7 +2062,7 @@ func (k msgServer) AddCredit(goCtx context.Context, msg *types.MsgAddCredit) (*t
 	}
 
 	deal.EscrowBalance = deal.EscrowBalance.Add(amount)
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, err
 	}
 
@@ -2126,7 +2134,7 @@ func (k msgServer) ExtendDeal(goCtx context.Context, msg *types.MsgExtendDeal) (
 
 	deal.EndBlock = newEnd
 	deal.PricingAnchorBlock = h
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, err
 	}
 
@@ -2155,70 +2163,41 @@ func (k msgServer) WithdrawRewards(goCtx context.Context, msg *types.MsgWithdraw
 		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid provider address: %s", err)
 	}
 
-	rewards, err := k.ProviderRewards.Get(ctx, creator)
+	storageReward, bandwidthReward, aggregateReward, err := k.providerRewardClaims(ctx, creator)
 	if err != nil {
-		if errors.Is(err, collections.ErrNotFound) {
-			return nil, sdkerrors.ErrNotFound.Wrap("no rewards found")
-		}
 		return nil, err
+	}
+
+	splitReward := storageReward.Add(bandwidthReward)
+	rewards := splitReward
+	legacyMintAll := false
+	if rewards.IsZero() && aggregateReward.IsPositive() {
+		// Backward compatibility for claims accumulated before split accounting.
+		rewards = aggregateReward
+		storageReward = aggregateReward
+		bandwidthReward = math.ZeroInt()
+		legacyMintAll = true
 	}
 
 	if rewards.IsZero() || rewards.IsNegative() {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("no rewards to withdraw")
 	}
 
-	// Mint tokens
-	// Wait, if the rewards came from Deal Escrow (Bandwidth), they are already in the module account (sent from User).
-	// If they are Storage Rewards (Inflation), they need to be minted.
-	// We didn't track which portion is which in `ProviderRewards`.
-	// Simplification for Phase 4: Assume ALL withdrawals are minted?
-	// NO, that would double-mint bandwidth payments (user paid -> module -> mint -> provider = inflation + user payment).
-	// We need to burn user payment and mint new? Or just transfer user payment?
-
-	// Correct logic:
-	// 1. Bandwidth fees are in Module Account.
-	// 2. Storage rewards are virtual (inflationary).
-	// BUT we combined them into one `totalReward` int.
-	// To support mixed model, we should probably just MINT everything for now, assuming `Escrow` burn logic is handled elsewhere or ignored.
-	// OR, we rely on the fact that `Escrow` deduction happens in `ProveLiveness`.
-	// `deal.EscrowBalance` was reduced. But the coins are still in `polystorechain` module account.
-	// So `polystorechain` module account holds:
-	// - Escrowed funds (waiting to be paid out)
-	// - Slashed funds (waiting to be burned)
-
-	// If we simply TRANSFER from Module to Provider, we use the existing Escrowed funds.
-	// But Storage Rewards (Inflation) are NOT in the module account yet.
-	// So we run out of funds if we just Transfer.
-
-	// Solution:
-	// Mint the portion that is Inflationary? We lost that distinction.
-	// Easy fix: Mint the *entire* amount to the module account first, then transfer?
-	// No, that inflates by Bandwidth amount too.
-
-	// Let's assume for Phase 4:
-	// The Module Account "has infinite supply" via Minting capability.
-	// We Mint coins equal to `rewards` and send to Provider.
-	// AND we Burn coins equal to `BandwidthPayment` from the Module Account?
-	// This is getting complicated.
-
-	// Simplest working model for Testnet:
-	// Just MINT the rewards.
-	// The Escrow deduction in `ProveLiveness` effectively "burns" the user's claim to those tokens, leaving them stranded in the Module Account (effectively burned/treasury).
-	// And we Mint fresh tokens for the provider.
-	// This results in: User loses X. Provider gains X + Y (inflation).
-	// Net result: Supply change = +Y.
-	// The "stranded" tokens in Module Account can be burned explicitly later or considered "community pool".
-
+	if storageReward.IsPositive() {
+		storageCoins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, storageReward))
+		if err := k.BankKeeper.MintCoins(ctx, types.ModuleName, storageCoins); err != nil {
+			return nil, err
+		}
+	}
 	coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, rewards))
-	if err := k.BankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
-		return nil, err
-	}
 	if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, providerAddr, coins); err != nil {
+		if !legacyMintAll {
+			return nil, fmt.Errorf("failed to send split rewards (storage=%s bandwidth=%s): %w", storageReward.String(), bandwidthReward.String(), err)
+		}
 		return nil, err
 	}
 
-	// Reset rewards
-	if err := k.ProviderRewards.Set(ctx, creator, math.ZeroInt()); err != nil {
+	if err := k.clearProviderRewardClaims(ctx, creator); err != nil {
 		return nil, err
 	}
 
@@ -2372,7 +2351,7 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 			}
 		}
 		deal.EscrowBalance = newEscrow
-		if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+		if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 			return nil, fmt.Errorf("failed to update deal escrow: %w", err)
 		}
 	}
@@ -2500,7 +2479,7 @@ func (k msgServer) UpdateDealRetrievalPolicy(goCtx context.Context, msg *types.M
 	}
 
 	deal.RetrievalPolicy = p
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 	return &types.MsgUpdateDealRetrievalPolicyResponse{Success: true}, nil
@@ -3311,7 +3290,7 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 				return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
 			}
 			deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
-			if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
+			if err := k.setDealWithAssignmentCollateralLocks(ctx, session.DealId, deal); err != nil {
 				return nil, fmt.Errorf("failed to refund locked retrieval fees: %w", err)
 			}
 			session.LockedFee = math.ZeroInt()
