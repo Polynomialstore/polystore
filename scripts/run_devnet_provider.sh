@@ -46,6 +46,8 @@ Notes:
   - By default, pair/link/register will auto-request faucet funds when POLYSTORE_PROVIDER_AUTO_FAUCET=1
     and POLYSTORE_FAUCET_URL (or POLYSTORE_TESTNET_FAUCET_URL) is configured.
   - start/register/bootstrap will not auto-create provider keys; run init or pair first.
+  - register defaults to POLYSTORE_PROVIDER_REGISTRATION_BOND=200stake so providers
+    satisfy the calibrated devnet minimum bond profile; set it empty to omit --bond.
   - EXPECTED_PROVIDER_ADDRESS (or POLYSTORE_EXPECTED_PROVIDER_ADDRESS) can enforce identity safety.
 USAGE
 }
@@ -82,6 +84,7 @@ TRUSTED_SETUP="${POLYSTORE_TRUSTED_SETUP:-$ROOT_DIR/polystorechain/trusted_setup
 PROVIDER_LISTEN="${PROVIDER_LISTEN:-${POLYSTORE_LISTEN_ADDR:-:8091}}"
 PROVIDER_CAPABILITIES="${PROVIDER_CAPABILITIES:-General}"
 PROVIDER_TOTAL_STORAGE="${PROVIDER_TOTAL_STORAGE:-1099511627776}" # 1 TiB default
+PROVIDER_REGISTRATION_BOND="${POLYSTORE_PROVIDER_REGISTRATION_BOND-${POLYSTORE_PROVIDER_BOND-200stake}}"
 PROVIDER_ENDPOINTS_RAW="${PROVIDER_ENDPOINTS:-${PROVIDER_ENDPOINT:-}}"
 BOOTSTRAP_ALLOW_PARTIAL="${BOOTSTRAP_ALLOW_PARTIAL:-0}"
 EXPECTED_PROVIDER_ADDRESS_RAW="${EXPECTED_PROVIDER_ADDRESS:-${POLYSTORE_EXPECTED_PROVIDER_ADDRESS:-}}"
@@ -1215,9 +1218,14 @@ register_provider() {
       --yes >/dev/null
     echo "Updated:"
   else
+    local bond_args=()
+    if [ -n "$PROVIDER_REGISTRATION_BOND" ]; then
+      bond_args=(--bond "$PROVIDER_REGISTRATION_BOND")
+    fi
     echo "==> Registering provider on-chain..."
     "$POLYSTORECHAIND_BIN" tx polystorechain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
       "${endpoint_args[@]}" \
+      "${bond_args[@]}" \
       --from "$PROVIDER_KEY" \
       --chain-id "$CHAIN_ID" \
       --node "$NODE_ADDR" \
@@ -1233,6 +1241,7 @@ register_provider() {
   echo "  profile:   $NETWORK_PROFILE"
   echo "  address:   $addr"
   echo "  endpoints: $PROVIDER_ENDPOINTS_RAW"
+  echo "  bond:      ${PROVIDER_REGISTRATION_BOND:-disabled}"
   echo "  lcd:       $LCD_BASE"
 }
 

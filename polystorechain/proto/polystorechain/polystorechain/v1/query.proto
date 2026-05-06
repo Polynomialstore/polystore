@@ -43,6 +43,61 @@ service Query {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{address}";
   }
 
+  // Queries the provider-centric health and lifecycle summary.
+  rpc GetProviderHealth(QueryGetProviderHealthRequest) returns (QueryGetProviderHealthResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{address}/health";
+  }
+
+  // Lists provider-centric health and lifecycle summaries.
+  rpc ListProviderHealth(QueryListProviderHealthRequest) returns (QueryListProviderHealthResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-health";
+  }
+
+  // Queries the provider-centric assignment collateral accounting summary.
+  rpc GetProviderCollateral(QueryGetProviderCollateralRequest) returns (QueryGetProviderCollateralResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{address}/collateral";
+  }
+
+  // Lists provider-centric assignment collateral accounting summaries.
+  rpc ListProviderCollateral(QueryListProviderCollateralRequest) returns (QueryListProviderCollateralResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-collateral";
+  }
+
+  // Queries observed staking-module binding status for a provider.
+  rpc GetProviderStaking(QueryGetProviderStakingRequest) returns (QueryGetProviderStakingResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/staking";
+  }
+
+  // Lists observed staking-module binding status for providers.
+  rpc ListProviderStaking(QueryListProviderStakingRequest) returns (QueryListProviderStakingResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-staking";
+  }
+
+  // Queries one stateful assignment collateral lock.
+  rpc GetAssignmentCollateralLock(QueryGetAssignmentCollateralLockRequest) returns (QueryGetAssignmentCollateralLockResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/collateral-locks/{deal_id}/{slot}";
+  }
+
+  // Lists stateful assignment collateral locks for a provider.
+  rpc ListAssignmentCollateralLocksByProvider(QueryListAssignmentCollateralLocksByProviderRequest) returns (QueryListAssignmentCollateralLocksByProviderResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/collateral-locks";
+  }
+
+  // Lists stateful assignment collateral locks for a deal.
+  rpc ListAssignmentCollateralLocksByDeal(QueryListAssignmentCollateralLocksByDealRequest) returns (QueryListAssignmentCollateralLocksByDealResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/collateral-locks";
+  }
+
+  // Queries a pending provider-bond unbonding request by id.
+  rpc GetProviderBondUnbonding(QueryGetProviderBondUnbondingRequest) returns (QueryGetProviderBondUnbondingResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-bond-unbondings/{id}";
+  }
+
+  // Lists pending provider-bond unbonding requests for a provider.
+  rpc ListProviderBondUnbondingsByProvider(QueryListProviderBondUnbondingsByProviderRequest) returns (QueryListProviderBondUnbondingsByProviderResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/bond-unbondings";
+  }
+
   // Queries the operator pairing for a provider address.
   rpc GetProviderPairing(QueryGetProviderPairingRequest) returns (QueryGetProviderPairingResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-pairings/{provider}";
@@ -96,6 +151,31 @@ service Query {
   // Lists virtual overlay stripes for a deal.
   rpc ListVirtualStripesByDeal(QueryListVirtualStripesByDealRequest) returns (QueryListVirtualStripesByDealResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/virtual-stripes";
+  }
+
+  // Queries the latest structured health state for a Mode 2 slot.
+  rpc GetSlotHealth(QueryGetSlotHealthRequest) returns (QueryGetSlotHealthResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/slots/{slot}/health";
+  }
+
+  // Lists structured slot health states for a deal.
+  rpc ListSlotHealthByDeal(QueryListSlotHealthByDealRequest) returns (QueryListSlotHealthByDealResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/slot-health";
+  }
+
+  // Queries explicit repair attempt/cooldown state for a Mode 2 slot.
+  rpc GetRepairAttempt(QueryGetRepairAttemptRequest) returns (QueryGetRepairAttemptResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/slots/{slot}/repair-attempt";
+  }
+
+  // Lists explicit repair attempt/cooldown states for a deal.
+  rpc ListRepairAttemptsByDeal(QueryListRepairAttemptsByDealRequest) returns (QueryListRepairAttemptsByDealResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/repair-attempts";
+  }
+
+  // Lists structured evidence cases, optionally filtered by deal.
+  rpc ListEvidenceCases(QueryListEvidenceCasesRequest) returns (QueryListEvidenceCasesResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/evidence";
   }
 }
 
@@ -152,6 +232,127 @@ message QueryGetProviderRequest {
 
 message QueryGetProviderResponse {
   Provider provider = 1;
+}
+
+// QueryGetProviderHealthRequest requests provider health by address.
+message QueryGetProviderHealthRequest {
+  string address = 1;
+}
+
+// QueryGetProviderHealthResponse returns provider-centric health state.
+message QueryGetProviderHealthResponse {
+  ProviderHealthState health = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListProviderHealthRequest lists provider health summaries.
+message QueryListProviderHealthRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+// QueryListProviderHealthResponse returns provider health summaries.
+message QueryListProviderHealthResponse {
+  repeated ProviderHealthState health = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetProviderCollateralRequest requests provider assignment collateral by address.
+message QueryGetProviderCollateralRequest {
+  string address = 1;
+}
+
+// QueryGetProviderCollateralResponse returns provider assignment collateral accounting.
+message QueryGetProviderCollateralResponse {
+  ProviderCollateralSummary collateral = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListProviderCollateralRequest lists provider collateral summaries.
+message QueryListProviderCollateralRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+// QueryListProviderCollateralResponse returns provider collateral summaries.
+message QueryListProviderCollateralResponse {
+  repeated ProviderCollateralSummary collateral = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetProviderStakingRequest requests observed staking linkage by provider.
+message QueryGetProviderStakingRequest {
+  string provider = 1;
+}
+
+// QueryGetProviderStakingResponse returns observed staking linkage status.
+message QueryGetProviderStakingResponse {
+  ProviderStakingSummary staking = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListProviderStakingRequest lists observed staking linkage summaries.
+message QueryListProviderStakingRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+// QueryListProviderStakingResponse returns observed staking linkage summaries.
+message QueryListProviderStakingResponse {
+  repeated ProviderStakingSummary staking = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetAssignmentCollateralLockRequest requests one lock by provider/deal/slot.
+message QueryGetAssignmentCollateralLockRequest {
+  string provider = 1;
+  uint64 deal_id = 2;
+  uint32 slot = 3;
+}
+
+// QueryGetAssignmentCollateralLockResponse returns one assignment collateral lock.
+message QueryGetAssignmentCollateralLockResponse {
+  AssignmentCollateralLock lock = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListAssignmentCollateralLocksByProviderRequest lists locks by provider.
+message QueryListAssignmentCollateralLocksByProviderRequest {
+  string provider = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListAssignmentCollateralLocksByProviderResponse returns provider locks.
+message QueryListAssignmentCollateralLocksByProviderResponse {
+  repeated AssignmentCollateralLock locks = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryListAssignmentCollateralLocksByDealRequest lists locks by deal.
+message QueryListAssignmentCollateralLocksByDealRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListAssignmentCollateralLocksByDealResponse returns deal locks.
+message QueryListAssignmentCollateralLocksByDealResponse {
+  repeated AssignmentCollateralLock locks = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetProviderBondUnbondingRequest requests a queued bond withdrawal by id.
+message QueryGetProviderBondUnbondingRequest {
+  uint64 id = 1;
+}
+
+// QueryGetProviderBondUnbondingResponse returns one queued bond withdrawal.
+message QueryGetProviderBondUnbondingResponse {
+  ProviderBondUnbonding unbonding = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListProviderBondUnbondingsByProviderRequest lists queued bond withdrawals.
+message QueryListProviderBondUnbondingsByProviderRequest {
+  string provider = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListProviderBondUnbondingsByProviderResponse returns provider withdrawals.
+message QueryListProviderBondUnbondingsByProviderResponse {
+  repeated ProviderBondUnbonding unbondings = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 
 message QueryGetProviderPairingRequest {
@@ -247,5 +448,63 @@ message QueryListVirtualStripesByDealRequest {
 
 message QueryListVirtualStripesByDealResponse {
   repeated VirtualStripe stripes = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetSlotHealthRequest requests the latest health state for a slot.
+message QueryGetSlotHealthRequest {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+}
+
+// QueryGetSlotHealthResponse returns the latest health state for a slot.
+message QueryGetSlotHealthResponse {
+  SlotHealthState health = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListSlotHealthByDealRequest requests all slot health states for a deal.
+message QueryListSlotHealthByDealRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListSlotHealthByDealResponse returns all slot health states for a deal.
+message QueryListSlotHealthByDealResponse {
+  repeated SlotHealthState health = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetRepairAttemptRequest requests repair attempt state for a slot.
+message QueryGetRepairAttemptRequest {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+}
+
+// QueryGetRepairAttemptResponse returns repair attempt state for a slot.
+message QueryGetRepairAttemptResponse {
+  RepairAttemptState repair_attempt = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListRepairAttemptsByDealRequest requests repair attempt states by deal.
+message QueryListRepairAttemptsByDealRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListRepairAttemptsByDealResponse returns repair attempt states by deal.
+message QueryListRepairAttemptsByDealResponse {
+  repeated RepairAttemptState repair_attempts = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryListEvidenceCasesRequest lists structured evidence cases.
+message QueryListEvidenceCasesRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListEvidenceCasesResponse returns structured evidence cases.
+message QueryListEvidenceCasesResponse {
+  repeated EvidenceCase evidence = 1 [(gogoproto.nullable) = false];
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
