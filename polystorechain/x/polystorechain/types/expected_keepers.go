@@ -5,6 +5,7 @@ import (
 
 	"cosmossdk.io/core/address"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
 // AuthKeeper defines the expected interface for the Auth module.
@@ -24,6 +25,15 @@ type BankKeeper interface {
 	SendCoinsFromAccountToModule(ctx context.Context, senderAddr sdk.AccAddress, recipientModule string, amt sdk.Coins) error
 	BurnCoins(ctx context.Context, moduleName string, amt sdk.Coins) error
 	// Methods imported from bank should be defined here
+}
+
+// StakingKeeper defines the staking-module surface used for observed provider
+// stake bindings. Delegated stake is not counted as provider collateral until
+// slash semantics are explicitly implemented.
+type StakingKeeper interface {
+	BondDenom(context.Context) (string, error)
+	GetValidator(ctx context.Context, addr sdk.ValAddress) (stakingtypes.Validator, error)
+	GetDelegation(ctx context.Context, delAddr sdk.AccAddress, valAddr sdk.ValAddress) (stakingtypes.Delegation, error)
 }
 
 // ParamSubspace defines the expected Subspace interface for parameters.
