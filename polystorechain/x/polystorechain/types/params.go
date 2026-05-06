@@ -53,6 +53,7 @@ var (
 	KeyMinProviderBond              = []byte("MinProviderBond")
 	KeyHardFaultBondSlashBps        = []byte("HardFaultBondSlashBps")
 	KeyAssignmentCollateralPerSlot  = []byte("AssignmentCollateralPerSlot")
+	KeyProviderBondUnbondingBlocks  = []byte("ProviderBondUnbondingBlocks")
 
 	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
 	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
@@ -117,6 +118,7 @@ func NewParams(
 	minProviderBond sdk.Coin,
 	hardFaultBondSlashBps uint64,
 	assignmentCollateralPerSlot sdk.Coin,
+	providerBondUnbondingBlocks uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:               baseStripeCost,
@@ -171,6 +173,7 @@ func NewParams(
 		MinProviderBond:             minProviderBond,
 		HardFaultBondSlashBps:       hardFaultBondSlashBps,
 		AssignmentCollateralPerSlot: assignmentCollateralPerSlot,
+		ProviderBondUnbondingBlocks: providerBondUnbondingBlocks,
 	}
 }
 
@@ -224,7 +227,50 @@ func DefaultParams() Params {
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // MinProviderBond (disabled by default)
 		0, // HardFaultBondSlashBps (disabled until governance/devnet params enable it)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // AssignmentCollateralPerSlot (disabled by default)
+		0, // ProviderBondUnbondingBlocks (0 preserves immediate local/devnet withdrawal)
 	)
+}
+
+const (
+	// DevnetPolicingProviderBondScale maps the unitless policy simulator
+	// provider-bond baseline onto integer stake-denominated chain params.
+	DevnetPolicingProviderBondScale int64 = 100
+
+	// DevnetPolicingInitialProviderBondAmount is the recommended provider
+	// registration self-bond for the calibrated devnet policing profile. It is
+	// not a consensus param, but scripts use it to give providers enough
+	// headroom above the minimum plus per-slot liability.
+	DevnetPolicingInitialProviderBondAmount int64 = 2 * DevnetPolicingProviderBondScale
+
+	// DevnetPolicingMinProviderBondAmount is derived from the
+	// provider_bond_headroom simulator baseline: 1.5 normalized units * 100.
+	DevnetPolicingMinProviderBondAmount int64 = 150
+
+	// DevnetPolicingAssignmentCollateralPerSlotAmount is derived from the
+	// provider_bond_headroom simulator baseline: 0.05 normalized units * 100.
+	DevnetPolicingAssignmentCollateralPerSlotAmount int64 = 5
+
+	// DevnetPolicingHardFaultBondSlashBps is calibrated from a simulated
+	// hard-fault slash of 1.0 against a 2.0 initial bond, i.e. 50%.
+	DevnetPolicingHardFaultBondSlashBps uint64 = 5000
+)
+
+// DevnetPolicingInitialProviderBond returns the recommended registration bond
+// used by devnet scripts when the calibrated policing profile is enabled.
+func DevnetPolicingInitialProviderBond() sdk.Coin {
+	return sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(DevnetPolicingInitialProviderBondAmount))
+}
+
+// DevnetPolicingParams returns a simulator-backed non-zero provider collateral
+// profile for trusted devnets. DefaultParams remains compatibility-safe for
+// tests and local flows that do not yet fund/register provider self-bonds.
+func DevnetPolicingParams() Params {
+	params := DefaultParams()
+	params.MinProviderBond = sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(DevnetPolicingMinProviderBondAmount))
+	params.AssignmentCollateralPerSlot = sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(DevnetPolicingAssignmentCollateralPerSlotAmount))
+	params.HardFaultBondSlashBps = DevnetPolicingHardFaultBondSlashBps
+	params.ProviderBondUnbondingBlocks = params.EpochLenBlocks * params.JailHardFaultEpochs
+	return params
 }
 
 // ParamSetPairs get the params.ParamSet
@@ -279,6 +325,7 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyMinProviderBond, &p.MinProviderBond, validateProviderBond),
 		paramtypes.NewParamSetPair(KeyHardFaultBondSlashBps, &p.HardFaultBondSlashBps, validateBps),
 		paramtypes.NewParamSetPair(KeyAssignmentCollateralPerSlot, &p.AssignmentCollateralPerSlot, validateProviderBond),
+		paramtypes.NewParamSetPair(KeyProviderBondUnbondingBlocks, &p.ProviderBondUnbondingBlocks, validateUint64Any),
 	}
 }
 
@@ -432,6 +479,9 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateProviderBond(p.AssignmentCollateralPerSlot); err != nil {
+		return err
+	}
+	if err := validateUint64Any(p.ProviderBondUnbondingBlocks); err != nil {
 		return err
 	}
 	return nil
