@@ -63,6 +63,15 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 		return nil
 	}
 
+	cacheCtx, write := ctx.CacheContext()
+	if err := k.applyHardFaultEvidenceConsequences(cacheCtx, ev, providerAddr); err != nil {
+		return err
+	}
+	write()
+	return nil
+}
+
+func (k Keeper) applyHardFaultEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase, providerAddr string) error {
 	provider, err := k.Providers.Get(ctx, providerAddr)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
@@ -85,12 +94,27 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 	if strings.TrimSpace(bondBefore.Denom) == "" {
 		bondBefore.Denom = sdk.DefaultBondDenom
 	}
-	bondSlash := providerBondSlashAmount(bondBefore, params.HardFaultBondSlashBps)
+	queuedBondSnapshot, err := k.providerBondUnbondingSnapshot(ctx, providerAddr, bondBefore.Denom)
+	if err != nil {
+		return err
+	}
+	queuedBondBefore := queuedBondSnapshot.total
+	slashableBond := sdk.NewCoin(bondBefore.Denom, bondBefore.Amount.Add(queuedBondBefore.Amount))
+	bondSlash := providerBondSlashAmount(slashableBond, params.HardFaultBondSlashBps)
+	activeBondSlash := zeroBondLike(bondBefore.Denom)
+	queuedBondSlash := zeroBondLike(bondBefore.Denom)
 	if bondSlash.Amount.IsPositive() {
-		if err := k.BankKeeper.BurnCoins(ctx, types.ProviderBondModuleName, sdk.NewCoins(bondSlash)); err != nil {
-			return fmt.Errorf("failed to burn provider bond slash: %w", err)
+		activeSlashAmount := bondSlash.Amount
+		if activeSlashAmount.GT(bondBefore.Amount) {
+			activeSlashAmount = bondBefore.Amount
 		}
-		provider.Bond = sdk.NewCoin(bondBefore.Denom, bondBefore.Amount.Sub(bondSlash.Amount))
+		activeBondSlash = sdk.NewCoin(bondBefore.Denom, activeSlashAmount)
+		provider.Bond = sdk.NewCoin(bondBefore.Denom, bondBefore.Amount.Sub(activeSlashAmount))
+		remainingSlash := sdk.NewCoin(bondBefore.Denom, bondSlash.Amount.Sub(activeSlashAmount))
+		queuedBondSlash, err = k.slashProviderBondUnbondings(ctx, providerAddr, remainingSlash, queuedBondSnapshot)
+		if err != nil {
+			return err
+		}
 		provider.BondSlashed = addBondCoins(provider.BondSlashed, bondSlash)
 	} else {
 		provider.Bond = bondBefore
@@ -131,9 +155,15 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 		health.LastSlot = ev.Slot
 		health.LastEpochId = ev.EpochId
 		health.UpdatedHeight = ctx.BlockHeight()
-		health.ConsequenceCeiling = fmt.Sprintf("jailed until height %d; reputation slash %d; bond slash %s", jailUntilHeight, reputationSlash, bondSlash)
+		health.ConsequenceCeiling = fmt.Sprintf("jailed until height %d; reputation slash %d; bond slash %s (active %s, queued %s)", jailUntilHeight, reputationSlash, bondSlash, activeBondSlash, queuedBondSlash)
 		if err := k.ProviderHealthStates.Set(ctx, providerAddr, health); err != nil {
 			return err
+		}
+	}
+
+	if bondSlash.Amount.IsPositive() {
+		if err := k.BankKeeper.BurnCoins(ctx, types.ProviderBondModuleName, sdk.NewCoins(bondSlash)); err != nil {
+			return fmt.Errorf("failed to burn provider bond slash: %w", err)
 		}
 	}
 
@@ -146,13 +176,115 @@ func (k Keeper) applyEvidenceConsequences(ctx sdk.Context, ev types.EvidenceCase
 			sdk.NewAttribute("reputation_slash", fmt.Sprintf("%d", reputationSlash)),
 			sdk.NewAttribute("reputation_after", fmt.Sprintf("%d", provider.ReputationScore)),
 			sdk.NewAttribute("bond_before", bondBefore.String()),
+			sdk.NewAttribute("bond_unbonding_before", queuedBondBefore.String()),
 			sdk.NewAttribute("bond_slash", bondSlash.String()),
+			sdk.NewAttribute("bond_active_slash", activeBondSlash.String()),
+			sdk.NewAttribute("bond_unbonding_slash", queuedBondSlash.String()),
 			sdk.NewAttribute("bond_after", provider.Bond.String()),
 			sdk.NewAttribute("bond_slashed_total", provider.BondSlashed.String()),
 			sdk.NewAttribute("jail_until_height", fmt.Sprintf("%d", jailUntilHeight)),
 		),
 	)
 	return nil
+}
+
+type providerBondUnbondingRecord struct {
+	id        uint64
+	unbonding types.ProviderBondUnbonding
+	amount    sdk.Coin
+}
+
+type providerBondUnbondingSnapshot struct {
+	total           sdk.Coin
+	records         []providerBondUnbondingRecord
+	danglingIndexes []uint64
+}
+
+func (k Keeper) providerBondUnbondingSnapshot(ctx sdk.Context, providerAddr string, denom string) (providerBondUnbondingSnapshot, error) {
+	denom = strings.TrimSpace(denom)
+	if denom == "" {
+		denom = sdk.DefaultBondDenom
+	}
+	snapshot := providerBondUnbondingSnapshot{
+		total:           zeroBondLike(denom),
+		records:         make([]providerBondUnbondingRecord, 0),
+		danglingIndexes: make([]uint64, 0),
+	}
+	if err := k.ProviderBondUnbondingsByProvider.Walk(ctx, collections.NewPrefixedPairRange[string, uint64](providerAddr), func(key collections.Pair[string, uint64], _ bool) (bool, error) {
+		unbonding, err := k.ProviderBondUnbondings.Get(ctx, key.K2())
+		if err != nil {
+			if errors.Is(err, collections.ErrNotFound) {
+				snapshot.danglingIndexes = append(snapshot.danglingIndexes, key.K2())
+				return false, nil
+			}
+			return true, err
+		}
+		amount := normalizeCoinAmount(unbonding.Amount)
+		amount.Denom = strings.TrimSpace(amount.Denom)
+		if amount.Denom == "" {
+			amount.Denom = denom
+		}
+		if amount.Amount.IsPositive() && amount.Denom != denom {
+			return true, fmt.Errorf("provider bond unbonding %d denom %q does not match slash denom %q", unbonding.Id, amount.Denom, denom)
+		}
+		snapshot.total = sdk.NewCoin(denom, snapshot.total.Amount.Add(amount.Amount))
+		if amount.Amount.IsPositive() {
+			snapshot.records = append(snapshot.records, providerBondUnbondingRecord{id: key.K2(), unbonding: unbonding, amount: amount})
+		}
+		return false, nil
+	}); err != nil {
+		return providerBondUnbondingSnapshot{}, err
+	}
+	return snapshot, nil
+}
+
+func (k Keeper) slashProviderBondUnbondings(ctx sdk.Context, providerAddr string, slash sdk.Coin, snapshot providerBondUnbondingSnapshot) (sdk.Coin, error) {
+	slash = normalizeCoinAmount(slash)
+	slash.Denom = strings.TrimSpace(slash.Denom)
+	if slash.Denom == "" {
+		slash.Denom = sdk.DefaultBondDenom
+	}
+	if !slash.Amount.IsPositive() {
+		return zeroBondLike(slash.Denom), nil
+	}
+
+	for _, id := range snapshot.danglingIndexes {
+		if err := k.ProviderBondUnbondingsByProvider.Remove(ctx, collections.Join(providerAddr, id)); err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return sdk.Coin{}, err
+		}
+	}
+
+	remaining := slash
+	slashed := zeroBondLike(slash.Denom)
+	for _, record := range snapshot.records {
+		if !remaining.Amount.IsPositive() {
+			break
+		}
+		slashAmount := remaining.Amount
+		if slashAmount.GT(record.amount.Amount) {
+			slashAmount = record.amount.Amount
+		}
+		if !slashAmount.IsPositive() {
+			continue
+		}
+		nextAmount := sdk.NewCoin(record.amount.Denom, record.amount.Amount.Sub(slashAmount))
+		record.unbonding.Amount = nextAmount
+		if nextAmount.Amount.IsPositive() {
+			if err := k.ProviderBondUnbondings.Set(ctx, record.id, record.unbonding); err != nil {
+				return sdk.Coin{}, err
+			}
+		} else {
+			if err := k.ProviderBondUnbondings.Remove(ctx, record.id); err != nil && !errors.Is(err, collections.ErrNotFound) {
+				return sdk.Coin{}, err
+			}
+			if err := k.ProviderBondUnbondingsByProvider.Remove(ctx, collections.Join(providerAddr, record.id)); err != nil && !errors.Is(err, collections.ErrNotFound) {
+				return sdk.Coin{}, err
+			}
+		}
+		slashed = sdk.NewCoin(slash.Denom, slashed.Amount.Add(slashAmount))
+		remaining = sdk.NewCoin(slash.Denom, remaining.Amount.Sub(slashAmount))
+	}
+	return slashed, nil
 }
 
 func (k Keeper) expireProviderJails(ctx sdk.Context) error {
