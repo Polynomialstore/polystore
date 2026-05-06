@@ -14,6 +14,11 @@
 # Hub-only mode (no local providers):
 #   PROVIDER_COUNT=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 #
+# Provider policing:
+#   By default, the multi-SP devnet applies the simulator-calibrated provider
+#   bond/slash/queue profile and registers local providers with 200stake bond.
+#   Set POLYSTORE_DEVNET_POLICING_DEFAULTS=0 for compatibility-zero params.
+#
 # Networking:
 #   By default, LCD + EVM JSON-RPC bind to localhost. Set POLYSTORE_BIND_ALL=1 to bind to 0.0.0.0 (LAN debugging).
 set -euo pipefail
@@ -36,6 +41,8 @@ GAS_PRICE="${POLYSTORE_GAS_PRICES:-0.001aatom}"
 DENOM="${POLYSTORE_DENOM:-stake}"
 POLYSTORE_BIND_ALL="${POLYSTORE_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
 POLYSTORE_REINIT_HOME="${POLYSTORE_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
+POLYSTORE_DEVNET_POLICING_DEFAULTS="${POLYSTORE_DEVNET_POLICING_DEFAULTS:-1}" # set to 0 to keep provider bond/slash defaults disabled
+POLYSTORE_PROVIDER_REGISTRATION_BOND="${POLYSTORE_PROVIDER_REGISTRATION_BOND:-}" # defaulted to 200${DENOM} when policing defaults are enabled
 
 POLYSTORECHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
 POLYSTORE_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
@@ -66,6 +73,23 @@ if [ -d "$POLYSTORE_CORE_LIB_DIR" ]; then
 fi
 
 banner() { printf '\n=== %s ===\n' "$*"; }
+
+env_truthy() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|t|yes|y|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+provider_registration_bond() {
+  if [ -n "$POLYSTORE_PROVIDER_REGISTRATION_BOND" ]; then
+    printf '%s\n' "$POLYSTORE_PROVIDER_REGISTRATION_BOND"
+    return 0
+  fi
+  if env_truthy "$POLYSTORE_DEVNET_POLICING_DEFAULTS"; then
+    printf '200%s\n' "$DENOM"
+  fi
+}
 
 CHAIN_MODULE_CLI_NAME="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-}"
 
@@ -492,6 +516,26 @@ set_uint_param("quota_min_blobs", "POLYSTORE_QUOTA_MIN_BLOBS")
 set_uint_param("quota_max_blobs", "POLYSTORE_QUOTA_MAX_BLOBS")
 set_uint_param("credit_cap_bps", "POLYSTORE_CREDIT_CAP_BPS")
 set_uint_param("evict_after_missed_epochs", "POLYSTORE_EVICT_AFTER_MISSED_EPOCHS")
+set_uint_param("jail_hard_fault_epochs", "POLYSTORE_JAIL_HARD_FAULT_EPOCHS")
+
+def env_enabled(name, default):
+    raw = os.getenv(name, default)
+    if raw is None:
+        return False
+    return raw.strip().lower() in ("1", "true", "t", "yes", "y", "on")
+
+if env_enabled("POLYSTORE_DEVNET_POLICING_DEFAULTS", "1"):
+    params["min_provider_bond"] = {"denom": default_denom, "amount": "150"}
+    params["assignment_collateral_per_slot"] = {"denom": default_denom, "amount": "5"}
+    params["hard_fault_bond_slash_bps"] = "5000"
+    epoch_len = int(params.get("epoch_len_blocks") or 100)
+    jail_epochs = int(params.get("jail_hard_fault_epochs") or 3)
+    params["provider_bond_unbonding_blocks"] = str(epoch_len * jail_epochs)
+
+set_coin_param("min_provider_bond", "POLYSTORE_MIN_PROVIDER_BOND")
+set_coin_param("assignment_collateral_per_slot", "POLYSTORE_ASSIGNMENT_COLLATERAL_PER_SLOT")
+set_uint_param("hard_fault_bond_slash_bps", "POLYSTORE_HARD_FAULT_BOND_SLASH_BPS")
+set_uint_param("provider_bond_unbonding_blocks", "POLYSTORE_PROVIDER_BOND_UNBONDING_BLOCKS")
 
 # Pricing knobs (optional, but useful for trusted devnet economics).
 storage_price_set = set_dec_param("storage_price", "POLYSTORE_STORAGE_PRICE")
@@ -673,8 +717,15 @@ register_provider() {
   local endpoint="$2"
   local module_cli
   module_cli="$(detect_chain_module_cli_name)"
+  local -a bond_args=()
+  local bond
+  bond="$(provider_registration_bond || true)"
+  if [ -n "$bond" ]; then
+    bond_args=(--bond "$bond")
+  fi
   "$POLYSTORECHAIND_BIN" tx "$module_cli" register-provider General 1099511627776 \
     --endpoint "$endpoint" \
+    "${bond_args[@]}" \
     --from "$key" \
     --chain-id "$CHAIN_ID" \
     --node "$RPC_ADDR" \

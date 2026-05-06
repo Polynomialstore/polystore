@@ -1,0 +1,72 @@
+{
+  "name": "provider-bond-opportunity-cost-controls",
+  "description": "Sensitivity sweep for locked provider-bond carry cost and its effect on P&L/churn pressure before translating bond sizing into chain defaults.",
+  "base_scenario": "../scenarios/ideal.yaml",
+  "cases": [
+    {
+      "name": "zero-carry-control",
+      "config": {
+        "retrieval_price_per_slot": 0.0,
+        "retrieval_base_fee": 0.0,
+        "base_reward_per_slot": 0.0,
+        "provider_fixed_cost_per_epoch": 0.0,
+        "provider_storage_cost_per_slot_epoch": 0.0,
+        "provider_bandwidth_cost_per_retrieval": 0.0,
+        "provider_initial_bond": 2.0,
+        "provider_bond_opportunity_cost_bps_per_epoch": 0,
+        "provider_churn_pnl_threshold": 0.0,
+        "provider_churn_after_epochs": 1
+      },
+      "assertions": {
+        "exact_provider_bond_opportunity_cost": 0.0,
+        "exact_providers_negative_pnl": 0,
+        "exact_churn_pressure_provider_epochs": 0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "modest-carry-visible",
+      "config": {
+        "retrieval_price_per_slot": 0.0,
+        "retrieval_base_fee": 0.0,
+        "base_reward_per_slot": 0.0,
+        "provider_fixed_cost_per_epoch": 0.0,
+        "provider_storage_cost_per_slot_epoch": 0.0,
+        "provider_bandwidth_cost_per_retrieval": 0.0,
+        "provider_initial_bond": 2.0,
+        "provider_bond_opportunity_cost_bps_per_epoch": 50,
+        "provider_churn_pnl_threshold": 0.0,
+        "provider_churn_after_epochs": 1
+      },
+      "assertions": {
+        "min_provider_bond_opportunity_cost": 1.0,
+        "min_providers_negative_pnl": 1,
+        "min_churn_pressure_provider_epochs": 1,
+        "max_provider_churn_events": 0,
+        "max_data_loss_events": 0
+      }
+    },
+    {
+      "name": "high-carry-pressure",
+      "config": {
+        "retrieval_price_per_slot": 0.0,
+        "retrieval_base_fee": 0.0,
+        "base_reward_per_slot": 0.0,
+        "provider_fixed_cost_per_epoch": 0.0,
+        "provider_storage_cost_per_slot_epoch": 0.0,
+        "provider_bandwidth_cost_per_retrieval": 0.0,
+        "provider_initial_bond": 5.0,
+        "provider_bond_opportunity_cost_bps_per_epoch": 100,
+        "provider_churn_pnl_threshold": 0.0,
+        "provider_churn_after_epochs": 1
+      },
+      "assertions": {
+        "min_provider_bond_opportunity_cost": 10.0,
+        "min_providers_negative_pnl": 1,
+        "min_churn_pressure_provider_epochs": 1,
+        "max_provider_churn_events": 0,
+        "max_data_loss_events": 0
+      }
+    }
+  ]
+}

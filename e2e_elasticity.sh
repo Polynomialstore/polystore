@@ -52,6 +52,7 @@ submit_signal_saturation() {
         --home "$HOME_DIR" \
         --keyring-backend test \
         --node "$NODE_ADDR" \
+        --gas 300000 \
         --broadcast-mode sync \
         --output json)
     echo "$response" | jq -r '.txhash'

@@ -449,7 +449,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				}
 			}
 			if dealChanged {
-				if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+				if err := k.setDealWithAssignmentCollateralLocks(sdkCtx, dealID, deal); err != nil {
 					return false, err
 				}
 			}
@@ -469,6 +469,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	// Finalize health transitions after reward accounting so a provider jailed
 	// through this epoch cannot earn by expiring at the boundary height.
 	if err := k.applyProviderHealthEpochDecay(sdkCtx, epochID); err != nil {
+		return err
+	}
+	if err := k.scheduleUnderbondedRepairs(sdkCtx, epochID); err != nil {
 		return err
 	}
 	// Run controlled churn after rewards are distributed so a draining provider
