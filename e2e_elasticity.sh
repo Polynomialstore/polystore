@@ -35,11 +35,30 @@ require_cmd() {
     fi
 }
 
+query_tx_json() {
+	local tx_hash="$1"
+	local tx_json
+	if [ -z "$tx_hash" ]; then
+		echo "FAILURE: missing tx hash." >&2
+		return 1
+	fi
+
+	for _ in {1..30}; do
+		if tx_json=$("$BINARY" q tx "$tx_hash" --node "$NODE_ADDR" --home "$HOME_DIR" -o json 2>/dev/null); then
+			echo "$tx_json"
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "FAILURE: tx $tx_hash was not indexed after waiting." >&2
+	"$BINARY" q tx "$tx_hash" --node "$NODE_ADDR" --home "$HOME_DIR" -o json >&2 || true
+	return 1
+}
+
 query_tx_code() {
-    local tx_hash="$1"
-    local tx_json
-    tx_json=$("$BINARY" q tx "$tx_hash" --node "$NODE_ADDR" --home "$HOME_DIR" -o json)
-    echo "$tx_json" | jq -r '.code // 0'
+	local tx_hash="$1"
+	query_tx_json "$tx_hash" | jq -r '.code // 0'
 }
 
 submit_signal_saturation() {
@@ -54,7 +73,7 @@ submit_signal_saturation() {
         --node "$NODE_ADDR" \
         --broadcast-mode sync \
         --output json)
-    echo "$response" | jq -r '.txhash'
+	echo "$response" | jq -er '.txhash'
 }
 
 provider_capability() {
@@ -269,13 +288,12 @@ sleep 2
 echo ">>> Creating Deal (MaxSpend=120, exactly one overlay stripe)..."
 CREATE_RESP=$("$BINARY" tx nilchain create-deal 100 1000 120 \
   --service-hint General \
-  --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --node "$NODE_ADDR" --broadcast-mode sync)
-CREATE_TX_HASH=$(echo "$CREATE_RESP" | awk '/txhash:/ {print $2}' | tail -n 1)
+  --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --node "$NODE_ADDR" --broadcast-mode sync --output json)
+CREATE_TX_HASH=$(echo "$CREATE_RESP" | jq -er '.txhash')
 echo "CreateDeal txhash: $CREATE_TX_HASH"
 
 # Wait for deliver-tx and confirm success.
-sleep 2
-CREATE_TX=$("$BINARY" q tx "$CREATE_TX_HASH" --node "$NODE_ADDR" --home "$HOME_DIR" -o json)
+CREATE_TX=$(query_tx_json "$CREATE_TX_HASH")
 CREATE_CODE=$(echo "$CREATE_TX" | jq -r '.code // 0')
 if [ "$CREATE_CODE" != "0" ]; then
   echo "CreateDeal failed: $(echo "$CREATE_TX" | jq -r '.raw_log')"
@@ -316,8 +334,7 @@ fi
 SIGNAL_TX_HASH=$(submit_signal_saturation "$ASSIGNED_KEY")
 echo "SignalSaturation txhash: $SIGNAL_TX_HASH"
 
-echo ">>> Waiting for block..."
-sleep 2
+echo ">>> Waiting for SignalSaturation to commit..."
 SIGNAL_CODE=$(query_tx_code "$SIGNAL_TX_HASH")
 if [ "$SIGNAL_CODE" != "0" ]; then
     echo "FAILURE: first SignalSaturation failed with code $SIGNAL_CODE." >&2
@@ -346,8 +363,7 @@ echo ">>> Signaling Saturation Again (Budget Limit Test, should fail)..."
 SIGNAL_FAIL_TX_HASH=$(submit_signal_saturation "$ASSIGNED_KEY")
 echo "Second SignalSaturation txhash: $SIGNAL_FAIL_TX_HASH"
 
-echo ">>> Waiting for block..."
-sleep 2
+echo ">>> Waiting for second SignalSaturation to commit..."
 SIGNAL_FAIL_CODE=$(query_tx_code "$SIGNAL_FAIL_TX_HASH")
 if [ "$SIGNAL_FAIL_CODE" = "0" ]; then
     echo "FAILURE: second SignalSaturation unexpectedly succeeded." >&2
