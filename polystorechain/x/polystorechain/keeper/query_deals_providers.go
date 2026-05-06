@@ -294,6 +294,60 @@ func (k queryServer) ListAssignmentCollateralLocksByDeal(goCtx context.Context, 
 	return &types.QueryListAssignmentCollateralLocksByDealResponse{Locks: locks, Pagination: pageRes}, nil
 }
 
+func (k queryServer) GetProviderBondUnbonding(goCtx context.Context, req *types.QueryGetProviderBondUnbondingRequest) (*types.QueryGetProviderBondUnbondingResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	unbonding, err := k.k.ProviderBondUnbondings.Get(ctx, req.Id)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "provider bond unbonding not found")
+		}
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &types.QueryGetProviderBondUnbondingResponse{Unbonding: unbonding}, nil
+}
+
+func (k queryServer) ListProviderBondUnbondingsByProvider(goCtx context.Context, req *types.QueryListProviderBondUnbondingsByProviderRequest) (*types.QueryListProviderBondUnbondingsByProviderResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	provider, err := canonicalAddress(req.Provider, "provider")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	unbondings, pageRes, err := sdkquery.CollectionFilteredPaginate(
+		goCtx,
+		k.k.ProviderBondUnbondingsByProvider,
+		req.Pagination,
+		func(key collections.Pair[string, uint64], _ bool) (bool, error) {
+			_, err := k.k.ProviderBondUnbondings.Get(ctx, key.K2())
+			if errors.Is(err, collections.ErrNotFound) {
+				return false, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		},
+		func(key collections.Pair[string, uint64], _ bool) (types.ProviderBondUnbonding, error) {
+			return k.k.ProviderBondUnbondings.Get(ctx, key.K2())
+		},
+		sdkquery.WithCollectionPaginationPairPrefix[string, uint64](provider),
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListProviderBondUnbondingsByProviderResponse{Unbondings: unbondings, Pagination: pageRes}, nil
+}
+
 func (k queryServer) GetProviderPairing(goCtx context.Context, req *types.QueryGetProviderPairingRequest) (*types.QueryGetProviderPairingResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")

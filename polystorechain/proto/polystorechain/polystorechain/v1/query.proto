@@ -63,6 +63,16 @@ service Query {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-collateral";
   }
 
+  // Queries observed staking-module binding status for a provider.
+  rpc GetProviderStaking(QueryGetProviderStakingRequest) returns (QueryGetProviderStakingResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/staking";
+  }
+
+  // Lists observed staking-module binding status for providers.
+  rpc ListProviderStaking(QueryListProviderStakingRequest) returns (QueryListProviderStakingResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-staking";
+  }
+
   // Queries one stateful assignment collateral lock.
   rpc GetAssignmentCollateralLock(QueryGetAssignmentCollateralLockRequest) returns (QueryGetAssignmentCollateralLockResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/collateral-locks/{deal_id}/{slot}";
@@ -76,6 +86,16 @@ service Query {
   // Lists stateful assignment collateral locks for a deal.
   rpc ListAssignmentCollateralLocksByDeal(QueryListAssignmentCollateralLocksByDealRequest) returns (QueryListAssignmentCollateralLocksByDealResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/collateral-locks";
+  }
+
+  // Queries a pending provider-bond unbonding request by id.
+  rpc GetProviderBondUnbonding(QueryGetProviderBondUnbondingRequest) returns (QueryGetProviderBondUnbondingResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/provider-bond-unbondings/{id}";
+  }
+
+  // Lists pending provider-bond unbonding requests for a provider.
+  rpc ListProviderBondUnbondingsByProvider(QueryListProviderBondUnbondingsByProviderRequest) returns (QueryListProviderBondUnbondingsByProviderResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/providers/{provider}/bond-unbondings";
   }
 
   // Queries the operator pairing for a provider address.
@@ -256,6 +276,27 @@ message QueryListProviderCollateralResponse {
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 
+// QueryGetProviderStakingRequest requests observed staking linkage by provider.
+message QueryGetProviderStakingRequest {
+  string provider = 1;
+}
+
+// QueryGetProviderStakingResponse returns observed staking linkage status.
+message QueryGetProviderStakingResponse {
+  ProviderStakingSummary staking = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListProviderStakingRequest lists observed staking linkage summaries.
+message QueryListProviderStakingRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+// QueryListProviderStakingResponse returns observed staking linkage summaries.
+message QueryListProviderStakingResponse {
+  repeated ProviderStakingSummary staking = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
 // QueryGetAssignmentCollateralLockRequest requests one lock by provider/deal/slot.
 message QueryGetAssignmentCollateralLockRequest {
   string provider = 1;
@@ -289,6 +330,28 @@ message QueryListAssignmentCollateralLocksByDealRequest {
 // QueryListAssignmentCollateralLocksByDealResponse returns deal locks.
 message QueryListAssignmentCollateralLocksByDealResponse {
   repeated AssignmentCollateralLock locks = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryGetProviderBondUnbondingRequest requests a queued bond withdrawal by id.
+message QueryGetProviderBondUnbondingRequest {
+  uint64 id = 1;
+}
+
+// QueryGetProviderBondUnbondingResponse returns one queued bond withdrawal.
+message QueryGetProviderBondUnbondingResponse {
+  ProviderBondUnbonding unbonding = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryListProviderBondUnbondingsByProviderRequest lists queued bond withdrawals.
+message QueryListProviderBondUnbondingsByProviderRequest {
+  string provider = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListProviderBondUnbondingsByProviderResponse returns provider withdrawals.
+message QueryListProviderBondUnbondingsByProviderResponse {
+  repeated ProviderBondUnbonding unbondings = 1 [(gogoproto.nullable) = false];
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 
