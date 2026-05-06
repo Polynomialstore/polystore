@@ -226,10 +226,14 @@ class SimConfig:
     provider_storage_cost_per_slot_epoch: float = 0.01
     provider_bandwidth_cost_per_retrieval: float = 0.001
     provider_fixed_cost_per_epoch: float = 0.05
+    provider_bond_opportunity_cost_bps_per_epoch: int = 0
     provider_initial_bond: float = 100.0
     provider_min_bond: float = 0.0
     provider_bond_per_slot: float = 0.0
     slash_hard_fault: float = 1.0
+    slash_hard_fault_bps: int = 0
+    slash_corrupt_retrieval_bps: int = 0
+    slash_invalid_synthetic_proof_bps: int = 0
     jail_epochs: int = 3
     elasticity_trigger_retrievals_per_epoch: int = 0
     elasticity_base_cost: float = 1.0
@@ -414,6 +418,17 @@ class SimConfig:
             raise ValueError("provider_min_bond must be non-negative")
         if self.provider_bond_per_slot < 0:
             raise ValueError("provider_bond_per_slot must be non-negative")
+        if self.provider_bond_opportunity_cost_bps_per_epoch < 0:
+            raise ValueError("provider_bond_opportunity_cost_bps_per_epoch must be non-negative")
+        if self.slash_hard_fault < 0:
+            raise ValueError("slash_hard_fault must be non-negative")
+        for key, value in {
+            "slash_hard_fault_bps": self.slash_hard_fault_bps,
+            "slash_corrupt_retrieval_bps": self.slash_corrupt_retrieval_bps,
+            "slash_invalid_synthetic_proof_bps": self.slash_invalid_synthetic_proof_bps,
+        }.items():
+            if value < 0 or value > 10_000:
+                raise ValueError(f"{key} must be in [0, 10000]")
         if self.provider_entry_reserve_count < 0:
             raise ValueError("provider_entry_reserve_count must be non-negative")
         if self.provider_entry_reserve_count > self.providers:
@@ -515,6 +530,7 @@ class Provider:
     retrieval_revenue: float = 0.0
     performance_reward_revenue: float = 0.0
     total_cost: float = 0.0
+    bond_opportunity_cost: float = 0.0
     slashed: float = 0.0
     bond: float = 0.0
     jailed_until_epoch: int = 0
@@ -700,6 +716,7 @@ class EpochMetrics:
     evidence_spam_bounty_paid: float = 0.0
     evidence_spam_net_gain: float = 0.0
     provider_cost: float = 0.0
+    provider_bond_opportunity_cost: float = 0.0
     provider_revenue: float = 0.0
     provider_pnl: float = 0.0
     provider_cost_shock_active: int = 0
@@ -2239,7 +2256,7 @@ class PolicySimulator:
         if self.mode_at_least("JAIL_SIMULATED"):
             provider.jailed_until_epoch = max(provider.jailed_until_epoch, epoch + self.config.jail_epochs)
         if self.mode_at_least("SLASH_SIMULATED"):
-            slash = min(provider.bond, self.config.slash_hard_fault)
+            slash = min(provider.bond, self._hard_fault_slash_amount(provider, reason))
             provider.bond -= slash
             provider.slashed += slash
             self.evidence_rows.append(
@@ -2253,6 +2270,19 @@ class PolicySimulator:
                     "consequence": "slash_simulated",
                 }
             )
+
+    def _hard_fault_slash_amount(self, provider: Provider, reason: str) -> float:
+        bps = self._hard_fault_slash_bps(reason)
+        if bps > 0:
+            return provider.bond * bps / 10_000
+        return self.config.slash_hard_fault
+
+    def _hard_fault_slash_bps(self, reason: str) -> int:
+        if reason == "corrupt_retrieval" and self.config.slash_corrupt_retrieval_bps > 0:
+            return self.config.slash_corrupt_retrieval_bps
+        if reason == "invalid_synthetic_proof" and self.config.slash_invalid_synthetic_proof_bps > 0:
+            return self.config.slash_invalid_synthetic_proof_bps
+        return self.config.slash_hard_fault_bps
 
     def _record_evidence(
         self,
@@ -2504,10 +2534,12 @@ class PolicySimulator:
         metrics.provider_cost_shock_bandwidth_multiplier_bps = shock_stats["bandwidth_multiplier_bps"]
 
         provider_cost = 0.0
+        provider_bond_opportunity_cost = 0.0
         for provider_id, provider in self.providers.items():
             if not self._provider_lifecycle_assignable(provider):
                 continue
             fixed_multiplier, storage_multiplier, bandwidth_multiplier = self._provider_cost_multipliers(provider, epoch)
+            bond_cost = provider.bond * self.config.provider_bond_opportunity_cost_bps_per_epoch / 10_000
             cost = (
                 self.config.provider_fixed_cost_per_epoch
                 * fixed_multiplier
@@ -2519,9 +2551,12 @@ class PolicySimulator:
                 * self.config.provider_bandwidth_cost_per_retrieval
                 * provider.bandwidth_cost_multiplier
                 * bandwidth_multiplier
+                + bond_cost
             )
             provider.total_cost += cost
+            provider.bond_opportunity_cost += bond_cost
             provider_cost += cost
+            provider_bond_opportunity_cost += bond_cost
 
         self._apply_provider_economic_churn(epoch, metrics, assigned_counts)
         self._apply_provider_supply_entry(epoch, metrics)
@@ -2533,6 +2568,7 @@ class PolicySimulator:
         self.provider_slashed_total_last_epoch = provider_slashed_total
 
         metrics.provider_cost = provider_cost
+        metrics.provider_bond_opportunity_cost = provider_bond_opportunity_cost
         metrics.provider_revenue = (
             metrics.retrieval_provider_payouts
             + metrics.storage_fee_provider_payouts
@@ -2586,6 +2622,7 @@ class PolicySimulator:
                 "evidence_spam_bounty_paid": metrics.evidence_spam_bounty_paid,
                 "evidence_spam_net_gain": metrics.evidence_spam_net_gain,
                 "provider_cost": metrics.provider_cost,
+                "provider_bond_opportunity_cost": metrics.provider_bond_opportunity_cost,
                 "provider_revenue": metrics.provider_revenue,
                 "provider_pnl": metrics.provider_pnl,
                 "provider_cost_shock_active": metrics.provider_cost_shock_active,
@@ -3021,6 +3058,7 @@ class PolicySimulator:
             "evidence_spam_bounty_paid",
             "evidence_spam_net_gain",
             "provider_cost",
+            "provider_bond_opportunity_cost",
             "provider_cost_shock_active",
             "provider_churn_events",
             "provider_entries",
@@ -3294,6 +3332,7 @@ class PolicySimulator:
                     "retrieval_revenue": provider.retrieval_revenue,
                     "performance_reward_revenue": provider.performance_reward_revenue,
                     "total_cost": provider.total_cost,
+                    "bond_opportunity_cost": provider.bond_opportunity_cost,
                     "slashed": provider.slashed,
                     "bond": provider.bond,
                     "bond_required": bond_required,

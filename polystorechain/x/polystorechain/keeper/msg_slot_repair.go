@@ -77,7 +77,7 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 	if err := k.clearMode2RepairReadiness(ctx, deal.Id, msg.Slot); err != nil {
 		return nil, fmt.Errorf("failed to clear stale repair readiness: %w", err)
 	}
-	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 
@@ -117,6 +117,8 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 		RepairTargetGen: slot.RepairTargetGen,
 	}); err != nil {
 		ctx.Logger().Error("failed to update slot health", "error", err)
+	} else if err := k.recordRepairAttemptStarted(ctx, deal.Id, msg.Slot, slot.Provider, pending, epochID, "manual_slot_repair_started", slot.RepairTargetGen, caseID); err != nil {
+		ctx.Logger().Error("failed to record repair attempt state", "error", err)
 	}
 
 	ctx.EventManager().EmitEvent(
@@ -199,7 +201,7 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	if err := k.clearMode2RepairReadiness(ctx, deal.Id, msg.Slot); err != nil {
 		return nil, fmt.Errorf("failed to clear consumed repair readiness: %w", err)
 	}
-	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 

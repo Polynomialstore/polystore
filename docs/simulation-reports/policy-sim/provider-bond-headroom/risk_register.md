@@ -7,7 +7,7 @@ Model provider assignment collateral as a first-class placement constraint. The 
 | Risk | Severity | Evidence | Impact | Recommended Follow-Up |
 |---|---|---|---|---|
 | Provider economic churn pressure | `medium` | 1 of 48 providers ended with negative modeled P&L. | A technically healthy network may still be unstable if rational providers exit. | Review storage price, retrieval price, reward pool, provider cost assumptions, and dynamic-pricing thresholds. |
-| Provider bond headroom exhausted | `medium` | Peak underbonded providers 1; peak assigned slots on underbonded providers 1; final bond deficit 1.5000. | Undercollateralized providers should not continue accumulating responsibility, especially after hard-fault slashing. | Review minimum bond, per-slot collateral, repair urgency, top-up UX, and whether underbonding should degrade placement before repair. |
+| Provider bond headroom exhausted | `medium` | Peak underbonded providers 1; peak assigned slots on underbonded providers 1; final bond deficit 1.4375. | Undercollateralized providers should not continue accumulating responsibility, especially after hard-fault slashing. | Review minimum bond, per-slot collateral, repair urgency, top-up UX, and whether underbonding should degrade placement before repair. |
 
 ## Evidence Counters
 

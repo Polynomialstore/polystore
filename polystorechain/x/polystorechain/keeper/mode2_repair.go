@@ -3,6 +3,7 @@ package keeper
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,8 @@ import (
 
 	"polystorechain/x/polystorechain/types"
 )
+
+var errNoReplacementProviderCandidates = errors.New("no replacement provider candidates available")
 
 func providerMatchesServiceHint(provider types.Provider, serviceHint string) bool {
 	info, err := types.ParseServiceHint(serviceHint)
@@ -43,10 +46,18 @@ func mode2ReplacementProviderIneligibility(provider types.Provider, serviceHint 
 }
 
 func (k Keeper) mode2ReplacementProviderIneligibility(ctx sdk.Context, provider types.Provider, serviceHint string) (string, error) {
+	counts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return "", err
+	}
+	return k.mode2ReplacementProviderIneligibilityWithCounts(ctx, provider, serviceHint, counts)
+}
+
+func (k Keeper) mode2ReplacementProviderIneligibilityWithCounts(ctx sdk.Context, provider types.Provider, serviceHint string, counts providerAssignmentCountSnapshot) (string, error) {
 	if reason := mode2ReplacementProviderIneligibility(provider, serviceHint); reason != "" {
 		return reason, nil
 	}
-	return k.providerHealthPlacementIneligibility(ctx, provider)
+	return k.providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx, provider, 1, counts)
 }
 
 func (k Keeper) mode2ReplacementProviderEligible(ctx sdk.Context, provider types.Provider, serviceHint string) (bool, error) {
@@ -58,6 +69,14 @@ func (k Keeper) mode2ReplacementProviderEligible(ctx sdk.Context, provider types
 }
 
 func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal, slot uint32, epochID uint64) (string, error) {
+	counts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return "", err
+	}
+	return k.selectMode2ReplacementProviderWithCounts(ctx, deal, slot, epochID, counts)
+}
+
+func (k Keeper) selectMode2ReplacementProviderWithCounts(ctx sdk.Context, deal types.Deal, slot uint32, epochID uint64, counts providerAssignmentCountSnapshot) (string, error) {
 	if len(deal.Mode2Slots) == 0 {
 		return "", fmt.Errorf("mode2 slot map is empty")
 	}
@@ -84,11 +103,11 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 
 	candidates := make([]string, 0, 8)
 	if err := k.Providers.Walk(ctx, nil, func(addr string, provider types.Provider) (stop bool, err error) {
-		eligible, err := k.mode2ReplacementProviderEligible(ctx, provider, deal.ServiceHint)
+		reason, err := k.mode2ReplacementProviderIneligibilityWithCounts(ctx, provider, deal.ServiceHint, counts)
 		if err != nil {
 			return false, err
 		}
-		if !eligible {
+		if reason != "" {
 			return false, nil
 		}
 		if _, blocked := exclude[strings.TrimSpace(provider.Address)]; blocked {
@@ -106,11 +125,11 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 	// one) so repairs remain possible without requiring extra providers.
 	if len(candidates) == 0 {
 		if err := k.Providers.Walk(ctx, nil, func(addr string, provider types.Provider) (stop bool, err error) {
-			eligible, err := k.mode2ReplacementProviderEligible(ctx, provider, deal.ServiceHint)
+			reason, err := k.mode2ReplacementProviderIneligibilityWithCounts(ctx, provider, deal.ServiceHint, counts)
 			if err != nil {
 				return false, err
 			}
-			if !eligible {
+			if reason != "" {
 				return false, nil
 			}
 			cand := strings.TrimSpace(provider.Address)
@@ -123,7 +142,7 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 			return "", err
 		}
 		if len(candidates) == 0 {
-			return "", fmt.Errorf("no replacement provider candidates available")
+			return "", errNoReplacementProviderCandidates
 		}
 	}
 
