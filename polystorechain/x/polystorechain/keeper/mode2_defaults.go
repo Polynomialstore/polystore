@@ -32,6 +32,24 @@ func providerMatchesBaseHint(provider types.Provider, baseHint string) bool {
 	}
 }
 
+func preferProvidersForServiceHint(candidates []types.Provider, baseHint string, count uint64) []types.Provider {
+	if normalizeServiceHintBase(baseHint) != "Hot" {
+		return candidates
+	}
+
+	edgeProviders := make([]types.Provider, 0, len(candidates))
+	for _, provider := range candidates {
+		if provider.Capabilities == "Edge" {
+			edgeProviders = append(edgeProviders, provider)
+		}
+	}
+	if uint64(len(edgeProviders)) >= count {
+		return edgeProviders
+	}
+
+	return candidates
+}
+
 func autoSelectMode2Profile(eligibleProviders uint64) (k uint64, m uint64, err error) {
 	if eligibleProviders < minMode2Slots {
 		return 0, 0, fmt.Errorf("not enough eligible providers for Mode 2 (need >= %d, got %d)", minMode2Slots, eligibleProviders)
@@ -60,6 +78,10 @@ func autoSelectMode2Profile(eligibleProviders uint64) (k uint64, m uint64, err e
 
 func (k Keeper) eligibleProviderCountForBaseHint(ctx sdk.Context, baseHint string) (uint64, error) {
 	serviceHint := normalizeServiceHintBase(baseHint)
+	assignmentCounts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return 0, err
+	}
 
 	var count uint64
 	if err := k.Providers.Walk(ctx, nil, func(_ string, provider types.Provider) (stop bool, err error) {
@@ -67,6 +89,13 @@ func (k Keeper) eligibleProviderCountForBaseHint(ctx sdk.Context, baseHint strin
 			return false, nil
 		}
 		if provider.Draining {
+			return false, nil
+		}
+		reason, err := k.providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx, provider, 1, assignmentCounts)
+		if err != nil {
+			return false, err
+		}
+		if reason != "" {
 			return false, nil
 		}
 		if providerMatchesBaseHint(provider, serviceHint) {

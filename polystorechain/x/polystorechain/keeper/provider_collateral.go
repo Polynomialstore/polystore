@@ -1,0 +1,490 @@
+package keeper
+
+import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"strings"
+
+	"cosmossdk.io/collections"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	"polystorechain/x/polystorechain/types"
+)
+
+type providerAssignmentCounts struct {
+	active  uint64
+	pending uint64
+}
+
+type providerAssignmentCountSnapshot map[string]providerAssignmentCounts
+
+func (s providerAssignmentCountSnapshot) countsFor(providerAddr string) (uint64, uint64) {
+	counts := s[strings.TrimSpace(providerAddr)]
+	return counts.active, counts.pending
+}
+
+func assignmentCountTotal(active uint64, pending uint64) uint64 {
+	total, overflow := addUint64(active, pending)
+	if overflow {
+		return ^uint64(0)
+	}
+	return total
+}
+
+func assignmentCountWithAdditional(active uint64, pending uint64, additional uint64) uint64 {
+	total := assignmentCountTotal(active, pending)
+	total, overflow := addUint64(total, additional)
+	if overflow {
+		return ^uint64(0)
+	}
+	return total
+}
+
+func (s providerAssignmentCountSnapshot) incrementPending(providerAddr string) {
+	providerAddr = strings.TrimSpace(providerAddr)
+	if providerAddr == "" {
+		return
+	}
+	counts := s[providerAddr]
+	if counts.pending < ^uint64(0) {
+		counts.pending++
+	}
+	s[providerAddr] = counts
+}
+
+func incrementAssignmentCount(count *uint64) {
+	if *count < ^uint64(0) {
+		*count++
+	}
+}
+
+func addAssignmentCount(count *uint64, delta uint64) {
+	if ^uint64(0)-*count < delta {
+		*count = ^uint64(0)
+		return
+	}
+	*count += delta
+}
+
+func addProviderAssignmentCounts(dst providerAssignmentCountSnapshot, providerAddr string, activeDelta uint64, pendingDelta uint64) {
+	providerAddr = strings.TrimSpace(providerAddr)
+	if providerAddr == "" {
+		return
+	}
+	counts := dst[providerAddr]
+	addAssignmentCount(&counts.active, activeDelta)
+	addAssignmentCount(&counts.pending, pendingDelta)
+	dst[providerAddr] = counts
+}
+
+func addProviderAssignmentSnapshot(dst providerAssignmentCountSnapshot, src providerAssignmentCountSnapshot) {
+	for providerAddr, counts := range src {
+		addProviderAssignmentCounts(dst, providerAddr, counts.active, counts.pending)
+	}
+}
+
+func addMode2DealAssignmentCounts(snapshot providerAssignmentCountSnapshot, deal types.Deal) uint64 {
+	var total uint64
+	for _, slot := range deal.Mode2Slots {
+		if slot == nil {
+			continue
+		}
+		switch slot.Status {
+		case types.SlotStatus_SLOT_STATUS_ACTIVE:
+			providerAddr := strings.TrimSpace(slot.Provider)
+			if providerAddr == "" {
+				continue
+			}
+			addProviderAssignmentCounts(snapshot, providerAddr, 1, 0)
+			incrementAssignmentCount(&total)
+		case types.SlotStatus_SLOT_STATUS_REPAIRING:
+			providerAddr := strings.TrimSpace(slot.PendingProvider)
+			if providerAddr == "" {
+				continue
+			}
+			addProviderAssignmentCounts(snapshot, providerAddr, 0, 1)
+			incrementAssignmentCount(&total)
+		}
+	}
+	return total
+}
+
+func mode2DealAssignmentLiabilityCount(deal types.Deal) uint64 {
+	return addMode2DealAssignmentCounts(make(providerAssignmentCountSnapshot), deal)
+}
+
+func (k Keeper) providerMode2DealAssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
+	height := uint64(ctx.BlockHeight())
+	snapshot := make(providerAssignmentCountSnapshot)
+	err := k.Deals.Walk(ctx, nil, func(_ uint64, deal types.Deal) (bool, error) {
+		if height < deal.StartBlock || height >= deal.EndBlock {
+			return false, nil
+		}
+		if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 {
+			return false, nil
+		}
+		addMode2DealAssignmentCounts(snapshot, deal)
+		return false, nil
+	})
+	return snapshot, err
+}
+
+func (k Keeper) providerAssignmentLockCountSnapshotForDeal(ctx sdk.Context, dealID uint64) (providerAssignmentCountSnapshot, uint64, error) {
+	snapshot := make(providerAssignmentCountSnapshot)
+	var total uint64
+	err := k.AssignmentCollateralLocksByDeal.Walk(ctx, collections.NewPrefixedPairRange[uint64, collections.Pair[uint32, string]](dealID), func(key assignmentCollateralLockByDealKey, _ bool) (bool, error) {
+		lock, err := k.assignmentCollateralLockFromDealIndex(ctx, key)
+		if err != nil {
+			if errors.Is(err, collections.ErrNotFound) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		providerAddr := strings.TrimSpace(lock.Provider)
+		if providerAddr == "" {
+			providerAddr = strings.TrimSpace(key.K2().K2())
+		}
+		if providerAddr == "" {
+			return false, nil
+		}
+
+		switch lock.Role {
+		case types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_ACTIVE:
+			addProviderAssignmentCounts(snapshot, providerAddr, 1, 0)
+		case types.AssignmentCollateralLockRole_ASSIGNMENT_COLLATERAL_LOCK_ROLE_PENDING_REPAIR:
+			addProviderAssignmentCounts(snapshot, providerAddr, 0, 1)
+		default:
+			return false, nil
+		}
+		incrementAssignmentCount(&total)
+		return false, nil
+	})
+	return snapshot, total, err
+}
+
+func (k Keeper) providerMode2LockAwareAssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
+	height := uint64(ctx.BlockHeight())
+	snapshot := make(providerAssignmentCountSnapshot)
+	err := k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (bool, error) {
+		if height < deal.StartBlock || height >= deal.EndBlock {
+			return false, nil
+		}
+		if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 {
+			return false, nil
+		}
+
+		expected := mode2DealAssignmentLiabilityCount(deal)
+		if expected == 0 {
+			return false, nil
+		}
+		lockCounts, lockTotal, err := k.providerAssignmentLockCountSnapshotForDeal(ctx, dealID)
+		if err != nil {
+			return false, err
+		}
+		if lockTotal == expected {
+			addProviderAssignmentSnapshot(snapshot, lockCounts)
+			return false, nil
+		}
+		addMode2DealAssignmentCounts(snapshot, deal)
+		return false, nil
+	})
+	return snapshot, err
+}
+
+func (k Keeper) assignmentCollateralLockLedgerEnabled(ctx sdk.Context) (bool, error) {
+	perSlot, err := normalizeAssignmentCollateralPerSlot(k.GetParams(ctx))
+	if err != nil {
+		return false, err
+	}
+	return perSlot.IsPositive(), nil
+}
+
+func (k Keeper) providerMode2AssignmentCountSnapshot(ctx sdk.Context) (providerAssignmentCountSnapshot, error) {
+	useLocks, err := k.assignmentCollateralLockLedgerEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if useLocks {
+		return k.providerMode2LockAwareAssignmentCountSnapshot(ctx)
+	}
+
+	return k.providerMode2DealAssignmentCountSnapshot(ctx)
+}
+
+func (k Keeper) providerMode2AssignmentCounts(ctx sdk.Context, providerAddr string) (active uint64, pending uint64, err error) {
+	providerAddr = strings.TrimSpace(providerAddr)
+	if providerAddr == "" {
+		return 0, 0, nil
+	}
+
+	snapshot, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	active, pending = snapshot.countsFor(providerAddr)
+	return active, pending, nil
+}
+
+func (k Keeper) providerAssignmentCollateralIneligibility(ctx sdk.Context, provider types.Provider, additionalAssignments uint64) (string, error) {
+	counts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return "", err
+	}
+	return k.providerAssignmentCollateralIneligibilityWithCounts(ctx, provider, additionalAssignments, counts), nil
+}
+
+func (k Keeper) providerAssignmentCollateralIneligibilityWithCounts(ctx sdk.Context, provider types.Provider, additionalAssignments uint64, counts providerAssignmentCountSnapshot) string {
+	active, pending := counts.countsFor(provider.Address)
+	assignments := assignmentCountWithAdditional(active, pending, additionalAssignments)
+	return providerBondPlacementIneligibilityForAssignments(provider, k.GetParams(ctx), assignments)
+}
+
+func (k Keeper) affordableActiveAssignments(ctx sdk.Context, provider types.Provider) (uint64, string, error) {
+	affordable, reason, err := providerBondAffordableAssignments(provider, k.GetParams(ctx))
+	if err != nil {
+		return 0, "", err
+	}
+	return affordable, reason, nil
+}
+
+func (k Keeper) deriveProviderCollateralSummary(ctx sdk.Context, provider types.Provider, counts providerAssignmentCountSnapshot) (types.ProviderCollateralSummary, error) {
+	providerAddr := strings.TrimSpace(provider.Address)
+	params := k.GetParams(ctx)
+
+	minBond, err := normalizeMinProviderBond(params)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+	perSlot, err := normalizeAssignmentCollateralPerSlot(params)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+	active, pending := counts.countsFor(providerAddr)
+	total := assignmentCountTotal(active, pending)
+	required, err := providerBondRequirementForAssignments(params, total)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+	affordable, affordableReason, err := providerBondAffordableAssignments(provider, params)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+
+	bond := normalizeCoinAmount(provider.Bond)
+	if strings.TrimSpace(bond.Denom) == "" {
+		bond.Denom = minBond.Denom
+	}
+
+	summary := types.ProviderCollateralSummary{
+		Provider:                    providerAddr,
+		ActiveAssignments:           active,
+		PendingAssignments:          pending,
+		TotalAssignments:            total,
+		Bond:                        bond,
+		MinProviderBond:             minBond,
+		AssignmentCollateralPerSlot: perSlot,
+		RequiredCollateral:          required,
+		AffordableAssignments:       affordable,
+	}
+
+	if affordable == ^uint64(0) {
+		summary.UnlimitedAssignments = true
+	} else if affordable >= total {
+		summary.AssignmentHeadroom = affordable - total
+	} else {
+		summary.OverassignedAssignments = total - affordable
+	}
+
+	reason, err := k.providerHealthPlacementIneligibilityForAssignmentsWithCounts(ctx, provider, 1, counts)
+	if err != nil {
+		return types.ProviderCollateralSummary{}, err
+	}
+	if reason != "" {
+		summary.EligibleForNewAssignment = false
+		summary.IneligibilityReason = reason
+	} else {
+		summary.EligibleForNewAssignment = true
+	}
+	if summary.IneligibilityReason == "" && affordableReason != "" {
+		summary.IneligibilityReason = affordableReason
+	}
+
+	return summary, nil
+}
+
+func (k Keeper) scheduleUnderbondedRepairs(ctx sdk.Context, epochID uint64) error {
+	params := k.GetParams(ctx)
+	min, err := normalizeMinProviderBond(params)
+	if err != nil {
+		return err
+	}
+	perSlot, err := normalizeAssignmentCollateralPerSlot(params)
+	if err != nil {
+		return err
+	}
+	if !min.Amount.IsPositive() && !perSlot.Amount.IsPositive() {
+		return nil
+	}
+
+	height := uint64(ctx.BlockHeight())
+	scheduledByProvider := make(map[string]uint64)
+	assignmentCounts, err := k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+
+	return k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (bool, error) {
+		if height < deal.StartBlock || height >= deal.EndBlock {
+			return false, nil
+		}
+		if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 {
+			return false, nil
+		}
+
+		dealChanged := false
+		for i := 0; i < len(deal.Mode2Slots); i++ {
+			entry := deal.Mode2Slots[i]
+			if entry == nil || entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+				continue
+			}
+			if strings.TrimSpace(entry.PendingProvider) != "" {
+				continue
+			}
+
+			providerAddr := strings.TrimSpace(entry.Provider)
+			if providerAddr == "" {
+				continue
+			}
+			provider, err := k.Providers.Get(ctx, providerAddr)
+			if err != nil {
+				return true, err
+			}
+			active, _ := assignmentCounts.countsFor(providerAddr)
+			if active == 0 {
+				continue
+			}
+			affordable, reason, err := k.affordableActiveAssignments(ctx, provider)
+			if err != nil {
+				return true, err
+			}
+			if reason == "" && active <= affordable {
+				continue
+			}
+			excess := active
+			if reason == "" && affordable < active {
+				excess = active - affordable
+			}
+			if scheduledByProvider[providerAddr] >= excess {
+				continue
+			}
+
+			slot := uint32(i)
+			coolingDown, attemptState, err := k.repairAttemptCooldownActive(ctx, dealID, slot, epochID)
+			if err != nil {
+				return true, err
+			}
+			if coolingDown {
+				ctx.Logger().Info(
+					"underbonded repair skipped during cooldown",
+					"deal", dealID,
+					"slot", slot,
+					"provider", entry.Provider,
+					"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
+				)
+				continue
+			}
+
+			pending, err := k.selectMode2ReplacementProviderWithCounts(ctx, deal, slot, epochID, assignmentCounts)
+			if err != nil {
+				ctx.Logger().Error(
+					"failed to select replacement provider (underbonded)",
+					"deal", dealID,
+					"slot", slot,
+					"provider", entry.Provider,
+					"error", err,
+				)
+				if errEvidence := k.recordRepairBackoff(ctx, dealID, entry.Provider, slot, epochID, err); errEvidence != nil {
+					ctx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
+				}
+				continue
+			}
+
+			entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+			entry.PendingProvider = strings.TrimSpace(pending)
+			assignmentCounts.incrementPending(entry.PendingProvider)
+			entry.StatusSinceHeight = ctx.BlockHeight()
+			entry.RepairTargetGen = deal.CurrentGen
+			if err := k.clearMode2RepairReadiness(ctx, dealID, slot); err != nil {
+				return true, err
+			}
+			deal.Mode2Slots[i] = entry
+			dealChanged = true
+			scheduledByProvider[providerAddr]++
+
+			extra := make([]byte, 0, 4+len(providerAddr))
+			extra = binary.BigEndian.AppendUint32(extra, slot)
+			extra = append(extra, []byte(providerAddr)...)
+			eid := deriveEvidenceID("underbonded_repair_started", dealID, epochID, extra)
+			if err := k.recordEvidenceSummary(ctx, dealID, providerAddr, "underbonded_repair_started", eid[:], "chain", false); err != nil {
+				ctx.Logger().Error("failed to record evidence summary", "error", err)
+			}
+			summary := fmt.Sprintf("provider collateral headroom insufficient; scheduled replacement %s", entry.PendingProvider)
+			if reason != "" {
+				summary = reason + "; " + summary
+			}
+			caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+				DealID:             dealID,
+				Slot:               slot,
+				Provider:           providerAddr,
+				Reporter:           "chain",
+				Reason:             "underbonded_repair_started",
+				Class:              types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+				Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+				Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_CONVICTED,
+				EvidenceID:         eid[:],
+				EpochID:            epochID,
+				Summary:            summary,
+				ConsequenceCeiling: "assignment collateral repair; no additional slash by default",
+			})
+			if err != nil {
+				ctx.Logger().Error("failed to record structured underbonded repair evidence", "error", err)
+			} else if err := k.setSlotHealthState(ctx, slotHealthUpdate{
+				DealID:          dealID,
+				Slot:            slot,
+				Provider:        providerAddr,
+				Status:          types.SlotHealthStatus_SLOT_HEALTH_STATUS_REPAIRING,
+				Reason:          "underbonded_repair_started",
+				Class:           types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+				Severity:        types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+				EpochID:         epochID,
+				EvidenceCaseID:  caseID,
+				PendingProvider: entry.PendingProvider,
+				RepairTargetGen: entry.RepairTargetGen,
+			}); err != nil {
+				ctx.Logger().Error("failed to update underbonded repair slot health", "error", err)
+			} else if err := k.recordRepairAttemptStarted(ctx, dealID, slot, providerAddr, entry.PendingProvider, epochID, "underbonded_repair_started", entry.RepairTargetGen, caseID); err != nil {
+				ctx.Logger().Error("failed to record underbonded repair attempt state", "error", err)
+			}
+
+			ctx.EventManager().EmitEvent(
+				sdk.NewEvent(
+					"underbonded_repair_started",
+					sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", dealID)),
+					sdk.NewAttribute("slot", fmt.Sprintf("%d", slot)),
+					sdk.NewAttribute(types.AttributeKeyProvider, providerAddr),
+					sdk.NewAttribute("pending_provider", entry.PendingProvider),
+					sdk.NewAttribute("epoch_id", fmt.Sprintf("%d", epochID)),
+				),
+			)
+		}
+
+		if dealChanged {
+			if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
+				return true, err
+			}
+		}
+		return false, nil
+	})
+}
