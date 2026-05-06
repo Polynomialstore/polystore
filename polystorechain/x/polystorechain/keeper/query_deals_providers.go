@@ -119,7 +119,11 @@ func (k queryServer) GetProviderHealth(goCtx context.Context, req *types.QueryGe
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	health, err := k.k.deriveProviderHealthState(ctx, address)
+	counts, err := k.k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	health, err := k.k.deriveProviderHealthStateWithCounts(ctx, address, counts)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return nil, status.Error(codes.NotFound, "provider not found")
@@ -136,12 +140,16 @@ func (k queryServer) ListProviderHealth(goCtx context.Context, req *types.QueryL
 	}
 
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	counts, err := k.k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	health, pageRes, err := sdkquery.CollectionPaginate(
 		goCtx,
 		k.k.Providers,
 		req.Pagination,
 		func(address string, _ types.Provider) (types.ProviderHealthState, error) {
-			return k.k.deriveProviderHealthState(ctx, address)
+			return k.k.deriveProviderHealthStateWithCounts(ctx, address, counts)
 		},
 	)
 	if err != nil {
@@ -149,6 +157,195 @@ func (k queryServer) ListProviderHealth(goCtx context.Context, req *types.QueryL
 	}
 
 	return &types.QueryListProviderHealthResponse{Health: health, Pagination: pageRes}, nil
+}
+
+func (k queryServer) GetProviderCollateral(goCtx context.Context, req *types.QueryGetProviderCollateralRequest) (*types.QueryGetProviderCollateralResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	address, err := canonicalAddress(req.Address, "address")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	provider, err := k.k.Providers.Get(ctx, address)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "provider not found")
+		}
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+	counts, err := k.k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	collateral, err := k.k.deriveProviderCollateralSummary(ctx, provider, counts)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryGetProviderCollateralResponse{Collateral: collateral}, nil
+}
+
+func (k queryServer) ListProviderCollateral(goCtx context.Context, req *types.QueryListProviderCollateralRequest) (*types.QueryListProviderCollateralResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	counts, err := k.k.providerMode2AssignmentCountSnapshot(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	collateral, pageRes, err := sdkquery.CollectionPaginate(
+		goCtx,
+		k.k.Providers,
+		req.Pagination,
+		func(address string, provider types.Provider) (types.ProviderCollateralSummary, error) {
+			if provider.Address == "" {
+				provider.Address = address
+			}
+			return k.k.deriveProviderCollateralSummary(ctx, provider, counts)
+		},
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListProviderCollateralResponse{Collateral: collateral, Pagination: pageRes}, nil
+}
+
+func (k queryServer) GetAssignmentCollateralLock(goCtx context.Context, req *types.QueryGetAssignmentCollateralLockRequest) (*types.QueryGetAssignmentCollateralLockResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	provider, err := canonicalAddress(req.Provider, "provider")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	lock, err := k.k.AssignmentCollateralLocks.Get(ctx, makeAssignmentCollateralLockKey(provider, req.DealId, req.Slot))
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "assignment collateral lock not found")
+		}
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &types.QueryGetAssignmentCollateralLockResponse{Lock: lock}, nil
+}
+
+func (k queryServer) ListAssignmentCollateralLocksByProvider(goCtx context.Context, req *types.QueryListAssignmentCollateralLocksByProviderRequest) (*types.QueryListAssignmentCollateralLocksByProviderResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	provider, err := canonicalAddress(req.Provider, "provider")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	locks, pageRes, err := sdkquery.CollectionPaginate(
+		goCtx,
+		k.k.AssignmentCollateralLocks,
+		req.Pagination,
+		func(_ assignmentCollateralLockKey, lock types.AssignmentCollateralLock) (types.AssignmentCollateralLock, error) {
+			return lock, nil
+		},
+		sdkquery.WithCollectionPaginationPairPrefix[string, collections.Pair[uint64, uint32]](provider),
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListAssignmentCollateralLocksByProviderResponse{Locks: locks, Pagination: pageRes}, nil
+}
+
+func (k queryServer) ListAssignmentCollateralLocksByDeal(goCtx context.Context, req *types.QueryListAssignmentCollateralLocksByDealRequest) (*types.QueryListAssignmentCollateralLocksByDealResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	locks, pageRes, err := sdkquery.CollectionFilteredPaginate(
+		goCtx,
+		k.k.AssignmentCollateralLocksByDeal,
+		req.Pagination,
+		func(key assignmentCollateralLockByDealKey, _ bool) (bool, error) {
+			_, err := k.k.assignmentCollateralLockFromDealIndex(ctx, key)
+			if errors.Is(err, collections.ErrNotFound) {
+				return false, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		},
+		func(key assignmentCollateralLockByDealKey, _ bool) (types.AssignmentCollateralLock, error) {
+			return k.k.assignmentCollateralLockFromDealIndex(ctx, key)
+		},
+		sdkquery.WithCollectionPaginationPairPrefix[uint64, collections.Pair[uint32, string]](req.DealId),
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListAssignmentCollateralLocksByDealResponse{Locks: locks, Pagination: pageRes}, nil
+}
+
+func (k queryServer) GetProviderBondUnbonding(goCtx context.Context, req *types.QueryGetProviderBondUnbondingRequest) (*types.QueryGetProviderBondUnbondingResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	unbonding, err := k.k.ProviderBondUnbondings.Get(ctx, req.Id)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "provider bond unbonding not found")
+		}
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &types.QueryGetProviderBondUnbondingResponse{Unbonding: unbonding}, nil
+}
+
+func (k queryServer) ListProviderBondUnbondingsByProvider(goCtx context.Context, req *types.QueryListProviderBondUnbondingsByProviderRequest) (*types.QueryListProviderBondUnbondingsByProviderResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	provider, err := canonicalAddress(req.Provider, "provider")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	unbondings, pageRes, err := sdkquery.CollectionFilteredPaginate(
+		goCtx,
+		k.k.ProviderBondUnbondingsByProvider,
+		req.Pagination,
+		func(key collections.Pair[string, uint64], _ bool) (bool, error) {
+			_, err := k.k.ProviderBondUnbondings.Get(ctx, key.K2())
+			if errors.Is(err, collections.ErrNotFound) {
+				return false, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		},
+		func(key collections.Pair[string, uint64], _ bool) (types.ProviderBondUnbonding, error) {
+			return k.k.ProviderBondUnbondings.Get(ctx, key.K2())
+		},
+		sdkquery.WithCollectionPaginationPairPrefix[string, uint64](provider),
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &types.QueryListProviderBondUnbondingsByProviderResponse{Unbondings: unbondings, Pagination: pageRes}, nil
 }
 
 func (k queryServer) GetProviderPairing(goCtx context.Context, req *types.QueryGetProviderPairingRequest) (*types.QueryGetProviderPairingResponse, error) {

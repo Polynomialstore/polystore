@@ -253,7 +253,7 @@ func (k msgServer) BumpDealSetupSlot(goCtx context.Context, msg *types.MsgBumpDe
 		deal.Providers[slotIdx] = newProvider
 	}
 
-	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 

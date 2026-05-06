@@ -289,7 +289,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 		deal.Mode2Slots = slots
 	}
 
-	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 		return nil, fmt.Errorf("failed to set deal: %w", err)
 	}
 
@@ -746,7 +746,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		deal.Mode2Slots = slots
 	}
 
-	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 		return nil, fmt.Errorf("failed to set deal: %w", err)
 	}
 
@@ -875,7 +875,7 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	deal.TotalMdus = msg.TotalMdus
 	deal.WitnessMdus = msg.WitnessMdus
 
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 
@@ -1065,7 +1065,7 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	deal.TotalMdus = intent.TotalMdus
 	deal.WitnessMdus = intent.WitnessMdus
 
-	if err := k.Deals.Set(ctx, intent.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, intent.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 
@@ -1756,7 +1756,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 	}
 
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal state: %w", err)
 	}
 
@@ -1913,7 +1913,7 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 		}
 		deal.Mode2Slots[slot] = entry
 
-		if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+		if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 			ctx.Logger().Error("failed to persist deal after health eviction", "deal", dealID, "error", err)
 			return
 		}
@@ -2005,7 +2005,7 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 	deal.EscrowBalance = deal.EscrowBalance.Sub(elasticityCost)
 	deal.SpendWindowSpent = newSpent
 
-	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal with new stripe: %w", err)
 	}
 	if err := k.VirtualStripes.Set(ctx, collections.Join(deal.Id, newStripeIndex), types.VirtualStripe{
@@ -2062,7 +2062,7 @@ func (k msgServer) AddCredit(goCtx context.Context, msg *types.MsgAddCredit) (*t
 	}
 
 	deal.EscrowBalance = deal.EscrowBalance.Add(amount)
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, err
 	}
 
@@ -2134,7 +2134,7 @@ func (k msgServer) ExtendDeal(goCtx context.Context, msg *types.MsgExtendDeal) (
 
 	deal.EndBlock = newEnd
 	deal.PricingAnchorBlock = h
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, err
 	}
 
@@ -2351,7 +2351,7 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 			}
 		}
 		deal.EscrowBalance = newEscrow
-		if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+		if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 			return nil, fmt.Errorf("failed to update deal escrow: %w", err)
 		}
 	}
@@ -2479,7 +2479,7 @@ func (k msgServer) UpdateDealRetrievalPolicy(goCtx context.Context, msg *types.M
 	}
 
 	deal.RetrievalPolicy = p
-	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
+	if err := k.setDealWithAssignmentCollateralLocks(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
 	}
 	return &types.MsgUpdateDealRetrievalPolicyResponse{Success: true}, nil
@@ -3290,7 +3290,7 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 				return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
 			}
 			deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
-			if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
+			if err := k.setDealWithAssignmentCollateralLocks(ctx, session.DealId, deal); err != nil {
 				return nil, fmt.Errorf("failed to refund locked retrieval fees: %w", err)
 			}
 			session.LockedFee = math.ZeroInt()
