@@ -39,6 +39,23 @@ type providerDaemonStatusDetail struct {
 	PendingOperator    string   `json:"pending_operator,omitempty"`
 	RegistrationStatus string   `json:"registration_status,omitempty"`
 	OnchainStatus      string   `json:"onchain_status,omitempty"`
+	HealthStatus       string   `json:"health_status,omitempty"`
+	HealthReason       string   `json:"health_reason,omitempty"`
+	HealthSeverity     string   `json:"health_severity,omitempty"`
+	HealthEvidenceCase string   `json:"health_evidence_case,omitempty"`
+	CollateralBond     string   `json:"collateral_bond,omitempty"`
+	CollateralMinBond  string   `json:"collateral_min_bond,omitempty"`
+	CollateralPerSlot  string   `json:"collateral_per_slot,omitempty"`
+	CollateralRequired string   `json:"collateral_required,omitempty"`
+	ActiveAssignments  string   `json:"active_assignments,omitempty"`
+	PendingAssignments string   `json:"pending_assignments,omitempty"`
+	TotalAssignments   string   `json:"total_assignments,omitempty"`
+	AffordableSlots    string   `json:"affordable_slots,omitempty"`
+	AssignmentHeadroom string   `json:"assignment_headroom,omitempty"`
+	OverassignedSlots  string   `json:"overassigned_slots,omitempty"`
+	UnlimitedSlots     bool     `json:"unlimited_slots"`
+	CanAcceptNewSlot   bool     `json:"can_accept_new_slot"`
+	SlotBlockReason    string   `json:"slot_block_reason,omitempty"`
 	Draining           bool     `json:"draining"`
 	Endpoints          []string `json:"endpoints,omitempty"`
 	LocalBase          string   `json:"local_base,omitempty"`
@@ -64,6 +81,40 @@ type lcdProviderStatusResponse struct {
 		Endpoints    []string `json:"endpoints"`
 		Draining     bool     `json:"draining"`
 	} `json:"provider"`
+}
+
+type lcdProviderHealthResponse struct {
+	Health struct {
+		Provider           string          `json:"provider"`
+		LifecycleStatus    json.RawMessage `json:"lifecycle_status"`
+		Reason             string          `json:"reason"`
+		Severity           json.RawMessage `json:"severity"`
+		LastEvidenceCaseID string          `json:"last_evidence_case_id"`
+	} `json:"health"`
+}
+
+type lcdCoin struct {
+	Denom  string `json:"denom"`
+	Amount string `json:"amount"`
+}
+
+type lcdProviderCollateralResponse struct {
+	Collateral struct {
+		Provider                    string  `json:"provider"`
+		ActiveAssignments           string  `json:"active_assignments"`
+		PendingAssignments          string  `json:"pending_assignments"`
+		TotalAssignments            string  `json:"total_assignments"`
+		Bond                        lcdCoin `json:"bond"`
+		MinProviderBond             lcdCoin `json:"min_provider_bond"`
+		AssignmentCollateralPerSlot lcdCoin `json:"assignment_collateral_per_slot"`
+		RequiredCollateral          lcdCoin `json:"required_collateral"`
+		AffordableAssignments       string  `json:"affordable_assignments"`
+		UnlimitedAssignments        bool    `json:"unlimited_assignments"`
+		AssignmentHeadroom          string  `json:"assignment_headroom"`
+		OverassignedAssignments     string  `json:"overassigned_assignments"`
+		EligibleForNewAssignment    bool    `json:"eligible_for_new_assignment"`
+		IneligibilityReason         string  `json:"ineligibility_reason"`
+	} `json:"collateral"`
 }
 
 type lcdProviderPairingResponse struct {
@@ -280,6 +331,31 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 		detail.RegistrationStatus = "unknown"
 	}
 
+	health, healthStatus, healthErr := fetchProviderHealthFromLCD(ctx, detail.Address)
+	if healthErr == nil && health != nil {
+		detail.HealthStatus = rawStatusLabel(health.Health.LifecycleStatus)
+		detail.HealthReason = strings.TrimSpace(health.Health.Reason)
+		detail.HealthSeverity = rawStatusLabel(health.Health.Severity)
+		detail.HealthEvidenceCase = strings.TrimSpace(health.Health.LastEvidenceCaseID)
+	}
+
+	collateral, collateralStatus, collateralErr := fetchProviderCollateralFromLCD(ctx, detail.Address)
+	if collateralErr == nil && collateral != nil {
+		detail.CollateralBond = formatStatusCoin(collateral.Collateral.Bond)
+		detail.CollateralMinBond = formatStatusCoin(collateral.Collateral.MinProviderBond)
+		detail.CollateralPerSlot = formatStatusCoin(collateral.Collateral.AssignmentCollateralPerSlot)
+		detail.CollateralRequired = formatStatusCoin(collateral.Collateral.RequiredCollateral)
+		detail.ActiveAssignments = strings.TrimSpace(collateral.Collateral.ActiveAssignments)
+		detail.PendingAssignments = strings.TrimSpace(collateral.Collateral.PendingAssignments)
+		detail.TotalAssignments = strings.TrimSpace(collateral.Collateral.TotalAssignments)
+		detail.AffordableSlots = strings.TrimSpace(collateral.Collateral.AffordableAssignments)
+		detail.AssignmentHeadroom = strings.TrimSpace(collateral.Collateral.AssignmentHeadroom)
+		detail.OverassignedSlots = strings.TrimSpace(collateral.Collateral.OverassignedAssignments)
+		detail.UnlimitedSlots = collateral.Collateral.UnlimitedAssignments
+		detail.CanAcceptNewSlot = collateral.Collateral.EligibleForNewAssignment
+		detail.SlotBlockReason = strings.TrimSpace(collateral.Collateral.IneligibilityReason)
+	}
+
 	if publicBase := firstHTTPBaseFromEndpoints(detail.Endpoints); publicBase != "" {
 		detail.PublicBase = publicBase
 		detail.PublicHealthURL = strings.TrimRight(publicBase, "/") + "/health"
@@ -313,6 +389,12 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 			issues = append(issues, "provider registration could not be queried from the LCD")
 		}
 	}
+	if healthStatus == "unknown" && healthErr != nil && lcdReachable {
+		issues = append(issues, "provider health could not be queried from the LCD")
+	}
+	if collateralStatus == "unknown" && collateralErr != nil && lcdReachable {
+		issues = append(issues, "provider collateral could not be queried from the LCD")
+	}
 	if len(detail.Endpoints) == 0 {
 		issues = append(issues, "provider endpoints are not configured")
 	}
@@ -321,6 +403,21 @@ func buildProviderDaemonStatus(ctx context.Context, listenAddr string, lcdReacha
 	}
 
 	return detail, dedupeIssues(issues)
+}
+
+func formatStatusCoin(coin lcdCoin) string {
+	amount := strings.TrimSpace(coin.Amount)
+	denom := strings.TrimSpace(coin.Denom)
+	switch {
+	case amount == "" && denom == "":
+		return ""
+	case amount == "":
+		return denom
+	case denom == "":
+		return amount
+	default:
+		return amount + denom
+	}
 }
 
 func statusUptimeSeconds() uint64 {
@@ -368,6 +465,18 @@ func firstHTTPBaseFromEndpoints(endpoints []string) string {
 	return ""
 }
 
+func rawStatusLabel(raw json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return ""
+	}
+	var label string
+	if err := json.Unmarshal(raw, &label); err == nil {
+		return strings.TrimSpace(label)
+	}
+	return trimmed
+}
+
 func fetchProviderStatusFromLCD(ctx context.Context, providerAddr string) (*lcdProviderStatusResponse, string, error) {
 	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
 	if base == "" || strings.TrimSpace(providerAddr) == "" {
@@ -381,6 +490,42 @@ func fetchProviderStatusFromLCD(ctx context.Context, providerAddr string) (*lcdP
 		return &payload, "registered", nil
 	case http.StatusNotFound:
 		return nil, "unregistered", nil
+	default:
+		return nil, "unknown", err
+	}
+}
+
+func fetchProviderHealthFromLCD(ctx context.Context, providerAddr string) (*lcdProviderHealthResponse, string, error) {
+	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
+	if base == "" || strings.TrimSpace(providerAddr) == "" {
+		return nil, "unknown", nil
+	}
+
+	var payload lcdProviderHealthResponse
+	statusCode, err := fetchStatusJSON(ctx, base+"/polystorechain/polystorechain/v1/providers/"+providerAddr+"/health", &payload)
+	switch statusCode {
+	case http.StatusOK:
+		return &payload, "found", nil
+	case http.StatusNotFound:
+		return nil, "not_found", nil
+	default:
+		return nil, "unknown", err
+	}
+}
+
+func fetchProviderCollateralFromLCD(ctx context.Context, providerAddr string) (*lcdProviderCollateralResponse, string, error) {
+	base := strings.TrimRight(strings.TrimSpace(lcdBase), "/")
+	if base == "" || strings.TrimSpace(providerAddr) == "" {
+		return nil, "unknown", nil
+	}
+
+	var payload lcdProviderCollateralResponse
+	statusCode, err := fetchStatusJSON(ctx, base+"/polystorechain/polystorechain/v1/providers/"+providerAddr+"/collateral", &payload)
+	switch statusCode {
+	case http.StatusOK:
+		return &payload, "found", nil
+	case http.StatusNotFound:
+		return nil, "not_found", nil
 	default:
 		return nil, "unknown", err
 	}
