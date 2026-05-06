@@ -119,8 +119,9 @@ devnet policing profile. It is calibrated from
 | `provider_initial_bond = 2.0` | `200stake` registration self-bond | Recommended local/testnet provider bond headroom. |
 | `provider_min_bond = 1.5` | `min_provider_bond = 150stake` | Minimum bond before placement/reward eligibility. |
 | `provider_bond_per_slot = 0.05` | `assignment_collateral_per_slot = 5stake` | Extra bond reserved per active/pending assignment. |
-| `slash_hard_fault = 1.0` against `2.0` initial bond | `hard_fault_bond_slash_bps = 5000` | 50% slashable-bond burn for hard faults. |
+| `slash_hard_fault_bps = 5000` against remaining provider bond | `hard_fault_bond_slash_bps = 5000` | 50% slashable-bond burn for hard faults. |
 | `jail_epochs = 3` and `epoch_len_blocks = 100` | `provider_bond_unbonding_blocks = 300` | Withdrawal queue spans the hard-fault jail window. |
+| `provider_bond_opportunity_cost_bps_per_epoch` | simulator-only carry cost | Models locked-collateral opportunity cost in provider P&L and churn pressure before translating to chain params. |
 
 `scripts/run_devnet_alpha_multi_sp.sh` applies this profile by default for
 multi-provider devnets and registers local providers with `200stake` self-bond.
@@ -146,6 +147,9 @@ are supported in scenario files:
 - `provider_online_probability_min` / `provider_online_probability_max`
 - `provider_repair_probability_min` / `provider_repair_probability_max`
 - `provider_storage_cost_jitter_bps` / `provider_bandwidth_cost_jitter_bps`
+- `provider_bond_opportunity_cost_bps_per_epoch`
+- `slash_hard_fault_bps`
+- `slash_corrupt_retrieval_bps` / `slash_invalid_synthetic_proof_bps`
 - `provider_cost_shocks`
 - `provider_regions`
 - `regional_outages`
