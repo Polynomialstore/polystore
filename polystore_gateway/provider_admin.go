@@ -380,6 +380,10 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 	case "registered":
 		args = append(args, "update-provider-endpoints", "--endpoint", endpoint)
 	case "unregistered":
+		registrationBond := strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_REGISTRATION_BOND"))
+		if registrationBond == "" {
+			registrationBond = strings.TrimSpace(os.Getenv("POLYSTORE_PROVIDER_BOND"))
+		}
 		args = append(
 			args,
 			"register-provider",
@@ -388,6 +392,9 @@ func providerAdminRegisterOrUpdateEndpoint(ctx context.Context, endpoint string)
 			"--endpoint",
 			endpoint,
 		)
+		if registrationBond != "" {
+			args = append(args, "--bond", registrationBond)
+		}
 	default:
 		return "", fmt.Errorf("unsupported provider registration state %q", registrationStatus)
 	}

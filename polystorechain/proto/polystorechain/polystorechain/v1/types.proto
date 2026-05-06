@@ -2,6 +2,7 @@ syntax = "proto3";
 package polystorechain.polystorechain.v1;
 
 import "gogoproto/gogo.proto";
+import "cosmos/base/v1beta1/coin.proto";
 import "cosmos_proto/cosmos.proto";
 
 option go_package = "polystorechain/x/polystorechain/types";
@@ -16,6 +17,282 @@ enum SlotStatus {
   SLOT_STATUS_UNSPECIFIED = 0;
   SLOT_STATUS_ACTIVE = 1;
   SLOT_STATUS_REPAIRING = 2;
+}
+
+// EvidenceClass describes the strongest evidence quality currently attached to
+// a policing case. It is intentionally coarser than a reason code so policy can
+// set consequence ceilings before economics are enabled.
+enum EvidenceClass {
+  // EVIDENCE_CLASS_UNSPECIFIED is the default unset value.
+  EVIDENCE_CLASS_UNSPECIFIED = 0;
+  // EVIDENCE_CLASS_CRYPTOGRAPHIC_HARD is deterministic proof or fraud evidence.
+  EVIDENCE_CLASS_CRYPTOGRAPHIC_HARD = 1;
+  // EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT is chain-observed liveness evidence.
+  EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT = 2;
+  // EVIDENCE_CLASS_THRESHOLD is repeated evidence that crossed conviction policy.
+  EVIDENCE_CLASS_THRESHOLD = 3;
+  // EVIDENCE_CLASS_CLIENT_OBSERVED is non-consensus client or gateway evidence.
+  EVIDENCE_CLASS_CLIENT_OBSERVED = 4;
+  // EVIDENCE_CLASS_STATISTICAL is aggregate behavior evidence.
+  EVIDENCE_CLASS_STATISTICAL = 5;
+  // EVIDENCE_CLASS_OPERATIONAL is maintenance or coordination evidence.
+  EVIDENCE_CLASS_OPERATIONAL = 6;
+  // EVIDENCE_CLASS_POSITIVE_READINESS is repair/readiness progress evidence.
+  EVIDENCE_CLASS_POSITIVE_READINESS = 7;
+}
+
+// EvidenceSeverity is the live policy interpretation of an evidence case.
+enum EvidenceSeverity {
+  // EVIDENCE_SEVERITY_UNSPECIFIED is the default unset value.
+  EVIDENCE_SEVERITY_UNSPECIFIED = 0;
+  // EVIDENCE_SEVERITY_INFO is informational and non-punitive.
+  EVIDENCE_SEVERITY_INFO = 1;
+  // EVIDENCE_SEVERITY_SOFT is weak or early evidence.
+  EVIDENCE_SEVERITY_SOFT = 2;
+  // EVIDENCE_SEVERITY_DEGRADED means health decay or operator alert.
+  EVIDENCE_SEVERITY_DEGRADED = 3;
+  // EVIDENCE_SEVERITY_DELINQUENT means threshold-crossed soft evidence.
+  EVIDENCE_SEVERITY_DELINQUENT = 4;
+  // EVIDENCE_SEVERITY_HARD means slash or jail candidate evidence.
+  EVIDENCE_SEVERITY_HARD = 5;
+  // EVIDENCE_SEVERITY_REPAIR means repair coordination evidence.
+  EVIDENCE_SEVERITY_REPAIR = 6;
+}
+
+// EvidenceCaseStatus tracks whether an evidence case is only observed,
+// threshold-convicted, or resolved by repair/readiness.
+enum EvidenceCaseStatus {
+  // EVIDENCE_CASE_STATUS_UNSPECIFIED is the default unset value.
+  EVIDENCE_CASE_STATUS_UNSPECIFIED = 0;
+  // EVIDENCE_CASE_STATUS_OBSERVED means evidence has not crossed conviction.
+  EVIDENCE_CASE_STATUS_OBSERVED = 1;
+  // EVIDENCE_CASE_STATUS_CONVICTED means threshold policy accepted the case.
+  EVIDENCE_CASE_STATUS_CONVICTED = 2;
+  // EVIDENCE_CASE_STATUS_RESOLVED means repair or readiness closed the case.
+  EVIDENCE_CASE_STATUS_RESOLVED = 3;
+}
+
+// SlotHealthStatus is the derived per-slot lifecycle used for operator and UI
+// visibility. DealSlot.status remains the canonical placement status.
+enum SlotHealthStatus {
+  // SLOT_HEALTH_STATUS_UNSPECIFIED is the default unset value.
+  SLOT_HEALTH_STATUS_UNSPECIFIED = 0;
+  // SLOT_HEALTH_STATUS_HEALTHY means no current health issue is recorded.
+  SLOT_HEALTH_STATUS_HEALTHY = 1;
+  // SLOT_HEALTH_STATUS_SUSPECT means soft evidence is below repair threshold.
+  SLOT_HEALTH_STATUS_SUSPECT = 2;
+  // SLOT_HEALTH_STATUS_DELINQUENT means soft evidence crossed threshold.
+  SLOT_HEALTH_STATUS_DELINQUENT = 3;
+  // SLOT_HEALTH_STATUS_REPAIRING means a pending provider is catching up.
+  SLOT_HEALTH_STATUS_REPAIRING = 4;
+  // SLOT_HEALTH_STATUS_CATCHUP_READY means the pending provider proved readiness.
+  SLOT_HEALTH_STATUS_CATCHUP_READY = 5;
+  // SLOT_HEALTH_STATUS_ACTIVE_PROMOTED means repair promotion just completed.
+  SLOT_HEALTH_STATUS_ACTIVE_PROMOTED = 6;
+  // SLOT_HEALTH_STATUS_REPAIR_BACKOFF means repair could not start safely.
+  SLOT_HEALTH_STATUS_REPAIR_BACKOFF = 7;
+  // SLOT_HEALTH_STATUS_EXPIRED means the slot is no longer active.
+  SLOT_HEALTH_STATUS_EXPIRED = 8;
+}
+
+// ProviderLifecycleStatus is the provider-centric health/lifecycle view used
+// for operator status and future placement/economics gates. It is observational
+// until explicit enforcement parameters are enabled.
+enum ProviderLifecycleStatus {
+  // PROVIDER_LIFECYCLE_STATUS_UNSPECIFIED is the default unset value.
+  PROVIDER_LIFECYCLE_STATUS_UNSPECIFIED = 0;
+  // PROVIDER_LIFECYCLE_STATUS_PAIRED means identity pairing exists.
+  PROVIDER_LIFECYCLE_STATUS_PAIRED = 1;
+  // PROVIDER_LIFECYCLE_STATUS_PROBATIONARY means limited assignment eligible.
+  PROVIDER_LIFECYCLE_STATUS_PROBATIONARY = 2;
+  // PROVIDER_LIFECYCLE_STATUS_ACTIVE means normal assignment eligible.
+  PROVIDER_LIFECYCLE_STATUS_ACTIVE = 3;
+  // PROVIDER_LIFECYCLE_STATUS_PREFERRED means sustained good performance.
+  PROVIDER_LIFECYCLE_STATUS_PREFERRED = 4;
+  // PROVIDER_LIFECYCLE_STATUS_HIGH_BANDWIDTH means hot-path eligible.
+  PROVIDER_LIFECYCLE_STATUS_HIGH_BANDWIDTH = 5;
+  // PROVIDER_LIFECYCLE_STATUS_DEGRADED means soft evidence requires attention.
+  PROVIDER_LIFECYCLE_STATUS_DEGRADED = 6;
+  // PROVIDER_LIFECYCLE_STATUS_DELINQUENT means threshold evidence crossed.
+  PROVIDER_LIFECYCLE_STATUS_DELINQUENT = 7;
+  // PROVIDER_LIFECYCLE_STATUS_DRAINING means voluntary exit is in progress.
+  PROVIDER_LIFECYCLE_STATUS_DRAINING = 8;
+  // PROVIDER_LIFECYCLE_STATUS_JAILED means provider is explicitly ineligible.
+  PROVIDER_LIFECYCLE_STATUS_JAILED = 9;
+  // PROVIDER_LIFECYCLE_STATUS_EXITED means provider is no longer active.
+  PROVIDER_LIFECYCLE_STATUS_EXITED = 10;
+}
+
+// EvidenceCase is the structured policing ledger for failures, repair
+// milestones, and hard-fault records. The legacy Proof summary remains for
+// compatibility, while this object carries machine-readable attribution.
+message EvidenceCase {
+  uint64 id = 1;
+  bytes evidence_id = 2; // deterministic 32-byte case hash when available
+  uint64 deal_id = 3;
+  uint32 slot = 4;
+  string provider = 5 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string reporter = 6;
+  string reason = 7;
+  EvidenceClass evidence_class = 8;
+  EvidenceSeverity severity = 9;
+  EvidenceCaseStatus status = 10;
+  bool slashable = 11;
+  bool counts_as_failure = 12;
+  uint64 epoch_id = 13;
+  uint64 count = 14;
+  int64 first_height = 15;
+  int64 last_height = 16;
+  bytes session_id = 17;
+  string summary = 18;
+  string consequence_ceiling = 19;
+}
+
+// SlotHealthState is the latest explainable health state for a Mode 2 slot.
+message SlotHealthState {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+  string provider = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  SlotHealthStatus status = 4;
+  string reason = 5;
+  EvidenceClass evidence_class = 6;
+  EvidenceSeverity severity = 7;
+  uint64 missed_epochs = 8;
+  uint64 deputy_missed_epochs = 9;
+  uint64 last_epoch_id = 10;
+  int64 updated_height = 11;
+  uint64 last_evidence_case_id = 12;
+  string pending_provider = 13 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 repair_target_gen = 14;
+}
+
+// ProviderHealthState is the latest provider-centric lifecycle summary derived
+// from structured evidence and provider registration state. It is intentionally
+// non-punitive until explicit enforcement params consume it.
+message ProviderHealthState {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  ProviderLifecycleStatus lifecycle_status = 2;
+  string reason = 3;
+  EvidenceClass evidence_class = 4;
+  EvidenceSeverity severity = 5;
+  uint64 last_evidence_case_id = 6;
+  uint64 last_deal_id = 7;
+  uint32 last_slot = 8;
+  uint64 last_epoch_id = 9;
+  int64 updated_height = 10;
+  uint64 soft_fault_count = 11;
+  uint64 hard_fault_count = 12;
+  uint64 repair_event_count = 13;
+  string consequence_ceiling = 14;
+}
+
+// ProviderCollateralSummary is a query-only, provider-centric accounting view
+// derived from registration bond state and current Mode 2 assignment counts.
+// It does not lock/unlock funds by itself; it makes the policy-visible
+// collateral requirement and placement headroom explicit for operators.
+message ProviderCollateralSummary {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 active_assignments = 2;
+  uint64 pending_assignments = 3;
+  uint64 total_assignments = 4;
+  cosmos.base.v1beta1.Coin bond = 5 [(gogoproto.nullable) = false];
+  cosmos.base.v1beta1.Coin min_provider_bond = 6 [(gogoproto.nullable) = false];
+  cosmos.base.v1beta1.Coin assignment_collateral_per_slot = 7 [(gogoproto.nullable) = false];
+  cosmos.base.v1beta1.Coin required_collateral = 8 [(gogoproto.nullable) = false];
+  uint64 affordable_assignments = 9;
+  bool unlimited_assignments = 10;
+  uint64 assignment_headroom = 11;
+  uint64 overassigned_assignments = 12;
+  bool eligible_for_new_assignment = 13;
+  string ineligibility_reason = 14;
+}
+
+// ProviderStakingBinding records the provider-to-staking linkage needed before
+// validator/delegation-backed collateral can safely participate in assignment
+// economics. This state is intentionally observed-only until slash semantics
+// for delegated stake are specified and tested.
+message ProviderStakingBinding {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string delegator = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string validator = 3 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
+  string operator = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  int64 bound_height = 5;
+  int64 updated_height = 6;
+  string slash_semantics = 7;
+  bool counts_toward_assignment_collateral = 8;
+}
+
+// ProviderStakingSummary is an operator-facing view of the staking binding plus
+// the live staking-module delegation, when the staking keeper is wired.
+message ProviderStakingSummary {
+  ProviderStakingBinding binding = 1 [(gogoproto.nullable) = false];
+  cosmos.base.v1beta1.Coin observed_stake = 2 [(gogoproto.nullable) = false];
+  bool staking_keeper_available = 3;
+  bool validator_found = 4;
+  bool delegation_found = 5;
+  bool counts_toward_assignment_collateral = 6;
+  string status = 7;
+  string reason = 8;
+}
+
+// AssignmentCollateralLockRole distinguishes currently serving assignments from
+// make-before-break pending repair responsibilities. The active provider's
+// assignment lock is replaced by the pending provider's lock while a slot is in
+// REPAIRING state.
+enum AssignmentCollateralLockRole {
+  ASSIGNMENT_COLLATERAL_LOCK_ROLE_UNSPECIFIED = 0;
+  ASSIGNMENT_COLLATERAL_LOCK_ROLE_ACTIVE = 1;
+  ASSIGNMENT_COLLATERAL_LOCK_ROLE_PENDING_REPAIR = 2;
+}
+
+// AssignmentCollateralLock is the stateful per-assignment collateral ledger
+// entry used by operator queries and future unbonding/slash-liability checks.
+message AssignmentCollateralLock {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 deal_id = 2;
+  uint32 slot = 3;
+  AssignmentCollateralLockRole role = 4;
+  cosmos.base.v1beta1.Coin amount = 5 [(gogoproto.nullable) = false];
+  uint64 generation = 6;
+  int64 locked_at_height = 7;
+  int64 updated_height = 8;
+  string reason = 9;
+}
+
+// ProviderBondUnbonding is the delayed provider-bond exit ledger. Queued funds
+// are no longer counted as active provider bond/collateral headroom, but remain
+// in the provider-bond module account until the maturity height is claimable.
+message ProviderBondUnbonding {
+  uint64 id = 1;
+  string provider = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string recipient = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  cosmos.base.v1beta1.Coin amount = 4 [(gogoproto.nullable) = false];
+  int64 requested_height = 5;
+  int64 mature_at_height = 6;
+  string actor = 7 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 active_assignments = 8;
+  uint64 pending_assignments = 9;
+  cosmos.base.v1beta1.Coin required_collateral = 10 [(gogoproto.nullable) = false];
+}
+
+// RepairAttemptState is the explicit per-slot repair coordination ledger. It
+// turns previously implicit repair/backoff evidence into queryable protocol
+// state for replacement-grinding controls, operator status, and future
+// calibrated jail/slash policy.
+message RepairAttemptState {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+  uint64 attempt_count = 3;
+  uint64 backoff_count = 4;
+  uint64 candidate_exhaustion_count = 5;
+  uint64 cooldown_until_epoch = 6;
+  uint64 last_attempt_epoch = 7;
+  int64 last_attempt_height = 8;
+  string provider = 9 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string pending_provider = 10 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string last_reason = 11;
+  uint64 repair_target_gen = 12;
+  uint64 last_evidence_case_id = 13;
 }
 
 // RetrievalPolicyMode controls who may open USER-funded retrieval sessions
@@ -106,6 +383,8 @@ message Provider {
   int64 reputation_score = 6; // Uptime/Performance score
   repeated string endpoints = 7; // Provider transport endpoints as Multiaddrs (HTTP now; libp2p future)
   bool draining = 8; // If true, provider will not receive new assignments (see RFC provider exit/draining).
+  cosmos.base.v1beta1.Coin bond = 9 [(gogoproto.nullable) = false]; // Active self-bond locked in the provider-bond module account.
+  cosmos.base.v1beta1.Coin bond_slashed = 10 [(gogoproto.nullable) = false]; // Cumulative self-bond burned for hard faults.
 }
 
 message ProviderPairing {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strings"
 
 	"cosmossdk.io/collections"
@@ -469,6 +470,23 @@ func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types
 				if err := k.recordEvidenceSummary(ctx, deal.Id, active, "deputy_served", eid[:], "chain", false); err != nil {
 					ctx.Logger().Error("failed to record deputy evidence summary", "error", err)
 				}
+				if _, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+					DealID:             deal.Id,
+					Slot:               slotU,
+					Provider:           active,
+					Reporter:           "chain",
+					Reason:             "deputy_served",
+					Class:              types.EvidenceClass_EVIDENCE_CLASS_STATISTICAL,
+					Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_SOFT,
+					Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+					CountsAsFailure:    shouldCountEvidenceAsFailedChallenge("deputy_served", false),
+					EpochID:            epochID,
+					EvidenceID:         eid[:],
+					Summary:            fmt.Sprintf("slot %d was served by deputy provider %s", slotU, creator),
+					ConsequenceCeiling: "audit debt and ghosting signal; no slash",
+				}); err != nil {
+					ctx.Logger().Error("failed to record deputy evidence case", "error", err)
+				}
 
 				// Audit debt: track deputy-served leaf proofs so epoch-end enforcement
 				// can start repairs even if synthetic fill meets quota.
@@ -503,7 +521,8 @@ func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types
 			return err
 		}
 		if counted && pending != "" && creator == pending {
-			return k.markMode2RepairReady(ctx, deal, slotU, creator, epochID)
+			params := k.GetParams(ctx)
+			return k.markMode2RepairReady(ctx, params, deal, slotU, creator, epochID)
 		}
 		return nil
 	}
@@ -604,7 +623,7 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 			return sdkerrors.ErrInvalidRequest.Wrap("duplicate synthetic challenge proof")
 		}
 		if pending != "" && creator == pending {
-			return k.markMode2RepairReady(ctx, deal, slotU, creator, epochID)
+			return k.markMode2RepairReady(ctx, params, deal, slotU, creator, epochID)
 		}
 		return nil
 	}
