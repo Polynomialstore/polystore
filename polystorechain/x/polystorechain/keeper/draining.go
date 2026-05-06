@@ -98,6 +98,20 @@ func (k Keeper) scheduleDrainingRepairs(ctx sdk.Context, epochID uint64) error {
 				if strings.TrimSpace(entry.Provider) != strings.TrimSpace(p.Address) {
 					continue
 				}
+				coolingDown, attemptState, err := k.repairAttemptCooldownActive(ctx, dealID, uint32(i), epochID)
+				if err != nil {
+					return true, err
+				}
+				if coolingDown {
+					ctx.Logger().Info(
+						"drain repair skipped during cooldown",
+						"deal", dealID,
+						"slot", i,
+						"provider", entry.Provider,
+						"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
+					)
+					continue
+				}
 
 				// Enforce drain budget.
 				nextScheduled, overflow := addUint64(scheduledBytes, slotBytes)
@@ -133,7 +147,7 @@ func (k Keeper) scheduleDrainingRepairs(ctx sdk.Context, epochID uint64) error {
 						"provider", entry.Provider,
 						"error", err,
 					)
-					if errEvidence := k.recordRepairBackoff(ctx, dealID, entry.Provider, slot, epochID, err.Error()); errEvidence != nil {
+					if errEvidence := k.recordRepairBackoff(ctx, dealID, entry.Provider, slot, epochID, err); errEvidence != nil {
 						ctx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
 					}
 					continue
@@ -166,6 +180,39 @@ func (k Keeper) scheduleDrainingRepairs(ctx sdk.Context, epochID uint64) error {
 				if err := k.recordEvidenceSummary(ctx, dealID, strings.TrimSpace(entry.Provider), "drain_repair_started", eid[:], "chain", false); err != nil {
 					ctx.Logger().Error("failed to record evidence summary", "error", err)
 				}
+				caseID, err := k.recordEvidenceCase(ctx, evidenceCaseInput{
+					DealID:             dealID,
+					Slot:               slot,
+					Provider:           strings.TrimSpace(entry.Provider),
+					Reporter:           "chain",
+					Reason:             "drain_repair_started",
+					Class:              types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+					Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+					Status:             types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_OBSERVED,
+					EvidenceID:         eid[:],
+					EpochID:            epochID,
+					Summary:            fmt.Sprintf("draining provider scheduled replacement %s", entry.PendingProvider),
+					ConsequenceCeiling: "voluntary drain repair; no penalty by itself",
+				})
+				if err != nil {
+					ctx.Logger().Error("failed to record structured drain repair evidence", "error", err)
+				} else if err := k.setSlotHealthState(ctx, slotHealthUpdate{
+					DealID:          dealID,
+					Slot:            slot,
+					Provider:        strings.TrimSpace(entry.Provider),
+					Status:          types.SlotHealthStatus_SLOT_HEALTH_STATUS_REPAIRING,
+					Reason:          "drain_repair_started",
+					Class:           types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+					Severity:        types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+					EpochID:         epochID,
+					EvidenceCaseID:  caseID,
+					PendingProvider: entry.PendingProvider,
+					RepairTargetGen: entry.RepairTargetGen,
+				}); err != nil {
+					ctx.Logger().Error("failed to update drain repair slot health", "error", err)
+				} else if err := k.recordRepairAttemptStarted(ctx, dealID, slot, entry.Provider, entry.PendingProvider, epochID, "drain_repair_started", entry.RepairTargetGen, caseID); err != nil {
+					ctx.Logger().Error("failed to record drain repair attempt state", "error", err)
+				}
 
 				ctx.Logger().Info(
 					"slot repair started (drain)",
@@ -178,7 +225,7 @@ func (k Keeper) scheduleDrainingRepairs(ctx sdk.Context, epochID uint64) error {
 			}
 
 			if dealChanged {
-				if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+				if err := k.setDealWithAssignmentCollateralLocks(ctx, dealID, deal); err != nil {
 					return true, err
 				}
 			}

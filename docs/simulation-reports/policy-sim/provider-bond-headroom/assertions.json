@@ -5,7 +5,7 @@
     "passed": true
   },
   {
-    "detail": "provider_slashed=2, required>=1",
+    "detail": "provider_slashed=1.9375, required>=1",
     "name": "min_provider_slashed",
     "passed": true
   },
@@ -30,7 +30,7 @@
     "passed": true
   },
   {
-    "detail": "max_provider_bond_deficit=1.55, required>=0.1",
+    "detail": "max_provider_bond_deficit=1.4875, required>=0.1",
     "name": "min_max_provider_bond_deficit",
     "passed": true
   },
