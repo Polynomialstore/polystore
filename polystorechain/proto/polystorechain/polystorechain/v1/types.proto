@@ -207,6 +207,34 @@ message ProviderCollateralSummary {
   string ineligibility_reason = 14;
 }
 
+// ProviderStakingBinding records the provider-to-staking linkage needed before
+// validator/delegation-backed collateral can safely participate in assignment
+// economics. This state is intentionally observed-only until slash semantics
+// for delegated stake are specified and tested.
+message ProviderStakingBinding {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string delegator = 2 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string validator = 3 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
+  string operator = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  int64 bound_height = 5;
+  int64 updated_height = 6;
+  string slash_semantics = 7;
+  bool counts_toward_assignment_collateral = 8;
+}
+
+// ProviderStakingSummary is an operator-facing view of the staking binding plus
+// the live staking-module delegation, when the staking keeper is wired.
+message ProviderStakingSummary {
+  ProviderStakingBinding binding = 1 [(gogoproto.nullable) = false];
+  cosmos.base.v1beta1.Coin observed_stake = 2 [(gogoproto.nullable) = false];
+  bool staking_keeper_available = 3;
+  bool validator_found = 4;
+  bool delegation_found = 5;
+  bool counts_toward_assignment_collateral = 6;
+  string status = 7;
+  string reason = 8;
+}
+
 // AssignmentCollateralLockRole distinguishes currently serving assignments from
 // make-before-break pending repair responsibilities. The active provider's
 // assignment lock is replaced by the pending provider's lock while a slot is in
