@@ -71,6 +71,9 @@ func TestProveLiveness_InvalidSystemProofRecordsHardEvidenceWithoutPayment(t *te
 	require.False(t, evidence.Valid)
 	require.Contains(t, evidence.Commitment, "deal=1")
 	require.Contains(t, evidence.Commitment, "provider="+providerA)
+	evidenceCase := requireEvidenceCase(t, f, sdkCtx, "system_proof_invalid")
+	require.Equal(t, types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_CONVICTED, evidenceCase.Status)
+	require.True(t, evidenceCase.Slashable)
 
 	_, err = f.keeper.Mode2EpochCredits.Get(sdkCtx, collections.Join(collections.Join(dealID, uint32(0)), uint64(1)))
 	require.ErrorIs(t, err, collections.ErrNotFound)
@@ -84,9 +87,20 @@ func TestProveLiveness_InvalidSystemProofRecordsHardEvidenceWithoutPayment(t *te
 
 	provider, err := f.keeper.Providers.Get(sdkCtx, providerA)
 	require.NoError(t, err)
-	require.Equal(t, beforeReputation, provider.ReputationScore)
-	require.Equal(t, "Active", provider.Status)
+	require.Equal(t, beforeReputation-1, provider.ReputationScore)
+	require.Equal(t, "Jailed", provider.Status)
 	require.False(t, provider.Draining)
+
+	jailUntil, err := f.keeper.ProviderJailUntil.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(16), jailUntil)
+
+	health, err := f.keeper.ProviderHealthStates.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED, health.LifecycleStatus)
+	require.Equal(t, "hard_fault_jailed", health.Reason)
+	require.Equal(t, types.EvidenceSeverity_EVIDENCE_SEVERITY_HARD, health.Severity)
+	require.Equal(t, uint64(1), health.HardFaultCount)
 }
 
 func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
@@ -223,4 +237,52 @@ func TestProveLiveness_HealthFailures_RecordBackoffWhenNoReplacement(t *testing.
 	require.Empty(t, slot0.PendingProvider)
 	require.True(t, hasEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered"))
 	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "provider_degraded_repair_started"))
+}
+
+func TestProveLiveness_HealthFailuresSkipRepairDuringCooldown(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	require.NoError(t, f.keeper.Params.Set(f.ctx, params))
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1)
+
+	providerA := makePolicyTestAddr(t, f, 0xA1)
+	providerB := makePolicyTestAddr(t, f, 0xB2)
+	providerC := makePolicyTestAddr(t, f, 0xC3)
+	providerD := makePolicyTestAddr(t, f, 0xD4)
+	registerPolicyTestProviders(t, f, sdkCtx, providerA, providerB, providerC, providerD)
+
+	dealID := uint64(1)
+	deal := mode2PolicyTestDeal(dealID, makePolicyTestAddr(t, f, 0xEE), []string{providerA, providerB, providerC})
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+	require.NoError(t, f.keeper.RepairAttemptStates.Set(sdkCtx, collections.Join(dealID, uint32(0)), types.RepairAttemptState{
+		DealId:             dealID,
+		Slot:               0,
+		Provider:           providerA,
+		CooldownUntilEpoch: 1,
+		LastReason:         "repair_backoff_entered",
+	}))
+
+	for i := 0; i < 3; i++ {
+		res, err := msgServer.ProveLiveness(sdkCtx, &types.MsgProveLiveness{
+			Creator:   providerA,
+			DealId:    dealID,
+			EpochId:   1,
+			ProofType: &types.MsgProveLiveness_SystemProof{SystemProof: nil},
+		})
+		require.NoError(t, err)
+		require.False(t, res.Success)
+	}
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	slot0 := updated.Mode2Slots[0]
+	require.NotNil(t, slot0)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, slot0.Status)
+	require.Empty(t, slot0.PendingProvider)
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "provider_degraded_repair_started"))
+	require.False(t, hasEvidenceSummary(t, f, sdkCtx, "repair_backoff_entered"))
 }

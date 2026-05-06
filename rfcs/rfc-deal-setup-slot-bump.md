@@ -455,7 +455,7 @@ Separate observability may later count setup bump frequency for ops dashboards, 
 
 ### 10.1 striped on-chain state
 
-This RFC complements [rfc-mode2-onchain-state.md](rfcs/rfc-mode2-onchain-state.md):
+This RFC complements [rfc-mode2-onchain-state.md](rfc-mode2-onchain-state.md):
 
 - setup bump happens **before** the normal repair state machine matters,
 - post-activation repairs still use `REPAIRING` and `pending_provider`.
