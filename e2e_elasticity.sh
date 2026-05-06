@@ -71,6 +71,7 @@ submit_signal_saturation() {
         --home "$HOME_DIR" \
         --keyring-backend test \
         --node "$NODE_ADDR" \
+        --gas 300000 \
         --broadcast-mode sync \
         --output json)
 	echo "$response" | jq -er '.txhash'
@@ -288,7 +289,7 @@ sleep 2
 echo ">>> Creating Deal (MaxSpend=120, exactly one overlay stripe)..."
 CREATE_RESP=$("$BINARY" tx nilchain create-deal 100 1000 120 \
   --service-hint General \
-  --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --node "$NODE_ADDR" --broadcast-mode sync --output json)
+  --from user --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --node "$NODE_ADDR" --gas 300000 --broadcast-mode sync --output json)
 CREATE_TX_HASH=$(echo "$CREATE_RESP" | jq -er '.txhash')
 echo "CreateDeal txhash: $CREATE_TX_HASH"
 
