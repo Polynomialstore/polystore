@@ -95,6 +95,22 @@ func requireNoRetrievalSessionState(t *testing.T, f *fixture, ctx sdk.Context) {
 	})
 	require.NoError(t, err)
 	require.Zero(t, nonces)
+
+	var ownerIndexes int
+	err = f.keeper.RetrievalSessionsByOwner.Walk(ctx, nil, func(_ collections.Pair[string, []byte], _ uint64) (bool, error) {
+		ownerIndexes++
+		return false, nil
+	})
+	require.NoError(t, err)
+	require.Zero(t, ownerIndexes)
+
+	var providerIndexes int
+	err = f.keeper.RetrievalSessionsByProvider.Walk(ctx, nil, func(_ collections.Pair[string, []byte], _ uint64) (bool, error) {
+		providerIndexes++
+		return false, nil
+	})
+	require.NoError(t, err)
+	require.Zero(t, providerIndexes)
 }
 
 func TestOpenRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing.T) {

@@ -78,7 +78,7 @@ func TestAssignProvidersFallsBackToGeneralForHotWhenEdgeUnderfilled(t *testing.T
 	require.Positive(t, generalCount)
 }
 
-func TestAssignProvidersHotPreferenceIgnoresInactiveAndDrainingEdge(t *testing.T) {
+func TestAssignProvidersHotPreferenceIgnoresOfflineAndDrainingEdge(t *testing.T) {
 	f := initFixture(t)
 	sdkCtx := sdk.UnwrapSDKContext(f.ctx)
 	providers := registerCapabilityProviders(t, f, "hot_edge_health", []string{
