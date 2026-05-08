@@ -81,6 +81,7 @@ function exportKeystore() {
   const ciphertext = Buffer.concat([cipher.update(hexToBytes(privateKey)), cipher.final()])
   const mac = keccak256(concat([derivedKey.subarray(16, 32), ciphertext]) as Hex)
   const account = privateKeyToAccount(privateKey)
+  const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const keystore = {
     version: 3,
@@ -109,8 +110,8 @@ function exportKeystore() {
   process.stdout.write(
     JSON.stringify({
       address: account.address,
-      nil_address: ethToPolystoreAddress(account.address),
-      polystore_address: ethToPolystoreAddress(account.address),
+      nil_address: polystoreAddress,
+      polystore_address: polystoreAddress,
       keystore_path: outPath,
     }),
   )
