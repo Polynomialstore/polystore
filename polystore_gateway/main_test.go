@@ -80,6 +80,57 @@ func setupMockCombinedOutput(t *testing.T, mockFn func(ctx context.Context, name
 	t.Cleanup(func() { mockCombinedOutput = oldMock })
 }
 
+func TestExtractJSONBodyHandlesNoisyObjectAndArray(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "object",
+			in:   "Initializing KZG with path: trusted_setup.txt\n{\"txhash\":\"ABC\"}\n",
+			want: "{\"txhash\":\"ABC\"}",
+		},
+		{
+			name: "array",
+			in:   "Initializing KZG with path: trusted_setup.txt\n[{\"name\":\"provider1\"},{\"name\":\"provider2\"}]\n",
+			want: "[{\"name\":\"provider1\"},{\"name\":\"provider2\"}]",
+		},
+		{
+			name: "ignores bracketed log prefix",
+			in:   "[INFO] initializing\n{\"txhash\":\"ABC\"}\n",
+			want: "{\"txhash\":\"ABC\"}",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(extractJSONBody([]byte(tc.in)))
+			if got != tc.want {
+				t.Fatalf("extractJSONBody() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveKeyNameForAddressHandlesNoisyKeyringArray(t *testing.T) {
+	const provider = "nil182f6qy5taazj5fa722p2ut4d0v5j2gkap0dprj"
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if len(args) >= 2 && args[0] == "keys" && args[1] == "list" {
+			return []byte(`Initializing KZG with path: /opt/polystore/polystorechain/trusted_setup.txt
+[{"name":"provider3","type":"local","address":"` + provider + `"}]`), nil
+		}
+		return nil, fmt.Errorf("unexpected command: %s %s", name, strings.Join(args, " "))
+	})
+
+	got, err := resolveKeyNameForAddress(context.Background(), provider)
+	if err != nil {
+		t.Fatalf("resolveKeyNameForAddress failed: %v", err)
+	}
+	if got != "provider3" {
+		t.Fatalf("resolveKeyNameForAddress() = %q, want provider3", got)
+	}
+}
+
 func deterministicManifestRootHex(tag string) string {
 	sum := sha256.Sum256([]byte(tag))
 	scalar := new(big.Int).SetBytes(sum[:])

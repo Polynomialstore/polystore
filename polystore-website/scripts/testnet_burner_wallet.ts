@@ -41,6 +41,7 @@ function generateWallet() {
     JSON.stringify({
       private_key: privateKey,
       address: account.address,
+      nil_address: polystoreAddress,
       polystore_address: polystoreAddress,
     }),
   )
@@ -108,6 +109,7 @@ function exportKeystore() {
   process.stdout.write(
     JSON.stringify({
       address: account.address,
+      nil_address: ethToPolystoreAddress(account.address),
       polystore_address: ethToPolystoreAddress(account.address),
       keystore_path: outPath,
     }),
