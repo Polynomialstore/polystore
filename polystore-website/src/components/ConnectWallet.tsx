@@ -163,6 +163,7 @@ export function ConnectWallet({ className = '', compact = false, responsive = fa
 
             {wrongNetwork && (
               <button
+                type="button"
                 onClick={() => {
                   if (openChainModal) {
                     openChainModal()
@@ -170,10 +171,27 @@ export function ConnectWallet({ className = '', compact = false, responsive = fa
                     void switchNetwork()
                   }
                 }}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-none bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary text-sm font-semibold transition-colors"
+                data-testid="switch-network"
+                aria-label="Switch wallet to PolyStore"
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-none border border-destructive/30 bg-destructive/10 font-mono-data font-bold uppercase text-destructive transition-colors hover:bg-destructive/15 ${
+                  responsive
+                    ? 'px-2.5 py-2 text-[9px] tracking-[0.2em] 2xl:px-3 2xl:text-[10px]'
+                    : compact
+                      ? 'px-2.5 py-2 text-[9px] tracking-[0.2em]'
+                      : 'px-3 py-2 text-[10px] tracking-[0.2em]'
+                }`}
               >
-                <AlertTriangle className="w-4 h-4" />
-                Switch
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {responsive ? (
+                  <>
+                    <span className="2xl:hidden">Switch</span>
+                    <span className="hidden 2xl:inline">Switch to PolyStore</span>
+                  </>
+                ) : compact ? (
+                  'Switch'
+                ) : (
+                  'Switch to PolyStore'
+                )}
               </button>
             )}
           </div>

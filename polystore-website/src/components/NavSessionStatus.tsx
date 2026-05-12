@@ -62,7 +62,8 @@ export function NavSessionStatus({
 
       {session.isConnected &&
       session.primarySessionState !== 'ready-browser' &&
-      session.primarySessionState !== 'ready-gateway' ? (
+      session.primarySessionState !== 'ready-gateway' &&
+      session.primarySessionState !== 'wrong-network' ? (
         <>
           <span
             className={cn(
