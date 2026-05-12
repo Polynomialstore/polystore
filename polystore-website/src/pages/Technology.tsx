@@ -184,6 +184,10 @@ export const Technology = () => {
           </div>
           <div className="text-[11px] text-muted-foreground">
             Jump to:{" "}
+            <Link className="text-primary hover:underline" to="/polyfs">
+              Full PolyFS page
+            </Link>
+            {" · "}
             <Link className="text-primary hover:underline" to="/technology?section=polyfs-layout">
               Indexing layout
             </Link>
