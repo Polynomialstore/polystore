@@ -43,7 +43,7 @@ export function NavSessionStatus({
   const session = useSessionStatus()
   const stakeBalanceLabel = session.lcdStakeBalance ? `${session.lcdStakeBalance} stake` : '—'
 
-  const shouldShowFaucet = session.faucetEnabled && session.isConnected
+  const shouldShowFaucet = session.faucetEnabled && session.isConnected && !session.isWrongNetwork
   const faucetClassName = responsive
     ? 'px-2.5 py-2 text-[9px] 2xl:px-3 2xl:text-[10px]'
     : compact
