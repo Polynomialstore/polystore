@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { ModeToggle } from "./ModeToggle";
 import { useState, useEffect } from "react";
-import { Menu, X, Github, ChevronDown, Rocket, Trophy, Activity, Terminal, Server, Database, BookOpen, FileText, FileCode } from "lucide-react";
+import { Menu, X, Github, ChevronDown, Rocket, Trophy, Activity, Terminal, Server, Database, BookOpen, FileText, FileCode, HardDrive } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LivingGrid } from "@nil-store/cybergrid-theme/react/living-grid";
 import { NavDropdown, NavItem } from "./NavDropdown";
@@ -94,6 +94,7 @@ export const Layout = () => {
         { name: "Whitepaper", path: "/whitepaper", description: "The full technical paper for PolyStore.", icon: <BookOpen className="w-5 h-5" /> },
         { name: "Litepaper", path: "/litepaper", description: "A shorter overview of the architecture and model.", icon: <FileText className="w-5 h-5" /> },
         { name: "Spec", path: "/spec", description: "The canonical protocol specification.", icon: <FileCode className="w-5 h-5" /> },
+        { name: "PolyFS", path: "/polyfs", description: "Technical guide to the polynomial filesystem layout.", icon: <HardDrive className="w-5 h-5" /> },
         ] 
       },
   ];
