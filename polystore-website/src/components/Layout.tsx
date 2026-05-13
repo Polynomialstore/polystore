@@ -94,7 +94,7 @@ export const Layout = () => {
         { name: "Whitepaper", path: "/whitepaper", description: "The full technical paper for PolyStore.", icon: <BookOpen className="w-5 h-5" /> },
         { name: "Litepaper", path: "/litepaper", description: "A shorter overview of the architecture and model.", icon: <FileText className="w-5 h-5" /> },
         { name: "Spec", path: "/spec", description: "The canonical protocol specification.", icon: <FileCode className="w-5 h-5" /> },
-        { name: "PolyFS", path: "/polyfs", description: "Technical guide to the polynomial filesystem layout.", icon: <HardDrive className="w-5 h-5" /> },
+        { name: "PolyFS", path: "/polyfs2", description: "Bottom-up technical draft of the filesystem layout.", icon: <HardDrive className="w-5 h-5" /> },
         ] 
       },
   ];

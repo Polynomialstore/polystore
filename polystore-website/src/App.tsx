@@ -19,6 +19,7 @@ import { ProofsDashboard } from "./pages/ProofsDashboard";
 import { FAQ } from "./pages/FAQ";
 import { LogoShowcase } from "./pages/LogoShowcase";
 import { PolyfsDocs } from "./pages/PolyfsDocs";
+import { Polyfs2Docs } from "./pages/Polyfs2Docs";
 import { ThemeProvider } from "./context/ThemeContext";
 import { TransportProvider } from "./context/TransportContext";
 import { Dashboard } from "./components/Dashboard";
@@ -60,6 +61,7 @@ function App() {
               <Route path="whitepaper" element={<Whitepaper />} />
               <Route path="spec" element={<Spec />} />
               <Route path="polyfs" element={<PolyfsDocs />} />
+              <Route path="polyfs2" element={<Polyfs2Docs />} />
               <Route path="faq" element={<FAQ />} />
               <Route path="technology" element={<TechnologyLayout />}>
                 <Route index element={<Technology />} />
