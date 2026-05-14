@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Navigate, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Home } from "./pages/Home";
 import { Technology } from "./pages/Technology";
@@ -19,7 +19,6 @@ import { ProofsDashboard } from "./pages/ProofsDashboard";
 import { FAQ } from "./pages/FAQ";
 import { LogoShowcase } from "./pages/LogoShowcase";
 import { PolyfsDocs } from "./pages/PolyfsDocs";
-import { Polyfs2Docs } from "./pages/Polyfs2Docs";
 import { ThemeProvider } from "./context/ThemeContext";
 import { TransportProvider } from "./context/TransportContext";
 import { Dashboard } from "./components/Dashboard";
@@ -61,7 +60,7 @@ function App() {
               <Route path="whitepaper" element={<Whitepaper />} />
               <Route path="spec" element={<Spec />} />
               <Route path="polyfs" element={<PolyfsDocs />} />
-              <Route path="polyfs2" element={<Polyfs2Docs />} />
+              <Route path="polyfs2" element={<Navigate to="/polyfs" replace />} />
               <Route path="faq" element={<FAQ />} />
               <Route path="technology" element={<TechnologyLayout />}>
                 <Route index element={<Technology />} />

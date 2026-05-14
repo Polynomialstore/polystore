@@ -74,7 +74,7 @@ export const KZGDeepDive = () => {
             <CheckCircle className="w-5 h-5 text-accent" /> 3. The Triple Proof (Scale)
           </h3>
           <p className="text-muted-foreground mb-6">
-            How do you verify a 1 Petabyte dataset with a single hash? PolyStore uses a <strong>3-Hop Verification Chain</strong> to bind every byte to the Deal Root.
+            How do you verify a 1 Petabyte dataset against one compact on-chain anchor? PolyStore uses a <strong>3-Hop Verification Chain</strong> to bind served data back to <strong>Deal.manifest_root</strong>.
           </p>
           <div className="bg-card p-6 rounded-none border border-border mb-6 space-y-4">
             <div className="flex items-center gap-4">
@@ -97,7 +97,7 @@ export const KZGDeepDive = () => {
                 <div className="w-8 h-8 bg-accent/10 text-accent border border-accent/20 flex items-center justify-center font-bold">3</div>
                 <div>
                     <h4 className="font-bold text-foreground">Hop 3: The Data</h4>
-                    <p className="text-sm text-muted-foreground">Verify the <strong>Data Byte</strong> belongs to the Blob Polynomial. (KZG Evaluation)</p>
+                    <p className="text-sm text-muted-foreground">Verify a challenged <strong>field evaluation</strong> against the blob commitment. (KZG Evaluation)</p>
                 </div>
             </div>
           </div>

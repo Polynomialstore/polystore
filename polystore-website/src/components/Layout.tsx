@@ -94,7 +94,7 @@ export const Layout = () => {
         { name: "Whitepaper", path: "/whitepaper", description: "The full technical paper for PolyStore.", icon: <BookOpen className="w-5 h-5" /> },
         { name: "Litepaper", path: "/litepaper", description: "A shorter overview of the architecture and model.", icon: <FileText className="w-5 h-5" /> },
         { name: "Spec", path: "/spec", description: "The canonical protocol specification.", icon: <FileCode className="w-5 h-5" /> },
-        { name: "PolyFS", path: "/polyfs2", description: "Bottom-up technical draft of the filesystem layout.", icon: <HardDrive className="w-5 h-5" /> },
+        { name: "KZG to PolyFS", path: "/polyfs", description: "Bottom-up proof anchors, blobs, MDUs, and manifests.", icon: <HardDrive className="w-5 h-5" /> },
         ] 
       },
   ];
@@ -183,6 +183,8 @@ export const Layout = () => {
                 onClick={() => setIsOpen(!isOpen)} 
                 className="lg:hidden p-2 glass-panel industrial-border hover:bg-muted/40 text-foreground transition-colors"
                 aria-label="Toggle Menu"
+                aria-expanded={isOpen}
+                aria-controls="mobile-menu"
               >
                 {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
@@ -193,6 +195,7 @@ export const Layout = () => {
         <AnimatePresence>
           {isOpen && (
             <motion.div
+              id="mobile-menu"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "100vh" }}
               exit={{ opacity: 0, height: 0 }}
@@ -231,10 +234,13 @@ export const Layout = () => {
                 {navStructure.map((item) => {
                     // Dropdown (Accordion)
                     const isExpanded = mobileExpanded === item.name;
+                    const panelId = `mobile-nav-${item.name.toLowerCase().replace(/\s+/g, "-")}`;
                     return (
                         <div key={item.name} className="border-b border-border/30 pb-4">
                             <button 
                                 onClick={() => toggleMobileGroup(item.name)}
+                                aria-expanded={isExpanded}
+                                aria-controls={panelId}
                                 className="w-full flex items-center justify-between text-[12px] font-bold uppercase tracking-[0.2em] text-foreground/80 hover:text-foreground transition-colors font-mono-data"
                             >
                                 {item.name}
@@ -243,6 +249,7 @@ export const Layout = () => {
                             <AnimatePresence>
                                 {isExpanded && (
                                     <motion.div
+                                        id={panelId}
                                         initial={{ height: 0, opacity: 0, y: -10 }}
                                         animate={{ height: "auto", opacity: 1, y: 0 }}
                                         exit={{ height: 0, opacity: 0, y: -10 }}

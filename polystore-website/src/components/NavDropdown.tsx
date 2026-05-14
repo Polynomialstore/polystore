@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ArrowUpRight } from "lucide-react";
@@ -20,16 +20,55 @@ interface NavDropdownProps {
 export const NavDropdown = ({ label, items }: NavDropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
+  const triggerId = `${menuId}-trigger`;
 
   const isActive = items.some(item => location.pathname === item.path);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsOpen(false);
+    }
+
+    function handleFocusIn(event: FocusEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", handleFocusIn);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", handleFocusIn);
+    };
+  }, [isOpen]);
+
   return (
     <div 
+      ref={containerRef}
       className="relative h-full flex items-center"
       onMouseEnter={() => setIsOpen(true)}
-      onMouseLeave={() => setIsOpen(false)}
+      onFocusCapture={() => setIsOpen(true)}
     >
       <button 
+        id={triggerId}
+        type="button"
+        onClick={() => setIsOpen(true)}
+        aria-expanded={isOpen}
+        aria-controls={menuId}
+        aria-haspopup="true"
         className={cn(
           "nav-topbtn",
           isActive ? "nav-topbtn--active" : "nav-topbtn--inactive",
@@ -52,6 +91,8 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            id={menuId}
+            aria-labelledby={triggerId}
             initial={{ opacity: 0, y: -10, x: "-50%", scale: 0.98 }}
             animate={{ opacity: 1, y: 0, x: "-50%", scale: 1 }}
             exit={{ opacity: 0, y: -8, x: "-50%", scale: 0.98 }}
@@ -68,11 +109,11 @@ export const NavDropdown = ({ label, items }: NavDropdownProps) => {
                   const active = location.pathname === item.path;
                   
                   // Wrapper to handle external vs internal link logic
-                  const Wrapper = ({ children, className }: { children: React.ReactNode; className: string }) => 
+                  const Wrapper = ({ children, className }: { children: ReactNode; className: string }) => 
                     item.external ? (
-                        <a href={item.path} target="_blank" rel="noopener noreferrer" className={className}>{children}</a>
+                        <a href={item.path} target="_blank" rel="noopener noreferrer" className={className} onClick={() => setIsOpen(false)}>{children}</a>
                     ) : (
-                        <Link to={item.path} className={className}>{children}</Link>
+                        <Link to={item.path} className={className} onClick={() => setIsOpen(false)}>{children}</Link>
                     );
 
                   return (
