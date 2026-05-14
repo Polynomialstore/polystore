@@ -1,4 +1,4 @@
-import { HashRouter, Navigate, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Home } from "./pages/Home";
 import { Technology } from "./pages/Technology";
@@ -60,7 +60,6 @@ function App() {
               <Route path="whitepaper" element={<Whitepaper />} />
               <Route path="spec" element={<Spec />} />
               <Route path="polyfs" element={<PolyfsDocs />} />
-              <Route path="polyfs2" element={<Navigate to="/polyfs" replace />} />
               <Route path="faq" element={<FAQ />} />
               <Route path="technology" element={<TechnologyLayout />}>
                 <Route index element={<Technology />} />

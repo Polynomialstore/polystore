@@ -10,13 +10,6 @@ test('PolyFS docs page renders the technical sections', async ({ page }) => {
   await expect(page.getByTestId('polyfs-triple-proof')).toContainText('challenged field evaluation')
 })
 
-test('legacy PolyFS draft route redirects to the canonical page', async ({ page }) => {
-  await page.goto('/#/polyfs2')
-
-  await expect(page).toHaveURL(/#\/polyfs$/)
-  await expect(page.getByRole('heading', { name: /KZG Commitments in PolyStore/i })).toBeVisible()
-})
-
 test('Learn nav exposes the canonical PolyFS page by click', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/#/')
