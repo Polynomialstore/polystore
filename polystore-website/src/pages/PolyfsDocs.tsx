@@ -201,7 +201,6 @@ export const PolyfsDocs = () => {
           <SectionLabel>The Pipeline</SectionLabel>
           <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-stretch">
             {pipeline.map((step, index) => {
-              const Icon = step.icon;
               return (
                 <div key={step.id} className="contents">
                   <div className="rounded-none border border-border bg-background/60 p-5">

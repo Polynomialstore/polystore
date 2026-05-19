@@ -14,6 +14,12 @@ import { maybeWrapPolyceZstd } from '../lib/polyce'
 import { classifyWalletError } from '../lib/walletErrors'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
+import {
+  formatProviderEligibilityError,
+  summarizeProviderEligibility,
+  type ProviderEligibilityCollateral,
+  type ProviderEligibilityHealth,
+} from '../lib/providerEligibility'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { multiaddrToHttpUrl } from '../lib/multiaddr'
 import { useSessionStatus } from '../hooks/useSessionStatus'
@@ -28,6 +34,7 @@ interface Provider {
   status: string
   reputation_score: string
   endpoints?: string[]
+  draining?: boolean
 }
 
 type StagedUpload = {
@@ -108,6 +115,9 @@ export function Dashboard() {
   const [deals, setDeals] = useState<Deal[]>([])
   const [allDeals, setAllDeals] = useState<Deal[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
+  const [providerHealth, setProviderHealth] = useState<ProviderEligibilityHealth[]>([])
+  const [providerCollateral, setProviderCollateral] = useState<ProviderEligibilityCollateral[]>([])
+  const [providerEligibilityLoaded, setProviderEligibilityLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'content' | 'mdu'>('mdu')
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -116,7 +126,19 @@ export function Dashboard() {
   const [createDealFeedback, setCreateDealFeedback] = useState<CreateDealFeedback | null>(null)
   const [dealFilter, setDealFilter] = useState('')
   const [compressUploads, setCompressUploads] = useState(true)
-  const providerCount = providers.length
+  const providerEligibility = useMemo(
+    () =>
+      summarizeProviderEligibility(providers, providerHealth, providerCollateral, {
+        loaded: providerEligibilityLoaded,
+        serviceHintBase: 'General',
+      }),
+    [providerCollateral, providerEligibilityLoaded, providerHealth, providers],
+  )
+  const providerEligibilityErrorFor = useCallback(
+    (requiredSlots: number, profileLabel: string) =>
+      formatProviderEligibilityError(providerEligibility, requiredSlots, profileLabel),
+    [providerEligibility],
+  )
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
   const defaultMode2Slots = appConfig.defaultRsK + appConfig.defaultRsM
   const activeChainId = walletChainId
@@ -580,25 +602,43 @@ export function Dashboard() {
     if (64 % k !== 0) {
       return { slots, error: 'K must divide 64.' }
     }
-    if (providerCount <= 0) {
-      return { slots, error: 'Provider list not loaded yet. Retry in a few seconds.' }
-    }
-    if (slots > providerCount) {
-      return { slots, error: `Need ${slots} providers (K+M); only ${providerCount} available.` }
-    }
-    return { slots, error: null }
-  }, [placementProfile, providerCount, rsK, rsM])
+    return { slots, error: providerEligibilityErrorFor(slots, `Custom Mode 2 ${k}+${m}`) }
+  }, [placementProfile, providerEligibilityErrorFor, rsK, rsM])
   const autoMode2ProviderError = useMemo(() => {
     if (placementProfile !== 'auto') return null
-    if (providerCount <= 0) {
-      return 'Provider list not loaded yet. Retry in a few seconds.'
-    }
-    if (defaultMode2Slots > providerCount) {
-      return `Default Mode 2 profile requires ${defaultMode2Slots} providers (K+M), but only ${providerCount} are available.`
-    }
-    return null
-  }, [defaultMode2Slots, placementProfile, providerCount])
+    return providerEligibilityErrorFor(defaultMode2Slots, `Default Mode 2 ${defaultRsLabel}`)
+  }, [defaultMode2Slots, defaultRsLabel, placementProfile, providerEligibilityErrorFor])
   const createDealProviderError = placementProfile === 'custom' ? mode2Config.error : autoMode2ProviderError
+  const formatCreateDealFailure = useCallback(
+    (error: unknown) => {
+      const walletError = classifyWalletError(error, 'Deal allocation failed. Check chain and provider status.')
+      const lower = walletError.message.toLowerCase()
+      if (!lower.includes('transaction reverted') && !lower.includes('execution reverted')) {
+        return walletError.message
+      }
+
+      const customSlots = mode2Config.slots ?? defaultMode2Slots
+      const requiredSlots = placementProfile === 'custom' ? customSlots : defaultMode2Slots
+      const profileLabel =
+        placementProfile === 'custom' && mode2Config.slots
+          ? `Custom Mode 2 ${rsK}+${rsM}`
+          : `Default Mode 2 ${defaultRsLabel}`
+      const eligibilityError = providerEligibilityErrorFor(requiredSlots, profileLabel)
+      if (eligibilityError) {
+        return `The chain rejected the create-deal transaction because provider placement has no valid assignment set. ${eligibilityError}`
+      }
+      return 'The chain rejected the create-deal transaction. This usually means provider placement, provider lifecycle state, or collateral policy rejected the requested deal; refresh provider status and retry.'
+    },
+    [
+      defaultMode2Slots,
+      defaultRsLabel,
+      mode2Config.slots,
+      placementProfile,
+      providerEligibilityErrorFor,
+      rsK,
+      rsM,
+    ],
+  )
 
   const providerEndpointsByAddr = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -657,6 +697,9 @@ export function Dashboard() {
       setDeals([])
       setAllDeals([])
       setProviders([])
+      setProviderHealth([])
+      setProviderCollateral([])
+      setProviderEligibilityLoaded(false)
     }
   }, [address, polystoreAddress])
 
@@ -720,15 +763,57 @@ export function Dashboard() {
   }
 
   async function fetchProviders() {
-    try {
-      const res = await fetch(`${appConfig.lcdBase}/polystorechain/polystorechain/v1/providers`)
-      const json = await res.json()
-      if (json.providers) {
-        setProviders(json.providers as Provider[])
+    const fetchJson = async (path: string) => {
+      const res = await fetch(`${appConfig.lcdBase}${path}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(text || `HTTP ${res.status}`)
       }
-    } catch (e) {
-      console.error('Failed to fetch providers', e)
+      return (await res.json()) as Record<string, unknown>
     }
+
+    const [providersResult, healthResult, collateralResult] = await Promise.allSettled([
+      fetchJson('/polystorechain/polystorechain/v1/providers'),
+      fetchJson('/polystorechain/polystorechain/v1/provider-health'),
+      fetchJson('/polystorechain/polystorechain/v1/provider-collateral'),
+    ])
+
+    if (providersResult.status === 'fulfilled') {
+      const providersValue = providersResult.value.providers
+      if (Array.isArray(providersValue)) {
+        setProviders(providersValue as Provider[])
+      }
+    } else {
+      console.error('Failed to fetch providers', providersResult.reason)
+    }
+
+    let loadedEligibilitySurface = false
+    if (healthResult.status === 'fulfilled') {
+      const healthValue = healthResult.value.health
+      if (Array.isArray(healthValue)) {
+        setProviderHealth(healthValue as ProviderEligibilityHealth[])
+        loadedEligibilitySurface = true
+      } else {
+        setProviderHealth([])
+      }
+    } else {
+      console.error('Failed to fetch provider health', healthResult.reason)
+      setProviderHealth([])
+    }
+
+    if (collateralResult.status === 'fulfilled') {
+      const collateralValue = collateralResult.value.collateral
+      if (Array.isArray(collateralValue)) {
+        setProviderCollateral(collateralValue as ProviderEligibilityCollateral[])
+        loadedEligibilitySurface = true
+      } else {
+        setProviderCollateral([])
+      }
+    } else {
+      console.error('Failed to fetch provider collateral', collateralResult.reason)
+      setProviderCollateral([])
+    }
+    setProviderEligibilityLoaded(loadedEligibilitySurface)
   }
 
   useEffect(() => {
@@ -1032,25 +1117,14 @@ export function Dashboard() {
           return
         }
         const slots = k + m
-        if (providerCount === 0) {
+        const providerError = providerEligibilityErrorFor(slots, `Custom Mode 2 ${k}+${m}`)
+        if (providerError) {
           setStatusTone('error')
-          setStatusMsg('Provider list not loaded yet. Retry in a few seconds.')
+          setStatusMsg(providerError)
           reportCreateDealFeedback({
             tone: 'error',
             title: 'Create deal failed',
-            message: 'Provider list not loaded yet. Retry in a few seconds.',
-          })
-          setTargetDealId(previousTargetDealId)
-          return
-        }
-        if (slots > providerCount) {
-          const message = `Custom Mode 2 profile requires ${slots} providers (K+M), but only ${providerCount} are available.`
-          setStatusTone('error')
-          setStatusMsg(message)
-          reportCreateDealFeedback({
-            tone: 'error',
-            title: 'Create deal failed',
-            message,
+            message: providerError,
           })
           setTargetDealId(previousTargetDealId)
           return
@@ -1092,10 +1166,13 @@ export function Dashboard() {
       }
     } catch (e) {
       setTargetDealId(previousTargetDealId)
+      const message = formatCreateDealFailure(e)
+      setStatusTone('error')
+      setStatusMsg(message)
       reportCreateDealFeedback({
         tone: 'error',
         title: 'Create deal failed',
-        message: handleWalletError(e, 'Deal allocation failed. Check gateway logs.'),
+        message,
       })
     }
   }

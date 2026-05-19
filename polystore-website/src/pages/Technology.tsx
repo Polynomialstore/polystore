@@ -466,7 +466,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                     <span className="font-semibold text-foreground">manifest_root</span> (KZG, 48B) commits to the ordered vector of per‑MDU roots.
                   </li>
                   <li>
-	                    Each <span className="font-semibold text-foreground">MDU root</span> (32B) commits to that MDU&apos;s blob commitments. Metadata/full-replica MDUs use 64 leaves; default Mode 2 striped user data uses 96 shard leaves.
+                    Each <span className="font-semibold text-foreground">MDU root</span> (32B) commits to that MDU&apos;s blob commitments. Metadata/full-replica MDUs use 64 leaves; default Mode 2 striped user data uses 96 shard leaves.
                   </li>
                   <li>
                     Each <span className="font-semibold text-foreground">blob commitment</span> (KZG, 48B) commits to the blob bytes.
@@ -688,7 +688,7 @@ global_blob = slab_mdu * 64 + blob_in_mdu`}
                 <span className="font-semibold">Merkle root</span>
               </div>
               <div className="mt-2 text-[11px] text-muted-foreground">
-	                Merkle root over the blob commitments for that MDU: 64 leaves for metadata/full-replica MDUs, or leaf_index over shard commitments for Mode 2 user data.
+                Merkle root over the blob commitments for that MDU: 64 leaves for metadata/full-replica MDUs, or leaf_index over shard commitments for Mode 2 user data.
               </div>
             </div>
 
