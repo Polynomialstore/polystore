@@ -164,6 +164,12 @@ func (s *systemLivenessState) markDone(key systemLivenessKey) {
 	delete(s.failures, key)
 }
 
+func (s *systemLivenessState) clearFailure(key systemLivenessKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.failures, key)
+}
+
 func (s *systemLivenessState) shouldBackoff(key systemLivenessKey, now time.Time) (bool, time.Duration, systemLivenessFailureReason) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -424,16 +430,22 @@ dealLoop:
 					snapshot.ProofsAlreadyDone++
 					continue
 				}
-				if blocked, _, reason := systemProverState.shouldBackoff(key, now); blocked {
-					snapshot.ProofsBackoffSkipped++
-					if reason == systemLivenessFailureMissingLocalData {
-						snapshot.MissingDataSkips++
-					}
-					continue
-				}
-
 				mduIndex, blobIndex := deriveMode2ChallengeLocal(epochSeed, deal.dealID, deal.currentGen, uint64(slotU), ordinal, metaMdus, userMdus, stripe.rows)
 				row := uint64(blobIndex) % stripe.rows
+				if blocked, _, reason := systemProverState.shouldBackoff(key, now); blocked {
+					if reason == systemLivenessFailureMissingLocalData &&
+						localRole == systemLivenessRolePendingRepair &&
+						mode2ShardBlobReadyForSystemProof(dealDir, mduIndex, slotU, row) {
+						systemProverState.clearFailure(key)
+					} else {
+						snapshot.ProofsBackoffSkipped++
+						if reason == systemLivenessFailureMissingLocalData {
+							snapshot.MissingDataSkips++
+						}
+						continue
+					}
+				}
+
 				if localRole == systemLivenessRolePendingRepair && !mode2ShardBlobReadyForSystemProof(dealDir, mduIndex, slotU, row) {
 					err := pendingRepairShardNotReadyError(deal.dealID, slotU, ordinal, mduIndex, row)
 					reason, retryIn, attempt, _ := systemProverState.recordFailure(key, now, err)
