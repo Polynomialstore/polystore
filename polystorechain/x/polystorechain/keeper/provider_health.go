@@ -127,6 +127,10 @@ func providerLifecycleFromEvidence(ev types.EvidenceCase, current types.Provider
 	}
 }
 
+func isProviderHealthRepairPhaseOnly(ev types.EvidenceCase) bool {
+	return ev.Severity == types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR
+}
+
 func (k Keeper) deriveProviderHealthState(ctx sdk.Context, providerAddr string) (types.ProviderHealthState, error) {
 	counts, err := k.providerMode2AssignmentCountSnapshot(ctx)
 	if err != nil {
@@ -274,16 +278,20 @@ func (k Keeper) updateProviderHealthFromEvidence(ctx sdk.Context, ev types.Evide
 
 	health := current
 	health.Provider = providerAddr
-	health.LifecycleStatus = providerLifecycleFromEvidence(ev, current)
-	health.Reason = strings.TrimSpace(ev.Reason)
-	health.EvidenceClass = ev.EvidenceClass
-	health.Severity = ev.Severity
-	health.LastEvidenceCaseId = ev.Id
-	health.LastDealId = ev.DealId
-	health.LastSlot = ev.Slot
-	health.LastEpochId = ev.EpochId
+	if !isProviderHealthRepairPhaseOnly(ev) {
+		health.LifecycleStatus = providerLifecycleFromEvidence(ev, current)
+		health.Reason = strings.TrimSpace(ev.Reason)
+		health.EvidenceClass = ev.EvidenceClass
+		health.Severity = ev.Severity
+		health.LastEvidenceCaseId = ev.Id
+		health.LastDealId = ev.DealId
+		health.LastSlot = ev.Slot
+		health.LastEpochId = ev.EpochId
+		health.ConsequenceCeiling = strings.TrimSpace(ev.ConsequenceCeiling)
+	} else if health.LifecycleStatus == types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_UNSPECIFIED {
+		health.LifecycleStatus = providerLifecycleFromEvidence(ev, current)
+	}
 	health.UpdatedHeight = ctx.BlockHeight()
-	health.ConsequenceCeiling = strings.TrimSpace(ev.ConsequenceCeiling)
 
 	switch {
 	case ev.Severity == types.EvidenceSeverity_EVIDENCE_SEVERITY_HARD || ev.Slashable:
