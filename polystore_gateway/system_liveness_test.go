@@ -24,6 +24,22 @@ func TestClassifySystemLivenessError_MissingLocalData(t *testing.T) {
 	}
 }
 
+func TestClassifySystemLivenessError_PendingRepairShardNotReady(t *testing.T) {
+	t.Parallel()
+
+	err := pendingRepairShardNotReadyError(22, 3, 4, 5, 6)
+	reason, backoff, expected := classifySystemLivenessError(err)
+	if reason != systemLivenessFailureMissingLocalData {
+		t.Fatalf("expected reason=%q, got %q", systemLivenessFailureMissingLocalData, reason)
+	}
+	if backoff != systemLivenessMissingDataBackoff {
+		t.Fatalf("expected backoff=%s, got %s", systemLivenessMissingDataBackoff, backoff)
+	}
+	if !expected {
+		t.Fatalf("expected expected=true")
+	}
+}
+
 func TestClassifySystemLivenessError_DealExpired(t *testing.T) {
 	t.Parallel()
 

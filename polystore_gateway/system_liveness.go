@@ -225,6 +225,10 @@ func classifySystemLivenessError(err error) (systemLivenessFailureReason, time.D
 	}
 }
 
+func pendingRepairShardNotReadyError(dealID uint64, slot uint32, ordinal, mduIndex, row uint64) error {
+	return fmt.Errorf("%w: pending repair shard not ready deal=%d slot=%d ord=%d mdu=%d row=%d", os.ErrNotExist, dealID, slot, ordinal, mduIndex, row)
+}
+
 func (s *systemLivenessState) recordFailure(key systemLivenessKey, now time.Time, err error) (systemLivenessFailureReason, time.Duration, uint32, bool) {
 	reason, base, expected := classifySystemLivenessError(err)
 
@@ -431,8 +435,10 @@ dealLoop:
 				mduIndex, blobIndex := deriveMode2ChallengeLocal(epochSeed, deal.dealID, deal.currentGen, uint64(slotU), ordinal, metaMdus, userMdus, stripe.rows)
 				row := uint64(blobIndex) % stripe.rows
 				if localRole == systemLivenessRolePendingRepair && !mode2ShardBlobReadyForSystemProof(dealDir, mduIndex, slotU, row) {
+					err := pendingRepairShardNotReadyError(deal.dealID, slotU, ordinal, mduIndex, row)
+					reason, retryIn, attempt, _ := systemProverState.recordFailure(key, now, err)
 					snapshot.MissingDataSkips++
-					log.Printf("system liveness: pending repair shard not ready deal=%d slot=%d ord=%d mdu=%d row=%d", deal.dealID, slotU, ordinal, mduIndex, row)
+					log.Printf("system liveness: expected skip deal=%d slot=%d ord=%d reason=%s attempt=%d retry_in=%s: %v", deal.dealID, slotU, ordinal, reason, attempt, retryIn.Round(time.Second), err)
 					continue
 				}
 				proof, err := generateSystemChainedProof(ctx, epochSeed, deal.dealID, dealDir, manifestPath, stripe, mduIndex, blobIndex)
