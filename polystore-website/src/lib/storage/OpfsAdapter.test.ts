@@ -40,6 +40,8 @@ class MockFileSystemFileHandle {
 }
 
 class MockFileSystemDirectoryHandle {
+    static failRemoveNames = new Set<string>();
+
     name: string;
     readonly kind = 'directory' as const;
     entries: Map<string, MockFileSystemDirectoryHandle | MockFileSystemFileHandle>;
@@ -94,6 +96,11 @@ class MockFileSystemDirectoryHandle {
     }
 
     async removeEntry(name: string, options?: { recursive?: boolean }): Promise<void> {
+        if (MockFileSystemDirectoryHandle.failRemoveNames.has(name)) {
+            const err = new Error('Object cannot be modified');
+            err.name = 'NoModificationAllowedError';
+            throw err;
+        }
         if (!this.entries.has(name)) {
             const err = new Error('Entry not found');
             err.name = 'NotFoundError';
@@ -125,6 +132,7 @@ Object.defineProperty(global, 'navigator', {
 // Reset mock before each test
 test.beforeEach(() => {
     mockRootDirectoryHandle.entries.clear();
+    MockFileSystemDirectoryHandle.failRemoveNames.clear();
 });
 
 function makeMetadata(opts: {
@@ -412,6 +420,54 @@ test('OpfsAdapter: atomic slab generation swap serves new generation and cleans 
     assert.ok(files.includes('mdu_0.bin'))
     assert.ok(files.includes('mdu_1.bin'))
     assert.ok(files.includes('manifest.bin'))
+})
+
+test('OpfsAdapter: atomic slab generation swap survives stale cleanup failure after activation', async () => {
+    const dealId = 'test-deal-atomic-swap-cleanup-failure'
+    const rootA = '0x' + '12'.repeat(48)
+    const rootB = '0x' + '34'.repeat(48)
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: rootA,
+        manifestBlob: new Uint8Array([1]),
+        mdus: [
+            { index: 0, data: new Uint8Array([50]) },
+            { index: 1, data: new Uint8Array([51]) },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: rootA,
+            generationId: rootA.slice(2),
+        }),
+    })
+
+    const dealDir = await mockRootDirectoryHandle.getDirectoryHandle(`deal-${dealId}`)
+    const generationsDir = await dealDir.getDirectoryHandle('generations')
+    const staleGenerationNames: string[] = []
+    for await (const entry of generationsDir.values()) {
+        if (entry.kind === 'directory') staleGenerationNames.push(entry.name)
+    }
+    assert.strictEqual(staleGenerationNames.length, 1)
+    MockFileSystemDirectoryHandle.failRemoveNames.add(staleGenerationNames[0])
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: rootB,
+        manifestBlob: new Uint8Array([2]),
+        mdus: [
+            { index: 0, data: new Uint8Array([60]) },
+            { index: 1, data: new Uint8Array([61]) },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: rootB,
+            generationId: rootB.slice(2),
+        }),
+    })
+
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([60]))
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 1), new Uint8Array([61]))
+    assert.strictEqual(await OpfsAdapter.readManifestRoot(dealId), rootB)
+    assert.strictEqual((await OpfsAdapter.readSlabMetadata(dealId))?.manifest_root, rootB)
 })
 
 test('OpfsAdapter: atomic slab generation swap rehydrates sparse artifacts on read', async () => {

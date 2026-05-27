@@ -454,7 +454,11 @@ export async function writeSlabGenerationAtomically(
         await writeBlobToDirectory(generationDir, GENERATION_COMPLETE_MARKER_FILE, new TextEncoder().encode('ok\n'))
 
         await writeActiveGenerationName(dealDir, generationName)
-        await cleanupInactiveGenerations(dealDir, generationName)
+        try {
+            await cleanupInactiveGenerations(dealDir, generationName)
+        } catch (cleanupError) {
+            console.warn('Failed to clean inactive OPFS slab generations', cleanupError)
+        }
     } catch (e) {
         await removeEntryIfExists(generationsDir, generationName, true)
         throw e
