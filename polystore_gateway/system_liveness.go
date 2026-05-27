@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,6 +30,7 @@ var (
 	epochSeedTagBytes     = []byte("polystore/epoch/v1")
 	challengeSeedTagBytes = []byte("polystore/chal/v1")
 	kzgZSeedTagBytes      = []byte("polystore/kzgz/v1")
+	bls12381FrModulus     = mustParseBigIntHex("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001")
 )
 
 type systemLivenessParams struct {
@@ -60,6 +62,14 @@ type systemLivenessKey struct {
 	slot    uint32
 	ordinal uint64
 }
+
+type systemLivenessLocalRole uint8
+
+const (
+	systemLivenessRoleNone systemLivenessLocalRole = iota
+	systemLivenessRoleAssigned
+	systemLivenessRolePendingRepair
+)
 
 type systemLivenessFailureReason string
 
@@ -394,14 +404,8 @@ dealLoop:
 				continue
 			}
 
-			local := false
-			if strings.TrimSpace(slot.Provider) == providerAddr {
-				local = true
-			}
-			if !local && strings.TrimSpace(slot.PendingProvider) == providerAddr {
-				local = true
-			}
-			if !local {
+			localRole := classifySystemLivenessLocalRole(providerAddr, slot)
+			if localRole == systemLivenessRoleNone {
 				continue
 			}
 
@@ -425,6 +429,12 @@ dealLoop:
 				}
 
 				mduIndex, blobIndex := deriveMode2ChallengeLocal(epochSeed, deal.dealID, deal.currentGen, uint64(slotU), ordinal, metaMdus, userMdus, stripe.rows)
+				row := uint64(blobIndex) % stripe.rows
+				if localRole == systemLivenessRolePendingRepair && !mode2ShardBlobReadyForSystemProof(dealDir, mduIndex, slotU, row) {
+					snapshot.MissingDataSkips++
+					log.Printf("system liveness: pending repair shard not ready deal=%d slot=%d ord=%d mdu=%d row=%d", deal.dealID, slotU, ordinal, mduIndex, row)
+					continue
+				}
 				proof, err := generateSystemChainedProof(ctx, epochSeed, deal.dealID, dealDir, manifestPath, stripe, mduIndex, blobIndex)
 				if err != nil {
 					reason, retryIn, attempt, expected := systemProverState.recordFailure(key, now, err)
@@ -872,6 +882,30 @@ func deriveMode2ChallengeLocal(seed [32]byte, dealID uint64, currentGen uint64, 
 	return mduIndex, uint32(leafIndex)
 }
 
+func classifySystemLivenessLocalRole(providerAddr string, slot mode2SlotAssignment) systemLivenessLocalRole {
+	providerAddr = strings.TrimSpace(providerAddr)
+	if providerAddr == "" {
+		return systemLivenessRoleNone
+	}
+	if strings.TrimSpace(slot.Provider) == providerAddr {
+		return systemLivenessRoleAssigned
+	}
+	if strings.TrimSpace(slot.PendingProvider) == providerAddr {
+		return systemLivenessRolePendingRepair
+	}
+	return systemLivenessRoleNone
+}
+
+func mode2ShardBlobReadyForSystemProof(dealDir string, mduIndex uint64, slot uint32, row uint64) bool {
+	path := filepath.Join(dealDir, fmt.Sprintf("mdu_%d_slot_%d.bin", mduIndex, slot))
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	minSize := int64(row+1) * int64(types.BLOB_SIZE)
+	return info.Size() >= minSize
+}
+
 func deriveKzgZ(seed [32]byte, dealID uint64, mduIndex uint64, blobIndex uint32) []byte {
 	buf := make([]byte, 0, len(kzgZSeedTagBytes)+32+8+8+4)
 	buf = append(buf, kzgZSeedTagBytes...)
@@ -881,8 +915,21 @@ func deriveKzgZ(seed [32]byte, dealID uint64, mduIndex uint64, blobIndex uint32)
 	buf = binary.BigEndian.AppendUint32(buf, blobIndex)
 	sum := sha256.Sum256(buf)
 	out := make([]byte, 32)
-	copy(out, sum[:])
+	// KZG opening points are BLS12-381 Fr elements. Raw SHA-256 output is not
+	// guaranteed to be canonical, so reduce it before passing it into the FFI.
+	z := new(big.Int).SetBytes(sum[:])
+	z.Mod(z, bls12381FrModulus)
+	zBytes := z.Bytes()
+	copy(out[32-len(zBytes):], zBytes)
 	return out
+}
+
+func mustParseBigIntHex(raw string) *big.Int {
+	n, ok := new(big.Int).SetString(raw, 16)
+	if !ok {
+		panic("invalid big.Int hex constant")
+	}
+	return n
 }
 
 func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID uint64, dealDir string, manifestPath string, stripe stripeParams, mduIndex uint64, blobIndex uint32) (*types.ChainedProof, error) {
