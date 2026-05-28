@@ -977,6 +977,18 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     uploadStatusRef.current = null
     uploadArtifactCountsRef.current = { queued: 0, uploaded: 0 }
     setUploadStatus(null)
+    if (typeof window !== 'undefined') {
+      const statusWindow = window as typeof window & {
+        __polyStoreUploadStatus?: UploadPipelineStatus | null
+        __polyStoreKzgStatus?: UploadPipelineStatus['kzg'] | null
+        __polyStorePerfBundle?: PolyStoreBrowserPerfBundle
+      }
+      statusWindow.__polyStoreUploadStatus = null
+      statusWindow.__polyStoreKzgStatus = null
+      if (statusWindow.__polyStorePerfBundle) {
+        statusWindow.__polyStorePerfBundle.uploadStatus = null
+      }
+    }
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }

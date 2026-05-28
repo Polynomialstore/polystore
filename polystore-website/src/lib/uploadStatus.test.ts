@@ -36,6 +36,22 @@ test('normalizeKzgBackendStatus reports WASM fallback reason', () => {
   assert.equal(status.fallbackReason, 'WebGPU fallback adapter rejected')
 })
 
+test('normalizeKzgBackendStatus ignores zero-valued scheduler defaults', () => {
+  const status = normalizeKzgBackendStatus({
+    rustCommitBackend: 'blst',
+    kzgCommitBackend: 'wasm-blst',
+    kzgWebGpuProbeTimeoutMs: 0,
+    kzgWebGpuCommitTimeoutMs: 0,
+    kzgWebGpuMinBlobs: 0,
+    commitWorkerCount: 0,
+  })
+
+  assert.equal(status.probeTimeoutMs, null)
+  assert.equal(status.commitTimeoutMs, null)
+  assert.equal(status.minBlobs, null)
+  assert.equal(status.commitWorkerCount, null)
+})
+
 test('patchUploadPipelineStatus preserves nested state and records elapsed time', () => {
   const initial = createUploadPipelineStatus({
     dealId: '42',
@@ -65,12 +81,14 @@ test('patchUploadPipelineStatus preserves nested state and records elapsed time'
 
 test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
   const status = createUploadPipelineStatus({
-    dealId: '42',
+    dealId: 'd'.repeat(300),
     fileName: 'x'.repeat(300),
     nowMs: 0,
   })
   const sanitized = sanitizeUploadPipelineStatus({
     ...status,
+    phaseLabel: 'p'.repeat(800),
+    latestEvent: 'l'.repeat(800),
     error: 'e'.repeat(800),
     kzg: {
       ...status.kzg,
@@ -78,6 +96,9 @@ test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
     },
   })
 
+  assert.equal(sanitized.dealId.length, 160)
+  assert.equal(sanitized.phaseLabel.length, 240)
+  assert.equal(sanitized.latestEvent?.length, 160)
   assert.equal(sanitized.file.name?.length, 160)
   assert.equal(sanitized.error?.length, 500)
   assert.equal(sanitized.kzg.fallbackReason?.length, 500)
