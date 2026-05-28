@@ -1,7 +1,14 @@
 import path from 'node:path'
+import os from 'node:os'
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
+
+import {
+  buildExpansionWorkerAutotuneCandidates,
+  pickExpansionWorkerCount,
+  selectExpansionWorkerCountFromSamples,
+} from '../src/lib/expansionWorkers'
 
 type BasisMode = 'blst' | 'affine' | 'projective'
 type PipelineMode =
@@ -54,6 +61,10 @@ const rsK = Number(process.env.RS_K || 2)
 const rsM = Number(process.env.RS_M || 1)
 const cycles = Number(process.env.CYCLES || 3)
 const basisMode = (process.env.BASIS_MODE || 'blst') as BasisMode
+const autotune = process.env.AUTOTUNE === '1'
+const hardwareConcurrency = Number.isFinite(Number(process.env.HARDWARE_CONCURRENCY))
+  ? Math.max(1, Math.floor(Number(process.env.HARDWARE_CONCURRENCY)))
+  : os.cpus().length
 const pipelineModes = (process.env.PIPELINE_MODES || process.env.PIPELINE_MODE || 'split')
   .split(',')
   .map((value) => value.trim())
@@ -66,7 +77,10 @@ const pipelineModes = (process.env.PIPELINE_MODES || process.env.PIPELINE_MODE |
       value === 'fused_batch_unprofiled' ||
       value === 'fused_batch_sampled',
   )
-const concurrencies = (process.env.CONCURRENCIES || '3,4,5,6')
+const requestedConcurrencies = autotune
+  ? buildExpansionWorkerAutotuneCandidates(hardwareConcurrency, Math.ceil(fileBytes / RAW_MDU_CAPACITY)).join(',')
+  : process.env.CONCURRENCIES || '3,4,5,6'
+const concurrencies = requestedConcurrencies
   .split(',')
   .map((value) => Number(value.trim()))
   .filter((value) => Number.isFinite(value) && value > 0)
@@ -244,6 +258,25 @@ const output = {
   basis_mode: basisMode,
   pipeline_modes: pipelineModes,
   cycles,
+  autotune: autotune
+    ? {
+        hardware_concurrency: hardwareConcurrency,
+        static_worker_count: pickExpansionWorkerCount(hardwareConcurrency, chunks.length),
+        candidates: concurrencies,
+        selected_by_pipeline_mode: Object.fromEntries(
+          pipelineModes.map((pipelineMode) => {
+            const samples = concurrencies.map((concurrency) => {
+              const result = results.get(`${pipelineMode}:${concurrency}`)
+              return {
+                workerCount: concurrency,
+                wallMs: result ? readStats(result.runs).median : Number.NaN,
+              }
+            })
+            return [pipelineMode, selectExpansionWorkerCountFromSamples(samples, hardwareConcurrency, chunks.length)]
+          }),
+        ),
+      }
+    : null,
   concurrencies,
   results: Object.fromEntries(
     [...results.entries()].map(([key, result]) => [
