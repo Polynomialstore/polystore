@@ -158,7 +158,7 @@ function firstString(...values: unknown[]): string | null {
 function firstNumber(...values: unknown[]): number | null {
   for (const value of values) {
     if (typeof value !== 'number') continue
-    if (Number.isFinite(value)) return value
+    if (Number.isFinite(value) && value > 0) return value
   }
   return null
 }
@@ -300,21 +300,25 @@ export function patchUploadPipelineStatus(
 }
 
 export function sanitizeUploadPipelineStatus(status: UploadPipelineStatus): UploadPipelineStatus {
+  const truncate = (value: string | null, maxLength: number) => (value ? value.slice(0, maxLength) : null)
   return {
     ...status,
+    dealId: status.dealId.slice(0, 160),
+    phaseLabel: status.phaseLabel.slice(0, 240),
     file: {
       ...status.file,
-      name: status.file.name ? status.file.name.slice(0, 160) : null,
+      name: truncate(status.file.name, 160),
     },
-    error: status.error ? status.error.slice(0, 500) : null,
+    latestEvent: truncate(status.latestEvent, 160),
+    error: truncate(status.error, 500),
     transport: {
       ...status.transport,
-      target: status.transport.target ? status.transport.target.slice(0, 240) : null,
-      lastError: status.transport.lastError ? status.transport.lastError.slice(0, 500) : null,
+      target: truncate(status.transport.target, 240),
+      lastError: truncate(status.transport.lastError, 500),
     },
     kzg: {
       ...status.kzg,
-      fallbackReason: status.kzg.fallbackReason ? status.kzg.fallbackReason.slice(0, 500) : null,
+      fallbackReason: truncate(status.kzg.fallbackReason, 500),
     },
   }
 }
