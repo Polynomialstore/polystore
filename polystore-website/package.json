@@ -29,6 +29,7 @@
     "perf:kzg-compare": "tsx scripts/benchmark_kzg_commit_compare.ts",
     "perf:kzg-browser": "tsx scripts/benchmark_browser_kzg_commit.ts",
     "perf:kzg-webgpu-lifecycle": "tsx scripts/benchmark_browser_kzg_webgpu_lifecycle.ts",
+    "preflight:webgpu": "tsx scripts/preflight_webgpu_chrome.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
