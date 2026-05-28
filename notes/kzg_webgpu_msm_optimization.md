@@ -57,6 +57,48 @@ Two follow-up reduction variants were also tested and rejected:
 These failures point to shader pressure/browser-stability limits in the current
 `webgpu-groth16`-derived G1 arithmetic, not just TypeScript overhead.
 
+## Cross-Device Diagnostic Runner
+
+PR #178 adds a diagnostic wrapper around the same browser benchmark:
+
+```sh
+cd polystore-website
+POLYSTORE_WEBGPU_MSM_RUNS=1 npm run diagnose:kzg-webgpu-msm
+```
+
+For local Chrome path or flag overrides:
+
+```sh
+POLYSTORE_CHROME_PATH=/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+POLYSTORE_WEBGPU_MSM_RUNS=1 \
+npm run diagnose:kzg-webgpu-msm
+```
+
+The diagnostic JSON includes:
+
+- `webgpu_diagnostics.adapter.info`
+- `webgpu_diagnostics.adapter.features`
+- `webgpu_diagnostics.adapter.limits.maxComputeWorkgroupStorageSize`
+- `webgpu_diagnostics.adapter.limits.maxComputeInvocationsPerWorkgroup`
+- per-run `device_lost_after_run`
+- top-level `error` and `device_lost` when the benchmark fails in diagnostic mode
+- the existing WASM/WebGPU timings and parity result
+
+Local diagnostic run on Linux/HeadlessChrome 138:
+
+- `maxComputeWorkgroupStorageSize`: 32768
+- `maxComputeInvocationsPerWorkgroup`: 256
+- `device_lost_after_run`: null on the stable path
+- WebGPU total: ~26.43 s
+- WASM total: ~389 ms
+- parity: true
+
+Use this runner on Apple M3 Chrome before spending more shader time. If the M3
+has a larger workgroup-storage budget or avoids device loss for the rejected
+reduction variants, the problem is adapter/backend sensitivity. If it matches
+the Linux result, the current shader architecture is the bottleneck rather than
+the local test machine.
+
 ## Handoff To #168
 
 Do not enable the pure WebGPU MSM path by default in upload scheduling yet.

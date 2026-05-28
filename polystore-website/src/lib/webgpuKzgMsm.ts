@@ -29,6 +29,7 @@ type GPUDevice = {
     submit: (commandBuffers: object[]) => void
     writeBuffer: (buffer: GPUBuffer, bufferOffset: number, data: Uint8Array | Uint32Array) => void
   }
+  lost?: Promise<{ reason?: string; message?: string }>
   createBindGroup: (descriptor: object) => object
   createBindGroupLayout: (descriptor: object) => GPUBindGroupLayout
   createBuffer: (descriptor: object) => GPUBuffer
@@ -85,6 +86,11 @@ export type WebGpuKzgMsmResult = {
     readbackBytes: number
     windowSumNonZeroBytes: number
   }
+}
+
+export type WebGpuKzgMsmDeviceLostInfo = {
+  reason: string | null
+  message: string | null
 }
 
 type BucketData = {
@@ -377,6 +383,21 @@ export class WebGpuKzgMsmCommitter {
 
   destroy(): void {
     this.srsBuffer.destroy()
+  }
+
+  async getDeviceLostInfo(timeoutMs = 0): Promise<WebGpuKzgMsmDeviceLostInfo | null> {
+    if (!this.device.lost) return null
+    const lost = this.device.lost.then((info) => ({
+      reason: info.reason ?? null,
+      message: info.message ?? null,
+    }))
+    if (timeoutMs <= 0) return lost
+    return Promise.race([
+      lost,
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), timeoutMs)
+      }),
+    ])
   }
 
   async commitBlobs(blobsFlat: Uint8Array): Promise<WebGpuKzgMsmResult> {

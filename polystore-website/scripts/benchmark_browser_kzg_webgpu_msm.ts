@@ -42,6 +42,7 @@ const runs = Number.parseInt(process.env.POLYSTORE_WEBGPU_MSM_RUNS ?? '1', 10)
 if (!Number.isInteger(runs) || runs < 1) {
   throw new Error('POLYSTORE_WEBGPU_MSM_RUNS must be a positive integer')
 }
+const diagnostic = process.env.POLYSTORE_WEBGPU_MSM_DIAGNOSTIC === '1'
 
 const vite = await createServer({
   root: process.cwd(),
@@ -77,6 +78,106 @@ try {
   await page.addScriptTag({
     content: `
       window.__runPolyStoreKzgWebGpuMsmBenchmark = async function(config) {
+        function serializeError(error) {
+          if (!error) return null;
+          return {
+            name: error.name ?? null,
+            message: error.message ?? String(error),
+            stack: error.stack ?? null,
+          };
+        }
+        function serializeRecord(record) {
+          if (!record) return null;
+          const out = {};
+          for (const key of Object.keys(record)) out[key] = record[key];
+          for (const key of [
+            'vendor',
+            'architecture',
+            'device',
+            'description',
+            'subgroupMinSize',
+            'subgroupMaxSize',
+            'isFallbackAdapter',
+          ]) {
+            if (typeof record[key] !== 'undefined') out[key] = record[key];
+          }
+          return out;
+        }
+        function pickLimits(limits) {
+          if (!limits) return null;
+          const keys = [
+            'maxTextureDimension1D',
+            'maxTextureDimension2D',
+            'maxTextureDimension3D',
+            'maxTextureArrayLayers',
+            'maxBindGroups',
+            'maxBindGroupsPlusVertexBuffers',
+            'maxBindingsPerBindGroup',
+            'maxDynamicUniformBuffersPerPipelineLayout',
+            'maxDynamicStorageBuffersPerPipelineLayout',
+            'maxSampledTexturesPerShaderStage',
+            'maxSamplersPerShaderStage',
+            'maxStorageBuffersPerShaderStage',
+            'maxStorageTexturesPerShaderStage',
+            'maxUniformBuffersPerShaderStage',
+            'maxUniformBufferBindingSize',
+            'maxStorageBufferBindingSize',
+            'minUniformBufferOffsetAlignment',
+            'minStorageBufferOffsetAlignment',
+            'maxVertexBuffers',
+            'maxBufferSize',
+            'maxVertexAttributes',
+            'maxVertexBufferArrayStride',
+            'maxInterStageShaderComponents',
+            'maxInterStageShaderVariables',
+            'maxColorAttachments',
+            'maxColorAttachmentBytesPerSample',
+            'maxComputeWorkgroupStorageSize',
+            'maxComputeInvocationsPerWorkgroup',
+            'maxComputeWorkgroupSizeX',
+            'maxComputeWorkgroupSizeY',
+            'maxComputeWorkgroupSizeZ',
+            'maxComputeWorkgroupsPerDimension',
+          ];
+          const out = {};
+          for (const key of keys) {
+            if (typeof limits[key] !== 'undefined') out[key] = limits[key];
+          }
+          return out;
+        }
+        async function collectWebGpuDiagnostics() {
+          const diagnostics = {
+            present: Boolean(navigator.gpu),
+            adapter: null,
+            adapter_error: null,
+          };
+          if (!navigator.gpu) return diagnostics;
+          try {
+            const adapter = await navigator.gpu.requestAdapter();
+            if (!adapter) {
+              diagnostics.adapter_error = 'requestAdapter returned null';
+              return diagnostics;
+            }
+            let info = null;
+            try {
+              if (adapter.info) info = serializeRecord(adapter.info);
+              else if (typeof adapter.requestAdapterInfo === 'function') {
+                info = serializeRecord(await adapter.requestAdapterInfo());
+              }
+            } catch (error) {
+              info = { error: serializeError(error) };
+            }
+            diagnostics.adapter = {
+              info,
+              features: adapter.features ? Array.from(adapter.features).sort() : [],
+              limits: pickLimits(adapter.limits),
+            };
+            return diagnostics;
+          } catch (error) {
+            diagnostics.adapter_error = serializeError(error);
+            return diagnostics;
+          }
+        }
         function makeValidBlob(seed) {
           const blob = new Uint8Array(config.blobSize);
           const chunks = config.blobSize / 32;
@@ -106,6 +207,7 @@ try {
 
         const wasmMod = await import('/wasm/polystore_core.js');
         const msmMod = await import('/src/lib/webgpuKzgMsm.ts');
+        const webgpuDiagnostics = await collectWebGpuDiagnostics();
         const wasmBytes = await fetch('/wasm/polystore_core_bg.wasm').then((response) => response.arrayBuffer());
         await wasmMod.default({ module_or_path: wasmBytes });
         const trustedSetupBytes = new Uint8Array(
@@ -123,40 +225,55 @@ try {
         }
 
         const gpuInitStart = performance.now();
-        const committer = await msmMod.createWebGpuKzgMsmCommitter(polyStoreWasm, navigator, {
-          bucketWidth: config.bucketWidth,
-        });
-        const gpuInitMs = performance.now() - gpuInitStart;
+        let committer = null;
+        let gpuInitMs = 0;
 
         const runResults = [];
         let wasmCommitments = null;
-        for (let run = 0; run < config.runs; run += 1) {
-          const wasmStart = performance.now();
-          wasmCommitments = polyStoreWasm.commit_blobs(blobs);
-          const wasmMs = performance.now() - wasmStart;
-          const gpu = await committer.commitBlobs(blobs);
-          runResults.push({
-            run,
-            wasm_ms: wasmMs,
-            gpu_timings: gpu.timings,
-            gpu_debug: gpu.debug ?? null,
-            parity: hex(wasmCommitments) === hex(gpu.commitments),
-            commitment_bytes: gpu.commitments.byteLength,
-            first_commitment: hex(gpu.commitments.slice(0, 48)),
+        let error = null;
+        let deviceLost = null;
+        try {
+          committer = await msmMod.createWebGpuKzgMsmCommitter(polyStoreWasm, navigator, {
+            bucketWidth: config.bucketWidth,
           });
+          gpuInitMs = performance.now() - gpuInitStart;
+
+          for (let run = 0; run < config.runs; run += 1) {
+            const wasmStart = performance.now();
+            wasmCommitments = polyStoreWasm.commit_blobs(blobs);
+            const wasmMs = performance.now() - wasmStart;
+            const gpu = await committer.commitBlobs(blobs);
+            runResults.push({
+              run,
+              wasm_ms: wasmMs,
+              gpu_timings: gpu.timings,
+              gpu_debug: gpu.debug ?? null,
+              device_lost_after_run: await committer.getDeviceLostInfo(25),
+              parity: hex(wasmCommitments) === hex(gpu.commitments),
+              commitment_bytes: gpu.commitments.byteLength,
+              first_commitment: hex(gpu.commitments.slice(0, 48)),
+            });
+          }
+        } catch (caught) {
+          error = serializeError(caught);
+          if (committer) deviceLost = await committer.getDeviceLostInfo(500);
+          if (!config.diagnostic) throw caught;
+        } finally {
+          committer?.destroy();
         }
-        committer.destroy();
 
         const totals = runResults.map((run) => run.gpu_timings.totalMs);
         const wasmTotals = runResults.map((run) => run.wasm_ms);
 
         return {
+          diagnostic: config.diagnostic,
           browser: {
             user_agent: navigator.userAgent,
             hardware_concurrency: navigator.hardwareConcurrency ?? null,
             cross_origin_isolated: crossOriginIsolated,
             webgpu_present: Boolean(navigator.gpu),
           },
+          webgpu_diagnostics: webgpuDiagnostics,
           blob_count: config.blobCount,
           bucket_width: config.bucketWidth,
           runs: config.runs,
@@ -164,7 +281,9 @@ try {
           gpu_init_ms: gpuInitMs,
           gpu_total_ms: stats(totals),
           run_results: runResults,
-          parity: runResults.every((run) => run.parity),
+          error,
+          device_lost: deviceLost,
+          parity: runResults.length > 0 && runResults.every((run) => run.parity),
           commitment_bytes: runResults[0]?.commitment_bytes ?? 0,
           first_commitment: runResults[0]?.first_commitment ?? '',
         };
@@ -177,6 +296,7 @@ try {
     blobCount,
     bucketWidth,
     runs,
+    diagnostic,
   })})`)
 
   console.log(
@@ -198,7 +318,11 @@ try {
     ),
   )
 
-  if (!(result as { parity?: boolean }).parity) {
+  if (!diagnostic && (result as { error?: unknown }).error) {
+    throw new Error('WebGPU MSM diagnostic captured a benchmark failure')
+  }
+
+  if (!diagnostic && !(result as { parity?: boolean }).parity) {
     throw new Error('WebGPU MSM commitment parity failed')
   }
 } finally {
