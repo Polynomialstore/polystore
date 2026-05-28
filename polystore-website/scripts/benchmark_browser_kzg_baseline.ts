@@ -185,6 +185,7 @@ const basisMode = (process.env.BASIS_MODE || 'blst') as BasisMode
 if (!['blst', 'affine', 'projective', 'fixed', 'fixed-base'].includes(basisMode)) {
   throw new Error(`invalid BASIS_MODE: ${process.env.BASIS_MODE ?? ''}`)
 }
+const childBasisMode = basisMode === 'fixed-base' ? 'fixed' : basisMode
 
 const singleBlob = await benchmarkSingleBlob(singleBlobRuns, singleBlobWarmups, basisMode)
 const oneMdu = runCommandJson<StagesSummary>(
@@ -194,7 +195,7 @@ const oneMdu = runCommandJson<StagesSummary>(
     FILE_BYTES: String(RAW_MDU_CAPACITY),
     WARMUP_RUNS: '0',
     MEASURE_RUNS: String(oneMduRuns),
-    BASIS_MODE: basisMode,
+    BASIS_MODE: childBasisMode,
   },
 )
 const largeWorker = runCommandJson<ConcurrencySummary>(
@@ -205,7 +206,7 @@ const largeWorker = runCommandJson<ConcurrencySummary>(
     CYCLES: String(largeCycles),
     CONCURRENCIES: concurrencies,
     PIPELINE_MODES: pipelineModes,
-    BASIS_MODE: basisMode,
+    BASIS_MODE: childBasisMode,
   },
 )
 
@@ -232,8 +233,8 @@ const baseline = {
   },
   commands: {
     baseline: `env BASIS_MODE=${basisMode} SINGLE_BLOB_WARMUPS=${singleBlobWarmups} SINGLE_BLOB_RUNS=${singleBlobRuns} ONE_MDU_RUNS=${oneMduRuns} LARGE_CYCLES=${largeCycles} LARGE_FILE_BYTES=${largeFileBytes} CONCURRENCIES=${concurrencies} PIPELINE_MODES=${pipelineModes} npm --prefix polystore-website run perf:browser-kzg-baseline --silent`,
-    one_mdu: `env FILE_BYTES=${RAW_MDU_CAPACITY} WARMUP_RUNS=0 MEASURE_RUNS=${oneMduRuns} BASIS_MODE=${basisMode} npm --prefix polystore-website run perf:prepare-stages --silent`,
-    large_worker: `env FILE_BYTES=${largeFileBytes} CYCLES=${largeCycles} CONCURRENCIES=${concurrencies} PIPELINE_MODES=${pipelineModes} BASIS_MODE=${basisMode} npm --prefix polystore-website run perf:user-stage-concurrency --silent`,
+    one_mdu: `env FILE_BYTES=${RAW_MDU_CAPACITY} WARMUP_RUNS=0 MEASURE_RUNS=${oneMduRuns} BASIS_MODE=${childBasisMode} npm --prefix polystore-website run perf:prepare-stages --silent`,
+    large_worker: `env FILE_BYTES=${largeFileBytes} CYCLES=${largeCycles} CONCURRENCIES=${concurrencies} PIPELINE_MODES=${pipelineModes} BASIS_MODE=${childBasisMode} npm --prefix polystore-website run perf:user-stage-concurrency --silent`,
   },
   basis_mode: basisMode,
   summary: {

@@ -772,14 +772,16 @@ impl PolyStoreWasm {
                 Ok(())
             }
             _ => Err(JsValue::from_str(
-                "basis mode must be 'blst', 'projective', 'affine' or 'fixed'",
+                "basis mode must be 'blst', 'projective', 'affine', 'fixed' or 'fixed-base'",
             )),
         }
     }
 
     pub fn fixed_base_table_stats(&self) -> Result<JsValue, JsValue> {
-        let (window_bits, windows, table_points, approximate_memory_bytes) =
-            self.kzg_ctx.fixed_base_table_stats();
+        let (window_bits, windows, table_points, approximate_memory_bytes) = self
+            .kzg_ctx
+            .fixed_base_table_stats()
+            .map_err(|e| JsValue::from_str(&format!("fixed-base table stats failed: {:?}", e)))?;
 
         #[derive(serde::Serialize)]
         struct FixedBaseTableStats {

@@ -340,7 +340,7 @@ impl KzgContext {
 
                     let msm_start = now_ms();
                     let acc = if wasm_basis_mode == WASM_MSM_MODE_FIXED {
-                        let (table, precompute_ms) = self.fixed_base_table_profiled(evals.len());
+                        let (table, precompute_ms) = self.fixed_base_table_profiled(evals.len())?;
                         perf.transform_ms += precompute_ms;
                         msm_fixed_base_g1_profiled(table, &evals, &mut perf)
                     } else if wasm_basis_mode == WASM_MSM_MODE_PROJECTIVE {
@@ -394,26 +394,44 @@ impl KzgContext {
         }
     }
 
-    fn fixed_base_table_profiled(&self, point_count: usize) -> (&FixedBaseMsmTable, f64) {
+    fn fixed_base_table_profiled(
+        &self,
+        point_count: usize,
+    ) -> Result<(&FixedBaseMsmTable, f64), KzgError> {
         if let Some(table) = self.fixed_base_table.get() {
-            return (table, 0.0);
+            if table.point_count < point_count {
+                return Err(KzgError::Internal(format!(
+                    "fixed-base table has {} points but {} were requested",
+                    table.point_count, point_count
+                )));
+            }
+            return Ok((table, 0.0));
         }
 
         let start = now_ms();
+        // Build the cache at the canonical blob width so an informational stats
+        // call cannot seed a too-small table for later commitments.
+        let build_point_count = point_count.max(BLOB_SIZE / 32).min(self.g1_points.len());
         let table = self.fixed_base_table.get_or_init(|| {
-            FixedBaseMsmTable::build(&self.g1_points, point_count, FIXED_BASE_WINDOW_BITS)
+            FixedBaseMsmTable::build(&self.g1_points, build_point_count, FIXED_BASE_WINDOW_BITS)
         });
-        (table, now_ms() - start)
+        if table.point_count < point_count {
+            return Err(KzgError::Internal(format!(
+                "fixed-base table has {} points but {} were requested",
+                table.point_count, point_count
+            )));
+        }
+        Ok((table, now_ms() - start))
     }
 
-    pub fn fixed_base_table_stats(&self) -> (usize, usize, usize, usize) {
-        let (table, _) = self.fixed_base_table_profiled(BLOB_SIZE / 32);
-        (
+    pub fn fixed_base_table_stats(&self) -> Result<(usize, usize, usize, usize), KzgError> {
+        let (table, _) = self.fixed_base_table_profiled(BLOB_SIZE / 32)?;
+        Ok((
             table.window_bits,
             table.windows,
             table.point_count * table.entries_per_point,
             table.approximate_memory_bytes(),
-        )
+        ))
     }
 
     pub fn mdu_to_kzg_commitments(&self, mdu_bytes: &[u8]) -> Result<Vec<KzgCommitment>, KzgError> {
@@ -1781,7 +1799,7 @@ mod tests {
 
         let baseline = ctx.blob_to_commitment(&blob).unwrap();
         let evals = bytes_to_scalars(&blob).unwrap();
-        let (table, precompute_ms) = ctx.fixed_base_table_profiled(evals.len());
+        let (table, precompute_ms) = ctx.fixed_base_table_profiled(evals.len()).unwrap();
         let mut perf = BlobToCommitmentPerf::default();
         let fixed = msm_fixed_base_g1_profiled(table, &evals, &mut perf)
             .to_affine()
