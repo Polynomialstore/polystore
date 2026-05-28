@@ -20,6 +20,13 @@ Provider public endpoints (striped `2+1` baseline):
 - `https://sp2.polynomialstore.com` → provider `nil1w98n98a8gnrwnyz62wfvya9wzvdr92uwz7dssk`
 - `https://sp3.polynomialstore.com` → provider `nil182f6qy5taazj5fa722p2ut4d0v5j2gkap0dprj`
 
+Provider ingress note:
+- These SP hostnames are expected to resolve directly to the provider host
+  through DNS-only records, with Caddy terminating HTTPS and proxying to local
+  provider-daemon ports. They should not be Cloudflare-proxied for normal bulk
+  provider traffic.
+- Runbook: `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`
+
 ## What Collaborators Need From Hub Operator
 
 - Faucet auth token (shared pre-alpha devnet bootstrap token; may already be embedded in the website build)
@@ -77,7 +84,7 @@ If the key is new and gas funding is still missing, fund the printed provider ad
 
 ```bash
 export PROVIDER_KEY="provider1"
-export PROVIDER_ENDPOINT="/dns4/sp1.polynomialstore.com/tcp/443/https" # or /ip4/<public-ip>/tcp/8091/http
+export PROVIDER_ENDPOINT="/dns4/sp1.polynomialstore.com/tcp/443/https"
 export POLYSTORE_GATEWAY_SP_AUTH="<shared-secret-from-hub>"
 export OPERATOR_ADDRESS="<operator-nil1-or-0x-address>"         # from website wallet step
 

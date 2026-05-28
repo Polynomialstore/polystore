@@ -37,4 +37,8 @@ If a provider wants a clean HTTPS endpoint on port 443:
 
 Notes:
 - Caddy automatically handles TLS and WebSockets for these reverse proxies.
-
+- For the current `polynomialstore.com` provider deployment, the SP hostnames use
+  DNS-only records and Caddy terminates HTTPS directly on the provider host. Do
+  not orange-cloud/proxy the SP records for bulk provider traffic.
+- The current direct HTTPS provider runbook is
+  `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`.

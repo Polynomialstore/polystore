@@ -17,6 +17,7 @@ This repo is currently geared toward a **trusted devnet soft launch (Feb 2026)**
 - Trusted devnet pack (hub + remote providers): `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
 - Collaborator packet (“send this to testers”): `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`
 - Provider endpoint profiles (`direct` vs `cloudflare-tunnel`): `docs/networking/PROVIDER_ENDPOINTS.md`
+- Direct SP HTTPS runbook for DNS-only provider hostnames: `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`
 
 ## Quick start (local, what CI exercises)
 
