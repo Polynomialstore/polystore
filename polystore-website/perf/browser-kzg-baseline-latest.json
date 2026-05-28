@@ -1,0 +1,316 @@
+{
+  "generated_at": "2026-05-28T17:25:42.331Z",
+  "git": {
+    "branch": "perf/wasm-kzg-benchmark",
+    "commit": "f31c94eb16e99cdb7ba53f660a0cb6ad7b6da79d",
+    "commit_short": "f31c94eb"
+  },
+  "runtime": {
+    "node": "v24.14.1",
+    "v8": "13.6.233.17-node.44",
+    "platform": "linux",
+    "arch": "x64",
+    "os_release": "6.8.0-110-generic",
+    "cpu_model": "11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz",
+    "logical_cpus": 12,
+    "total_memory_bytes": 33512767488
+  },
+  "commands": {
+    "baseline": "env SINGLE_BLOB_WARMUPS=1 SINGLE_BLOB_RUNS=5 ONE_MDU_RUNS=1 LARGE_CYCLES=1 LARGE_FILE_BYTES=49103158 CONCURRENCIES=5,6,7 PIPELINE_MODES=fused_batch_sampled npm --prefix polystore-website run perf:browser-kzg-baseline --silent",
+    "one_mdu": "env FILE_BYTES=8126464 WARMUP_RUNS=0 MEASURE_RUNS=1 BASIS_MODE=blst npm --prefix polystore-website run perf:prepare-stages --silent",
+    "large_worker": "env FILE_BYTES=49103158 CYCLES=1 CONCURRENCIES=5,6,7 PIPELINE_MODES=fused_batch_sampled BASIS_MODE=blst npm --prefix polystore-website run perf:user-stage-concurrency --silent"
+  },
+  "summary": {
+    "single_blob_wall_median_ms": 258.45477900000014,
+    "one_mdu_total_prepare_median_ms": 26567.780770999998,
+    "one_mdu_user_stage_median_ms": 26433.036531,
+    "one_mdu_user_msm_total_ms": 25792,
+    "one_mdu_implied_per_blob_msm_ms": 268.6666666666667,
+    "commitments_per_raw_user_mdu": 96
+  },
+  "single_blob": {
+    "blob_bytes": 131072,
+    "warmup_runs": 1,
+    "measure_runs": 5,
+    "init_ms": 2650.128383,
+    "wall_ms": {
+      "min": 257.4234220000003,
+      "median": 258.45477900000014,
+      "mean": 259.0532860000001,
+      "max": 262.8153379999999
+    },
+    "rust_total_ms": {
+      "min": 257,
+      "median": 258,
+      "mean": 259,
+      "max": 263
+    },
+    "rust_msm_ms": {
+      "min": 257,
+      "median": 258,
+      "mean": 259,
+      "max": 263
+    },
+    "last_perf": {
+      "decode_ms": 0,
+      "transform_ms": 0,
+      "msm_scalar_prep_ms": 0,
+      "msm_bucket_fill_ms": 0,
+      "msm_reduce_ms": 0,
+      "msm_double_ms": 0,
+      "msm_ms": 263,
+      "compress_ms": 0,
+      "total_ms": 263,
+      "blobs": 1
+    }
+  },
+  "one_mdu_prepare": {
+    "file_bytes": 8126464,
+    "raw_mdu_capacity": 8126464,
+    "total_user_mdus": 1,
+    "rs_k": 2,
+    "rs_m": 1,
+    "basis_mode": "blst",
+    "warmup_runs": 0,
+    "measure_runs": 1,
+    "init": {
+      "polystore_wasm_ms": 2643.014051
+    },
+    "stages": {
+      "total_ms": {
+        "min": 26567.780770999998,
+        "median": 26567.780770999998,
+        "mean": 26567.780770999998,
+        "max": 26567.780770999998
+      },
+      "user_stage_ms": {
+        "min": 26433.036531,
+        "median": 26433.036531,
+        "mean": 26433.036531,
+        "max": 26433.036531
+      },
+      "witness_stage_ms": {
+        "min": 52.63608699999895,
+        "median": 52.63608699999895,
+        "mean": 52.63608699999895,
+        "max": 52.63608699999895
+      },
+      "meta_stage_ms": {
+        "min": 42.540367000001424,
+        "median": 42.540367000001424,
+        "mean": 42.540367000001424,
+        "max": 42.540367000001424
+      },
+      "manifest_ms": {
+        "min": 34.98725600000034,
+        "median": 34.98725600000034,
+        "mean": 34.98725600000034,
+        "max": 34.98725600000034
+      }
+    },
+    "phase_totals": {
+      "user": {
+        "wall_ms": 26433.036531,
+        "phase_totals": {
+          "expand_ms": 6,
+          "commit_ms": 25797,
+          "root_ms": 1.0081690000006347,
+          "rust_encode_ms": 2,
+          "rust_rs_ms": 3,
+          "rust_commit_decode_ms": 4,
+          "rust_commit_transform_ms": 0,
+          "rust_commit_msm_scalar_prep_ms": 0,
+          "rust_commit_msm_bucket_fill_ms": 0,
+          "rust_commit_msm_reduce_ms": 0,
+          "rust_commit_msm_double_ms": 0,
+          "rust_commit_msm_ms": 25792,
+          "rust_commit_compress_ms": 1
+        }
+      },
+      "witness": {
+        "wall_ms": 52.63608699999895,
+        "phase_totals": {
+          "expand_ms": 0,
+          "commit_ms": 52.47536200000104,
+          "root_ms": 0.16072499999791034,
+          "rust_encode_ms": 0,
+          "rust_rs_ms": 0,
+          "rust_commit_decode_ms": 0,
+          "rust_commit_transform_ms": 0,
+          "rust_commit_msm_scalar_prep_ms": 0,
+          "rust_commit_msm_bucket_fill_ms": 0,
+          "rust_commit_msm_reduce_ms": 0,
+          "rust_commit_msm_double_ms": 0,
+          "rust_commit_msm_ms": 47,
+          "rust_commit_compress_ms": 0
+        }
+      },
+      "meta": {
+        "wall_ms": 42.540367000001424,
+        "phase_totals": {
+          "expand_ms": 0,
+          "commit_ms": 42.381375000000844,
+          "root_ms": 0.15899200000058045,
+          "rust_encode_ms": 0,
+          "rust_rs_ms": 0,
+          "rust_commit_decode_ms": 0,
+          "rust_commit_transform_ms": 0,
+          "rust_commit_msm_scalar_prep_ms": 0,
+          "rust_commit_msm_bucket_fill_ms": 0,
+          "rust_commit_msm_reduce_ms": 0,
+          "rust_commit_msm_double_ms": 0,
+          "rust_commit_msm_ms": 40,
+          "rust_commit_compress_ms": 0
+        }
+      }
+    },
+    "runs": [
+      {
+        "total_ms": 26567.780770999998,
+        "user_stage": {
+          "wall_ms": 26433.036531,
+          "records": [
+            {
+              "index": 0,
+              "kind": "user",
+              "raw_bytes": 8126464,
+              "encoded_mdu_bytes": 8388608,
+              "witness_bytes": 4608,
+              "wall_ms": 26433.036531,
+              "expand_ms": 6,
+              "commit_ms": 25797,
+              "root_ms": 1.0081690000006347,
+              "rust_encode_ms": 2,
+              "rust_rs_ms": 3,
+              "rust_commit_decode_ms": 4,
+              "rust_commit_transform_ms": 0,
+              "rust_commit_msm_scalar_prep_ms": 0,
+              "rust_commit_msm_bucket_fill_ms": 0,
+              "rust_commit_msm_reduce_ms": 0,
+              "rust_commit_msm_double_ms": 0,
+              "rust_commit_msm_ms": 25792,
+              "rust_commit_compress_ms": 1,
+              "mdu_root_hex": "0xa2b7fa7c36fcafb424bc559340489772ad72dac948cbe86c81a4543d4db3b9eb"
+            }
+          ]
+        },
+        "witness_stage": {
+          "wall_ms": 52.63608699999895,
+          "records": [
+            {
+              "index": 0,
+              "kind": "witness",
+              "raw_bytes": 4608,
+              "encoded_mdu_bytes": 8388608,
+              "witness_bytes": 3072,
+              "wall_ms": 52.63608699999895,
+              "expand_ms": 0,
+              "commit_ms": 52.47536200000104,
+              "root_ms": 0.16072499999791034,
+              "rust_encode_ms": 0,
+              "rust_rs_ms": 0,
+              "rust_commit_decode_ms": 0,
+              "rust_commit_transform_ms": 0,
+              "rust_commit_msm_scalar_prep_ms": 0,
+              "rust_commit_msm_bucket_fill_ms": 0,
+              "rust_commit_msm_reduce_ms": 0,
+              "rust_commit_msm_double_ms": 0,
+              "rust_commit_msm_ms": 47,
+              "rust_commit_compress_ms": 0,
+              "mdu_root_hex": "0x7a26d4e0decb1352c8c75f06463a80fc680819cd8fe7daa67fe6328daf535b7e"
+            }
+          ]
+        },
+        "meta_stage": {
+          "wall_ms": 42.540367000001424,
+          "records": [
+            {
+              "index": 0,
+              "kind": "meta",
+              "raw_bytes": 8388608,
+              "encoded_mdu_bytes": 8388608,
+              "witness_bytes": 3072,
+              "wall_ms": 42.540367000001424,
+              "expand_ms": 0,
+              "commit_ms": 42.381375000000844,
+              "root_ms": 0.15899200000058045,
+              "rust_encode_ms": 0,
+              "rust_rs_ms": 0,
+              "rust_commit_decode_ms": 0,
+              "rust_commit_transform_ms": 0,
+              "rust_commit_msm_scalar_prep_ms": 0,
+              "rust_commit_msm_bucket_fill_ms": 0,
+              "rust_commit_msm_reduce_ms": 0,
+              "rust_commit_msm_double_ms": 0,
+              "rust_commit_msm_ms": 40,
+              "rust_commit_compress_ms": 0,
+              "mdu_root_hex": "0x32ce41943ab54afacc773beb6ffacb1a274df460ac53200d6cecc5fa31652ad7"
+            }
+          ]
+        },
+        "manifest_ms": 34.98725600000034,
+        "user_count": 1,
+        "witness_count": 1,
+        "manifest_root_hex": "0xac1ee55408fb1dfaf1bbaa0aafc71b3d25a332296f42e09c4157b13d49110e566f88c5220427ea41c7fa301d866319f3"
+      }
+    ]
+  },
+  "large_worker_sweep": {
+    "file_bytes": 49103158,
+    "total_user_mdus": 7,
+    "basis_mode": "blst",
+    "pipeline_modes": [
+      "fused_batch_sampled"
+    ],
+    "cycles": 1,
+    "concurrencies": [
+      5,
+      6,
+      7
+    ],
+    "results": {
+      "fused_batch_sampled:5": {
+        "pipeline_mode": "fused_batch_sampled",
+        "concurrency": 5,
+        "worker_count": 5,
+        "runs": [
+          56170.163725
+        ],
+        "stats": {
+          "min": 56170.163725,
+          "median": 56170.163725,
+          "mean": 56170.163725,
+          "max": 56170.163725
+        }
+      },
+      "fused_batch_sampled:6": {
+        "pipeline_mode": "fused_batch_sampled",
+        "concurrency": 6,
+        "worker_count": 6,
+        "runs": [
+          40087.33147
+        ],
+        "stats": {
+          "min": 40087.33147,
+          "median": 40087.33147,
+          "mean": 40087.33147,
+          "max": 40087.33147
+        }
+      },
+      "fused_batch_sampled:7": {
+        "pipeline_mode": "fused_batch_sampled",
+        "concurrency": 7,
+        "worker_count": 7,
+        "runs": [
+          38378.566854000004
+        ],
+        "stats": {
+          "min": 38378.566854000004,
+          "median": 38378.566854000004,
+          "mean": 38378.566854000004,
+          "max": 38378.566854000004
+        }
+      }
+    }
+  }
+}

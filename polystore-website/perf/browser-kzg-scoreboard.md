@@ -5,9 +5,25 @@ Use this file to record the largest wins on `perf/browser-kzg-next` against the 
 Recommended commands:
 
 ```bash
+npm --prefix polystore-website run perf:browser-kzg-baseline
 npm --prefix polystore-website run perf:prepare-stages
 npm --prefix polystore-website run perf:prepare
 ```
+
+## Current Baseline Artifact
+
+The reproducible baseline for the no-local-helper browser/WASM KZG path is recorded in:
+
+- `polystore-website/perf/browser-kzg-baseline-latest.md`
+- `polystore-website/perf/browser-kzg-baseline-latest.json`
+
+The baseline runner covers:
+
+- one nonzero 128 KiB blob commitment using the checked-in PolyStore WASM bundle;
+- one raw user MDU full prepare with staged timing;
+- one large user-stage worker sweep across configured worker counts.
+
+Use this artifact as the before-state for fixed-base MSM, batched MSM, and worker-autotune PRs. Browser-runtime evidence should be captured separately when a browser harness is available; this baseline is the stable Node/V8 contract.
 
 Fields to track:
 - `full_prepare_ms`
