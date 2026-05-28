@@ -88,12 +88,20 @@ function buildHeaders(
   dealId: string,
   manifestRoot: string,
   previousManifestRoot: string | undefined,
+  uploadGeneration: string | undefined,
   artifact: SparseArtifactInput,
 ): Record<string, string> {
   const headers: Record<string, string> = {
     'X-PolyStore-Deal-ID': dealId,
-    'X-PolyStore-Manifest-Root': manifestRoot,
     'Content-Type': 'application/octet-stream',
+  }
+  const normalizedManifestRoot = String(manifestRoot || '').trim()
+  const normalizedUploadGeneration = String(uploadGeneration || '').trim()
+  if (normalizedManifestRoot !== '') {
+    headers['X-PolyStore-Manifest-Root'] = normalizedManifestRoot
+  }
+  if (normalizedUploadGeneration !== '') {
+    headers['X-PolyStore-Upload-Generation'] = normalizedUploadGeneration
   }
   const normalizedPreviousManifestRoot = String(previousManifestRoot || '').trim()
   if (normalizedPreviousManifestRoot !== '') {
@@ -112,7 +120,13 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
   const sendArtifact: UploadTransportPort['sendArtifact'] = async (request) => {
     const response = await postSparseArtifact({
       url: targetUrl(request.target, request.artifact),
-      headers: buildHeaders(request.dealId, request.manifestRoot, request.previousManifestRoot, request.artifact),
+      headers: buildHeaders(
+        request.dealId,
+        request.manifestRoot,
+        request.previousManifestRoot,
+        request.uploadGeneration,
+        request.artifact,
+      ),
       artifact: request.artifact,
     })
 
@@ -145,6 +159,7 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
         deal_id: parsedDealId,
         manifest_root: first.manifestRoot,
         previous_manifest_root: String(first.previousManifestRoot || '').trim(),
+        upload_generation: String(first.uploadGeneration || '').trim(),
         artifacts: artifacts.map(({ request, sparseArtifact, part }) => ({
           part,
           kind: request.artifact.kind,
