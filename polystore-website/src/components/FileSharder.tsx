@@ -3675,9 +3675,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                   ? Math.floor(toU8(result.shards_flat).byteLength / Math.max(1, Number(result.shard_len)))
                   : (result.shards ?? []).length,
             }
-              perfSamples.user.push(perfSample)
-              updateUploadKzgStatus(result.perf, 'kzg:user_mdu')
-              console.log('[perf] user mdu (mode2)', {
+            perfSamples.user.push(perfSample)
+            updateUploadKzgStatus(result.perf, 'kzg:user_mdu')
+            console.log('[perf] user mdu (mode2)', {
               ...perfSample,
             })
             prevCommitMsPerMdu = opMs
@@ -3851,9 +3851,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                 totalMs: opMs,
                 batchBlobs,
               };
-                perfSamples.user.push(perfSample);
-                updateUploadKzgStatus(result.perf, 'kzg:user_mdu')
-                console.log('[perf] user mdu', {
+              perfSamples.user.push(perfSample);
+              updateUploadKzgStatus(result.perf, 'kzg:user_mdu')
+              console.log('[perf] user mdu', {
                 ...perfSample,
               });
               prevCommitMsPerMdu = opMs;
@@ -4018,9 +4018,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerCommitWorkerCount,
               totalMs: opMs,
             };
-              perfSamples.witness.push(perfSample);
-              updateUploadKzgStatus(result.perf, 'kzg:witness_mdu')
-              console.log('[perf] witness mdu', {
+            perfSamples.witness.push(perfSample);
+            updateUploadKzgStatus(result.perf, 'kzg:witness_mdu')
+            console.log('[perf] witness mdu', {
               ...perfSample,
             });
             prevCommitMsPerMdu = opMs;
@@ -4145,9 +4145,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           workerRustCommitMsmSubphasesAvailable,
           totalMs: opMs,
         }
-          perfSamples.meta.push(metaPerfSample)
-          updateUploadKzgStatus(mdu0PrepareResult.perf, 'kzg:mdu0')
-          console.log('[perf] meta mdu0', {
+        perfSamples.meta.push(metaPerfSample)
+        updateUploadKzgStatus(mdu0PrepareResult.perf, 'kzg:mdu0')
+        console.log('[perf] meta mdu0', {
           prepareBuilderMs: Number(mdu0PrepareResult.perf?.prepareBuilderMs ?? 0),
           ...metaPerfSample,
         });
@@ -4195,18 +4195,18 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           currentMduIndex: null,
         }));
         const manifestStart = performance.now();
-          const manifest = await workerClient.computeManifest(allRoots);
-          const manifestMs = performance.now() - manifestStart;
-          updateUploadStatus(
-            {
-              phase: 'manifest',
-              phaseLabel: 'Manifest root computed',
-              tone: 'active',
-              timing: { phases: { manifest: roundPerfMs(manifestMs) ?? manifestMs } },
-            },
-            'manifest:computed',
-          )
-          console.log('[perf] manifest aggregation', { ms: manifestMs, roots: allRoots.length / 32 });
+        const manifest = await workerClient.computeManifest(allRoots);
+        const manifestMs = performance.now() - manifestStart;
+        updateUploadStatus(
+          {
+            phase: 'manifest',
+            phaseLabel: 'Manifest root computed',
+            tone: 'active',
+            timing: { phases: { manifest: roundPerfMs(manifestMs) ?? manifestMs } },
+          },
+          'manifest:computed',
+        )
+        console.log('[perf] manifest aggregation', { ms: manifestMs, roots: allRoots.length / 32 });
         
         const finalMdus = [
           makePreparedMdu(0, mdu0Bytes),
@@ -4459,7 +4459,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           note: 'max* fields are closest to wall-clock critical path; sum* fields are parallel worker totals',
         });
         console.log('[perf] prepare profile', prepareProfile);
-          browserPerfEndPhase('prepare', {
+        browserPerfEndPhase('prepare', {
           ok: true,
           totalMs: roundPerfMs(elapsedMs),
           fileBytes: bytes.length,
@@ -4489,25 +4489,25 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,
           slowestWitnessMduIndex: prepareProfile.summary.slowestWitnessMduIndex,
           manifestMs: roundPerfMs(manifestMs),
-          })
-          updateUploadStatus(
-            {
-              phase: 'done',
-              phaseLabel: 'Client-side expansion complete',
-              tone: 'success',
-              storage: { stage: 'upload_queue', queuedArtifacts: finalMdus.length + 1 },
-              totals: {
-                userMdus: totalUserChunks,
-                witnessMdus: witnessMduCount,
-                totalMdus: finalMdus.length,
-                bytesDone: bytes.length,
-                bytesTotal: bytes.length,
-                workDone: workTotal,
-                workTotal,
-              },
+        })
+        updateUploadStatus(
+          {
+            phase: 'done',
+            phaseLabel: 'Client-side expansion complete',
+            tone: 'success',
+            storage: { stage: 'upload_queue', queuedArtifacts: finalMdus.length + 1 },
+            totals: {
+              userMdus: totalUserChunks,
+              witnessMdus: witnessMduCount,
+              totalMdus: finalMdus.length,
+              bytesDone: bytes.length,
+              bytesTotal: bytes.length,
+              workDone: workTotal,
+              workTotal,
             },
-            'prepare:complete',
-          )
+          },
+          'prepare:complete',
+        )
 
         const mib = logicalSizeBytes / (1024 * 1024);
         const seconds = elapsedMs / 1000;
@@ -4524,19 +4524,19 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     } catch (e: unknown) {
         console.error(e);
         const msg = e instanceof Error ? e.message : String(e);
-          browserPerfLog('run:error', {
+        browserPerfLog('run:error', {
+          error: msg,
+        })
+        updateUploadStatus(
+          {
+            phase: 'error',
+            phaseLabel: msg,
+            tone: 'error',
             error: msg,
-          })
-          updateUploadStatus(
-            {
-              phase: 'error',
-              phaseLabel: msg,
-              tone: 'error',
-              error: msg,
-              transport: { lastError: msg },
-            },
-            'run:error',
-          )
+            transport: { lastError: msg },
+          },
+          'run:error',
+        )
         addLog(`Error: ${msg}`);
         setShardProgress((p) => ({
           ...p,
