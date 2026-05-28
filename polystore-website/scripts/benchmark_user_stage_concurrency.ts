@@ -56,7 +56,8 @@ const SCALAR_BYTES = 32
 const SCALAR_PAYLOAD_BYTES = 31
 const RAW_MDU_CAPACITY = Math.floor(MDU_SIZE_BYTES / SCALAR_BYTES) * SCALAR_PAYLOAD_BYTES
 
-const fileBytes = Number(process.env.FILE_BYTES || 49_103_158)
+const parsedFileBytes = Number(process.env.FILE_BYTES || 49_103_158)
+const fileBytes = Number.isFinite(parsedFileBytes) ? Math.floor(parsedFileBytes) : Number.NaN
 const rsK = Number(process.env.RS_K || 2)
 const rsM = Number(process.env.RS_M || 1)
 const cycles = Number(process.env.CYCLES || 3)
@@ -64,7 +65,7 @@ const basisMode = (process.env.BASIS_MODE || 'blst') as BasisMode
 const autotune = process.env.AUTOTUNE === '1'
 const hardwareConcurrency = Number.isFinite(Number(process.env.HARDWARE_CONCURRENCY))
   ? Math.max(1, Math.floor(Number(process.env.HARDWARE_CONCURRENCY)))
-  : os.cpus().length
+  : Math.max(1, os.cpus().length)
 const pipelineModes = (process.env.PIPELINE_MODES || process.env.PIPELINE_MODE || 'split')
   .split(',')
   .map((value) => value.trim())
