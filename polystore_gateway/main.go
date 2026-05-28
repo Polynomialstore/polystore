@@ -4793,7 +4793,7 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 
 const defaultCORSAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
 
-const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-PolyStore-Req-Sig, X-PolyStore-Req-Nonce, X-PolyStore-Req-Expires-At, X-PolyStore-Req-Range-Start, X-PolyStore-Req-Range-Len, X-PolyStore-Download-Session, X-PolyStore-Session-Id, X-PolyStore-Manifest-Root, X-PolyStore-Previous-Manifest-Root, X-PolyStore-Deal-ID, X-PolyStore-Mdu-Index, X-PolyStore-Slot, X-PolyStore-Full-Size, X-PolyStore-Gateway-Auth, X-PolyStore-Deputy"
+const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-PolyStore-Req-Sig, X-PolyStore-Req-Nonce, X-PolyStore-Req-Expires-At, X-PolyStore-Req-Range-Start, X-PolyStore-Req-Range-Len, X-PolyStore-Download-Session, X-PolyStore-Session-Id, X-PolyStore-Manifest-Root, X-PolyStore-Previous-Manifest-Root, X-PolyStore-Upload-Generation, X-PolyStore-Deal-ID, X-PolyStore-Mdu-Index, X-PolyStore-Slot, X-PolyStore-Full-Size, X-PolyStore-Gateway-Auth, X-PolyStore-Deputy"
 
 const defaultCORSExposeHeaders = "Accept-Ranges, Content-Range, X-PolyStore-Deal-ID, X-PolyStore-Epoch, X-PolyStore-Bytes-Served, X-PolyStore-Provider, X-PolyStore-File-Path, X-PolyStore-Range-Start, X-PolyStore-Range-Len, X-PolyStore-Proof-JSON, X-PolyStore-Proof-Hash, X-PolyStore-Fetch-Session, X-PolyStore-Gateway-Proof-MS, X-PolyStore-Gateway-Fetch-MS"
 
@@ -6423,6 +6423,7 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Deal-ID"))
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Mdu-Index"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-PolyStore-Manifest-Root"))
+	uploadGenerationRaw := strings.TrimSpace(r.Header.Get(polystoreUploadGenerationHeader))
 	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-PolyStore-Full-Size"))
 	if r.ContentLength > 0 {
 		profile.setCount("content_length_bytes", uint64(r.ContentLength))
@@ -6444,34 +6445,44 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if clientManifestRoot == "" {
+	uploadGenerationID, err := normalizeUploadGenerationID(uploadGenerationRaw)
+	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_upload_generation"
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if clientManifestRoot == "" && uploadGenerationID == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_manifest_root"
-		http.Error(w, "X-PolyStore-Manifest-Root header is required", http.StatusBadRequest)
+		http.Error(w, "X-PolyStore-Manifest-Root or X-PolyStore-Upload-Generation header is required", http.StatusBadRequest)
 		return
 	}
-	validatePrevStarted := time.Now()
-	if err := validatePolyfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
-		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		statusCode = classifyPolyfsUploadPreviousManifestRootError(err)
-		switch statusCode {
-		case http.StatusBadRequest:
-			outcome = "validate_previous_root_failed"
-			http.Error(w, err.Error(), statusCode)
-		case http.StatusNotFound:
-			outcome = "deal_not_found"
-			http.Error(w, "deal not found", statusCode)
-		case http.StatusConflict:
-			outcome = "validate_previous_root_failed"
-			http.Error(w, err.Error(), statusCode)
-		default:
-			log.Printf("SpUploadMdu: failed to validate deal %d previous root: %v", dealID, err)
-			outcome = "validate_previous_root_failed"
-			http.Error(w, "failed to validate deal", statusCode)
+	if clientManifestRoot != "" {
+		validatePrevStarted := time.Now()
+		if err := validatePolyfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
+			profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
+			statusCode = classifyPolyfsUploadPreviousManifestRootError(err)
+			switch statusCode {
+			case http.StatusBadRequest:
+				outcome = "validate_previous_root_failed"
+				http.Error(w, err.Error(), statusCode)
+			case http.StatusNotFound:
+				outcome = "deal_not_found"
+				http.Error(w, "deal not found", statusCode)
+			case http.StatusConflict:
+				outcome = "validate_previous_root_failed"
+				http.Error(w, err.Error(), statusCode)
+			default:
+				log.Printf("SpUploadMdu: failed to validate deal %d previous root: %v", dealID, err)
+				outcome = "validate_previous_root_failed"
+				http.Error(w, "failed to validate deal", statusCode)
+			}
+			return
 		}
-		return
+		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 	}
-	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 	declaredFullSize := int64(0)
 	hasDeclaredFullSize := false
 	if fullSizeHeader != "" {
@@ -6487,16 +6498,19 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		profile.setCount("declared_full_size_bytes", uint64(declaredFullSize))
 	}
 
-	// Canonicalize Root
-	parsed, err := parseManifestRoot(clientManifestRoot)
-	if err != nil {
-		statusCode = http.StatusBadRequest
-		outcome = "invalid_manifest_root"
-		http.Error(w, "invalid manifest root", http.StatusBadRequest)
-		return
+	rootDir := ""
+	if clientManifestRoot != "" {
+		parsed, err := parseManifestRoot(clientManifestRoot)
+		if err != nil {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_manifest_root"
+			http.Error(w, "invalid manifest root", http.StatusBadRequest)
+			return
+		}
+		rootDir = dealScopedDir(dealID, parsed)
+	} else {
+		rootDir = stagedUploadDir(dealID, uploadGenerationID)
 	}
-	// Store under deal-scoped directory to avoid collisions across deals.
-	rootDir := dealScopedDir(dealID, parsed)
 
 	// Write MDU
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
@@ -6664,6 +6678,7 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	mduIndexStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Mdu-Index"))
 	slotStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Slot"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-PolyStore-Manifest-Root"))
+	uploadGenerationRaw := strings.TrimSpace(r.Header.Get(polystoreUploadGenerationHeader))
 	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-PolyStore-Full-Size"))
 	if r.ContentLength > 0 {
 		profile.setCount("content_length_bytes", uint64(r.ContentLength))
@@ -6693,34 +6708,44 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if clientManifestRoot == "" {
+	uploadGenerationID, err := normalizeUploadGenerationID(uploadGenerationRaw)
+	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_upload_generation"
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if clientManifestRoot == "" && uploadGenerationID == "" {
 		statusCode = http.StatusBadRequest
 		outcome = "missing_manifest_root"
-		http.Error(w, "X-PolyStore-Manifest-Root header is required", http.StatusBadRequest)
+		http.Error(w, "X-PolyStore-Manifest-Root or X-PolyStore-Upload-Generation header is required", http.StatusBadRequest)
 		return
 	}
-	validatePrevStarted := time.Now()
-	if err := validatePolyfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
-		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
-		statusCode = classifyPolyfsUploadPreviousManifestRootError(err)
-		switch statusCode {
-		case http.StatusBadRequest:
-			outcome = "validate_previous_root_failed"
-			http.Error(w, err.Error(), statusCode)
-		case http.StatusNotFound:
-			outcome = "deal_not_found"
-			http.Error(w, "deal not found", statusCode)
-		case http.StatusConflict:
-			outcome = "validate_previous_root_failed"
-			http.Error(w, err.Error(), statusCode)
-		default:
-			log.Printf("SpUploadShard: failed to validate deal %d previous root: %v", dealID, err)
-			outcome = "validate_previous_root_failed"
-			http.Error(w, "failed to validate deal", statusCode)
+	if clientManifestRoot != "" {
+		validatePrevStarted := time.Now()
+		if err := validatePolyfsUploadPreviousManifestRoot(r.Context(), dealID, clientManifestRoot, uploadPreviousManifestRootHeader(r)); err != nil {
+			profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
+			statusCode = classifyPolyfsUploadPreviousManifestRootError(err)
+			switch statusCode {
+			case http.StatusBadRequest:
+				outcome = "validate_previous_root_failed"
+				http.Error(w, err.Error(), statusCode)
+			case http.StatusNotFound:
+				outcome = "deal_not_found"
+				http.Error(w, "deal not found", statusCode)
+			case http.StatusConflict:
+				outcome = "validate_previous_root_failed"
+				http.Error(w, err.Error(), statusCode)
+			default:
+				log.Printf("SpUploadShard: failed to validate deal %d previous root: %v", dealID, err)
+				outcome = "validate_previous_root_failed"
+				http.Error(w, "failed to validate deal", statusCode)
+			}
+			return
 		}
-		return
+		profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 	}
-	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 	declaredFullSize := int64(0)
 	hasDeclaredFullSize := false
 	if fullSizeHeader != "" {
@@ -6742,14 +6767,19 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		profile.setCount("declared_full_size_bytes", uint64(declaredFullSize))
 	}
 
-	parsed, err := parseManifestRoot(clientManifestRoot)
-	if err != nil {
-		statusCode = http.StatusBadRequest
-		outcome = "invalid_manifest_root"
-		http.Error(w, "invalid manifest root", http.StatusBadRequest)
-		return
+	rootDir := ""
+	if clientManifestRoot != "" {
+		parsed, err := parseManifestRoot(clientManifestRoot)
+		if err != nil {
+			statusCode = http.StatusBadRequest
+			outcome = "invalid_manifest_root"
+			http.Error(w, "invalid manifest root", http.StatusBadRequest)
+			return
+		}
+		rootDir = dealScopedDir(dealID, parsed)
+	} else {
+		rootDir = stagedUploadDir(dealID, uploadGenerationID)
 	}
-	rootDir := dealScopedDir(dealID, parsed)
 
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
@@ -6978,6 +7008,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 
 	dealIDStr := strings.TrimSpace(r.Header.Get("X-PolyStore-Deal-ID"))
 	clientManifestRoot := strings.TrimSpace(r.Header.Get("X-PolyStore-Manifest-Root"))
+	uploadGenerationRaw := strings.TrimSpace(r.Header.Get(polystoreUploadGenerationHeader))
 	fullSizeHeader := strings.TrimSpace(r.Header.Get("X-PolyStore-Full-Size"))
 	if r.ContentLength > 0 {
 		profile.setCount("content_length_bytes", uint64(r.ContentLength))
@@ -7012,6 +7043,13 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid deal_id", http.StatusBadRequest)
 		return
 	}
+	uploadGenerationID, err := normalizeUploadGenerationID(uploadGenerationRaw)
+	if err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_upload_generation"
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	parsed, err := parseManifestRoot(clientManifestRoot)
 	if err != nil {
@@ -7044,19 +7082,30 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 
 	rootDir := dealScopedDir(dealID, parsed)
+	writeDir := rootDir
+	if uploadGenerationID != "" {
+		writeDir = stagedUploadDir(dealID, uploadGenerationID)
+	}
 
-	path := filepath.Join(rootDir, "manifest.bin")
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
-		storedPath = path
-		profile.setCount("stored_size_bytes", uint64(info.Size()))
-		outcome = "already_present"
-		logVerboseMode2Uploadf("SpUploadManifest: already present %s for deal %d", path, dealID)
-		w.WriteHeader(http.StatusOK)
+	path := filepath.Join(writeDir, "manifest.bin")
+	if uploadGenerationID == "" {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
+			storedPath = path
+			profile.setCount("stored_size_bytes", uint64(info.Size()))
+			outcome = "already_present"
+			logVerboseMode2Uploadf("SpUploadManifest: already present %s for deal %d", path, dealID)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	} else if _, err := os.Stat(writeDir); err != nil {
+		statusCode = http.StatusNotFound
+		outcome = "staged_generation_not_found"
+		http.Error(w, "staged upload generation not found", http.StatusNotFound)
 		return
 	}
 
 	mkdirStarted := time.Now()
-	if err := ensureUploadRootDir(rootDir); err != nil {
+	if err := ensureUploadRootDir(writeDir); err != nil {
 		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 		statusCode = http.StatusInternalServerError
 		outcome = "mkdir_failed"
@@ -7065,7 +7114,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	}
 	profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))
 
-	tmp, err := createTempInUploadRoot(rootDir, "manifest.bin.tmp-*")
+	tmp, err := createTempInUploadRoot(writeDir, "manifest.bin.tmp-*")
 	if err != nil {
 		statusCode = http.StatusInternalServerError
 		outcome = "create_temp_failed"
@@ -7156,6 +7205,20 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	profile.addDuration("rename_ms", time.Since(renameStarted))
 	committed = true
 	storedPath = path
+
+	if uploadGenerationID != "" {
+		promoteStarted := time.Now()
+		if err := promoteStagedUploadGeneration(dealID, uploadGenerationID, rootDir); err != nil {
+			profile.addDuration("promote_generation_ms", time.Since(promoteStarted))
+			statusCode = http.StatusInternalServerError
+			outcome = "promote_generation_failed"
+			http.Error(w, "failed to finalize staged upload generation", http.StatusInternalServerError)
+			return
+		}
+		profile.addDuration("promote_generation_ms", time.Since(promoteStarted))
+		storedPath = filepath.Join(rootDir, "manifest.bin")
+		outcome = "staged_generation_promoted"
+	}
 
 	logVerboseMode2Uploadf("SpUploadManifest: stored %s (%d bytes) for deal %d", path, storedSize, dealID)
 	w.WriteHeader(http.StatusOK)

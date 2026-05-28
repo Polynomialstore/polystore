@@ -132,6 +132,94 @@ func TestSpUploadManifest_AcceptsSparseBodyWithFullSizeHeader(t *testing.T) {
 	}
 }
 
+func TestSpUploadManifest_PromotesStagedGenerationArtifacts(t *testing.T) {
+	useTempUploadDir(t)
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
+
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-staged-generation")
+	dealID := uint64(1)
+	owner := "nil1owner"
+	generationID := "browser-run-123"
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: owner, CID: ""},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	r := testRouter()
+
+	mduReq := httptest.NewRequest(http.MethodPost, "/sp/upload_mdu", bytes.NewReader([]byte{0xAA}))
+	mduReq.Header.Set("X-PolyStore-Deal-ID", "1")
+	mduReq.Header.Set("X-PolyStore-Mdu-Index", "0")
+	mduReq.Header.Set(polystoreUploadGenerationHeader, generationID)
+	mduReq.Header.Set("X-PolyStore-Full-Size", "8388608")
+	mduReq.Header.Set("Content-Type", "application/octet-stream")
+	mduW := httptest.NewRecorder()
+	r.ServeHTTP(mduW, mduReq)
+	if mduW.Code != http.StatusOK {
+		t.Fatalf("expected staged mdu upload 200, got %d: %s", mduW.Code, mduW.Body.String())
+	}
+
+	shardReq := httptest.NewRequest(http.MethodPost, "/sp/upload_shard", bytes.NewReader([]byte{0xBB}))
+	shardReq.Header.Set("X-PolyStore-Deal-ID", "1")
+	shardReq.Header.Set("X-PolyStore-Mdu-Index", "2")
+	shardReq.Header.Set("X-PolyStore-Slot", "1")
+	shardReq.Header.Set(polystoreUploadGenerationHeader, generationID)
+	shardReq.Header.Set("X-PolyStore-Full-Size", "1024")
+	shardReq.Header.Set("Content-Type", "application/octet-stream")
+	shardW := httptest.NewRecorder()
+	r.ServeHTTP(shardW, shardReq)
+	if shardW.Code != http.StatusOK {
+		t.Fatalf("expected staged shard upload 200, got %d: %s", shardW.Code, shardW.Body.String())
+	}
+
+	stageDir := stagedUploadDir(dealID, generationID)
+	if _, err := os.Stat(filepath.Join(stageDir, "mdu_0.bin")); err != nil {
+		t.Fatalf("expected staged mdu before manifest finalize: %v", err)
+	}
+
+	manifestReq := httptest.NewRequest(http.MethodPost, "/sp/upload_manifest", bytes.NewReader([]byte{0xCC}))
+	manifestReq.Header.Set("X-PolyStore-Deal-ID", "1")
+	manifestReq.Header.Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
+	manifestReq.Header.Set(polystoreUploadPreviousManifestRootHeader, "")
+	manifestReq.Header.Set(polystoreUploadGenerationHeader, generationID)
+	manifestReq.Header.Set("X-PolyStore-Full-Size", "131072")
+	manifestReq.Header.Set("Content-Type", "application/octet-stream")
+	manifestW := httptest.NewRecorder()
+	r.ServeHTTP(manifestW, manifestReq)
+	if manifestW.Code != http.StatusOK {
+		t.Fatalf("expected staged manifest finalize 200, got %d: %s", manifestW.Code, manifestW.Body.String())
+	}
+
+	finalDir := filepath.Join(uploadDir, "deals", "1", manifestRoot.Key)
+	for _, item := range []struct {
+		name string
+		size int64
+	}{
+		{name: "mdu_0.bin", size: 8388608},
+		{name: "mdu_2_slot_1.bin", size: 1024},
+		{name: "manifest.bin", size: 131072},
+	} {
+		info, err := os.Stat(filepath.Join(finalDir, item.name))
+		if err != nil {
+			t.Fatalf("expected promoted %s: %v", item.name, err)
+		}
+		if info.Size() != item.size {
+			t.Fatalf("promoted %s size mismatch: got=%d want=%d", item.name, info.Size(), item.size)
+		}
+	}
+	if _, err := os.Stat(stageDir); !os.IsNotExist(err) {
+		t.Fatalf("expected staged generation to be removed, stat err=%v", err)
+	}
+}
+
 func TestSpUploadManifest_RejectsStalePreviousManifestRoot(t *testing.T) {
 	useTempUploadDir(t)
 	resetPolyfsCASStatusCountersForTest()
