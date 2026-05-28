@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks'
 
 import init, { PolyStoreWasm } from '../public/wasm/polystore_core.js'
 
-type BasisMode = 'blst' | 'affine' | 'projective'
+type BasisMode = 'blst' | 'affine' | 'projective' | 'fixed'
 
 type WorkerInput = {
   basisMode: BasisMode

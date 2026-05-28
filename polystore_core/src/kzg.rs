@@ -30,6 +30,16 @@ pub type Bytes48 = [u8; 48];
 
 static PIPPENGER_WINDOW_OVERRIDE: AtomicUsize = AtomicUsize::new(0);
 static WASM_MSM_BASIS_MODE: AtomicUsize = AtomicUsize::new(0);
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+const WASM_MSM_MODE_BLST: usize = 0;
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+const WASM_MSM_MODE_AFFINE: usize = 1;
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+const WASM_MSM_MODE_PROJECTIVE: usize = 2;
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+const WASM_MSM_MODE_FIXED: usize = 3;
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+const FIXED_BASE_WINDOW_BITS: usize = 5;
 
 #[cfg(target_arch = "wasm32")]
 #[derive(Default)]
@@ -102,10 +112,56 @@ pub struct KzgContext {
     #[cfg(target_arch = "wasm32")]
     #[allow(dead_code)]
     g1_points_projective: Vec<G1Projective>,
+    fixed_base_table: OnceLock<FixedBaseMsmTable>,
     g1_points_blst: Vec<blst_p1_affine>,
     g2_points: Vec<G2Affine>,
     g1_generator: G1Affine,
     g1_points_are_monomial: bool,
+}
+
+struct FixedBaseMsmTable {
+    window_bits: usize,
+    windows: usize,
+    entries_per_point: usize,
+    point_count: usize,
+    multiples: Vec<G1Projective>,
+}
+
+impl FixedBaseMsmTable {
+    fn build(points: &[G1Affine], point_count: usize, window_bits: usize) -> Self {
+        let point_count = point_count.min(points.len());
+        let windows = (256 + window_bits - 1) / window_bits;
+        let entries_per_point = (1usize << window_bits) - 1;
+        let mut multiples = Vec::with_capacity(point_count * entries_per_point);
+
+        for point in points.iter().take(point_count) {
+            let base = G1Projective::from(*point);
+            let mut running = G1Projective::identity();
+            for _ in 0..entries_per_point {
+                running += base;
+                multiples.push(running);
+            }
+        }
+
+        Self {
+            window_bits,
+            windows,
+            entries_per_point,
+            point_count,
+            multiples,
+        }
+    }
+
+    #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+    fn multiple(&self, point_index: usize, window_value: usize) -> G1Projective {
+        debug_assert!(window_value > 0);
+        debug_assert!(window_value <= self.entries_per_point);
+        self.multiples[point_index * self.entries_per_point + window_value - 1]
+    }
+
+    fn approximate_memory_bytes(&self) -> usize {
+        self.multiples.capacity() * std::mem::size_of::<G1Projective>()
+    }
 }
 
 impl KzgContext {
@@ -202,6 +258,7 @@ impl KzgContext {
             g1_points,
             #[cfg(target_arch = "wasm32")]
             g1_points_projective,
+            fixed_base_table: OnceLock::new(),
             g1_points_blst,
             g2_points,
             g1_generator,
@@ -273,13 +330,20 @@ impl KzgContext {
             #[cfg(target_arch = "wasm32")]
             {
                 let wasm_basis_mode = WASM_MSM_BASIS_MODE.load(Ordering::Relaxed);
-                if wasm_basis_mode == 1 || wasm_basis_mode == 2 {
+                if wasm_basis_mode == WASM_MSM_MODE_AFFINE
+                    || wasm_basis_mode == WASM_MSM_MODE_PROJECTIVE
+                    || wasm_basis_mode == WASM_MSM_MODE_FIXED
+                {
                     let decode_start = now_ms();
                     let evals = bytes_to_scalars(blob_bytes)?;
                     perf.decode_ms = now_ms() - decode_start;
 
                     let msm_start = now_ms();
-                    let acc = if wasm_basis_mode == 2 {
+                    let acc = if wasm_basis_mode == WASM_MSM_MODE_FIXED {
+                        let (table, precompute_ms) = self.fixed_base_table_profiled(evals.len());
+                        perf.transform_ms += precompute_ms;
+                        msm_fixed_base_g1_profiled(table, &evals, &mut perf)
+                    } else if wasm_basis_mode == WASM_MSM_MODE_PROJECTIVE {
                         msm_pippenger_g1_projective_profiled_wasm(
                             &self.g1_points_projective,
                             &evals,
@@ -330,6 +394,28 @@ impl KzgContext {
         }
     }
 
+    fn fixed_base_table_profiled(&self, point_count: usize) -> (&FixedBaseMsmTable, f64) {
+        if let Some(table) = self.fixed_base_table.get() {
+            return (table, 0.0);
+        }
+
+        let start = now_ms();
+        let table = self.fixed_base_table.get_or_init(|| {
+            FixedBaseMsmTable::build(&self.g1_points, point_count, FIXED_BASE_WINDOW_BITS)
+        });
+        (table, now_ms() - start)
+    }
+
+    pub fn fixed_base_table_stats(&self) -> (usize, usize, usize, usize) {
+        let (table, _) = self.fixed_base_table_profiled(BLOB_SIZE / 32);
+        (
+            table.window_bits,
+            table.windows,
+            table.point_count * table.entries_per_point,
+            table.approximate_memory_bytes(),
+        )
+    }
+
     pub fn mdu_to_kzg_commitments(&self, mdu_bytes: &[u8]) -> Result<Vec<KzgCommitment>, KzgError> {
         if mdu_bytes.len() != MDU_SIZE {
             return Err(KzgError::InvalidMduSize);
@@ -369,7 +455,9 @@ impl KzgContext {
         let mut perf = BlobToCommitmentPerf::default();
 
         #[cfg(target_arch = "wasm32")]
-        if !self.g1_points_are_monomial && WASM_MSM_BASIS_MODE.load(Ordering::Relaxed) == 0 {
+        if !self.g1_points_are_monomial
+            && WASM_MSM_BASIS_MODE.load(Ordering::Relaxed) == WASM_MSM_MODE_BLST
+        {
             let points = &self.g1_points_blst;
             let n = points.len().min(BLOB_SIZE / 32);
             let scratch_words = unsafe {
@@ -853,6 +941,82 @@ fn prepare_buckets(buckets: &mut Vec<G1Projective>, buckets_len: usize) -> &mut 
     let buckets = &mut buckets[..buckets_len];
     buckets.fill(G1Projective::identity());
     buckets
+}
+
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+fn msm_fixed_base_g1_profiled(
+    table: &FixedBaseMsmTable,
+    scalars: &[Scalar],
+    perf: &mut BlobToCommitmentPerf,
+) -> G1Projective {
+    let n = table.point_count.min(scalars.len());
+    if n == 0 {
+        return G1Projective::identity();
+    }
+    let scalars = &scalars[..n];
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        return WASM_MSM_PROJECTIVE_SCRATCH.with(|scratch| {
+            let mut scratch = scratch.borrow_mut();
+            let WasmMsmScratch {
+                scalar_bytes: scalar_bytes_buf,
+                ..
+            } = &mut *scratch;
+
+            let scalar_prep_start = now_ms();
+            let scalar_bytes = prepare_scalar_bytes(scalar_bytes_buf, scalars);
+            perf.msm_scalar_prep_ms += now_ms() - scalar_prep_start;
+
+            fixed_base_accumulate(table, scalar_bytes, perf)
+        });
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let scalar_prep_start = now_ms();
+        let scalar_bytes: Vec<[u8; 32]> = scalars
+            .iter()
+            .map(|scalar| {
+                let repr = scalar.to_repr();
+                let mut out = [0u8; 32];
+                out.copy_from_slice(repr.as_ref());
+                out
+            })
+            .collect();
+        perf.msm_scalar_prep_ms += now_ms() - scalar_prep_start;
+
+        fixed_base_accumulate(table, &scalar_bytes, perf)
+    }
+}
+
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+fn fixed_base_accumulate(
+    table: &FixedBaseMsmTable,
+    scalar_bytes: &[[u8; 32]],
+    perf: &mut BlobToCommitmentPerf,
+) -> G1Projective {
+    let mut acc = G1Projective::identity();
+    for window_index in (0..table.windows).rev() {
+        if window_index != table.windows - 1 {
+            let double_start = now_ms();
+            for _ in 0..table.window_bits {
+                acc = acc.double();
+            }
+            perf.msm_double_ms += now_ms() - double_start;
+        }
+
+        let add_start = now_ms();
+        let bit_offset = window_index * table.window_bits;
+        for (point_index, scalar) in scalar_bytes.iter().take(table.point_count).enumerate() {
+            let w = pippenger_window(scalar, bit_offset, table.window_bits);
+            if w != 0 {
+                acc += table.multiple(point_index, w);
+            }
+        }
+        perf.msm_bucket_fill_ms += now_ms() - add_start;
+    }
+    acc
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1493,6 +1657,37 @@ mod tests {
     }
 
     #[test]
+    fn fixed_base_msm_matches_pippenger_small_n() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(154);
+        let n = 128;
+
+        let points: Vec<G1Affine> = (0..n)
+            .map(|_| {
+                let mut wide = [0u8; 64];
+                rng.fill_bytes(&mut wide);
+                (G1Projective::generator() * Scalar::from_bytes_wide(&wide)).to_affine()
+            })
+            .collect();
+
+        let scalars: Vec<Scalar> = (0..n)
+            .map(|_| {
+                let mut wide = [0u8; 64];
+                rng.fill_bytes(&mut wide);
+                Scalar::from_bytes_wide(&wide)
+            })
+            .collect();
+
+        let table = FixedBaseMsmTable::build(&points, n, FIXED_BASE_WINDOW_BITS);
+        let mut perf = BlobToCommitmentPerf::default();
+        let fixed = msm_fixed_base_g1_profiled(&table, &scalars, &mut perf);
+        let pippenger = msm_pippenger_g1(&points, &scalars);
+
+        assert_eq!(fixed.to_affine(), pippenger.to_affine());
+        assert_eq!(table.point_count, n);
+        assert!(table.approximate_memory_bytes() > 0);
+    }
+
+    #[test]
     fn fft_round_trip_4096() {
         let mut rng = rand::rngs::StdRng::seed_from_u64(99);
         let omega = scalar_for_cell_index(1).expect("omega must parse");
@@ -1570,5 +1765,30 @@ mod tests {
             .to_compressed();
 
         assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn fixed_base_lagrange_commitment_matches_default_for_random_blob() {
+        let path = get_trusted_setup_path();
+        let ctx = KzgContext::load_from_file(&path).unwrap();
+        if ctx.g1_points_are_monomial {
+            return;
+        }
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(2026154);
+        let mut blob = vec![0u8; BLOB_SIZE];
+        rng.fill_bytes(&mut blob);
+
+        let baseline = ctx.blob_to_commitment(&blob).unwrap();
+        let evals = bytes_to_scalars(&blob).unwrap();
+        let (table, precompute_ms) = ctx.fixed_base_table_profiled(evals.len());
+        let mut perf = BlobToCommitmentPerf::default();
+        let fixed = msm_fixed_base_g1_profiled(table, &evals, &mut perf)
+            .to_affine()
+            .to_compressed();
+
+        assert_eq!(fixed, baseline);
+        assert!(precompute_ms >= 0.0);
+        assert!(perf.msm_bucket_fill_ms >= 0.0);
     }
 }

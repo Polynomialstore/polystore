@@ -3,7 +3,7 @@ import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 
-type BasisMode = 'blst' | 'affine' | 'projective'
+type BasisMode = 'blst' | 'affine' | 'projective' | 'fixed'
 type PipelineMode =
   | 'split'
   | 'split_unprofiled'
@@ -74,7 +74,7 @@ const concurrencies = (process.env.CONCURRENCIES || '3,4,5,6')
 
 if (!Number.isFinite(fileBytes) || fileBytes <= 0) throw new Error(`invalid FILE_BYTES: ${process.env.FILE_BYTES ?? ''}`)
 if (!Number.isFinite(cycles) || cycles <= 0) throw new Error(`invalid CYCLES: ${process.env.CYCLES ?? ''}`)
-if (!['blst', 'affine', 'projective'].includes(basisMode)) {
+if (!['blst', 'affine', 'projective', 'fixed'].includes(basisMode)) {
   throw new Error(`invalid BASIS_MODE: ${process.env.BASIS_MODE ?? ''}`)
 }
 if (concurrencies.length === 0) {

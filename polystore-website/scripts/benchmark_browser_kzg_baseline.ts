@@ -38,6 +38,8 @@ type CommitPerf = {
   blobs?: number
 }
 
+type BasisMode = 'blst' | 'affine' | 'projective' | 'fixed' | 'fixed-base'
+
 type StagesSummary = {
   file_bytes: number
   raw_mdu_capacity: number
@@ -120,14 +122,18 @@ function gitValue(args: string[]): string {
   return child.stdout.trim()
 }
 
-async function benchmarkSingleBlob(measureRuns: number, warmupRuns: number) {
+async function benchmarkSingleBlob(measureRuns: number, warmupRuns: number, basisMode: BasisMode) {
   const wasmPath = path.resolve(websiteRoot, 'public', 'wasm', 'polystore_core_bg.wasm')
   const wasmBuffer = await fs.readFile(wasmPath)
   const initStart = performance.now()
   await init({ module_or_path: wasmBuffer })
   const trustedSetup = new Uint8Array(await fs.readFile(path.resolve(websiteRoot, 'public', 'trusted_setup.txt')))
   const wasm = new PolyStoreWasm(trustedSetup)
-  wasm.set_wasm_msm_basis_mode('blst')
+  wasm.set_wasm_msm_basis_mode(basisMode)
+  const fixedBaseStats =
+    basisMode === 'fixed' || basisMode === 'fixed-base'
+      ? (wasm.fixed_base_table_stats() as unknown)
+      : null
   const initMs = performance.now() - initStart
   const blob = makeDeterministicBytes(BLOB_SIZE)
   const runs: number[] = []
@@ -161,6 +167,7 @@ async function benchmarkSingleBlob(measureRuns: number, warmupRuns: number) {
     wall_ms: readStats(runs),
     rust_total_ms: readStats(totalRuns),
     rust_msm_ms: readStats(msmRuns),
+    fixed_base_table_stats: fixedBaseStats,
     last_perf: lastPerf,
   }
 }
@@ -174,8 +181,12 @@ const largeCycles = Number(process.env.LARGE_CYCLES || 1)
 const largeFileBytes = Number(process.env.LARGE_FILE_BYTES || 49_103_158)
 const concurrencies = process.env.CONCURRENCIES || '5,6,7'
 const pipelineModes = process.env.PIPELINE_MODES || 'fused_batch_sampled'
+const basisMode = (process.env.BASIS_MODE || 'blst') as BasisMode
+if (!['blst', 'affine', 'projective', 'fixed', 'fixed-base'].includes(basisMode)) {
+  throw new Error(`invalid BASIS_MODE: ${process.env.BASIS_MODE ?? ''}`)
+}
 
-const singleBlob = await benchmarkSingleBlob(singleBlobRuns, singleBlobWarmups)
+const singleBlob = await benchmarkSingleBlob(singleBlobRuns, singleBlobWarmups, basisMode)
 const oneMdu = runCommandJson<StagesSummary>(
   'one-MDU prepare-stages benchmark',
   ['--silent', '--prefix', 'polystore-website', 'run', 'perf:prepare-stages'],
@@ -183,7 +194,7 @@ const oneMdu = runCommandJson<StagesSummary>(
     FILE_BYTES: String(RAW_MDU_CAPACITY),
     WARMUP_RUNS: '0',
     MEASURE_RUNS: String(oneMduRuns),
-    BASIS_MODE: 'blst',
+    BASIS_MODE: basisMode,
   },
 )
 const largeWorker = runCommandJson<ConcurrencySummary>(
@@ -194,7 +205,7 @@ const largeWorker = runCommandJson<ConcurrencySummary>(
     CYCLES: String(largeCycles),
     CONCURRENCIES: concurrencies,
     PIPELINE_MODES: pipelineModes,
-    BASIS_MODE: 'blst',
+    BASIS_MODE: basisMode,
   },
 )
 
@@ -220,10 +231,11 @@ const baseline = {
     total_memory_bytes: os.totalmem(),
   },
   commands: {
-    baseline: `env SINGLE_BLOB_WARMUPS=${singleBlobWarmups} SINGLE_BLOB_RUNS=${singleBlobRuns} ONE_MDU_RUNS=${oneMduRuns} LARGE_CYCLES=${largeCycles} LARGE_FILE_BYTES=${largeFileBytes} CONCURRENCIES=${concurrencies} PIPELINE_MODES=${pipelineModes} npm --prefix polystore-website run perf:browser-kzg-baseline --silent`,
-    one_mdu: `env FILE_BYTES=${RAW_MDU_CAPACITY} WARMUP_RUNS=0 MEASURE_RUNS=${oneMduRuns} BASIS_MODE=blst npm --prefix polystore-website run perf:prepare-stages --silent`,
-    large_worker: `env FILE_BYTES=${largeFileBytes} CYCLES=${largeCycles} CONCURRENCIES=${concurrencies} PIPELINE_MODES=${pipelineModes} BASIS_MODE=blst npm --prefix polystore-website run perf:user-stage-concurrency --silent`,
+    baseline: `env BASIS_MODE=${basisMode} SINGLE_BLOB_WARMUPS=${singleBlobWarmups} SINGLE_BLOB_RUNS=${singleBlobRuns} ONE_MDU_RUNS=${oneMduRuns} LARGE_CYCLES=${largeCycles} LARGE_FILE_BYTES=${largeFileBytes} CONCURRENCIES=${concurrencies} PIPELINE_MODES=${pipelineModes} npm --prefix polystore-website run perf:browser-kzg-baseline --silent`,
+    one_mdu: `env FILE_BYTES=${RAW_MDU_CAPACITY} WARMUP_RUNS=0 MEASURE_RUNS=${oneMduRuns} BASIS_MODE=${basisMode} npm --prefix polystore-website run perf:prepare-stages --silent`,
+    large_worker: `env FILE_BYTES=${largeFileBytes} CYCLES=${largeCycles} CONCURRENCIES=${concurrencies} PIPELINE_MODES=${pipelineModes} BASIS_MODE=${basisMode} npm --prefix polystore-website run perf:user-stage-concurrency --silent`,
   },
+  basis_mode: basisMode,
   summary: {
     single_blob_wall_median_ms: singleBlob.wall_ms.median,
     one_mdu_total_prepare_median_ms: oneMdu.stages.total_ms.median,

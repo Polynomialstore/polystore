@@ -767,10 +767,35 @@ impl PolyStoreWasm {
                 set_wasm_msm_basis_mode(1);
                 Ok(())
             }
+            "fixed" | "fixed-base" => {
+                set_wasm_msm_basis_mode(3);
+                Ok(())
+            }
             _ => Err(JsValue::from_str(
-                "basis mode must be 'blst', 'projective' or 'affine'",
+                "basis mode must be 'blst', 'projective', 'affine' or 'fixed'",
             )),
         }
+    }
+
+    pub fn fixed_base_table_stats(&self) -> Result<JsValue, JsValue> {
+        let (window_bits, windows, table_points, approximate_memory_bytes) =
+            self.kzg_ctx.fixed_base_table_stats();
+
+        #[derive(serde::Serialize)]
+        struct FixedBaseTableStats {
+            window_bits: usize,
+            windows: usize,
+            table_points: usize,
+            approximate_memory_bytes: usize,
+        }
+
+        serde_wasm_bindgen::to_value(&FixedBaseTableStats {
+            window_bits,
+            windows,
+            table_points,
+            approximate_memory_bytes,
+        })
+        .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
 }
 

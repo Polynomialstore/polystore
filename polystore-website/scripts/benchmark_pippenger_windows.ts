@@ -26,7 +26,7 @@ const windows = (process.env.WINDOWS || '8,9,10,11,12,13')
 const basisModes = (process.env.BASIS_MODES || 'projective')
   .split(',')
   .map((value) => value.trim())
-  .filter((value): value is 'projective' | 'affine' => value === 'projective' || value === 'affine')
+  .filter((value): value is 'projective' | 'affine' | 'fixed' => value === 'projective' || value === 'affine' || value === 'fixed')
 
 function stats(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b)

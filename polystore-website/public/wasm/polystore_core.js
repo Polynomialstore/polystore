@@ -172,7 +172,7 @@ let WASM_VECTOR_LEN = 0;
 
 const PolyStoreWasmFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_nilwasm_free(ptr >>> 0, 1));
+    : new FinalizationRegistry(ptr => wasm.__wbg_polystorewasm_free(ptr >>> 0, 1));
 
 const WasmMdu0BuilderFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
@@ -187,7 +187,7 @@ export class PolyStoreWasm {
     }
     free() {
         const ptr = this.__destroy_into_raw();
-        wasm.__wbg_nilwasm_free(ptr, 0);
+        wasm.__wbg_polystorewasm_free(ptr, 0);
     }
     /**
      * @param {Uint8Array} mdu_bytes
@@ -196,7 +196,7 @@ export class PolyStoreWasm {
     commit_mdu(mdu_bytes) {
         const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_commit_mdu(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.polystorewasm_commit_mdu(this.__wbg_ptr, ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -209,7 +209,7 @@ export class PolyStoreWasm {
     expand_file(data) {
         const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_file(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.polystorewasm_expand_file(this.__wbg_ptr, ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -222,7 +222,7 @@ export class PolyStoreWasm {
     commit_blobs(blobs_flat) {
         const ptr0 = passArray8ToWasm0(blobs_flat, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_commit_blobs(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.polystorewasm_commit_blobs(this.__wbg_ptr, ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -237,7 +237,7 @@ export class PolyStoreWasm {
     expand_mdu_rs(mdu_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_mdu_rs(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_mdu_rs(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -250,7 +250,7 @@ export class PolyStoreWasm {
     compute_manifest(roots_flat) {
         const ptr0 = passArray8ToWasm0(roots_flat, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_compute_manifest(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.polystorewasm_compute_manifest(this.__wbg_ptr, ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -263,7 +263,7 @@ export class PolyStoreWasm {
     compute_mdu_root(witness_flat) {
         const ptr0 = passArray8ToWasm0(witness_flat, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_compute_mdu_root(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.polystorewasm_compute_mdu_root(this.__wbg_ptr, ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -276,7 +276,7 @@ export class PolyStoreWasm {
     commit_blobs_profiled(blobs_flat) {
         const ptr0 = passArray8ToWasm0(blobs_flat, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_commit_blobs_profiled(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.polystorewasm_commit_blobs_profiled(this.__wbg_ptr, ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -291,7 +291,17 @@ export class PolyStoreWasm {
     expand_payload_rs_flat(payload_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_payload_rs_flat(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_payload_rs_flat(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {any}
+     */
+    fixed_base_table_stats() {
+        const ret = wasm.polystorewasm_fixed_base_table_stats(this.__wbg_ptr);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -303,7 +313,7 @@ export class PolyStoreWasm {
     set_wasm_msm_basis_mode(mode) {
         const ptr0 = passStringToWasm0(mode, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_set_wasm_msm_basis_mode(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.polystorewasm_set_wasm_msm_basis_mode(this.__wbg_ptr, ptr0, len0);
         if (ret[1]) {
             throw takeFromExternrefTable0(ret[0]);
         }
@@ -312,7 +322,7 @@ export class PolyStoreWasm {
      * @param {number} bits
      */
     set_pippenger_window_bits(bits) {
-        const ret = wasm.nilwasm_set_pippenger_window_bits(this.__wbg_ptr, bits);
+        const ret = wasm.polystorewasm_set_pippenger_window_bits(this.__wbg_ptr, bits);
         if (ret[1]) {
             throw takeFromExternrefTable0(ret[0]);
         }
@@ -326,7 +336,7 @@ export class PolyStoreWasm {
     expand_mdu_rs_flat_committed(mdu_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_mdu_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_mdu_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -341,7 +351,7 @@ export class PolyStoreWasm {
     expand_mdu_rs_flat_uncommitted(mdu_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_mdu_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_mdu_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -356,7 +366,7 @@ export class PolyStoreWasm {
     expand_payload_rs_flat_committed(payload_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_payload_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_payload_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -371,7 +381,7 @@ export class PolyStoreWasm {
     expand_payload_rs_flat_uncommitted(payload_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_payload_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_payload_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -386,7 +396,7 @@ export class PolyStoreWasm {
     expand_mdu_rs_flat_committed_profiled(mdu_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_mdu_rs_flat_committed_profiled(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_mdu_rs_flat_committed_profiled(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -398,7 +408,7 @@ export class PolyStoreWasm {
     constructor(trusted_setup_bytes) {
         const ptr0 = passArray8ToWasm0(trusted_setup_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_new(ptr0, len0);
+        const ret = wasm.polystorewasm_new(ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -415,7 +425,7 @@ export class PolyStoreWasm {
     expand_payload_rs_flat_committed_profiled(payload_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.nilwasm_expand_payload_rs_flat_committed_profiled(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_payload_rs_flat_committed_profiled(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }

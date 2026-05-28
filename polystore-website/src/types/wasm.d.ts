@@ -26,7 +26,8 @@ declare module '/wasm/polystore_core.js' {
     compute_mdu_root(witness_bytes: Uint8Array): unknown
     compute_manifest(roots: Uint8Array): unknown
     set_pippenger_window_bits(bits: number): void
-    set_wasm_msm_basis_mode(mode: 'blst' | 'projective' | 'affine'): void
+    set_wasm_msm_basis_mode(mode: 'blst' | 'projective' | 'affine' | 'fixed' | 'fixed-base'): void
+    fixed_base_table_stats(): unknown
   }
 
   export class WasmMdu0Builder {
@@ -72,7 +73,8 @@ declare module '../../public/wasm/polystore_core.js' {
     compute_mdu_root(witness_bytes: Uint8Array): unknown
     compute_manifest(roots: Uint8Array): unknown
     set_pippenger_window_bits(bits: number): void
-    set_wasm_msm_basis_mode(mode: 'blst' | 'projective' | 'affine'): void
+    set_wasm_msm_basis_mode(mode: 'blst' | 'projective' | 'affine' | 'fixed' | 'fixed-base'): void
+    fixed_base_table_stats(): unknown
   }
 
   export class WasmMdu0Builder {

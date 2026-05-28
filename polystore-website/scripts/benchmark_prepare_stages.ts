@@ -77,7 +77,7 @@ type PrepareRun = {
   manifest_root_hex: string
 }
 
-type BasisMode = 'blst' | 'affine' | 'projective'
+type BasisMode = 'blst' | 'affine' | 'projective' | 'fixed'
 
 type Stats = {
   min: number
@@ -169,7 +169,7 @@ const basisMode = (process.env.BASIS_MODE || 'blst') as BasisMode
 if (!Number.isFinite(fileBytes) || fileBytes <= 0) throw new Error(`invalid FILE_BYTES: ${process.env.FILE_BYTES ?? ''}`)
 if (!Number.isFinite(warmupRuns) || warmupRuns < 0) throw new Error(`invalid WARMUP_RUNS: ${process.env.WARMUP_RUNS ?? ''}`)
 if (!Number.isFinite(measureRuns) || measureRuns <= 0) throw new Error(`invalid MEASURE_RUNS: ${process.env.MEASURE_RUNS ?? ''}`)
-if (!['blst', 'affine', 'projective'].includes(basisMode)) {
+if (!['blst', 'affine', 'projective', 'fixed'].includes(basisMode)) {
   throw new Error(`invalid BASIS_MODE: ${process.env.BASIS_MODE ?? ''}`)
 }
 
