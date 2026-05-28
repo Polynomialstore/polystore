@@ -47,8 +47,8 @@ function assertBlobBatch(blobsFlat: Uint8Array): number {
   if (!(blobsFlat instanceof Uint8Array)) {
     throw new Error('blobsFlat must be a Uint8Array')
   }
-  if (blobsFlat.byteLength === 0 || blobsFlat.byteLength % KZG_BLOB_SIZE !== 0) {
-    throw new Error('blobsFlat length must be a non-zero multiple of 128 KiB')
+  if (blobsFlat.byteLength % KZG_BLOB_SIZE !== 0) {
+    throw new Error('blobsFlat length must be a multiple of 128 KiB')
   }
   return blobsFlat.byteLength / KZG_BLOB_SIZE
 }

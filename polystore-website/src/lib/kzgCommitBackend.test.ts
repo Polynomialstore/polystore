@@ -90,14 +90,41 @@ test('wasm blst backend wraps direct commit_blobs output unchanged', () => {
   assert.strictEqual(backend.commitBlobs(blobBatch(2)), expected)
 })
 
+test('wasm blst backend preserves empty commit_blobs batches', () => {
+  const expected = new Uint8Array()
+  const backend = new WasmBlstKzgCommitBackend({
+    commit_blobs: (input) => {
+      assert.equal(input.byteLength, 0)
+      return expected
+    },
+    commit_blobs_profiled: () => ({ witness_flat: expected, perf: { blobs: 0 } }),
+  })
+
+  assert.strictEqual(backend.commitBlobs(new Uint8Array()), expected)
+  assert.deepEqual(backend.commitBlobsProfiled(new Uint8Array()), {
+    witnessFlat: expected,
+    perf: {
+      decodeMs: 0,
+      transformMs: 0,
+      msmScalarPrepMs: 0,
+      msmBucketFillMs: 0,
+      msmReduceMs: 0,
+      msmDoubleMs: 0,
+      msmMs: 0,
+      compressMs: 0,
+      totalMs: 0,
+      blobs: 0,
+    },
+  })
+})
+
 test('wasm blst backend rejects invalid batch shape and invalid output length', () => {
   const backend = new WasmBlstKzgCommitBackend({
     commit_blobs: () => new Uint8Array(1),
     commit_blobs_profiled: () => ({ witness_flat: new Uint8Array(1), perf: { blobs: 1 } }),
   })
 
-  assert.throws(() => backend.commitBlobs(new Uint8Array()), /non-zero multiple/)
-  assert.throws(() => backend.commitBlobs(new Uint8Array(KZG_BLOB_SIZE + 1)), /non-zero multiple/)
+  assert.throws(() => backend.commitBlobs(new Uint8Array(KZG_BLOB_SIZE + 1)), /multiple/)
   assert.throws(() => backend.commitBlobs(blobBatch(1)), /commit_blobs returned 1 bytes/)
 })
 

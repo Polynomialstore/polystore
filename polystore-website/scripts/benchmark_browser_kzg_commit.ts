@@ -25,10 +25,14 @@ function parsePositiveInt(name: string, fallback: number): number {
 
 function parseBlobMatrix(): number[] {
   const raw = process.env.KZG_BENCH_BLOBS || '1,4,16,64,256'
-  const values = raw
-    .split(',')
-    .map((part) => Number(part.trim()))
-    .filter((value) => Number.isFinite(value))
+  const values = raw.split(',').map((part) => {
+    const token = part.trim()
+    const value = Number(token)
+    if (token.length === 0 || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+      throw new Error('KZG_BENCH_BLOBS must be a comma-separated list of positive integers')
+    }
+    return value
+  })
   if (values.length === 0 || values.some((value) => !Number.isInteger(value) || value <= 0)) {
     throw new Error('KZG_BENCH_BLOBS must be a comma-separated list of positive integers')
   }
@@ -95,9 +99,10 @@ const config = {
 }
 
 const server = await startStaticServer()
-const browser = await chromium.launch({ headless: process.env.HEADLESS !== '0' })
+let browser: Awaited<ReturnType<typeof chromium.launch>> | null = null
 
 try {
+  browser = await chromium.launch({ headless: process.env.HEADLESS !== '0' })
   const page = await browser.newPage()
   await page.goto(`${server.origin}/benchmark.html`)
   await page.addScriptTag({
@@ -252,6 +257,6 @@ try {
     ),
   )
 } finally {
-  await browser.close()
+  await browser?.close()
   await server.close()
 }
