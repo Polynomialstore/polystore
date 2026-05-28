@@ -207,6 +207,127 @@ test('upload engine: direct upload emits task events when requested', async () =
   ])
 })
 
+test('upload engine: pipelined generation uploads artifacts before manifest binding resolves', async () => {
+  const starts: string[] = []
+  const requests: UploadTransportRequest[] = []
+  let resolveManifest!: (value: {
+    manifestRoot: string
+    manifestBlob: Uint8Array
+    manifestTargets: Array<{
+      baseUrl: string
+      mduPath: string
+      manifestPath: string
+      label: string
+    }>
+  }) => void
+  const manifest = new Promise<{
+    manifestRoot: string
+    manifestBlob: Uint8Array
+    manifestTargets: Array<{
+      baseUrl: string
+      mduPath: string
+      manifestPath: string
+      label: string
+    }>
+  }>((resolve) => {
+    resolveManifest = resolve
+  })
+  const target = {
+    baseUrl: 'http://provider-a',
+    mduPath: '/sp/upload_mdu',
+    manifestPath: '/sp/upload_manifest',
+    label: 'provider-a',
+  }
+  const transport = {
+    async sendArtifact(request: UploadTransportRequest) {
+      starts.push(`${request.artifact.kind}:${request.manifestRoot || 'staged'}:${request.uploadGeneration || '-'}`)
+      requests.push(request)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    },
+  }
+  const engine = createUploadEngine({ transport, parallelism: { direct: 2 } })
+
+  async function* artifacts() {
+    yield {
+      target,
+      artifact: { kind: 'mdu' as const, index: 0, bytes: new Uint8Array([1]), fullSize: 8 },
+    }
+    yield {
+      target,
+      artifact: { kind: 'mdu' as const, index: 1, bytes: new Uint8Array([2]), fullSize: 8 },
+    }
+  }
+
+  const pending = engine.uploadPipelinedGeneration({
+    dealId: '24',
+    previousManifestRoot: '0xprev',
+    uploadGeneration: 'browser-run-1',
+    artifacts: artifacts(),
+    manifest,
+  })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  assert.deepEqual(starts, [
+    'mdu:staged:browser-run-1',
+    'mdu:staged:browser-run-1',
+  ])
+
+  resolveManifest({
+    manifestRoot: '0xnext',
+    manifestBlob: new Uint8Array([9]),
+    manifestTargets: [target],
+  })
+  const result = await pending
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(starts, [
+    'mdu:staged:browser-run-1',
+    'mdu:staged:browser-run-1',
+    'manifest:0xnext:browser-run-1',
+  ])
+  assert.equal(requests[0].previousManifestRoot, '0xprev')
+  assert.equal(requests[2].previousManifestRoot, '0xprev')
+})
+
+test('upload engine: pipelined generation does not finalize manifest after artifact failure', async () => {
+  const starts: string[] = []
+  const target = {
+    baseUrl: 'http://provider-a',
+    mduPath: '/sp/upload_mdu',
+    manifestPath: '/sp/upload_manifest',
+    label: 'provider-a',
+  }
+  const transport = {
+    async sendArtifact(request: UploadTransportRequest) {
+      starts.push(request.artifact.kind)
+      if (request.artifact.kind === 'mdu') throw new Error('provider rejected staged mdu')
+    },
+  }
+  const engine = createUploadEngine({ transport })
+
+  async function* artifacts() {
+    yield {
+      target,
+      artifact: { kind: 'mdu' as const, index: 0, bytes: new Uint8Array([1]), fullSize: 8 },
+    }
+  }
+
+  const result = await engine.uploadPipelinedGeneration({
+    dealId: '25',
+    uploadGeneration: 'browser-run-2',
+    artifacts: artifacts(),
+    manifest: Promise.resolve({
+      manifestRoot: '0xnext',
+      manifestBlob: new Uint8Array([9]),
+      manifestTargets: [target],
+    }),
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, 'provider rejected staged mdu')
+  assert.deepEqual(starts, ['mdu'])
+})
+
 test('upload engine: striped upload overlaps metadata and shard requests with combined bounded concurrency', async () => {
   let activeTotal = 0
   let peakTotal = 0

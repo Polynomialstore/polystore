@@ -53,6 +53,7 @@ export interface UploadTransportRequest {
   dealId: string
   manifestRoot: string
   previousManifestRoot?: string
+  uploadGeneration?: string
   target: UploadTarget
   artifact: SparseArtifactInput
 }
@@ -133,6 +134,27 @@ export interface StripedSlotUploadInput {
   slot: number
   target: UploadTarget
   onProgress?: (steps: UploadProgressStep[]) => void
+  onTaskEvent?: (event: UploadTaskEvent) => void
+}
+
+export interface PipelinedUploadArtifact {
+  target: UploadTarget
+  artifact: SparseArtifactInput
+}
+
+export interface PipelinedManifestBinding {
+  manifestRoot: string
+  manifestBlob: Uint8Array
+  manifestBlobFullSize?: number
+  manifestTargets: UploadTarget[]
+}
+
+export interface PipelinedGenerationUploadInput {
+  dealId: string
+  previousManifestRoot?: string
+  uploadGeneration: string
+  artifacts: AsyncIterable<PipelinedUploadArtifact>
+  manifest: Promise<PipelinedManifestBinding>
   onTaskEvent?: (event: UploadTaskEvent) => void
 }
 
@@ -413,6 +435,115 @@ async function runUploadTasks(
           })
       }
 
+      settleIfDone()
+    }
+
+    launchNext()
+  })
+}
+
+async function runPipelinedUploadTaskProducer(
+  input: PipelinedGenerationUploadInput,
+  concurrency: number,
+  transport: UploadTransportPort,
+): Promise<UploadEngineResult> {
+  const trackTaskEvents = Boolean(input.onTaskEvent)
+  const tasks = input.artifacts[Symbol.asyncIterator]()
+  let active = 0
+  let producerDone = false
+  let firstError: string | null = null
+
+  const uploadOne = async (item: PipelinedUploadArtifact): Promise<void> => {
+    const request: UploadTransportRequest = {
+      dealId: input.dealId,
+      manifestRoot: '',
+      previousManifestRoot: input.previousManifestRoot,
+      uploadGeneration: input.uploadGeneration,
+      target: item.target,
+      artifact: item.artifact,
+    }
+    const startedAt = trackTaskEvents ? (typeof performance !== 'undefined' ? performance.now() : Date.now()) : 0
+    const target = trackTaskEvents ? request.target.label || request.target.baseUrl : ''
+    const index = trackTaskEvents && 'index' in request.artifact ? request.artifact.index : undefined
+    const slot = trackTaskEvents && 'slot' in request.artifact ? request.artifact.slot : undefined
+    const bytes = trackTaskEvents ? request.artifact.bytes.byteLength : 0
+    const fullSize = trackTaskEvents ? request.artifact.fullSize : undefined
+    if (trackTaskEvents) {
+      input.onTaskEvent?.({
+        phase: 'start',
+        kind: request.artifact.kind,
+        target,
+        index,
+        slot,
+        bytes,
+        fullSize,
+      })
+    }
+    try {
+      await transport.sendArtifact(request)
+      if (trackTaskEvents) {
+        const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        input.onTaskEvent?.({
+          phase: 'end',
+          kind: request.artifact.kind,
+          target,
+          index,
+          slot,
+          bytes,
+          fullSize,
+          durationMs: finishedAt - startedAt,
+          ok: true,
+        })
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (trackTaskEvents) {
+        const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        input.onTaskEvent?.({
+          phase: 'end',
+          kind: request.artifact.kind,
+          target,
+          index,
+          slot,
+          bytes,
+          fullSize,
+          durationMs: finishedAt - startedAt,
+          ok: false,
+          error: message,
+        })
+      }
+      throw new Error(message)
+    }
+  }
+
+  return await new Promise<UploadEngineResult>((resolve) => {
+    const settleIfDone = () => {
+      if (!producerDone || active !== 0) return
+      resolve(firstError ? { ok: false, steps: [], error: firstError } : { ok: true, steps: [] })
+    }
+
+    const launchNext = () => {
+      while (!firstError && active < concurrency && !producerDone) {
+        active += 1
+        void tasks
+          .next()
+          .then((next) => {
+            if (next.done) {
+              producerDone = true
+              return
+            }
+            return uploadOne(next.value)
+          })
+          .catch((error: unknown) => {
+            if (!firstError) firstError = error instanceof Error ? error.message : String(error)
+            producerDone = true
+          })
+          .finally(() => {
+            active -= 1
+            launchNext()
+            settleIfDone()
+          })
+      }
       settleIfDone()
     }
 
@@ -886,6 +1017,26 @@ export function createUploadEngine(options: UploadEngineOptions) {
 
       const slotConcurrency = Math.max(1, Math.min(tasks.length, stripedMetadataConcurrency + stripedShardConcurrency))
       return runUploadTasks(tasks, steps, input.onProgress, input.onTaskEvent, slotConcurrency, ports.transport)
+    },
+
+    async uploadPipelinedGeneration(input: PipelinedGenerationUploadInput): Promise<UploadEngineResult> {
+      const artifactResult = await runPipelinedUploadTaskProducer(input, directConcurrency, ports.transport)
+      if (!artifactResult.ok) {
+        return artifactResult
+      }
+      const manifest = await input.manifest
+      const manifestTasks: UploadTask[] = manifest.manifestTargets.map((target) => ({
+        stepIndex: -1,
+        request: {
+          dealId: input.dealId,
+          manifestRoot: manifest.manifestRoot,
+          previousManifestRoot: input.previousManifestRoot,
+          uploadGeneration: input.uploadGeneration,
+          target,
+          artifact: { kind: 'manifest', bytes: manifest.manifestBlob, fullSize: manifest.manifestBlobFullSize } as const,
+        },
+      }))
+      return runUploadTasks(manifestTasks, [], undefined, input.onTaskEvent, directConcurrency, ports.transport)
     },
 
     async commitPreparedContent(input: PreparedCommitInput): Promise<ChainCommitRequest> {

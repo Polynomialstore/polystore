@@ -26,6 +26,7 @@
     "perf:prepare-compare": "tsx scripts/benchmark_prepare_compare.ts",
     "perf:user-stage-concurrency": "tsx scripts/benchmark_user_stage_concurrency.ts",
     "perf:browser-kzg-baseline": "tsx scripts/benchmark_browser_kzg_baseline.ts",
+    "perf:upload-pipeline": "tsx scripts/benchmark_upload_pipelining.ts",
     "perf:msm-windows": "tsx scripts/benchmark_pippenger_windows.ts",
     "perf:kzg-compare": "tsx scripts/benchmark_kzg_commit_compare.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
