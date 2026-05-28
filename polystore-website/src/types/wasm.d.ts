@@ -23,6 +23,8 @@ declare module '/wasm/polystore_core.js' {
     commit_mdu(mdu_bytes: Uint8Array): unknown
     commit_blobs(blob_bytes: Uint8Array): Uint8Array
     commit_blobs_profiled(blob_bytes: Uint8Array): unknown
+    webgpu_g1_srs_lagrange(): Uint8Array
+    webgpu_fold_g1_window_sums(window_sums: Uint8Array, bucket_width: number): Uint8Array
     compute_mdu_root(witness_bytes: Uint8Array): unknown
     compute_manifest(roots: Uint8Array): unknown
     set_pippenger_window_bits(bits: number): void
@@ -69,6 +71,8 @@ declare module '../../public/wasm/polystore_core.js' {
     commit_mdu(mdu_bytes: Uint8Array): unknown
     commit_blobs(blob_bytes: Uint8Array): Uint8Array
     commit_blobs_profiled(blob_bytes: Uint8Array): unknown
+    webgpu_g1_srs_lagrange(): Uint8Array
+    webgpu_fold_g1_window_sums(window_sums: Uint8Array, bucket_width: number): Uint8Array
     compute_mdu_root(witness_bytes: Uint8Array): unknown
     compute_manifest(roots: Uint8Array): unknown
     set_pippenger_window_bits(bits: number): void

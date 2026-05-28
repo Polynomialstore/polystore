@@ -538,6 +538,26 @@ impl PolyStoreWasm {
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {:?}", e)))
     }
 
+    pub fn webgpu_g1_srs_lagrange(&self) -> Result<Uint8Array, JsValue> {
+        let bytes = self
+            .kzg_ctx
+            .webgpu_g1_srs_lagrange_bytes()
+            .map_err(|e| JsValue::from_str(&format!("WebGPU SRS export failed: {:?}", e)))?;
+        Ok(Uint8Array::from(bytes.as_slice()))
+    }
+
+    pub fn webgpu_fold_g1_window_sums(
+        &self,
+        window_sums: &[u8],
+        bucket_width: u32,
+    ) -> Result<Uint8Array, JsValue> {
+        let commitment = self
+            .kzg_ctx
+            .webgpu_fold_g1_window_sums(window_sums, bucket_width as usize)
+            .map_err(|e| JsValue::from_str(&format!("WebGPU MSM fold failed: {:?}", e)))?;
+        Ok(Uint8Array::from(commitment.as_slice()))
+    }
+
     pub fn expand_mdu_rs_flat_committed_profiled(
         &self,
         mdu_bytes: &[u8],
