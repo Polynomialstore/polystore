@@ -47,6 +47,7 @@ type WebGpuNavigator = Navigator & {
 }
 
 export const WEBGPU_KZG_MSM_BUCKET_WIDTH = 10
+export const WEBGPU_KZG_MSM_REDUCTION_MODE: WebGpuKzgMsmReductionMode = 'parallel16'
 export const WEBGPU_KZG_MSM_POINT_BYTES = 384
 export const WEBGPU_KZG_MSM_SIGN_BIT = 0x80000000
 export const WEBGPU_KZG_MSM_BLOB_SIZE = 128 * 1024
@@ -340,7 +341,7 @@ export class WebGpuKzgMsmCommitter {
     private readonly wasm: WebGpuKzgMsmWasmInterop,
     private readonly options: WebGpuKzgMsmOptions = {},
   ) {
-    const reductionMode = assertReductionMode(options.reductionMode ?? 'serial')
+    const reductionMode = assertReductionMode(options.reductionMode ?? WEBGPU_KZG_MSM_REDUCTION_MODE)
     const srs = wasm.webgpu_g1_srs_lagrange()
     if (srs.byteLength < WEBGPU_KZG_MSM_CELLS_PER_BLOB * WEBGPU_KZG_MSM_POINT_BYTES) {
       throw new Error('WebGPU KZG MSM SRS export is smaller than one blob domain')
@@ -470,7 +471,7 @@ export class WebGpuKzgMsmCommitter {
     const started = nowMs()
     const blobs = assertBlobBatch(blobsFlat)
     const bucketWidth = assertBucketWidth(this.options.bucketWidth ?? WEBGPU_KZG_MSM_BUCKET_WIDTH)
-    const reductionMode = assertReductionMode(this.options.reductionMode ?? 'serial')
+    const reductionMode = assertReductionMode(this.options.reductionMode ?? WEBGPU_KZG_MSM_REDUCTION_MODE)
     const commitments = new Uint8Array(blobs * 48)
     let debug: WebGpuKzgMsmResult['debug']
     const timings: WebGpuKzgMsmTimings = {
