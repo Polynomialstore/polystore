@@ -16,7 +16,7 @@ Related:
   - `user-gateway` (legacy runtime alias: `polystore_gateway` in router mode)
   - `polystore_faucet` (enabled, rate-limited; collaborator-only)
   - `polystore-website` (static build behind HTTPS)
-- **Providers (remote SPs)** run (direct endpoint or Cloudflare Tunnel endpoint):
+- **Providers (remote SPs)** run (direct endpoint preferred, Cloudflare Tunnel fallback):
   - `provider-daemon` (legacy runtime alias: `polystore_gateway` in provider mode, one per SP)
 - **Users** interact via:
   - Website + MetaMask (wallet-first), or curl for debugging
@@ -43,6 +43,7 @@ Gateway policy for this soft launch:
 
 Reverse proxy templates:
 - Caddy examples live in `ops/caddy/` (`ops/caddy/Caddyfile.hub.example` + `ops/caddy/Caddyfile.provider.example`).
+- Current direct SP HTTPS runbook: `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`.
 
 ## Connectivity profiles (choose one)
 
@@ -51,13 +52,15 @@ Reverse proxy templates:
 - Hub has reachable inbound `80/443`.
 - DNS (`rpc/lcd/evm/faucet/web`) resolves directly to the hub public IP.
 - Caddy terminates TLS and proxies to localhost ports.
+- Provider hosts with reachable inbound `443` should also use direct DNS-only
+  HTTPS for SP payload paths.
 
 ### Profile B — Home server behind NAT/CGNAT + Cloudflare Tunnel
 
 - Hub is not directly reachable from the internet.
 - `cloudflared` publishes the same public hostnames and forwards to localhost ports.
 - Inbound `80/443` on the hub is not required.
-- Provider machines can also use Cloudflare Tunnel endpoints (`/dns4/<host>/tcp/443/https`) when they cannot open inbound ports.
+- Provider machines can use Cloudflare Tunnel endpoints (`/dns4/<host>/tcp/443/https`) when they cannot open inbound ports.
 - Endpoint details for providers: `docs/networking/PROVIDER_ENDPOINTS.md`.
 
 ## Hub runbook (blank box → running devnet)

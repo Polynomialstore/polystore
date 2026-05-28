@@ -12,3 +12,16 @@ sp1.example.com {
   reverse_proxy 127.0.0.1:8091
 }
 
+# Multi-provider host example:
+#
+# sp1.example.com {
+#   reverse_proxy 127.0.0.1:8091
+# }
+#
+# sp2.example.com {
+#   reverse_proxy 127.0.0.1:8092
+# }
+#
+# sp3.example.com {
+#   reverse_proxy 127.0.0.1:8093
+# }

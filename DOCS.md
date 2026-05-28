@@ -50,6 +50,7 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 - `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`: “Send this to collaborators” quickstart (website testing + optional SP join).
 - `docs/REMOTE_SP_JOIN_QUICKSTART.md`: Remote provider join quickstart (fast path).
 - `docs/networking/PROVIDER_ENDPOINTS.md`: Provider endpoint profiles (`direct` and `cloudflare-tunnel`).
+- `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`: DNS-only direct HTTPS runbook for multi-provider hosts.
 - `docs/TRUSTED_DEVNET_MONITORING_CHECKLIST.md`: Minimal monitoring checklist for the soft launch.
 
 ## Agent Runbooks
