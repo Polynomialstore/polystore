@@ -266,17 +266,6 @@ function createEmptyStorageBuffer(device: GPUDevice, label: string, size: number
   })
 }
 
-function createUniformBuffer(device: GPUDevice, label: string, bytes: Uint32Array): GPUBuffer {
-  const usage = gpuBufferUsage()
-  const buffer = device.createBuffer({
-    label,
-    size: Math.max(16, Math.ceil(bytes.byteLength / 16) * 16),
-    usage: usage.UNIFORM | usage.COPY_DST,
-  })
-  device.queue.writeBuffer(buffer, 0, bytes)
-  return buffer
-}
-
 function assertReductionMode(mode: WebGpuKzgMsmReductionMode): WebGpuKzgMsmReductionMode {
   if (mode === 'serial' || mode === 'parallel16' || mode === 'parallel32' || mode === 'parallel64') return mode
   throw new Error('WebGPU KZG MSM reduction mode must be serial, parallel16, parallel32, or parallel64')
@@ -542,10 +531,6 @@ export class WebGpuKzgMsmCommitter {
               `polystore-kzg-msm-${reductionMode}-partial-window-sums`,
               Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
             )
-      const parallelSubsumParams =
-        reductionMode === 'serial'
-          ? null
-          : createUniformBuffer(this.device, `polystore-kzg-msm-${reductionMode}-params`, new Uint32Array([1, 0, 0, 0]))
       timings.uploadMs += nowMs() - uploadStart
 
       const dispatchStart = nowMs()
@@ -580,10 +565,7 @@ export class WebGpuKzgMsmCommitter {
         ],
       })
       const parallelPhase1BindGroup =
-        reductionMode === 'serial' ||
-        !partialWindowSums ||
-        !parallelSubsumParams ||
-        !this.parallelSubsumPhase1Layout
+        reductionMode === 'serial' || !partialWindowSums || !this.parallelSubsumPhase1Layout
           ? null
           : this.device.createBindGroup({
               label: `polystore-kzg-msm-${reductionMode}-phase1-bg`,
@@ -593,11 +575,10 @@ export class WebGpuKzgMsmCommitter {
                 { binding: 1, resource: { buffer: windowStarts } },
                 { binding: 2, resource: { buffer: windowCounts } },
                 { binding: 3, resource: { buffer: partialWindowSums } },
-                { binding: 4, resource: { buffer: parallelSubsumParams } },
               ],
             })
       const parallelPhase2BindGroup =
-        reductionMode === 'serial' || !partialWindowSums || !parallelSubsumParams || !this.parallelSubsumPhase2Layout
+        reductionMode === 'serial' || !partialWindowSums || !this.parallelSubsumPhase2Layout
           ? null
           : this.device.createBindGroup({
               label: `polystore-kzg-msm-${reductionMode}-phase2-bg`,
@@ -605,7 +586,6 @@ export class WebGpuKzgMsmCommitter {
               entries: [
                 { binding: 0, resource: { buffer: partialWindowSums } },
                 { binding: 1, resource: { buffer: windowSums } },
-                { binding: 2, resource: { buffer: parallelSubsumParams } },
               ],
             })
 
@@ -686,7 +666,6 @@ export class WebGpuKzgMsmCommitter {
         aggregatedBuckets,
         windowSums,
         partialWindowSums,
-        parallelSubsumParams,
       ]) {
         buffer?.destroy()
       }
