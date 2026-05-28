@@ -45,7 +45,7 @@ type WebGpuNavigator = Navigator & {
   }
 }
 
-export const WEBGPU_KZG_MSM_BUCKET_WIDTH = 13
+export const WEBGPU_KZG_MSM_BUCKET_WIDTH = 10
 export const WEBGPU_KZG_MSM_POINT_BYTES = 384
 export const WEBGPU_KZG_MSM_SIGN_BIT = 0x80000000
 export const WEBGPU_KZG_MSM_BLOB_SIZE = 128 * 1024
@@ -55,6 +55,10 @@ const FR_MODULUS = BigInt('0x73eda753299d7d483339d80809a1d80553bda402fffe5bfefff
 export type WebGpuKzgMsmWasmInterop = {
   webgpu_g1_srs_lagrange: () => Uint8Array
   webgpu_fold_g1_window_sums: (windowSums: Uint8Array, bucketWidth: number) => Uint8Array
+}
+
+export type WebGpuKzgMsmOptions = {
+  bucketWidth?: number
 }
 
 export type WebGpuKzgMsmTimings = {
@@ -71,9 +75,14 @@ export type WebGpuKzgMsmResult = {
   timings: WebGpuKzgMsmTimings
   blobs: number
   debug?: {
+    bucketWidth: number
     bucketCount: number
     baseIndexCount: number
     numWindows: number
+    maxBucketSize: number
+    meanBucketSize: number
+    uploadBytes: number
+    readbackBytes: number
     windowSumNonZeroBytes: number
   }
 }
@@ -86,6 +95,7 @@ type BucketData = {
   windowStarts: Uint32Array
   windowCounts: Uint32Array
   numWindows: number
+  maxBucketSize: number
 }
 
 function nowMs(): number {
@@ -118,6 +128,13 @@ function assertBlobBatch(blobsFlat: Uint8Array): number {
     throw new Error('WebGPU KZG MSM input length must be a multiple of 128 KiB')
   }
   return blobsFlat.byteLength / WEBGPU_KZG_MSM_BLOB_SIZE
+}
+
+function assertBucketWidth(bucketWidth: number): number {
+  if (!Number.isInteger(bucketWidth) || bucketWidth < 4 || bucketWidth > 13) {
+    throw new Error('WebGPU KZG MSM bucket width must be an integer between 4 and 13')
+  }
+  return bucketWidth
 }
 
 function blobCellToScalar(cell: Uint8Array): bigint {
@@ -187,6 +204,7 @@ export function buildWebGpuKzgMsmBucketData(blob: Uint8Array, bucketWidth = WEBG
   const bucketValues: number[] = []
   const windowStarts = new Uint32Array(numWindows)
   const windowCounts = new Uint32Array(numWindows)
+  let maxBucketSize = 0
 
   for (let windowIndex = 0; windowIndex < numWindows; windowIndex += 1) {
     const buckets = perWindow.get(windowIndex)
@@ -197,6 +215,7 @@ export function buildWebGpuKzgMsmBucketData(blob: Uint8Array, bucketWidth = WEBG
     windowCounts[windowIndex] = values.length
     for (const value of values) {
       const entries = buckets.get(value) ?? []
+      maxBucketSize = Math.max(maxBucketSize, entries.length)
       bucketPointers.push(baseIndices.length)
       bucketSizes.push(entries.length)
       bucketValues.push(value)
@@ -212,6 +231,7 @@ export function buildWebGpuKzgMsmBucketData(blob: Uint8Array, bucketWidth = WEBG
     windowStarts,
     windowCounts,
     numWindows,
+    maxBucketSize,
   }
 }
 
@@ -268,6 +288,7 @@ export class WebGpuKzgMsmCommitter {
   constructor(
     private readonly device: GPUDevice,
     private readonly wasm: WebGpuKzgMsmWasmInterop,
+    private readonly options: WebGpuKzgMsmOptions = {},
   ) {
     const srs = wasm.webgpu_g1_srs_lagrange()
     if (srs.byteLength < WEBGPU_KZG_MSM_CELLS_PER_BLOB * WEBGPU_KZG_MSM_POINT_BYTES) {
@@ -361,6 +382,7 @@ export class WebGpuKzgMsmCommitter {
   async commitBlobs(blobsFlat: Uint8Array): Promise<WebGpuKzgMsmResult> {
     const started = nowMs()
     const blobs = assertBlobBatch(blobsFlat)
+    const bucketWidth = assertBucketWidth(this.options.bucketWidth ?? WEBGPU_KZG_MSM_BUCKET_WIDTH)
     const commitments = new Uint8Array(blobs * 48)
     let debug: WebGpuKzgMsmResult['debug']
     const timings: WebGpuKzgMsmTimings = {
@@ -376,12 +398,12 @@ export class WebGpuKzgMsmCommitter {
       const blob = blobsFlat.subarray(i * WEBGPU_KZG_MSM_BLOB_SIZE, (i + 1) * WEBGPU_KZG_MSM_BLOB_SIZE)
       if (blob.every((byte) => byte === 0)) {
         const emptyWindows = new Uint8Array(WEBGPU_KZG_MSM_POINT_BYTES)
-        commitments.set(this.wasm.webgpu_fold_g1_window_sums(emptyWindows, WEBGPU_KZG_MSM_BUCKET_WIDTH), i * 48)
+        commitments.set(this.wasm.webgpu_fold_g1_window_sums(emptyWindows, bucketWidth), i * 48)
         continue
       }
 
       const bucketStart = nowMs()
-      const bucketData = buildWebGpuKzgMsmBucketData(blob)
+      const bucketData = buildWebGpuKzgMsmBucketData(blob, bucketWidth)
       timings.bucketBuildMs += nowMs() - bucketStart
 
       const uploadStart = nowMs()
@@ -459,15 +481,28 @@ export class WebGpuKzgMsmCommitter {
         Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
       )
       debug ??= {
+        bucketWidth,
         bucketCount: bucketData.bucketValues.length,
         baseIndexCount: bucketData.baseIndices.length,
         numWindows: bucketData.numWindows,
+        maxBucketSize: bucketData.maxBucketSize,
+        meanBucketSize: bucketData.bucketValues.length
+          ? bucketData.baseIndices.length / bucketData.bucketValues.length
+          : 0,
+        uploadBytes:
+          bucketData.baseIndices.byteLength +
+          bucketData.bucketPointers.byteLength +
+          bucketData.bucketSizes.byteLength +
+          bucketData.bucketValues.byteLength +
+          bucketData.windowStarts.byteLength +
+          bucketData.windowCounts.byteLength,
+        readbackBytes: Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
         windowSumNonZeroBytes: windowSumBytes.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0),
       }
       timings.dispatchReadbackMs += nowMs() - dispatchStart
 
       const foldStart = nowMs()
-      const commitment = this.wasm.webgpu_fold_g1_window_sums(windowSumBytes, WEBGPU_KZG_MSM_BUCKET_WIDTH)
+      const commitment = this.wasm.webgpu_fold_g1_window_sums(windowSumBytes, bucketWidth)
       timings.foldMs += nowMs() - foldStart
       commitments.set(commitment, i * 48)
 
@@ -493,11 +528,12 @@ export class WebGpuKzgMsmCommitter {
 export async function createWebGpuKzgMsmCommitter(
   wasm: WebGpuKzgMsmWasmInterop,
   navigatorLike: WebGpuNavigator = navigator as WebGpuNavigator,
+  options: WebGpuKzgMsmOptions = {},
 ): Promise<WebGpuKzgMsmCommitter> {
   const gpu = navigatorLike.gpu
   if (!gpu) throw new Error('navigator.gpu is unavailable')
   const adapter = await gpu.requestAdapter()
   if (!adapter) throw new Error('WebGPU adapter request returned null')
   const device = await adapter.requestDevice()
-  return new WebGpuKzgMsmCommitter(device, wasm)
+  return new WebGpuKzgMsmCommitter(device, wasm, options)
 }

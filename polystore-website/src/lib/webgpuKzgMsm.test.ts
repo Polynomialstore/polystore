@@ -37,7 +37,7 @@ test('WebGPU KZG MSM bucket data maps one canonical scalar to one positive bucke
 })
 
 test('WebGPU KZG MSM bucket data uses signed windows for high window values', () => {
-  const buckets = buildWebGpuKzgMsmBucketData(blobWithCell(9, 4097n))
+  const buckets = buildWebGpuKzgMsmBucketData(blobWithCell(9, 4097n), 13)
 
   assert.equal(buckets.baseIndices[0], (9 | WEBGPU_KZG_MSM_SIGN_BIT) >>> 0)
   assert.equal(buckets.bucketValues[0], 4095)

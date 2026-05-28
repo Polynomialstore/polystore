@@ -34,6 +34,14 @@ const blobCount = Number.parseInt(process.env.POLYSTORE_WEBGPU_MSM_BLOBS ?? '1',
 if (!Number.isInteger(blobCount) || blobCount < 1) {
   throw new Error('POLYSTORE_WEBGPU_MSM_BLOBS must be a positive integer')
 }
+const bucketWidth = Number.parseInt(process.env.POLYSTORE_WEBGPU_MSM_BUCKET_WIDTH ?? '10', 10)
+if (!Number.isInteger(bucketWidth) || bucketWidth < 4 || bucketWidth > 13) {
+  throw new Error('POLYSTORE_WEBGPU_MSM_BUCKET_WIDTH must be an integer between 4 and 13')
+}
+const runs = Number.parseInt(process.env.POLYSTORE_WEBGPU_MSM_RUNS ?? '1', 10)
+if (!Number.isInteger(runs) || runs < 1) {
+  throw new Error('POLYSTORE_WEBGPU_MSM_RUNS must be a positive integer')
+}
 
 const vite = await createServer({
   root: process.cwd(),
@@ -84,6 +92,17 @@ try {
         function hex(bytes) {
           return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
         }
+        function stats(values) {
+          const sorted = [...values].sort((a, b) => a - b);
+          const pick = (quantile) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * quantile))] ?? 0;
+          return {
+            min: sorted[0] ?? 0,
+            median: pick(0.5),
+            p95: pick(0.95),
+            max: sorted[sorted.length - 1] ?? 0,
+            mean: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0,
+          };
+        }
 
         const wasmMod = await import('/wasm/polystore_core.js');
         const msmMod = await import('/src/lib/webgpuKzgMsm.ts');
@@ -103,15 +122,33 @@ try {
           blobs.set(makeValidBlob(41 + i), i * config.blobSize);
         }
 
-        const wasmStart = performance.now();
-        const wasmCommitments = polyStoreWasm.commit_blobs(blobs);
-        const wasmMs = performance.now() - wasmStart;
-
         const gpuInitStart = performance.now();
-        const committer = await msmMod.createWebGpuKzgMsmCommitter(polyStoreWasm);
+        const committer = await msmMod.createWebGpuKzgMsmCommitter(polyStoreWasm, navigator, {
+          bucketWidth: config.bucketWidth,
+        });
         const gpuInitMs = performance.now() - gpuInitStart;
-        const gpu = await committer.commitBlobs(blobs);
+
+        const runResults = [];
+        let wasmCommitments = null;
+        for (let run = 0; run < config.runs; run += 1) {
+          const wasmStart = performance.now();
+          wasmCommitments = polyStoreWasm.commit_blobs(blobs);
+          const wasmMs = performance.now() - wasmStart;
+          const gpu = await committer.commitBlobs(blobs);
+          runResults.push({
+            run,
+            wasm_ms: wasmMs,
+            gpu_timings: gpu.timings,
+            gpu_debug: gpu.debug ?? null,
+            parity: hex(wasmCommitments) === hex(gpu.commitments),
+            commitment_bytes: gpu.commitments.byteLength,
+            first_commitment: hex(gpu.commitments.slice(0, 48)),
+          });
+        }
         committer.destroy();
+
+        const totals = runResults.map((run) => run.gpu_timings.totalMs);
+        const wasmTotals = runResults.map((run) => run.wasm_ms);
 
         return {
           browser: {
@@ -121,13 +158,15 @@ try {
             webgpu_present: Boolean(navigator.gpu),
           },
           blob_count: config.blobCount,
-          wasm_ms: wasmMs,
+          bucket_width: config.bucketWidth,
+          runs: config.runs,
+          wasm_ms: stats(wasmTotals),
           gpu_init_ms: gpuInitMs,
-          gpu_timings: gpu.timings,
-          gpu_debug: gpu.debug ?? null,
-          parity: hex(wasmCommitments) === hex(gpu.commitments),
-          commitment_bytes: gpu.commitments.byteLength,
-          first_commitment: hex(gpu.commitments.slice(0, 48)),
+          gpu_total_ms: stats(totals),
+          run_results: runResults,
+          parity: runResults.every((run) => run.parity),
+          commitment_bytes: runResults[0]?.commitment_bytes ?? 0,
+          first_commitment: runResults[0]?.first_commitment ?? '',
         };
       };
     `,
@@ -136,6 +175,8 @@ try {
   const result = await page.evaluate(`window.__runPolyStoreKzgWebGpuMsmBenchmark(${JSON.stringify({
     blobSize: BLOB_SIZE,
     blobCount,
+    bucketWidth,
+    runs,
   })})`)
 
   console.log(
