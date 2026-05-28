@@ -104,6 +104,32 @@ wait_for_height() {
   return 1
 }
 
+wait_for_epoch_window() {
+  local min_remaining="${1:-8}"
+  local attempts="${2:-180}"
+  local delay="${3:-1}"
+  for _ in $(seq 1 "$attempts"); do
+    local h mod remaining
+    h="$(rpc_height)"
+    if [ "$h" -le 0 ]; then
+      sleep "$delay"
+      continue
+    fi
+    mod="$((h % EPOCH_LEN))"
+    if [ "$mod" -eq 0 ]; then
+      remaining="$EPOCH_LEN"
+    else
+      remaining="$((EPOCH_LEN - mod))"
+    fi
+    if [ "$remaining" -ge "$min_remaining" ]; then
+      echo "    epoch window ready at height=$h remaining_blocks=$remaining"
+      return 0
+    fi
+    sleep "$delay"
+  done
+  return 1
+}
+
 json_get() {
   local key="$1"
   python3 -c '
@@ -126,6 +152,24 @@ elif isinstance(cur, (dict, list)):
 else:
   print(cur)
 ' "$key"
+}
+
+slot_json_by_index() {
+  local slot_index="$1"
+  python3 -c '
+import json, sys
+slot_index = str(sys.argv[1])
+data = json.load(sys.stdin)
+deal = data.get("deal") or {}
+slots = deal.get("mode2_slots") or []
+for s in slots:
+  if not s:
+    continue
+  if str(s.get("slot","")) == slot_index:
+    print(json.dumps(s))
+    sys.exit(0)
+print("")
+' "$slot_index"
 }
 
 extract_last_json() {
@@ -397,6 +441,7 @@ export PROVIDER_COUNT
 export START_WEB="${START_WEB:-0}"
 export POLYSTORE_EPOCH_LEN_BLOCKS="${POLYSTORE_EPOCH_LEN_BLOCKS:-20}"
 export POLYSTORE_EVICT_AFTER_MISSED_EPOCHS="${POLYSTORE_EVICT_AFTER_MISSED_EPOCHS:-1}"
+EPOCH_LEN="$POLYSTORE_EPOCH_LEN_BLOCKS"
 
 echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
 "$STACK_SCRIPT" start
@@ -520,18 +565,35 @@ if [ "${CHAIN_ROOT_HEX:-}" != "$MANIFEST_ROOT" ]; then
   exit 1
 fi
 
+echo "==> Aligning ghost scenario inside an epoch window..."
+MIN_GHOST_REPAIR_REMAINING_BLOCKS="${MIN_GHOST_REPAIR_REMAINING_BLOCKS:-8}"
+wait_for_epoch_window "$MIN_GHOST_REPAIR_REMAINING_BLOCKS" 180 1 || {
+  echo "ERROR: timed out waiting for an epoch window with >=$MIN_GHOST_REPAIR_REMAINING_BLOCKS blocks remaining" >&2
+  exit 1
+}
+
 echo "==> Planning retrieval session for first blob..."
 PLAN_RESP="$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/plan-retrieval-session/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(urlencode "$FILENAME")&range_start=0&range_len=$RAW_BLOB_PAYLOAD_BYTES")"
 PLAN_PROVIDER="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("provider",""))' 2>/dev/null || true)"
+PLAN_PROVIDER_SOURCE="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("provider_source",""))' 2>/dev/null || true)"
+PLAN_MODE2_SLOT="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; v=json.load(sys.stdin).get("mode2_slot",""); print("" if v is None else v)' 2>/dev/null || true)"
+PLAN_MODE2_SLOT_STATUS="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; v=json.load(sys.stdin).get("mode2_slot_status",""); print("" if v is None else v)' 2>/dev/null || true)"
+PLAN_MODE2_ACTIVE_PROVIDER="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("mode2_active_provider",""))' 2>/dev/null || true)"
+PLAN_MODE2_PENDING_PROVIDER="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("mode2_pending_provider",""))' 2>/dev/null || true)"
 PLAN_START_MDU="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("start_mdu_index",""))' 2>/dev/null || true)"
 PLAN_START_BLOB="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("start_blob_index",""))' 2>/dev/null || true)"
 PLAN_BLOB_COUNT="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("blob_count",""))' 2>/dev/null || true)"
-if [ -z "$PLAN_PROVIDER" ] || [ -z "$PLAN_START_MDU" ] || [ -z "$PLAN_START_BLOB" ] || [ -z "$PLAN_BLOB_COUNT" ]; then
+if [ -z "$PLAN_PROVIDER" ] || [ -z "$PLAN_MODE2_SLOT" ] || [ -z "$PLAN_START_MDU" ] || [ -z "$PLAN_START_BLOB" ] || [ -z "$PLAN_BLOB_COUNT" ]; then
   echo "ERROR: plan response missing required fields" >&2
   echo "$PLAN_RESP" >&2
   exit 1
 fi
-echo "    planned slot provider=$PLAN_PROVIDER start_mdu=$PLAN_START_MDU start_blob=$PLAN_START_BLOB blob_count=$PLAN_BLOB_COUNT"
+if [ "$PLAN_MODE2_SLOT_STATUS" != "1" ]; then
+  echo "ERROR: planned slot is not ACTIVE before ghosting (status=$PLAN_MODE2_SLOT_STATUS)" >&2
+  echo "$PLAN_RESP" >&2
+  exit 1
+fi
+echo "    planned slot=$PLAN_MODE2_SLOT status=$PLAN_MODE2_SLOT_STATUS provider=$PLAN_PROVIDER source=$PLAN_PROVIDER_SOURCE active=$PLAN_MODE2_ACTIVE_PROVIDER pending=$PLAN_MODE2_PENDING_PROVIDER start_mdu=$PLAN_START_MDU start_blob=$PLAN_START_BLOB blob_count=$PLAN_BLOB_COUNT"
 
 echo "==> Resolving planned provider endpoint..."
 PROVIDER_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/providers/$PLAN_PROVIDER")"
@@ -610,34 +672,20 @@ fi
 
 submit_session_proof "$SESSION_HEX" "$DEPUTY_PROVIDER"
 
-echo "==> Waiting for epoch end to trigger deputy-miss repair..."
-EPOCH_LEN="$POLYSTORE_EPOCH_LEN_BLOCKS"
-CUR_H="$(rpc_height)"
-NEXT_EPOCH_END="$(( ( (CUR_H + EPOCH_LEN - 1) / EPOCH_LEN ) * EPOCH_LEN ))"
-if [ "$NEXT_EPOCH_END" -le "$CUR_H" ]; then
-  NEXT_EPOCH_END="$((CUR_H + EPOCH_LEN))"
-fi
-wait_for_height "$NEXT_EPOCH_END" 180 1 || { echo "ERROR: timed out waiting for epoch end" >&2; exit 1; }
-sleep 2
-
-DEAL_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID")"
-REPAIR_SLOT_JSON="$(echo "$DEAL_JSON" | PLANNED_PROVIDER="$PLAN_PROVIDER" python3 -c '
-import json, os, sys
-planned = (os.environ.get("PLANNED_PROVIDER","") or "").strip()
-data = json.load(sys.stdin)
-deal = data.get("deal") or {}
-slots = deal.get("mode2_slots") or []
-for s in slots:
-  if not s:
-    continue
-  if (s.get("provider") or "").strip() != planned:
-    continue
-  print(json.dumps(s))
-  sys.exit(0)
-print("")
-')"
+echo "==> Waiting for deputy-miss repair to start..."
+REPAIR_SLOT_JSON=""
+for _ in $(seq 1 180); do
+  DEAL_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID")"
+  REPAIR_SLOT_JSON="$(echo "$DEAL_JSON" | slot_json_by_index "$PLAN_MODE2_SLOT")"
+  SLOT_STATUS="$(echo "$REPAIR_SLOT_JSON" | python3 -c 'import sys, json; print((json.load(sys.stdin).get("status") or ""))' 2>/dev/null || true)"
+  PENDING_PROVIDER="$(echo "$REPAIR_SLOT_JSON" | python3 -c 'import sys, json; print((json.load(sys.stdin).get("pending_provider") or ""))' 2>/dev/null || true)"
+  if { [ "$SLOT_STATUS" = "SLOT_STATUS_REPAIRING" ] || [ "$SLOT_STATUS" = "2" ]; } && [ -n "$PENDING_PROVIDER" ]; then
+    break
+  fi
+  sleep 1
+done
 if [ -z "$REPAIR_SLOT_JSON" ]; then
-  echo "ERROR: failed to find slot for planned provider in deal state" >&2
+  echo "ERROR: failed to find planned slot $PLAN_MODE2_SLOT in deal state" >&2
   echo "$DEAL_JSON" >&2
   exit 1
 fi

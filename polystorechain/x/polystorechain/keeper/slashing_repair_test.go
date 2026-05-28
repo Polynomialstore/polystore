@@ -517,6 +517,11 @@ func TestCheckMissedProofs_Mode2RepairBackoffWhenNoCandidate(t *testing.T) {
 	require.Equal(t, "repair_backoff_entered", attempt.LastReason)
 	require.Equal(t, providerA, attempt.Provider)
 	require.Empty(t, attempt.PendingProvider)
+	providerHealth, err := f.keeper.ProviderHealthStates.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT, providerHealth.LifecycleStatus)
+	require.Equal(t, "provider_delinquent", providerHealth.Reason)
+	require.Positive(t, providerHealth.RepairEventCount)
 
 	sdkCtx = sdkCtx.WithBlockHeight(10)
 	setMode2EpochCredits(t, f, sdkCtx, dealID, 2, 1, 2)

@@ -1,6 +1,6 @@
 # PolyStore Policing and Failure Simulation Roadmap
 
-Last updated: 2026-04-27
+Last updated: 2026-05-27
 
 ## 1. Purpose
 
@@ -49,6 +49,7 @@ The current repo already contains several enforcement surfaces:
 | Structured evidence and slot health | Keeper-level `EvidenceCase` and `SlotHealthState` ledgers now classify quota misses, deputy misses, repair backoff, readiness, and promotion with indexed, paginated query surfaces. |
 | Provider health lifecycle | Keeper-level `ProviderHealthState` now aggregates provider lifecycle signals from structured evidence, registration state, and bond headroom; placement, setup bumping, repair replacement, base rewards, proof-time reward eligibility, soft-fault decay, hard-fault jail/reputation consequences, and underbonded exclusion consume it. |
 | Provider bond economics | Provider registration can lock an isolated self-bond, authorized provider/operator top-ups can restore bond headroom, hard/slashable evidence can burn a governance-parametrized bond share from active and queued provider-bond funds, provider records expose active/slashed bond, underbonded providers are excluded or repaired away when `min_provider_bond` / `assignment_collateral_per_slot` are enabled, `AssignmentCollateralLock` state makes live slot liabilities queryable, and `provider_bond_unbonding_blocks` can force excess-bond exits through a delayed slashable claim queue. |
+| Mode 2 system liveness | Provider-daemons now have regression coverage that generates proofs from the exact per-slot shard bytes they store. System KZG challenge points are reduced into BLS12-381 Fr before proof generation, and pending repair providers do not attempt proof responsibility until the challenged shard row is locally present. |
 | Fast simulation | `tools/policy_sim` now provides an initial deterministic logical simulator. |
 
 The remaining work is to organize these mechanisms into an explicit reliability
@@ -404,6 +405,10 @@ Current landed status:
    state: `EvidenceCase` records and `SlotHealthState` records are written by
    quota-miss, deputy-miss, repair-start, repair-backoff, repair-readiness, and
    repair-completion paths, and are exposed through keeper queries.
+5. Provider-health root cause and repair workflow phase are no longer conflated
+   for repair-severity events: `repair_backoff_entered` increments repair
+   accounting but does not replace the underlying delinquency reason such as
+   `provider_delinquent` or `quota_miss_repair_started`.
 
 ### Milestone 4: Gateway and Provider Enforcement
 
@@ -419,6 +424,19 @@ Exit criteria:
 1. Gateway/provider failures map to known taxonomy entries.
 2. Routing around unhealthy slots is observable.
 
+Current landed status:
+
+1. Mode 2 system-liveness proof generation is now covered by gateway tests that
+   build real Mode 2 artifacts, read the stored `mdu_<index>_slot_<slot>.bin`
+   shard row, generate a chained proof, and verify it against the manifest root.
+2. The previously observed provider-daemon failure class
+   `polystore_compute_blob_proof failed with code: -3` is covered as a
+   regression: deterministic system challenges must be valid BLS12-381 Fr
+   scalars before KZG proof generation.
+3. Pending repair assignments are treated as catch-up responsibility before
+   proof responsibility. A pending provider only attempts a system proof once
+   the challenged local slot shard row exists.
+
 ### Milestone 5: Process-Level Devnet Scenarios
 
 Deliverables:
@@ -431,6 +449,21 @@ Exit criteria:
 
 1. The most important simulation claims have at least one real-stack confirmation.
 2. Slow tests remain stable enough to run intentionally.
+
+Current reset/smoke gate for the next devnet update:
+
+1. Deploy the fixed chain and provider-daemon binaries.
+2. Reset chain and provider state so old quota-miss and delinquency evidence
+   from the invalid challenge-point bug does not contaminate the new baseline.
+3. Register fresh providers and endpoints.
+4. Create a fresh Mode 2 deal, upload through the public user-gateway path, and
+   commit the manifest root on chain.
+5. Wait through multiple system-liveness epochs and confirm provider health
+   remains `ACTIVE`, slot health remains `HEALTHY`, and system proofs are
+   submitted without `polystore_compute_blob_proof failed with code: -3`.
+6. Confirm a pending repair provider does not get penalized before repair
+   catch-up/readiness, then confirm it can prove after the target slot shard is
+   locally present.
 
 ### Milestone 6: Observability and Operator UX
 

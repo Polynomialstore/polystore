@@ -8,6 +8,8 @@ import * as OpfsAdapter from './OpfsAdapter';
 // and stores content in a simple in-memory map.
 
 class MockFileSystemFileHandle {
+    static failReadCounts = new Map<string, number>();
+
     name: string;
     readonly kind = 'file' as const;
     private content: Uint8Array | null = null;
@@ -20,7 +22,16 @@ class MockFileSystemFileHandle {
     async getFile() {
         return {
             name: this.name,
-            arrayBuffer: async () => this.content?.buffer || new ArrayBuffer(0),
+            arrayBuffer: async () => {
+                const remainingFailures = MockFileSystemFileHandle.failReadCounts.get(this.name) || 0
+                if (remainingFailures > 0) {
+                    MockFileSystemFileHandle.failReadCounts.set(this.name, remainingFailures - 1)
+                    const err = new Error('File cannot be read')
+                    err.name = 'NotReadableError'
+                    throw err
+                }
+                return this.content?.buffer || new ArrayBuffer(0)
+            },
             size: this.content?.length || 0,
             type: 'application/octet-stream',
             lastModified: Date.now(),
@@ -40,6 +51,8 @@ class MockFileSystemFileHandle {
 }
 
 class MockFileSystemDirectoryHandle {
+    static failRemoveNames = new Set<string>();
+
     name: string;
     readonly kind = 'directory' as const;
     entries: Map<string, MockFileSystemDirectoryHandle | MockFileSystemFileHandle>;
@@ -94,6 +107,11 @@ class MockFileSystemDirectoryHandle {
     }
 
     async removeEntry(name: string, options?: { recursive?: boolean }): Promise<void> {
+        if (MockFileSystemDirectoryHandle.failRemoveNames.has(name)) {
+            const err = new Error('Object cannot be modified');
+            err.name = 'NoModificationAllowedError';
+            throw err;
+        }
         if (!this.entries.has(name)) {
             const err = new Error('Entry not found');
             err.name = 'NotFoundError';
@@ -125,7 +143,16 @@ Object.defineProperty(global, 'navigator', {
 // Reset mock before each test
 test.beforeEach(() => {
     mockRootDirectoryHandle.entries.clear();
+    MockFileSystemFileHandle.failReadCounts.clear();
+    MockFileSystemDirectoryHandle.failRemoveNames.clear();
 });
+
+async function writeMockFile(dir: MockFileSystemDirectoryHandle, name: string, data: string | Uint8Array): Promise<void> {
+    const handle = await dir.getFileHandle(name, { create: true })
+    const writable = await handle.createWritable()
+    await writable.write(typeof data === 'string' ? new TextEncoder().encode(data) : data)
+    await writable.close()
+}
 
 function makeMetadata(opts: {
     dealId: string
@@ -412,6 +439,87 @@ test('OpfsAdapter: atomic slab generation swap serves new generation and cleans 
     assert.ok(files.includes('mdu_0.bin'))
     assert.ok(files.includes('mdu_1.bin'))
     assert.ok(files.includes('manifest.bin'))
+})
+
+test('OpfsAdapter: atomic slab generation swap survives stale cleanup failure after activation', async () => {
+    const dealId = 'test-deal-atomic-swap-cleanup-failure'
+    const rootA = '0x' + '12'.repeat(48)
+    const rootB = '0x' + '34'.repeat(48)
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: rootA,
+        manifestBlob: new Uint8Array([1]),
+        mdus: [
+            { index: 0, data: new Uint8Array([50]) },
+            { index: 1, data: new Uint8Array([51]) },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: rootA,
+            generationId: rootA.slice(2),
+        }),
+    })
+
+    const dealDir = await mockRootDirectoryHandle.getDirectoryHandle(`deal-${dealId}`)
+    const generationsDir = await dealDir.getDirectoryHandle('generations')
+    const staleGenerationNames: string[] = []
+    for await (const entry of generationsDir.values()) {
+        if (entry.kind === 'directory') staleGenerationNames.push(entry.name)
+    }
+    assert.strictEqual(staleGenerationNames.length, 1)
+    MockFileSystemDirectoryHandle.failRemoveNames.add(staleGenerationNames[0])
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: rootB,
+        manifestBlob: new Uint8Array([2]),
+        mdus: [
+            { index: 0, data: new Uint8Array([60]) },
+            { index: 1, data: new Uint8Array([61]) },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: rootB,
+            generationId: rootB.slice(2),
+        }),
+    })
+
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([60]))
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 1), new Uint8Array([61]))
+    assert.strictEqual(await OpfsAdapter.readManifestRoot(dealId), rootB)
+    assert.strictEqual((await OpfsAdapter.readSlabMetadata(dealId))?.manifest_root, rootB)
+})
+
+test('OpfsAdapter: active generation reads retry transient OPFS NotReadableError', async () => {
+    const dealId = 'test-deal-transient-not-readable'
+    const root = '0x' + '56'.repeat(48)
+
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: root,
+        manifestBlob: new Uint8Array([1]),
+        mdus: [
+            { index: 0, data: new Uint8Array([70]) },
+            { index: 1, data: new Uint8Array([71]) },
+        ],
+        metadata: makeMetadata({
+            dealId,
+            manifestRoot: root,
+            generationId: root.slice(2),
+        }),
+    })
+
+    MockFileSystemFileHandle.failReadCounts.set('mdu_0.bin', 1)
+    assert.deepStrictEqual(await OpfsAdapter.readMdu(dealId, 0), new Uint8Array([70]))
+})
+
+test('OpfsAdapter: stale active generation pointer cleanup failure does not break reads', async () => {
+    const dealId = 'test-deal-stale-pointer-cleanup-failure'
+    const dealDir = await mockRootDirectoryHandle.getDirectoryHandle(`deal-${dealId}`, { create: true })
+    const generationsDir = await dealDir.getDirectoryHandle('generations', { create: true })
+    await generationsDir.getDirectoryHandle('gen-incomplete', { create: true })
+    await writeMockFile(dealDir, 'active_generation.txt', 'gen-incomplete\n')
+    MockFileSystemDirectoryHandle.failRemoveNames.add('active_generation.txt')
+
+    assert.strictEqual(await OpfsAdapter.readMdu(dealId, 0), null)
 })
 
 test('OpfsAdapter: atomic slab generation swap rehydrates sparse artifacts on read', async () => {

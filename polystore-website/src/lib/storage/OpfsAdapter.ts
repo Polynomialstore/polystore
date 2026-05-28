@@ -95,23 +95,54 @@ async function writeBlobToDirectory(
     await writable.close()
 }
 
+function isDomErrorName(e: unknown, name: string): boolean {
+    return e instanceof Error && e.name === name
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 async function readBlobFromDirectory(dir: FileSystemDirectoryHandle, name: string): Promise<Uint8Array | null> {
-    try {
-        const fileHandle = await dir.getFileHandle(name)
-        const file = await fileHandle.getFile()
-        const buffer = await file.arrayBuffer()
-        return new Uint8Array(buffer)
-    } catch (e: unknown) {
-        if (e instanceof Error && e.name === 'NotFoundError') return null
-        throw e
+    let lastRetryableError: unknown = null
+    const retryDelaysMs = [0, 25, 100, 250]
+    for (const delayMs of retryDelaysMs) {
+        if (delayMs > 0) await sleep(delayMs)
+        try {
+            const fileHandle = await dir.getFileHandle(name)
+            const file = await fileHandle.getFile()
+            const buffer = await file.arrayBuffer()
+            return new Uint8Array(buffer)
+        } catch (e: unknown) {
+            if (isDomErrorName(e, 'NotFoundError')) return null
+            if (isDomErrorName(e, 'NotReadableError')) {
+                lastRetryableError = e
+                continue
+            }
+            throw e
+        }
     }
+    throw lastRetryableError
 }
 
 async function removeEntryIfExists(dir: FileSystemDirectoryHandle, name: string, recursive = false): Promise<void> {
     try {
         await dir.removeEntry(name, recursive ? { recursive: true } : undefined)
     } catch (e: unknown) {
-        if (e instanceof Error && e.name === 'NotFoundError') return
+        if (isDomErrorName(e, 'NotFoundError')) return
+        throw e
+    }
+}
+
+async function bestEffortRemoveEntryIfExists(
+    dir: FileSystemDirectoryHandle,
+    name: string,
+    recursive = false,
+): Promise<void> {
+    try {
+        await removeEntryIfExists(dir, name, recursive)
+    } catch (e: unknown) {
+        if (isDomErrorName(e, 'NoModificationAllowedError')) return
         throw e
     }
 }
@@ -154,22 +185,6 @@ async function generationLooksComplete(dir: FileSystemDirectoryHandle): Promise<
     return !!meta && !!mdu0 && !!manifest
 }
 
-async function removeIncompleteGenerationIfAny(
-    generationsDir: FileSystemDirectoryHandle,
-    generationName: string,
-): Promise<void> {
-    try {
-        const handle = await generationsDir.getDirectoryHandle(generationName)
-        const complete = await generationLooksComplete(handle)
-        if (!complete) {
-            await removeEntryIfExists(generationsDir, generationName, true)
-        }
-    } catch (e: unknown) {
-        if (e instanceof Error && e.name === 'NotFoundError') return
-        throw e
-    }
-}
-
 async function cleanupInactiveGenerations(
     dealDir: FileSystemDirectoryHandle,
     activeGenerationName: string,
@@ -193,22 +208,20 @@ async function resolveActiveStorageDirectory(dealId: string, create: boolean): P
 
     const generationsDir = await getGenerationsDirectory(dealDir, false)
     if (!generationsDir) {
-        await removeEntryIfExists(dealDir, ACTIVE_GENERATION_POINTER_FILE)
+        await bestEffortRemoveEntryIfExists(dealDir, ACTIVE_GENERATION_POINTER_FILE)
         return dealDir
     }
 
-    await removeIncompleteGenerationIfAny(generationsDir, activeGenerationName)
     try {
         const activeDir = await generationsDir.getDirectoryHandle(activeGenerationName)
         if (!(await generationLooksComplete(activeDir))) {
-            await removeEntryIfExists(generationsDir, activeGenerationName, true)
-            await removeEntryIfExists(dealDir, ACTIVE_GENERATION_POINTER_FILE)
+            await bestEffortRemoveEntryIfExists(dealDir, ACTIVE_GENERATION_POINTER_FILE)
             return dealDir
         }
         return activeDir
     } catch (e: unknown) {
-        if (e instanceof Error && e.name === 'NotFoundError') {
-            await removeEntryIfExists(dealDir, ACTIVE_GENERATION_POINTER_FILE)
+        if (isDomErrorName(e, 'NotFoundError')) {
+            await bestEffortRemoveEntryIfExists(dealDir, ACTIVE_GENERATION_POINTER_FILE)
             return dealDir
         }
         throw e
@@ -454,7 +467,11 @@ export async function writeSlabGenerationAtomically(
         await writeBlobToDirectory(generationDir, GENERATION_COMPLETE_MARKER_FILE, new TextEncoder().encode('ok\n'))
 
         await writeActiveGenerationName(dealDir, generationName)
-        await cleanupInactiveGenerations(dealDir, generationName)
+        try {
+            await cleanupInactiveGenerations(dealDir, generationName)
+        } catch (cleanupError) {
+            console.warn('Failed to clean inactive OPFS slab generations', cleanupError)
+        }
     } catch (e) {
         await removeEntryIfExists(generationsDir, generationName, true)
         throw e

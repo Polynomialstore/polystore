@@ -24,6 +24,22 @@ func TestClassifySystemLivenessError_MissingLocalData(t *testing.T) {
 	}
 }
 
+func TestClassifySystemLivenessError_PendingRepairShardNotReady(t *testing.T) {
+	t.Parallel()
+
+	err := pendingRepairShardNotReadyError(22, 3, 4, 5, 6)
+	reason, backoff, expected := classifySystemLivenessError(err)
+	if reason != systemLivenessFailureMissingLocalData {
+		t.Fatalf("expected reason=%q, got %q", systemLivenessFailureMissingLocalData, reason)
+	}
+	if backoff != systemLivenessMissingDataBackoff {
+		t.Fatalf("expected backoff=%s, got %s", systemLivenessMissingDataBackoff, backoff)
+	}
+	if !expected {
+		t.Fatalf("expected expected=true")
+	}
+}
+
 func TestClassifySystemLivenessError_DealExpired(t *testing.T) {
 	t.Parallel()
 
@@ -68,12 +84,28 @@ func TestSystemLivenessState_BackoffProgression(t *testing.T) {
 		t.Fatalf("expected blocked reason=%q, got %q", systemLivenessFailureMissingLocalData, blockedReason)
 	}
 
-	_, delay2, attempt2, _ := st.recordFailure(key, now.Add(delay1+time.Second), errors.New("no such file or directory"))
-	if attempt2 != 2 {
-		t.Fatalf("expected second attempt=2, got %d", attempt2)
+	st.clearFailure(key)
+	blocked, _, _ = st.shouldBackoff(key, now.Add(2*time.Second))
+	if blocked {
+		t.Fatalf("expected no backoff after clearFailure")
 	}
-	if delay2 <= delay1 {
-		t.Fatalf("expected delay2 > delay1, got delay1=%s delay2=%s", delay1, delay2)
+
+	_, delay2, attempt2, _ := st.recordFailure(key, now.Add(delay1+time.Second), errors.New("no such file or directory"))
+	if attempt2 != 1 {
+		t.Fatalf("expected retry after clearFailure to restart at attempt=1, got %d", attempt2)
+	}
+	if delay2 != delay1 {
+		t.Fatalf("expected delay2 to restart at %s, got %s", delay1, delay2)
+	}
+
+	key2 := systemLivenessKey{dealID: 13, slot: 1, ordinal: 0}
+	_, baseDelay, _, _ := st.recordFailure(key2, now, errors.New("no such file or directory"))
+	_, escalatedDelay, escalatedAttempt, _ := st.recordFailure(key2, now.Add(baseDelay+time.Second), errors.New("no such file or directory"))
+	if escalatedAttempt != 2 {
+		t.Fatalf("expected second attempt=2, got %d", escalatedAttempt)
+	}
+	if escalatedDelay <= baseDelay {
+		t.Fatalf("expected escalated delay > base delay, got base=%s escalated=%s", baseDelay, escalatedDelay)
 	}
 
 	st.markDone(key)

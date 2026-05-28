@@ -4,7 +4,7 @@
 # - polystorechaind (CometBFT + LCD + JSON-RPC)
 # - polystore_faucet
 # - N provider daemons (polystore_gateway, provider mode) on ports 8091+
-# - 1 gateway router (polystore_gateway, router mode) on :8080
+# - 1 gateway router (polystore_gateway, router mode) on :8080 by default
 # - polystore-website (optional, default on)
 #
 # Usage:
@@ -37,6 +37,7 @@ EVM_WS_PORT="${EVM_WS_PORT:-8546}"
 LCD_PORT="${LCD_PORT:-1317}"
 FAUCET_PORT="${FAUCET_PORT:-8081}"
 WEB_PORT="${WEB_PORT:-5173}"
+GATEWAY_PORT="${GATEWAY_PORT:-8080}"
 GAS_PRICE="${POLYSTORE_GAS_PRICES:-0.001aatom}"
 DENOM="${POLYSTORE_DENOM:-stake}"
 POLYSTORE_BIND_ALL="${POLYSTORE_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RPC to 0.0.0.0
@@ -805,6 +806,7 @@ start_router() {
       POLYSTORE_HOME="$CHAIN_HOME" \
       POLYSTORE_NODE="$RPC_ADDR" \
       POLYSTORE_LCD_BASE="http://127.0.0.1:${LCD_PORT}" \
+      POLYSTORE_LISTEN_ADDR="${POLYSTORE_LISTEN_ADDR:-:$GATEWAY_PORT}" \
       POLYSTORE_UPLOAD_DIR="$LOG_DIR/router_tmp" \
       POLYSTORECHAIND_BIN="$POLYSTORECHAIND_BIN" \
       POLYSTORE_GATEWAY_SP_AUTH="$POLYSTORE_GATEWAY_SP_AUTH" \
@@ -813,6 +815,22 @@ start_router() {
     echo $! >"$PID_DIR/router.pid"
   )
   echo "router pid $(cat "$PID_DIR/router.pid"), logs: $LOG_DIR/router.log"
+}
+
+ensure_service_running() {
+  local svc="$1"
+  local pid_file="$PID_DIR/$svc.pid"
+  if [ ! -f "$pid_file" ]; then
+    echo "ERROR: $svc pid file missing: $pid_file" >&2
+    return 1
+  fi
+  local pid
+  pid="$(cat "$pid_file")"
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "ERROR: $svc process exited; check $LOG_DIR/$svc.log" >&2
+    tail -80 "$LOG_DIR/$svc.log" >&2 || true
+    return 1
+  fi
 }
 
 start_web() {
@@ -825,7 +843,7 @@ start_web() {
     VITE_LCD_BASE="${VITE_LCD_BASE:-http://localhost:${LCD_PORT}}" \
     VITE_EVM_RPC="${VITE_EVM_RPC:-http://localhost:$EVM_RPC_PORT}" \
     VITE_SP_BASE="${VITE_SP_BASE:-http://localhost:${PROVIDER_PORT_BASE}}" \
-    VITE_GATEWAY_BASE="${VITE_GATEWAY_BASE:-http://localhost:8080}" \
+    VITE_GATEWAY_BASE="${VITE_GATEWAY_BASE:-http://localhost:${GATEWAY_PORT}}" \
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
     VITE_POLYSTORE_PRECOMPILE="${VITE_POLYSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
@@ -855,7 +873,7 @@ stop_all() {
   done
 
   # Best-effort kill by port in case go run spawned children.
-  local ports=("${RPC_ADDR##*:}" "${P2P_ADDR##*:}" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" 8080 "$FAUCET_PORT" "$WEB_PORT" "$P2P_PORT_BASE")
+  local ports=("${RPC_ADDR##*:}" "${P2P_ADDR##*:}" "$LCD_PORT" "$EVM_RPC_PORT" "$EVM_WS_PORT" "$GATEWAY_PORT" "$FAUCET_PORT" "$WEB_PORT" "$P2P_PORT_BASE")
   if [ "$PROVIDER_COUNT" -gt 0 ]; then
     for i in $(seq 1 "$PROVIDER_COUNT"); do
       ports+=("$((PROVIDER_PORT_BASE + i - 1))")
@@ -913,7 +931,9 @@ start_all() {
   fi
 
   start_router
-  wait_for_http "router" "http://localhost:8080/health" "200" 60 1
+  ensure_service_running "router"
+  wait_for_http "router" "http://localhost:${GATEWAY_PORT}/health" "200" 60 1
+  ensure_service_running "router"
 
   if [ "$START_WEB" = "1" ]; then
     start_web
@@ -926,7 +946,7 @@ RPC:         http://localhost:${RPC_ADDR##*:}
 REST/LCD:    http://localhost:${LCD_PORT}
 EVM RPC:     http://localhost:$EVM_RPC_PORT  (Cosmos Chain ID $CHAIN_ID / EVM Chain ID $EVM_CHAIN_ID)
 Faucet:      http://localhost:${FAUCET_PORT}/faucet
-Gateway:     http://localhost:8080/gateway/upload
+Gateway:     http://localhost:${GATEWAY_PORT}/gateway/upload
 Web UI:      http://localhost:${WEB_PORT}/#/dashboard
 Providers:   $PROVIDER_COUNT (ports starting at $PROVIDER_PORT_BASE)
 Home:        $CHAIN_HOME
