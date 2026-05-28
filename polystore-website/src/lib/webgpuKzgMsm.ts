@@ -79,6 +79,16 @@ export type WebGpuKzgMsmOptions = {
   allowFallbackAdapter?: boolean
 }
 
+export type WebGpuKzgMsmAdapterCalibration = {
+  cacheKey: string
+  bucketWidth: number
+  reductionMode: WebGpuKzgMsmReductionMode
+  minBlobs: number
+  minBytes: number
+  source: 'default-adapter-rule' | 'benchmark-matrix'
+  reason: string
+}
+
 export type WebGpuKzgMsmTimings = {
   scalarPrepMs: number
   bucketBuildMs: number
@@ -103,6 +113,11 @@ export type WebGpuKzgMsmResult = {
     uploadBytes: number
     readbackBytes: number
     windowSumNonZeroBytes: number
+    processedBlobs: number
+    commandSubmissions: number
+    readbackCount: number
+    scratchCapacityBytes: number
+    scratchResizeCount: number
   }
 }
 
@@ -120,6 +135,11 @@ type BucketData = {
   windowCounts: Uint32Array
   numWindows: number
   maxBucketSize: number
+}
+
+type ScratchBufferStats = {
+  capacityBytes: number
+  resizeCount: number
 }
 
 function nowMs(): number {
@@ -169,27 +189,32 @@ function blobCellToScalar(cell: Uint8Array): bigint {
   return value % FR_MODULUS
 }
 
-function scalarToSignedWindows(scalar: bigint, width: number): Array<{ value: number; negative: boolean }> {
+function visitSignedWindows(
+  scalar: bigint,
+  width: number,
+  visit: (windowIndex: number, value: number, negative: boolean) => void,
+): void {
   const mask = (1n << BigInt(width)) - 1n
   const half = 1n << BigInt(width - 1)
   const full = 1n << BigInt(width)
   let remaining = scalar
   let carry = 0n
-  const windows: Array<{ value: number; negative: boolean }> = []
+  let windowIndex = 0
 
   while (remaining > 0n || carry > 0n) {
     const raw = (remaining & mask) + carry
     remaining >>= BigInt(width)
     carry = 0n
     if (raw >= half) {
-      windows.push({ value: Number(full - raw), negative: true })
+      const value = Number(full - raw)
+      if (value !== 0) visit(windowIndex, value, true)
       carry = 1n
     } else {
-      windows.push({ value: Number(raw), negative: false })
+      const value = Number(raw)
+      if (value !== 0) visit(windowIndex, value, false)
     }
+    windowIndex += 1
   }
-
-  return windows
 }
 
 export function buildWebGpuKzgMsmBucketData(blob: Uint8Array, bucketWidth = WEBGPU_KZG_MSM_BUCKET_WIDTH): BucketData {
@@ -197,61 +222,82 @@ export function buildWebGpuKzgMsmBucketData(blob: Uint8Array, bucketWidth = WEBG
     throw new Error('WebGPU KZG MSM currently commits one 128 KiB blob per dispatch')
   }
 
-  const perWindow = new Map<number, Map<number, number[]>>()
+  const width = assertBucketWidth(bucketWidth)
+  const bucketSlots = 1 << width
+  const maxWindows = Math.ceil(256 / width) + 1
+  const counts = new Uint32Array(maxWindows * bucketSlots)
   let maxWindow = 0
+  let baseIndexCount = 0
 
   for (let pointIndex = 0; pointIndex < WEBGPU_KZG_MSM_CELLS_PER_BLOB; pointIndex += 1) {
     const scalar = blobCellToScalar(blob.subarray(pointIndex * 32, pointIndex * 32 + 32))
     if (scalar === 0n) continue
 
-    const windows = scalarToSignedWindows(scalar, bucketWidth)
-    for (let windowIndex = 0; windowIndex < windows.length; windowIndex += 1) {
-      const { value, negative } = windows[windowIndex]
-      if (value === 0) continue
+    visitSignedWindows(scalar, width, (windowIndex, value) => {
       maxWindow = Math.max(maxWindow, windowIndex)
-      let buckets = perWindow.get(windowIndex)
-      if (!buckets) {
-        buckets = new Map()
-        perWindow.set(windowIndex, buckets)
-      }
-      const encoded = pointIndex | (negative ? WEBGPU_KZG_MSM_SIGN_BIT : 0)
-      const entries = buckets.get(value)
-      if (entries) entries.push(encoded >>> 0)
-      else buckets.set(value, [encoded >>> 0])
-    }
+      counts[windowIndex * bucketSlots + value] += 1
+      baseIndexCount += 1
+    })
   }
 
   const numWindows = maxWindow + 1
-  const baseIndices: number[] = []
-  const bucketPointers: number[] = []
-  const bucketSizes: number[] = []
-  const bucketValues: number[] = []
-  const windowStarts = new Uint32Array(numWindows)
-  const windowCounts = new Uint32Array(numWindows)
+  let bucketCount = 0
   let maxBucketSize = 0
-
   for (let windowIndex = 0; windowIndex < numWindows; windowIndex += 1) {
-    const buckets = perWindow.get(windowIndex)
-    windowStarts[windowIndex] = bucketValues.length
-    if (!buckets) continue
-
-    const values = [...buckets.keys()].sort((a, b) => a - b)
-    windowCounts[windowIndex] = values.length
-    for (const value of values) {
-      const entries = buckets.get(value) ?? []
-      maxBucketSize = Math.max(maxBucketSize, entries.length)
-      bucketPointers.push(baseIndices.length)
-      bucketSizes.push(entries.length)
-      bucketValues.push(value)
-      baseIndices.push(...entries)
+    const windowOffset = windowIndex * bucketSlots
+    for (let value = 1; value < bucketSlots; value += 1) {
+      const count = counts[windowOffset + value]
+      if (count === 0) continue
+      bucketCount += 1
+      maxBucketSize = Math.max(maxBucketSize, count)
     }
   }
 
+  const baseIndices = new Uint32Array(baseIndexCount)
+  const bucketPointers = new Uint32Array(bucketCount)
+  const bucketSizes = new Uint32Array(bucketCount)
+  const bucketValues = new Uint32Array(bucketCount)
+  const windowStarts = new Uint32Array(numWindows)
+  const windowCounts = new Uint32Array(numWindows)
+  const entryOffsets = new Uint32Array(counts.length)
+  const fillCounts = new Uint32Array(counts.length)
+  let bucketIndex = 0
+  let baseIndexOffset = 0
+
+  for (let windowIndex = 0; windowIndex < numWindows; windowIndex += 1) {
+    const windowOffset = windowIndex * bucketSlots
+    windowStarts[windowIndex] = bucketIndex
+    for (let value = 1; value < bucketSlots; value += 1) {
+      const count = counts[windowOffset + value]
+      if (count === 0) continue
+      const offset = windowOffset + value
+      entryOffsets[offset] = baseIndexOffset
+      bucketPointers[bucketIndex] = baseIndexOffset
+      bucketSizes[bucketIndex] = count
+      bucketValues[bucketIndex] = value
+      baseIndexOffset += count
+      bucketIndex += 1
+      windowCounts[windowIndex] += 1
+    }
+  }
+
+  for (let pointIndex = 0; pointIndex < WEBGPU_KZG_MSM_CELLS_PER_BLOB; pointIndex += 1) {
+    const scalar = blobCellToScalar(blob.subarray(pointIndex * 32, pointIndex * 32 + 32))
+    if (scalar === 0n) continue
+
+    visitSignedWindows(scalar, width, (windowIndex, value, negative) => {
+      const offset = windowIndex * bucketSlots + value
+      const writeIndex = entryOffsets[offset] + fillCounts[offset]
+      baseIndices[writeIndex] = (pointIndex | (negative ? WEBGPU_KZG_MSM_SIGN_BIT : 0)) >>> 0
+      fillCounts[offset] += 1
+    })
+  }
+
   return {
-    baseIndices: new Uint32Array(baseIndices),
-    bucketPointers: new Uint32Array(bucketPointers),
-    bucketSizes: new Uint32Array(bucketSizes),
-    bucketValues: new Uint32Array(bucketValues),
+    baseIndices,
+    bucketPointers,
+    bucketSizes,
+    bucketValues,
     windowStarts,
     windowCounts,
     numWindows,
@@ -271,13 +317,124 @@ function createStorageBuffer(device: GPUDevice, label: string, bytes: Uint8Array
   return buffer
 }
 
-function createEmptyStorageBuffer(device: GPUDevice, label: string, size: number): GPUBuffer {
-  const usage = gpuBufferUsage()
-  return device.createBuffer({
-    label,
-    size: Math.max(4, size),
-    usage: usage.STORAGE | usage.COPY_SRC,
-  })
+function alignBufferSize(size: number): number {
+  return Math.max(4, Math.ceil(size / 4) * 4)
+}
+
+function growBufferCapacity(current: number, required: number): number {
+  let next = Math.max(4, current)
+  while (next < required) next *= 2
+  return next
+}
+
+class ReusableGpuBuffer {
+  private buffer: GPUBuffer | null = null
+  private capacity = 0
+  private resizes = 0
+
+  constructor(
+    private readonly device: GPUDevice,
+    private readonly label: string,
+    private readonly usage: number,
+  ) {}
+
+  get stats(): ScratchBufferStats {
+    return { capacityBytes: this.capacity, resizeCount: this.resizes }
+  }
+
+  ensure(size: number): GPUBuffer {
+    const required = alignBufferSize(size)
+    if (this.buffer && this.capacity >= required) return this.buffer
+    this.buffer?.destroy()
+    this.capacity = growBufferCapacity(this.capacity, required)
+    this.resizes += 1
+    this.buffer = this.device.createBuffer({
+      label: this.label,
+      size: this.capacity,
+      usage: this.usage,
+    })
+    return this.buffer
+  }
+
+  write(bytes: Uint8Array | Uint32Array): GPUBuffer {
+    const buffer = this.ensure(bytes.byteLength)
+    this.device.queue.writeBuffer(buffer, 0, bytes)
+    return buffer
+  }
+
+  destroy(): void {
+    this.buffer?.destroy()
+    this.buffer = null
+    this.capacity = 0
+  }
+}
+
+class WebGpuKzgMsmScratch {
+  readonly baseIndices: ReusableGpuBuffer
+  readonly bucketPointers: ReusableGpuBuffer
+  readonly bucketSizes: ReusableGpuBuffer
+  readonly bucketValues: ReusableGpuBuffer
+  readonly windowStarts: ReusableGpuBuffer
+  readonly windowCounts: ReusableGpuBuffer
+  readonly aggregatedBuckets: ReusableGpuBuffer
+  readonly windowSums: ReusableGpuBuffer
+  readonly partialWindowSums: ReusableGpuBuffer
+  readonly readback: ReusableGpuBuffer
+  private readonly buffers: ReusableGpuBuffer[]
+
+  constructor(device: GPUDevice) {
+    const usage = gpuBufferUsage()
+    this.baseIndices = new ReusableGpuBuffer(device, 'polystore-kzg-msm-base-indices', usage.STORAGE | usage.COPY_DST)
+    this.bucketPointers = new ReusableGpuBuffer(
+      device,
+      'polystore-kzg-msm-bucket-pointers',
+      usage.STORAGE | usage.COPY_DST,
+    )
+    this.bucketSizes = new ReusableGpuBuffer(device, 'polystore-kzg-msm-bucket-sizes', usage.STORAGE | usage.COPY_DST)
+    this.bucketValues = new ReusableGpuBuffer(device, 'polystore-kzg-msm-bucket-values', usage.STORAGE | usage.COPY_DST)
+    this.windowStarts = new ReusableGpuBuffer(device, 'polystore-kzg-msm-window-starts', usage.STORAGE | usage.COPY_DST)
+    this.windowCounts = new ReusableGpuBuffer(device, 'polystore-kzg-msm-window-counts', usage.STORAGE | usage.COPY_DST)
+    this.aggregatedBuckets = new ReusableGpuBuffer(
+      device,
+      'polystore-kzg-msm-aggregated-buckets',
+      usage.STORAGE | usage.COPY_SRC,
+    )
+    this.windowSums = new ReusableGpuBuffer(device, 'polystore-kzg-msm-window-sums', usage.STORAGE | usage.COPY_SRC)
+    this.partialWindowSums = new ReusableGpuBuffer(
+      device,
+      'polystore-kzg-msm-partial-window-sums',
+      usage.STORAGE | usage.COPY_SRC,
+    )
+    this.readback = new ReusableGpuBuffer(device, 'polystore-kzg-msm-readback', usage.COPY_DST | usage.MAP_READ)
+    this.buffers = [
+      this.baseIndices,
+      this.bucketPointers,
+      this.bucketSizes,
+      this.bucketValues,
+      this.windowStarts,
+      this.windowCounts,
+      this.aggregatedBuckets,
+      this.windowSums,
+      this.partialWindowSums,
+      this.readback,
+    ]
+  }
+
+  stats(): ScratchBufferStats {
+    return this.buffers.reduce(
+      (stats, buffer) => {
+        const bufferStats = buffer.stats
+        stats.capacityBytes += bufferStats.capacityBytes
+        stats.resizeCount += bufferStats.resizeCount
+        return stats
+      },
+      { capacityBytes: 0, resizeCount: 0 },
+    )
+  }
+
+  destroy(): void {
+    for (const buffer of this.buffers) buffer.destroy()
+  }
 }
 
 function assertReductionMode(mode: WebGpuKzgMsmReductionMode): WebGpuKzgMsmReductionMode {
@@ -295,15 +452,60 @@ async function readAdapterInfo(adapter: WebGpuAdapter): Promise<WebGpuAdapterInf
   return null
 }
 
-function defaultReductionModeForAdapter(info: WebGpuAdapterInfo | null): WebGpuKzgMsmReductionMode {
+export function createWebGpuKzgMsmAdapterCacheKey(info: WebGpuAdapterInfo | null, version = 'webgpu-msm-v1'): string {
+  const normalize = (value: unknown) => String(value ?? 'unknown').trim().toLowerCase() || 'unknown'
+  return [
+    version,
+    normalize(info?.vendor),
+    normalize(info?.architecture),
+    normalize(info?.device),
+    normalize(info?.description),
+    normalize(info?.isFallbackAdapter),
+  ].join('|')
+}
+
+export function defaultWebGpuKzgMsmAdapterCalibration(
+  info: WebGpuAdapterInfo | null,
+): WebGpuKzgMsmAdapterCalibration {
   const vendor = info?.vendor?.toLowerCase() ?? ''
   const architecture = info?.architecture?.toLowerCase() ?? ''
-  if (vendor.includes('apple') || architecture.includes('metal')) return 'parallel16'
-  return WEBGPU_KZG_MSM_REDUCTION_MODE
+  const isAppleMetal = vendor.includes('apple') || architecture.includes('metal')
+  const reductionMode = isAppleMetal ? 'parallel16' : WEBGPU_KZG_MSM_REDUCTION_MODE
+  return {
+    cacheKey: createWebGpuKzgMsmAdapterCacheKey(info),
+    bucketWidth: WEBGPU_KZG_MSM_BUCKET_WIDTH,
+    reductionMode,
+    minBlobs: 1,
+    minBytes: WEBGPU_KZG_MSM_BLOB_SIZE,
+    source: 'default-adapter-rule',
+    reason: isAppleMetal
+      ? 'Apple/Metal diagnostics favor parallel16 for the final per-window reduction'
+      : 'NVIDIA/Vulkan and unknown native adapters default to the stable serial reduction',
+  }
+}
+
+export class WebGpuKzgMsmCalibrationCache {
+  private readonly entries = new Map<string, WebGpuKzgMsmAdapterCalibration>()
+
+  get(info: WebGpuAdapterInfo | null): WebGpuKzgMsmAdapterCalibration | null {
+    return this.entries.get(createWebGpuKzgMsmAdapterCacheKey(info)) ?? null
+  }
+
+  set(info: WebGpuAdapterInfo | null, calibration: WebGpuKzgMsmAdapterCalibration): void {
+    this.entries.set(createWebGpuKzgMsmAdapterCacheKey(info), calibration)
+  }
+
+  invalidate(info?: WebGpuAdapterInfo | null): void {
+    if (typeof info === 'undefined') {
+      this.entries.clear()
+      return
+    }
+    this.entries.delete(createWebGpuKzgMsmAdapterCacheKey(info))
+  }
 }
 
 export function selectWebGpuKzgMsmReductionMode(info: WebGpuAdapterInfo | null): WebGpuKzgMsmReductionMode {
-  return defaultReductionModeForAdapter(info)
+  return defaultWebGpuKzgMsmAdapterCalibration(info).reductionMode
 }
 
 function reductionWorkgroupSize(mode: WebGpuKzgMsmReductionMode): 16 | 32 | 64 {
@@ -337,26 +539,26 @@ function buildParallelSubsumShader(workgroupSize: 16 | 32 | 64): string {
     win_sums_ph2_g1[window_id] = store_g1(sum);`)
 }
 
-async function readBuffer(device: GPUDevice, source: GPUBuffer, size: number): Promise<Uint8Array> {
-  const usage = gpuBufferUsage()
-  const readback = device.createBuffer({
-    label: 'polystore-kzg-msm-readback',
-    size,
-    usage: usage.COPY_DST | usage.MAP_READ,
-  })
+async function readIntoScratchBuffer(
+  device: GPUDevice,
+  readbackScratch: ReusableGpuBuffer,
+  source: GPUBuffer,
+  size: number,
+): Promise<Uint8Array> {
+  const readback = readbackScratch.ensure(size)
   const encoder = device.createCommandEncoder({ label: 'polystore-kzg-msm-readback-encoder' })
   encoder.copyBufferToBuffer(source, 0, readback, 0, size)
   device.queue.submit([encoder.finish()])
   await readback.mapAsync(gpuMapMode().READ)
   const mapped = readback.getMappedRange()
-  const out = new Uint8Array(mapped.slice(0))
+  const out = new Uint8Array(mapped.slice(0, size))
   readback.unmap()
-  readback.destroy()
   return out
 }
 
 export class WebGpuKzgMsmCommitter {
   private readonly srsBuffer: GPUBuffer
+  private readonly scratch: WebGpuKzgMsmScratch
   private readonly aggregatePipeline: GPUComputePipeline
   private readonly montgomeryPipeline: GPUComputePipeline
   private readonly weightPipeline: GPUComputePipeline
@@ -381,6 +583,7 @@ export class WebGpuKzgMsmCommitter {
       throw new Error('WebGPU KZG MSM SRS export is smaller than one blob domain')
     }
     this.srsBuffer = createStorageBuffer(device, 'polystore-kzg-msm-g1-srs', srs)
+    this.scratch = new WebGpuKzgMsmScratch(device)
 
     const aggregateModule = device.createShaderModule({
       label: 'polystore-kzg-msm-g1-aggregate',
@@ -484,6 +687,7 @@ export class WebGpuKzgMsmCommitter {
 
   destroy(): void {
     this.srsBuffer.destroy()
+    this.scratch.destroy()
   }
 
   async getDeviceLostInfo(timeoutMs = 0): Promise<WebGpuKzgMsmDeviceLostInfo | null> {
@@ -508,6 +712,18 @@ export class WebGpuKzgMsmCommitter {
     const reductionMode = assertReductionMode(this.options.reductionMode ?? WEBGPU_KZG_MSM_REDUCTION_MODE)
     const commitments = new Uint8Array(blobs * 48)
     let debug: WebGpuKzgMsmResult['debug']
+    const scratchStatsAtStart = this.scratch.stats()
+    const debugTotals = {
+      bucketCount: 0,
+      baseIndexCount: 0,
+      maxBucketSize: 0,
+      uploadBytes: 0,
+      readbackBytes: 0,
+      windowSumNonZeroBytes: 0,
+      processedBlobs: 0,
+      commandSubmissions: 0,
+      readbackCount: 0,
+    }
     const timings: WebGpuKzgMsmTimings = {
       scalarPrepMs: 0,
       bucketBuildMs: 0,
@@ -528,34 +744,36 @@ export class WebGpuKzgMsmCommitter {
       const bucketStart = nowMs()
       const bucketData = buildWebGpuKzgMsmBucketData(blob, bucketWidth)
       timings.bucketBuildMs += nowMs() - bucketStart
+      debugTotals.bucketCount += bucketData.bucketValues.length
+      debugTotals.baseIndexCount += bucketData.baseIndices.length
+      debugTotals.maxBucketSize = Math.max(debugTotals.maxBucketSize, bucketData.maxBucketSize)
+      debugTotals.processedBlobs += 1
 
       const uploadStart = nowMs()
-      const baseIndices = createStorageBuffer(this.device, 'polystore-kzg-msm-base-indices', bucketData.baseIndices)
-      const bucketPointers = createStorageBuffer(this.device, 'polystore-kzg-msm-bucket-pointers', bucketData.bucketPointers)
-      const bucketSizes = createStorageBuffer(this.device, 'polystore-kzg-msm-bucket-sizes', bucketData.bucketSizes)
-      const bucketValues = createStorageBuffer(this.device, 'polystore-kzg-msm-bucket-values', bucketData.bucketValues)
-      const windowStarts = createStorageBuffer(this.device, 'polystore-kzg-msm-window-starts', bucketData.windowStarts)
-      const windowCounts = createStorageBuffer(this.device, 'polystore-kzg-msm-window-counts', bucketData.windowCounts)
-      const aggregatedBuckets = createEmptyStorageBuffer(
-        this.device,
-        'polystore-kzg-msm-aggregated-buckets',
+      const baseIndices = this.scratch.baseIndices.write(bucketData.baseIndices)
+      const bucketPointers = this.scratch.bucketPointers.write(bucketData.bucketPointers)
+      const bucketSizes = this.scratch.bucketSizes.write(bucketData.bucketSizes)
+      const bucketValues = this.scratch.bucketValues.write(bucketData.bucketValues)
+      const windowStarts = this.scratch.windowStarts.write(bucketData.windowStarts)
+      const windowCounts = this.scratch.windowCounts.write(bucketData.windowCounts)
+      const aggregatedBuckets = this.scratch.aggregatedBuckets.ensure(
         Math.max(1, bucketData.bucketValues.length) * WEBGPU_KZG_MSM_POINT_BYTES,
       )
-      const windowSums = createEmptyStorageBuffer(
-        this.device,
-        'polystore-kzg-msm-window-sums',
-        Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
-      )
+      const windowSums = this.scratch.windowSums.ensure(Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES)
       const partialWindowSums =
         reductionMode === 'serial'
           ? null
-          : createEmptyStorageBuffer(
-              this.device,
-              `polystore-kzg-msm-${reductionMode}-partial-window-sums`,
-              Math.max(1, bucketData.numWindows) *
-                reductionWorkgroupSize(reductionMode) *
-                WEBGPU_KZG_MSM_POINT_BYTES,
+          : this.scratch.partialWindowSums.ensure(
+              Math.max(1, bucketData.numWindows) * reductionWorkgroupSize(reductionMode) * WEBGPU_KZG_MSM_POINT_BYTES,
             )
+      const uploadBytes =
+        bucketData.baseIndices.byteLength +
+        bucketData.bucketPointers.byteLength +
+        bucketData.bucketSizes.byteLength +
+        bucketData.bucketValues.byteLength +
+        bucketData.windowStarts.byteLength +
+        bucketData.windowCounts.byteLength
+      debugTotals.uploadBytes += uploadBytes
       timings.uploadMs += nowMs() - uploadStart
 
       const dispatchStart = nowMs()
@@ -644,35 +862,39 @@ export class WebGpuKzgMsmCommitter {
       }
       pass.end()
       this.device.queue.submit([encoder.finish()])
+      debugTotals.commandSubmissions += 1
       const validationError = await this.device.popErrorScope?.()
       if (validationError) {
         throw new Error(`WebGPU KZG MSM validation failed: ${validationError.message ?? String(validationError)}`)
       }
 
-      const windowSumBytes = await readBuffer(
+      const readbackBytes = Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES
+      const windowSumBytes = await readIntoScratchBuffer(
         this.device,
+        this.scratch.readback,
         windowSums,
-        Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
+        readbackBytes,
       )
-      debug ??= {
+      const scratchStatsAfter = this.scratch.stats()
+      debugTotals.readbackBytes += readbackBytes
+      debugTotals.readbackCount += 1
+      debugTotals.windowSumNonZeroBytes += windowSumBytes.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0)
+      debug = {
         bucketWidth,
         reductionMode,
-        bucketCount: bucketData.bucketValues.length,
-        baseIndexCount: bucketData.baseIndices.length,
+        bucketCount: debugTotals.bucketCount,
+        baseIndexCount: debugTotals.baseIndexCount,
         numWindows: bucketData.numWindows,
-        maxBucketSize: bucketData.maxBucketSize,
-        meanBucketSize: bucketData.bucketValues.length
-          ? bucketData.baseIndices.length / bucketData.bucketValues.length
-          : 0,
-        uploadBytes:
-          bucketData.baseIndices.byteLength +
-          bucketData.bucketPointers.byteLength +
-          bucketData.bucketSizes.byteLength +
-          bucketData.bucketValues.byteLength +
-          bucketData.windowStarts.byteLength +
-          bucketData.windowCounts.byteLength,
-        readbackBytes: Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
-        windowSumNonZeroBytes: windowSumBytes.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0),
+        maxBucketSize: debugTotals.maxBucketSize,
+        meanBucketSize: debugTotals.bucketCount ? debugTotals.baseIndexCount / debugTotals.bucketCount : 0,
+        uploadBytes: debugTotals.uploadBytes,
+        readbackBytes: debugTotals.readbackBytes,
+        windowSumNonZeroBytes: debugTotals.windowSumNonZeroBytes,
+        processedBlobs: debugTotals.processedBlobs,
+        commandSubmissions: debugTotals.commandSubmissions,
+        readbackCount: debugTotals.readbackCount,
+        scratchCapacityBytes: scratchStatsAfter.capacityBytes,
+        scratchResizeCount: scratchStatsAfter.resizeCount - scratchStatsAtStart.resizeCount,
       }
       timings.dispatchReadbackMs += nowMs() - dispatchStart
 
@@ -680,20 +902,6 @@ export class WebGpuKzgMsmCommitter {
       const commitment = this.wasm.webgpu_fold_g1_window_sums(windowSumBytes, bucketWidth)
       timings.foldMs += nowMs() - foldStart
       commitments.set(commitment, i * 48)
-
-      for (const buffer of [
-        baseIndices,
-        bucketPointers,
-        bucketSizes,
-        bucketValues,
-        windowStarts,
-        windowCounts,
-        aggregatedBuckets,
-        windowSums,
-        partialWindowSums,
-      ]) {
-        buffer?.destroy()
-      }
     }
 
     timings.totalMs = nowMs() - started
@@ -716,7 +924,8 @@ export async function createWebGpuKzgMsmCommitter(
   }
   const resolvedOptions: WebGpuKzgMsmOptions = {
     ...options,
-    reductionMode: options.reductionMode ?? defaultReductionModeForAdapter(adapterInfo),
+    bucketWidth: options.bucketWidth ?? defaultWebGpuKzgMsmAdapterCalibration(adapterInfo).bucketWidth,
+    reductionMode: options.reductionMode ?? defaultWebGpuKzgMsmAdapterCalibration(adapterInfo).reductionMode,
   }
   const device = await adapter.requestDevice()
   return new WebGpuKzgMsmCommitter(device, wasm, resolvedOptions)
