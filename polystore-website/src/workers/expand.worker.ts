@@ -1,9 +1,11 @@
 import init, { PolyStoreWasm } from '../lib/polystoreCoreRuntime.js'
+import { createWasmBlstKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend'
 
 let wasmInitialized = false
 let wasmInitPromise: Promise<void> | null = null
 let wasmInitError: unknown = null
 let polyStoreWasmInstance: PolyStoreWasm | null = null
+let kzgCommitBackend: KzgCommitBackend | null = null
 
 function initializeWasm(): Promise<void> {
   if (wasmInitialized) return Promise.resolve()
@@ -39,11 +41,12 @@ self.onmessage = async (event) => {
         const { trustedSetupBytes } = payload as { trustedSetupBytes: Uint8Array }
         if (!trustedSetupBytes) throw new Error('Trusted setup bytes required')
         polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes)
+        kzgCommitBackend = createWasmBlstKzgCommitBackend(polyStoreWasmInstance)
         ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: 'ok' })
         return
       }
       case 'expandMduRs': {
-        if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized')
+        if (!polyStoreWasmInstance || !kzgCommitBackend) throw new Error('PolyStoreWasm not initialized')
         const { data, k, m, profile = true } = payload as { data: Uint8Array; k: number; m: number; profile?: boolean }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
         const opStart = performance.now()
@@ -211,7 +214,7 @@ self.onmessage = async (event) => {
         return
       }
       case 'commitMduProfiled': {
-        if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized')
+        if (!polyStoreWasmInstance || !kzgCommitBackend) throw new Error('PolyStoreWasm not initialized')
         const { data } = payload as { data: Uint8Array }
         const BLOBS_PER_MDU = 64
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
@@ -219,29 +222,10 @@ self.onmessage = async (event) => {
 
         const opStart = performance.now()
         const commitStart = performance.now()
-        const committedRaw = polyStoreWasmInstance.commit_blobs_profiled(data) as {
-          witness_flat?: Uint8Array | ArrayBufferLike
-          perf?: {
-            decode_ms?: unknown
-            transform_ms?: unknown
-            msm_scalar_prep_ms?: unknown
-            msm_bucket_fill_ms?: unknown
-            msm_reduce_ms?: unknown
-            msm_double_ms?: unknown
-            msm_ms?: unknown
-            compress_ms?: unknown
-            total_ms?: unknown
-            blobs?: unknown
-          }
-        }
+        const committedRaw = kzgCommitBackend.commitBlobsProfiled(data)
         const commitMs = performance.now() - commitStart
-        const witnessRaw = committedRaw?.witness_flat
-        if (!witnessRaw) {
-          throw new Error('commit_blobs_profiled returned no witness bytes')
-        }
-        const witnessFlat =
-          witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike)
-        const commitPerf = committedRaw?.perf
+        const witnessFlat = committedRaw.witnessFlat
+        const commitPerf = committedRaw.perf
 
         const rootStart = performance.now()
         const root = polyStoreWasmInstance.compute_mdu_root(witnessFlat) as unknown
@@ -261,15 +245,15 @@ self.onmessage = async (event) => {
                 blobCount: BLOBS_PER_MDU,
                 batchCount: 1,
                 batchSize: BLOBS_PER_MDU,
-                rustCommitDecodeMs: Number(commitPerf?.decode_ms ?? 0),
-                rustCommitTransformMs: Number(commitPerf?.transform_ms ?? 0),
-                rustCommitMsmScalarPrepMs: Number(commitPerf?.msm_scalar_prep_ms ?? 0),
-                rustCommitMsmBucketFillMs: Number(commitPerf?.msm_bucket_fill_ms ?? 0),
-                rustCommitMsmReduceMs: Number(commitPerf?.msm_reduce_ms ?? 0),
-                rustCommitMsmDoubleMs: Number(commitPerf?.msm_double_ms ?? 0),
-                rustCommitMsmMs: Number(commitPerf?.msm_ms ?? 0),
-                rustCommitCompressMs: Number(commitPerf?.compress_ms ?? 0),
-                rustCommitMs: Number(commitPerf?.total_ms ?? commitMs),
+                rustCommitDecodeMs: commitPerf.decodeMs,
+                rustCommitTransformMs: commitPerf.transformMs,
+                rustCommitMsmScalarPrepMs: commitPerf.msmScalarPrepMs,
+                rustCommitMsmBucketFillMs: commitPerf.msmBucketFillMs,
+                rustCommitMsmReduceMs: commitPerf.msmReduceMs,
+                rustCommitMsmDoubleMs: commitPerf.msmDoubleMs,
+                rustCommitMsmMs: commitPerf.msmMs,
+                rustCommitCompressMs: commitPerf.compressMs,
+                rustCommitMs: commitPerf.totalMs || commitMs,
                 rustCommitBackend: 'blst',
                 rustCommitMsmSubphasesAvailable: false,
               },
