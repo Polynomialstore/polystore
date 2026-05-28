@@ -8,7 +8,10 @@ This doc defines the two supported endpoint "types" for testnet onboarding:
 - `cloudflare-tunnel` (fallback when inbound ports are unavailable): expose HTTPS via Cloudflare Tunnel.
 
 For the current `polynomialstore.com` SP deployment, direct DNS-only HTTPS is
-the primary shape. See `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`.
+the primary shape. This was chosen after empirical transfer tests showed a large
+slowdown when Cloudflare Tunnel or orange-cloud/proxied `A` records carried SP
+payload traffic, while the same origin was fast over direct HTTPS. See
+`docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md` for the validation procedure.
 
 Future (not testnet-blocking):
 
@@ -91,7 +94,9 @@ sp3.example.com {
 
 When using Cloudflare DNS with this profile, the SP records must be **DNS-only**
 for bulk transfer. Orange-cloud/proxied records route traffic through
-Cloudflare and can behave like the tunnel path for large provider payloads.
+Cloudflare and can behave like the tunnel path for large provider payloads. If
+large uploads or retrievals regress, benchmark direct origin HTTPS against the
+Cloudflare path before changing provider-daemon code.
 
 Now print the endpoint to register:
 

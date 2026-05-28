@@ -269,8 +269,8 @@ export const TestnetDocs = () => {
                 For testnet onboarding, keep it simple:
               </p>
               <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-                <li><strong>direct</strong> (recommended): SP has inbound 443 on a public IP / port-forward; expose <code className="px-1 py-0.5 rounded-none bg-secondary/60">https://sp.example.com</code> via a reverse proxy. If Cloudflare manages DNS, keep SP payload hostnames DNS-only.</li>
-                <li><strong>cloudflare-tunnel</strong> (fallback): SP is behind NAT; expose <code className="px-1 py-0.5 rounded-none bg-secondary/60">https://sp.example.com</code> via Cloudflare Tunnel (no router changes, bytes transit Cloudflare).</li>
+                <li><strong>direct</strong> (recommended): SP has inbound 443 on a public IP / port-forward; expose <code className="px-1 py-0.5 rounded-none bg-secondary/60">https://sp.example.com</code> via a reverse proxy. Use this for bulk provider payloads when possible.</li>
+                <li><strong>cloudflare-tunnel</strong> (fallback): SP is behind NAT; expose <code className="px-1 py-0.5 rounded-none bg-secondary/60">https://sp.example.com</code> via Cloudflare Tunnel. This is operationally convenient, but bytes transit Cloudflare and should be benchmarked if large transfers are slow.</li>
                 <li><strong>webrtc</strong> (future): NAT traversal optimization; not testnet-blocking.</li>
               </ul>
               <p className="text-muted-foreground">
@@ -290,7 +290,7 @@ export const TestnetDocs = () => {
             <div className="space-y-2">
               <h3 className="font-bold text-foreground">2A) direct (reverse proxy on 443)</h3>
               <p className="text-muted-foreground">
-                If the SP has an open inbound port, terminate TLS on 443 and proxy to <code className="px-1 py-0.5 rounded-none bg-secondary/60">localhost:8082</code>. When using Cloudflare DNS, keep the hostname DNS-only instead of proxied. Example with Caddy:
+                If the SP has an open inbound port, terminate TLS on 443 and proxy to <code className="px-1 py-0.5 rounded-none bg-secondary/60">localhost:8082</code>. When using Cloudflare DNS, keep the hostname DNS-only instead of proxied; this recommendation comes from devnet measurements where the Cloudflare proxy path was much slower for large transfers than direct origin HTTPS. Example with Caddy:
               </p>
               <div className="font-mono text-xs text-muted-foreground space-y-2 bg-secondary/30 p-4 rounded-none overflow-x-auto">
                 <p>$ caddy reverse-proxy --from sp.example.com --to localhost:8082</p>
