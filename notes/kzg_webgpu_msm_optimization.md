@@ -45,6 +45,18 @@ accepted the TypeScript build, but the GPU device was lost before readback in
 the benchmark environment. That path was not kept in source because it was not
 browser-stable.
 
+Two follow-up reduction variants were also tested and rejected:
+
+- The vendored `subsum_phase1_g1` path was wired with explicit bind groups.
+  Chrome rejected the original 64-lane form because the workgroup array of G1
+  points exceeded the adapter's workgroup-storage limit.
+- A browser-sized 32-lane `subsum_phase1_g1` variant and a KZG-specific sparse
+  running-sum shader both compiled, but the benchmark lost the GPU instance
+  before readback, including at `POLYSTORE_WEBGPU_MSM_BUCKET_WIDTH=4`.
+
+These failures point to shader pressure/browser-stability limits in the current
+`webgpu-groth16`-derived G1 arithmetic, not just TypeScript overhead.
+
 ## Handoff To #168
 
 Do not enable the pure WebGPU MSM path by default in upload scheduling yet.
