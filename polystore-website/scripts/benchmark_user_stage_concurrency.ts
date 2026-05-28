@@ -79,7 +79,7 @@ const pipelineModes = (process.env.PIPELINE_MODES || process.env.PIPELINE_MODE |
       value === 'fused_batch_sampled',
   )
 const requestedConcurrencies = autotune
-  ? buildExpansionWorkerAutotuneCandidates(hardwareConcurrency, Math.ceil(fileBytes / RAW_MDU_CAPACITY)).join(',')
+  ? buildExpansionWorkerAutotuneCandidates(hardwareConcurrency, Math.ceil(Math.floor(fileBytes) / RAW_MDU_CAPACITY)).join(',')
   : process.env.CONCURRENCIES || '3,4,5,6'
 const concurrencies = requestedConcurrencies
   .split(',')
