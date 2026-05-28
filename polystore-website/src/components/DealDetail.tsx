@@ -1960,9 +1960,37 @@ export function DealDetail({
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
-      const requirement = await inspectLocalDealIndexRequirement(String(dealId), cid)
+      let requirement = await inspectLocalDealIndexRequirement(String(dealId), cid)
+
+      // Browser Mode 2 commits update chain state and then atomically publish the OPFS slab.
+      // On slow CI, Deal Detail can observe the new on-chain root a tick before OPFS has
+      // swapped in the completed generation. Treat that as readiness lag, not as a terminal
+      // "missing index" state, and poll the real local-index condition for a bounded window.
+      if (requirement.status !== 'ready') {
+        const retryStartedAt = Date.now()
+        const maxWaitMs = 20_000
+        const pollMs = 500
+        while (Date.now() - retryStartedAt < maxWaitMs) {
+          await new Promise((resolve) => setTimeout(resolve, pollMs))
+          const next = await inspectLocalDealIndexRequirement(String(dealId), cid)
+          if (next.status === 'ready') {
+            requirement = next
+            break
+          }
+          requirement = next
+        }
+      }
+
       setDealIndexRequirement(requirement)
       if (requirement.status !== 'ready') {
+        console.warn('PolyFS local index not ready after bounded wait', {
+          dealId,
+          manifestRoot: cid,
+          status: requirement.status,
+          reason: requirement.reason,
+          localManifestRoot: requirement.localManifestRoot,
+          chainManifestRoot: requirement.chainManifestRoot,
+        })
         setFiles(null)
         return
       }
