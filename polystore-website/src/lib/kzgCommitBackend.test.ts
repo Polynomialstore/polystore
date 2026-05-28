@@ -140,6 +140,11 @@ function fakeCommitter(options: {
             uploadBytes: 4,
             readbackBytes: 384,
             windowSumNonZeroBytes: 1,
+            processedBlobs: blobs,
+            commandSubmissions: blobs,
+            readbackCount: blobs,
+            scratchCapacityBytes: 4096,
+            scratchResizeCount: 1,
           },
         }
       },
