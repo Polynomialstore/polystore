@@ -53,6 +53,9 @@ type WebGpuAdapter = {
 type WebGpuAdapterInfo = {
   vendor?: string
   architecture?: string
+  device?: string
+  description?: string
+  isFallbackAdapter?: boolean
 }
 
 export const WEBGPU_KZG_MSM_BUCKET_WIDTH = 10
@@ -73,6 +76,7 @@ export type WebGpuKzgMsmReductionMode = 'serial' | 'parallel16' | 'parallel32' |
 export type WebGpuKzgMsmOptions = {
   bucketWidth?: number
   reductionMode?: WebGpuKzgMsmReductionMode
+  allowFallbackAdapter?: boolean
 }
 
 export type WebGpuKzgMsmTimings = {
@@ -296,6 +300,10 @@ function defaultReductionModeForAdapter(info: WebGpuAdapterInfo | null): WebGpuK
   const architecture = info?.architecture?.toLowerCase() ?? ''
   if (vendor.includes('apple') || architecture.includes('metal')) return 'parallel16'
   return WEBGPU_KZG_MSM_REDUCTION_MODE
+}
+
+export function selectWebGpuKzgMsmReductionMode(info: WebGpuAdapterInfo | null): WebGpuKzgMsmReductionMode {
+  return defaultReductionModeForAdapter(info)
 }
 
 function reductionWorkgroupSize(mode: WebGpuKzgMsmReductionMode): 16 | 32 | 64 {
@@ -702,9 +710,13 @@ export async function createWebGpuKzgMsmCommitter(
   if (!gpu) throw new Error('navigator.gpu is unavailable')
   const adapter = await gpu.requestAdapter()
   if (!adapter) throw new Error('WebGPU adapter request returned null')
+  const adapterInfo = await readAdapterInfo(adapter)
+  if (!options.allowFallbackAdapter && adapterInfo?.isFallbackAdapter) {
+    throw new Error('WebGPU adapter is a fallback/software adapter')
+  }
   const resolvedOptions: WebGpuKzgMsmOptions = {
     ...options,
-    reductionMode: options.reductionMode ?? defaultReductionModeForAdapter(await readAdapterInfo(adapter)),
+    reductionMode: options.reductionMode ?? defaultReductionModeForAdapter(adapterInfo),
   }
   const device = await adapter.requestDevice()
   return new WebGpuKzgMsmCommitter(device, wasm, resolvedOptions)

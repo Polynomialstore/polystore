@@ -181,6 +181,15 @@ type PreparePerfSample = {
   workerRustCommitMs: number
   workerRustCommitBackend?: string
   workerRustCommitMsmSubphasesAvailable?: boolean
+  workerKzgCommitBackend?: string
+  workerKzgWebGpuFallbackReason?: string
+  workerKzgWebGpuProbeStatus?: string
+  workerKzgWebGpuCircuitOpen?: boolean
+  workerKzgWebGpuReductionMode?: string
+  workerKzgWebGpuProbeTimeoutMs?: number
+  workerKzgWebGpuCommitTimeoutMs?: number
+  workerKzgWebGpuMinBlobs?: number
+  workerCommitWorkerCount?: number
   totalMs: number
   batchBlobs?: number
   shardCount?: number
@@ -262,6 +271,15 @@ type PreparePerfProfile = {
     unaccountedMsIsWallClockRemainder: true
     rustCommitBackend?: string
     rustCommitMsmSubphasesAvailable?: boolean
+    kzgCommitBackend?: string
+    kzgWebGpuFallbackReason?: string
+    kzgWebGpuProbeStatus?: string
+    kzgWebGpuCircuitOpen?: boolean
+    kzgWebGpuReductionMode?: string
+    kzgWebGpuProbeTimeoutMs?: number
+    kzgWebGpuCommitTimeoutMs?: number
+    kzgWebGpuMinBlobs?: number
+    commitWorkerCount?: number
   }
   samples: {
     user: PreparePerfSample[]
@@ -3268,7 +3286,20 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               typeof result.perf?.rustCommitMsmSubphasesAvailable === 'boolean'
                 ? result.perf.rustCommitMsmSubphasesAvailable
                 : undefined
-
+            const workerKzgCommitBackend =
+              typeof result.perf?.kzgCommitBackend === 'string' ? result.perf.kzgCommitBackend : undefined
+            const workerKzgWebGpuFallbackReason =
+              typeof result.perf?.kzgWebGpuFallbackReason === 'string' ? result.perf.kzgWebGpuFallbackReason : undefined
+            const workerKzgWebGpuProbeStatus =
+              typeof result.perf?.kzgWebGpuProbeStatus === 'string' ? result.perf.kzgWebGpuProbeStatus : undefined
+            const workerKzgWebGpuCircuitOpen =
+              typeof result.perf?.kzgWebGpuCircuitOpen === 'boolean' ? result.perf.kzgWebGpuCircuitOpen : undefined
+            const workerKzgWebGpuReductionMode =
+              typeof result.perf?.kzgWebGpuReductionMode === 'string' ? result.perf.kzgWebGpuReductionMode : undefined
+            const workerKzgWebGpuProbeTimeoutMs = Number(result.perf?.kzgWebGpuProbeTimeoutMs ?? 0)
+            const workerKzgWebGpuCommitTimeoutMs = Number(result.perf?.kzgWebGpuCommitTimeoutMs ?? 0)
+            const workerKzgWebGpuMinBlobs = Number(result.perf?.kzgWebGpuMinBlobs ?? 0)
+            const workerCommitWorkerCount = Number(result.perf?.commitWorkerCount ?? 0)
             if (!encodedMdu) {
               const encodeStart = performance.now()
               encodedMdu = encodeToMdu(rawChunk)
@@ -3323,6 +3354,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerRustCommitMs,
               workerRustCommitBackend,
               workerRustCommitMsmSubphasesAvailable,
+              workerKzgCommitBackend,
+              workerKzgWebGpuFallbackReason,
+              workerKzgWebGpuProbeStatus,
+              workerKzgWebGpuCircuitOpen,
+              workerKzgWebGpuReductionMode,
+              workerKzgWebGpuProbeTimeoutMs,
+              workerKzgWebGpuCommitTimeoutMs,
+              workerKzgWebGpuMinBlobs,
+              workerCommitWorkerCount,
               totalMs: opMs,
               shardCount:
                 result.shards_flat && Number(result.shard_len ?? 0) > 0
@@ -3611,6 +3651,22 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               typeof result.perf?.rustCommitMsmSubphasesAvailable === 'boolean'
                 ? result.perf.rustCommitMsmSubphasesAvailable
                 : undefined
+            const workerKzgCommitBackend =
+              typeof result.perf?.kzgCommitBackend === 'string' ? result.perf.kzgCommitBackend : undefined
+            const workerKzgWebGpuFallbackReason =
+              typeof result.perf?.kzgWebGpuFallbackReason === 'string'
+                ? result.perf.kzgWebGpuFallbackReason
+                : undefined
+            const workerKzgWebGpuProbeStatus =
+              typeof result.perf?.kzgWebGpuProbeStatus === 'string' ? result.perf.kzgWebGpuProbeStatus : undefined
+            const workerKzgWebGpuCircuitOpen =
+              typeof result.perf?.kzgWebGpuCircuitOpen === 'boolean' ? result.perf.kzgWebGpuCircuitOpen : undefined
+            const workerKzgWebGpuReductionMode =
+              typeof result.perf?.kzgWebGpuReductionMode === 'string' ? result.perf.kzgWebGpuReductionMode : undefined
+            const workerKzgWebGpuProbeTimeoutMs = Number(result.perf?.kzgWebGpuProbeTimeoutMs ?? 0)
+            const workerKzgWebGpuCommitTimeoutMs = Number(result.perf?.kzgWebGpuCommitTimeoutMs ?? 0)
+            const workerKzgWebGpuMinBlobs = Number(result.perf?.kzgWebGpuMinBlobs ?? 0)
+            const workerCommitWorkerCount = Number(result.perf?.commitWorkerCount ?? 0)
 
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
@@ -3643,6 +3699,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerRustCommitMs,
               workerRustCommitBackend,
               workerRustCommitMsmSubphasesAvailable,
+              workerKzgCommitBackend,
+              workerKzgWebGpuFallbackReason,
+              workerKzgWebGpuProbeStatus,
+              workerKzgWebGpuCircuitOpen,
+              workerKzgWebGpuReductionMode,
+              workerKzgWebGpuProbeTimeoutMs,
+              workerKzgWebGpuCommitTimeoutMs,
+              workerKzgWebGpuMinBlobs,
+              workerCommitWorkerCount,
               totalMs: opMs,
             };
             perfSamples.witness.push(perfSample);
@@ -3867,6 +3932,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const rustCommitMsmSubphasesAvailable = perfSamples.user.some(
           (sample) => sample.workerRustCommitMsmSubphasesAvailable === true,
         )
+        const kzgDiagnosticSample = allSamples.find((sample) => typeof sample.workerKzgCommitBackend === 'string')
         const slowestUserSample =
           perfSamples.user.reduce<PreparePerfSample | null>(
             (best, sample) => (!best || sample.totalMs > best.totalMs ? sample : best),
@@ -3950,6 +4016,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             unaccountedMsIsWallClockRemainder: true,
             rustCommitBackend,
             rustCommitMsmSubphasesAvailable,
+            kzgCommitBackend: kzgDiagnosticSample?.workerKzgCommitBackend,
+            kzgWebGpuFallbackReason: kzgDiagnosticSample?.workerKzgWebGpuFallbackReason,
+            kzgWebGpuProbeStatus: kzgDiagnosticSample?.workerKzgWebGpuProbeStatus,
+            kzgWebGpuCircuitOpen: kzgDiagnosticSample?.workerKzgWebGpuCircuitOpen,
+            kzgWebGpuReductionMode: kzgDiagnosticSample?.workerKzgWebGpuReductionMode,
+            kzgWebGpuProbeTimeoutMs: kzgDiagnosticSample?.workerKzgWebGpuProbeTimeoutMs,
+            kzgWebGpuCommitTimeoutMs: kzgDiagnosticSample?.workerKzgWebGpuCommitTimeoutMs,
+            kzgWebGpuMinBlobs: kzgDiagnosticSample?.workerKzgWebGpuMinBlobs,
+            commitWorkerCount: kzgDiagnosticSample?.workerCommitWorkerCount,
           },
           samples: perfSamples,
         }

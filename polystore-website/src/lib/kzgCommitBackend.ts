@@ -1,9 +1,21 @@
+import {
+  createWebGpuKzgMsmCommitter,
+  type WebGpuKzgMsmCommitter,
+  type WebGpuKzgMsmReductionMode,
+  type WebGpuKzgMsmResult,
+} from './webgpuKzgMsm'
+
 export const KZG_BLOB_SIZE = 128 * 1024
 export const KZG_COMMITMENT_SIZE = 48
 export const KZG_CELLS_PER_BLOB = KZG_BLOB_SIZE / 32
 export const POLYSTORE_TRUSTED_SETUP_SHA256 = 'd39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7'
+const DEFAULT_WEBGPU_PROBE_TIMEOUT_MS = 1500
+const DEFAULT_WEBGPU_COMMIT_TIMEOUT_MS = 3000
+const DEFAULT_WEBGPU_MIN_BLOBS = 1
 
-export type KzgCommitBackendKind = 'wasm-blst' | 'webgpu-wasm-fallback'
+export type KzgCommitBackendKind = 'wasm-blst' | 'webgpu-scheduler' | 'webgpu-wasm-fallback'
+export type KzgCommitBackendChoice = 'wasm-blst' | 'webgpu'
+export type WebGpuKzgMode = 'auto' | 'force' | 'off'
 
 export type PolyStoreCommitApi = {
   commit_blobs(blobBytes: Uint8Array): Uint8Array | ArrayBufferLike
@@ -33,14 +45,15 @@ export type KzgCommitBackendStatus = {
   initialized: boolean
   label: string
   fallbackReason?: string
+  selectedBackend?: KzgCommitBackendChoice
   webgpu?: WebGpuKzgStatus
 }
 
 export type KzgCommitBackend = {
   readonly kind: KzgCommitBackendKind
   getStatus(): KzgCommitBackendStatus
-  commitBlobs(blobsFlat: Uint8Array): Uint8Array
-  commitBlobsProfiled(blobsFlat: Uint8Array): KzgCommitProfiledResult
+  commitBlobs(blobsFlat: Uint8Array): Uint8Array | Promise<Uint8Array>
+  commitBlobsProfiled(blobsFlat: Uint8Array): KzgCommitProfiledResult | Promise<KzgCommitProfiledResult>
 }
 
 type GpuBufferLike = {
@@ -63,6 +76,8 @@ type GpuDeviceLike = {
 }
 
 type GpuAdapterLike = {
+  info?: WebGpuKzgAdapterInfo
+  requestAdapterInfo?: () => Promise<WebGpuKzgAdapterInfo>
   requestDevice: () => Promise<GpuDeviceLike>
 }
 
@@ -102,12 +117,44 @@ export type WebGpuKzgStatus = {
   deviceLost: boolean
   fallbackActive: boolean
   reason?: string
+  adapter?: WebGpuKzgAdapterInfo | null
+  selectedBackend?: KzgCommitBackendChoice
+  reductionMode?: WebGpuKzgMsmReductionMode
+  scheduler?: WebGpuKzgSchedulerStatus
   srs?: WebGpuSrsMetadata
   timings?: WebGpuKzgInitTimings
 }
 
+export type WebGpuKzgAdapterInfo = {
+  vendor?: string
+  architecture?: string
+  device?: string
+  description?: string
+  isFallbackAdapter?: boolean
+}
+
+export type WebGpuKzgSchedulerStatus = {
+  mode: WebGpuKzgMode
+  probeStatus: 'not-run' | 'running' | 'passed' | 'failed' | 'timeout' | 'disabled'
+  probeTimeoutMs: number
+  commitTimeoutMs: number
+  minBlobs: number
+  circuitOpen: boolean
+  circuitReason?: string
+  lastProbeMs?: number
+  lastWebGpuMs?: number
+  lastWasmMs?: number
+  lastFallbackReason?: string
+}
+
 export type CreateKzgCommitBackendOptions = {
   preferWebGpu?: boolean
+  webGpuMode?: WebGpuKzgMode
+  webGpuProbeTimeoutMs?: number
+  webGpuCommitTimeoutMs?: number
+  webGpuMinBlobs?: number
+  allowFallbackAdapter?: boolean
+  webGpuCommitterFactory?: () => Promise<WebGpuKzgMsmCommitter>
   navigatorLike?: WebGpuNavigator
   bufferUsage?: WebGpuBufferUsageLike
   now?: () => number
@@ -139,6 +186,69 @@ function nowMs(now: (() => number) | undefined): number {
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function makeProbeBlob(): Uint8Array {
+  const blob = new Uint8Array(KZG_BLOB_SIZE)
+  for (let i = 0; i < KZG_CELLS_PER_BLOB; i += 1) {
+    const offset = i * 32
+    blob[offset] = 0
+    for (let j = 1; j < 32; j += 1) {
+      blob[offset + j] = (41 + i * 17 + j * 29) & 0xff
+    }
+  }
+  return blob
+}
+
+function profileFromWebGpuResult(result: WebGpuKzgMsmResult): KzgCommitPerf {
+  return {
+    decodeMs: 0,
+    transformMs: 0,
+    msmScalarPrepMs: result.timings.scalarPrepMs,
+    msmBucketFillMs: result.timings.bucketBuildMs,
+    msmReduceMs: result.timings.dispatchReadbackMs,
+    msmDoubleMs: 0,
+    msmMs: result.timings.dispatchReadbackMs,
+    compressMs: result.timings.foldMs,
+    totalMs: result.timings.totalMs,
+    blobs: result.blobs,
+  }
+}
+
+function normalizeTimeout(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value) || !value || value <= 0) return fallback
+  return Math.floor(value)
+}
+
+function normalizeMinBlobs(value: number | undefined): number {
+  if (!Number.isFinite(value) || !value || value < 1) return DEFAULT_WEBGPU_MIN_BLOBS
+  return Math.floor(value)
+}
+
+function delay<T>(ms: number, value: T): Promise<T> {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(value), ms)
+  })
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<{ timedOut: false; value: T } | { timedOut: true }> {
+  return Promise.race([
+    promise.then((value) => ({ timedOut: false as const, value })),
+    delay(timeoutMs, { timedOut: true as const }),
+  ])
+}
+
+async function readAdapterInfo(adapter: GpuAdapterLike): Promise<WebGpuKzgAdapterInfo | null> {
+  try {
+    if (adapter.info) return adapter.info
+    if (typeof adapter.requestAdapterInfo === 'function') return await adapter.requestAdapterInfo()
+  } catch {
+    return null
+  }
+  return null
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -315,12 +425,257 @@ export class WebGpuKzgLifecycleBackend implements KzgCommitBackend {
     }
   }
 
-  commitBlobs(blobsFlat: Uint8Array): Uint8Array {
+  commitBlobs(blobsFlat: Uint8Array): Uint8Array | Promise<Uint8Array> {
     return this.wasmFallback.commitBlobs(blobsFlat)
   }
 
-  commitBlobsProfiled(blobsFlat: Uint8Array): KzgCommitProfiledResult {
+  commitBlobsProfiled(blobsFlat: Uint8Array): KzgCommitProfiledResult | Promise<KzgCommitProfiledResult> {
     return this.wasmFallback.commitBlobsProfiled(blobsFlat)
+  }
+}
+
+export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
+  readonly kind = 'webgpu-scheduler' as const
+  private status: WebGpuKzgStatus
+  private committer: WebGpuKzgMsmCommitter | null = null
+  private probePromise: Promise<boolean> | null = null
+  private readonly mode: WebGpuKzgMode
+  private readonly probeTimeoutMs: number
+  private readonly commitTimeoutMs: number
+  private readonly minBlobs: number
+
+  constructor(
+    private readonly wasmFallback: KzgCommitBackend,
+    private readonly wasmInterop: PolyStoreCommitApi,
+    private readonly navigatorLike: WebGpuNavigator | undefined,
+    initialStatus: WebGpuKzgStatus,
+    private readonly options: CreateKzgCommitBackendOptions,
+  ) {
+    this.mode = options.webGpuMode ?? (options.preferWebGpu ? 'auto' : 'off')
+    this.probeTimeoutMs = normalizeTimeout(options.webGpuProbeTimeoutMs, DEFAULT_WEBGPU_PROBE_TIMEOUT_MS)
+    this.commitTimeoutMs = normalizeTimeout(options.webGpuCommitTimeoutMs, DEFAULT_WEBGPU_COMMIT_TIMEOUT_MS)
+    this.minBlobs = normalizeMinBlobs(options.webGpuMinBlobs)
+    this.status = {
+      ...initialStatus,
+      fallbackActive: true,
+      selectedBackend: 'wasm-blst',
+      scheduler: {
+        mode: this.mode,
+        probeStatus: this.mode === 'off' ? 'disabled' : 'not-run',
+        probeTimeoutMs: this.probeTimeoutMs,
+        commitTimeoutMs: this.commitTimeoutMs,
+        minBlobs: this.minBlobs,
+        circuitOpen: false,
+      },
+    }
+  }
+
+  getStatus(): KzgCommitBackendStatus {
+    return {
+      kind: this.kind,
+      initialized: this.wasmFallback.getStatus().initialized,
+      label: this.status.selectedBackend === 'webgpu' ? 'WebGPU KZG MSM' : 'WASM blst fallback',
+      fallbackReason: this.status.scheduler?.lastFallbackReason ?? this.status.reason,
+      selectedBackend: this.status.selectedBackend,
+      webgpu: { ...this.status, scheduler: this.status.scheduler ? { ...this.status.scheduler } : undefined },
+    }
+  }
+
+  private updateScheduler(update: Partial<WebGpuKzgSchedulerStatus>): void {
+    const scheduler = this.status.scheduler ?? {
+      mode: this.mode,
+      probeStatus: 'not-run' as const,
+      probeTimeoutMs: this.probeTimeoutMs,
+      commitTimeoutMs: this.commitTimeoutMs,
+      minBlobs: this.minBlobs,
+      circuitOpen: false,
+    }
+    this.status = {
+      ...this.status,
+      scheduler: { ...scheduler, ...update },
+    }
+  }
+
+  private fallBack(reason: string): void {
+    this.status = {
+      ...this.status,
+      available: Boolean(this.committer),
+      fallbackActive: true,
+      selectedBackend: 'wasm-blst',
+      reason,
+    }
+    this.updateScheduler({ lastFallbackReason: reason })
+  }
+
+  private openCircuit(reason: string): void {
+    this.committer?.destroy()
+    this.committer = null
+    this.status = {
+      ...this.status,
+      available: false,
+      fallbackActive: true,
+      selectedBackend: 'wasm-blst',
+      reason,
+    }
+    this.updateScheduler({
+      circuitOpen: true,
+      circuitReason: reason,
+      lastFallbackReason: reason,
+    })
+  }
+
+  private async initCommitter(): Promise<WebGpuKzgMsmCommitter> {
+    if (this.committer) return this.committer
+    const committer = this.options.webGpuCommitterFactory
+      ? await this.options.webGpuCommitterFactory()
+      : await createWebGpuKzgMsmCommitter(
+          this.wasmInterop as unknown as Parameters<typeof createWebGpuKzgMsmCommitter>[0],
+          this.navigatorLike as unknown as Parameters<typeof createWebGpuKzgMsmCommitter>[1],
+          { allowFallbackAdapter: this.options.allowFallbackAdapter ?? false },
+        )
+    this.committer = committer
+    this.status = {
+      ...this.status,
+      supported: true,
+      available: true,
+      deviceLost: false,
+    }
+    committer.getDeviceLostInfo().then((info) => {
+      if (info) {
+        this.openCircuit(`WebGPU device lost${info.reason ? `: ${info.reason}` : ''}${info.message ? ` (${info.message})` : ''}`)
+      }
+    }).catch((error) => {
+      this.openCircuit(`WebGPU device lost: ${error instanceof Error ? error.message : String(error)}`)
+    })
+    return committer
+  }
+
+  private async probe(): Promise<boolean> {
+    if (this.mode === 'off') {
+      this.fallBack('WebGPU KZG scheduler disabled')
+      return false
+    }
+    if (this.status.scheduler?.circuitOpen) return false
+    if (this.status.scheduler?.probeStatus === 'passed') return true
+    if (this.probePromise) return this.probePromise
+
+    this.updateScheduler({ probeStatus: 'running' })
+    this.probePromise = this.runProbe().finally(() => {
+      this.probePromise = null
+    })
+    return this.probePromise
+  }
+
+  private async runProbe(): Promise<boolean> {
+    const probeStarted = nowMs(this.options.now)
+    const probeBlob = makeProbeBlob()
+    try {
+      const wasmStarted = nowMs(this.options.now)
+      const wasmCommitments = await this.wasmFallback.commitBlobs(probeBlob)
+      const wasmMs = nowMs(this.options.now) - wasmStarted
+      const committer = await this.initCommitter()
+      const gpuPromise = committer.commitBlobs(probeBlob)
+      const timed = await withTimeout(gpuPromise, this.probeTimeoutMs)
+      if (timed.timedOut) {
+        gpuPromise.catch(() => undefined).finally(() => this.committer?.destroy())
+        this.openCircuit(`WebGPU probe exceeded ${this.probeTimeoutMs}ms`)
+        this.updateScheduler({ probeStatus: 'timeout', lastProbeMs: nowMs(this.options.now) - probeStarted, lastWasmMs: wasmMs })
+        return false
+      }
+
+      const gpu = timed.value
+      const gpuMs = gpu.timings.totalMs
+      const parity = bytesToHex(wasmCommitments) === bytesToHex(gpu.commitments)
+      this.updateScheduler({
+        lastProbeMs: nowMs(this.options.now) - probeStarted,
+        lastWebGpuMs: gpuMs,
+        lastWasmMs: wasmMs,
+      })
+      if (!parity) {
+        this.openCircuit('WebGPU probe commitment parity failed')
+        this.updateScheduler({ probeStatus: 'failed' })
+        return false
+      }
+      if (this.mode === 'auto' && gpuMs > wasmMs) {
+        this.fallBack(`WebGPU probe slower than WASM (${gpuMs.toFixed(2)}ms > ${wasmMs.toFixed(2)}ms)`)
+        this.updateScheduler({ probeStatus: 'failed' })
+        return false
+      }
+      this.status = {
+        ...this.status,
+        available: true,
+        fallbackActive: false,
+        selectedBackend: 'webgpu',
+        reductionMode: gpu.debug?.reductionMode,
+        reason: undefined,
+      }
+      this.updateScheduler({ probeStatus: 'passed', lastFallbackReason: undefined })
+      return true
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.openCircuit(reason)
+      this.updateScheduler({ probeStatus: 'failed', lastProbeMs: nowMs(this.options.now) - probeStarted })
+      return false
+    }
+  }
+
+  async commitBlobs(blobsFlat: Uint8Array): Promise<Uint8Array> {
+    const blobs = assertBlobBatch(blobsFlat)
+    if (blobs < this.minBlobs) {
+      this.fallBack(`batch below WebGPU threshold: ${blobs} < ${this.minBlobs}`)
+      return this.wasmFallback.commitBlobs(blobsFlat)
+    }
+    if (!(await this.probe()) || !this.committer) {
+      return this.wasmFallback.commitBlobs(blobsFlat)
+    }
+
+    const gpuPromise = this.committer.commitBlobs(blobsFlat)
+    const timed = await withTimeout(gpuPromise, this.commitTimeoutMs)
+    if (timed.timedOut) {
+      gpuPromise.catch(() => undefined).finally(() => this.committer?.destroy())
+      this.openCircuit(`WebGPU commit exceeded ${this.commitTimeoutMs}ms`)
+      return this.wasmFallback.commitBlobs(blobsFlat)
+    }
+
+    this.status = {
+      ...this.status,
+      fallbackActive: false,
+      selectedBackend: 'webgpu',
+      reductionMode: timed.value.debug?.reductionMode ?? this.status.reductionMode,
+    }
+    this.updateScheduler({ lastWebGpuMs: timed.value.timings.totalMs, lastFallbackReason: undefined })
+    return timed.value.commitments
+  }
+
+  async commitBlobsProfiled(blobsFlat: Uint8Array): Promise<KzgCommitProfiledResult> {
+    const blobs = assertBlobBatch(blobsFlat)
+    if (blobs < this.minBlobs) {
+      this.fallBack(`batch below WebGPU threshold: ${blobs} < ${this.minBlobs}`)
+      return this.wasmFallback.commitBlobsProfiled(blobsFlat)
+    }
+    if (!(await this.probe()) || !this.committer) {
+      return this.wasmFallback.commitBlobsProfiled(blobsFlat)
+    }
+
+    const gpuPromise = this.committer.commitBlobs(blobsFlat)
+    const timed = await withTimeout(gpuPromise, this.commitTimeoutMs)
+    if (timed.timedOut) {
+      gpuPromise.catch(() => undefined).finally(() => this.committer?.destroy())
+      this.openCircuit(`WebGPU commit exceeded ${this.commitTimeoutMs}ms`)
+      return this.wasmFallback.commitBlobsProfiled(blobsFlat)
+    }
+
+    this.status = {
+      ...this.status,
+      fallbackActive: false,
+      selectedBackend: 'webgpu',
+      reductionMode: timed.value.debug?.reductionMode ?? this.status.reductionMode,
+    }
+    this.updateScheduler({ lastWebGpuMs: timed.value.timings.totalMs, lastFallbackReason: undefined })
+    return {
+      witnessFlat: timed.value.commitments,
+      perf: profileFromWebGpuResult(timed.value),
+    }
   }
 }
 
@@ -337,7 +692,8 @@ export async function createBrowserKzgCommitBackend(
   options: CreateKzgCommitBackendOptions = {},
 ): Promise<KzgCommitBackend> {
   const wasmFallback = createWasmBlstKzgCommitBackend(wasm)
-  if (!options.preferWebGpu) {
+  const mode = options.webGpuMode ?? (options.preferWebGpu ? 'auto' : 'off')
+  if (!options.preferWebGpu || mode === 'off') {
     return wasmFallback
   }
 
@@ -368,40 +724,30 @@ export async function createBrowserKzgCommitBackend(
       throw new Error(`Trusted setup SHA-256 mismatch: ${setupSha256}`)
     }
 
+    timings.totalMs = nowMs(options.now) - started
+
     const adapterStart = nowMs(options.now)
     const adapter = await gpu.requestAdapter()
     timings.adapterMs = nowMs(options.now) - adapterStart
     if (!adapter) {
       throw new Error('WebGPU adapter request returned null')
     }
-
-    const deviceStart = nowMs(options.now)
-    const device = await adapter.requestDevice()
-    timings.deviceMs = nowMs(options.now) - deviceStart
-
-    const usage = options.bufferUsage ?? (globalThis as unknown as { GPUBufferUsage?: WebGpuBufferUsageLike }).GPUBufferUsage
-    if (!usage) {
-      throw new Error('GPUBufferUsage constants are unavailable')
+    const adapterInfo = await readAdapterInfo(adapter)
+    if (!options.allowFallbackAdapter && adapterInfo?.isFallbackAdapter) {
+      throw new Error('WebGPU adapter is a fallback/software adapter')
     }
 
-    const uploadStart = nowMs(options.now)
-    const srsBuffer = device.createBuffer({
-      label: 'polystore-kzg-g1-srs-compressed',
-      size: parsed.g1Compressed.byteLength,
-      usage: usage.STORAGE | usage.COPY_DST,
-    })
-    device.queue.writeBuffer(srsBuffer, 0, parsed.g1Compressed)
-    timings.srsUploadMs = nowMs(options.now) - uploadStart
-    timings.totalMs = nowMs(options.now) - started
-
-    const backend = new WebGpuKzgLifecycleBackend(
+    return new ScheduledWebGpuKzgCommitBackend(
       wasmFallback,
+      wasm as PolyStoreCommitApi,
+      options.navigatorLike,
       {
         supported: true,
-        available: true,
+        available: false,
         deviceLost: false,
         fallbackActive: true,
-        reason: 'WebGPU MSM is not implemented in this milestone; commitments use WASM',
+        reason: 'WebGPU scheduler has not completed its bounded probe',
+        adapter: adapterInfo,
         srs: {
           g1Count: parsed.g1Count,
           g2Count: parsed.g2Count,
@@ -411,16 +757,8 @@ export async function createBrowserKzgCommitBackend(
         },
         timings,
       },
-      srsBuffer,
+      options,
     )
-
-    device.lost?.then((info) => {
-      backend.markDeviceLost(`WebGPU device lost${info?.reason ? `: ${info.reason}` : ''}${info?.message ? ` (${info.message})` : ''}`)
-    }).catch((error) => {
-      backend.markDeviceLost(`WebGPU device lost: ${error instanceof Error ? error.message : String(error)}`)
-    })
-
-    return backend
   } catch (error) {
     timings.totalMs = nowMs(options.now) - started
     return new WebGpuKzgLifecycleBackend(

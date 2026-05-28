@@ -115,6 +115,21 @@ function initializeCommitPool(trustedSetupBytes: Uint8Array): Promise<void> {
 }
 
 function commitBlobsWithPool(data: Uint8Array): Promise<Uint8Array> {
+    if (kzgCommitBackend) {
+        const status = kzgCommitBackend.getStatus();
+        const scheduler = status.webgpu?.scheduler;
+        const shouldUseDirectScheduler =
+            status.kind === 'webgpu-scheduler' &&
+            scheduler &&
+            !scheduler.circuitOpen &&
+            scheduler.probeStatus !== 'failed' &&
+            scheduler.probeStatus !== 'timeout' &&
+            scheduler.probeStatus !== 'disabled';
+        if (shouldUseDirectScheduler) {
+            return Promise.resolve(kzgCommitBackend.commitBlobs(data));
+        }
+    }
+
     if (!commitWorkers || commitWorkers.length === 0) {
         if (!kzgCommitBackend) return Promise.reject(new Error('PolyStoreWasm not initialized'));
         return Promise.resolve(kzgCommitBackend.commitBlobs(data));
@@ -132,6 +147,23 @@ function commitBlobsWithPool(data: Uint8Array): Promise<Uint8Array> {
         commitPendingByWorker.get(w)?.add(id);
         w.postMessage({ id, type: 'commitBlobs', payload: { data } }, [data.buffer]);
     });
+}
+
+function kzgCommitDiagnostics() {
+    const status = kzgCommitBackend?.getStatus();
+    const scheduler = status?.webgpu?.scheduler;
+    return {
+        rustCommitBackend: status?.selectedBackend === 'webgpu' ? 'webgpu-msm' : 'blst',
+        kzgCommitBackend: status?.selectedBackend ?? status?.kind ?? 'unknown',
+        kzgWebGpuAvailable: Boolean(status?.webgpu?.available),
+        kzgWebGpuFallbackReason: status?.fallbackReason ?? '',
+        kzgWebGpuProbeStatus: scheduler?.probeStatus ?? '',
+        kzgWebGpuCircuitOpen: Boolean(scheduler?.circuitOpen),
+        kzgWebGpuProbeTimeoutMs: scheduler?.probeTimeoutMs ?? 0,
+        kzgWebGpuCommitTimeoutMs: scheduler?.commitTimeoutMs ?? 0,
+        kzgWebGpuMinBlobs: scheduler?.minBlobs ?? 0,
+        kzgWebGpuReductionMode: status?.webgpu?.reductionMode ?? '',
+    };
 }
 
 // Start fetching + compiling the WASM as soon as the worker loads so the first
@@ -413,7 +445,7 @@ self.onmessage = async (event) => {
 
                 const commitStart = performance.now();
                 if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
-                const committedRaw = kzgCommitBackend.commitBlobsProfiled(mdu0Bytes);
+                const committedRaw = await kzgCommitBackend.commitBlobsProfiled(mdu0Bytes);
                 perf.commitMs = performance.now() - commitStart;
                 const witnessFlat = committedRaw.witnessFlat;
                 const commitPerf = committedRaw.perf;
@@ -426,6 +458,7 @@ self.onmessage = async (event) => {
                 perf.rustCommitMsmMs = commitPerf.msmMs;
                 perf.rustCommitCompressMs = commitPerf.compressMs;
                 perf.rustCommitMs = commitPerf.totalMs || perf.commitMs;
+                Object.assign(perf, kzgCommitDiagnostics());
 
                 const rootStart = performance.now();
                 const root = polyStoreWasmInstance.compute_mdu_root(witnessFlat) as unknown;
@@ -519,6 +552,8 @@ self.onmessage = async (event) => {
                         batchCount: Math.ceil(BLOBS_PER_MDU / batch),
                         batchSize: batch,
                         blobCount: BLOBS_PER_MDU,
+                        commitWorkerCount: commitWorkers.length,
+                        ...kzgCommitDiagnostics(),
                     },
                 };
                 break;
@@ -533,7 +568,7 @@ self.onmessage = async (event) => {
                 const opStart = performance.now();
                 const commitStart = performance.now();
                 if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
-                const committedRaw = kzgCommitBackend.commitBlobsProfiled(data);
+                const committedRaw = await kzgCommitBackend.commitBlobsProfiled(data);
                 const commitMs = performance.now() - commitStart;
                 const witnessFlat = committedRaw.witnessFlat;
                 const commitPerf = committedRaw.perf;
@@ -561,8 +596,8 @@ self.onmessage = async (event) => {
                         rustCommitMsmMs: commitPerf.msmMs,
                         rustCommitCompressMs: commitPerf.compressMs,
                         rustCommitMs: commitPerf.totalMs || commitMs,
-                        rustCommitBackend: 'blst',
                         rustCommitMsmSubphasesAvailable: false,
+                        ...kzgCommitDiagnostics(),
                     },
                 };
                 break;

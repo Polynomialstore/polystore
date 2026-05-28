@@ -26,6 +26,23 @@ function initializeWasm(): Promise<void> {
 
 void initializeWasm()
 
+function kzgCommitDiagnostics() {
+  const status = kzgCommitBackend?.getStatus()
+  const scheduler = status?.webgpu?.scheduler
+  return {
+    rustCommitBackend: status?.selectedBackend === 'webgpu' ? 'webgpu-msm' : 'blst',
+    kzgCommitBackend: status?.selectedBackend ?? status?.kind ?? 'unknown',
+    kzgWebGpuAvailable: Boolean(status?.webgpu?.available),
+    kzgWebGpuFallbackReason: status?.fallbackReason ?? '',
+    kzgWebGpuProbeStatus: scheduler?.probeStatus ?? '',
+    kzgWebGpuCircuitOpen: Boolean(scheduler?.circuitOpen),
+    kzgWebGpuProbeTimeoutMs: scheduler?.probeTimeoutMs ?? 0,
+    kzgWebGpuCommitTimeoutMs: scheduler?.commitTimeoutMs ?? 0,
+    kzgWebGpuMinBlobs: scheduler?.minBlobs ?? 0,
+    kzgWebGpuReductionMode: status?.webgpu?.reductionMode ?? '',
+  }
+}
+
 self.onmessage = async (event) => {
   const { type, payload, id } = event.data as {
     id: number
@@ -222,7 +239,7 @@ self.onmessage = async (event) => {
 
         const opStart = performance.now()
         const commitStart = performance.now()
-        const committedRaw = kzgCommitBackend.commitBlobsProfiled(data)
+        const committedRaw = await kzgCommitBackend.commitBlobsProfiled(data)
         const commitMs = performance.now() - commitStart
         const witnessFlat = committedRaw.witnessFlat
         const commitPerf = committedRaw.perf
@@ -254,8 +271,8 @@ self.onmessage = async (event) => {
                 rustCommitMsmMs: commitPerf.msmMs,
                 rustCommitCompressMs: commitPerf.compressMs,
                 rustCommitMs: commitPerf.totalMs || commitMs,
-                rustCommitBackend: 'blst',
                 rustCommitMsmSubphasesAvailable: false,
+                ...kzgCommitDiagnostics(),
               },
             },
           },

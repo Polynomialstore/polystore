@@ -74,14 +74,77 @@ function mockWasm(blobs = 1): PolyStoreWasmLike {
   }
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
+function dynamicMockWasm(): PolyStoreWasmLike {
+  return {
+    commit_blobs: (input) => commitments(input.byteLength / KZG_BLOB_SIZE),
+    commit_blobs_profiled: (input) => {
+      const blobs = input.byteLength / KZG_BLOB_SIZE
+      return { witness_flat: commitments(blobs), perf: { blobs } }
+    },
+  }
+}
+
+function fakeNavigator(info: Record<string, unknown> = {}) {
+  return {
+    gpu: {
+      requestAdapter: async () => ({
+        info,
+        requestDevice: async () => ({
+          queue: { writeBuffer: () => undefined },
+          createBuffer: () => ({}),
+        }),
+      }),
+    },
+  } as unknown as Navigator
+}
+
+function fakeCommitter(options: {
+  totalMs?: number
+  delayMs?: number
+  commitmentsSeed?: number
+  reductionMode?: 'serial' | 'parallel16' | 'parallel32' | 'parallel64'
+}) {
+  const destroyed = { value: false }
+  return {
+    destroyed,
+    committer: {
+      destroy: () => {
+        destroyed.value = true
+      },
+      getDeviceLostInfo: async () => null,
+      commitBlobs: async (input: Uint8Array) => {
+        if (options.delayMs) {
+          await new Promise((resolve) => setTimeout(resolve, options.delayMs))
+        }
+        const blobs = input.byteLength / KZG_BLOB_SIZE
+        const totalMs = options.totalMs ?? 10
+        return {
+          commitments: commitments(blobs, options.commitmentsSeed ?? 1),
+          timings: {
+            scalarPrepMs: 0,
+            bucketBuildMs: 0,
+            uploadMs: 0,
+            dispatchReadbackMs: totalMs,
+            foldMs: 0,
+            totalMs,
+          },
+          blobs,
+          debug: {
+            bucketWidth: 10,
+            reductionMode: options.reductionMode ?? 'serial',
+            bucketCount: 1,
+            baseIndexCount: 1,
+            numWindows: 1,
+            maxBucketSize: 1,
+            meanBucketSize: 1,
+            uploadBytes: 4,
+            readbackBytes: 384,
+            windowSumNonZeroBytes: 1,
+          },
+        }
+      },
+    },
+  }
 }
 
 async function loadTrustedSetupBytes(): Promise<Uint8Array> {
@@ -215,43 +278,21 @@ test('browser backend falls back when WebGPU is unavailable', async () => {
   assert.match(status.fallbackReason || '', /navigator\.gpu is unavailable/)
 })
 
-test('browser backend uploads SRS to a persistent WebGPU buffer and keeps WASM as commit path', async () => {
+test('browser backend starts with a bounded WebGPU scheduler and WASM fallback', async () => {
   const setupBytes = await loadTrustedSetupBytes()
-  const writes: Array<{ offset: number; bytes: number }> = []
-  const buffer = { destroyed: false, destroy() { this.destroyed = true } }
-  const deviceLost = deferred<{ reason?: string; message?: string }>()
   const backend = await createBrowserKzgCommitBackend(mockWasm(2), setupBytes, {
     preferWebGpu: true,
-    navigatorLike: {
-      gpu: {
-        requestAdapter: async () => ({
-          requestDevice: async () => ({
-            queue: {
-              writeBuffer: (_buffer: unknown, offset: number, data: Uint8Array) => {
-                writes.push({ offset, bytes: data.byteLength })
-              },
-            },
-            lost: deviceLost.promise,
-            createBuffer: (descriptor: { size: number }) => {
-              assert.equal(descriptor.size, 4096 * KZG_COMMITMENT_SIZE)
-              return buffer
-            },
-          }),
-        }),
-      },
-    } as unknown as Navigator,
-    bufferUsage: { STORAGE: 1, COPY_DST: 2 },
+    navigatorLike: fakeNavigator({ vendor: 'nvidia', architecture: 'ampere', isFallbackAdapter: false }),
   })
 
-  assert.equal(backend.kind, 'webgpu-wasm-fallback')
-  assert.deepEqual(backend.commitBlobs(blobBatch(2)), commitments(2))
-  assert.deepEqual(writes, [{ offset: 0, bytes: 4096 * KZG_COMMITMENT_SIZE }])
+  assert.equal(backend.kind, 'webgpu-scheduler')
   const status = backend.getStatus()
   assert.equal(status.webgpu?.supported, true)
-  assert.equal(status.webgpu?.available, true)
+  assert.equal(status.webgpu?.available, false)
   assert.equal(status.webgpu?.fallbackActive, true)
+  assert.equal(status.selectedBackend, 'wasm-blst')
   assert.equal(status.webgpu?.srs?.sha256, POLYSTORE_TRUSTED_SETUP_SHA256)
-  assert.match(status.fallbackReason || '', /commitments use WASM/)
+  assert.equal(status.webgpu?.scheduler?.probeStatus, 'not-run')
 })
 
 test('browser backend contains WebGPU init failure and falls back to WASM', async () => {
@@ -274,35 +315,78 @@ test('browser backend contains WebGPU init failure and falls back to WASM', asyn
   assert.match(status.fallbackReason || '', /adapter denied/)
 })
 
-test('browser backend marks device loss unavailable without changing commitment output', async () => {
-  const deviceLost = deferred<{ reason?: string; message?: string }>()
-  const buffer = { destroyed: false, destroy() { this.destroyed = true } }
+test('browser backend rejects fallback adapters before scheduler selection', async () => {
   const backend = await createBrowserKzgCommitBackend(mockWasm(1), await loadTrustedSetupBytes(), {
     preferWebGpu: true,
-    navigatorLike: {
-      gpu: {
-        requestAdapter: async () => ({
-          requestDevice: async () => ({
-            queue: { writeBuffer: () => undefined },
-            lost: deviceLost.promise,
-            createBuffer: () => buffer,
-          }),
-        }),
-      },
-    } as unknown as Navigator,
-    bufferUsage: { STORAGE: 1, COPY_DST: 2 },
+    navigatorLike: fakeNavigator({ vendor: 'google', architecture: 'swiftshader', isFallbackAdapter: true }),
   })
 
-  assert.equal(backend.getStatus().webgpu?.available, true)
-  deviceLost.resolve({ reason: 'destroyed', message: 'test device loss' })
-  await new Promise((resolve) => setTimeout(resolve, 0))
-
   const status = backend.getStatus()
-  assert.equal(buffer.destroyed, true)
   assert.equal(status.webgpu?.available, false)
-  assert.equal(status.webgpu?.deviceLost, true)
-  assert.match(status.fallbackReason || '', /destroyed/)
-  assert.deepEqual(backend.commitBlobs(blobBatch(1)), commitments(1))
+  assert.match(status.fallbackReason || '', /fallback\/software adapter/)
+})
+
+test('browser backend selects WebGPU after bounded parity probe', async () => {
+  const fake = fakeCommitter({ totalMs: 5, reductionMode: 'serial' })
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    webGpuMode: 'force',
+    navigatorLike: fakeNavigator({ vendor: 'nvidia', architecture: 'ampere', isFallbackAdapter: false }),
+    webGpuCommitterFactory: async () => fake.committer as never,
+    now: (() => {
+      let current = 0
+      return () => {
+        current += 1
+        return current
+      }
+    })(),
+  })
+
+  assert.deepEqual(await backend.commitBlobs(blobBatch(2)), commitments(2))
+  const status = backend.getStatus()
+  assert.equal(status.selectedBackend, 'webgpu')
+  assert.equal(status.webgpu?.fallbackActive, false)
+  assert.equal(status.webgpu?.scheduler?.probeStatus, 'passed')
+  assert.equal(status.webgpu?.reductionMode, 'serial')
+})
+
+test('browser backend falls back when auto probe is slower than WASM', async () => {
+  const fake = fakeCommitter({ totalMs: 500 })
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    navigatorLike: fakeNavigator({ vendor: 'nvidia', architecture: 'ampere', isFallbackAdapter: false }),
+    webGpuCommitterFactory: async () => fake.committer as never,
+    now: (() => {
+      let current = 0
+      return () => {
+        current += 1
+        return current
+      }
+    })(),
+  })
+
+  assert.deepEqual(await backend.commitBlobs(blobBatch(1)), commitments(1))
+  const status = backend.getStatus()
+  assert.equal(status.selectedBackend, 'wasm-blst')
+  assert.equal(status.webgpu?.scheduler?.probeStatus, 'failed')
+  assert.match(status.fallbackReason || '', /slower than WASM/)
+})
+
+test('browser backend opens session circuit breaker on WebGPU timeout', async () => {
+  const fake = fakeCommitter({ delayMs: 25 })
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    webGpuProbeTimeoutMs: 5,
+    navigatorLike: fakeNavigator({ vendor: 'nvidia', architecture: 'ampere', isFallbackAdapter: false }),
+    webGpuCommitterFactory: async () => fake.committer as never,
+  })
+
+  assert.deepEqual(await backend.commitBlobs(blobBatch(1)), commitments(1))
+  const status = backend.getStatus()
+  assert.equal(status.selectedBackend, 'wasm-blst')
+  assert.equal(status.webgpu?.scheduler?.circuitOpen, true)
+  assert.equal(status.webgpu?.scheduler?.probeStatus, 'timeout')
+  assert.match(status.fallbackReason || '', /probe exceeded/)
 })
 
 test('browser backend fails closed on incompatible trusted setup bytes before GPU upload', async () => {
