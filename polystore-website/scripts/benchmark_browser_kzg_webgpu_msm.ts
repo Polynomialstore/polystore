@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import os from 'node:os'
+import { execFileSync } from 'node:child_process'
 
 import { chromium } from '@playwright/test'
 import { createServer } from 'vite'
@@ -28,6 +29,24 @@ function launchArgs(): string[] {
     ? process.env.POLYSTORE_WEBGPU_CHROME_ARGS.split(/\s+/).filter(Boolean)
     : []
   return [...DEFAULT_WEBGPU_ARGS, ...extra]
+}
+
+function gitValue(args: string[]): string | null {
+  try {
+    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  } catch {
+    return null
+  }
+}
+
+function gitMetadata() {
+  const status = gitValue(['status', '--porcelain'])
+  return {
+    branch: gitValue(['branch', '--show-current']),
+    commit: gitValue(['rev-parse', 'HEAD']),
+    short_commit: gitValue(['rev-parse', '--short=8', 'HEAD']),
+    dirty: status === null ? null : status.length > 0,
+  }
 }
 
 const blobCount = Number.parseInt(process.env.POLYSTORE_WEBGPU_MSM_BLOBS ?? '1', 10)
@@ -311,6 +330,7 @@ try {
       {
         benchmark: 'browser-kzg-webgpu-msm',
         timestamp: new Date().toISOString(),
+        git: gitMetadata(),
         host: {
           platform: os.platform(),
           release: os.release(),
