@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEVNET_USER="${POLYSTORE_DEVNET_USER:-${SUDO_USER:-mikers}}"
+DEVNET_USER="${POLYSTORE_DEVNET_USER:-${SUDO_USER:-}}"
 TARGET_ROOT="${TARGET_ROOT:-/opt/polystore}"
-CHAIN_STATE_ROOT="${CHAIN_STATE_ROOT:-/var/lib/nilstore}"
+CHAIN_STATE_ROOT="${CHAIN_STATE_ROOT:-/var/lib/polystore}"
 SUDOERS_FILE="${SUDOERS_FILE:-/etc/sudoers.d/polystore-devnet-systemctl}"
 SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-$(command -v systemctl)}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "ERROR: run this script with sudo/root." >&2
   echo "       Example: sudo $0" >&2
+  exit 1
+fi
+
+if [ -z "$DEVNET_USER" ]; then
+  echo "ERROR: devnet user is required." >&2
+  echo "       Run via sudo as the target user or set POLYSTORE_DEVNET_USER=<user>." >&2
   exit 1
 fi
 
@@ -59,4 +65,5 @@ runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" stop polystore-faucet.s
 runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" start polystore-gateway-router.service >/dev/null
 runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" stop polystore-gateway-router.service >/dev/null
 
-echo "DONE: $DEVNET_USER can update $TARGET_ROOT/$CHAIN_STATE_ROOT and restart PolyStore root services with sudo -n systemctl."
+echo "DONE: $DEVNET_USER can update $TARGET_ROOT and $CHAIN_STATE_ROOT and restart PolyStore root services with sudo -n systemctl."
+echo "NOTE: systemctl status is intentionally not granted; update scripts read status without sudo."
