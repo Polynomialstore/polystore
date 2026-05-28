@@ -111,8 +111,8 @@ Minimum required edits in `polystore-gateway-provider.env`:
   `PROVIDER_UNITS=...` and `PROVIDER_HEALTH_URLS=...` for that layout, or leave
   provider units absent to update only the hub services.
 - The sudoers allowlist installed by `ops/grant_devnet_user_ops.sh` covers only
-  `start`, `stop`, `restart`, and `is-active` for the three root services.
-  `systemctl status` is intentionally read without sudo by the update helper.
+  `start`, `stop`, `restart`, `is-active`, and `status` for the three root
+  services.
 - Unit `ExecStart` commands intentionally use a shell wrapper so EnvironmentFile
   variables (for example `POLYSTORECHAIND_BIN`) are expanded correctly by systemd.
 - The env templates include `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release`

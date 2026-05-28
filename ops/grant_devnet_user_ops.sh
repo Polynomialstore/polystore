@@ -48,9 +48,9 @@ trap cleanup EXIT
 
 cat >"$tmp_sudoers" <<EOF
 Defaults:$DEVNET_USER !requiretty
-$DEVNET_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start polystorechaind.service, $SYSTEMCTL_BIN stop polystorechaind.service, $SYSTEMCTL_BIN restart polystorechaind.service, $SYSTEMCTL_BIN is-active polystorechaind.service
-$DEVNET_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start polystore-faucet.service, $SYSTEMCTL_BIN stop polystore-faucet.service, $SYSTEMCTL_BIN restart polystore-faucet.service, $SYSTEMCTL_BIN is-active polystore-faucet.service
-$DEVNET_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start polystore-gateway-router.service, $SYSTEMCTL_BIN stop polystore-gateway-router.service, $SYSTEMCTL_BIN restart polystore-gateway-router.service, $SYSTEMCTL_BIN is-active polystore-gateway-router.service
+$DEVNET_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start polystorechaind.service, $SYSTEMCTL_BIN stop polystorechaind.service, $SYSTEMCTL_BIN restart polystorechaind.service, $SYSTEMCTL_BIN is-active polystorechaind.service, $SYSTEMCTL_BIN status polystorechaind.service
+$DEVNET_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start polystore-faucet.service, $SYSTEMCTL_BIN stop polystore-faucet.service, $SYSTEMCTL_BIN restart polystore-faucet.service, $SYSTEMCTL_BIN is-active polystore-faucet.service, $SYSTEMCTL_BIN status polystore-faucet.service
+$DEVNET_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start polystore-gateway-router.service, $SYSTEMCTL_BIN stop polystore-gateway-router.service, $SYSTEMCTL_BIN restart polystore-gateway-router.service, $SYSTEMCTL_BIN is-active polystore-gateway-router.service, $SYSTEMCTL_BIN status polystore-gateway-router.service
 EOF
 
 echo "==> Installing narrow sudoers allowlist at $SUDOERS_FILE"
@@ -60,10 +60,13 @@ visudo -cf "$SUDOERS_FILE"
 echo "==> Verifying passwordless service control for $DEVNET_USER"
 runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" start polystorechaind.service >/dev/null
 runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" stop polystorechaind.service >/dev/null
+runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" status polystorechaind.service >/dev/null
 runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" start polystore-faucet.service >/dev/null
 runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" stop polystore-faucet.service >/dev/null
+runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" status polystore-faucet.service >/dev/null
 runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" start polystore-gateway-router.service >/dev/null
 runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" stop polystore-gateway-router.service >/dev/null
+runuser -u "$DEVNET_USER" -- sudo -n -l "$SYSTEMCTL_BIN" status polystore-gateway-router.service >/dev/null
 
 echo "DONE: $DEVNET_USER can update $TARGET_ROOT and $CHAIN_STATE_ROOT and restart PolyStore root services with sudo -n systemctl."
-echo "NOTE: systemctl status is intentionally not granted; update scripts read status without sudo."
+echo "NOTE: sudoers is intentionally limited to start/stop/restart/is-active/status for PolyStore root services."
