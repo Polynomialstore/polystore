@@ -6,8 +6,8 @@ Baseline PR: #174
 ## Current Result
 
 The pure WebGPU MSM path preserves byte-for-byte parity with the WASM `blst`
-oracle and is now faster than WASM on real Apple M3 browser hardware when using
-the `parallel16` reduction mode.
+oracle and is now faster than WASM on real Apple M3 and NVIDIA RTX 3060 Ti
+browser hardware. The fastest reduction mode is adapter-sensitive.
 
 On the local WebGPU-enabled Chrome benchmark environment, which resolves to
 SwiftShader rather than a native GPU:
@@ -26,9 +26,19 @@ On Apple M3 Chrome/Metal using the diagnostic runner at commit `69533f8e`:
 | `parallel32` | ~105.82 ms | ~259.70 ms | true | no |
 | `parallel64` | ~111.44 ms | ~251.26 ms | true | no |
 
-`parallel16` is the default reduction mode because it is the fastest passing
-mode on the native Apple Metal target and still preserves parity in the local
-SwiftShader smoke test.
+On Ubuntu 22.04, headed Chrome 148, NVIDIA RTX 3060 Ti/Vulkan using the
+diagnostic runner at commit `1b9dedd8`:
+
+| reduction mode | WebGPU total | WASM total | parity | device lost |
+| --- | ---: | ---: | --- | --- |
+| `serial` | ~92.66-105.28 ms | ~285.96-286.38 ms | true | no |
+| `parallel32` | ~7434.90 ms | ~290.28 ms | true | no |
+| `parallel64` | ~7601.74 ms | ~291.76 ms | true | no |
+| `parallel16` | ~21222.31 ms | ~286.96 ms | true | no |
+
+The default reduction mode is adapter-aware: Apple Metal uses `parallel16`,
+while other adapters use `serial`. This preserves the M3 win without regressing
+NVIDIA Vulkan.
 
 ## Window Sweep
 
@@ -98,8 +108,8 @@ The diagnostic JSON includes:
 - top-level `error` and `device_lost` when the benchmark fails in diagnostic mode
 - the existing WASM/WebGPU timings and parity result
 
-The default path is `POLYSTORE_WEBGPU_MSM_REDUCTION=parallel16`. PR #178 also
-keeps explicit reduction overrides for diagnostics:
+The default path is adapter-aware. Leave `POLYSTORE_WEBGPU_MSM_REDUCTION`
+unset to use the selected default, or set it explicitly for diagnostics:
 
 ```sh
 POLYSTORE_WEBGPU_MSM_REDUCTION=serial POLYSTORE_WEBGPU_MSM_RUNS=1 npm run diagnose:kzg-webgpu-msm
@@ -128,6 +138,15 @@ Local generated-reduction diagnostic result on SwiftShader:
 - `POLYSTORE_WEBGPU_MSM_REDUCTION=parallel16` returns `parity: true`,
   `error: null`, and `device_lost: null`, but remains slow at ~42.6 s because
   the adapter is software-backed.
+
+Local NVIDIA note:
+
+- Headless Chrome still selected SwiftShader even with native Vulkan flags.
+- Headed Chrome with `POLYSTORE_WEBGPU_HEADLESS=0` and
+  `POLYSTORE_WEBGPU_CHROME_ARGS='--use-vulkan=native --force_high_performance_gpu'`
+  selected `vendor: nvidia`, `architecture: ampere`, `isFallbackAdapter: false`.
+- With no explicit `POLYSTORE_WEBGPU_MSM_REDUCTION`, the adapter-aware default
+  selected `serial` on NVIDIA and returned ~92.66 ms WebGPU vs ~285.96 ms WASM.
 
 ## Handoff To #168
 

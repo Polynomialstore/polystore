@@ -42,12 +42,21 @@ type GPUDevice = {
 }
 type WebGpuNavigator = Navigator & {
   gpu?: {
-    requestAdapter: () => Promise<null | { requestDevice: () => Promise<GPUDevice> }>
+    requestAdapter: () => Promise<null | WebGpuAdapter>
   }
+}
+type WebGpuAdapter = {
+  info?: WebGpuAdapterInfo
+  requestAdapterInfo?: () => Promise<WebGpuAdapterInfo>
+  requestDevice: () => Promise<GPUDevice>
+}
+type WebGpuAdapterInfo = {
+  vendor?: string
+  architecture?: string
 }
 
 export const WEBGPU_KZG_MSM_BUCKET_WIDTH = 10
-export const WEBGPU_KZG_MSM_REDUCTION_MODE: WebGpuKzgMsmReductionMode = 'parallel16'
+export const WEBGPU_KZG_MSM_REDUCTION_MODE: WebGpuKzgMsmReductionMode = 'serial'
 export const WEBGPU_KZG_MSM_POINT_BYTES = 384
 export const WEBGPU_KZG_MSM_SIGN_BIT = 0x80000000
 export const WEBGPU_KZG_MSM_BLOB_SIZE = 128 * 1024
@@ -270,6 +279,23 @@ function createEmptyStorageBuffer(device: GPUDevice, label: string, size: number
 function assertReductionMode(mode: WebGpuKzgMsmReductionMode): WebGpuKzgMsmReductionMode {
   if (mode === 'serial' || mode === 'parallel16' || mode === 'parallel32' || mode === 'parallel64') return mode
   throw new Error('WebGPU KZG MSM reduction mode must be serial, parallel16, parallel32, or parallel64')
+}
+
+async function readAdapterInfo(adapter: WebGpuAdapter): Promise<WebGpuAdapterInfo | null> {
+  try {
+    if (adapter.info) return adapter.info
+    if (typeof adapter.requestAdapterInfo === 'function') return await adapter.requestAdapterInfo()
+  } catch {
+    return null
+  }
+  return null
+}
+
+function defaultReductionModeForAdapter(info: WebGpuAdapterInfo | null): WebGpuKzgMsmReductionMode {
+  const vendor = info?.vendor?.toLowerCase() ?? ''
+  const architecture = info?.architecture?.toLowerCase() ?? ''
+  if (vendor.includes('apple') || architecture.includes('metal')) return 'parallel16'
+  return WEBGPU_KZG_MSM_REDUCTION_MODE
 }
 
 function reductionWorkgroupSize(mode: WebGpuKzgMsmReductionMode): 16 | 32 | 64 {
@@ -676,6 +702,10 @@ export async function createWebGpuKzgMsmCommitter(
   if (!gpu) throw new Error('navigator.gpu is unavailable')
   const adapter = await gpu.requestAdapter()
   if (!adapter) throw new Error('WebGPU adapter request returned null')
+  const resolvedOptions: WebGpuKzgMsmOptions = {
+    ...options,
+    reductionMode: options.reductionMode ?? defaultReductionModeForAdapter(await readAdapterInfo(adapter)),
+  }
   const device = await adapter.requestDevice()
-  return new WebGpuKzgMsmCommitter(device, wasm, options)
+  return new WebGpuKzgMsmCommitter(device, wasm, resolvedOptions)
 }

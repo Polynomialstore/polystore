@@ -62,8 +62,8 @@ if (!Number.isInteger(runs) || runs < 1) {
   throw new Error('POLYSTORE_WEBGPU_MSM_RUNS must be a positive integer')
 }
 const diagnostic = process.env.POLYSTORE_WEBGPU_MSM_DIAGNOSTIC === '1'
-const reductionMode = process.env.POLYSTORE_WEBGPU_MSM_REDUCTION ?? 'parallel16'
-if (!['serial', 'parallel16', 'parallel32', 'parallel64'].includes(reductionMode)) {
+const reductionMode = process.env.POLYSTORE_WEBGPU_MSM_REDUCTION
+if (reductionMode && !['serial', 'parallel16', 'parallel32', 'parallel64'].includes(reductionMode)) {
   throw new Error('POLYSTORE_WEBGPU_MSM_REDUCTION must be serial, parallel16, parallel32, or parallel64')
 }
 
@@ -300,7 +300,8 @@ try {
           webgpu_diagnostics: webgpuDiagnostics,
           blob_count: config.blobCount,
           bucket_width: config.bucketWidth,
-          reduction_mode: config.reductionMode,
+          requested_reduction_mode: config.reductionMode ?? null,
+          reduction_mode: runResults[0]?.gpu_debug?.reductionMode ?? config.reductionMode ?? null,
           runs: config.runs,
           wasm_ms: stats(wasmTotals),
           gpu_init_ms: gpuInitMs,
