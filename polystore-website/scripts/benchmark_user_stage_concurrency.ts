@@ -64,7 +64,7 @@ const basisMode = (process.env.BASIS_MODE || 'blst') as BasisMode
 const autotune = process.env.AUTOTUNE === '1'
 const hardwareConcurrency = Number.isFinite(Number(process.env.HARDWARE_CONCURRENCY))
   ? Math.max(1, Math.floor(Number(process.env.HARDWARE_CONCURRENCY)))
-  : os.cpus().length
+  : Math.max(1, os.cpus().length)
 const pipelineModes = (process.env.PIPELINE_MODES || process.env.PIPELINE_MODE || 'split')
   .split(',')
   .map((value) => value.trim())
@@ -78,7 +78,7 @@ const pipelineModes = (process.env.PIPELINE_MODES || process.env.PIPELINE_MODE |
       value === 'fused_batch_sampled',
   )
 const requestedConcurrencies = autotune
-  ? buildExpansionWorkerAutotuneCandidates(hardwareConcurrency, Math.ceil(fileBytes / RAW_MDU_CAPACITY)).join(',')
+  ? buildExpansionWorkerAutotuneCandidates(hardwareConcurrency, Math.ceil(Math.floor(fileBytes) / RAW_MDU_CAPACITY)).join(',')
   : process.env.CONCURRENCIES || '3,4,5,6'
 const concurrencies = requestedConcurrencies
   .split(',')
