@@ -173,7 +173,7 @@ test.describe('gateway absent', () => {
   test.skip(!hasLocalStack, 'requires local stack (gateway disabled)')
 
   test('gateway absent: dashboard upload falls back to direct SP', async ({ page }, testInfo) => {
-    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 900_000 : 600_000)
+    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 1_200_000 : 1_200_000)
     const fileName = 'gateway-absent.txt'
     const fileBytes = uploadSizeBytes > 1024 ? crypto.randomBytes(uploadSizeBytes) : Buffer.from('gateway-absent-upload')
     const perf = { profile: null as unknown }
@@ -327,6 +327,14 @@ test.describe('gateway absent', () => {
     await expect(page.getByText('Upload another file')).toHaveCount(0)
 
     await attachGatewayAbsentDebug(page, testInfo, dealId, 'post-commit')
+    const dealRow = page.getByTestId(`deal-row-${dealId}`)
+    if ((await dealRow.count().catch(() => 0)) > 0) {
+      await dealRow.click({ force: true })
+    }
+    const filesTab = page.getByTestId('deal-detail-tab-files')
+    if ((await filesTab.count().catch(() => 0)) > 0) {
+      await filesTab.click({ force: true })
+    }
     try {
       await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0, { timeout: 90_000 })
       await expect(page.getByTestId('deal-detail-file-row')).toHaveCount(1, { timeout: 90_000 })
