@@ -57,8 +57,7 @@ journalctl -u polystorechaind -f
 
 ## User-level Cloudflare tunnel units
 
-For the current `polynomialstore.com` deployment, the Cloudflare tunnels run cleanly as
-user services:
+Cloudflare tunnels can run cleanly as user services:
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -71,6 +70,12 @@ systemctl --user enable --now cloudflared-providers.service
 
 These units intentionally use `Restart=always`. `cloudflared` can exit with status `0`
 after all connections drop, and `Restart=on-failure` leaves the tunnel down.
+
+For the current `polynomialstore.com` provider deployment, the three SP
+hostnames are expected to use DNS-only direct HTTPS through Caddy, not
+Cloudflare Tunnel. `cloudflared-providers.service` may still exist as a fallback,
+but future agents should not assume it carries live `sp1`/`sp2`/`sp3` traffic.
+See `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`.
 
 ## Provider quick usage
 

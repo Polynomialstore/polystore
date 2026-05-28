@@ -5,10 +5,10 @@ This is the shortest supported path for a PolyStore testnet provider-daemon oper
 Note: this file keeps a legacy `ALPHA_` prefix for compatibility.
 
 Recommended target:
-- home server behind NAT with Cloudflare Tunnel
+- DNS-only direct HTTPS through a reverse proxy when inbound `443` can reach the provider host
 
 Fallback target:
-- public VPS or directly reachable host
+- Cloudflare Tunnel when inbound ports are unavailable
 
 ## What you need from the hub operator
 
@@ -45,7 +45,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
    - use `./scripts/run_devnet_provider.sh link` for link-only repair when the host is already configured and only the on-chain link request is missing
 8. Confirm:
    - local `http://127.0.0.1:8091/health`
-   - public `https://sp.<domain>/health` for tunnel / hostname mode, or `http://<ip>:8091/health` for direct IPv4 mode
+   - public `https://sp.<domain>/health` for DNS-only direct HTTPS or tunnel hostname mode, or `http://<ip>:8091/health` for direct IPv4 debugging
    - provider appears on `https://lcd.<domain>/polystorechain/polystorechain/v1/providers`
    - provider appears in the website `My Providers` dashboard at `https://polynomialstore.com/#/sp-dashboard`
 
@@ -55,6 +55,7 @@ If you deliberately want partial bootstrap without provider link, use the manual
 
 - Fast join guide: `docs/REMOTE_SP_JOIN_QUICKSTART.md`
 - Endpoint formats: `docs/networking/PROVIDER_ENDPOINTS.md`
+- Direct HTTPS runbook: `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`
 - Multi-provider guide: `DEVNET_MULTI_PROVIDER.md`
 
 ## Success criteria

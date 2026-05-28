@@ -26,7 +26,7 @@ The web-first operator flow is:
 
 - This repo checked out
 - Go + Rust toolchains installed
-- A reachable provider endpoint (either direct public IP/port-forward, or Cloudflare Tunnel HTTPS)
+- A reachable provider endpoint (prefer DNS-only direct HTTPS when inbound `443` is available; use Cloudflare Tunnel HTTPS when inbound ports are unavailable)
 - (Optional, recommended) systemd + a reverse proxy:
   - systemd templates: `ops/systemd/polystore-gateway-provider.service` + `ops/systemd/env/polystore-gateway-provider.env`
   - HTTPS reverse proxy example: `ops/caddy/Caddyfile.provider.example`
@@ -49,7 +49,21 @@ PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
 
 ### 2) Pick an endpoint multiaddr
 
-Option A (direct/public endpoint): register an IP+port endpoint:
+Option A (preferred when inbound `443` is available): register a DNS+HTTPS endpoint:
+
+- `/dns4/sp.<domain>/tcp/443/https`
+
+Set it:
+
+```bash
+export PROVIDER_ENDPOINT="/dns4/sp.<domain>/tcp/443/https"
+```
+
+The DNS record should be DNS-only when using Cloudflare DNS, with Caddy or
+another reverse proxy terminating HTTPS on the provider host and forwarding to
+the local provider listener. See `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`.
+
+Option B (direct public IP/port debugging): register an IP+port endpoint:
 
 - `/ip4/<your-public-ip>/tcp/8091/http`
 
@@ -59,7 +73,7 @@ Set it:
 export PROVIDER_ENDPOINT="/ip4/<your-public-ip>/tcp/8091/http"
 ```
 
-Option B (behind NAT with Cloudflare Tunnel): register DNS+HTTPS endpoint:
+Option C (behind NAT with Cloudflare Tunnel): register DNS+HTTPS endpoint:
 
 - `/dns4/sp.<domain>/tcp/443/https`
 

@@ -4,8 +4,11 @@ PolyStore providers (SPs) must register at least one reachable **endpoint multia
 
 This doc defines the two supported endpoint "types" for testnet onboarding:
 
-- `cloudflare-tunnel` (recommended for the trusted soft-launch / home-server path): expose HTTPS via Cloudflare Tunnel.
-- `direct` (recommended when you already control stable public ingress): provider has an open inbound port or reverse proxy.
+- `direct` (recommended when inbound `443` can reach the provider host): provider has an open inbound port or reverse proxy.
+- `cloudflare-tunnel` (fallback when inbound ports are unavailable): expose HTTPS via Cloudflare Tunnel.
+
+For the current `polynomialstore.com` SP deployment, direct DNS-only HTTPS is
+the primary shape. See `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`.
 
 Future (not testnet-blocking):
 
@@ -69,6 +72,27 @@ Example TLS reverse proxy (Caddy):
 caddy reverse-proxy --from sp.example.com --to localhost:8082
 ```
 
+For a multi-provider host, Caddy can terminate TLS once on `443` and route by
+hostname:
+
+```caddyfile
+sp1.example.com {
+  reverse_proxy 127.0.0.1:8091
+}
+
+sp2.example.com {
+  reverse_proxy 127.0.0.1:8092
+}
+
+sp3.example.com {
+  reverse_proxy 127.0.0.1:8093
+}
+```
+
+When using Cloudflare DNS with this profile, the SP records must be **DNS-only**
+for bulk transfer. Orange-cloud/proxied records route traffic through
+Cloudflare and can behave like the tunnel path for large provider payloads.
+
 Now print the endpoint to register:
 
 ```bash
@@ -97,11 +121,13 @@ polystorechaind tx polystorechain update-provider-endpoints \
   --endpoint "/dns4/sp.example.com/tcp/443/https"
 ```
 
-## Type: cloudflare-tunnel (recommended soft-launch default)
+## Type: cloudflare-tunnel (fallback when inbound ports are unavailable)
 
 Goal: expose the provider at `https://sp.example.com` without opening inbound ports.
 
 This routes traffic through Cloudflare, but is simple and works behind NAT.
+Use it when the provider host cannot expose inbound `443`. If inbound `443` is
+available, prefer the direct DNS-only HTTPS profile above.
 
 ### Minimal tunnel setup
 
