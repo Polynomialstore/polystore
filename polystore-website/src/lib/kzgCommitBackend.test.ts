@@ -7,8 +7,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   KZG_BLOB_SIZE,
   KZG_COMMITMENT_SIZE,
+  POLYSTORE_TRUSTED_SETUP_SHA256,
   WasmBlstKzgCommitBackend,
+  createBrowserKzgCommitBackend,
   createWasmBlstKzgCommitBackend,
+  parseTrustedSetupG1Srs,
   parseKzgCommitProfiledResult,
 } from './kzgCommitBackend'
 
@@ -62,6 +65,27 @@ function commitments(blobs: number, seed = 1): Uint8Array {
     out[i] = (seed + i) & 0xff
   }
   return out
+}
+
+function mockWasm(blobs = 1): PolyStoreWasmLike {
+  return {
+    commit_blobs: () => commitments(blobs),
+    commit_blobs_profiled: () => ({ witness_flat: commitments(blobs), perf: { blobs } }),
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+async function loadTrustedSetupBytes(): Promise<Uint8Array> {
+  return new Uint8Array(await fs.readFile(path.resolve(__dirname, '../../public/trusted_setup.txt')))
 }
 
 test('wasm blst backend reports default status', () => {
@@ -164,6 +188,168 @@ test('profiled parser normalizes wasm field names', () => {
 
 test('createWasmBlstKzgCommitBackend fails closed before wasm init', () => {
   assert.throws(() => createWasmBlstKzgCommitBackend(null), /PolyStoreWasm not initialized/)
+})
+
+test('trusted setup parser validates pinned SRS shape for WebGPU residency', async () => {
+  const parsed = parseTrustedSetupG1Srs(await loadTrustedSetupBytes())
+
+  assert.equal(parsed.g1Count, 4096)
+  assert.equal(parsed.g2Count, 65)
+  assert.equal(parsed.g1Bytes, 4096 * KZG_COMMITMENT_SIZE)
+  assert.equal(parsed.g1Compressed.byteLength, 4096 * KZG_COMMITMENT_SIZE)
+  assert.equal(parsed.basis, 'lagrange-or-monomial-g1-compressed')
+})
+
+test('browser backend falls back when WebGPU is unavailable', async () => {
+  const backend = await createBrowserKzgCommitBackend(mockWasm(1), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    navigatorLike: {} as unknown as Navigator,
+  })
+
+  assert.equal(backend.kind, 'webgpu-wasm-fallback')
+  assert.deepEqual(backend.commitBlobs(blobBatch(1)), commitments(1))
+  const status = backend.getStatus()
+  assert.equal(status.webgpu?.supported, false)
+  assert.equal(status.webgpu?.available, false)
+  assert.equal(status.webgpu?.fallbackActive, true)
+  assert.match(status.fallbackReason || '', /navigator\.gpu is unavailable/)
+})
+
+test('browser backend uploads SRS to a persistent WebGPU buffer and keeps WASM as commit path', async () => {
+  const setupBytes = await loadTrustedSetupBytes()
+  const writes: Array<{ offset: number; bytes: number }> = []
+  const buffer = { destroyed: false, destroy() { this.destroyed = true } }
+  const deviceLost = deferred<{ reason?: string; message?: string }>()
+  const backend = await createBrowserKzgCommitBackend(mockWasm(2), setupBytes, {
+    preferWebGpu: true,
+    navigatorLike: {
+      gpu: {
+        requestAdapter: async () => ({
+          requestDevice: async () => ({
+            queue: {
+              writeBuffer: (_buffer: unknown, offset: number, data: Uint8Array) => {
+                writes.push({ offset, bytes: data.byteLength })
+              },
+            },
+            lost: deviceLost.promise,
+            createBuffer: (descriptor: { size: number }) => {
+              assert.equal(descriptor.size, 4096 * KZG_COMMITMENT_SIZE)
+              return buffer
+            },
+          }),
+        }),
+      },
+    } as unknown as Navigator,
+    bufferUsage: { STORAGE: 1, COPY_DST: 2 },
+  })
+
+  assert.equal(backend.kind, 'webgpu-wasm-fallback')
+  assert.deepEqual(backend.commitBlobs(blobBatch(2)), commitments(2))
+  assert.deepEqual(writes, [{ offset: 0, bytes: 4096 * KZG_COMMITMENT_SIZE }])
+  const status = backend.getStatus()
+  assert.equal(status.webgpu?.supported, true)
+  assert.equal(status.webgpu?.available, true)
+  assert.equal(status.webgpu?.fallbackActive, true)
+  assert.equal(status.webgpu?.srs?.sha256, POLYSTORE_TRUSTED_SETUP_SHA256)
+  assert.match(status.fallbackReason || '', /commitments use WASM/)
+})
+
+test('browser backend contains WebGPU init failure and falls back to WASM', async () => {
+  const backend = await createBrowserKzgCommitBackend(mockWasm(1), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    navigatorLike: {
+      gpu: {
+        requestAdapter: async () => {
+          throw new Error('adapter denied')
+        },
+      },
+    } as unknown as Navigator,
+    bufferUsage: { STORAGE: 1, COPY_DST: 2 },
+  })
+
+  assert.deepEqual(backend.commitBlobs(blobBatch(1)), commitments(1))
+  const status = backend.getStatus()
+  assert.equal(status.webgpu?.supported, true)
+  assert.equal(status.webgpu?.available, false)
+  assert.match(status.fallbackReason || '', /adapter denied/)
+})
+
+test('browser backend marks device loss unavailable without changing commitment output', async () => {
+  const deviceLost = deferred<{ reason?: string; message?: string }>()
+  const buffer = { destroyed: false, destroy() { this.destroyed = true } }
+  const backend = await createBrowserKzgCommitBackend(mockWasm(1), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    navigatorLike: {
+      gpu: {
+        requestAdapter: async () => ({
+          requestDevice: async () => ({
+            queue: { writeBuffer: () => undefined },
+            lost: deviceLost.promise,
+            createBuffer: () => buffer,
+          }),
+        }),
+      },
+    } as unknown as Navigator,
+    bufferUsage: { STORAGE: 1, COPY_DST: 2 },
+  })
+
+  assert.equal(backend.getStatus().webgpu?.available, true)
+  deviceLost.resolve({ reason: 'destroyed', message: 'test device loss' })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  const status = backend.getStatus()
+  assert.equal(buffer.destroyed, true)
+  assert.equal(status.webgpu?.available, false)
+  assert.equal(status.webgpu?.deviceLost, true)
+  assert.match(status.fallbackReason || '', /destroyed/)
+  assert.deepEqual(backend.commitBlobs(blobBatch(1)), commitments(1))
+})
+
+test('browser backend fails closed on incompatible trusted setup bytes before GPU upload', async () => {
+  let adapterRequested = false
+  const backend = await createBrowserKzgCommitBackend(mockWasm(1), new TextEncoder().encode('1\n0\n00\n'), {
+    preferWebGpu: true,
+    navigatorLike: {
+      gpu: {
+        requestAdapter: async () => {
+          adapterRequested = true
+          return null
+        },
+      },
+    } as unknown as Navigator,
+    bufferUsage: { STORAGE: 1, COPY_DST: 2 },
+  })
+
+  assert.equal(adapterRequested, false)
+  assert.deepEqual(backend.commitBlobs(blobBatch(1)), commitments(1))
+  const status = backend.getStatus()
+  assert.equal(status.webgpu?.available, false)
+  assert.match(status.fallbackReason || '', /below required blob domain/)
+})
+
+test('browser backend fails closed on trusted setup hash mismatch before adapter request', async () => {
+  const setupBytes = await loadTrustedSetupBytes()
+  const tampered = setupBytes.slice()
+  const firstG1ByteOffset = new TextDecoder().decode(tampered).indexOf('\n', new TextDecoder().decode(tampered).indexOf('\n') + 1) + 1
+  tampered[firstG1ByteOffset] = tampered[firstG1ByteOffset] === 'a'.charCodeAt(0) ? 'b'.charCodeAt(0) : 'a'.charCodeAt(0)
+  let adapterRequested = false
+
+  const backend = await createBrowserKzgCommitBackend(mockWasm(1), tampered, {
+    preferWebGpu: true,
+    navigatorLike: {
+      gpu: {
+        requestAdapter: async () => {
+          adapterRequested = true
+          return null
+        },
+      },
+    } as unknown as Navigator,
+    bufferUsage: { STORAGE: 1, COPY_DST: 2 },
+  })
+
+  assert.equal(adapterRequested, false)
+  assert.deepEqual(backend.commitBlobs(blobBatch(1)), commitments(1))
+  assert.match(backend.getStatus().fallbackReason || '', /Trusted setup SHA-256 mismatch/)
 })
 
 test('wasm blst backend output matches direct PolyStoreWasm commit_blobs', async (t) => {
