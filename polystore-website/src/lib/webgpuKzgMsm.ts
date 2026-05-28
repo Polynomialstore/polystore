@@ -279,15 +279,6 @@ function reductionWorkgroupSize(mode: WebGpuKzgMsmReductionMode): 16 | 32 | 64 {
 }
 
 function buildParallelSubsumShader(workgroupSize: 16 | 32 | 64): string {
-  const reductions = [32, 16, 8, 4, 2]
-    .filter((step) => step < workgroupSize)
-    .map(
-      (step) => `
-    if tid < ${step}u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + ${step}u]); }
-    workgroupBarrier();`,
-    )
-    .join('\n')
-
   return WEBGPU_GROTH16_MSM_G1_SUBSUM_SHADER
     .replace('const G1_SUBSUM_WG_SIZE: u32 = 64u;', `const G1_SUBSUM_WG_SIZE: u32 = ${workgroupSize}u;`)
     .replace(
@@ -298,20 +289,17 @@ function buildParallelSubsumShader(workgroupSize: 16 | 32 | 64): string {
       '@compute @workgroup_size(64)\nfn subsum_phase1_g1',
       `@compute @workgroup_size(${workgroupSize})\nfn subsum_phase1_g1`,
     )
-    .replace(
-      `
-    if tid < 32u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 32u]); }
-    workgroupBarrier();
-    if tid < 16u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 16u]); }
-    workgroupBarrier();
-    if tid < 8u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 8u]); }
-    workgroupBarrier();
-    if tid < 4u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 4u]); }
-    workgroupBarrier();
-    if tid < 2u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 2u]); }
-    workgroupBarrier();`,
-      reductions,
-    )
+    .replace(/ {4}subsum_shared_g1\[tid\] = local_sum;[\s\S]*? {4}}\n}\n\n@group\(0\) @binding\(0\) var<storage, read> partial_sums_ph2_g1:/, `    partial_sums_g1[window_id * G1_SUBSUM_WG_SIZE + tid] = local_sum;
+}
+
+@group(0) @binding(0) var<storage, read> partial_sums_ph2_g1:`)
+    .replace(/ {4}let window_id = global_id.x;\n {4}win_sums_ph2_g1\[window_id\] = partial_sums_ph2_g1\[window_id\];/, `    let window_id = global_id.x;
+    var sum = G1_INFINITY;
+    let start = window_id * G1_SUBSUM_WG_SIZE;
+    for (var i = 0u; i < G1_SUBSUM_WG_SIZE; i = i + 1u) {
+        sum = add_g1_safe(sum, partial_sums_ph2_g1[start + i]);
+    }
+    win_sums_ph2_g1[window_id] = store_g1(sum);`)
 }
 
 async function readBuffer(device: GPUDevice, source: GPUBuffer, size: number): Promise<Uint8Array> {
@@ -529,7 +517,9 @@ export class WebGpuKzgMsmCommitter {
           : createEmptyStorageBuffer(
               this.device,
               `polystore-kzg-msm-${reductionMode}-partial-window-sums`,
-              Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
+              Math.max(1, bucketData.numWindows) *
+                reductionWorkgroupSize(reductionMode) *
+                WEBGPU_KZG_MSM_POINT_BYTES,
             )
       timings.uploadMs += nowMs() - uploadStart
 
