@@ -58,8 +58,11 @@ export type WebGpuKzgMsmWasmInterop = {
   webgpu_fold_g1_window_sums: (windowSums: Uint8Array, bucketWidth: number) => Uint8Array
 }
 
+export type WebGpuKzgMsmReductionMode = 'serial' | 'parallel16' | 'parallel32' | 'parallel64'
+
 export type WebGpuKzgMsmOptions = {
   bucketWidth?: number
+  reductionMode?: WebGpuKzgMsmReductionMode
 }
 
 export type WebGpuKzgMsmTimings = {
@@ -77,6 +80,7 @@ export type WebGpuKzgMsmResult = {
   blobs: number
   debug?: {
     bucketWidth: number
+    reductionMode: WebGpuKzgMsmReductionMode
     bucketCount: number
     baseIndexCount: number
     numWindows: number
@@ -262,6 +266,65 @@ function createEmptyStorageBuffer(device: GPUDevice, label: string, size: number
   })
 }
 
+function createUniformBuffer(device: GPUDevice, label: string, bytes: Uint32Array): GPUBuffer {
+  const usage = gpuBufferUsage()
+  const buffer = device.createBuffer({
+    label,
+    size: Math.max(16, Math.ceil(bytes.byteLength / 16) * 16),
+    usage: usage.UNIFORM | usage.COPY_DST,
+  })
+  device.queue.writeBuffer(buffer, 0, bytes)
+  return buffer
+}
+
+function assertReductionMode(mode: WebGpuKzgMsmReductionMode): WebGpuKzgMsmReductionMode {
+  if (mode === 'serial' || mode === 'parallel16' || mode === 'parallel32' || mode === 'parallel64') return mode
+  throw new Error('WebGPU KZG MSM reduction mode must be serial, parallel16, parallel32, or parallel64')
+}
+
+function reductionWorkgroupSize(mode: WebGpuKzgMsmReductionMode): 16 | 32 | 64 {
+  if (mode === 'parallel16') return 16
+  if (mode === 'parallel32') return 32
+  if (mode === 'parallel64') return 64
+  throw new Error('serial reduction mode does not have a parallel workgroup size')
+}
+
+function buildParallelSubsumShader(workgroupSize: 16 | 32 | 64): string {
+  const reductions = [32, 16, 8, 4, 2]
+    .filter((step) => step < workgroupSize)
+    .map(
+      (step) => `
+    if tid < ${step}u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + ${step}u]); }
+    workgroupBarrier();`,
+    )
+    .join('\n')
+
+  return WEBGPU_GROTH16_MSM_G1_SUBSUM_SHADER
+    .replace('const G1_SUBSUM_WG_SIZE: u32 = 64u;', `const G1_SUBSUM_WG_SIZE: u32 = ${workgroupSize}u;`)
+    .replace(
+      'var<workgroup> subsum_shared_g1: array<PointG1, 64>;',
+      `var<workgroup> subsum_shared_g1: array<PointG1, ${workgroupSize}>;`,
+    )
+    .replace(
+      '@compute @workgroup_size(64)\nfn subsum_phase1_g1',
+      `@compute @workgroup_size(${workgroupSize})\nfn subsum_phase1_g1`,
+    )
+    .replace(
+      `
+    if tid < 32u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 32u]); }
+    workgroupBarrier();
+    if tid < 16u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 16u]); }
+    workgroupBarrier();
+    if tid < 8u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 8u]); }
+    workgroupBarrier();
+    if tid < 4u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 4u]); }
+    workgroupBarrier();
+    if tid < 2u { subsum_shared_g1[tid] = add_g1_safe(subsum_shared_g1[tid], subsum_shared_g1[tid + 2u]); }
+    workgroupBarrier();`,
+      reductions,
+    )
+}
+
 async function readBuffer(device: GPUDevice, source: GPUBuffer, size: number): Promise<Uint8Array> {
   const usage = gpuBufferUsage()
   const readback = device.createBuffer({
@@ -286,16 +349,21 @@ export class WebGpuKzgMsmCommitter {
   private readonly montgomeryPipeline: GPUComputePipeline
   private readonly weightPipeline: GPUComputePipeline
   private readonly subsumPipeline: GPUComputePipeline
+  private readonly parallelSubsumPhase1Pipeline?: GPUComputePipeline
+  private readonly parallelSubsumPhase2Pipeline?: GPUComputePipeline
   private readonly aggregateLayout: GPUBindGroupLayout
   private readonly montgomeryLayout: GPUBindGroupLayout
   private readonly weightLayout: GPUBindGroupLayout
   private readonly subsumLayout: GPUBindGroupLayout
+  private readonly parallelSubsumPhase1Layout?: GPUBindGroupLayout
+  private readonly parallelSubsumPhase2Layout?: GPUBindGroupLayout
 
   constructor(
     private readonly device: GPUDevice,
     private readonly wasm: WebGpuKzgMsmWasmInterop,
     private readonly options: WebGpuKzgMsmOptions = {},
   ) {
+    const reductionMode = assertReductionMode(options.reductionMode ?? 'serial')
     const srs = wasm.webgpu_g1_srs_lagrange()
     if (srs.byteLength < WEBGPU_KZG_MSM_CELLS_PER_BLOB * WEBGPU_KZG_MSM_POINT_BYTES) {
       throw new Error('WebGPU KZG MSM SRS export is smaller than one blob domain')
@@ -310,6 +378,13 @@ export class WebGpuKzgMsmCommitter {
       label: 'polystore-kzg-msm-g1-subsum',
       code: WEBGPU_GROTH16_MSM_G1_SUBSUM_SHADER,
     })
+    const parallelSubsumModule =
+      reductionMode === 'serial'
+        ? null
+        : device.createShaderModule({
+            label: `polystore-kzg-msm-g1-${reductionMode}`,
+            code: buildParallelSubsumShader(reductionWorkgroupSize(reductionMode)),
+          })
 
     const shaderStage = gpuShaderStage()
     this.montgomeryLayout = device.createBindGroupLayout({
@@ -366,6 +441,20 @@ export class WebGpuKzgMsmCommitter {
       compute: { module: subsumModule, entryPoint: 'subsum_accumulation_g1' },
     })
     this.subsumLayout = this.subsumPipeline.getBindGroupLayout(0)
+    if (parallelSubsumModule) {
+      this.parallelSubsumPhase1Pipeline = device.createComputePipeline({
+        label: `polystore-kzg-msm-${reductionMode}-phase1`,
+        layout: 'auto',
+        compute: { module: parallelSubsumModule, entryPoint: 'subsum_phase1_g1' },
+      })
+      this.parallelSubsumPhase1Layout = this.parallelSubsumPhase1Pipeline.getBindGroupLayout(0)
+      this.parallelSubsumPhase2Pipeline = device.createComputePipeline({
+        label: `polystore-kzg-msm-${reductionMode}-phase2`,
+        layout: 'auto',
+        compute: { module: parallelSubsumModule, entryPoint: 'subsum_phase2_g1' },
+      })
+      this.parallelSubsumPhase2Layout = this.parallelSubsumPhase2Pipeline.getBindGroupLayout(0)
+    }
 
     const montgomeryBindGroup = device.createBindGroup({
       label: 'polystore-kzg-msm-srs-montgomery-bg',
@@ -404,6 +493,7 @@ export class WebGpuKzgMsmCommitter {
     const started = nowMs()
     const blobs = assertBlobBatch(blobsFlat)
     const bucketWidth = assertBucketWidth(this.options.bucketWidth ?? WEBGPU_KZG_MSM_BUCKET_WIDTH)
+    const reductionMode = assertReductionMode(this.options.reductionMode ?? 'serial')
     const commitments = new Uint8Array(blobs * 48)
     let debug: WebGpuKzgMsmResult['debug']
     const timings: WebGpuKzgMsmTimings = {
@@ -444,6 +534,18 @@ export class WebGpuKzgMsmCommitter {
         'polystore-kzg-msm-window-sums',
         Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
       )
+      const partialWindowSums =
+        reductionMode === 'serial'
+          ? null
+          : createEmptyStorageBuffer(
+              this.device,
+              `polystore-kzg-msm-${reductionMode}-partial-window-sums`,
+              Math.max(1, bucketData.numWindows) * WEBGPU_KZG_MSM_POINT_BYTES,
+            )
+      const parallelSubsumParams =
+        reductionMode === 'serial'
+          ? null
+          : createUniformBuffer(this.device, `polystore-kzg-msm-${reductionMode}-params`, new Uint32Array([1, 0, 0, 0]))
       timings.uploadMs += nowMs() - uploadStart
 
       const dispatchStart = nowMs()
@@ -477,6 +579,35 @@ export class WebGpuKzgMsmCommitter {
           { binding: 4, resource: { buffer: windowSums } },
         ],
       })
+      const parallelPhase1BindGroup =
+        reductionMode === 'serial' ||
+        !partialWindowSums ||
+        !parallelSubsumParams ||
+        !this.parallelSubsumPhase1Layout
+          ? null
+          : this.device.createBindGroup({
+              label: `polystore-kzg-msm-${reductionMode}-phase1-bg`,
+              layout: this.parallelSubsumPhase1Layout,
+              entries: [
+                { binding: 0, resource: { buffer: aggregatedBuckets } },
+                { binding: 1, resource: { buffer: windowStarts } },
+                { binding: 2, resource: { buffer: windowCounts } },
+                { binding: 3, resource: { buffer: partialWindowSums } },
+                { binding: 4, resource: { buffer: parallelSubsumParams } },
+              ],
+            })
+      const parallelPhase2BindGroup =
+        reductionMode === 'serial' || !partialWindowSums || !parallelSubsumParams || !this.parallelSubsumPhase2Layout
+          ? null
+          : this.device.createBindGroup({
+              label: `polystore-kzg-msm-${reductionMode}-phase2-bg`,
+              layout: this.parallelSubsumPhase2Layout,
+              entries: [
+                { binding: 0, resource: { buffer: partialWindowSums } },
+                { binding: 1, resource: { buffer: windowSums } },
+                { binding: 2, resource: { buffer: parallelSubsumParams } },
+              ],
+            })
 
       const encoder = this.device.createCommandEncoder({ label: 'polystore-kzg-msm-encoder' })
       const pass = encoder.beginComputePass({ label: 'polystore-kzg-msm-pass' })
@@ -486,9 +617,26 @@ export class WebGpuKzgMsmCommitter {
       pass.setPipeline(this.weightPipeline)
       pass.setBindGroup(0, weightBindGroup)
       pass.dispatchWorkgroups(Math.max(1, Math.ceil(bucketData.bucketValues.length / 64)))
-      pass.setPipeline(this.subsumPipeline)
-      pass.setBindGroup(0, subsumBindGroup)
-      pass.dispatchWorkgroups(Math.max(1, bucketData.numWindows))
+      if (reductionMode === 'serial') {
+        pass.setPipeline(this.subsumPipeline)
+        pass.setBindGroup(0, subsumBindGroup)
+        pass.dispatchWorkgroups(Math.max(1, bucketData.numWindows))
+      } else {
+        if (
+          !this.parallelSubsumPhase1Pipeline ||
+          !this.parallelSubsumPhase2Pipeline ||
+          !parallelPhase1BindGroup ||
+          !parallelPhase2BindGroup
+        ) {
+          throw new Error(`WebGPU KZG MSM ${reductionMode} pipeline was not initialized`)
+        }
+        pass.setPipeline(this.parallelSubsumPhase1Pipeline)
+        pass.setBindGroup(0, parallelPhase1BindGroup)
+        pass.dispatchWorkgroups(Math.max(1, bucketData.numWindows))
+        pass.setPipeline(this.parallelSubsumPhase2Pipeline)
+        pass.setBindGroup(0, parallelPhase2BindGroup)
+        pass.dispatchWorkgroups(Math.max(1, bucketData.numWindows))
+      }
       pass.end()
       this.device.queue.submit([encoder.finish()])
       const validationError = await this.device.popErrorScope?.()
@@ -503,6 +651,7 @@ export class WebGpuKzgMsmCommitter {
       )
       debug ??= {
         bucketWidth,
+        reductionMode,
         bucketCount: bucketData.bucketValues.length,
         baseIndexCount: bucketData.baseIndices.length,
         numWindows: bucketData.numWindows,
@@ -536,8 +685,10 @@ export class WebGpuKzgMsmCommitter {
         windowCounts,
         aggregatedBuckets,
         windowSums,
+        partialWindowSums,
+        parallelSubsumParams,
       ]) {
-        buffer.destroy()
+        buffer?.destroy()
       }
     }
 

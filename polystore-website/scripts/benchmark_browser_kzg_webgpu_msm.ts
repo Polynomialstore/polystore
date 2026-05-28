@@ -43,6 +43,10 @@ if (!Number.isInteger(runs) || runs < 1) {
   throw new Error('POLYSTORE_WEBGPU_MSM_RUNS must be a positive integer')
 }
 const diagnostic = process.env.POLYSTORE_WEBGPU_MSM_DIAGNOSTIC === '1'
+const reductionMode = process.env.POLYSTORE_WEBGPU_MSM_REDUCTION ?? 'serial'
+if (!['serial', 'parallel16', 'parallel32', 'parallel64'].includes(reductionMode)) {
+  throw new Error('POLYSTORE_WEBGPU_MSM_REDUCTION must be serial, parallel16, parallel32, or parallel64')
+}
 
 const vite = await createServer({
   root: process.cwd(),
@@ -235,6 +239,7 @@ try {
         try {
           committer = await msmMod.createWebGpuKzgMsmCommitter(polyStoreWasm, navigator, {
             bucketWidth: config.bucketWidth,
+            reductionMode: config.reductionMode,
           });
           gpuInitMs = performance.now() - gpuInitStart;
 
@@ -276,6 +281,7 @@ try {
           webgpu_diagnostics: webgpuDiagnostics,
           blob_count: config.blobCount,
           bucket_width: config.bucketWidth,
+          reduction_mode: config.reductionMode,
           runs: config.runs,
           wasm_ms: stats(wasmTotals),
           gpu_init_ms: gpuInitMs,
@@ -297,6 +303,7 @@ try {
     bucketWidth,
     runs,
     diagnostic,
+    reductionMode,
   })})`)
 
   console.log(

@@ -84,6 +84,20 @@ The diagnostic JSON includes:
 - top-level `error` and `device_lost` when the benchmark fails in diagnostic mode
 - the existing WASM/WebGPU timings and parity result
 
+The stable path is `POLYSTORE_WEBGPU_MSM_REDUCTION=serial`, which is also the
+default. PR #178 also exposes diagnostic-only generated reduction variants:
+
+```sh
+POLYSTORE_WEBGPU_MSM_REDUCTION=parallel16 POLYSTORE_WEBGPU_MSM_RUNS=1 npm run diagnose:kzg-webgpu-msm
+POLYSTORE_WEBGPU_MSM_REDUCTION=parallel32 POLYSTORE_WEBGPU_MSM_RUNS=1 npm run diagnose:kzg-webgpu-msm
+POLYSTORE_WEBGPU_MSM_REDUCTION=parallel64 POLYSTORE_WEBGPU_MSM_RUNS=1 npm run diagnose:kzg-webgpu-msm
+```
+
+These variants keep the stable per-bucket weighting shader and only replace the
+final per-window sum with 16/32/64-lane generated reductions. They are not
+scheduler candidates unless they return `error: null`, `device_lost: null`, and
+`parity: true` on real browser hardware.
+
 Local diagnostic run on Linux/HeadlessChrome 138:
 
 - `maxComputeWorkgroupStorageSize`: 32768
@@ -92,6 +106,12 @@ Local diagnostic run on Linux/HeadlessChrome 138:
 - WebGPU total: ~26.43 s
 - WASM total: ~389 ms
 - parity: true
+
+Local generated-reduction diagnostic result:
+
+- `POLYSTORE_WEBGPU_MSM_REDUCTION=parallel16` loses the SwiftShader GPU
+  instance before producing a run result:
+  `OperationError: Instance dropped in popErrorScope`.
 
 Use this runner on Apple M3 Chrome before spending more shader time. If the M3
 has a larger workgroup-storage budget or avoids device loss for the rejected
