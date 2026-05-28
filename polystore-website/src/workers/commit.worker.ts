@@ -48,7 +48,10 @@ self.onmessage = async (event) => {
         const { trustedSetupBytes } = payload as { trustedSetupBytes: Uint8Array }
         if (!trustedSetupBytes) throw new Error('Trusted setup bytes required')
         polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes)
-        kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, { preferWebGpu: true })
+        kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, {
+          preferWebGpu: false,
+          webGpuMode: 'off',
+        })
         ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: 'ok' })
         return
       }
@@ -56,7 +59,7 @@ self.onmessage = async (event) => {
         if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized')
         const { data } = payload as { data: Uint8Array }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
-        const commitments = kzgCommitBackend.commitBlobs(data)
+        const commitments = await kzgCommitBackend.commitBlobs(data)
         ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: commitments }, [commitments.buffer])
         return
       }

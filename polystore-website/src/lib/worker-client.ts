@@ -169,7 +169,7 @@ function sendExpansionMessageToWorker(
 export interface ExpandedMdu {
     witness_flat: Uint8Array | number[]; // 96 * 48 bytes
     mdu_root: Uint8Array | number[]; // 32 bytes
-    perf?: {
+    perf?: KzgCommitDiagnostics & {
       commitMs?: number;
       rootMs?: number;
       totalMs?: number;
@@ -192,7 +192,7 @@ export interface ExpandedMdu {
 
 export interface PreparedMdu0 {
   mdu0_bytes: Uint8Array | number[]
-  perf?: {
+  perf?: KzgCommitDiagnostics & {
     witnessRootSetMs?: number
     userRootSetMs?: number
     appendMs?: number
@@ -203,7 +203,7 @@ export interface PreparedMdu0 {
 
 export interface PreparedCommittedMdu0 extends PreparedMdu0 {
   mdu_root: Uint8Array | number[]
-  perf?: {
+  perf?: KzgCommitDiagnostics & {
     witnessRootSetMs?: number
     userRootSetMs?: number
     appendMs?: number
@@ -232,7 +232,7 @@ export interface ExpandedStripe {
     shards?: Array<Uint8Array | number[]>;
     shards_flat?: Uint8Array | number[];
     shard_len?: number;
-    perf?: {
+    perf?: KzgCommitDiagnostics & {
       expandMs?: number;
       rootMs?: number;
       totalMs?: number;
@@ -255,6 +255,20 @@ export interface ExpandedStripe {
       rows?: number;
       shardsTotal?: number;
     };
+}
+
+export type KzgCommitDiagnostics = {
+  rustCommitBackend?: string
+  kzgCommitBackend?: string
+  kzgWebGpuAvailable?: boolean
+  kzgWebGpuFallbackReason?: string
+  kzgWebGpuProbeStatus?: string
+  kzgWebGpuCircuitOpen?: boolean
+  kzgWebGpuProbeTimeoutMs?: number
+  kzgWebGpuCommitTimeoutMs?: number
+  kzgWebGpuMinBlobs?: number
+  kzgWebGpuReductionMode?: string
+  commitWorkerCount?: number
 }
 
 type ExpandStripeOptions = {
