@@ -6,7 +6,7 @@
 // The `init` function loads the WASM binary.
 // The `Mdu0Builder` and `PolyStoreWasm` classes are exposed by wasm-bindgen.
 import init, { WasmMdu0Builder, PolyStoreWasm } from '../lib/polystoreCoreRuntime.js';
-import { createWasmBlstKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend';
+import { createBrowserKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend';
 
 let wasmInitialized = false;
 let wasmInitPromise: Promise<void> | null = null;
@@ -180,7 +180,7 @@ self.onmessage = async (event) => {
                 }
                 if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for PolyStoreWasm initialization');
                 polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes);
-                kzgCommitBackend = createWasmBlstKzgCommitBackend(polyStoreWasmInstance);
+                kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, { preferWebGpu: true });
                 // Initialize the blob-commit compute pool (best-effort).
                 try {
                     await initializeCommitPool(trustedSetupBytes);
