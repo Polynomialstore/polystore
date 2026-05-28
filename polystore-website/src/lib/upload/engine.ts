@@ -448,10 +448,23 @@ async function runPipelinedUploadTaskProducer(
   transport: UploadTransportPort,
 ): Promise<UploadEngineResult> {
   const trackTaskEvents = Boolean(input.onTaskEvent)
-  const tasks = input.artifacts[Symbol.asyncIterator]()
-  let active = 0
   let producerDone = false
   let firstError: string | null = null
+  const queue: PipelinedUploadArtifact[] = []
+  const waiters: Array<() => void> = []
+
+  const wakeWorkers = () => {
+    while (waiters.length > 0) {
+      waiters.shift()?.()
+    }
+  }
+
+  const waitForWork = async () => {
+    if (queue.length > 0 || producerDone || firstError) return
+    await new Promise<void>((resolve) => {
+      waiters.push(resolve)
+    })
+  }
 
   const uploadOne = async (item: PipelinedUploadArtifact): Promise<void> => {
     const request: UploadTransportRequest = {
@@ -516,39 +529,39 @@ async function runPipelinedUploadTaskProducer(
     }
   }
 
-  return await new Promise<UploadEngineResult>((resolve) => {
-    const settleIfDone = () => {
-      if (!producerDone || active !== 0) return
-      resolve(firstError ? { ok: false, steps: [], error: firstError } : { ok: true, steps: [] })
-    }
-
-    const launchNext = () => {
-      while (!firstError && active < concurrency && !producerDone) {
-        active += 1
-        void tasks
-          .next()
-          .then((next) => {
-            if (next.done) {
-              producerDone = true
-              return
-            }
-            return uploadOne(next.value)
-          })
-          .catch((error: unknown) => {
-            if (!firstError) firstError = error instanceof Error ? error.message : String(error)
-            producerDone = true
-          })
-          .finally(() => {
-            active -= 1
-            launchNext()
-            settleIfDone()
-          })
+  const produce = async () => {
+    try {
+      for await (const item of input.artifacts) {
+        if (firstError) break
+        queue.push(item)
+        wakeWorkers()
       }
-      settleIfDone()
+    } catch (error: unknown) {
+      if (!firstError) firstError = error instanceof Error ? error.message : String(error)
+    } finally {
+      producerDone = true
+      wakeWorkers()
     }
+  }
 
-    launchNext()
-  })
+  const worker = async () => {
+    for (;;) {
+      await waitForWork()
+      if (firstError || (producerDone && queue.length === 0)) return
+      const item = queue.shift()
+      if (!item) continue
+      try {
+        await uploadOne(item)
+      } catch (error: unknown) {
+        if (!firstError) firstError = error instanceof Error ? error.message : String(error)
+        wakeWorkers()
+        return
+      }
+    }
+  }
+
+  await Promise.all([produce(), ...Array.from({ length: Math.max(1, concurrency) }, () => worker())])
+  return firstError ? { ok: false, steps: [], error: firstError } : { ok: true, steps: [] }
 }
 
 function groupUploadTasksByTarget(tasks: UploadTask[]): UploadTaskBundle[] {
