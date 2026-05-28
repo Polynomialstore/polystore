@@ -4,12 +4,14 @@
 // across multiple single-threaded WASM instances (no SharedArrayBuffer required).
 
 import init, { PolyStoreWasm } from '../lib/polystoreCoreRuntime.js'
+import { createWasmBlstKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend'
 
 let wasmInitialized = false
 let wasmInitPromise: Promise<void> | null = null
 let wasmInitError: unknown = null
 
 let polyStoreWasmInstance: PolyStoreWasm | null = null
+let kzgCommitBackend: KzgCommitBackend | null = null
 
 function initializeWasm(): Promise<void> {
   if (wasmInitialized) return Promise.resolve()
@@ -46,14 +48,15 @@ self.onmessage = async (event) => {
         const { trustedSetupBytes } = payload as { trustedSetupBytes: Uint8Array }
         if (!trustedSetupBytes) throw new Error('Trusted setup bytes required')
         polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes)
+        kzgCommitBackend = createWasmBlstKzgCommitBackend(polyStoreWasmInstance)
         ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: 'ok' })
         return
       }
       case 'commitBlobs': {
-        if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized')
+        if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized')
         const { data } = payload as { data: Uint8Array }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
-        const commitments = polyStoreWasmInstance.commit_blobs(data)
+        const commitments = kzgCommitBackend.commitBlobs(data)
         ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: commitments }, [commitments.buffer])
         return
       }
