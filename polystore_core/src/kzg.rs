@@ -30,6 +30,9 @@ pub type Bytes48 = [u8; 48];
 
 static PIPPENGER_WINDOW_OVERRIDE: AtomicUsize = AtomicUsize::new(0);
 static WASM_MSM_BASIS_MODE: AtomicUsize = AtomicUsize::new(0);
+const WEBGPU_FQ_GPU_BYTES: usize = 120;
+const WEBGPU_FQ_GPU_PADDED_BYTES: usize = 128;
+const WEBGPU_G1_GPU_BYTES: usize = 3 * WEBGPU_FQ_GPU_PADDED_BYTES;
 
 #[cfg(target_arch = "wasm32")]
 #[derive(Default)]
@@ -425,6 +428,48 @@ impl KzgContext {
         }
 
         Ok((flat, perf))
+    }
+
+    pub fn webgpu_g1_srs_lagrange_bytes(&self) -> Result<Vec<u8>, KzgError> {
+        if self.g1_points_are_monomial {
+            return Err(KzgError::Internal(
+                "WebGPU MSM prototype currently requires Lagrange-form G1 SRS".into(),
+            ));
+        }
+
+        let point_count = self.g1_points.len().min(BLOB_SIZE / 32);
+        let mut out = Vec::with_capacity(point_count * WEBGPU_G1_GPU_BYTES);
+        for point in self.g1_points.iter().take(point_count) {
+            out.extend_from_slice(&webgpu_serialize_g1(point));
+        }
+        Ok(out)
+    }
+
+    pub fn webgpu_fold_g1_window_sums(
+        &self,
+        window_sums: &[u8],
+        bucket_width: usize,
+    ) -> Result<KzgCommitment, KzgError> {
+        if window_sums.len() % WEBGPU_G1_GPU_BYTES != 0 {
+            return Err(KzgError::InvalidDataLength);
+        }
+
+        let num_windows = window_sums.len() / WEBGPU_G1_GPU_BYTES;
+        let mut result = G1Projective::identity();
+        for (i, chunk) in window_sums
+            .chunks_exact(WEBGPU_G1_GPU_BYTES)
+            .enumerate()
+            .rev()
+        {
+            if i + 1 != num_windows {
+                for _ in 0..bucket_width {
+                    result = result.double();
+                }
+            }
+            result += webgpu_deserialize_g1(chunk)?;
+        }
+
+        Ok(result.to_affine().to_compressed())
     }
 
     pub fn create_mdu_merkle_root(
@@ -1384,6 +1429,109 @@ fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
     Ok(scalars)
 }
 
+fn webgpu_fq_bytes_to_13bit(bytes_48_le: &[u8]) -> [u8; WEBGPU_FQ_GPU_BYTES] {
+    debug_assert_eq!(bytes_48_le.len(), 48);
+    let mut result = [0u8; WEBGPU_FQ_GPU_BYTES];
+    let mut bit_offset = 0usize;
+    for i in 0..30 {
+        let byte_idx = bit_offset / 8;
+        let bit_shift = bit_offset % 8;
+        let mut val = 0u32;
+        for j in 0..3usize {
+            if byte_idx + j < 48 {
+                val |= (bytes_48_le[byte_idx + j] as u32) << (j * 8);
+            }
+        }
+        let limb = (val >> bit_shift) & 0x1fff;
+        result[i * 4..i * 4 + 4].copy_from_slice(&limb.to_le_bytes());
+        bit_offset += 13;
+    }
+    result
+}
+
+fn webgpu_fq_13bit_to_bytes(bytes_120: &[u8]) -> [u8; 48] {
+    debug_assert_eq!(bytes_120.len(), WEBGPU_FQ_GPU_BYTES);
+    let mut result = [0u8; 48];
+    let mut bit_offset = 0usize;
+    for i in 0..30 {
+        let limb = u32::from_le_bytes([
+            bytes_120[i * 4],
+            bytes_120[i * 4 + 1],
+            bytes_120[i * 4 + 2],
+            bytes_120[i * 4 + 3],
+        ]) & 0x1fff;
+        let byte_idx = bit_offset / 8;
+        let bit_shift = bit_offset % 8;
+        let shifted = (limb as u64) << bit_shift;
+        for j in 0..3usize {
+            if byte_idx + j < 48 {
+                result[byte_idx + j] |= ((shifted >> (j * 8)) & 0xff) as u8;
+            }
+        }
+        bit_offset += 13;
+    }
+    result
+}
+
+fn webgpu_be_coord_to_gpu_limbs(be_bytes: &[u8]) -> [u8; WEBGPU_FQ_GPU_BYTES] {
+    let mut le = [0u8; 48];
+    le.copy_from_slice(be_bytes);
+    le.reverse();
+    webgpu_fq_bytes_to_13bit(&le)
+}
+
+fn webgpu_gpu_limbs_to_be_coord(limb_bytes: &[u8]) -> [u8; 48] {
+    let mut be = webgpu_fq_13bit_to_bytes(limb_bytes);
+    be.reverse();
+    be
+}
+
+fn webgpu_serialize_g1(point: &G1Affine) -> [u8; WEBGPU_G1_GPU_BYTES] {
+    if bool::from(point.is_identity()) {
+        return [0u8; WEBGPU_G1_GPU_BYTES];
+    }
+
+    let mut uncompressed = point.to_uncompressed();
+    uncompressed[0] &= 0b0001_1111;
+    let mut z_le = [0u8; 48];
+    z_le[0] = 1;
+
+    let mut out = [0u8; WEBGPU_G1_GPU_BYTES];
+    out[0..WEBGPU_FQ_GPU_BYTES]
+        .copy_from_slice(&webgpu_be_coord_to_gpu_limbs(&uncompressed[..48]));
+    out[WEBGPU_FQ_GPU_PADDED_BYTES..WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES]
+        .copy_from_slice(&webgpu_be_coord_to_gpu_limbs(&uncompressed[48..96]));
+    out[2 * WEBGPU_FQ_GPU_PADDED_BYTES
+        ..2 * WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES]
+        .copy_from_slice(&webgpu_fq_bytes_to_13bit(&z_le));
+    out
+}
+
+fn webgpu_deserialize_g1(bytes: &[u8]) -> Result<G1Projective, KzgError> {
+    if bytes.len() != WEBGPU_G1_GPU_BYTES {
+        return Err(KzgError::InvalidDataLength);
+    }
+    let z = &bytes[2 * WEBGPU_FQ_GPU_PADDED_BYTES
+        ..2 * WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES];
+    if z.iter().all(|byte| *byte == 0) {
+        return Ok(G1Projective::identity());
+    }
+
+    let x_be = webgpu_gpu_limbs_to_be_coord(&bytes[0..WEBGPU_FQ_GPU_BYTES]);
+    let y_be = webgpu_gpu_limbs_to_be_coord(
+        &bytes[WEBGPU_FQ_GPU_PADDED_BYTES
+            ..WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES],
+    );
+    let mut uncompressed = [0u8; 96];
+    uncompressed[..48].copy_from_slice(&x_be);
+    uncompressed[48..].copy_from_slice(&y_be);
+
+    let affine: Option<G1Affine> = Option::from(G1Affine::from_uncompressed(&uncompressed));
+    let affine = affine
+        .ok_or(KzgError::Internal("Invalid WebGPU G1 point".into()))?;
+    Ok(G1Projective::from(affine))
+}
+
 fn parse_g1(bytes: &[u8]) -> Result<G1Affine, KzgError> {
     if bytes.len() != 48 {
         return Err(KzgError::InvalidDataLength);
@@ -1546,6 +1694,35 @@ mod tests {
 
         assert_eq!(profiled, plain);
         assert!(perf.total_ms >= 0.0);
+    }
+
+    #[test]
+    fn webgpu_g1_layout_roundtrips_generator() {
+        let point = G1Affine::generator();
+        let gpu_bytes = webgpu_serialize_g1(&point);
+        assert_eq!(gpu_bytes.len(), WEBGPU_G1_GPU_BYTES);
+
+        let decoded = webgpu_deserialize_g1(&gpu_bytes).unwrap().to_affine();
+        assert_eq!(decoded, point);
+    }
+
+    #[test]
+    fn webgpu_fold_g1_window_sums_matches_direct_fold() {
+        let path = get_trusted_setup_path();
+        let ctx = KzgContext::load_from_file(&path).unwrap();
+        let p0 = G1Projective::from(G1Affine::generator());
+        let p1 = p0.double();
+        let mut window_sums = Vec::new();
+        window_sums.extend_from_slice(&webgpu_serialize_g1(&p0.to_affine()));
+        window_sums.extend_from_slice(&webgpu_serialize_g1(&p1.to_affine()));
+
+        let folded = ctx.webgpu_fold_g1_window_sums(&window_sums, 3).unwrap();
+        let mut expected = p1;
+        for _ in 0..3 {
+            expected = expected.double();
+        }
+        expected += p0;
+        assert_eq!(folded, expected.to_affine().to_compressed());
     }
 
     #[test]
