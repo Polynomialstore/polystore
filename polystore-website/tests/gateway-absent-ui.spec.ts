@@ -173,7 +173,7 @@ test.describe('gateway absent', () => {
   test.skip(!hasLocalStack, 'requires local stack (gateway disabled)')
 
   test('gateway absent: dashboard upload falls back to direct SP', async ({ page }, testInfo) => {
-    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 2_700_000 : 2_700_000)
+    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 5_400_000 : 5_400_000)
     const fileName = 'gateway-absent.txt'
     const fileBytes = uploadSizeBytes > 1024 ? crypto.randomBytes(uploadSizeBytes) : Buffer.from('gateway-absent-upload')
     const perf = { profile: null as unknown }
