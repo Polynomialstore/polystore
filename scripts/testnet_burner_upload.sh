@@ -47,6 +47,13 @@ require_cmd() {
   fi
 }
 
+abs_path() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$(pwd -P)" "$1" ;;
+  esac
+}
+
 EXPORT_KEYSTORE="./burner-keystore.json"
 KEYSTORE_PASSWORD_ENV="POLYSTORE_BURNER_KEYSTORE_PASSWORD"
 ALLOW_RAW_KEY_EXPORT=0
@@ -143,6 +150,10 @@ if [[ "$ALLOW_RAW_KEY_EXPORT" != "1" && -n "$RAW_KEY_OUT" ]]; then
   echo "error: --raw-key-out requires --allow-raw-key-export" >&2
   exit 1
 fi
+EXPORT_KEYSTORE="$(abs_path "$EXPORT_KEYSTORE")"
+if [[ -n "$RAW_KEY_OUT" ]]; then
+  RAW_KEY_OUT="$(abs_path "$RAW_KEY_OUT")"
+fi
 
 require_cmd jq
 require_cmd curl
@@ -182,7 +193,7 @@ umask 077
 wallet_json="$(cd "$ROOT_DIR/polystore-website" && node_modules/.bin/tsx "$ROOT_DIR/polystore-website/scripts/testnet_burner_wallet.ts" generate)"
 PRIVATE_KEY="$(printf '%s' "$wallet_json" | jq -r '.private_key')"
 EVM_ADDRESS="$(printf '%s' "$wallet_json" | jq -r '.address')"
-POLYSTORE_ADDRESS="$(printf '%s' "$wallet_json" | jq -r '.nil_address')"
+POLYSTORE_ADDRESS="$(printf '%s' "$wallet_json" | jq -r '.polystore_address // .nil_address // ""')"
 
 if [[ -z "$PRIVATE_KEY" || -z "$EVM_ADDRESS" || -z "$POLYSTORE_ADDRESS" || "$PRIVATE_KEY" == "null" ]]; then
   echo "error: failed to generate burner wallet" >&2

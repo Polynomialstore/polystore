@@ -45,6 +45,7 @@ UPLOAD_STATUS_TIMEOUT_SECS="${UPLOAD_STATUS_TIMEOUT_SECS:-300}"
 UPLOAD_STATUS_POLL_INTERVAL_SECS="${UPLOAD_STATUS_POLL_INTERVAL_SECS:-2}"
 TX_SUBMIT_MODE="${POLYSTORE_TX_SUBMIT_MODE:-gateway}"
 POLYSTORECHAIND_BIN="${POLYSTORECHAIND_BIN:-polystorechaind}"
+POLYSTORE_CHAIN_TX_MODULE="${POLYSTORE_CHAIN_TX_MODULE:-nilchain}"
 POLYSTORE_GAS_PRICES="${POLYSTORE_GAS_PRICES:-${POLYSTORE_TESTNET_GAS_PRICES:-0.001aatom}}"
 POLYSTORE_TX_SENDER_KEY="${POLYSTORE_TX_SENDER_KEY:-${POLYSTORE_TESTNET_TX_SENDER_KEY:-faucet}}"
 POLYSTORE_TX_SENDER_HOME="${POLYSTORE_TX_SENDER_HOME:-$ROOT_DIR/_artifacts/testnet_tx_sender_home}"
@@ -143,7 +144,7 @@ direct_create_deal() {
     printf '%s\n' "$payload_json" >"$payload_file"
 
     cmd_status=0
-    create_out="$("$POLYSTORECHAIND_BIN" tx polystorechain create-deal-from-evm "$payload_file" \
+    create_out="$("$POLYSTORECHAIND_BIN" tx "$POLYSTORE_CHAIN_TX_MODULE" create-deal-from-evm "$payload_file" \
       --node "$POLYSTORE_NODE" \
       --chain-id "$CHAIN_ID" \
       --from "$POLYSTORE_TX_SENDER_KEY" \
@@ -220,7 +221,7 @@ direct_create_deal() {
     ' 2>/dev/null || true)"
 
     if [[ -z "$deal_id" ]]; then
-      list_out="$("$POLYSTORECHAIND_BIN" query polystorechain list-deals \
+      list_out="$("$POLYSTORECHAIND_BIN" query "$POLYSTORE_CHAIN_TX_MODULE" list-deals \
         --node "$POLYSTORE_NODE" \
         --output json 2>/dev/null || true)"
       max_id="$(printf '%s' "$list_out" | jq -r '[.deals[]?.id | tonumber] | max // empty' 2>/dev/null || true)"
@@ -270,7 +271,7 @@ direct_update_deal_content() {
     printf '%s\n' "$update_json" >"$update_file"
 
     cmd_status=0
-    update_out="$("$POLYSTORECHAIND_BIN" tx polystorechain update-deal-content-from-evm "$update_file" \
+    update_out="$("$POLYSTORECHAIND_BIN" tx "$POLYSTORE_CHAIN_TX_MODULE" update-deal-content-from-evm "$update_file" \
       --node "$POLYSTORE_NODE" \
       --chain-id "$CHAIN_ID" \
       --from "$POLYSTORE_TX_SENDER_KEY" \
