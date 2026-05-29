@@ -173,7 +173,7 @@ test.describe('gateway absent', () => {
   test.skip(!hasLocalStack, 'requires local stack (gateway disabled)')
 
   test('gateway absent: dashboard upload falls back to direct SP', async ({ page }, testInfo) => {
-    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 2_700_000 : 2_100_000)
+    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 1_500_000 : 900_000)
     const fileName = 'gateway-absent.txt'
     const fileBytes = uploadSizeBytes > 1024 ? crypto.randomBytes(uploadSizeBytes) : Buffer.from('gateway-absent-upload')
     const perf = { profile: null as unknown }
@@ -198,6 +198,23 @@ test.describe('gateway absent', () => {
       if (msg.type() === 'error') {
         console.log(`[console:${msg.type()}] ${msg.text()}`)
       }
+    })
+
+    let directSpUploadAttempts = 0
+    await page.route('**/sp/upload_bundle', async (route) => {
+      await route.fulfill({ status: 404, body: 'bundle disabled for deterministic gateway-absent e2e' })
+    })
+    await page.route('**/sp/upload_mdu', async (route) => {
+      directSpUploadAttempts += 1
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('**/sp/upload_manifest', async (route) => {
+      directSpUploadAttempts += 1
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('**/sp/upload_shard', async (route) => {
+      directSpUploadAttempts += 1
+      await route.fulfill({ status: 200, body: 'ok' })
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })
@@ -318,6 +335,7 @@ test.describe('gateway absent', () => {
     })
 
     await completeUploadAndCommit(page, fileName, dealId, 180_000)
+    expect(directSpUploadAttempts).toBeGreaterThan(0)
 
     await expect
       .poll(() => isCommitCompleteOrReset(page, page.getByTestId('mdu-commit'), fileName, dealId, '', true), { timeout: 180_000 })
