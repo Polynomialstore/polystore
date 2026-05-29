@@ -7,6 +7,10 @@
 // The `Mdu0Builder` and `PolyStoreWasm` classes are exposed by wasm-bindgen.
 import init, { WasmMdu0Builder, PolyStoreWasm } from '../lib/polystoreCoreRuntime.js';
 import { createBrowserKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend';
+import {
+    expandUserMduRsWithBrowserKzg,
+    kzgCommitDiagnosticsForBackend,
+} from '../lib/upload/userMduBrowserKzg';
 
 let wasmInitialized = false;
 let wasmInitPromise: Promise<void> | null = null;
@@ -14,6 +18,16 @@ let wasmInitError: unknown = null;
 let mdu0BuilderInstance: WasmMdu0Builder | null = null;
 let polyStoreWasmInstance: PolyStoreWasm | null = null;
 let kzgCommitBackend: KzgCommitBackend | null = null;
+
+// User MDU batches are large (default Mode 2 RS 8+4 commits 96 blobs), so
+// do not let a one-blob probe reject WebGPU for the dominant upload stage.
+// Validation failures still fall back through expandUserMduRsWithBrowserKzg.
+const USER_UPLOAD_KZG_OPTIONS = {
+    preferWebGpu: true,
+    webGpuMode: 'force' as const,
+    webGpuProbeTimeoutMs: 15_000,
+    webGpuCommitTimeoutMs: 60_000,
+};
 
 type CommitWorkerPending = {
     resolve: (value: unknown) => void;
@@ -150,20 +164,7 @@ function commitBlobsWithPool(data: Uint8Array): Promise<Uint8Array> {
 }
 
 function kzgCommitDiagnostics() {
-    const status = kzgCommitBackend?.getStatus();
-    const scheduler = status?.webgpu?.scheduler;
-    return {
-        rustCommitBackend: status?.selectedBackend === 'webgpu' ? 'webgpu-msm' : 'blst',
-        kzgCommitBackend: status?.selectedBackend ?? status?.kind ?? 'unknown',
-        kzgWebGpuAvailable: Boolean(status?.webgpu?.available),
-        kzgWebGpuFallbackReason: status?.fallbackReason ?? '',
-        kzgWebGpuProbeStatus: scheduler?.probeStatus ?? '',
-        kzgWebGpuCircuitOpen: Boolean(scheduler?.circuitOpen),
-        kzgWebGpuProbeTimeoutMs: scheduler?.probeTimeoutMs ?? 0,
-        kzgWebGpuCommitTimeoutMs: scheduler?.commitTimeoutMs ?? 0,
-        kzgWebGpuMinBlobs: scheduler?.minBlobs ?? 0,
-        kzgWebGpuReductionMode: status?.webgpu?.reductionMode ?? '',
-    };
+    return kzgCommitDiagnosticsForBackend(kzgCommitBackend);
 }
 
 // Start fetching + compiling the WASM as soon as the worker loads so the first
@@ -212,7 +213,7 @@ self.onmessage = async (event) => {
                 }
                 if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for PolyStoreWasm initialization');
                 polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes);
-                kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, { preferWebGpu: true });
+                kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, USER_UPLOAD_KZG_OPTIONS);
                 // Initialize the blob-commit compute pool (best-effort).
                 try {
                     await initializeCommitPool(trustedSetupBytes);
@@ -604,164 +605,42 @@ self.onmessage = async (event) => {
             }
             case 'expandMduRs': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+                if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { data, k, m, profile = true } = payload as {
                     data: Uint8Array;
                     k: number;
                     m: number;
                     profile?: boolean;
                 };
-                if (!(data instanceof Uint8Array)) throw new Error('data must be a Uint8Array');
-                const expanded = (
-                    profile
-                        ? polyStoreWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m))
-                        : polyStoreWasmInstance.expand_mdu_rs_flat_committed(data, Number(k), Number(m))
-                ) as unknown;
-                const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded;
-                const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat;
-                const rootRaw = (parsed as { mdu_root?: unknown }).mdu_root;
-                const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat;
-                const shardLen = Number((parsed as { shard_len?: unknown }).shard_len ?? 0);
-                const rustPerf = (parsed as {
-                    perf?: {
-                        encode_ms?: unknown;
-                        rs_ms?: unknown;
-                        commit_decode_ms?: unknown;
-                        commit_transform_ms?: unknown;
-                        commit_msm_scalar_prep_ms?: unknown;
-                        commit_msm_bucket_fill_ms?: unknown;
-                        commit_msm_reduce_ms?: unknown;
-                        commit_msm_double_ms?: unknown;
-                        commit_msm_ms?: unknown;
-                        commit_compress_ms?: unknown;
-                        commit_ms?: unknown;
-                        total_ms?: unknown;
-                        rows?: unknown;
-                        shards_total?: unknown;
-                    };
-                }).perf;
-                if (!Number.isInteger(shardLen) || shardLen <= 0) {
-                    throw new Error('expandMduRs returned an invalid shard length');
-                }
-
-                const witnessFlat =
-                    witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike);
-                const rootBytes =
-                    rootRaw instanceof Uint8Array ? rootRaw : new Uint8Array(rootRaw as ArrayBufferLike);
-                const shardsFlat =
-                    shardsRaw instanceof Uint8Array ? shardsRaw : new Uint8Array(shardsRaw as ArrayBufferLike);
-
-                result = {
-                    witness_flat: witnessFlat,
-                    mdu_root: rootBytes,
-                    shards_flat: shardsFlat,
-                    shard_len: shardLen,
-                    perf: {
-                        expandMs: Number(rustPerf?.encode_ms ?? 0) + Number(rustPerf?.rs_ms ?? 0),
-                        rootMs: 0,
-                        totalMs: Number(rustPerf?.total_ms ?? 0),
-                        shardCount: Math.floor(shardsFlat.byteLength / shardLen),
-                        shardLen,
-                        rustEncodeMs: Number(rustPerf?.encode_ms ?? 0),
-                        rustRsMs: Number(rustPerf?.rs_ms ?? 0),
-                        rustCommitDecodeMs: Number(rustPerf?.commit_decode_ms ?? 0),
-                        rustCommitTransformMs: Number(rustPerf?.commit_transform_ms ?? 0),
-                        rustCommitMsmScalarPrepMs: Number(rustPerf?.commit_msm_scalar_prep_ms ?? 0),
-                        rustCommitMsmBucketFillMs: Number(rustPerf?.commit_msm_bucket_fill_ms ?? 0),
-                        rustCommitMsmReduceMs: Number(rustPerf?.commit_msm_reduce_ms ?? 0),
-                        rustCommitMsmDoubleMs: Number(rustPerf?.commit_msm_double_ms ?? 0),
-                        rustCommitMsmMs: Number(rustPerf?.commit_msm_ms ?? 0),
-                        rustCommitCompressMs: Number(rustPerf?.commit_compress_ms ?? 0),
-                        rustCommitMs: Number(rustPerf?.commit_ms ?? 0),
-                        rustTotalMs: Number(rustPerf?.total_ms ?? 0),
-                        rustCommitBackend: 'blst',
-                        rustCommitMsmSubphasesAvailable: false,
-                        rows: Number(rustPerf?.rows ?? 0),
-                        shardsTotal: Number(rustPerf?.shards_total ?? 0),
-                    },
-                };
+                result = await expandUserMduRsWithBrowserKzg({
+                    kind: 'mdu',
+                    data,
+                    k: Number(k),
+                    m: Number(m),
+                    profile,
+                    wasm: polyStoreWasmInstance,
+                    kzgCommitBackend,
+                });
                 break;
             }
             case 'expandPayloadRs': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+                if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { data, k, m, profile = true } = payload as {
                     data: Uint8Array;
                     k: number;
                     m: number;
                     profile?: boolean;
                 };
-                if (!(data instanceof Uint8Array)) throw new Error('data must be a Uint8Array');
-
-                const expanded = (
-                    profile
-                        ? polyStoreWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m))
-                        : polyStoreWasmInstance.expand_payload_rs_flat_committed(data, Number(k), Number(m))
-                ) as unknown;
-                const parsed = typeof expanded === 'string' ? JSON.parse(expanded) : expanded;
-                const shardsRaw = (parsed as { shards_flat?: unknown }).shards_flat;
-                const witnessRaw = (parsed as { witness_flat?: unknown }).witness_flat;
-                const rootRaw = (parsed as { mdu_root?: unknown }).mdu_root;
-                const shardLen = Number((parsed as { shard_len?: unknown }).shard_len ?? 0);
-                const rustPerf = (parsed as {
-                    perf?: {
-                        encode_ms?: unknown;
-                        rs_ms?: unknown;
-                        commit_decode_ms?: unknown;
-                        commit_transform_ms?: unknown;
-                        commit_msm_scalar_prep_ms?: unknown;
-                        commit_msm_bucket_fill_ms?: unknown;
-                        commit_msm_reduce_ms?: unknown;
-                        commit_msm_double_ms?: unknown;
-                        commit_msm_ms?: unknown;
-                        commit_compress_ms?: unknown;
-                        commit_ms?: unknown;
-                        total_ms?: unknown;
-                        rows?: unknown;
-                        shards_total?: unknown;
-                    };
-                }).perf;
-                if (!Number.isInteger(shardLen) || shardLen <= 0) {
-                    throw new Error('expandPayloadRs returned an invalid shard length');
-                }
-
-                const shardsFlat = shardsRaw instanceof Uint8Array ? shardsRaw : new Uint8Array(shardsRaw as ArrayBufferLike);
-                if (shardsFlat.byteLength % shardLen !== 0) {
-                    throw new Error('expandPayloadRs returned misaligned shard bytes');
-                }
-                const witnessFlat =
-                    witnessRaw instanceof Uint8Array ? witnessRaw : new Uint8Array(witnessRaw as ArrayBufferLike);
-                const rootBytes =
-                    rootRaw instanceof Uint8Array ? rootRaw : new Uint8Array(rootRaw as ArrayBufferLike);
-
-                result = {
-                    witness_flat: witnessFlat,
-                    mdu_root: rootBytes,
-                    shards_flat: shardsFlat,
-                    shard_len: shardLen,
-                    perf: {
-                        expandMs: Number(rustPerf?.encode_ms ?? 0) + Number(rustPerf?.rs_ms ?? 0),
-                        commitMs: Number(rustPerf?.commit_ms ?? 0),
-                        rootMs: 0,
-                        totalMs: Number(rustPerf?.total_ms ?? 0),
-                        shardCount: shardsFlat.byteLength / shardLen,
-                        shardLen,
-                        rustEncodeMs: Number(rustPerf?.encode_ms ?? 0),
-                        rustRsMs: Number(rustPerf?.rs_ms ?? 0),
-                        rustCommitDecodeMs: Number(rustPerf?.commit_decode_ms ?? 0),
-                        rustCommitTransformMs: Number(rustPerf?.commit_transform_ms ?? 0),
-                        rustCommitMsmScalarPrepMs: Number(rustPerf?.commit_msm_scalar_prep_ms ?? 0),
-                        rustCommitMsmBucketFillMs: Number(rustPerf?.commit_msm_bucket_fill_ms ?? 0),
-                        rustCommitMsmReduceMs: Number(rustPerf?.commit_msm_reduce_ms ?? 0),
-                        rustCommitMsmDoubleMs: Number(rustPerf?.commit_msm_double_ms ?? 0),
-                        rustCommitMsmMs: Number(rustPerf?.commit_msm_ms ?? 0),
-                        rustCommitCompressMs: Number(rustPerf?.commit_compress_ms ?? 0),
-                        rustCommitMs: Number(rustPerf?.commit_ms ?? 0),
-                        rustTotalMs: Number(rustPerf?.total_ms ?? 0),
-                        rustCommitBackend: 'blst',
-                        rustCommitMsmSubphasesAvailable: false,
-                        rows: Number(rustPerf?.rows ?? 0),
-                        shardsTotal: Number(rustPerf?.shards_total ?? 0),
-                    },
-                };
+                result = await expandUserMduRsWithBrowserKzg({
+                    kind: 'payload',
+                    data,
+                    k: Number(k),
+                    m: Number(m),
+                    profile,
+                    wasm: polyStoreWasmInstance,
+                    kzgCommitBackend,
+                });
                 break;
             }
             case 'computeManifest': {
