@@ -1,9 +1,11 @@
 package keeper
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -240,4 +242,37 @@ func overlayProviderBondHealth(health types.ProviderHealthState, provider types.
 	health.UpdatedHeight = height
 	health.ConsequenceCeiling = reason
 	return health
+}
+
+func (k Keeper) clearResolvedProviderUnderbondedHealth(ctx sdk.Context, provider types.Provider) error {
+	providerAddr := strings.TrimSpace(provider.Address)
+	if providerAddr == "" {
+		return nil
+	}
+	health, err := k.ProviderHealthStates.Get(ctx, providerAddr)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	if health.Reason != providerUnderbondedReason ||
+		health.LifecycleStatus != types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT {
+		return nil
+	}
+	reason, err := k.providerAssignmentCollateralIneligibility(ctx, provider, 0)
+	if err != nil {
+		return err
+	}
+	if reason != "" {
+		return nil
+	}
+
+	health.LifecycleStatus = types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_ACTIVE
+	health.Reason = "provider_bond_restored"
+	health.EvidenceClass = types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL
+	health.Severity = types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO
+	health.UpdatedHeight = ctx.BlockHeight()
+	health.ConsequenceCeiling = "provider bond now satisfies collateral requirements"
+	return k.ProviderHealthStates.Set(ctx, providerAddr, health)
 }
