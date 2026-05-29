@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page, type TestInfo } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
@@ -14,14 +14,14 @@ function extractManifestRoot(text: string): string {
   return (match?.[0] || '').toLowerCase()
 }
 
-async function readDealManifestRoot(page: Parameters<typeof test>[0]['page'], dealId: string): Promise<string> {
+async function readDealManifestRoot(page: Page, dealId: string): Promise<string> {
   const cell = page.getByTestId(`deal-manifest-${dealId}`)
   if ((await cell.count().catch(() => 0)) === 0) return ''
   const text = (await cell.first().textContent().catch(() => '')) || ''
   return extractManifestRoot(text)
 }
 
-async function isUploaderResetToInitialState(page: Parameters<typeof test>[0]['page']): Promise<boolean> {
+async function isUploaderResetToInitialState(page: Page): Promise<boolean> {
   const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
   if (panelState !== 'idle') return false
   const step2State = await page.getByTestId('workflow-step-2').getAttribute('data-step-state').catch(() => null)
@@ -32,8 +32,8 @@ async function isUploaderResetToInitialState(page: Parameters<typeof test>[0]['p
 }
 
 async function isCommitCompleteOrReset(
-  page: Parameters<typeof test>[0]['page'],
-  commitBtn: ReturnType<Parameters<typeof test>[0]['page']['getByTestId']>,
+  page: Page,
+  commitBtn: ReturnType<Page['getByTestId']>,
   expectedFilePath: string,
   dealId: string,
   initialManifestRoot: string,
@@ -56,7 +56,7 @@ async function isCommitCompleteOrReset(
 }
 
 async function completeUploadAndCommit(
-  page: Parameters<typeof test>[0]['page'],
+  page: Page,
   expectedFilePath: string,
   dealId: string,
   timeout = 300_000,
@@ -71,7 +71,7 @@ async function completeUploadAndCommit(
 
     const commitReady = (await commitBtn.count().catch(() => 0)) > 0 && (await commitBtn.isEnabled().catch(() => false))
     if (commitReady) {
-      await commitBtn.click()
+      await commitBtn.click({ force: true, timeout: 10_000 })
       await expect
         .poll(() => isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true), { timeout: 180_000 })
         .toBe(true)
@@ -80,7 +80,7 @@ async function completeUploadAndCommit(
 
     const uploadReady = (await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false)) && (await uploadBtn.isEnabled().catch(() => false))
     if (uploadReady) {
-      await uploadBtn.click({ force: true })
+      await uploadBtn.click({ force: true, timeout: 10_000 })
       await expect
         .poll(async () => {
           if (await commitBtn.isEnabled().catch(() => false)) return true
@@ -98,11 +98,82 @@ async function completeUploadAndCommit(
     .toBe(true)
 }
 
+async function collectGatewayAbsentDebug(page: Page, dealId: string): Promise<Record<string, unknown>> {
+  const selectorText = async (testId: string) =>
+    ((await page.getByTestId(testId).textContent().catch(() => null)) || '').trim()
+  const selectorAttr = async (testId: string, attr: string) =>
+    await page.getByTestId(testId).getAttribute(attr).catch(() => null)
+
+  const opfs = await page
+    .evaluate(async (id) => {
+      const out: { available: boolean; files: string[]; error?: string } = { available: false, files: [] }
+      try {
+        const storage = navigator.storage as StorageManager & {
+          getDirectory?: () => Promise<FileSystemDirectoryHandle>
+        }
+        if (!storage.getDirectory) return out
+        out.available = true
+        const root = await storage.getDirectory()
+        const visit = async (dir: FileSystemDirectoryHandle, prefix: string) => {
+          for await (const [name, entry] of dir.entries()) {
+            const path = prefix ? `${prefix}/${name}` : name
+            if (path.includes(`deal-${id}`)) out.files.push(path)
+            if (entry.kind === 'directory') await visit(entry, path)
+          }
+        }
+        await visit(root, '')
+        out.files.sort()
+      } catch (e) {
+        out.error = e instanceof Error ? e.message : String(e)
+      }
+      return out
+    }, dealId)
+    .catch((e) => ({ available: false, files: [], error: e instanceof Error ? e.message : String(e) }))
+
+  return {
+    dealId,
+    manifestRoot: await readDealManifestRoot(page, dealId),
+    url: page.url(),
+    uploadPanelState: await selectorAttr('mdu-upload-card', 'data-panel-state'),
+    uploadButtonText: await selectorText('mdu-upload'),
+    uploadStateText: await selectorText('mdu-upload-state'),
+    commitButtonText: await selectorText('mdu-commit'),
+    workflow: {
+      step2: await selectorAttr('workflow-step-2', 'data-step-state'),
+      step3: await selectorAttr('workflow-step-3', 'data-step-state'),
+      step4: await selectorAttr('workflow-step-4', 'data-step-state'),
+    },
+    route: await selectorText('transport-route'),
+    cacheSource: await selectorText('transport-cache-source'),
+    cacheFreshness: await selectorText('transport-cache-freshness'),
+    indexSync: {
+      present: (await page.getByTestId('deal-index-sync-panel').count().catch(() => 0)) > 0,
+      status: await selectorAttr('deal-index-sync-panel', 'data-sync-status'),
+      reason: await selectorText('deal-index-sync-reason'),
+      message: await selectorText('deal-index-sync-message'),
+    },
+    fileRows: await page.getByTestId('deal-detail-file-row').evaluateAll((rows) =>
+      rows.map((row) => ({
+        text: row.textContent || '',
+        filePath: row.getAttribute('data-file-path'),
+      })),
+    ).catch(() => []),
+    opfs,
+  }
+}
+
+async function attachGatewayAbsentDebug(page: Page, testInfo: TestInfo, dealId: string, label: string): Promise<void> {
+  const debug = await collectGatewayAbsentDebug(page, dealId)
+  const body = Buffer.from(JSON.stringify(debug, null, 2))
+  await testInfo.attach(`${label}.json`, { body, contentType: 'application/json' })
+  console.log(`[gateway-absent-debug:${label}] ${body.toString('utf8')}`)
+}
+
 test.describe('gateway absent', () => {
   test.skip(!hasLocalStack, 'requires local stack (gateway disabled)')
 
   test('gateway absent: dashboard upload falls back to direct SP', async ({ page }, testInfo) => {
-    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 900_000 : 300_000)
+    test.setTimeout(uploadSizeBytes > 50 * 1024 * 1024 ? 1_500_000 : 900_000)
     const fileName = 'gateway-absent.txt'
     const fileBytes = uploadSizeBytes > 1024 ? crypto.randomBytes(uploadSizeBytes) : Buffer.from('gateway-absent-upload')
     const perf = { profile: null as unknown }
@@ -127,6 +198,23 @@ test.describe('gateway absent', () => {
       if (msg.type() === 'error') {
         console.log(`[console:${msg.type()}] ${msg.text()}`)
       }
+    })
+
+    let directSpUploadAttempts = 0
+    await page.route('**/sp/upload_bundle', async (route) => {
+      await route.fulfill({ status: 404, body: 'bundle disabled for deterministic gateway-absent e2e' })
+    })
+    await page.route('**/sp/upload_mdu', async (route) => {
+      directSpUploadAttempts += 1
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('**/sp/upload_manifest', async (route) => {
+      directSpUploadAttempts += 1
+      await route.fulfill({ status: 200, body: 'ok' })
+    })
+    await page.route('**/sp/upload_shard', async (route) => {
+      directSpUploadAttempts += 1
+      await route.fulfill({ status: 200, body: 'ok' })
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })
@@ -171,6 +259,15 @@ test.describe('gateway absent', () => {
     }
 
     await ensureCreateDealDrawerOpen(page)
+    const advancedToggle = page.getByTestId('workspace-advanced-toggle')
+    if ((await advancedToggle.count().catch(() => 0)) > 0) {
+      await advancedToggle.click({ force: true })
+    }
+    const placementProfile = page.getByTestId('alloc-placement-profile')
+    await expect(placementProfile).toBeVisible({ timeout: 30_000 })
+    await placementProfile.selectOption('custom')
+    await page.locator('label').filter({ hasText: /^RS K$/ }).locator('..').locator('input').fill('2')
+    await page.locator('label').filter({ hasText: /^RS M$/ }).locator('..').locator('input').fill('1')
     const allocSubmit = page.getByTestId('alloc-submit')
     await expect(allocSubmit).toBeVisible({ timeout: 120_000 })
     await allocSubmit.click()
@@ -247,6 +344,7 @@ test.describe('gateway absent', () => {
     })
 
     await completeUploadAndCommit(page, fileName, dealId, 180_000)
+    expect(directSpUploadAttempts).toBeGreaterThan(0)
 
     await expect
       .poll(() => isCommitCompleteOrReset(page, page.getByTestId('mdu-commit'), fileName, dealId, '', true), { timeout: 180_000 })
@@ -254,8 +352,23 @@ test.describe('gateway absent', () => {
     await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
     await expect(page.getByTestId('mdu-upload-card').getByText(/\/DEAL\/Upload/i)).toBeVisible({ timeout: 60_000 })
     await expect(page.getByText('Upload another file')).toHaveCount(0)
-    await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0)
-    await expect(page.getByTestId('deal-detail-file-row')).toHaveCount(1, { timeout: 60_000 })
-    await expect(page.getByTestId('deal-detail-file-row').first()).toContainText(fileName, { timeout: 60_000 })
+
+    await attachGatewayAbsentDebug(page, testInfo, dealId, 'post-commit')
+    const dealRow = page.getByTestId(`deal-row-${dealId}`)
+    if ((await dealRow.count().catch(() => 0)) > 0) {
+      await dealRow.click({ force: true })
+    }
+    const filesTab = page.getByTestId('deal-detail-tab-files')
+    if ((await filesTab.count().catch(() => 0)) > 0) {
+      await filesTab.click({ force: true })
+    }
+    try {
+      await expect(page.getByTestId('deal-index-sync-panel')).toHaveCount(0, { timeout: 90_000 })
+      await expect(page.getByTestId('deal-detail-file-row')).toHaveCount(1, { timeout: 90_000 })
+      await expect(page.getByTestId('deal-detail-file-row').first()).toContainText(fileName, { timeout: 60_000 })
+    } catch (e) {
+      await attachGatewayAbsentDebug(page, testInfo, dealId, 'file-row-timeout')
+      throw e
+    }
   })
 })

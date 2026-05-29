@@ -1960,9 +1960,37 @@ export function DealDetail({
     if (!cid || !dealId || !owner) return
     setLoadingFiles(true)
     try {
-      const requirement = await inspectLocalDealIndexRequirement(String(dealId), cid)
+      let requirement = await inspectLocalDealIndexRequirement(String(dealId), cid)
+
+      // Browser Mode 2 commits update chain state and then atomically publish the OPFS slab.
+      // On slow CI, Deal Detail can observe the new on-chain root a tick before OPFS has
+      // swapped in the completed generation. Treat that as readiness lag, not as a terminal
+      // "missing index" state, and poll the real local-index condition for a bounded window.
+      if (requirement.status !== 'ready') {
+        const retryStartedAt = Date.now()
+        const maxWaitMs = 20_000
+        const pollMs = 500
+        while (Date.now() - retryStartedAt < maxWaitMs) {
+          await new Promise((resolve) => setTimeout(resolve, pollMs))
+          const next = await inspectLocalDealIndexRequirement(String(dealId), cid)
+          if (next.status === 'ready') {
+            requirement = next
+            break
+          }
+          requirement = next
+        }
+      }
+
       setDealIndexRequirement(requirement)
       if (requirement.status !== 'ready') {
+        console.warn('PolyFS local index not ready after bounded wait', {
+          dealId,
+          manifestRoot: cid,
+          status: requirement.status,
+          reason: requirement.reason,
+          localManifestRoot: requirement.localManifestRoot,
+          chainManifestRoot: requirement.chainManifestRoot,
+        })
         setFiles(null)
         return
       }
@@ -2426,7 +2454,11 @@ export function DealDetail({
       setDealIndexSyncMessage('')
       void fetchSlab(committedManifestRoot, deal.id, owner)
       void fetchFiles(committedManifestRoot, deal.id, owner)
-      void fetchManifestInfo(committedManifestRoot, deal.id, owner)
+      if (activeTab === 'manifest') {
+        void fetchManifestInfo(committedManifestRoot, deal.id, owner)
+      } else {
+        setLoadingManifestInfo(false)
+      }
     } else {
       // Do not surface local OPFS slabs for "empty" deals; OPFS is treated as a cache for on-chain content.
       // This avoids showing stale slabs after a chain reset where deal IDs are reused.
@@ -2449,7 +2481,7 @@ export function DealDetail({
     }
     setFileActionError(null)
     void fetchActivity(deal.id)
-  }, [authoritativeDealLoaded, committedManifestRoot, deal.id, fetchFiles, fetchActivity, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
+  }, [activeTab, authoritativeDealLoaded, committedManifestRoot, deal.id, fetchFiles, fetchActivity, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
 
   const requiresDealIndexSync =
     dealIndexRequirement.status === 'needs_sync_missing' ||
