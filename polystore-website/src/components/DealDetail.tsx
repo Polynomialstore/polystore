@@ -2454,7 +2454,11 @@ export function DealDetail({
       setDealIndexSyncMessage('')
       void fetchSlab(committedManifestRoot, deal.id, owner)
       void fetchFiles(committedManifestRoot, deal.id, owner)
-      void fetchManifestInfo(committedManifestRoot, deal.id, owner)
+      if (activeTab === 'manifest') {
+        void fetchManifestInfo(committedManifestRoot, deal.id, owner)
+      } else {
+        setLoadingManifestInfo(false)
+      }
     } else {
       // Do not surface local OPFS slabs for "empty" deals; OPFS is treated as a cache for on-chain content.
       // This avoids showing stale slabs after a chain reset where deal IDs are reused.
@@ -2477,7 +2481,7 @@ export function DealDetail({
     }
     setFileActionError(null)
     void fetchActivity(deal.id)
-  }, [authoritativeDealLoaded, committedManifestRoot, deal.id, fetchFiles, fetchActivity, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
+  }, [activeTab, authoritativeDealLoaded, committedManifestRoot, deal.id, fetchFiles, fetchActivity, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
 
   const requiresDealIndexSync =
     dealIndexRequirement.status === 'needs_sync_missing' ||
