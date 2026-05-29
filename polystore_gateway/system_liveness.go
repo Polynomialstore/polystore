@@ -978,19 +978,10 @@ func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID 
 
 	const commitmentBytes = 48
 	commitmentSpan := leafCount * commitmentBytes
-	startOffset := userOrdinal * commitmentSpan
 
-	witnessReader, err := newPolyfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
+	witnessRaw, err := readWitnessCommitmentsForUserMdu(dealDir, userOrdinal, commitmentSpan)
 	if err != nil {
 		return nil, err
-	}
-	witnessRaw, err := io.ReadAll(witnessReader)
-	_ = witnessReader.Close()
-	if err != nil {
-		return nil, err
-	}
-	if uint64(len(witnessRaw)) != commitmentSpan {
-		return nil, fmt.Errorf("invalid witness commitments length: got %d want %d", len(witnessRaw), commitmentSpan)
 	}
 
 	commitmentOffset := int(blobIndex) * commitmentBytes
