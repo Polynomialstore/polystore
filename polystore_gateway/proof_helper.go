@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -244,19 +243,9 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 		return nil, "", fmt.Errorf("leaf_count must be > 0")
 	}
 	commitmentSpan := leafCount * commitmentBytes
-	startOffset := userOrdinal * commitmentSpan
-
-	witnessReader, err := newPolyfsDecodedReader(dealDir, 1, startOffset, commitmentSpan, startOffset, commitmentSpan)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to open witness reader: %w", err)
-	}
-	witnessRaw, err := io.ReadAll(witnessReader)
-	_ = witnessReader.Close()
+	witnessRaw, err := readWitnessCommitmentsForUserMdu(dealDir, userOrdinal, commitmentSpan)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read witness commitments: %w", err)
-	}
-	if uint64(len(witnessRaw)) != commitmentSpan {
-		return nil, "", fmt.Errorf("invalid witness commitments length: got %d want %d", len(witnessRaw), commitmentSpan)
 	}
 
 	if uint64(leafIndex) >= leafCount {
