@@ -3585,6 +3585,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             const wasmMs = performance.now() - wasmStart
             const workerTotalMs = Number(result.perf?.totalMs ?? 0)
             const workerExpandMs = Number(result.perf?.expandMs ?? 0)
+            const workerCommitMs = Number(result.perf?.commitMs ?? result.perf?.rustCommitMs ?? 0)
             const workerRootMs = Number(result.perf?.rootMs ?? 0)
             const workerQueueMs = Math.max(0, wasmMs - workerTotalMs)
             const workerRustEncodeMs = Number(result.perf?.rustEncodeMs ?? 0)
@@ -3657,7 +3658,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerTotalMs,
               workerQueueMs,
               workerExpandMs,
-              workerCommitMs: 0,
+              workerCommitMs,
               workerRootMs,
               workerRustEncodeMs,
               workerRustRsMs,

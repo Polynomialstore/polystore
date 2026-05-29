@@ -234,6 +234,7 @@ export interface ExpandedStripe {
     shard_len?: number;
     perf?: KzgCommitDiagnostics & {
       expandMs?: number;
+      commitMs?: number;
       rootMs?: number;
       totalMs?: number;
       shardCount?: number;
@@ -254,6 +255,7 @@ export interface ExpandedStripe {
       rustCommitMsmSubphasesAvailable?: boolean;
       rows?: number;
       shardsTotal?: number;
+      browserKzgCommitFallbackReason?: string;
     };
 }
 
