@@ -71,7 +71,7 @@ async function completeUploadAndCommit(
 
     const commitReady = (await commitBtn.count().catch(() => 0)) > 0 && (await commitBtn.isEnabled().catch(() => false))
     if (commitReady) {
-      await commitBtn.click()
+      await commitBtn.click({ force: true, timeout: 10_000 })
       await expect
         .poll(() => isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true), { timeout: 180_000 })
         .toBe(true)
@@ -80,7 +80,7 @@ async function completeUploadAndCommit(
 
     const uploadReady = (await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false)) && (await uploadBtn.isEnabled().catch(() => false))
     if (uploadReady) {
-      await uploadBtn.click({ force: true })
+      await uploadBtn.click({ force: true, timeout: 10_000 })
       await expect
         .poll(async () => {
           if (await commitBtn.isEnabled().catch(() => false)) return true
