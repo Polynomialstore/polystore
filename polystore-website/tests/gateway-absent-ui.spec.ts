@@ -259,6 +259,15 @@ test.describe('gateway absent', () => {
     }
 
     await ensureCreateDealDrawerOpen(page)
+    const advancedToggle = page.getByTestId('workspace-advanced-toggle')
+    if ((await advancedToggle.count().catch(() => 0)) > 0) {
+      await advancedToggle.click({ force: true })
+    }
+    const placementProfile = page.getByTestId('alloc-placement-profile')
+    await expect(placementProfile).toBeVisible({ timeout: 30_000 })
+    await placementProfile.selectOption('custom')
+    await page.locator('label').filter({ hasText: /^RS K$/ }).locator('..').locator('input').fill('2')
+    await page.locator('label').filter({ hasText: /^RS M$/ }).locator('..').locator('input').fill('1')
     const allocSubmit = page.getByTestId('alloc-submit')
     await expect(allocSubmit).toBeVisible({ timeout: 120_000 })
     await allocSubmit.click()
