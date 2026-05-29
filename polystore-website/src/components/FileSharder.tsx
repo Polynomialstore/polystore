@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
-import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
+import { CheckCircle2, ClipboardCopy, Cpu, Database, FileJson, LoaderCircle, Network, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
 import { workerClient } from '../lib/worker-client';
@@ -55,6 +55,17 @@ import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../
 import { collectMode2SlotFailures } from '../lib/upload/mode2Recovery';
 import { classifyPolyfsCommitError } from '../lib/polyfsCommitError';
 import { waitForTransactionReceipt } from '../lib/evmRpc';
+import {
+  createUploadPipelineStatus,
+  normalizeKzgBackendStatus,
+  patchUploadPipelineStatus,
+  sanitizeUploadPipelineStatus,
+  type DeepPartialUploadPipelineStatus,
+  type KzgDiagnosticsInput,
+  type UploadPipelinePhase,
+  type UploadPipelineStatus,
+  type UploadStatusTone,
+} from '../lib/uploadStatus';
 import {
   decodeComputeRetrievalSessionIdsResult,
   encodeComputeRetrievalSessionIdsData,
@@ -306,6 +317,7 @@ type PolyStoreBrowserPerfBundle = {
   browserPerfLast: Record<string, unknown> | null
   prepareSummary: PolyStorePrepareSummary | null
   prepareProfile: PreparePerfProfile | null
+  uploadStatus?: UploadPipelineStatus | null
 }
 
 type PolyStorePrepareSummary = PreparePerfProfile['summary'] & {
@@ -361,6 +373,100 @@ function formatDuration(ms: number) {
   if (!Number.isFinite(ms) || ms < 0) return '—';
   if (ms < 1000) return `${ms.toFixed(0)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
+}
+
+function uploadToneForPhase(phase: UploadPipelinePhase): UploadStatusTone {
+  if (phase === 'done') return 'success'
+  if (phase === 'error') return 'error'
+  if (phase === 'idle') return 'idle'
+  return 'active'
+}
+
+function browserPerfPhaseToUploadPhase(phase: string): UploadPipelinePhase {
+  switch (phase) {
+    case 'read_file':
+      return 'read_file'
+    case 'gateway_ingest':
+      return 'gateway_ingest'
+    case 'prepare':
+      return 'prepare'
+    case 'append_bootstrap':
+      return 'append_bootstrap'
+    case 'plan_upload':
+      return 'plan_upload'
+    case 'persist_local':
+      return 'opfs_staging'
+    case 'upload':
+      return 'upload_transport'
+    case 'commit':
+      return 'chain_handoff'
+    default:
+      return 'prepare'
+  }
+}
+
+function labelUploadPhase(phase: UploadPipelinePhase): string {
+  switch (phase) {
+    case 'read_file':
+      return 'Reading file into browser memory'
+    case 'gateway_ingest':
+      return 'Gateway ingest'
+    case 'prepare':
+      return 'Preparing slab'
+    case 'append_bootstrap':
+      return 'Resolving append base'
+    case 'plan_upload':
+      return 'Planning slab layout'
+    case 'browser_memory':
+      return 'Bytes staged in browser memory'
+    case 'opfs_staging':
+      return 'Saving slab artifacts to browser storage'
+    case 'expand_user':
+      return 'Expanding user MDUs'
+    case 'expand_witness':
+      return 'Committing witness MDUs'
+    case 'mdu0_builder':
+      return 'Building MDU0'
+    case 'manifest':
+      return 'Computing manifest'
+    case 'upload_transport':
+      return 'Uploading artifacts'
+    case 'chain_handoff':
+      return 'Committing manifest root'
+    case 'done':
+      return 'Upload pipeline complete'
+    case 'error':
+      return 'Upload pipeline error'
+    default:
+      return 'Idle'
+  }
+}
+
+function uploadStatusPhaseFromShardPhase(phase: ShardPhase): UploadPipelinePhase {
+  switch (phase) {
+    case 'reading':
+      return 'read_file'
+    case 'gateway_receiving':
+    case 'gateway_encoding':
+    case 'gateway_uploading':
+      return 'gateway_ingest'
+    case 'planning':
+      return 'plan_upload'
+    case 'shard_user':
+      return 'expand_user'
+    case 'shard_witness':
+      return 'expand_witness'
+    case 'finalize_mdu0':
+      return 'mdu0_builder'
+    case 'compute_manifest':
+      return 'manifest'
+    case 'done':
+      return 'done'
+    case 'error':
+      return 'error'
+    default:
+      return 'idle'
+  }
 }
 
 function alternateLoopbackBase(baseUrl: string): string | null {
@@ -555,6 +661,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   const lastStaleCommitMessageRef = useRef<string | null>(null)
   const browserPerfRunRef = useRef<BrowserPerfRun | null>(null)
   const browserPerfSeqRef = useRef(1)
+  const uploadArtifactCountsRef = useRef({ queued: 0, uploaded: 0 })
+  const [uploadStatus, setUploadStatus] = useState<UploadPipelineStatus | null>(null)
+  const uploadStatusRef = useRef<UploadPipelineStatus | null>(null)
   const dealSetupAttemptRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const gatewayUploadProgressRef = useRef<{ phase: string; workDone: number; workTotal: number }>({
@@ -591,6 +700,60 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   )
 
   const addLog = useCallback((msg: string) => setLogs(prev => [...prev, msg]), []);
+
+  const publishUploadStatus = useCallback((next: UploadPipelineStatus) => {
+    const sanitized = sanitizeUploadPipelineStatus(next)
+    uploadStatusRef.current = sanitized
+    setUploadStatus(sanitized)
+    if (typeof window !== 'undefined') {
+      const statusWindow = window as typeof window & {
+        __polyStoreUploadStatus?: UploadPipelineStatus
+        __polyStoreKzgStatus?: UploadPipelineStatus['kzg']
+        __polyStorePerfBundle?: PolyStoreBrowserPerfBundle
+        __nilBrowserPerfLog?: Array<Record<string, unknown>>
+        __nilBrowserPerfLast?: Record<string, unknown>
+      }
+      statusWindow.__polyStoreUploadStatus = sanitized
+      statusWindow.__polyStoreKzgStatus = sanitized.kzg
+      statusWindow.__polyStorePerfBundle = {
+        browserPerfLog: statusWindow.__nilBrowserPerfLog ?? statusWindow.__polyStorePerfBundle?.browserPerfLog ?? [],
+        browserPerfLast: statusWindow.__nilBrowserPerfLast ?? statusWindow.__polyStorePerfBundle?.browserPerfLast ?? null,
+        prepareSummary: statusWindow.__polyStorePerfBundle?.prepareSummary ?? null,
+        prepareProfile: statusWindow.__polyStorePerfBundle?.prepareProfile ?? null,
+        uploadStatus: sanitized,
+      }
+    }
+  }, [])
+
+  const updateUploadStatus = useCallback(
+    (patch: DeepPartialUploadPipelineStatus, event?: string) => {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      const next = patchUploadPipelineStatus(
+        uploadStatusRef.current,
+        {
+          ...patch,
+          latestEvent: event ?? patch.latestEvent ?? uploadStatusRef.current?.latestEvent ?? null,
+        },
+        now,
+      )
+      publishUploadStatus(next)
+      return next
+    },
+    [publishUploadStatus],
+  )
+
+  const updateUploadKzgStatus = useCallback(
+    (diagnostics: KzgDiagnosticsInput | null | undefined, event = 'kzg:status') => {
+      if (!diagnostics) return
+      updateUploadStatus(
+        {
+          kzg: normalizeKzgBackendStatus(diagnostics),
+        },
+        event,
+      )
+    },
+    [updateUploadStatus],
+  )
 
   const browserPerfLog = useCallback(
     (event: string, extra: Record<string, unknown> = {}) => {
@@ -643,6 +806,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           browserPerfLast: perfWindow.__nilBrowserPerfLast ?? null,
           prepareSummary: perfWindow.__polyStorePerfBundle?.prepareSummary ?? null,
           prepareProfile: perfWindow.__polyStorePerfBundle?.prepareProfile ?? null,
+          uploadStatus: uploadStatusRef.current,
         }
       }
       if (import.meta.env.DEV) {
@@ -661,6 +825,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         startedAtMs: performance.now(),
         phaseStarts: {},
       }
+      publishUploadStatus(
+        createUploadPipelineStatus({
+          dealId,
+          runId: browserPerfRunRef.current.id,
+          fileName: file.name,
+          fileBytes: file.size,
+          nowMs: browserPerfRunRef.current.startedAtMs,
+        }),
+      )
       browserPerfLog('run:start', {
         hardwareConcurrency:
           typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
@@ -668,7 +841,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             : null,
       })
     },
-    [browserPerfLog],
+    [browserPerfLog, dealId, publishUploadStatus],
   )
 
   const browserPerfStartPhase = useCallback(
@@ -676,9 +849,35 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       const run = browserPerfRunRef.current
       if (!run) return
       run.phaseStarts[phase] = performance.now()
+      if (phase === 'upload') {
+        uploadArtifactCountsRef.current = { queued: 0, uploaded: 0 }
+      }
       browserPerfLog(`${phase}:start`, extra)
+      const uploadPhase = browserPerfPhaseToUploadPhase(phase)
+      updateUploadStatus(
+        {
+          phase: uploadPhase,
+          phaseLabel: labelUploadPhase(uploadPhase),
+          tone: uploadToneForPhase(uploadPhase),
+          storage:
+            uploadPhase === 'read_file' || uploadPhase === 'prepare' || uploadPhase === 'plan_upload'
+              ? { stage: 'browser_memory' }
+              : uploadPhase === 'opfs_staging'
+                ? { stage: 'opfs' }
+                : undefined,
+          transport:
+            uploadPhase === 'gateway_ingest'
+              ? { mode: 'gateway' }
+              : uploadPhase === 'upload_transport'
+                ? { mode: 'striped-provider' }
+                : uploadPhase === 'chain_handoff'
+                  ? { mode: 'none' }
+                  : undefined,
+        },
+        `${phase}:start`,
+      )
     },
-    [browserPerfLog],
+    [browserPerfLog, updateUploadStatus],
   )
 
   const browserPerfEndPhase = useCallback(
@@ -694,12 +893,26 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         durationMs,
         ...extra,
       })
+      if (durationMs !== null) {
+        updateUploadStatus(
+          {
+            timing: { phases: { [phase]: durationMs } },
+          },
+          `${phase}:end`,
+        )
+      }
     },
-    [browserPerfLog],
+    [browserPerfLog, updateUploadStatus],
   )
 
   const browserPerfUploadTaskEvent = useCallback(
     (event: UploadTaskEvent) => {
+      const uploadArtifactCounts = uploadArtifactCountsRef.current
+      if (event.phase === 'start') {
+        uploadArtifactCounts.queued += 1
+      } else if (event.phase === 'end' && event.ok !== false) {
+        uploadArtifactCounts.uploaded += 1
+      }
       browserPerfLog(`upload_task:${event.phase}`, {
         artifactKind: event.kind,
         target: event.target,
@@ -711,9 +924,33 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         ok: event.ok ?? null,
         error: event.error ?? null,
       })
+      updateUploadStatus(
+        {
+          phase: 'upload_transport',
+          phaseLabel: event.phase === 'start' ? 'Uploading artifact' : event.ok === false ? 'Artifact upload failed' : 'Uploaded artifact',
+          tone: event.ok === false ? 'error' : 'active',
+          storage: {
+            stage: event.phase === 'end' && event.ok !== false ? 'provider' : 'upload_queue',
+            queuedArtifacts: uploadArtifactCounts.queued,
+            uploadedArtifacts: uploadArtifactCounts.uploaded,
+          },
+          transport: {
+            mode: event.kind === 'shard' ? 'striped-provider' : 'direct-provider',
+            target: event.target,
+            lastError: event.error ?? null,
+          },
+          totals: {
+            bytesDone: event.phase === 'end' && event.ok !== false ? event.bytes : undefined,
+            bytesTotal: event.fullSize ?? event.bytes,
+          },
+          error: event.error ?? null,
+        },
+        `upload_task:${event.phase}`,
+      )
     },
-    [browserPerfLog],
+    [browserPerfLog, updateUploadStatus],
   )
+
   const resetUploadPanel = useCallback(() => {
     setProcessing(false)
     setShards([])
@@ -736,6 +973,21 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       phase: '',
       workDone: 0,
       workTotal: 0,
+    }
+    uploadStatusRef.current = null
+    uploadArtifactCountsRef.current = { queued: 0, uploaded: 0 }
+    setUploadStatus(null)
+    if (typeof window !== 'undefined') {
+      const statusWindow = window as typeof window & {
+        __polyStoreUploadStatus?: UploadPipelineStatus | null
+        __polyStoreKzgStatus?: UploadPipelineStatus['kzg'] | null
+        __polyStorePerfBundle?: PolyStoreBrowserPerfBundle
+      }
+      statusWindow.__polyStoreUploadStatus = null
+      statusWindow.__polyStoreKzgStatus = null
+      if (statusWindow.__polyStorePerfBundle) {
+        statusWindow.__polyStorePerfBundle.uploadStatus = null
+      }
     }
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -822,6 +1074,41 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   const isUploadComplete = isMode2
     ? mode2UploadComplete
     : uploadProgress.length > 0 && uploadProgress.every(p => p.status === 'complete');
+
+  useEffect(() => {
+    if (!uploadStatusRef.current) return
+    const phase = uploadStatusPhaseFromShardPhase(shardProgress.phase)
+    const isGateway = shardProgress.phase.startsWith('gateway_')
+    updateUploadStatus(
+      {
+        phase,
+        phaseLabel: shardProgress.label || labelUploadPhase(phase),
+        tone: uploadToneForPhase(phase),
+        totals: {
+          userMdus: shardProgress.totalUserMdus || null,
+          witnessMdus: shardProgress.totalWitnessMdus || null,
+          totalMdus: shardProgress.totalMdus || null,
+          bytesDone: shardProgress.userBytesDone || null,
+          bytesTotal: shardProgress.fileBytesTotal || null,
+          workDone: shardProgress.workDone || null,
+          workTotal: shardProgress.workTotal || null,
+        },
+        storage:
+          phase === 'read_file' ||
+          phase === 'plan_upload' ||
+          phase === 'expand_user' ||
+          phase === 'expand_witness' ||
+          phase === 'mdu0_builder' ||
+          phase === 'manifest'
+            ? { stage: 'browser_memory', browserMemoryBytes: shardProgress.fileBytesTotal || null }
+            : phase === 'done'
+              ? { stage: mode2UploadComplete || isUploadComplete ? 'provider' : 'upload_queue' }
+              : undefined,
+        transport: isGateway ? { mode: 'gateway' } : undefined,
+      },
+      `phase:${shardProgress.phase}`,
+    )
+  }, [isUploadComplete, mode2UploadComplete, shardProgress, updateUploadStatus])
 
   const applyDealSetupSnapshot = useCallback((snapshot: DealSetupSnapshot) => {
     setBaseManifestRoot(snapshot.baseManifestRoot)
@@ -2956,6 +3243,22 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         ok: true,
         bufferBytes: buffer.byteLength,
       })
+      updateUploadStatus(
+        {
+          phase: 'browser_memory',
+          phaseLabel: 'File bytes staged in browser memory',
+          tone: 'active',
+          storage: {
+            stage: 'browser_memory',
+            browserMemoryBytes: buffer.byteLength,
+          },
+          totals: {
+            bytesDone: buffer.byteLength,
+            bytesTotal: buffer.byteLength,
+          },
+        },
+        'browser_memory:ready',
+      )
       console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`)
       let bytes: Uint8Array = new Uint8Array(buffer)
       let logicalSizeBytes = file.size
@@ -3124,6 +3427,21 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       blobsTotal: uploadPlan.blobsTotal,
       workTotal: uploadPlan.workTotal,
     })
+    updateUploadStatus(
+      {
+        phase: 'plan_upload',
+        phaseLabel: 'Slab plan ready',
+        tone: 'active',
+        totals: {
+          userMdus: uploadPlan.totalUserMdus,
+          witnessMdus: uploadPlan.witnessMduCount,
+          totalMdus: uploadPlan.totalMdus,
+          bytesTotal: totalFileBytes,
+          workTotal: uploadPlan.workTotal,
+        },
+      },
+      'plan_upload:ready',
+    )
     addLog(`DEBUG: File bytes: ${bytes.length}, RawMduCapacity: ${RawMduCapacity}, TotalUserMdus: ${totalUserChunks}`);
     console.log('[perf] sharding start', {
       file: file.name,
@@ -3370,6 +3688,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                   : (result.shards ?? []).length,
             }
             perfSamples.user.push(perfSample)
+            updateUploadKzgStatus(result.perf, 'kzg:user_mdu')
             console.log('[perf] user mdu (mode2)', {
               ...perfSample,
             })
@@ -3545,6 +3864,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                 batchBlobs,
               };
               perfSamples.user.push(perfSample);
+              updateUploadKzgStatus(result.perf, 'kzg:user_mdu')
               console.log('[perf] user mdu', {
                 ...perfSample,
               });
@@ -3711,6 +4031,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               totalMs: opMs,
             };
             perfSamples.witness.push(perfSample);
+            updateUploadKzgStatus(result.perf, 'kzg:witness_mdu')
             console.log('[perf] witness mdu', {
               ...perfSample,
             });
@@ -3837,6 +4158,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           totalMs: opMs,
         }
         perfSamples.meta.push(metaPerfSample)
+        updateUploadKzgStatus(mdu0PrepareResult.perf, 'kzg:mdu0')
         console.log('[perf] meta mdu0', {
           prepareBuilderMs: Number(mdu0PrepareResult.perf?.prepareBuilderMs ?? 0),
           ...metaPerfSample,
@@ -3887,6 +4209,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const manifestStart = performance.now();
         const manifest = await workerClient.computeManifest(allRoots);
         const manifestMs = performance.now() - manifestStart;
+        updateUploadStatus(
+          {
+            phase: 'manifest',
+            phaseLabel: 'Manifest root computed',
+            tone: 'active',
+            timing: { phases: { manifest: roundPerfMs(manifestMs) ?? manifestMs } },
+          },
+          'manifest:computed',
+        )
         console.log('[perf] manifest aggregation', { ms: manifestMs, roots: allRoots.length / 32 });
         
         const finalMdus = [
@@ -4074,7 +4405,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               __nilBrowserPerfLog?: Array<Record<string, unknown>>
               __nilBrowserPerfLast?: Record<string, unknown>
             }
-          ).__polyStorePerfBundle = {
+            ).__polyStorePerfBundle = {
             browserPerfLog:
               (
                 window as typeof window & {
@@ -4087,10 +4418,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                   __nilBrowserPerfLast?: Record<string, unknown>
                 }
               ).__nilBrowserPerfLast ?? null,
-            prepareSummary,
-            prepareProfile,
+              prepareSummary,
+              prepareProfile,
+              uploadStatus: uploadStatusRef.current,
+            }
           }
-        }
         console.log('[perf] sharding totals', {
           totalMs: elapsedMs,
           fileBytes: bytes.length,
@@ -4170,6 +4502,24 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           slowestWitnessMduIndex: prepareProfile.summary.slowestWitnessMduIndex,
           manifestMs: roundPerfMs(manifestMs),
         })
+        updateUploadStatus(
+          {
+            phase: 'done',
+            phaseLabel: 'Client-side expansion complete',
+            tone: 'success',
+            storage: { stage: 'upload_queue', queuedArtifacts: finalMdus.length + 1 },
+            totals: {
+              userMdus: totalUserChunks,
+              witnessMdus: witnessMduCount,
+              totalMdus: finalMdus.length,
+              bytesDone: bytes.length,
+              bytesTotal: bytes.length,
+              workDone: workTotal,
+              workTotal,
+            },
+          },
+          'prepare:complete',
+        )
 
         const mib = logicalSizeBytes / (1024 * 1024);
         const seconds = elapsedMs / 1000;
@@ -4189,6 +4539,16 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         browserPerfLog('run:error', {
           error: msg,
         })
+        updateUploadStatus(
+          {
+            phase: 'error',
+            phaseLabel: msg,
+            tone: 'error',
+            error: msg,
+            transport: { lastError: msg },
+          },
+          'run:error',
+        )
         addLog(`Error: ${msg}`);
         setShardProgress((p) => ({
           ...p,
@@ -4202,7 +4562,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     } finally {
         setProcessing(false);
     }
-  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, browserPerfEndPhase, browserPerfLog, browserPerfStartPhase, browserPerfStartRun, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded]);
+  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, browserPerfEndPhase, browserPerfLog, browserPerfStartPhase, browserPerfStartRun, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded, updateUploadKzgStatus, updateUploadStatus]);
 
   // Helper for encoding (matches polystore_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
@@ -4311,6 +4671,69 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         ? 'text-success'
         : 'text-muted-foreground'
 
+  const uploadStatusRows = useMemo(() => {
+    if (!uploadStatus) return []
+    const timingPhases = uploadStatus.timing.phases
+    const uploaded = uploadStatus.storage.uploadedArtifacts
+    const queued = uploadStatus.storage.queuedArtifacts
+    return [
+      { label: 'phase', value: uploadStatus.phaseLabel },
+      { label: 'kzg', value: uploadStatus.kzg.label },
+      {
+        label: 'adapter',
+        value:
+          uploadStatus.kzg.webGpuAvailable === null
+            ? 'pending'
+            : uploadStatus.kzg.webGpuAvailable
+              ? 'native WebGPU'
+              : 'not available',
+      },
+      { label: 'probe', value: uploadStatus.kzg.probeStatus || 'pending' },
+      { label: 'storage', value: uploadStatus.storage.stage.replace(/_/g, ' ') },
+      { label: 'transport', value: uploadStatus.transport.mode.replace(/-/g, ' ') },
+      {
+        label: 'elapsed',
+        value: uploadStatus.timing.elapsedMs === null ? '—' : formatDuration(uploadStatus.timing.elapsedMs),
+      },
+      {
+        label: 'prepare',
+        value: timingPhases.prepare === undefined ? '—' : formatDuration(timingPhases.prepare),
+      },
+      {
+        label: 'upload',
+        value: timingPhases.upload === undefined ? '—' : formatDuration(timingPhases.upload),
+      },
+      {
+        label: 'artifacts',
+        value:
+          queued === null && uploaded === null
+            ? '—'
+            : `${String(uploaded ?? 0)} uploaded / ${String(queued ?? 0)} queued`,
+      },
+    ]
+  }, [uploadStatus])
+
+  const uploadStatusToneClass =
+    uploadStatus?.tone === 'error'
+      ? 'border-destructive/40 bg-destructive/5 text-destructive'
+      : uploadStatus?.tone === 'success'
+        ? 'border-success/30 bg-success/10 text-success'
+        : uploadStatus?.kzg.display === 'webgpu-msm'
+          ? 'border-primary/30 bg-primary/5 text-primary'
+          : uploadStatus?.kzg.display === 'fallback' || uploadStatus?.kzg.display === 'unavailable'
+            ? 'border-amber-500/40 bg-amber-500/5 text-amber-600 dark:text-amber-300'
+            : 'border-border/70 bg-background/40 text-muted-foreground'
+
+  const copyUploadStatus = useCallback(() => {
+    if (!uploadStatus) return
+    const text = JSON.stringify(uploadStatus, null, 2)
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text)
+      return
+    }
+    console.log('[polyStoreUploadStatus]', uploadStatus)
+  }, [uploadStatus])
+
   const startPreparedUpload = useCallback(
     async (trigger: 'auto' | 'manual' = 'manual') => {
       if (!currentManifestRoot) return false
@@ -4334,6 +4757,16 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         mode: isMode2 ? 'mode2' : 'mode1',
       })
       if (ok) {
+        updateUploadStatus(
+          {
+            phase: 'chain_handoff',
+            phaseLabel: 'Provider upload complete; chain commit pending',
+            tone: 'active',
+            storage: { stage: 'provider' },
+            transport: { mode: isMode2 ? 'striped-provider' : 'direct-provider' },
+          },
+          'upload:complete',
+        )
         void mirrorSlabToGateway()
       }
       return ok
@@ -4352,6 +4785,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       processing,
       uploadMdus,
       uploadMode2,
+      updateUploadStatus,
     ],
   )
 
@@ -4690,6 +5124,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           ok: true,
           manifestRoot: currentManifestRoot,
         })
+        updateUploadStatus(
+          {
+            phase: 'done',
+            phaseLabel: 'Manifest root committed on-chain',
+            tone: 'success',
+            storage: { stage: 'chain' },
+          },
+          'commit:complete',
+        )
         return true
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -4699,6 +5142,16 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           error: msg,
         })
         addLog(`Commit failed: ${msg}`)
+        updateUploadStatus(
+          {
+            phase: 'error',
+            phaseLabel: `Commit failed: ${msg}`,
+            tone: 'error',
+            error: msg,
+            transport: { lastError: msg },
+          },
+          'commit:error',
+        )
         return false
       }
     },
@@ -4719,6 +5172,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       shardProgress.totalUserMdus,
       shardProgress.totalWitnessMdus,
       uploadEngine,
+      updateUploadStatus,
     ],
   )
 
@@ -5113,11 +5567,61 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                     ) : null}
                   </div>
                 )
-              })}
-            </div>
+                })}
+              </div>
 
-            {hasError ? (
-              <div className="nil-tab-panel border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">
+            {uploadStatus ? (
+              <div
+                className={`nil-tab-panel px-4 py-3 ${uploadStatusToneClass}`}
+                data-testid="upload-pipeline-status"
+                data-upload-kzg={uploadStatus.kzg.display}
+                data-upload-storage={uploadStatus.storage.stage}
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] font-mono-data">
+                      <Cpu className="h-3.5 w-3.5" />
+                      <span>{uploadStatus.kzg.label}</span>
+                      <span className="text-muted-foreground">/</span>
+                      <span>{uploadStatus.phaseLabel}</span>
+                    </div>
+                    {uploadStatus.kzg.fallbackReason || uploadStatus.error ? (
+                      <div className="text-[10px] font-mono-data leading-relaxed text-muted-foreground">
+                        {uploadStatus.error || uploadStatus.kzg.fallbackReason}
+                      </div>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyUploadStatus}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 border border-border/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] font-mono-data text-foreground transition-colors hover:border-primary/60 hover:text-primary"
+                    data-testid="copy-upload-status"
+                  >
+                    <ClipboardCopy className="h-3.5 w-3.5" />
+                    Copy JSON
+                  </button>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-mono-data sm:grid-cols-5">
+                  {uploadStatusRows.map((row) => (
+                    <div key={row.label} className="nil-tab-inset min-w-0 px-2 py-2">
+                      <div className="flex items-center gap-1 uppercase tracking-[0.18em] text-muted-foreground">
+                        {row.label === 'storage' ? (
+                          <Database className="h-3 w-3" />
+                        ) : row.label === 'transport' ? (
+                          <Network className="h-3 w-3" />
+                        ) : null}
+                        <span>{row.label}</span>
+                      </div>
+                      <div className="mt-1 truncate text-foreground">{row.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+              {hasError ? (
+                <div className="nil-tab-panel border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">
                 {commitDisplayError ? `Commit failed: ${commitDisplayError.message}` : null}
                 {commitDisplayError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
                 {mode2UploadError ? `Upload failed: ${mode2UploadError}` : null}
