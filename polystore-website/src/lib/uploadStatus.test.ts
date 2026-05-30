@@ -90,6 +90,10 @@ test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
     phaseLabel: 'p'.repeat(800),
     latestEvent: 'l'.repeat(800),
     error: 'e'.repeat(800),
+    transport: {
+      ...status.transport,
+      fallbackReason: 't'.repeat(800),
+    },
     kzg: {
       ...status.kzg,
       fallbackReason: 'f'.repeat(800),
@@ -101,5 +105,6 @@ test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
   assert.equal(sanitized.latestEvent?.length, 160)
   assert.equal(sanitized.file.name?.length, 160)
   assert.equal(sanitized.error?.length, 500)
+  assert.equal(sanitized.transport.fallbackReason?.length, 500)
   assert.equal(sanitized.kzg.fallbackReason?.length, 500)
 })
