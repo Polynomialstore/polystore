@@ -32,6 +32,7 @@
     "perf:kzg-browser": "tsx scripts/benchmark_browser_kzg_commit.ts",
     "perf:kzg-webgpu-lifecycle": "tsx scripts/benchmark_browser_kzg_webgpu_lifecycle.ts",
     "perf:kzg-webgpu-msm": "tsx scripts/benchmark_browser_kzg_webgpu_msm.ts",
+    "perf:kzg-webgpu-msm:matrix": "POLYSTORE_WEBGPU_MSM_BLOBS_LIST=64,96,256 POLYSTORE_WEBGPU_MSM_BUCKET_WIDTHS=10,12,13 POLYSTORE_WEBGPU_MSM_REDUCTIONS=serial,parallel16 POLYSTORE_WEBGPU_MSM_RUNS=1 tsx scripts/benchmark_browser_kzg_webgpu_msm.ts",
     "diagnose:kzg-webgpu-msm": "POLYSTORE_WEBGPU_MSM_DIAGNOSTIC=1 tsx scripts/benchmark_browser_kzg_webgpu_msm.ts",
     "preflight:webgpu": "tsx scripts/preflight_webgpu_chrome.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",

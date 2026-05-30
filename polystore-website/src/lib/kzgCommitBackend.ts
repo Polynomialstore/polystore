@@ -1,6 +1,14 @@
 import {
+  calibrateWebGpuKzgMsmAdapter,
   createWebGpuKzgMsmCommitter,
+  defaultWebGpuKzgMsmAdapterCalibration,
+  defaultWebGpuKzgMsmCalibrationCache,
+  type WebGpuKzgMsmAdapterCalibration,
+  type WebGpuKzgMsmCalibrationCandidate,
+  type WebGpuKzgMsmCalibrationCache,
+  type WebGpuKzgMsmCalibrationSource,
   type WebGpuKzgMsmCommitter,
+  type WebGpuKzgMsmOptions,
   type WebGpuKzgMsmReductionMode,
   type WebGpuKzgMsmResult,
 } from './webgpuKzgMsm'
@@ -12,10 +20,16 @@ export const POLYSTORE_TRUSTED_SETUP_SHA256 = 'd39b9f2d047cc9dca2de58f264b6a0944
 const DEFAULT_WEBGPU_PROBE_TIMEOUT_MS = 1500
 const DEFAULT_WEBGPU_COMMIT_TIMEOUT_MS = 3000
 const DEFAULT_WEBGPU_MIN_BLOBS = 1
+const DEFAULT_WEBGPU_CALIBRATION_MIN_BLOBS = 64
+const DEFAULT_WEBGPU_CALIBRATION_BLOBS = 4
+const DEFAULT_WEBGPU_CALIBRATION_RUNS = 1
+const DEFAULT_WEBGPU_CALIBRATION_TIMEOUT_MS = 12_000
 
 export type KzgCommitBackendKind = 'wasm-blst' | 'webgpu-scheduler' | 'webgpu-wasm-fallback'
 export type KzgCommitBackendChoice = 'wasm-blst' | 'webgpu'
 export type WebGpuKzgMode = 'auto' | 'force' | 'off'
+export type WebGpuKzgCalibrationMode = 'auto' | 'force' | 'off'
+export type WebGpuKzgCalibrationRunStatus = 'default' | 'cached' | 'running' | 'passed' | 'failed' | 'disabled'
 
 export type PolyStoreCommitApi = {
   commit_blobs(blobBytes: Uint8Array): Uint8Array | ArrayBufferLike
@@ -111,6 +125,22 @@ export type WebGpuSrsMetadata = {
   basis: 'lagrange-or-monomial-g1-compressed'
 }
 
+export type WebGpuKzgCalibrationStatus = {
+  status: WebGpuKzgCalibrationRunStatus
+  mode: WebGpuKzgCalibrationMode
+  cacheKey?: string
+  version?: string
+  source?: WebGpuKzgMsmCalibrationSource
+  bucketWidth?: number
+  reductionMode?: WebGpuKzgMsmReductionMode
+  minBlobs?: number
+  minBytes?: number
+  score?: number | null
+  measuredAtMs?: number | null
+  measuredFixture?: WebGpuKzgMsmAdapterCalibration['measuredFixture']
+  reason?: string
+}
+
 export type WebGpuKzgStatus = {
   supported: boolean
   available: boolean
@@ -119,7 +149,9 @@ export type WebGpuKzgStatus = {
   reason?: string
   adapter?: WebGpuKzgAdapterInfo | null
   selectedBackend?: KzgCommitBackendChoice
+  bucketWidth?: number
   reductionMode?: WebGpuKzgMsmReductionMode
+  calibration?: WebGpuKzgCalibrationStatus
   scheduler?: WebGpuKzgSchedulerStatus
   srs?: WebGpuSrsMetadata
   timings?: WebGpuKzgInitTimings
@@ -139,6 +171,10 @@ export type WebGpuKzgSchedulerStatus = {
   probeTimeoutMs: number
   commitTimeoutMs: number
   minBlobs: number
+  bucketWidth?: number
+  reductionMode?: WebGpuKzgMsmReductionMode
+  calibrationStatus?: WebGpuKzgCalibrationRunStatus
+  calibrationSource?: WebGpuKzgMsmCalibrationSource
   circuitOpen: boolean
   circuitReason?: string
   lastProbeMs?: number
@@ -154,7 +190,14 @@ export type CreateKzgCommitBackendOptions = {
   webGpuCommitTimeoutMs?: number
   webGpuMinBlobs?: number
   allowFallbackAdapter?: boolean
-  webGpuCommitterFactory?: () => Promise<WebGpuKzgMsmCommitter>
+  webGpuCalibrationMode?: WebGpuKzgCalibrationMode
+  webGpuCalibrationMinBlobs?: number
+  webGpuCalibrationBlobCount?: number
+  webGpuCalibrationRuns?: number
+  webGpuCalibrationTimeoutMs?: number
+  webGpuCalibrationCandidates?: WebGpuKzgMsmCalibrationCandidate[]
+  webGpuCalibrationCache?: WebGpuKzgMsmCalibrationCache | null
+  webGpuCommitterFactory?: (options?: WebGpuKzgMsmOptions) => Promise<WebGpuKzgMsmCommitter>
   navigatorLike?: WebGpuNavigator
   bufferUsage?: WebGpuBufferUsageLike
   now?: () => number
@@ -443,6 +486,14 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
   private readonly probeTimeoutMs: number
   private readonly commitTimeoutMs: number
   private readonly minBlobs: number
+  private readonly calibrationMode: WebGpuKzgCalibrationMode
+  private readonly calibrationMinBlobs: number
+  private readonly calibrationBlobCount: number
+  private readonly calibrationRuns: number
+  private readonly calibrationTimeoutMs: number
+  private readonly calibrationCache: WebGpuKzgMsmCalibrationCache | null
+  private selectedCalibration: WebGpuKzgMsmAdapterCalibration
+  private calibrationPromise: Promise<boolean> | null = null
 
   constructor(
     private readonly wasmFallback: KzgCommitBackend,
@@ -455,16 +506,32 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
     this.probeTimeoutMs = normalizeTimeout(options.webGpuProbeTimeoutMs, DEFAULT_WEBGPU_PROBE_TIMEOUT_MS)
     this.commitTimeoutMs = normalizeTimeout(options.webGpuCommitTimeoutMs, DEFAULT_WEBGPU_COMMIT_TIMEOUT_MS)
     this.minBlobs = normalizeMinBlobs(options.webGpuMinBlobs)
+    this.calibrationMode = options.webGpuCalibrationMode ?? 'auto'
+    this.calibrationMinBlobs = normalizeTimeout(options.webGpuCalibrationMinBlobs, DEFAULT_WEBGPU_CALIBRATION_MIN_BLOBS)
+    this.calibrationBlobCount = normalizeTimeout(options.webGpuCalibrationBlobCount, DEFAULT_WEBGPU_CALIBRATION_BLOBS)
+    this.calibrationRuns = normalizeTimeout(options.webGpuCalibrationRuns, DEFAULT_WEBGPU_CALIBRATION_RUNS)
+    this.calibrationTimeoutMs = normalizeTimeout(options.webGpuCalibrationTimeoutMs, DEFAULT_WEBGPU_CALIBRATION_TIMEOUT_MS)
+    this.calibrationCache = options.webGpuCalibrationCache === undefined ? defaultWebGpuKzgMsmCalibrationCache : options.webGpuCalibrationCache
+    const adapterInfo = initialStatus.adapter ?? null
+    const cachedCalibration = this.calibrationCache?.get(adapterInfo) ?? null
+    this.selectedCalibration = cachedCalibration ?? defaultWebGpuKzgMsmAdapterCalibration(adapterInfo)
     this.status = {
       ...initialStatus,
       fallbackActive: true,
       selectedBackend: 'wasm-blst',
+      bucketWidth: this.selectedCalibration.bucketWidth,
+      reductionMode: this.selectedCalibration.reductionMode,
+      calibration: this.calibrationStatus(cachedCalibration ? 'cached' : this.calibrationMode === 'off' ? 'disabled' : 'default'),
       scheduler: {
         mode: this.mode,
         probeStatus: this.mode === 'off' ? 'disabled' : 'not-run',
         probeTimeoutMs: this.probeTimeoutMs,
         commitTimeoutMs: this.commitTimeoutMs,
         minBlobs: this.minBlobs,
+        bucketWidth: this.selectedCalibration.bucketWidth,
+        reductionMode: this.selectedCalibration.reductionMode,
+        calibrationStatus: cachedCalibration ? 'cached' : this.calibrationMode === 'off' ? 'disabled' : 'default',
+        calibrationSource: this.selectedCalibration.source,
         circuitOpen: false,
       },
     }
@@ -481,6 +548,54 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
     }
   }
 
+  private calibrationStatus(
+    status: WebGpuKzgCalibrationRunStatus,
+    reason = this.selectedCalibration.reason,
+  ): WebGpuKzgCalibrationStatus {
+    return {
+      status,
+      mode: this.calibrationMode,
+      cacheKey: this.selectedCalibration.cacheKey,
+      version: this.selectedCalibration.version,
+      source: this.selectedCalibration.source,
+      bucketWidth: this.selectedCalibration.bucketWidth,
+      reductionMode: this.selectedCalibration.reductionMode,
+      minBlobs: this.selectedCalibration.minBlobs,
+      minBytes: this.selectedCalibration.minBytes,
+      score: this.selectedCalibration.score,
+      measuredAtMs: this.selectedCalibration.measuredAtMs,
+      measuredFixture: this.selectedCalibration.measuredFixture,
+      reason,
+    }
+  }
+
+  private updateSelectedCalibration(
+    calibration: WebGpuKzgMsmAdapterCalibration,
+    status: WebGpuKzgCalibrationRunStatus,
+    reason = calibration.reason,
+  ): void {
+    const changed =
+      this.selectedCalibration.bucketWidth !== calibration.bucketWidth ||
+      this.selectedCalibration.reductionMode !== calibration.reductionMode
+    if (changed) {
+      this.committer?.destroy()
+      this.committer = null
+    }
+    this.selectedCalibration = calibration
+    this.status = {
+      ...this.status,
+      bucketWidth: calibration.bucketWidth,
+      reductionMode: calibration.reductionMode,
+      calibration: this.calibrationStatus(status, reason),
+    }
+    this.updateScheduler({
+      bucketWidth: calibration.bucketWidth,
+      reductionMode: calibration.reductionMode,
+      calibrationStatus: status,
+      calibrationSource: calibration.source,
+    })
+  }
+
   private updateScheduler(update: Partial<WebGpuKzgSchedulerStatus>): void {
     const scheduler = this.status.scheduler ?? {
       mode: this.mode,
@@ -488,6 +603,10 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
       probeTimeoutMs: this.probeTimeoutMs,
       commitTimeoutMs: this.commitTimeoutMs,
       minBlobs: this.minBlobs,
+      bucketWidth: this.selectedCalibration.bucketWidth,
+      reductionMode: this.selectedCalibration.reductionMode,
+      calibrationStatus: this.status.calibration?.status ?? 'default',
+      calibrationSource: this.selectedCalibration.source,
       circuitOpen: false,
     }
     this.status = {
@@ -510,6 +629,7 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
   private openCircuit(reason: string): void {
     this.committer?.destroy()
     this.committer = null
+    this.calibrationCache?.invalidate(this.status.adapter ?? null)
     this.status = {
       ...this.status,
       available: false,
@@ -526,12 +646,18 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
 
   private async initCommitter(): Promise<WebGpuKzgMsmCommitter> {
     if (this.committer) return this.committer
+    const committerOptions: WebGpuKzgMsmOptions = {
+      allowFallbackAdapter: this.options.allowFallbackAdapter ?? false,
+      bucketWidth: this.selectedCalibration.bucketWidth,
+      reductionMode: this.selectedCalibration.reductionMode,
+      calibration: this.selectedCalibration,
+    }
     const committer = this.options.webGpuCommitterFactory
-      ? await this.options.webGpuCommitterFactory()
+      ? await this.options.webGpuCommitterFactory(committerOptions)
       : await createWebGpuKzgMsmCommitter(
           this.wasmInterop as unknown as Parameters<typeof createWebGpuKzgMsmCommitter>[0],
           this.navigatorLike as unknown as Parameters<typeof createWebGpuKzgMsmCommitter>[1],
-          { allowFallbackAdapter: this.options.allowFallbackAdapter ?? false },
+          committerOptions,
         )
     this.committer = committer
     this.status = {
@@ -550,12 +676,80 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
     return committer
   }
 
-  private async probe(): Promise<boolean> {
+  private async ensureCalibration(realBatchBlobs: number): Promise<boolean> {
+    if (this.calibrationMode === 'off') {
+      this.updateSelectedCalibration(this.selectedCalibration, 'disabled', 'WebGPU MSM calibration disabled')
+      return true
+    }
+
+    const cached = this.calibrationCache?.get(this.status.adapter ?? null) ?? null
+    if (cached) {
+      this.updateSelectedCalibration(cached, 'cached', 'loaded WebGPU MSM calibration from cache')
+      return true
+    }
+
+    if (this.calibrationMode === 'auto' && realBatchBlobs < this.calibrationMinBlobs) {
+      this.updateSelectedCalibration(
+        this.selectedCalibration,
+        'default',
+        `batch below calibration threshold: ${realBatchBlobs} < ${this.calibrationMinBlobs}`,
+      )
+      return true
+    }
+
+    if (this.calibrationPromise) return this.calibrationPromise
+    this.status = { ...this.status, calibration: this.calibrationStatus('running', 'running bounded calibration') }
+    this.updateScheduler({ calibrationStatus: 'running' })
+    this.calibrationPromise = this.runCalibration().finally(() => {
+      this.calibrationPromise = null
+    })
+    return this.calibrationPromise
+  }
+
+  private async runCalibration(): Promise<boolean> {
+    try {
+      const calibration = await calibrateWebGpuKzgMsmAdapter({
+        adapterInfo: this.status.adapter ?? null,
+        candidates: this.options.webGpuCalibrationCandidates,
+        blobCount: this.calibrationBlobCount,
+        runsPerCandidate: this.calibrationRuns,
+        timeoutMs: this.calibrationTimeoutMs,
+        now: this.options.now,
+        oracleCommitBlobs: (blobsFlat) => this.wasmFallback.commitBlobs(blobsFlat),
+        createCommitter: (candidate) => {
+          const committerOptions: WebGpuKzgMsmOptions = {
+            allowFallbackAdapter: this.options.allowFallbackAdapter ?? false,
+            bucketWidth: candidate.bucketWidth,
+            reductionMode: candidate.reductionMode,
+          }
+          return this.options.webGpuCommitterFactory
+            ? this.options.webGpuCommitterFactory(committerOptions)
+            : createWebGpuKzgMsmCommitter(
+                this.wasmInterop as unknown as Parameters<typeof createWebGpuKzgMsmCommitter>[0],
+                this.navigatorLike as unknown as Parameters<typeof createWebGpuKzgMsmCommitter>[1],
+                committerOptions,
+              )
+        },
+      })
+      this.calibrationCache?.set(this.status.adapter ?? null, calibration)
+      this.updateSelectedCalibration(calibration, 'passed')
+      return true
+    } catch (error) {
+      const reason = `WebGPU MSM calibration failed: ${error instanceof Error ? error.message : String(error)}`
+      this.openCircuit(reason)
+      this.status = { ...this.status, calibration: this.calibrationStatus('failed', reason) }
+      this.updateScheduler({ calibrationStatus: 'failed' })
+      return false
+    }
+  }
+
+  private async probe(realBatchBlobs: number): Promise<boolean> {
     if (this.mode === 'off') {
       this.fallBack('WebGPU KZG scheduler disabled')
       return false
     }
     if (this.status.scheduler?.circuitOpen) return false
+    if (!(await this.ensureCalibration(realBatchBlobs))) return false
     if (this.status.scheduler?.probeStatus === 'passed') return true
     if (this.probePromise) return this.probePromise
 
@@ -606,10 +800,16 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
         available: true,
         fallbackActive: false,
         selectedBackend: 'webgpu',
-        reductionMode: gpu.debug?.reductionMode,
+        bucketWidth: gpu.debug?.bucketWidth ?? this.selectedCalibration.bucketWidth,
+        reductionMode: gpu.debug?.reductionMode ?? this.selectedCalibration.reductionMode,
         reason: undefined,
       }
-      this.updateScheduler({ probeStatus: 'passed', lastFallbackReason: undefined })
+      this.updateScheduler({
+        probeStatus: 'passed',
+        bucketWidth: gpu.debug?.bucketWidth ?? this.selectedCalibration.bucketWidth,
+        reductionMode: gpu.debug?.reductionMode ?? this.selectedCalibration.reductionMode,
+        lastFallbackReason: undefined,
+      })
       return true
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
@@ -625,7 +825,7 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
       this.fallBack(`batch below WebGPU threshold: ${blobs} < ${this.minBlobs}`)
       return this.wasmFallback.commitBlobs(blobsFlat)
     }
-    if (!(await this.probe()) || !this.committer) {
+    if (!(await this.probe(blobs)) || !this.committer) {
       return this.wasmFallback.commitBlobs(blobsFlat)
     }
 
@@ -641,9 +841,15 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
       ...this.status,
       fallbackActive: false,
       selectedBackend: 'webgpu',
+      bucketWidth: timed.value.debug?.bucketWidth ?? this.status.bucketWidth,
       reductionMode: timed.value.debug?.reductionMode ?? this.status.reductionMode,
     }
-    this.updateScheduler({ lastWebGpuMs: timed.value.timings.totalMs, lastFallbackReason: undefined })
+    this.updateScheduler({
+      bucketWidth: timed.value.debug?.bucketWidth ?? this.status.bucketWidth,
+      reductionMode: timed.value.debug?.reductionMode ?? this.status.reductionMode,
+      lastWebGpuMs: timed.value.timings.totalMs,
+      lastFallbackReason: undefined,
+    })
     return timed.value.commitments
   }
 
@@ -653,7 +859,7 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
       this.fallBack(`batch below WebGPU threshold: ${blobs} < ${this.minBlobs}`)
       return this.wasmFallback.commitBlobsProfiled(blobsFlat)
     }
-    if (!(await this.probe()) || !this.committer) {
+    if (!(await this.probe(blobs)) || !this.committer) {
       return this.wasmFallback.commitBlobsProfiled(blobsFlat)
     }
 
@@ -669,9 +875,15 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
       ...this.status,
       fallbackActive: false,
       selectedBackend: 'webgpu',
+      bucketWidth: timed.value.debug?.bucketWidth ?? this.status.bucketWidth,
       reductionMode: timed.value.debug?.reductionMode ?? this.status.reductionMode,
     }
-    this.updateScheduler({ lastWebGpuMs: timed.value.timings.totalMs, lastFallbackReason: undefined })
+    this.updateScheduler({
+      bucketWidth: timed.value.debug?.bucketWidth ?? this.status.bucketWidth,
+      reductionMode: timed.value.debug?.reductionMode ?? this.status.reductionMode,
+      lastWebGpuMs: timed.value.timings.totalMs,
+      lastFallbackReason: undefined,
+    })
     return {
       witnessFlat: timed.value.commitments,
       perf: profileFromWebGpuResult(timed.value),

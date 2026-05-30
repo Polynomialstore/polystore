@@ -14,13 +14,19 @@ test('normalizeKzgBackendStatus names WebGPU MSM with reduction mode', () => {
     kzgCommitBackend: 'webgpu',
     kzgWebGpuAvailable: true,
     kzgWebGpuProbeStatus: 'passed',
+    kzgWebGpuBucketWidth: 12,
     kzgWebGpuReductionMode: 'serial',
+    kzgWebGpuCalibrationSource: 'benchmark-matrix',
+    kzgWebGpuCalibrationStatus: 'passed',
   })
 
   assert.equal(status.display, 'webgpu-msm')
-  assert.equal(status.label, 'WebGPU MSM (serial)')
+  assert.equal(status.label, 'WebGPU MSM (serial, bucket 12, benchmark-matrix)')
   assert.equal(status.webGpuAvailable, true)
   assert.equal(status.probeStatus, 'passed')
+  assert.equal(status.bucketWidth, 12)
+  assert.equal(status.calibrationStatus, 'passed')
+  assert.equal(status.calibrationSource, 'benchmark-matrix')
 })
 
 test('normalizeKzgBackendStatus reports WASM fallback reason', () => {

@@ -269,7 +269,11 @@ export type KzgCommitDiagnostics = {
   kzgWebGpuProbeTimeoutMs?: number
   kzgWebGpuCommitTimeoutMs?: number
   kzgWebGpuMinBlobs?: number
+  kzgWebGpuBucketWidth?: number
   kzgWebGpuReductionMode?: string
+  kzgWebGpuCalibrationStatus?: string
+  kzgWebGpuCalibrationSource?: string
+  kzgWebGpuCalibrationCacheKey?: string
   commitWorkerCount?: number
 }
 

@@ -196,7 +196,11 @@ type PreparePerfSample = {
   workerKzgWebGpuFallbackReason?: string
   workerKzgWebGpuProbeStatus?: string
   workerKzgWebGpuCircuitOpen?: boolean
+  workerKzgWebGpuBucketWidth?: number
   workerKzgWebGpuReductionMode?: string
+  workerKzgWebGpuCalibrationStatus?: string
+  workerKzgWebGpuCalibrationSource?: string
+  workerKzgWebGpuCalibrationCacheKey?: string
   workerKzgWebGpuProbeTimeoutMs?: number
   workerKzgWebGpuCommitTimeoutMs?: number
   workerKzgWebGpuMinBlobs?: number
@@ -286,7 +290,11 @@ type PreparePerfProfile = {
     kzgWebGpuFallbackReason?: string
     kzgWebGpuProbeStatus?: string
     kzgWebGpuCircuitOpen?: boolean
+    kzgWebGpuBucketWidth?: number
     kzgWebGpuReductionMode?: string
+    kzgWebGpuCalibrationStatus?: string
+    kzgWebGpuCalibrationSource?: string
+    kzgWebGpuCalibrationCacheKey?: string
     kzgWebGpuProbeTimeoutMs?: number
     kzgWebGpuCommitTimeoutMs?: number
     kzgWebGpuMinBlobs?: number
@@ -3613,8 +3621,21 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               typeof result.perf?.kzgWebGpuProbeStatus === 'string' ? result.perf.kzgWebGpuProbeStatus : undefined
             const workerKzgWebGpuCircuitOpen =
               typeof result.perf?.kzgWebGpuCircuitOpen === 'boolean' ? result.perf.kzgWebGpuCircuitOpen : undefined
+            const workerKzgWebGpuBucketWidth = Number(result.perf?.kzgWebGpuBucketWidth ?? 0) || undefined
             const workerKzgWebGpuReductionMode =
               typeof result.perf?.kzgWebGpuReductionMode === 'string' ? result.perf.kzgWebGpuReductionMode : undefined
+            const workerKzgWebGpuCalibrationStatus =
+              typeof result.perf?.kzgWebGpuCalibrationStatus === 'string'
+                ? result.perf.kzgWebGpuCalibrationStatus
+                : undefined
+            const workerKzgWebGpuCalibrationSource =
+              typeof result.perf?.kzgWebGpuCalibrationSource === 'string'
+                ? result.perf.kzgWebGpuCalibrationSource
+                : undefined
+            const workerKzgWebGpuCalibrationCacheKey =
+              typeof result.perf?.kzgWebGpuCalibrationCacheKey === 'string'
+                ? result.perf.kzgWebGpuCalibrationCacheKey
+                : undefined
             const workerKzgWebGpuProbeTimeoutMs = Number(result.perf?.kzgWebGpuProbeTimeoutMs ?? 0)
             const workerKzgWebGpuCommitTimeoutMs = Number(result.perf?.kzgWebGpuCommitTimeoutMs ?? 0)
             const workerKzgWebGpuMinBlobs = Number(result.perf?.kzgWebGpuMinBlobs ?? 0)
@@ -3677,7 +3698,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerKzgWebGpuFallbackReason,
               workerKzgWebGpuProbeStatus,
               workerKzgWebGpuCircuitOpen,
+              workerKzgWebGpuBucketWidth,
               workerKzgWebGpuReductionMode,
+              workerKzgWebGpuCalibrationStatus,
+              workerKzgWebGpuCalibrationSource,
+              workerKzgWebGpuCalibrationCacheKey,
               workerKzgWebGpuProbeTimeoutMs,
               workerKzgWebGpuCommitTimeoutMs,
               workerKzgWebGpuMinBlobs,
@@ -3982,8 +4007,21 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               typeof result.perf?.kzgWebGpuProbeStatus === 'string' ? result.perf.kzgWebGpuProbeStatus : undefined
             const workerKzgWebGpuCircuitOpen =
               typeof result.perf?.kzgWebGpuCircuitOpen === 'boolean' ? result.perf.kzgWebGpuCircuitOpen : undefined
+            const workerKzgWebGpuBucketWidth = Number(result.perf?.kzgWebGpuBucketWidth ?? 0) || undefined
             const workerKzgWebGpuReductionMode =
               typeof result.perf?.kzgWebGpuReductionMode === 'string' ? result.perf.kzgWebGpuReductionMode : undefined
+            const workerKzgWebGpuCalibrationStatus =
+              typeof result.perf?.kzgWebGpuCalibrationStatus === 'string'
+                ? result.perf.kzgWebGpuCalibrationStatus
+                : undefined
+            const workerKzgWebGpuCalibrationSource =
+              typeof result.perf?.kzgWebGpuCalibrationSource === 'string'
+                ? result.perf.kzgWebGpuCalibrationSource
+                : undefined
+            const workerKzgWebGpuCalibrationCacheKey =
+              typeof result.perf?.kzgWebGpuCalibrationCacheKey === 'string'
+                ? result.perf.kzgWebGpuCalibrationCacheKey
+                : undefined
             const workerKzgWebGpuProbeTimeoutMs = Number(result.perf?.kzgWebGpuProbeTimeoutMs ?? 0)
             const workerKzgWebGpuCommitTimeoutMs = Number(result.perf?.kzgWebGpuCommitTimeoutMs ?? 0)
             const workerKzgWebGpuMinBlobs = Number(result.perf?.kzgWebGpuMinBlobs ?? 0)
@@ -4024,7 +4062,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerKzgWebGpuFallbackReason,
               workerKzgWebGpuProbeStatus,
               workerKzgWebGpuCircuitOpen,
+              workerKzgWebGpuBucketWidth,
               workerKzgWebGpuReductionMode,
+              workerKzgWebGpuCalibrationStatus,
+              workerKzgWebGpuCalibrationSource,
+              workerKzgWebGpuCalibrationCacheKey,
               workerKzgWebGpuProbeTimeoutMs,
               workerKzgWebGpuCommitTimeoutMs,
               workerKzgWebGpuMinBlobs,
@@ -4352,7 +4394,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             kzgWebGpuFallbackReason: kzgDiagnosticSample?.workerKzgWebGpuFallbackReason,
             kzgWebGpuProbeStatus: kzgDiagnosticSample?.workerKzgWebGpuProbeStatus,
             kzgWebGpuCircuitOpen: kzgDiagnosticSample?.workerKzgWebGpuCircuitOpen,
+            kzgWebGpuBucketWidth: kzgDiagnosticSample?.workerKzgWebGpuBucketWidth,
             kzgWebGpuReductionMode: kzgDiagnosticSample?.workerKzgWebGpuReductionMode,
+            kzgWebGpuCalibrationStatus: kzgDiagnosticSample?.workerKzgWebGpuCalibrationStatus,
+            kzgWebGpuCalibrationSource: kzgDiagnosticSample?.workerKzgWebGpuCalibrationSource,
+            kzgWebGpuCalibrationCacheKey: kzgDiagnosticSample?.workerKzgWebGpuCalibrationCacheKey,
             kzgWebGpuProbeTimeoutMs: kzgDiagnosticSample?.workerKzgWebGpuProbeTimeoutMs,
             kzgWebGpuCommitTimeoutMs: kzgDiagnosticSample?.workerKzgWebGpuCommitTimeoutMs,
             kzgWebGpuMinBlobs: kzgDiagnosticSample?.workerKzgWebGpuMinBlobs,
@@ -4690,6 +4736,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               : 'not available',
       },
       { label: 'probe', value: uploadStatus.kzg.probeStatus || 'pending' },
+      {
+        label: 'calibration',
+        value: [uploadStatus.kzg.calibrationStatus, uploadStatus.kzg.calibrationSource]
+          .filter(Boolean)
+          .join(' / ') || 'default',
+      },
       { label: 'storage', value: uploadStatus.storage.stage.replace(/_/g, ' ') },
       { label: 'transport', value: uploadStatus.transport.mode.replace(/-/g, ' ') },
       {

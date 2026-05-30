@@ -50,7 +50,7 @@ type WebGpuAdapter = {
   requestAdapterInfo?: () => Promise<WebGpuAdapterInfo>
   requestDevice: () => Promise<GPUDevice>
 }
-type WebGpuAdapterInfo = {
+export type WebGpuKzgMsmAdapterInfo = {
   vendor?: string
   architecture?: string
   device?: string
@@ -58,8 +58,12 @@ type WebGpuAdapterInfo = {
   isFallbackAdapter?: boolean
 }
 
+type WebGpuAdapterInfo = WebGpuKzgMsmAdapterInfo
+
 export const WEBGPU_KZG_MSM_BUCKET_WIDTH = 10
 export const WEBGPU_KZG_MSM_REDUCTION_MODE: WebGpuKzgMsmReductionMode = 'serial'
+export const WEBGPU_KZG_MSM_CALIBRATION_VERSION = 'webgpu-msm-calibration-v2'
+export const WEBGPU_KZG_MSM_CALIBRATION_STORAGE_PREFIX = 'polystore:kzg:webgpu-msm-calibration:'
 export const WEBGPU_KZG_MSM_POINT_BYTES = 384
 export const WEBGPU_KZG_MSM_SIGN_BIT = 0x80000000
 export const WEBGPU_KZG_MSM_BLOB_SIZE = 128 * 1024
@@ -77,16 +81,56 @@ export type WebGpuKzgMsmOptions = {
   bucketWidth?: number
   reductionMode?: WebGpuKzgMsmReductionMode
   allowFallbackAdapter?: boolean
+  calibration?: WebGpuKzgMsmAdapterCalibration
+}
+
+export type WebGpuKzgMsmCalibrationSource = 'default-adapter-rule' | 'benchmark-matrix'
+
+export type WebGpuKzgMsmCalibrationFixture = {
+  blobs: number
+  bytes: number
+  runs: number
+  candidates: number
+  metric: 'median-total-ms'
+  wasmMs: number | null
 }
 
 export type WebGpuKzgMsmAdapterCalibration = {
+  version: string
   cacheKey: string
   bucketWidth: number
   reductionMode: WebGpuKzgMsmReductionMode
   minBlobs: number
   minBytes: number
-  source: 'default-adapter-rule' | 'benchmark-matrix'
+  source: WebGpuKzgMsmCalibrationSource
   reason: string
+  score: number | null
+  measuredFixture: WebGpuKzgMsmCalibrationFixture | null
+  measuredAtMs: number | null
+}
+
+export type WebGpuKzgMsmCalibrationCandidate = {
+  bucketWidth: number
+  reductionMode: WebGpuKzgMsmReductionMode
+  label?: string
+}
+
+export type WebGpuKzgMsmCalibrationStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
+
+export type WebGpuKzgMsmCalibrationCommitter = {
+  commitBlobs: (blobsFlat: Uint8Array) => Promise<WebGpuKzgMsmResult>
+  destroy: () => void
+}
+
+export type WebGpuKzgMsmCalibrationOptions = {
+  adapterInfo: WebGpuKzgMsmAdapterInfo | null
+  createCommitter: (candidate: WebGpuKzgMsmCalibrationCandidate) => Promise<WebGpuKzgMsmCalibrationCommitter>
+  oracleCommitBlobs: (blobsFlat: Uint8Array) => Uint8Array | Promise<Uint8Array>
+  candidates?: WebGpuKzgMsmCalibrationCandidate[]
+  blobCount?: number
+  runsPerCandidate?: number
+  timeoutMs?: number
+  now?: () => number
 }
 
 export type WebGpuKzgMsmTimings = {
@@ -442,6 +486,81 @@ function assertReductionMode(mode: WebGpuKzgMsmReductionMode): WebGpuKzgMsmReduc
   throw new Error('WebGPU KZG MSM reduction mode must be serial, parallel16, parallel32, or parallel64')
 }
 
+function normalizePositiveInteger(value: unknown, fallback: number): number {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue) || numberValue < 1) return fallback
+  return Math.floor(numberValue)
+}
+
+function normalizeCalibrationCandidate(candidate: WebGpuKzgMsmCalibrationCandidate): WebGpuKzgMsmCalibrationCandidate {
+  return {
+    bucketWidth: assertBucketWidth(candidate.bucketWidth),
+    reductionMode: assertReductionMode(candidate.reductionMode),
+    label: candidate.label,
+  }
+}
+
+function uniqueCalibrationCandidates(
+  candidates: WebGpuKzgMsmCalibrationCandidate[],
+): WebGpuKzgMsmCalibrationCandidate[] {
+  const seen = new Set<string>()
+  const out: WebGpuKzgMsmCalibrationCandidate[] = []
+  for (const candidate of candidates) {
+    const normalized = normalizeCalibrationCandidate(candidate)
+    const key = `${normalized.bucketWidth}:${normalized.reductionMode}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(normalized)
+  }
+  return out
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false
+  for (let i = 0; i < a.byteLength; i += 1) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+function median(values: number[]): number {
+  const sorted = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b)
+  if (sorted.length === 0) return Number.POSITIVE_INFINITY
+  return sorted[Math.floor((sorted.length - 1) / 2)]
+}
+
+function delay<T>(ms: number, value: T): Promise<T> {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(value), ms)
+  })
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<{ timedOut: false; value: T } | { timedOut: true }> {
+  return Promise.race([
+    promise.then((value) => ({ timedOut: false as const, value })),
+    delay(timeoutMs, { timedOut: true as const }),
+  ])
+}
+
+export function makeWebGpuKzgMsmCalibrationBlobBatch(blobCount = 4): Uint8Array {
+  const blobs = normalizePositiveInteger(blobCount, 4)
+  const out = new Uint8Array(WEBGPU_KZG_MSM_BLOB_SIZE * blobs)
+  for (let blobIndex = 0; blobIndex < blobs; blobIndex += 1) {
+    const seed = 41 + blobIndex * 13
+    for (let cellIndex = 0; cellIndex < WEBGPU_KZG_MSM_CELLS_PER_BLOB; cellIndex += 1) {
+      const offset = blobIndex * WEBGPU_KZG_MSM_BLOB_SIZE + cellIndex * 32
+      out[offset] = 0
+      for (let byteIndex = 1; byteIndex < 32; byteIndex += 1) {
+        out[offset + byteIndex] = (seed + cellIndex * 17 + byteIndex * 29) & 0xff
+      }
+    }
+  }
+  return out
+}
+
 async function readAdapterInfo(adapter: WebGpuAdapter): Promise<WebGpuAdapterInfo | null> {
   try {
     if (adapter.info) return adapter.info
@@ -452,7 +571,10 @@ async function readAdapterInfo(adapter: WebGpuAdapter): Promise<WebGpuAdapterInf
   return null
 }
 
-export function createWebGpuKzgMsmAdapterCacheKey(info: WebGpuAdapterInfo | null, version = 'webgpu-msm-v1'): string {
+export function createWebGpuKzgMsmAdapterCacheKey(
+  info: WebGpuAdapterInfo | null,
+  version = WEBGPU_KZG_MSM_CALIBRATION_VERSION,
+): string {
   const normalize = (value: unknown) => String(value ?? 'unknown').trim().toLowerCase() || 'unknown'
   return [
     version,
@@ -466,13 +588,15 @@ export function createWebGpuKzgMsmAdapterCacheKey(info: WebGpuAdapterInfo | null
 
 export function defaultWebGpuKzgMsmAdapterCalibration(
   info: WebGpuAdapterInfo | null,
+  version = WEBGPU_KZG_MSM_CALIBRATION_VERSION,
 ): WebGpuKzgMsmAdapterCalibration {
   const vendor = info?.vendor?.toLowerCase() ?? ''
   const architecture = info?.architecture?.toLowerCase() ?? ''
   const isAppleMetal = vendor.includes('apple') || architecture.includes('metal')
   const reductionMode = isAppleMetal ? 'parallel16' : WEBGPU_KZG_MSM_REDUCTION_MODE
   return {
-    cacheKey: createWebGpuKzgMsmAdapterCacheKey(info),
+    version,
+    cacheKey: createWebGpuKzgMsmAdapterCacheKey(info, version),
     bucketWidth: WEBGPU_KZG_MSM_BUCKET_WIDTH,
     reductionMode,
     minBlobs: 1,
@@ -481,31 +605,252 @@ export function defaultWebGpuKzgMsmAdapterCalibration(
     reason: isAppleMetal
       ? 'Apple/Metal diagnostics favor parallel16 for the final per-window reduction'
       : 'NVIDIA/Vulkan and unknown native adapters default to the stable serial reduction',
+    score: null,
+    measuredFixture: null,
+    measuredAtMs: null,
+  }
+}
+
+function resolveDefaultCalibrationStorage(): WebGpuKzgMsmCalibrationStorage | null {
+  try {
+    const storage = (globalThis as unknown as { localStorage?: WebGpuKzgMsmCalibrationStorage }).localStorage
+    return storage ?? null
+  } catch {
+    return null
+  }
+}
+
+function normalizeWebGpuKzgMsmCalibration(
+  info: WebGpuAdapterInfo | null,
+  raw: unknown,
+  version = WEBGPU_KZG_MSM_CALIBRATION_VERSION,
+): WebGpuKzgMsmAdapterCalibration | null {
+  const obj = raw as Partial<WebGpuKzgMsmAdapterCalibration> | null | undefined
+  const expectedCacheKey = createWebGpuKzgMsmAdapterCacheKey(info, version)
+  if (!obj || obj.version !== version || obj.cacheKey !== expectedCacheKey) return null
+  if (obj.source !== 'default-adapter-rule' && obj.source !== 'benchmark-matrix') return null
+
+  try {
+    const bucketWidth = assertBucketWidth(Number(obj.bucketWidth))
+    const reductionMode = assertReductionMode(obj.reductionMode as WebGpuKzgMsmReductionMode)
+    const minBlobs = normalizePositiveInteger(obj.minBlobs, 1)
+    const measuredFixture = obj.measuredFixture
+      ? {
+          blobs: normalizePositiveInteger(obj.measuredFixture.blobs, 1),
+          bytes: normalizePositiveInteger(obj.measuredFixture.bytes, WEBGPU_KZG_MSM_BLOB_SIZE),
+          runs: normalizePositiveInteger(obj.measuredFixture.runs, 1),
+          candidates: normalizePositiveInteger(obj.measuredFixture.candidates, 1),
+          metric: 'median-total-ms' as const,
+          wasmMs: Number.isFinite(Number(obj.measuredFixture.wasmMs)) ? Number(obj.measuredFixture.wasmMs) : null,
+        }
+      : null
+    return {
+      version,
+      cacheKey: expectedCacheKey,
+      bucketWidth,
+      reductionMode,
+      minBlobs,
+      minBytes: normalizePositiveInteger(obj.minBytes, minBlobs * WEBGPU_KZG_MSM_BLOB_SIZE),
+      source: obj.source,
+      reason: typeof obj.reason === 'string' && obj.reason.trim() ? obj.reason : 'calibration selected',
+      score: Number.isFinite(Number(obj.score)) ? Number(obj.score) : null,
+      measuredFixture,
+      measuredAtMs: Number.isFinite(Number(obj.measuredAtMs)) ? Number(obj.measuredAtMs) : null,
+    }
+  } catch {
+    return null
   }
 }
 
 export class WebGpuKzgMsmCalibrationCache {
   private readonly entries = new Map<string, WebGpuKzgMsmAdapterCalibration>()
+  private readonly storage: WebGpuKzgMsmCalibrationStorage | null
+  private readonly version: string
+  private readonly storagePrefix: string
+
+  constructor(options: {
+    storage?: WebGpuKzgMsmCalibrationStorage | null
+    version?: string
+    storagePrefix?: string
+  } = {}) {
+    this.storage = options.storage === undefined ? resolveDefaultCalibrationStorage() : options.storage
+    this.version = options.version ?? WEBGPU_KZG_MSM_CALIBRATION_VERSION
+    this.storagePrefix = options.storagePrefix ?? WEBGPU_KZG_MSM_CALIBRATION_STORAGE_PREFIX
+  }
 
   get(info: WebGpuAdapterInfo | null): WebGpuKzgMsmAdapterCalibration | null {
-    return this.entries.get(createWebGpuKzgMsmAdapterCacheKey(info)) ?? null
+    const cacheKey = createWebGpuKzgMsmAdapterCacheKey(info, this.version)
+    const memoryEntry = normalizeWebGpuKzgMsmCalibration(info, this.entries.get(cacheKey), this.version)
+    if (memoryEntry) return memoryEntry
+    this.entries.delete(cacheKey)
+
+    if (!this.storage) return null
+    try {
+      const raw = this.storage.getItem(`${this.storagePrefix}${cacheKey}`)
+      if (!raw) return null
+      const storageEntry = normalizeWebGpuKzgMsmCalibration(info, JSON.parse(raw), this.version)
+      if (!storageEntry) {
+        this.storage.removeItem(`${this.storagePrefix}${cacheKey}`)
+        return null
+      }
+      this.entries.set(cacheKey, storageEntry)
+      return storageEntry
+    } catch {
+      return null
+    }
   }
 
   set(info: WebGpuAdapterInfo | null, calibration: WebGpuKzgMsmAdapterCalibration): void {
-    this.entries.set(createWebGpuKzgMsmAdapterCacheKey(info), calibration)
+    const normalized = normalizeWebGpuKzgMsmCalibration(
+      info,
+      {
+        ...calibration,
+        version: this.version,
+        cacheKey: createWebGpuKzgMsmAdapterCacheKey(info, this.version),
+      },
+      this.version,
+    )
+    if (!normalized) throw new Error('invalid WebGPU KZG MSM calibration result')
+    this.entries.set(normalized.cacheKey, normalized)
+    try {
+      this.storage?.setItem(`${this.storagePrefix}${normalized.cacheKey}`, JSON.stringify(normalized))
+    } catch {
+      // Persistent storage is best effort; the in-memory cache remains valid for this session.
+    }
   }
 
   invalidate(info?: WebGpuAdapterInfo | null): void {
     if (typeof info === 'undefined') {
+      for (const key of this.entries.keys()) {
+        try {
+          this.storage?.removeItem(`${this.storagePrefix}${key}`)
+        } catch {
+          // best effort
+        }
+      }
       this.entries.clear()
       return
     }
-    this.entries.delete(createWebGpuKzgMsmAdapterCacheKey(info))
+    const cacheKey = createWebGpuKzgMsmAdapterCacheKey(info, this.version)
+    this.entries.delete(cacheKey)
+    try {
+      this.storage?.removeItem(`${this.storagePrefix}${cacheKey}`)
+    } catch {
+      // best effort
+    }
   }
 }
 
+export const defaultWebGpuKzgMsmCalibrationCache = new WebGpuKzgMsmCalibrationCache()
+
+export function defaultWebGpuKzgMsmCalibrationCandidates(
+  info: WebGpuAdapterInfo | null,
+  fallback = defaultWebGpuKzgMsmAdapterCalibration(info),
+): WebGpuKzgMsmCalibrationCandidate[] {
+  const vendor = info?.vendor?.toLowerCase() ?? ''
+  const architecture = info?.architecture?.toLowerCase() ?? ''
+  const candidates: WebGpuKzgMsmCalibrationCandidate[] = [
+    { bucketWidth: fallback.bucketWidth, reductionMode: fallback.reductionMode, label: 'adapter-default' },
+  ]
+
+  if (vendor.includes('apple') || architecture.includes('metal')) {
+    candidates.push({ bucketWidth: 10, reductionMode: 'parallel16', label: 'apple-metal-parallel16' })
+  } else {
+    candidates.push({ bucketWidth: 12, reductionMode: 'parallel16', label: 'ampere-parallel16-bucket12' })
+  }
+
+  return uniqueCalibrationCandidates(candidates)
+}
+
+export function selectWebGpuKzgMsmAdapterCalibration(
+  info: WebGpuAdapterInfo | null,
+  cache: WebGpuKzgMsmCalibrationCache | null | undefined = defaultWebGpuKzgMsmCalibrationCache,
+): WebGpuKzgMsmAdapterCalibration {
+  return cache?.get(info) ?? defaultWebGpuKzgMsmAdapterCalibration(info)
+}
+
 export function selectWebGpuKzgMsmReductionMode(info: WebGpuAdapterInfo | null): WebGpuKzgMsmReductionMode {
-  return defaultWebGpuKzgMsmAdapterCalibration(info).reductionMode
+  return selectWebGpuKzgMsmAdapterCalibration(info).reductionMode
+}
+
+export async function calibrateWebGpuKzgMsmAdapter(
+  options: WebGpuKzgMsmCalibrationOptions,
+): Promise<WebGpuKzgMsmAdapterCalibration> {
+  const fallback = defaultWebGpuKzgMsmAdapterCalibration(options.adapterInfo)
+  const candidates = uniqueCalibrationCandidates(options.candidates ?? defaultWebGpuKzgMsmCalibrationCandidates(options.adapterInfo, fallback))
+  const blobCount = normalizePositiveInteger(options.blobCount, 4)
+  const runsPerCandidate = normalizePositiveInteger(options.runsPerCandidate, 1)
+  const timeoutMs = normalizePositiveInteger(options.timeoutMs, 12_000)
+  const fixture = makeWebGpuKzgMsmCalibrationBlobBatch(blobCount)
+  const oracleStart = nowMs()
+  const oracleCommitments = await options.oracleCommitBlobs(fixture)
+  const wasmMs = nowMs() - oracleStart
+  const expectedBytes = blobCount * 48
+  if (oracleCommitments.byteLength !== expectedBytes) {
+    throw new Error(`WebGPU MSM calibration oracle returned ${oracleCommitments.byteLength} bytes, expected ${expectedBytes}`)
+  }
+
+  const scored: Array<{ candidate: WebGpuKzgMsmCalibrationCandidate; score: number }> = []
+  const failures: string[] = []
+  for (const candidate of candidates) {
+    const scores: number[] = []
+    let committer: WebGpuKzgMsmCalibrationCommitter | null = null
+    try {
+      committer = await options.createCommitter(candidate)
+      for (let run = 0; run < runsPerCandidate; run += 1) {
+        const timed = await withTimeout(committer.commitBlobs(fixture), timeoutMs)
+        if (timed.timedOut) {
+          failures.push(`${candidate.bucketWidth}/${candidate.reductionMode}: timeout after ${timeoutMs}ms`)
+          break
+        }
+        if (!bytesEqual(oracleCommitments, timed.value.commitments)) {
+          failures.push(`${candidate.bucketWidth}/${candidate.reductionMode}: parity mismatch`)
+          scores.length = 0
+          break
+        }
+        scores.push(timed.value.timings.totalMs)
+      }
+    } catch (error) {
+      failures.push(
+        `${candidate.bucketWidth}/${candidate.reductionMode}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    } finally {
+      committer?.destroy()
+    }
+
+    if (scores.length === runsPerCandidate) {
+      scored.push({ candidate, score: median(scores) })
+    }
+  }
+
+  scored.sort((a, b) => a.score - b.score)
+  const winner = scored[0]
+  if (!winner) {
+    throw new Error(
+      `WebGPU MSM calibration failed for ${candidates.length} candidate(s)${failures.length ? `: ${failures.join('; ')}` : ''}`,
+    )
+  }
+
+  return {
+    version: fallback.version,
+    cacheKey: fallback.cacheKey,
+    bucketWidth: winner.candidate.bucketWidth,
+    reductionMode: winner.candidate.reductionMode,
+    minBlobs: Math.max(1, Math.min(blobCount, fallback.minBlobs || blobCount)),
+    minBytes: Math.max(WEBGPU_KZG_MSM_BLOB_SIZE, Math.min(fixture.byteLength, fallback.minBytes || fixture.byteLength)),
+    source: 'benchmark-matrix',
+    reason: `bounded calibration selected bucket ${winner.candidate.bucketWidth} / ${winner.candidate.reductionMode}`,
+    score: winner.score,
+    measuredFixture: {
+      blobs: blobCount,
+      bytes: fixture.byteLength,
+      runs: runsPerCandidate,
+      candidates: candidates.length,
+      metric: 'median-total-ms',
+      wasmMs,
+    },
+    measuredAtMs: options.now ? options.now() : Date.now(),
+  }
 }
 
 function reductionWorkgroupSize(mode: WebGpuKzgMsmReductionMode): 16 | 32 | 64 {
@@ -922,10 +1267,12 @@ export async function createWebGpuKzgMsmCommitter(
   if (!options.allowFallbackAdapter && adapterInfo?.isFallbackAdapter) {
     throw new Error('WebGPU adapter is a fallback/software adapter')
   }
+  const calibration = options.calibration ?? selectWebGpuKzgMsmAdapterCalibration(adapterInfo)
   const resolvedOptions: WebGpuKzgMsmOptions = {
     ...options,
-    bucketWidth: options.bucketWidth ?? defaultWebGpuKzgMsmAdapterCalibration(adapterInfo).bucketWidth,
-    reductionMode: options.reductionMode ?? defaultWebGpuKzgMsmAdapterCalibration(adapterInfo).reductionMode,
+    calibration,
+    bucketWidth: options.bucketWidth ?? calibration.bucketWidth,
+    reductionMode: options.reductionMode ?? calibration.reductionMode,
   }
   const device = await adapter.requestDevice()
   return new WebGpuKzgMsmCommitter(device, wasm, resolvedOptions)

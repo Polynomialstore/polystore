@@ -37,7 +37,11 @@ export type KzgBackendStatus = {
   fallbackReason: string | null
   probeStatus: string | null
   circuitOpen: boolean | null
+  bucketWidth: number | null
   reductionMode: string | null
+  calibrationStatus: string | null
+  calibrationSource: string | null
+  calibrationCacheKey: string | null
   probeTimeoutMs: number | null
   commitTimeoutMs: number | null
   minBlobs: number | null
@@ -104,8 +108,16 @@ export type KzgDiagnosticsInput = {
   workerKzgWebGpuProbeStatus?: string
   kzgWebGpuCircuitOpen?: boolean
   workerKzgWebGpuCircuitOpen?: boolean
+  kzgWebGpuBucketWidth?: number
+  workerKzgWebGpuBucketWidth?: number
   kzgWebGpuReductionMode?: string
   workerKzgWebGpuReductionMode?: string
+  kzgWebGpuCalibrationStatus?: string
+  workerKzgWebGpuCalibrationStatus?: string
+  kzgWebGpuCalibrationSource?: string
+  workerKzgWebGpuCalibrationSource?: string
+  kzgWebGpuCalibrationCacheKey?: string
+  workerKzgWebGpuCalibrationCacheKey?: string
   kzgWebGpuProbeTimeoutMs?: number
   workerKzgWebGpuProbeTimeoutMs?: number
   kzgWebGpuCommitTimeoutMs?: number
@@ -139,7 +151,11 @@ export const PENDING_KZG_BACKEND_STATUS: KzgBackendStatus = {
   fallbackReason: null,
   probeStatus: null,
   circuitOpen: null,
+  bucketWidth: null,
   reductionMode: null,
+  calibrationStatus: null,
+  calibrationSource: null,
+  calibrationCacheKey: null,
   probeTimeoutMs: null,
   commitTimeoutMs: null,
   minBlobs: null,
@@ -179,13 +195,18 @@ export function normalizeKzgBackendStatus(input?: KzgDiagnosticsInput | null): K
   const probeStatus = firstString(input.kzgWebGpuProbeStatus, input.workerKzgWebGpuProbeStatus)
   const circuitOpen = firstBoolean(input.kzgWebGpuCircuitOpen, input.workerKzgWebGpuCircuitOpen)
   const webGpuAvailable = firstBoolean(input.kzgWebGpuAvailable, input.workerKzgWebGpuAvailable)
+  const bucketWidth = firstNumber(input.kzgWebGpuBucketWidth, input.workerKzgWebGpuBucketWidth)
   const reductionMode = firstString(input.kzgWebGpuReductionMode, input.workerKzgWebGpuReductionMode)
+  const calibrationStatus = firstString(input.kzgWebGpuCalibrationStatus, input.workerKzgWebGpuCalibrationStatus)
+  const calibrationSource = firstString(input.kzgWebGpuCalibrationSource, input.workerKzgWebGpuCalibrationSource)
+  const calibrationCacheKey = firstString(input.kzgWebGpuCalibrationCacheKey, input.workerKzgWebGpuCalibrationCacheKey)
+  const settingParts = [reductionMode, bucketWidth ? `bucket ${bucketWidth}` : null, calibrationSource].filter(Boolean)
 
   let display: KzgBackendDisplay = 'unknown'
   let label = 'KZG backend unknown'
   if (backend === 'webgpu' || rustBackend === 'webgpu-msm') {
     display = 'webgpu-msm'
-    label = reductionMode ? `WebGPU MSM (${reductionMode})` : 'WebGPU MSM'
+    label = settingParts.length ? `WebGPU MSM (${settingParts.join(', ')})` : 'WebGPU MSM'
   } else if (backend === 'wasm-blst' || backend === 'webgpu-wasm-fallback' || rustBackend === 'blst') {
     display = fallbackReason ? 'fallback' : 'wasm-blst'
     label = fallbackReason ? 'WASM blst fallback' : 'WASM blst'
@@ -203,7 +224,11 @@ export function normalizeKzgBackendStatus(input?: KzgDiagnosticsInput | null): K
     fallbackReason,
     probeStatus,
     circuitOpen,
+    bucketWidth,
     reductionMode,
+    calibrationStatus,
+    calibrationSource,
+    calibrationCacheKey,
     probeTimeoutMs: firstNumber(input.kzgWebGpuProbeTimeoutMs, input.workerKzgWebGpuProbeTimeoutMs),
     commitTimeoutMs: firstNumber(input.kzgWebGpuCommitTimeoutMs, input.workerKzgWebGpuCommitTimeoutMs),
     minBlobs: firstNumber(input.kzgWebGpuMinBlobs, input.workerKzgWebGpuMinBlobs),
@@ -319,6 +344,7 @@ export function sanitizeUploadPipelineStatus(status: UploadPipelineStatus): Uplo
     kzg: {
       ...status.kzg,
       fallbackReason: truncate(status.kzg.fallbackReason, 500),
+      calibrationCacheKey: truncate(status.kzg.calibrationCacheKey, 240),
     },
   }
 }
