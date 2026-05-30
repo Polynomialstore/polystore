@@ -1,25 +1,14 @@
 import init, { PolyStoreWasm } from '../lib/polystoreCoreRuntime.js'
-import { createBrowserKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend'
 import {
-  expandUserMduRsWithBrowserKzg,
-  kzgCommitDiagnosticsForBackend,
+  committedExpansionToUserMduBrowserKzgResult,
+  parseCommittedExpansion,
+  parseUserMduUncommittedExpansion,
 } from '../lib/upload/userMduBrowserKzg'
 
 let wasmInitialized = false
 let wasmInitPromise: Promise<void> | null = null
 let wasmInitError: unknown = null
 let polyStoreWasmInstance: PolyStoreWasm | null = null
-let kzgCommitBackend: KzgCommitBackend | null = null
-
-// User MDU batches are large (default Mode 2 RS 8+4 commits 96 blobs), so
-// do not let a one-blob probe reject WebGPU for the dominant upload stage.
-// Validation failures still fall back through expandUserMduRsWithBrowserKzg.
-const USER_UPLOAD_KZG_OPTIONS = {
-  preferWebGpu: true,
-  webGpuMode: 'force' as const,
-  webGpuProbeTimeoutMs: 15_000,
-  webGpuCommitTimeoutMs: 60_000,
-}
 
 function initializeWasm(): Promise<void> {
   if (wasmInitialized) return Promise.resolve()
@@ -40,8 +29,10 @@ function initializeWasm(): Promise<void> {
 
 void initializeWasm()
 
-function kzgCommitDiagnostics() {
-  return kzgCommitDiagnosticsForBackend(kzgCommitBackend)
+function committedFallbackReason(fallbackReason: unknown): string | undefined {
+  return typeof fallbackReason === 'string' && fallbackReason.trim()
+    ? `scheduler owner failed; used committed WASM fallback: ${fallbackReason}`
+    : undefined
 }
 
 self.onmessage = async (event) => {
@@ -59,110 +50,63 @@ self.onmessage = async (event) => {
         const { trustedSetupBytes } = payload as { trustedSetupBytes: Uint8Array }
         if (!trustedSetupBytes) throw new Error('Trusted setup bytes required')
         polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes)
-        kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, USER_UPLOAD_KZG_OPTIONS)
         ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: 'ok' })
         return
       }
-      case 'expandMduRs': {
-        if (!polyStoreWasmInstance || !kzgCommitBackend) throw new Error('PolyStoreWasm not initialized')
-        const { data, k, m, profile = true } = payload as { data: Uint8Array; k: number; m: number; profile?: boolean }
-        if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
-        const result = await expandUserMduRsWithBrowserKzg({
-          kind: 'mdu',
-          data,
-          k: Number(k),
-          m: Number(m),
-          profile,
-          wasm: polyStoreWasmInstance,
-          kzgCommitBackend,
-        })
-        const transferables: Transferable[] = [result.witness_flat.buffer, result.mdu_root.buffer, result.shards_flat.buffer]
-        ;(self as unknown as Worker).postMessage(
-          {
-            id,
-            type: 'result',
-            payload: result,
-          },
-          transferables,
-        )
-        return
-      }
-      case 'expandPayloadRs': {
-        if (!polyStoreWasmInstance || !kzgCommitBackend) throw new Error('PolyStoreWasm not initialized')
-        const { data, k, m, profile = true } = payload as {
+      case 'expandMduRsUncommitted':
+      case 'expandPayloadRsUncommitted': {
+        if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized')
+        const { data, k, m, profile = true, payloadId, sequence, mduIndex } = payload as {
           data: Uint8Array
           k: number
           m: number
           profile?: boolean
+          payloadId?: string
+          sequence?: number
+          mduIndex?: number
         }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
-
-        const result = await expandUserMduRsWithBrowserKzg({
-          kind: 'payload',
-          data,
+        const kind = type === 'expandMduRsUncommitted' ? 'mdu' : 'payload'
+        const raw = kind === 'mdu'
+          ? polyStoreWasmInstance.expand_mdu_rs_flat_uncommitted(data, Number(k), Number(m))
+          : polyStoreWasmInstance.expand_payload_rs_flat_uncommitted(data, Number(k), Number(m))
+        const result = parseUserMduUncommittedExpansion(raw, {
+          kind,
           k: Number(k),
           m: Number(m),
           profile,
-          wasm: polyStoreWasmInstance,
-          kzgCommitBackend,
+          payloadId,
+          sequence,
+          mduIndex,
+          label: kind === 'mdu' ? 'expandMduRsUncommitted' : 'expandPayloadRsUncommitted',
         })
-        ;(self as unknown as Worker).postMessage(
-          {
-            id,
-            type: 'result',
-            payload: result,
-          },
-          [result.witness_flat.buffer, result.mdu_root.buffer, result.shards_flat.buffer],
-        )
+        ;(self as unknown as Worker).postMessage({ id, type: 'result', payload: result }, [result.shardsFlat.buffer])
         return
       }
-      case 'commitMduProfiled': {
-        if (!polyStoreWasmInstance || !kzgCommitBackend) throw new Error('PolyStoreWasm not initialized')
-        const { data } = payload as { data: Uint8Array }
-        const BLOBS_PER_MDU = 64
+      case 'expandMduRsCommitted':
+      case 'expandPayloadRsCommitted': {
+        if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized')
+        const { data, k, m, profile = true, fallbackReason } = payload as {
+          data: Uint8Array
+          k: number
+          m: number
+          profile?: boolean
+          fallbackReason?: string
+        }
         if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
-        if (data.byteLength !== 8 * 1024 * 1024) throw new Error('MDU bytes must be exactly 8 MiB')
-
-        const opStart = performance.now()
-        const commitStart = performance.now()
-        const committedRaw = await kzgCommitBackend.commitBlobsProfiled(data)
-        const commitMs = performance.now() - commitStart
-        const witnessFlat = committedRaw.witnessFlat
-        const commitPerf = committedRaw.perf
-
-        const rootStart = performance.now()
-        const root = polyStoreWasmInstance.compute_mdu_root(witnessFlat) as unknown
-        const rootMs = performance.now() - rootStart
-        const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike)
+        const isMdu = type === 'expandMduRsCommitted'
+        const raw = isMdu
+          ? profile
+            ? polyStoreWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m))
+            : polyStoreWasmInstance.expand_mdu_rs_flat_committed(data, Number(k), Number(m))
+          : profile
+            ? polyStoreWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m))
+            : polyStoreWasmInstance.expand_payload_rs_flat_committed(data, Number(k), Number(m))
+        const parsed = parseCommittedExpansion(raw, isMdu ? 'expandMduRsCommitted' : 'expandPayloadRsCommitted')
+        const result = committedExpansionToUserMduBrowserKzgResult(parsed, committedFallbackReason(fallbackReason))
         ;(self as unknown as Worker).postMessage(
-          {
-            id,
-            type: 'result',
-            payload: {
-              witness_flat: witnessFlat,
-              mdu_root: rootBytes,
-              perf: {
-                commitMs,
-                rootMs,
-                totalMs: performance.now() - opStart,
-                blobCount: BLOBS_PER_MDU,
-                batchCount: 1,
-                batchSize: BLOBS_PER_MDU,
-                rustCommitDecodeMs: commitPerf.decodeMs,
-                rustCommitTransformMs: commitPerf.transformMs,
-                rustCommitMsmScalarPrepMs: commitPerf.msmScalarPrepMs,
-                rustCommitMsmBucketFillMs: commitPerf.msmBucketFillMs,
-                rustCommitMsmReduceMs: commitPerf.msmReduceMs,
-                rustCommitMsmDoubleMs: commitPerf.msmDoubleMs,
-                rustCommitMsmMs: commitPerf.msmMs,
-                rustCommitCompressMs: commitPerf.compressMs,
-                rustCommitMs: commitPerf.totalMs || commitMs,
-                rustCommitMsmSubphasesAvailable: false,
-                ...kzgCommitDiagnostics(),
-              },
-            },
-          },
-          [witnessFlat.buffer, rootBytes.buffer],
+          { id, type: 'result', payload: result },
+          [parsed.witnessFlat.buffer, parsed.mduRoot.buffer, parsed.shardsFlat.buffer],
         )
         return
       }

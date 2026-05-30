@@ -3,7 +3,6 @@ import {
   KZG_COMMITMENT_SIZE,
   type KzgCommitBackend,
   type KzgCommitPerf,
-  type KzgCommitProfiledResult,
 } from '../kzgCommitBackend'
 
 export type UserMduExpansionKind = 'mdu' | 'payload'
@@ -42,6 +41,16 @@ export type UserMduBrowserKzgPerf = ReturnType<typeof kzgCommitDiagnosticsForBac
   rows: number
   shardsTotal: number
   browserKzgCommitFallbackReason?: string
+  kzgSchedulerSequence?: number
+  kzgSchedulerQueueWaitMs?: number
+  kzgSchedulerCommitMs?: number
+  kzgSchedulerTotalMs?: number
+  kzgSchedulerDepthAtEnqueue?: number
+  kzgSchedulerActiveAtEnqueue?: number
+  kzgSchedulerQueueDepthAtStart?: number
+  kzgSchedulerMaxQueueDepth?: number
+  kzgSchedulerFallbackCount?: number
+  kzgSchedulerOwner?: string
 }
 
 export type UserMduBrowserKzgResult = {
@@ -52,7 +61,7 @@ export type UserMduBrowserKzgResult = {
   perf: UserMduBrowserKzgPerf
 }
 
-type SplitExpansionPerf = {
+export type SplitExpansionPerf = {
   encode_ms?: unknown
   rs_ms?: unknown
   total_ms?: unknown
@@ -61,7 +70,7 @@ type SplitExpansionPerf = {
   shard_len?: unknown
 }
 
-type CommittedExpansionPerf = SplitExpansionPerf & {
+export type CommittedExpansionPerf = SplitExpansionPerf & {
   commit_decode_ms?: unknown
   commit_transform_ms?: unknown
   commit_msm_scalar_prep_ms?: unknown
@@ -73,13 +82,26 @@ type CommittedExpansionPerf = SplitExpansionPerf & {
   commit_ms?: unknown
 }
 
-type ParsedUncommittedExpansion = {
+export type ParsedUncommittedExpansion = {
   shardsFlat: Uint8Array
   shardLen: number
   perf: SplitExpansionPerf
 }
 
-type ParsedCommittedExpansion = ParsedUncommittedExpansion & {
+export const USER_MDU_UNCOMMITTED_CONTRACT = 'mode2-user-mdu-uncommitted-v1' as const
+
+export type UserMduUncommittedExpansion = ParsedUncommittedExpansion & {
+  contract: typeof USER_MDU_UNCOMMITTED_CONTRACT
+  kind: UserMduExpansionKind
+  k: number
+  m: number
+  payloadId: string
+  profile: boolean
+  sequence?: number
+  mduIndex?: number
+}
+
+export type ParsedCommittedExpansion = ParsedUncommittedExpansion & {
   witnessFlat: Uint8Array
   mduRoot: Uint8Array
   perf: CommittedExpansionPerf
@@ -122,7 +144,7 @@ function parseMaybeJson(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
-function parseUncommittedExpansion(raw: unknown, label: string): ParsedUncommittedExpansion {
+export function parseUncommittedExpansion(raw: unknown, label: string): ParsedUncommittedExpansion {
   const parsed = parseMaybeJson(raw)
   const shardLen = Number(parsed.shard_len ?? 0)
   if (!Number.isInteger(shardLen) || shardLen <= 0) {
@@ -142,7 +164,7 @@ function parseUncommittedExpansion(raw: unknown, label: string): ParsedUncommitt
   }
 }
 
-function parseCommittedExpansion(raw: unknown, label: string): ParsedCommittedExpansion {
+export function parseCommittedExpansion(raw: unknown, label: string): ParsedCommittedExpansion {
   const parsed = parseMaybeJson(raw)
   const base = parseUncommittedExpansion(parsed, label)
   const witnessFlat = toUserMduUint8Array(parsed.witness_flat)
@@ -159,6 +181,48 @@ function parseCommittedExpansion(raw: unknown, label: string): ParsedCommittedEx
     witnessFlat,
     mduRoot,
     perf: (parsed.perf ?? {}) as CommittedExpansionPerf,
+  }
+}
+
+export function parseUserMduUncommittedExpansion(
+  raw: unknown,
+  context: {
+    kind: UserMduExpansionKind
+    k: number
+    m: number
+    payloadId?: string
+    profile?: boolean
+    sequence?: number
+    mduIndex?: number
+    label?: string
+  },
+): UserMduUncommittedExpansion {
+  const k = Number(context.k)
+  const m = Number(context.m)
+  if (!Number.isInteger(k) || k <= 0) throw new Error('RS k must be a positive integer')
+  if (!Number.isInteger(m) || m <= 0) throw new Error('RS m must be a positive integer')
+  const parsed = parseUncommittedExpansion(raw, context.label ?? context.kind)
+  const shardCount = parsed.shardsFlat.byteLength / parsed.shardLen
+  if (shardCount !== k + m) {
+    throw new Error(`${context.label ?? context.kind} returned ${shardCount} shards, expected ${k + m}`)
+  }
+  const perfRows = numberField(parsed.perf.rows)
+  const expectedCommitmentCount = parsed.shardsFlat.byteLength / KZG_BLOB_SIZE
+  if (perfRows > 0 && expectedCommitmentCount !== shardCount * perfRows) {
+    throw new Error(
+      `${context.label ?? context.kind} returned ${expectedCommitmentCount} blobs, expected ${shardCount * perfRows}`,
+    )
+  }
+  return {
+    contract: USER_MDU_UNCOMMITTED_CONTRACT,
+    kind: context.kind,
+    k,
+    m,
+    payloadId: context.payloadId ?? `${context.kind}:${context.sequence ?? 'unknown'}`,
+    profile: context.profile !== false,
+    sequence: context.sequence,
+    mduIndex: context.mduIndex,
+    ...parsed,
   }
 }
 
@@ -284,6 +348,83 @@ function committedFallback(
   }
 }
 
+export function committedExpansionToUserMduBrowserKzgResult(
+  parsed: ParsedCommittedExpansion,
+  fallbackReason?: string,
+): UserMduBrowserKzgResult {
+  const diagnostics = {
+    ...kzgCommitDiagnosticsForBackend(undefined),
+    kzgCommitBackend: 'wasm-blst',
+    rustCommitBackend: 'blst',
+  }
+  const rootMs = 0
+  const commitPerf = committedPerfToKzgCommitPerf(parsed.perf)
+  return {
+    witness_flat: parsed.witnessFlat,
+    mdu_root: parsed.mduRoot,
+    shards_flat: parsed.shardsFlat,
+    shard_len: parsed.shardLen,
+    perf: perfFromSplitAndCommit(
+      parsed.perf,
+      commitPerf,
+      numberField(parsed.perf.commit_ms),
+      rootMs,
+      numberField(parsed.perf.total_ms) + numberField(parsed.perf.commit_ms),
+      parsed.shardsFlat,
+      parsed.shardLen,
+      diagnostics,
+      fallbackReason,
+    ),
+  }
+}
+
+export async function commitUserMduUncommittedWithBrowserKzg(options: {
+  expansion: ParsedUncommittedExpansion
+  wasm: Pick<UserMduBrowserKzgWasm, 'compute_mdu_root'>
+  kzgCommitBackend: KzgCommitBackend
+  now?: () => number
+  totalStartMs?: number
+}): Promise<UserMduBrowserKzgResult> {
+  const { expansion, wasm, kzgCommitBackend } = options
+  const now = options.now ?? defaultNow
+  const totalStart = options.totalStartMs
+
+  const commitStart = now()
+  const committedRaw = await kzgCommitBackend.commitBlobsProfiled(expansion.shardsFlat)
+  const commitMs = now() - commitStart
+  const witnessFlat = committedRaw.witnessFlat
+  const expectedWitnessBytes = (expansion.shardsFlat.byteLength / KZG_BLOB_SIZE) * KZG_COMMITMENT_SIZE
+  if (witnessFlat.byteLength !== expectedWitnessBytes) {
+    throw new Error(`browser KZG returned ${witnessFlat.byteLength} witness bytes, expected ${expectedWitnessBytes}`)
+  }
+
+  const rootStart = now()
+  const root = wasm.compute_mdu_root(witnessFlat) as unknown
+  const rootMs = now() - rootStart
+  const rootBytes = toUserMduUint8Array(root)
+  if (rootBytes.byteLength !== 32) {
+    throw new Error(`compute_mdu_root returned ${rootBytes.byteLength} bytes, expected 32`)
+  }
+
+  const diagnostics = kzgCommitDiagnosticsForBackend(kzgCommitBackend)
+  return {
+    witness_flat: witnessFlat,
+    mdu_root: rootBytes,
+    shards_flat: expansion.shardsFlat,
+    shard_len: expansion.shardLen,
+    perf: perfFromSplitAndCommit(
+      expansion.perf,
+      committedRaw.perf,
+      commitMs,
+      rootMs,
+      totalStart === undefined ? numberField(expansion.perf.total_ms) + commitMs + rootMs : now() - totalStart,
+      expansion.shardsFlat,
+      expansion.shardLen,
+      diagnostics,
+    ),
+  }
+}
+
 export async function expandUserMduRsWithBrowserKzg(
   options: ExpandWithBrowserKzgOptions,
 ): Promise<UserMduBrowserKzgResult> {
@@ -297,49 +438,16 @@ export async function expandUserMduRsWithBrowserKzg(
     : wasm.expand_payload_rs_flat_uncommitted(data, k, m)
   const expanded = parseUncommittedExpansion(uncommittedRaw, kind === 'mdu' ? 'expandMduRs' : 'expandPayloadRs')
 
-  let committedRaw: KzgCommitProfiledResult
-  let commitMs = 0
-  let witnessFlat: Uint8Array
-  let rootMs = 0
-  let rootBytes: Uint8Array
   try {
-    const commitStart = now()
-    committedRaw = await kzgCommitBackend.commitBlobsProfiled(expanded.shardsFlat)
-    commitMs = now() - commitStart
-    witnessFlat = committedRaw.witnessFlat
-    const expectedWitnessBytes = (expanded.shardsFlat.byteLength / KZG_BLOB_SIZE) * KZG_COMMITMENT_SIZE
-    if (witnessFlat.byteLength !== expectedWitnessBytes) {
-      throw new Error(`browser KZG returned ${witnessFlat.byteLength} witness bytes, expected ${expectedWitnessBytes}`)
-    }
-
-    const rootStart = now()
-    const root = wasm.compute_mdu_root(witnessFlat) as unknown
-    rootMs = now() - rootStart
-    rootBytes = toUserMduUint8Array(root)
-    if (rootBytes.byteLength !== 32) {
-      throw new Error(`compute_mdu_root returned ${rootBytes.byteLength} bytes, expected 32`)
-    }
+    return await commitUserMduUncommittedWithBrowserKzg({
+      expansion: expanded,
+      wasm,
+      kzgCommitBackend,
+      now,
+      totalStartMs: totalStart,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return committedFallback(options, now, totalStart, `browser KZG commit failed validation; used committed WASM fallback: ${message}`)
-  }
-
-  const diagnostics = kzgCommitDiagnosticsForBackend(kzgCommitBackend)
-  const totalMs = now() - totalStart
-  return {
-    witness_flat: witnessFlat,
-    mdu_root: rootBytes,
-    shards_flat: expanded.shardsFlat,
-    shard_len: expanded.shardLen,
-    perf: perfFromSplitAndCommit(
-      expanded.perf,
-      committedRaw.perf,
-      commitMs,
-      rootMs,
-      totalMs,
-      expanded.shardsFlat,
-      expanded.shardLen,
-      diagnostics,
-    ),
   }
 }

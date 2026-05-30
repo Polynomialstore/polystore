@@ -42,6 +42,12 @@ export type KzgBackendStatus = {
   calibrationStatus: string | null
   calibrationSource: string | null
   calibrationCacheKey: string | null
+  schedulerQueueWaitMs: number | null
+  schedulerTotalMs: number | null
+  schedulerQueueDepth: number | null
+  schedulerActive: number | null
+  schedulerMaxQueueDepth: number | null
+  schedulerFallbackCount: number | null
   probeTimeoutMs: number | null
   commitTimeoutMs: number | null
   minBlobs: number | null
@@ -118,6 +124,18 @@ export type KzgDiagnosticsInput = {
   workerKzgWebGpuCalibrationSource?: string
   kzgWebGpuCalibrationCacheKey?: string
   workerKzgWebGpuCalibrationCacheKey?: string
+  kzgSchedulerQueueWaitMs?: number
+  workerKzgSchedulerQueueWaitMs?: number
+  kzgSchedulerTotalMs?: number
+  workerKzgSchedulerTotalMs?: number
+  kzgSchedulerDepthAtEnqueue?: number
+  workerKzgSchedulerDepthAtEnqueue?: number
+  kzgSchedulerActiveAtEnqueue?: number
+  workerKzgSchedulerActiveAtEnqueue?: number
+  kzgSchedulerMaxQueueDepth?: number
+  workerKzgSchedulerMaxQueueDepth?: number
+  kzgSchedulerFallbackCount?: number
+  workerKzgSchedulerFallbackCount?: number
   kzgWebGpuProbeTimeoutMs?: number
   workerKzgWebGpuProbeTimeoutMs?: number
   kzgWebGpuCommitTimeoutMs?: number
@@ -156,6 +174,12 @@ export const PENDING_KZG_BACKEND_STATUS: KzgBackendStatus = {
   calibrationStatus: null,
   calibrationSource: null,
   calibrationCacheKey: null,
+  schedulerQueueWaitMs: null,
+  schedulerTotalMs: null,
+  schedulerQueueDepth: null,
+  schedulerActive: null,
+  schedulerMaxQueueDepth: null,
+  schedulerFallbackCount: null,
   probeTimeoutMs: null,
   commitTimeoutMs: null,
   minBlobs: null,
@@ -229,6 +253,12 @@ export function normalizeKzgBackendStatus(input?: KzgDiagnosticsInput | null): K
     calibrationStatus,
     calibrationSource,
     calibrationCacheKey,
+    schedulerQueueWaitMs: firstNumber(input.kzgSchedulerQueueWaitMs, input.workerKzgSchedulerQueueWaitMs),
+    schedulerTotalMs: firstNumber(input.kzgSchedulerTotalMs, input.workerKzgSchedulerTotalMs),
+    schedulerQueueDepth: firstNumber(input.kzgSchedulerDepthAtEnqueue, input.workerKzgSchedulerDepthAtEnqueue),
+    schedulerActive: firstNumber(input.kzgSchedulerActiveAtEnqueue, input.workerKzgSchedulerActiveAtEnqueue),
+    schedulerMaxQueueDepth: firstNumber(input.kzgSchedulerMaxQueueDepth, input.workerKzgSchedulerMaxQueueDepth),
+    schedulerFallbackCount: firstNumber(input.kzgSchedulerFallbackCount, input.workerKzgSchedulerFallbackCount),
     probeTimeoutMs: firstNumber(input.kzgWebGpuProbeTimeoutMs, input.workerKzgWebGpuProbeTimeoutMs),
     commitTimeoutMs: firstNumber(input.kzgWebGpuCommitTimeoutMs, input.workerKzgWebGpuCommitTimeoutMs),
     minBlobs: firstNumber(input.kzgWebGpuMinBlobs, input.workerKzgWebGpuMinBlobs),
