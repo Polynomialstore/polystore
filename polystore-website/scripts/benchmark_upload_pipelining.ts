@@ -1,41 +1,76 @@
-import { createUploadEngine, type PipelinedUploadArtifact, type UploadTarget, type UploadTransportRequest } from '../src/lib/upload/engine'
+import { performance } from 'node:perf_hooks'
 
-const artifactCount = Math.max(1, Number(process.env.ARTIFACTS || 8))
-const computeMs = Math.max(0, Number(process.env.COMPUTE_MS || 40))
-const uploadMs = Math.max(0, Number(process.env.UPLOAD_MS || 30))
-const concurrency = Math.max(1, Number(process.env.CONCURRENCY || 3))
+import {
+  createUploadEngine,
+  type PipelinedUploadArtifact,
+  type UploadTarget,
+  type UploadTaskEvent,
+  type UploadTransportRequest,
+} from '../src/lib/upload/engine'
+
+const artifactCount = Math.max(1, Number(process.env.ARTIFACTS || 24))
+const computeMs = Math.max(0, Number(process.env.COMPUTE_MS || 35))
+const uploadMs = Math.max(0, Number(process.env.UPLOAD_MS || 45))
+const concurrency = Math.max(1, Number(process.env.CONCURRENCY || 4))
+const providers = Math.max(1, Number(process.env.PROVIDERS || 1))
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function nowMs(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now()
+  return performance.now()
 }
 
-const target: UploadTarget = {
-  baseUrl: 'http://provider.test',
-  mduPath: '/sp/upload_mdu',
-  manifestPath: '/sp/upload_manifest',
-  label: 'provider.test',
+function target(index: number): UploadTarget {
+  return {
+    baseUrl: `http://provider-${index}.test`,
+    mduPath: '/sp/upload_mdu',
+    manifestPath: '/sp/upload_manifest',
+    shardPath: '/sp/upload_shard',
+    label: `provider-${index}`,
+  }
 }
+
+const targets = Array.from({ length: providers }, (_, index) => target(index))
 
 function makeArtifact(index: number): PipelinedUploadArtifact {
+  const slot = index % providers
   return {
-    target,
+    target: targets[slot],
     artifact: {
-      kind: 'mdu',
-      index,
+      kind: 'shard',
+      index: 1 + index,
+      slot,
       bytes: new Uint8Array([index & 0xff]),
-      fullSize: 8,
+      fullSize: 1024 * 1024,
     },
   }
 }
 
+function requestBytes(request: UploadTransportRequest): number {
+  return Math.max(0, request.artifact.bytes.byteLength)
+}
+
 function makeTransport() {
   const starts: Array<{ kind: string; tMs: number; manifestRoot: string; generation: string }> = []
+  let active = 0
+  let peakActiveUploads = 0
+  let requestCount = 0
+  let bytesSent = 0
   return {
-    starts,
+    metrics: {
+      starts,
+      get peakActiveUploads() {
+        return peakActiveUploads
+      },
+      get requestCount() {
+        return requestCount
+      },
+      get bytesSent() {
+        return bytesSent
+      },
+    },
     transport: {
       async sendArtifact(request: UploadTransportRequest) {
         starts.push({
@@ -44,38 +79,77 @@ function makeTransport() {
           manifestRoot: request.manifestRoot,
           generation: request.uploadGeneration || '',
         })
+        requestCount += 1
+        bytesSent += requestBytes(request)
+        active += 1
+        peakActiveUploads = Math.max(peakActiveUploads, active)
         await sleep(uploadMs)
+        active -= 1
       },
     },
   }
 }
 
-async function runSequential(): Promise<number> {
+async function prepareArtifacts(): Promise<{ artifacts: PipelinedUploadArtifact[]; prepareWallMs: number }> {
   const prepared: PipelinedUploadArtifact[] = []
   const startedAt = nowMs()
   for (let i = 0; i < artifactCount; i += 1) {
     await sleep(computeMs)
     prepared.push(makeArtifact(i))
   }
-  const transport = makeTransport()
-  const engine = createUploadEngine({ transport: transport.transport, parallelism: { direct: concurrency } })
-  await engine.uploadDirect({
-    dealId: '1',
-    manifestRoot: '0xnext',
-    manifestBlob: new Uint8Array([0xff]),
-    mdus: prepared.map((item) => {
-      if (item.artifact.kind !== 'mdu') throw new Error('expected mdu artifact')
-      return { index: item.artifact.index, data: item.artifact.bytes, fullSize: item.artifact.fullSize }
-    }),
-    target,
-  })
-  return nowMs() - startedAt
+  return { artifacts: prepared, prepareWallMs: nowMs() - startedAt }
 }
 
-async function runPipelined(): Promise<{ elapsedMs: number; starts: ReturnType<typeof makeTransport>['starts'] }> {
+async function runSequential() {
+  const startedAt = nowMs()
+  const prepared = await prepareArtifacts()
   const transport = makeTransport()
   const engine = createUploadEngine({ transport: transport.transport, parallelism: { direct: concurrency } })
+  const uploadStartedAt = nowMs()
+  async function* artifacts() {
+    for (const artifact of prepared.artifacts) {
+      yield artifact
+    }
+  }
+  const result = await engine.uploadPipelinedGeneration({
+    dealId: '197',
+    previousManifestRoot: '0xprev',
+    uploadGeneration: 'benchmark-sequential',
+    artifacts: artifacts(),
+    manifest: Promise.resolve({
+      manifestRoot: '0xnext',
+      manifestBlob: new Uint8Array([0xff]),
+      manifestTargets: targets,
+    }),
+  })
+  if (!result.ok) throw new Error(result.error || 'sequential upload failed')
+  const finishedAt = nowMs()
+  const stats = result.transportStats
+  return {
+    scenario: 'sequential_prepare_then_upload',
+    prepareWallMs: prepared.prepareWallMs,
+    uploadWallMs: finishedAt - uploadStartedAt,
+    overlapWallMs: 0,
+    endToEndWallMs: finishedAt - startedAt,
+    artifactCount: stats?.artifactCount ?? artifactCount + 1,
+    peakActiveUploads: Math.max(transport.metrics.peakActiveUploads, stats?.peakActiveUploads ?? 0),
+    requestCount: stats?.requestCount ?? transport.metrics.requestCount,
+    bundleCount: stats?.bundleCount ?? 0,
+    fallbackCount: stats?.fallbackCount ?? 0,
+    bytesSent: stats?.bytesSent ?? transport.metrics.bytesSent,
+  }
+}
+
+async function runPipelined() {
+  const transport = makeTransport()
+  const engine = createUploadEngine({ transport: transport.transport, parallelism: { direct: concurrency } })
+  const taskEvents: UploadTaskEvent[] = []
   let computed = 0
+  let prepareDoneAt = 0
+  let resolveManifest!: (value: { manifestRoot: string; manifestBlob: Uint8Array; manifestTargets: UploadTarget[] }) => void
+  const manifest = new Promise<{ manifestRoot: string; manifestBlob: Uint8Array; manifestTargets: UploadTarget[] }>((resolve) => {
+    resolveManifest = resolve
+  })
 
   async function* artifacts() {
     for (let i = 0; i < artifactCount; i += 1) {
@@ -83,42 +157,85 @@ async function runPipelined(): Promise<{ elapsedMs: number; starts: ReturnType<t
       computed += 1
       yield makeArtifact(i)
     }
+    prepareDoneAt = nowMs()
+    resolveManifest({
+      manifestRoot: '0xnext',
+      manifestBlob: new Uint8Array([0xff]),
+      manifestTargets: targets,
+    })
   }
 
   const startedAt = nowMs()
   const result = await engine.uploadPipelinedGeneration({
-    dealId: '1',
-    uploadGeneration: 'pipelined',
+    dealId: '197',
+    previousManifestRoot: '0xprev',
+    uploadGeneration: 'benchmark-pipelined',
     artifacts: artifacts(),
-    manifest: (async () => {
-      while (computed < artifactCount) {
-        await sleep(1)
-      }
-      return {
-        manifestRoot: '0xnext',
-        manifestBlob: new Uint8Array([0xff]),
-        manifestTargets: [target],
-      }
-    })(),
+    manifest,
+    onTaskEvent(event) {
+      taskEvents.push(event)
+    },
   })
   if (!result.ok) throw new Error(result.error || 'pipelined upload failed')
-  return { elapsedMs: nowMs() - startedAt, starts: transport.starts }
+  const finishedAt = nowMs()
+  const stats = result.transportStats
+  const prepareWallMs = prepareDoneAt - startedAt
+  const firstTransportStart = transport.metrics.starts[0]?.tMs ?? startedAt
+  const uploadWallMs = finishedAt - firstTransportStart
+  const overlapWallMs = Math.max(0, Math.min(prepareDoneAt, finishedAt) - firstTransportStart)
+  return {
+    scenario: 'pipelined_prepare_and_upload',
+    prepareWallMs,
+    uploadWallMs,
+    overlapWallMs,
+    endToEndWallMs: finishedAt - startedAt,
+    artifactCount: stats?.artifactCount ?? artifactCount + providers,
+    queuedArtifactCount: stats?.queuedArtifactCount ?? artifactCount,
+    stagedArtifactCount: stats?.stagedArtifactCount ?? artifactCount,
+    activatedArtifactCount: stats?.activatedArtifactCount ?? providers,
+    peakActiveUploads: Math.max(transport.metrics.peakActiveUploads, stats?.peakActiveUploads ?? 0),
+    requestCount: stats?.requestCount ?? transport.metrics.requestCount,
+    bundleCount: stats?.bundleCount ?? 0,
+    fallbackCount: stats?.fallbackCount ?? 0,
+    bytesSent: stats?.bytesSent ?? transport.metrics.bytesSent,
+    preparedArtifacts: computed,
+    stagedBeforeManifest: transport.metrics.starts.filter((start) => start.kind !== 'manifest' && start.manifestRoot === '').length,
+  }
 }
 
-const sequentialMs = await runSequential()
+const sequential = await runSequential()
 const pipelined = await runPipelined()
-const speedup = sequentialMs / pipelined.elapsedMs
+const speedup = sequential.endToEndWallMs / pipelined.endToEndWallMs
 
+const rows = [sequential, pipelined].map((row) => ({
+  ...row,
+  prepareWallMs: Math.round(row.prepareWallMs * 10) / 10,
+  uploadWallMs: Math.round(row.uploadWallMs * 10) / 10,
+  overlapWallMs: Math.round(row.overlapWallMs * 10) / 10,
+  endToEndWallMs: Math.round(row.endToEndWallMs * 10) / 10,
+}))
+
+console.table(rows.map((row) => ({
+  scenario: row.scenario,
+  prepareMs: row.prepareWallMs,
+  uploadMs: row.uploadWallMs,
+  overlapMs: row.overlapWallMs,
+  e2eMs: row.endToEndWallMs,
+  artifacts: row.artifactCount,
+  requests: row.requestCount,
+  bundles: row.bundleCount,
+  fallbacks: row.fallbackCount,
+  peakActive: row.peakActiveUploads,
+})))
 console.log(JSON.stringify({
   scenario: {
     artifact_count: artifactCount,
+    provider_count: providers,
     compute_ms_per_artifact: computeMs,
-    upload_ms_per_artifact: uploadMs,
+    upload_ms_per_request: uploadMs,
     upload_concurrency: concurrency,
+    note: 'Mocked latency benchmark; measures end-to-end overlap, not KZG speedup.',
   },
-  sequential_ms: sequentialMs,
-  pipelined_ms: pipelined.elapsedMs,
   speedup,
-  decision: speedup > 1.05 ? 'improvement' : speedup < 0.95 ? 'regression' : 'same',
-  pipelined_started_before_manifest_count: pipelined.starts.filter((start) => start.kind !== 'manifest' && start.manifestRoot === '').length,
+  rows,
 }, null, 2))

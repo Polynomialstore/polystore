@@ -112,7 +112,34 @@ test('patchUploadPipelineStatus preserves nested state and records elapsed time'
   assert.equal(next.totals.totalMdus, 3)
   assert.equal(next.totals.workDone, 1)
   assert.equal(next.storage.stage, 'browser_memory')
+  assert.equal(next.storage.activeArtifacts, null)
+  assert.equal(next.storage.stagedArtifacts, null)
   assert.equal(next.timing.elapsedMs, 150)
+})
+
+test('patchUploadPipelineStatus tracks staged provider artifacts', () => {
+  const initial = createUploadPipelineStatus({ dealId: '42', nowMs: 0 })
+  const next = patchUploadPipelineStatus(
+    initial,
+    {
+      phase: 'upload_transport',
+      phaseLabel: 'Staging artifacts',
+      storage: {
+        stage: 'provider_staged',
+        queuedArtifacts: 4,
+        activeArtifacts: 1,
+        stagedArtifacts: 3,
+        uploadedArtifacts: 3,
+      },
+    },
+    50,
+  )
+
+  assert.equal(next.storage.stage, 'provider_staged')
+  assert.equal(next.storage.queuedArtifacts, 4)
+  assert.equal(next.storage.activeArtifacts, 1)
+  assert.equal(next.storage.stagedArtifacts, 3)
+  assert.equal(next.storage.uploadedArtifacts, 3)
 })
 
 test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {

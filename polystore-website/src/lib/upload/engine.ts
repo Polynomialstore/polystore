@@ -37,7 +37,7 @@ export interface UploadProgressStep {
 }
 
 export interface UploadTaskEvent {
-  phase: 'start' | 'end' | 'fallback'
+  phase: 'queued' | 'start' | 'end' | 'fallback' | 'activate'
   kind: SparseArtifactKind
   target: string
   index?: number
@@ -53,10 +53,17 @@ export interface UploadTaskEvent {
   bundleBytes?: number
   fallbackArtifactCount?: number
   fallbackReason?: string
+  queuedDepth?: number
+  activeUploads?: number
+  staged?: boolean
+  activating?: boolean
 }
 
 export interface UploadTransportStats {
   artifactCount: number
+  queuedArtifactCount: number
+  stagedArtifactCount: number
+  activatedArtifactCount: number
   perArtifactCount: number
   bundledArtifactCount: number
   bundleCount: number
@@ -175,6 +182,7 @@ export interface PipelinedGenerationUploadInput {
   artifacts: AsyncIterable<PipelinedUploadArtifact>
   manifest: Promise<PipelinedManifestBinding>
   onTaskEvent?: (event: UploadTaskEvent) => void
+  onPipelineError?: (error: Error) => void
 }
 
 export interface PreparedCommitInput {
@@ -346,6 +354,9 @@ const DEFAULT_STRIPED_SHARD_UPLOAD_CONCURRENCY = 6
 function createUploadTransportStats(): UploadTransportStats {
   return {
     artifactCount: 0,
+    queuedArtifactCount: 0,
+    stagedArtifactCount: 0,
+    activatedArtifactCount: 0,
     perArtifactCount: 0,
     bundledArtifactCount: 0,
     bundleCount: 0,
@@ -371,6 +382,9 @@ function mergeUploadTransportStats(...statsList: Array<UploadTransportStats | un
   const merged = createUploadTransportStats()
   for (const stats of filtered) {
     merged.artifactCount += stats.artifactCount
+    merged.queuedArtifactCount += stats.queuedArtifactCount
+    merged.stagedArtifactCount += stats.stagedArtifactCount
+    merged.activatedArtifactCount += stats.activatedArtifactCount
     merged.perArtifactCount += stats.perArtifactCount
     merged.bundledArtifactCount += stats.bundledArtifactCount
     merged.bundleCount += stats.bundleCount
@@ -434,6 +448,11 @@ async function runUploadTasks(
         const slot = trackTaskEvents && 'slot' in task.request.artifact ? task.request.artifact.slot : undefined
         const bytes = trackTaskEvents ? task.request.artifact.bytes.byteLength : 0
         const fullSize = trackTaskEvents ? task.request.artifact.fullSize : undefined
+        const staged = String(task.request.manifestRoot || '').trim() === '' && String(task.request.uploadGeneration || '').trim() !== ''
+        const activating =
+          task.request.artifact.kind === 'manifest' &&
+          String(task.request.manifestRoot || '').trim() !== '' &&
+          String(task.request.uploadGeneration || '').trim() !== ''
         if (trackTaskEvents) {
           onTaskEvent?.({
             phase: 'start',
@@ -444,6 +463,9 @@ async function runUploadTasks(
             bytes,
             fullSize,
             transportKind: 'artifact',
+            activeUploads: active,
+            staged,
+            activating,
           })
         }
 
@@ -454,6 +476,8 @@ async function runUploadTasks(
         void transport
           .sendArtifact(task.request)
           .then(() => {
+            if (staged) stats.stagedArtifactCount += 1
+            if (activating) stats.activatedArtifactCount += 1
             if (trackTaskEvents) {
               const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
               onTaskEvent?.({
@@ -467,6 +491,9 @@ async function runUploadTasks(
                 durationMs: finishedAt - startedAt,
                 ok: true,
                 transportKind: 'artifact',
+                activeUploads: active,
+                staged,
+                activating,
               })
             }
             if (trackProgress) {
@@ -490,6 +517,9 @@ async function runUploadTasks(
                 ok: false,
                 error: message,
                 transportKind: 'artifact',
+                activeUploads: active,
+                staged,
+                activating,
               })
             }
             if (trackProgress) {
@@ -518,6 +548,7 @@ async function runPipelinedUploadTaskProducer(
   const trackTaskEvents = Boolean(input.onTaskEvent)
   let producerDone = false
   let firstError: string | null = null
+  let active = 0
   const stats = createUploadTransportStats()
   const queue: PipelinedUploadArtifact[] = []
   const waiters: Array<() => void> = []
@@ -535,52 +566,66 @@ async function runPipelinedUploadTaskProducer(
     })
   }
 
+  const requestForItem = (item: PipelinedUploadArtifact): UploadTransportRequest => ({
+    dealId: input.dealId,
+    manifestRoot: '',
+    previousManifestRoot: input.previousManifestRoot,
+    uploadGeneration: input.uploadGeneration,
+    target: item.target,
+    artifact: item.artifact,
+  })
+
+  const eventFieldsForRequest = (request: UploadTransportRequest) => {
+    const target = request.target.label || request.target.baseUrl
+    const index = 'index' in request.artifact ? request.artifact.index : undefined
+    const slot = 'slot' in request.artifact ? request.artifact.slot : undefined
+    const bytes = request.artifact.bytes.byteLength
+    const fullSize = request.artifact.fullSize
+    const staged = String(request.manifestRoot || '').trim() === '' && String(request.uploadGeneration || '').trim() !== ''
+    return { target, index, slot, bytes, fullSize, staged }
+  }
+
   const uploadOne = async (item: PipelinedUploadArtifact): Promise<void> => {
-    const request: UploadTransportRequest = {
-      dealId: input.dealId,
-      manifestRoot: '',
-      previousManifestRoot: input.previousManifestRoot,
-      uploadGeneration: input.uploadGeneration,
-      target: item.target,
-      artifact: item.artifact,
-    }
-    stats.artifactCount += 1
+    const request = requestForItem(item)
+    active += 1
     stats.perArtifactCount += 1
     stats.requestCount += 1
     stats.bytesSent += Math.max(0, request.artifact.bytes.byteLength)
+    stats.peakActiveUploads = Math.max(stats.peakActiveUploads, active)
     const startedAt = trackTaskEvents ? (typeof performance !== 'undefined' ? performance.now() : Date.now()) : 0
-    const target = trackTaskEvents ? request.target.label || request.target.baseUrl : ''
-    const index = trackTaskEvents && 'index' in request.artifact ? request.artifact.index : undefined
-    const slot = trackTaskEvents && 'slot' in request.artifact ? request.artifact.slot : undefined
-    const bytes = trackTaskEvents ? request.artifact.bytes.byteLength : 0
-    const fullSize = trackTaskEvents ? request.artifact.fullSize : undefined
+    const fields = eventFieldsForRequest(request)
     if (trackTaskEvents) {
       input.onTaskEvent?.({
         phase: 'start',
         kind: request.artifact.kind,
-        target,
-        index,
-        slot,
-        bytes,
-        fullSize,
+        target: fields.target,
+        index: fields.index,
+        slot: fields.slot,
+        bytes: fields.bytes,
+        fullSize: fields.fullSize,
         transportKind: 'artifact',
+        activeUploads: active,
+        staged: fields.staged,
       })
     }
     try {
       await transport.sendArtifact(request)
+      if (fields.staged) stats.stagedArtifactCount += 1
       if (trackTaskEvents) {
         const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
         input.onTaskEvent?.({
           phase: 'end',
           kind: request.artifact.kind,
-          target,
-          index,
-          slot,
-          bytes,
-          fullSize,
+          target: fields.target,
+          index: fields.index,
+          slot: fields.slot,
+          bytes: fields.bytes,
+          fullSize: fields.fullSize,
           durationMs: finishedAt - startedAt,
           ok: true,
           transportKind: 'artifact',
+          activeUploads: active,
+          staged: fields.staged,
         })
       }
     } catch (error: unknown) {
@@ -590,18 +635,22 @@ async function runPipelinedUploadTaskProducer(
         input.onTaskEvent?.({
           phase: 'end',
           kind: request.artifact.kind,
-          target,
-          index,
-          slot,
-          bytes,
-          fullSize,
+          target: fields.target,
+          index: fields.index,
+          slot: fields.slot,
+          bytes: fields.bytes,
+          fullSize: fields.fullSize,
           durationMs: finishedAt - startedAt,
           ok: false,
           error: message,
           transportKind: 'artifact',
+          activeUploads: active,
+          staged: fields.staged,
         })
       }
       throw new Error(message)
+    } finally {
+      active = Math.max(0, active - 1)
     }
   }
 
@@ -609,6 +658,24 @@ async function runPipelinedUploadTaskProducer(
     try {
       for await (const item of input.artifacts) {
         if (firstError) break
+        const request = requestForItem(item)
+        stats.artifactCount += 1
+        stats.queuedArtifactCount += 1
+        if (trackTaskEvents) {
+          const fields = eventFieldsForRequest(request)
+          input.onTaskEvent?.({
+            phase: 'queued',
+            kind: request.artifact.kind,
+            target: fields.target,
+            index: fields.index,
+            slot: fields.slot,
+            bytes: fields.bytes,
+            fullSize: fields.fullSize,
+            transportKind: 'artifact',
+            queuedDepth: queue.length + 1,
+            staged: fields.staged,
+          })
+        }
         queue.push(item)
         wakeWorkers()
       }
@@ -629,7 +696,9 @@ async function runPipelinedUploadTaskProducer(
       try {
         await uploadOne(item)
       } catch (error: unknown) {
-        if (!firstError) firstError = error instanceof Error ? error.message : String(error)
+        const pipelineError = error instanceof Error ? error : new Error(String(error))
+        if (!firstError) firstError = pipelineError.message
+        input.onPipelineError?.(pipelineError)
         wakeWorkers()
         return
       }
@@ -1183,7 +1252,18 @@ export function createUploadEngine(options: UploadEngineOptions) {
       if (!artifactResult.ok) {
         return artifactResult
       }
-      const manifest = await input.manifest
+      let manifest: PipelinedManifestBinding
+      try {
+        manifest = await input.manifest
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        return {
+          ok: false,
+          steps: [],
+          error: message,
+          transportStats: artifactResult.transportStats,
+        }
+      }
       const manifestTasks: UploadTask[] = manifest.manifestTargets.map((target) => ({
         stepIndex: -1,
         request: {
