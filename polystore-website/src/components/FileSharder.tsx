@@ -8,6 +8,7 @@ import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
 import { useBumpDealSetupSlot } from '../hooks/useBumpDealSetupSlot';
 import { appConfig } from '../config';
+import { formatDuration } from '../lib/duration';
 import { POLYFS_RECORD_PATH_MAX_BYTES, sanitizePolyfsRecordPath } from '../lib/polyfsPath';
 import {
   deleteDealDirectory,
@@ -412,12 +413,6 @@ function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
-}
-
-function formatDuration(ms: number) {
-  if (!Number.isFinite(ms) || ms < 0) return '—';
-  if (ms < 1000) return `${ms.toFixed(0)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
 }
 
 function uploadToneForPhase(phase: UploadPipelinePhase): UploadStatusTone {
