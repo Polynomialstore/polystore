@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
-import { CheckCircle2, ClipboardCopy, Cpu, Database, FileJson, LoaderCircle, Network, UploadCloud, Wallet } from 'lucide-react';
+import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
 import { workerClient } from '../lib/worker-client';
@@ -729,7 +729,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   const browserPerfRunRef = useRef<BrowserPerfRun | null>(null)
   const browserPerfSeqRef = useRef(1)
   const uploadTransportCountersRef = useRef<UploadTransportCounters>(createUploadTransportCounters())
-  const [uploadStatus, setUploadStatus] = useState<UploadPipelineStatus | null>(null)
   const uploadStatusRef = useRef<UploadPipelineStatus | null>(null)
   const dealSetupAttemptRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -771,7 +770,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   const publishUploadStatus = useCallback((next: UploadPipelineStatus) => {
     const sanitized = sanitizeUploadPipelineStatus(next)
     uploadStatusRef.current = sanitized
-    setUploadStatus(sanitized)
     if (typeof window !== 'undefined') {
       const statusWindow = window as typeof window & {
         __polyStoreUploadStatus?: UploadPipelineStatus
@@ -1112,7 +1110,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     }
     uploadStatusRef.current = null
     uploadTransportCountersRef.current = createUploadTransportCounters()
-    setUploadStatus(null)
     if (typeof window !== 'undefined') {
       const statusWindow = window as typeof window & {
         __polyStoreUploadStatus?: UploadPipelineStatus | null
@@ -4902,92 +4899,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         ? 'text-success'
         : 'text-muted-foreground'
 
-  const uploadStatusRows = useMemo(() => {
-    if (!uploadStatus) return []
-    const timingPhases = uploadStatus.timing.phases
-    const uploaded = uploadStatus.storage.uploadedArtifacts
-    const queued = uploadStatus.storage.queuedArtifacts
-    const requestCount = uploadStatus.transport.requestCount
-    const bundleCount = uploadStatus.transport.bundleCount
-    const bytesSent = uploadStatus.transport.bytesSent
-    const fallbackCount = uploadStatus.transport.fallbackCount
-    return [
-      { label: 'phase', value: uploadStatus.phaseLabel },
-      { label: 'kzg', value: uploadStatus.kzg.label },
-      {
-        label: 'adapter',
-        value:
-          uploadStatus.kzg.webGpuAvailable === null
-            ? 'pending'
-            : uploadStatus.kzg.webGpuAvailable
-              ? 'native WebGPU'
-              : 'not available',
-      },
-      { label: 'probe', value: uploadStatus.kzg.probeStatus || 'pending' },
-      {
-        label: 'calibration',
-        value: [uploadStatus.kzg.calibrationStatus, uploadStatus.kzg.calibrationSource]
-          .filter(Boolean)
-          .join(' / ') || 'default',
-      },
-      { label: 'storage', value: uploadStatus.storage.stage.replace(/_/g, ' ') },
-      { label: 'transport', value: uploadStatus.transport.mode.replace(/-/g, ' ') },
-      {
-        label: 'elapsed',
-        value: uploadStatus.timing.elapsedMs === null ? '—' : formatDuration(uploadStatus.timing.elapsedMs),
-      },
-      {
-        label: 'prepare',
-        value: timingPhases.prepare === undefined ? '—' : formatDuration(timingPhases.prepare),
-      },
-      {
-        label: 'upload',
-        value: timingPhases.upload === undefined ? '—' : formatDuration(timingPhases.upload),
-      },
-      {
-        label: 'artifacts',
-        value:
-          queued === null && uploaded === null
-            ? '—'
-            : `${String(uploaded ?? 0)} uploaded / ${String(queued ?? 0)} queued`,
-      },
-      {
-        label: 'requests',
-        value:
-          requestCount === null
-            ? '—'
-            : `${requestCount} reqs${bundleCount && bundleCount > 0 ? ` (${bundleCount} bundles)` : ''}`,
-      },
-      {
-        label: 'sent',
-        value: bytesSent === null ? '—' : formatBytes(bytesSent),
-      },
-      ...(fallbackCount && fallbackCount > 0
-        ? [{ label: 'fallback', value: uploadStatus.transport.fallbackReason || `${fallbackCount} bundle fallback(s)` }]
-        : []),
-    ]
-  }, [uploadStatus])
-
-  const uploadStatusToneClass =
-    uploadStatus?.tone === 'error'
-      ? 'border-destructive/40 bg-destructive/5 text-destructive'
-      : uploadStatus?.tone === 'success'
-        ? 'border-success/30 bg-success/10 text-success'
-        : uploadStatus?.kzg.display === 'webgpu-msm'
-          ? 'border-primary/30 bg-primary/5 text-primary'
-          : uploadStatus?.kzg.display === 'fallback' || uploadStatus?.kzg.display === 'unavailable'
-            ? 'border-amber-500/40 bg-amber-500/5 text-amber-600 dark:text-amber-300'
-            : 'border-border/70 bg-background/40 text-muted-foreground'
-
-  const copyUploadStatus = useCallback(() => {
-    if (!uploadStatus) return
-    const text = JSON.stringify(uploadStatus, null, 2)
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(text)
-      return
-    }
-    console.log('[polyStoreUploadStatus]', uploadStatus)
-  }, [uploadStatus])
 
   const startPreparedUpload = useCallback(
     async (trigger: 'auto' | 'manual' = 'manual') => {
@@ -5835,55 +5746,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                 })}
               </div>
 
-            {uploadStatus ? (
-              <div
-                className={`nil-tab-panel px-4 py-3 ${uploadStatusToneClass}`}
-                data-testid="upload-pipeline-status"
-                data-upload-kzg={uploadStatus.kzg.display}
-                data-upload-storage={uploadStatus.storage.stage}
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] font-mono-data">
-                      <Cpu className="h-3.5 w-3.5" />
-                      <span>{uploadStatus.kzg.label}</span>
-                      <span className="text-muted-foreground">/</span>
-                      <span>{uploadStatus.phaseLabel}</span>
-                    </div>
-                    {uploadStatus.kzg.fallbackReason || uploadStatus.error ? (
-                      <div className="text-[10px] font-mono-data leading-relaxed text-muted-foreground">
-                        {uploadStatus.error || uploadStatus.kzg.fallbackReason}
-                      </div>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={copyUploadStatus}
-                    className="inline-flex shrink-0 items-center justify-center gap-2 border border-border/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] font-mono-data text-foreground transition-colors hover:border-primary/60 hover:text-primary"
-                    data-testid="copy-upload-status"
-                  >
-                    <ClipboardCopy className="h-3.5 w-3.5" />
-                    Copy JSON
-                  </button>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-mono-data sm:grid-cols-5">
-                  {uploadStatusRows.map((row) => (
-                    <div key={row.label} className="nil-tab-inset min-w-0 px-2 py-2">
-                      <div className="flex items-center gap-1 uppercase tracking-[0.18em] text-muted-foreground">
-                        {row.label === 'storage' ? (
-                          <Database className="h-3 w-3" />
-                        ) : row.label === 'transport' ? (
-                          <Network className="h-3 w-3" />
-                        ) : null}
-                        <span>{row.label}</span>
-                      </div>
-                      <div className="mt-1 truncate text-foreground">{row.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
 
               {hasError ? (
                 <div className="nil-tab-panel border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-mono-data text-destructive">

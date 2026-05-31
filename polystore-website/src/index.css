@@ -378,6 +378,40 @@
     border-bottom: 1.5px solid hsl(var(--primary) / var(--industrial-bracket-opacity, 1));
   }
 
+  .recessed-input {
+    border: 1px solid hsl(var(--input));
+    background: hsl(var(--background) / 0.86);
+    color: hsl(var(--foreground));
+    caret-color: hsl(var(--primary));
+    color-scheme: light dark;
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease,
+      color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .recessed-input::placeholder {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .recessed-input:focus {
+    border-color: hsl(var(--primary) / 0.55);
+    outline: none;
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.28);
+  }
+
+  .recessed-input option {
+    background: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+  }
+
+  .dark .recessed-input {
+    border-color: hsl(var(--border));
+    background: hsl(var(--secondary) / 0.9);
+    color: hsl(var(--foreground));
+  }
+
   /* Abstract UI Components */
   .nil-badge {
     @apply inline-flex items-center gap-2 border border-border bg-card/80 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] font-mono text-foreground;
