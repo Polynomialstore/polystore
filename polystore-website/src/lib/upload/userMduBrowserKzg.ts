@@ -54,6 +54,14 @@ export type UserMduBrowserKzgPerf = ReturnType<typeof kzgCommitDiagnosticsForBac
   browserKzgBatchCommitMs?: number
   browserKzgBatchRootMs?: number
   browserKzgBatchSplitCount?: number
+  browserKzgBatchTimeoutCount?: number
+  kzgWebGpuCommitTimeoutCount?: number
+  kzgWebGpuBatchTooLargeCount?: number
+  kzgWebGpuLastTimeoutBlobs?: number
+  kzgWebGpuLastTimeoutBytes?: number
+  kzgWebGpuLastTimeoutBatchMdus?: number
+  kzgWebGpuLastTimeoutRetryable?: boolean
+  kzgWebGpuLastTimeoutAdapterCacheKey?: string
   kzgSchedulerSequence?: number
   kzgSchedulerQueueWaitMs?: number
   kzgSchedulerCommitMs?: number
@@ -74,6 +82,9 @@ export type UserMduBrowserKzgPerf = ReturnType<typeof kzgCommitDiagnosticsForBac
   kzgSchedulerBatchPlanReason?: string
   kzgSchedulerBatchSplitCount?: number
   kzgSchedulerBatchFallbackCount?: number
+  kzgSchedulerBatchTimeoutCount?: number
+  kzgSchedulerSafeMaxBatchMdus?: number
+  kzgSchedulerRetriedBatchSizes?: string
   kzgSchedulerOwner?: string
 }
 
@@ -268,6 +279,13 @@ export function kzgCommitDiagnosticsForBackend(kzgCommitBackend: KzgCommitBacken
     kzgWebGpuCalibrationStatus: status?.webgpu?.calibration?.status ?? scheduler?.calibrationStatus ?? '',
     kzgWebGpuCalibrationSource: status?.webgpu?.calibration?.source ?? scheduler?.calibrationSource ?? '',
     kzgWebGpuCalibrationCacheKey: status?.webgpu?.calibration?.cacheKey ?? '',
+    kzgWebGpuCommitTimeoutCount: scheduler?.commitTimeoutCount ?? 0,
+    kzgWebGpuBatchTooLargeCount: scheduler?.batchTooLargeCount ?? 0,
+    kzgWebGpuLastTimeoutBlobs: scheduler?.lastTimeoutBlobs ?? 0,
+    kzgWebGpuLastTimeoutBytes: scheduler?.lastTimeoutBytes ?? 0,
+    kzgWebGpuLastTimeoutBatchMdus: scheduler?.lastTimeoutBatchMdus ?? 0,
+    kzgWebGpuLastTimeoutRetryable: Boolean(scheduler?.lastTimeoutRetryable),
+    kzgWebGpuLastTimeoutAdapterCacheKey: scheduler?.lastTimeoutAdapterCacheKey ?? '',
   }
 }
 
@@ -430,7 +448,11 @@ export async function commitUserMduUncommittedWithBrowserKzg(options: {
   const totalStart = options.totalStartMs
 
   const commitStart = now()
-  const committedRaw = await kzgCommitBackend.commitBlobsProfiled(expansion.shardsFlat)
+  const committedRaw = await kzgCommitBackend.commitBlobsProfiled(expansion.shardsFlat, {
+    batchMduCount: 1,
+    batchLabel: 'user-mdu-single',
+    allowWebGpuBatchTimeoutRetry: false,
+  })
   const commitMs = now() - commitStart
   const witnessFlat = committedRaw.witnessFlat
   const expectedWitnessBytes = (expansion.shardsFlat.byteLength / KZG_BLOB_SIZE) * KZG_COMMITMENT_SIZE
@@ -484,7 +506,11 @@ export async function commitUserMduBatchUncommittedWithBrowserKzg(options: {
   const batchBlobsFlat = concatenateUserMduKzgBatch(expansions)
 
   const commitStart = now()
-  const committedRaw = await kzgCommitBackend.commitBlobsProfiled(batchBlobsFlat)
+  const committedRaw = await kzgCommitBackend.commitBlobsProfiled(batchBlobsFlat, {
+    batchMduCount: expansions.length,
+    batchLabel: 'user-mdu-batch',
+    allowWebGpuBatchTimeoutRetry: expansions.length > 1,
+  })
   const commitMs = now() - commitStart
   const witnessFlat = committedRaw.witnessFlat
   const expectedWitnessBytes = batchBlobs * KZG_COMMITMENT_SIZE

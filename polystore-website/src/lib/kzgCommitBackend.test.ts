@@ -13,6 +13,8 @@ import {
   createWasmBlstKzgCommitBackend,
   parseTrustedSetupG1Srs,
   parseKzgCommitProfiledResult,
+  WebGpuKzgCommitTimeoutError,
+  isWebGpuKzgCommitTimeoutError,
 } from './kzgCommitBackend'
 import {
   WebGpuKzgMsmCalibrationCache,
@@ -138,6 +140,56 @@ function fakeCommitter(options: {
           debug: {
             bucketWidth: options.bucketWidth ?? 10,
             reductionMode: options.reductionMode ?? 'serial',
+            bucketCount: 1,
+            baseIndexCount: 1,
+            numWindows: 1,
+            maxBucketSize: 1,
+            meanBucketSize: 1,
+            uploadBytes: 4,
+            readbackBytes: 384,
+            windowSumNonZeroBytes: 1,
+            processedBlobs: blobs,
+            commandSubmissions: blobs,
+            readbackCount: blobs,
+            scratchCapacityBytes: 4096,
+            scratchResizeCount: 1,
+          },
+        }
+      },
+    },
+  }
+}
+
+function fakeCommitterSequence(delaysMs: number[], commitmentsSeed = 1) {
+  const destroyed = { value: false }
+  let calls = 0
+  return {
+    destroyed,
+    committer: {
+      destroy: () => {
+        destroyed.value = true
+      },
+      getDeviceLostInfo: async () => null,
+      commitBlobs: async (input: Uint8Array) => {
+        const delayMs = delaysMs[Math.min(calls, delaysMs.length - 1)] ?? 0
+        calls += 1
+        if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs))
+        const blobs = input.byteLength / KZG_BLOB_SIZE
+        const totalMs = Math.max(1, delayMs || 1)
+        return {
+          commitments: commitments(blobs, commitmentsSeed),
+          timings: {
+            scalarPrepMs: 0,
+            bucketBuildMs: 0,
+            uploadMs: 0,
+            dispatchReadbackMs: totalMs,
+            foldMs: 0,
+            totalMs,
+          },
+          blobs,
+          debug: {
+            bucketWidth: 10,
+            reductionMode: 'parallel16' as const,
             bucketCount: 1,
             baseIndexCount: 1,
             numWindows: 1,
@@ -485,6 +537,85 @@ test('browser backend opens session circuit breaker on WebGPU timeout', async ()
   assert.equal(status.webgpu?.scheduler?.circuitOpen, true)
   assert.equal(status.webgpu?.scheduler?.probeStatus, 'timeout')
   assert.match(status.fallbackReason || '', /probe exceeded/)
+})
+
+test('browser backend surfaces multi-MDU WebGPU commit timeout without opening the circuit', async () => {
+  const fake = fakeCommitterSequence([0, 25])
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    webGpuMode: 'force',
+    webGpuCommitTimeoutMs: 5,
+    navigatorLike: fakeNavigator({ vendor: 'apple', architecture: 'metal', isFallbackAdapter: false }),
+    webGpuCommitterFactory: async () => fake.committer as never,
+  })
+
+  await assert.rejects(
+    Promise.resolve(backend.commitBlobsProfiled(blobBatch(6), { batchMduCount: 2, batchLabel: 'test-batch' })),
+    (error: unknown) => {
+      assert.equal(isWebGpuKzgCommitTimeoutError(error), true)
+      assert.equal((error as WebGpuKzgCommitTimeoutError).details.batchMduCount, 2)
+      assert.equal((error as WebGpuKzgCommitTimeoutError).details.blobs, 6)
+      assert.equal((error as WebGpuKzgCommitTimeoutError).details.bytes, 6 * KZG_BLOB_SIZE)
+      assert.equal((error as WebGpuKzgCommitTimeoutError).details.timeoutMs, 5)
+      assert.equal((error as WebGpuKzgCommitTimeoutError).details.retryableAsSmallerBatch, true)
+      assert.equal((error as WebGpuKzgCommitTimeoutError).details.reductionMode, 'parallel16')
+      return true
+    },
+  )
+
+  const status = backend.getStatus()
+  assert.equal(status.webgpu?.scheduler?.circuitOpen, false)
+  assert.equal(status.webgpu?.scheduler?.commitTimeoutCount, 1)
+  assert.equal(status.webgpu?.scheduler?.batchTooLargeCount, 1)
+  assert.equal(status.webgpu?.scheduler?.lastTimeoutBatchMdus, 2)
+  assert.equal(status.webgpu?.scheduler?.lastTimeoutRetryable, true)
+  assert.equal(status.selectedBackend, 'webgpu')
+})
+
+test('browser backend opens circuit and falls back on single-MDU WebGPU commit timeout', async () => {
+  const fake = fakeCommitterSequence([0, 25])
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    webGpuMode: 'force',
+    webGpuCommitTimeoutMs: 5,
+    navigatorLike: fakeNavigator({ vendor: 'nvidia', architecture: 'ampere', isFallbackAdapter: false }),
+    webGpuCommitterFactory: async () => fake.committer as never,
+  })
+
+  const result = await backend.commitBlobsProfiled(blobBatch(3), { batchMduCount: 1 })
+  assert.deepEqual(result.witnessFlat, commitments(3))
+  const status = backend.getStatus()
+  assert.equal(status.selectedBackend, 'wasm-blst')
+  assert.equal(status.webgpu?.scheduler?.circuitOpen, true)
+  assert.equal(status.webgpu?.scheduler?.commitTimeoutCount, 1)
+  assert.equal(status.webgpu?.scheduler?.batchTooLargeCount, 0)
+  assert.match(status.fallbackReason || '', /commit exceeded 5ms/)
+})
+
+test('browser backend stale timeout cleanup does not destroy replacement committer', async () => {
+  const first = fakeCommitterSequence([0, 25])
+  const second = fakeCommitterSequence([0], 17)
+  const committers = [first, second]
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    webGpuMode: 'force',
+    webGpuCommitTimeoutMs: 5,
+    navigatorLike: fakeNavigator({ vendor: 'apple', architecture: 'metal', isFallbackAdapter: false }),
+    webGpuCommitterFactory: async () => committers.shift()?.committer as never,
+  })
+
+  await assert.rejects(
+    Promise.resolve(backend.commitBlobsProfiled(blobBatch(6), { batchMduCount: 2 })),
+    (error: unknown) => isWebGpuKzgCommitTimeoutError(error),
+  )
+  assert.equal(first.destroyed.value, false)
+
+  const result = await backend.commitBlobsProfiled(blobBatch(3), { batchMduCount: 1 })
+  assert.deepEqual(result.witnessFlat, commitments(3, 17))
+  await new Promise((resolve) => setTimeout(resolve, 35))
+  assert.equal(first.destroyed.value, true)
+  assert.equal(second.destroyed.value, false)
+  assert.equal(backend.getStatus().webgpu?.scheduler?.circuitOpen, false)
 })
 
 test('browser backend fails closed on incompatible trusted setup bytes before GPU upload', async () => {

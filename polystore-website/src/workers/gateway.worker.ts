@@ -6,7 +6,11 @@
 // The `init` function loads the WASM binary.
 // The `Mdu0Builder` and `PolyStoreWasm` classes are exposed by wasm-bindgen.
 import init, { WasmMdu0Builder, PolyStoreWasm } from '../lib/polystoreCoreRuntime.js';
-import { createBrowserKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend';
+import {
+    createBrowserKzgCommitBackend,
+    isWebGpuKzgCommitTimeoutError,
+    type KzgCommitBackend,
+} from '../lib/kzgCommitBackend';
 import {
     committedExpansionToUserMduBrowserKzgResult,
     commitUserMduBatchUncommittedWithBrowserKzg,
@@ -183,6 +187,7 @@ function committedFallbackReason(fallbackReason: unknown): string | undefined {
 async function commitUserMduBatchWithSplitting(
     expansions: UserMduUncommittedExpansion[],
     splitCount = { value: 0 },
+    timeoutCount = { value: 0 },
 ): Promise<UserMduBrowserKzgResult[]> {
     if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
     if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
@@ -197,14 +202,16 @@ async function commitUserMduBatchWithSplitting(
             perf: {
                 ...result.perf,
                 browserKzgBatchSplitCount: splitCount.value,
+                browserKzgBatchTimeoutCount: timeoutCount.value,
             },
         }));
     } catch (error) {
         if (expansions.length <= 1) throw error;
         splitCount.value += 1;
+        if (isWebGpuKzgCommitTimeoutError(error)) timeoutCount.value += 1;
         const mid = Math.ceil(expansions.length / 2);
-        const left = await commitUserMduBatchWithSplitting(expansions.slice(0, mid), splitCount);
-        const right = await commitUserMduBatchWithSplitting(expansions.slice(mid), splitCount);
+        const left = await commitUserMduBatchWithSplitting(expansions.slice(0, mid), splitCount, timeoutCount);
+        const right = await commitUserMduBatchWithSplitting(expansions.slice(mid), splitCount, timeoutCount);
         return [...left, ...right];
     }
 }
@@ -265,6 +272,11 @@ self.onmessage = async (event) => {
                     commitWorkersReady = Promise.resolve();
                 }
                 result = 'PolyStoreWasm initialized';
+                break;
+            }
+            case 'getKzgBackendStatus': {
+                if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+                result = kzgCommitBackend.getStatus();
                 break;
             }
             case 'initMdu0Builder': {
