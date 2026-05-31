@@ -510,6 +510,18 @@ export const workerClient = {
     return userMduKzgScheduler.getStatus();
   },
 
+  getExpansionWorkerPoolStatus() {
+    return {
+      ready: expansionWorkersReady !== null,
+      workerCount: expansionWorkers.length,
+      pendingMessages: expansionPending.size,
+    };
+  },
+
+  async getKzgCommitDiagnostics(): Promise<KzgCommitDiagnostics> {
+    return sendMessageToWorker('getKzgCommitDiagnostics', {}) as Promise<KzgCommitDiagnostics>;
+  },
+
   async computeMduRoot(witness: Uint8Array): Promise<Uint8Array> {
     return sendMessageToWorker('computeMduRoot', { witness }) as Promise<Uint8Array>;
   },

@@ -6,6 +6,8 @@ import { performance } from 'node:perf_hooks'
 
 import {
   buildExpansionWorkerAutotuneCandidates,
+  buildExpansionWorkerCalibrationPlan,
+  finalizeExpansionWorkerAutotuneSelection,
   pickExpansionWorkerCount,
   selectExpansionWorkerCountFromSamples,
 } from '../src/lib/expansionWorkers'
@@ -253,6 +255,50 @@ for (let cycle = 0; cycle < cycles; cycle += 1) {
   }
 }
 
+const autotuneShape = {
+  hardwareConcurrency,
+  totalJobs: chunks.length,
+  rsK,
+  rsM,
+  kzgCommitBackend: `node-${basisMode}`,
+  rustCommitBackend: basisMode,
+  schedulerOwner: `benchmark-user-stage-${pipelineModes.join('+')}`,
+  schedulerConcurrency: 1,
+  schedulerMaxQueueDepth: 32,
+}
+const autotunePlan = buildExpansionWorkerCalibrationPlan(autotuneShape)
+const selectedByPipelineMode = Object.fromEntries(
+  pipelineModes.map((pipelineMode) => {
+    const samples = concurrencies.map((concurrency) => {
+      const result = results.get(`${pipelineMode}:${concurrency}`)
+      const stats = result ? readStats(result.runs) : null
+      return {
+        workerCount: concurrency,
+        wallMs: stats ? stats.median : Number.NaN,
+        sampleJobs: chunks.length,
+        scoreMs: stats ? stats.median / Math.max(1, chunks.length) : Number.NaN,
+      }
+    })
+    const selection = finalizeExpansionWorkerAutotuneSelection(autotuneShape, samples, {
+      calibrationComplete: true,
+      nowMs: Date.now(),
+    })
+    return [
+      pipelineMode,
+      {
+        selected_worker_count: selection.workerCount,
+        static_worker_count: selection.staticWorkerCount,
+        source: selection.source,
+        cache_hit: selection.cacheHit,
+        reason: selection.reason,
+        score_ms_per_user_mdu: selection.scoreMs,
+        sampled_candidates: selection.sampledCandidates,
+        legacy_selected_worker_count: selectExpansionWorkerCountFromSamples(samples, hardwareConcurrency, chunks.length),
+      },
+    ]
+  }),
+)
+
 const output = {
   file_bytes: fileBytes,
   total_user_mdus: chunks.length,
@@ -264,18 +310,9 @@ const output = {
         hardware_concurrency: hardwareConcurrency,
         static_worker_count: pickExpansionWorkerCount(hardwareConcurrency, chunks.length),
         candidates: concurrencies,
-        selected_by_pipeline_mode: Object.fromEntries(
-          pipelineModes.map((pipelineMode) => {
-            const samples = concurrencies.map((concurrency) => {
-              const result = results.get(`${pipelineMode}:${concurrency}`)
-              return {
-                workerCount: concurrency,
-                wallMs: result ? readStats(result.runs).median : Number.NaN,
-              }
-            })
-            return [pipelineMode, selectExpansionWorkerCountFromSamples(samples, hardwareConcurrency, chunks.length)]
-          }),
-        ),
+        cache_key: autotunePlan.cacheKey,
+        plan: autotunePlan,
+        selected_by_pipeline_mode: selectedByPipelineMode,
       }
     : null,
   concurrencies,

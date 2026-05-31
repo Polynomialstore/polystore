@@ -25,6 +25,7 @@
     "perf:prepare-stages": "tsx scripts/benchmark_prepare_stages.ts",
     "perf:prepare-compare": "tsx scripts/benchmark_prepare_compare.ts",
     "perf:user-stage-concurrency": "tsx scripts/benchmark_user_stage_concurrency.ts",
+    "perf:worker-autotune-sim": "tsx scripts/benchmark_worker_autotune_sim.ts",
     "perf:browser-kzg-baseline": "tsx scripts/benchmark_browser_kzg_baseline.ts",
     "perf:upload-pipeline": "tsx scripts/benchmark_upload_pipelining.ts",
     "perf:msm-windows": "tsx scripts/benchmark_pippenger_windows.ts",

@@ -267,6 +267,10 @@ self.onmessage = async (event) => {
                 result = 'PolyStoreWasm initialized';
                 break;
             }
+            case 'getKzgCommitDiagnostics': {
+                result = kzgCommitDiagnostics();
+                break;
+            }
             case 'initMdu0Builder': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { maxUserMdus, commitmentsPerMdu } = payload as { maxUserMdus: number; commitmentsPerMdu?: number };

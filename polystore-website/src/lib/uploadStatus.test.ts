@@ -58,6 +58,14 @@ test('normalizeKzgBackendStatus ignores zero-valued scheduler defaults', () => {
   assert.equal(status.commitWorkerCount, null)
 })
 
+test('createUploadPipelineStatus initializes worker autotune as pending', () => {
+  const status = createUploadPipelineStatus({ dealId: '42', nowMs: 10 })
+
+  assert.equal(status.workerAutotune.selectedWorkerCount, null)
+  assert.deepEqual(status.workerAutotune.candidates, [])
+  assert.equal(status.workerAutotune.cacheHit, null)
+})
+
 test('normalizeKzgBackendStatus surfaces browser KZG scheduler diagnostics', () => {
   const status = normalizeKzgBackendStatus({
     rustCommitBackend: 'webgpu-msm',
@@ -103,6 +111,12 @@ test('patchUploadPipelineStatus preserves nested state and records elapsed time'
       phaseLabel: 'Planning slab layout',
       totals: { totalMdus: 3, workDone: 1 },
       storage: { stage: 'browser_memory', browserMemoryBytes: 1024 },
+      workerAutotune: {
+        selectedWorkerCount: 5,
+        staticWorkerCount: 6,
+        candidates: [1, 3, 5, 6],
+        source: 'calibrated',
+      },
     },
     250,
   )
@@ -112,6 +126,8 @@ test('patchUploadPipelineStatus preserves nested state and records elapsed time'
   assert.equal(next.totals.totalMdus, 3)
   assert.equal(next.totals.workDone, 1)
   assert.equal(next.storage.stage, 'browser_memory')
+  assert.equal(next.workerAutotune.selectedWorkerCount, 5)
+  assert.deepEqual(next.workerAutotune.candidates, [1, 3, 5, 6])
   assert.equal(next.timing.elapsedMs, 150)
 })
 
@@ -130,6 +146,13 @@ test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
       ...status.kzg,
       fallbackReason: 'f'.repeat(800),
     },
+    workerAutotune: {
+      ...status.workerAutotune,
+      cacheKey: 'k'.repeat(800),
+      reason: 'r'.repeat(800),
+      candidates: Array.from({ length: 32 }, (_, i) => i + 1),
+      sampledCandidates: Array.from({ length: 32 }, (_, i) => i + 1),
+    },
   })
 
   assert.equal(sanitized.dealId.length, 160)
@@ -138,4 +161,8 @@ test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
   assert.equal(sanitized.file.name?.length, 160)
   assert.equal(sanitized.error?.length, 500)
   assert.equal(sanitized.kzg.fallbackReason?.length, 500)
+  assert.equal(sanitized.workerAutotune.cacheKey?.length, 240)
+  assert.equal(sanitized.workerAutotune.reason?.length, 500)
+  assert.equal(sanitized.workerAutotune.candidates.length, 16)
+  assert.equal(sanitized.workerAutotune.sampledCandidates.length, 16)
 })
