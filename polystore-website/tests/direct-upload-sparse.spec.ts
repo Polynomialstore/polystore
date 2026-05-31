@@ -394,6 +394,10 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const uploadStatus = await page.evaluate(() => {
     return (window as Window & { __polyStoreUploadStatus?: unknown }).__polyStoreUploadStatus ?? null
   }) as {
+    storage?: {
+      stagedArtifacts?: number | null
+      uploadedArtifacts?: number | null
+    }
     transport?: {
       requestCount?: number | null
       bundleCount?: number | null
@@ -432,8 +436,14 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   } else {
     expect(bundleUploads.length).toBe(0)
     expect(perArtifactPostRequests).toBe(logicalArtifactCount)
-    expect(uploadStatus?.transport?.fallbackCount ?? 0).toBeGreaterThanOrEqual(1)
-    expect(uploadStatus?.transport?.fallbackReason || '').toMatch(/bundle/i)
+    const fallbackCount = uploadStatus?.transport?.fallbackCount ?? 0
+    if (fallbackCount > 0) {
+      expect(uploadStatus?.transport?.fallbackReason || '').toMatch(/bundle/i)
+    } else {
+      // Pipelined browser staging intentionally uses per-artifact generation uploads
+      // until the final manifest root is known, so no bundle fallback is required.
+      expect(uploadStatus?.storage?.stagedArtifacts ?? 0).toBeGreaterThan(0)
+    }
   }
 
   expect(sparseMduUploads.length).toBeGreaterThan(0)

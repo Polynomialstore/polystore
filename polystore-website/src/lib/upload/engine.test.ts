@@ -328,6 +328,102 @@ test('upload engine: pipelined generation does not finalize manifest after artif
   assert.deepEqual(starts, ['mdu'])
 })
 
+test('upload engine: pipelined generation emits queued/staged/activation progress', async () => {
+  const target = {
+    baseUrl: 'http://provider-a',
+    mduPath: '/sp/upload_mdu',
+    manifestPath: '/sp/upload_manifest',
+    label: 'provider-a',
+  }
+  const events: UploadTaskEvent[] = []
+  const engine = createUploadEngine({
+    transport: {
+      async sendArtifact() {
+        await new Promise((resolve) => setTimeout(resolve, 1))
+      },
+    },
+    parallelism: { direct: 1 },
+  })
+
+  async function* artifacts() {
+    yield {
+      target,
+      artifact: { kind: 'shard' as const, index: 7, slot: 2, bytes: new Uint8Array([1]), fullSize: 8 },
+    }
+  }
+
+  const result = await engine.uploadPipelinedGeneration({
+    dealId: '26',
+    previousManifestRoot: '0xprev',
+    uploadGeneration: 'browser-run-3',
+    artifacts: artifacts(),
+    manifest: Promise.resolve({
+      manifestRoot: '0xnext',
+      manifestBlob: new Uint8Array([9]),
+      manifestTargets: [target],
+    }),
+    onTaskEvent(event) {
+      events.push(event)
+    },
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(
+    events.map((event) => `${event.phase}:${event.kind}:${event.staged ? 'staged' : event.activating ? 'activating' : 'bound'}`),
+    [
+      'queued:shard:staged',
+      'start:shard:staged',
+      'end:shard:staged',
+      'start:manifest:activating',
+      'end:manifest:activating',
+    ],
+  )
+  assert.equal(result.transportStats?.queuedArtifactCount, 1)
+  assert.equal(result.transportStats?.stagedArtifactCount, 1)
+  assert.equal(result.transportStats?.activatedArtifactCount, 1)
+})
+
+test('upload engine: pipelined generation reports manifest computation failure without activation', async () => {
+  const target = {
+    baseUrl: 'http://provider-a',
+    mduPath: '/sp/upload_mdu',
+    manifestPath: '/sp/upload_manifest',
+    label: 'provider-a',
+  }
+  const starts: string[] = []
+  const engine = createUploadEngine({
+    transport: {
+      async sendArtifact(request: UploadTransportRequest) {
+        starts.push(`${request.artifact.kind}:${request.manifestRoot || 'staged'}`)
+      },
+    },
+  })
+
+  async function* artifacts() {
+    yield {
+      target,
+      artifact: { kind: 'mdu' as const, index: 0, bytes: new Uint8Array([1]), fullSize: 8 },
+    }
+  }
+
+  let rejectManifest!: (error: Error) => void
+  const manifest = new Promise<never>((_, reject) => {
+    rejectManifest = reject
+  })
+  setTimeout(() => rejectManifest(new Error('manifest kzg failed')), 0)
+
+  const result = await engine.uploadPipelinedGeneration({
+    dealId: '27',
+    uploadGeneration: 'browser-run-4',
+    artifacts: artifacts(),
+    manifest,
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, 'manifest kzg failed')
+  assert.deepEqual(starts, ['mdu:staged'])
+})
+
 test('upload engine: striped upload overlaps metadata and shard requests with combined bounded concurrency', async () => {
   let activeTotal = 0
   let peakTotal = 0

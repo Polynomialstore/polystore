@@ -21,6 +21,8 @@ export type UploadPipelineStorageStage =
   | 'browser_memory'
   | 'opfs'
   | 'upload_queue'
+  | 'provider_staged'
+  | 'manifest_activation'
   | 'provider'
   | 'chain'
 
@@ -92,6 +94,8 @@ export type UploadPipelineStatus = {
     browserMemoryBytes: number | null
     opfsBytes: number | null
     queuedArtifacts: number | null
+    activeArtifacts: number | null
+    stagedArtifacts: number | null
     uploadedArtifacts: number | null
   }
   transport: {
@@ -334,6 +338,8 @@ export function createUploadPipelineStatus(input: {
       browserMemoryBytes: null,
       opfsBytes: null,
       queuedArtifacts: null,
+      activeArtifacts: null,
+      stagedArtifacts: null,
       uploadedArtifacts: null,
     },
     transport: {
