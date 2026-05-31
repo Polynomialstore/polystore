@@ -641,15 +641,15 @@ export function finalizeExpansionWorkerAutotuneSelection(
   const base = staticExpansionWorkerAutotuneSelection(shape)
   const measuredAtMs = Number.isFinite(options.nowMs) ? Number(options.nowMs) : Date.now()
 
-  if (options.timedOut) {
+  if (options.timedOut && validSamples.length === 0) {
     return {
       ...base,
       source: 'fallback-timeout',
-      reason: 'worker calibration timed out; using static hardware-concurrency worker count and not caching partial samples',
+      reason: 'worker calibration timed out before producing valid samples; using static hardware-concurrency worker count',
       timedOut: true,
       samples,
-      sampledCandidates: uniqueSorted(validSamples.map((sample) => sample.workerCount)),
-      sampleCount: validSamples.length,
+      sampledCandidates: [],
+      sampleCount: 0,
     }
   }
 
@@ -687,7 +687,7 @@ export function finalizeExpansionWorkerAutotuneSelection(
   }
 
   const workerCount = Math.floor(Number(bestSample.workerCount))
-  const calibrationComplete = options.calibrationComplete !== false
+  const calibrationComplete = options.calibrationComplete !== false && !options.timedOut
   const selection: ExpansionWorkerAutotuneSelection = {
     version: EXPANSION_WORKER_AUTOTUNE_VERSION,
     contract: normalized.contract,
@@ -701,7 +701,9 @@ export function finalizeExpansionWorkerAutotuneSelection(
     cacheKey: normalized.cacheKey,
     reason: calibrationComplete
       ? `selected ${workerCount} upload-prep workers from runtime calibration (${bestScore.toFixed(2)} ms/user MDU)`
-      : `selected ${workerCount} upload-prep workers from incomplete runtime calibration (${bestScore.toFixed(2)} ms/user MDU); result not cached`,
+      : options.timedOut
+        ? `selected ${workerCount} upload-prep workers from partial timed-out runtime calibration (${bestScore.toFixed(2)} ms/user MDU); result not cached`
+        : `selected ${workerCount} upload-prep workers from incomplete runtime calibration (${bestScore.toFixed(2)} ms/user MDU); result not cached`,
     scoreMs: bestScore,
     measuredAtMs,
     sampleCount: validSamples.length,
@@ -712,7 +714,7 @@ export function finalizeExpansionWorkerAutotuneSelection(
     jobBucket: normalized.jobBucket,
     backendKey: normalized.backendKey,
     schedulerKey: normalized.schedulerKey,
-    timedOut: false,
+    timedOut: Boolean(options.timedOut),
     cacheWritable: calibrationComplete,
     samples,
   }

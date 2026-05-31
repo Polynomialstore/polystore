@@ -198,14 +198,11 @@ test('isUsableExpansionWorkerAutotuneCache rejects malformed and out-of-candidat
   assert.equal(isUsableExpansionWorkerAutotuneCache({ ...cache, scoreMs: Number.NaN }, defaultShape), false)
 })
 
-test('finalizeExpansionWorkerAutotuneSelection fails closed on timeout, error, and invalid samples', () => {
-  const timedOut = finalizeExpansionWorkerAutotuneSelection(
-    defaultShape,
-    [{ workerCount: 5, wallMs: 2500, sampleJobs: 5 }],
-    { timedOut: true },
-  )
+test('finalizeExpansionWorkerAutotuneSelection fails closed on timeout without samples, error, and invalid samples', () => {
+  const timedOut = finalizeExpansionWorkerAutotuneSelection(defaultShape, [], { timedOut: true })
   assert.equal(timedOut.workerCount, 6)
   assert.equal(timedOut.source, 'fallback-timeout')
+  assert.equal(timedOut.sampleCount, 0)
   assert.equal(timedOut.cacheWritable, false)
 
   const failed = finalizeExpansionWorkerAutotuneSelection(defaultShape, [], { error: new Error('boom') })
@@ -215,6 +212,27 @@ test('finalizeExpansionWorkerAutotuneSelection fails closed on timeout, error, a
   const noSamples = finalizeExpansionWorkerAutotuneSelection(defaultShape, [{ workerCount: 9, wallMs: 1 }])
   assert.equal(noSamples.workerCount, 6)
   assert.equal(noSamples.source, 'fallback-no-samples')
+})
+
+test('finalizeExpansionWorkerAutotuneSelection uses valid timed-out samples without caching partial results', () => {
+  const store = new ExpansionWorkerAutotuneCacheStore({ storage: memoryStorage() })
+  const timedOut = finalizeExpansionWorkerAutotuneSelection(
+    { ...defaultShape, totalJobs: 9 },
+    [
+      { workerCount: 3, wallMs: 29_004, sampleJobs: 3 },
+      { workerCount: 5, wallMs: 54_080, sampleJobs: 5 },
+    ],
+    { timedOut: true, cacheStore: store },
+  )
+
+  assert.equal(timedOut.workerCount, 3)
+  assert.equal(timedOut.source, 'calibrated')
+  assert.equal(timedOut.timedOut, true)
+  assert.deepEqual(timedOut.sampledCandidates, [3, 5])
+  assert.equal(timedOut.sampleCount, 2)
+  assert.equal(timedOut.cacheWritable, false)
+  assert.match(timedOut.reason, /partial timed-out runtime calibration/)
+  assert.equal(getCachedExpansionWorkerAutotuneSelection({ ...defaultShape, totalJobs: 9 }, store), null)
 })
 
 test('finalizeExpansionWorkerAutotuneSelection does not cache incomplete calibration', () => {
