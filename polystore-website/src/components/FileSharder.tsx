@@ -179,6 +179,12 @@ type PreparePerfSample = {
   workerExpandMs: number
   workerCommitMs: number
   workerRootMs: number
+  workerKzgSchedulerQueueWaitMs: number
+  workerKzgSchedulerTotalMs: number
+  workerKzgSchedulerDepthAtEnqueue?: number
+  workerKzgSchedulerActiveAtEnqueue?: number
+  workerKzgSchedulerMaxQueueDepth?: number
+  workerKzgSchedulerFallbackCount?: number
   workerRustEncodeMs: number
   workerRustRsMs: number
   workerRustCommitDecodeMs: number
@@ -247,6 +253,9 @@ type PreparePerfProfile = {
     sumUserCommitMs: number
     sumUserExpandMs: number
     sumUserQueueMs: number
+    maxUserKzgSchedulerQueueWaitMs: number
+    sumUserKzgSchedulerQueueWaitMs: number
+    sumUserKzgSchedulerTotalMs: number
     sumWitnessTotalMs: number
     sumWitnessCommitMs: number
     sumWitnessQueueMs: number
@@ -260,6 +269,8 @@ type PreparePerfProfile = {
     workerExpandMs: number
     workerCommitMs: number
     workerRootMs: number
+    workerKzgSchedulerQueueWaitMs: number
+    workerKzgSchedulerTotalMs: number
     workerRustEncodeMs: number
     workerRustRsMs: number
     workerRustCommitDecodeMs: number
@@ -298,6 +309,8 @@ type PreparePerfProfile = {
     kzgWebGpuProbeTimeoutMs?: number
     kzgWebGpuCommitTimeoutMs?: number
     kzgWebGpuMinBlobs?: number
+    kzgSchedulerMaxQueueDepth?: number
+    kzgSchedulerFallbackCount?: number
     commitWorkerCount?: number
   }
   samples: {
@@ -3701,6 +3714,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             const workerCommitMs = Number(result.perf?.commitMs ?? result.perf?.rustCommitMs ?? 0)
             const workerRootMs = Number(result.perf?.rootMs ?? 0)
             const workerQueueMs = Math.max(0, wasmMs - workerTotalMs)
+            const workerKzgSchedulerQueueWaitMs = Number(result.perf?.kzgSchedulerQueueWaitMs ?? 0)
+            const workerKzgSchedulerTotalMs = Number(result.perf?.kzgSchedulerTotalMs ?? 0)
+            const workerKzgSchedulerDepthAtEnqueue = Number(result.perf?.kzgSchedulerDepthAtEnqueue ?? 0) || undefined
+            const workerKzgSchedulerActiveAtEnqueue = Number(result.perf?.kzgSchedulerActiveAtEnqueue ?? 0) || undefined
+            const workerKzgSchedulerMaxQueueDepth = Number(result.perf?.kzgSchedulerMaxQueueDepth ?? 0) || undefined
+            const workerKzgSchedulerFallbackCount = Number(result.perf?.kzgSchedulerFallbackCount ?? 0) || undefined
             const workerRustEncodeMs = Number(result.perf?.rustEncodeMs ?? 0)
             const workerRustRsMs = Number(result.perf?.rustRsMs ?? 0)
             const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
@@ -3786,6 +3805,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerExpandMs,
               workerCommitMs,
               workerRootMs,
+              workerKzgSchedulerQueueWaitMs,
+              workerKzgSchedulerTotalMs,
+              workerKzgSchedulerDepthAtEnqueue,
+              workerKzgSchedulerActiveAtEnqueue,
+              workerKzgSchedulerMaxQueueDepth,
+              workerKzgSchedulerFallbackCount,
               workerRustEncodeMs,
               workerRustRsMs,
               workerRustCommitDecodeMs,
@@ -3980,6 +4005,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                 workerExpandMs: 0,
                 workerCommitMs,
                 workerRootMs,
+                workerKzgSchedulerQueueWaitMs: 0,
+                workerKzgSchedulerTotalMs: 0,
                 workerRustEncodeMs: 0,
                 workerRustRsMs: 0,
                 workerRustCommitDecodeMs: 0,
@@ -4087,6 +4114,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             const workerCommitMs = Number(result.perf?.commitMs ?? 0);
             const workerRootMs = Number(result.perf?.rootMs ?? 0);
             const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
+            const workerKzgSchedulerQueueWaitMs = Number(result.perf?.kzgSchedulerQueueWaitMs ?? 0)
+            const workerKzgSchedulerTotalMs = Number(result.perf?.kzgSchedulerTotalMs ?? 0)
+            const workerKzgSchedulerDepthAtEnqueue = Number(result.perf?.kzgSchedulerDepthAtEnqueue ?? 0) || undefined
+            const workerKzgSchedulerActiveAtEnqueue = Number(result.perf?.kzgSchedulerActiveAtEnqueue ?? 0) || undefined
+            const workerKzgSchedulerMaxQueueDepth = Number(result.perf?.kzgSchedulerMaxQueueDepth ?? 0) || undefined
+            const workerKzgSchedulerFallbackCount = Number(result.perf?.kzgSchedulerFallbackCount ?? 0) || undefined
             const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
             const workerRustCommitTransformMs = Number(result.perf?.rustCommitTransformMs ?? 0)
             const workerRustCommitMsmScalarPrepMs = Number(result.perf?.rustCommitMsmScalarPrepMs ?? 0)
@@ -4150,6 +4183,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerExpandMs: 0,
               workerCommitMs,
               workerRootMs,
+              workerKzgSchedulerQueueWaitMs,
+              workerKzgSchedulerTotalMs,
+              workerKzgSchedulerDepthAtEnqueue,
+              workerKzgSchedulerActiveAtEnqueue,
+              workerKzgSchedulerMaxQueueDepth,
+              workerKzgSchedulerFallbackCount,
               workerRustEncodeMs: 0,
               workerRustRsMs: 0,
               workerRustCommitDecodeMs,
@@ -4290,6 +4329,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           workerExpandMs: 0,
           workerCommitMs,
           workerRootMs,
+          workerKzgSchedulerQueueWaitMs: 0,
+          workerKzgSchedulerTotalMs: 0,
           workerRustEncodeMs: 0,
           workerRustRsMs: 0,
           workerRustCommitDecodeMs,
@@ -4445,6 +4486,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             maxUserCommitMs: maxBy(perfSamples.user, (sample) => sample.workerRustCommitMs),
             maxUserExpandMs: maxBy(perfSamples.user, (sample) => sample.workerExpandMs),
             maxUserQueueMs: maxBy(perfSamples.user, (sample) => sample.workerQueueMs),
+            maxUserKzgSchedulerQueueWaitMs: maxBy(perfSamples.user, (sample) => sample.workerKzgSchedulerQueueWaitMs),
+            sumUserKzgSchedulerQueueWaitMs: sumBy(perfSamples.user, (sample) => sample.workerKzgSchedulerQueueWaitMs),
+            sumUserKzgSchedulerTotalMs: sumBy(perfSamples.user, (sample) => sample.workerKzgSchedulerTotalMs),
             maxWitnessTotalMs: maxBy(perfSamples.witness, (sample) => sample.totalMs),
             maxWitnessCommitMs: maxBy(perfSamples.witness, (sample) => sample.workerCommitMs),
             maxWitnessQueueMs: maxBy(perfSamples.witness, (sample) => sample.workerQueueMs),
@@ -4469,6 +4513,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             workerExpandMs: sumBy(allSamples, (sample) => sample.workerExpandMs),
             workerCommitMs: sumBy(allSamples, (sample) => sample.workerCommitMs),
             workerRootMs: sumBy(allSamples, (sample) => sample.workerRootMs),
+            workerKzgSchedulerQueueWaitMs: sumBy(allSamples, (sample) => sample.workerKzgSchedulerQueueWaitMs),
+            workerKzgSchedulerTotalMs: sumBy(allSamples, (sample) => sample.workerKzgSchedulerTotalMs),
             workerRustEncodeMs: sumBy(allSamples, (sample) => sample.workerRustEncodeMs),
             workerRustRsMs: sumBy(allSamples, (sample) => sample.workerRustRsMs),
             workerRustCommitDecodeMs: sumBy(allSamples, (sample) => sample.workerRustCommitDecodeMs),
@@ -4507,6 +4553,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             kzgWebGpuProbeTimeoutMs: kzgDiagnosticSample?.workerKzgWebGpuProbeTimeoutMs,
             kzgWebGpuCommitTimeoutMs: kzgDiagnosticSample?.workerKzgWebGpuCommitTimeoutMs,
             kzgWebGpuMinBlobs: kzgDiagnosticSample?.workerKzgWebGpuMinBlobs,
+            kzgSchedulerMaxQueueDepth: kzgDiagnosticSample?.workerKzgSchedulerMaxQueueDepth,
+            kzgSchedulerFallbackCount: kzgDiagnosticSample?.workerKzgSchedulerFallbackCount,
             commitWorkerCount: kzgDiagnosticSample?.workerCommitWorkerCount,
           },
           samples: perfSamples,
@@ -4599,12 +4647,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           maxUserCommitMs: roundPerfMs(prepareProfile.summary.maxUserCommitMs),
           maxUserExpandMs: roundPerfMs(prepareProfile.summary.maxUserExpandMs),
           maxUserQueueMs: roundPerfMs(prepareProfile.summary.maxUserQueueMs),
+          maxUserKzgSchedulerQueueWaitMs: roundPerfMs(prepareProfile.summary.maxUserKzgSchedulerQueueWaitMs),
           maxWitnessTotalMs: roundPerfMs(prepareProfile.summary.maxWitnessTotalMs),
           maxWitnessCommitMs: roundPerfMs(prepareProfile.summary.maxWitnessCommitMs),
           maxWitnessQueueMs: roundPerfMs(prepareProfile.summary.maxWitnessQueueMs),
           sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
           sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
           sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          sumUserKzgSchedulerQueueWaitMs: roundPerfMs(prepareProfile.summary.sumUserKzgSchedulerQueueWaitMs),
+          sumUserKzgSchedulerTotalMs: roundPerfMs(prepareProfile.summary.sumUserKzgSchedulerTotalMs),
           sumWitnessCommitMs: roundPerfMs(prepareProfile.summary.sumWitnessCommitMs),
           sumWitnessQueueMs: roundPerfMs(prepareProfile.summary.sumWitnessQueueMs),
           rustCommitDecodeMs: roundPerfMs(prepareProfile.phases.workerRustCommitDecodeMs),
@@ -4642,12 +4693,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           maxUserCommitMs: roundPerfMs(prepareProfile.summary.maxUserCommitMs),
           maxUserExpandMs: roundPerfMs(prepareProfile.summary.maxUserExpandMs),
           maxUserQueueMs: roundPerfMs(prepareProfile.summary.maxUserQueueMs),
+          maxUserKzgSchedulerQueueWaitMs: roundPerfMs(prepareProfile.summary.maxUserKzgSchedulerQueueWaitMs),
           maxWitnessTotalMs: roundPerfMs(prepareProfile.summary.maxWitnessTotalMs),
           maxWitnessCommitMs: roundPerfMs(prepareProfile.summary.maxWitnessCommitMs),
           maxWitnessQueueMs: roundPerfMs(prepareProfile.summary.maxWitnessQueueMs),
           sumUserCommitMs: roundPerfMs(prepareProfile.summary.sumUserCommitMs),
           sumUserExpandMs: roundPerfMs(prepareProfile.summary.sumUserExpandMs),
           sumUserQueueMs: roundPerfMs(prepareProfile.summary.sumUserQueueMs),
+          sumUserKzgSchedulerQueueWaitMs: roundPerfMs(prepareProfile.summary.sumUserKzgSchedulerQueueWaitMs),
+          sumUserKzgSchedulerTotalMs: roundPerfMs(prepareProfile.summary.sumUserKzgSchedulerTotalMs),
           sumWitnessCommitMs: roundPerfMs(prepareProfile.summary.sumWitnessCommitMs),
           sumWitnessQueueMs: roundPerfMs(prepareProfile.summary.sumWitnessQueueMs),
           slowestUserMduIndex: prepareProfile.summary.slowestUserMduIndex,

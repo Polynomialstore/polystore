@@ -3,6 +3,8 @@
 // This file provides a simple client API to interact with the gateway.worker.ts
 // It abstracts the message passing and Promise-based communication.
 import { DEFAULT_EXPANSION_HARDWARE_CONCURRENCY, pickExpansionWorkerCount } from './expansionWorkers'
+import { UserMduKzgScheduler } from './upload/userMduKzgScheduler'
+import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './upload/userMduBrowserKzg'
 
 // Instantiate the worker
 const worker = new Worker(new URL('../workers/gateway.worker.ts', import.meta.url), {
@@ -27,6 +29,8 @@ const expansionPending = new Map<number, ExpansionWorkerPending>()
 const expansionPendingByWorker = new Map<Worker, Set<number>>()
 let expansionNextMessageId = 1
 let expansionRoundRobin = 0
+let nextUserMduKzgSequence = 0
+const userMduKzgScheduler = new UserMduKzgScheduler({ concurrency: 1, maxQueueDepth: 32 })
 
 // Handle messages coming back from the worker
 worker.onmessage = (event) => {
@@ -137,7 +141,12 @@ function sendMessageToWorker(
 }
 
 function sendExpansionMessageToWorker(
-  type: 'expandMduRs' | 'expandPayloadRs' | 'commitMduProfiled' | 'computeManifest',
+  type:
+    | 'expandMduRsUncommitted'
+    | 'expandPayloadRsUncommitted'
+    | 'expandMduRsCommitted'
+    | 'expandPayloadRsCommitted'
+    | 'computeManifest',
   payload: unknown,
   transferables?: Transferable[],
 ): Promise<unknown> {
@@ -274,11 +283,68 @@ export type KzgCommitDiagnostics = {
   kzgWebGpuCalibrationStatus?: string
   kzgWebGpuCalibrationSource?: string
   kzgWebGpuCalibrationCacheKey?: string
+  kzgSchedulerSequence?: number
+  kzgSchedulerQueueWaitMs?: number
+  kzgSchedulerCommitMs?: number
+  kzgSchedulerTotalMs?: number
+  kzgSchedulerDepthAtEnqueue?: number
+  kzgSchedulerActiveAtEnqueue?: number
+  kzgSchedulerQueueDepthAtStart?: number
+  kzgSchedulerMaxQueueDepth?: number
+  kzgSchedulerFallbackCount?: number
+  kzgSchedulerOwner?: string
   commitWorkerCount?: number
 }
 
 type ExpandStripeOptions = {
   profile?: boolean
+}
+
+async function expandStripeWithScheduledKzg(
+  kind: 'mdu' | 'payload',
+  data: Uint8Array,
+  k: number,
+  m: number,
+  opts?: ExpandStripeOptions,
+): Promise<ExpandedStripe> {
+  if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array')
+  const sequence = nextUserMduKzgSequence++
+  const profile = opts?.profile !== false
+  const payloadId = `user-mdu:${kind}:${sequence}`
+  // Keep one copy only for the rare scheduler/owner failure path. Normal
+  // WebGPU/validation fallbacks happen inside the single KZG owner and return
+  // the original shard bytes, but a worker crash can detach transferred shards.
+  const fallbackData = data.slice()
+  const expansionType = kind === 'mdu' ? 'expandMduRsUncommitted' : 'expandPayloadRsUncommitted'
+  const committedType = kind === 'mdu' ? 'expandMduRsCommitted' : 'expandPayloadRsCommitted'
+  const expansion = sendExpansionMessageToWorker(
+    expansionType,
+    { data, k, m, profile, payloadId, sequence },
+    [data.buffer],
+  ) as Promise<UserMduUncommittedExpansion>
+
+  return userMduKzgScheduler.enqueue({
+    sequence,
+    expansion,
+    commit: async (expanded) => sendMessageToWorker(
+      'commitExpandedUserMdu',
+      { expansion: expanded },
+      [expanded.shardsFlat.buffer],
+    ) as Promise<UserMduBrowserKzgResult>,
+    fallback: async (reason) => {
+      const result = await sendExpansionMessageToWorker(
+        committedType,
+        { data: fallbackData, k, m, profile, fallbackReason: reason, payloadId, sequence },
+        [fallbackData.buffer],
+      ) as UserMduBrowserKzgResult
+      result.perf = {
+        ...(result.perf ?? {}),
+        browserKzgCommitFallbackReason:
+          result.perf?.browserKzgCommitFallbackReason ?? `scheduler owner failed; used committed WASM fallback: ${reason}`,
+      }
+      return result
+    },
+  }) as Promise<ExpandedStripe>
 }
 
 // --- Public API for interacting with the Worker ---
@@ -381,13 +447,11 @@ export const workerClient = {
   },
 
   async commitMduProfiled(data: Uint8Array): Promise<ExpandedMdu> {
-    return sendExpansionMessageToWorker('commitMduProfiled', { data }, [data.buffer]) as Promise<ExpandedMdu>;
+    return sendMessageToWorker('commitMduProfiled', { data }, [data.buffer]) as Promise<ExpandedMdu>;
   },
 
   async expandMduRs(data: Uint8Array, k: number, m: number, opts?: ExpandStripeOptions): Promise<ExpandedStripe> {
-    return sendExpansionMessageToWorker('expandMduRs', { data, k, m, profile: opts?.profile !== false }, [
-      data.buffer,
-    ]) as Promise<ExpandedStripe>;
+    return expandStripeWithScheduledKzg('mdu', data, k, m, opts);
   },
 
   async expandPayloadRs(
@@ -396,9 +460,7 @@ export const workerClient = {
     m: number,
     opts?: ExpandStripeOptions,
   ): Promise<ExpandedStripe> {
-    return sendExpansionMessageToWorker('expandPayloadRs', { data, k, m, profile: opts?.profile !== false }, [
-      data.buffer,
-    ]) as Promise<ExpandedStripe>;
+    return expandStripeWithScheduledKzg('payload', data, k, m, opts);
   },
 
   // Compute Manifest Root from a list of MDU roots (concatenated 32-byte roots)
@@ -407,6 +469,10 @@ export const workerClient = {
       root: Uint8Array;
       blob: Uint8Array;
     }>;
+  },
+
+  getUserMduKzgSchedulerStatus() {
+    return userMduKzgScheduler.getStatus();
   },
 
   async computeMduRoot(witness: Uint8Array): Promise<Uint8Array> {

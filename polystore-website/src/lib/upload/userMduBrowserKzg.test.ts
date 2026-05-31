@@ -6,7 +6,9 @@ import init, { PolyStoreWasm } from '../../../public/wasm/polystore_core.js'
 import { createWasmBlstKzgCommitBackend, KZG_BLOB_SIZE, type KzgCommitBackend, type KzgCommitBackendStatus } from '../kzgCommitBackend'
 import {
   expandUserMduRsWithBrowserKzg,
+  parseUserMduUncommittedExpansion,
   toUserMduUint8Array,
+  USER_MDU_UNCOMMITTED_CONTRACT,
   type UserMduBrowserKzgWasm,
 } from './userMduBrowserKzg'
 
@@ -152,6 +154,41 @@ function makeBackend(options?: { selectedBackend?: 'webgpu' | 'wasm-blst'; throw
   }
   return { backend, calls }
 }
+
+test('uncommitted expansion parser stamps the deterministic internal contract', () => {
+  const shardsFlat = bytes(KZG_BLOB_SIZE * 3, 5)
+  const parsed = parseUserMduUncommittedExpansion(
+    {
+      shards_flat: shardsFlat,
+      shard_len: KZG_BLOB_SIZE,
+      perf: { encode_ms: 1, rs_ms: 2, total_ms: 3, rows: 1, shards_total: 3, shard_len: KZG_BLOB_SIZE },
+    },
+    { kind: 'payload', k: 2, m: 1, payloadId: 'fixture', sequence: 12 },
+  )
+
+  assert.equal(parsed.contract, USER_MDU_UNCOMMITTED_CONTRACT)
+  assert.equal(parsed.payloadId, 'fixture')
+  assert.equal(parsed.sequence, 12)
+  assert.equal(parsed.kind, 'payload')
+  assert.equal(parsed.k, 2)
+  assert.equal(parsed.m, 1)
+  assert.equal(parsed.shardLen, KZG_BLOB_SIZE)
+  assert.deepEqual(parsed.shardsFlat, shardsFlat)
+})
+
+test('uncommitted expansion parser rejects shard-count drift before commitment', () => {
+  assert.throws(
+    () => parseUserMduUncommittedExpansion(
+      {
+        shards_flat: bytes(KZG_BLOB_SIZE * 2, 9),
+        shard_len: KZG_BLOB_SIZE,
+        perf: { rows: 1, shards_total: 2 },
+      },
+      { kind: 'payload', k: 2, m: 1, payloadId: 'bad' },
+    ),
+    /returned 2 shards, expected 3/,
+  )
+})
 
 test('user MDU expansion routes commitments through the browser KZG backend', async () => {
   const { wasm, calls, mduShards, shardLen } = makeWasm()

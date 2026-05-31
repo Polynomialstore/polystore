@@ -58,6 +58,26 @@ test('normalizeKzgBackendStatus ignores zero-valued scheduler defaults', () => {
   assert.equal(status.commitWorkerCount, null)
 })
 
+test('normalizeKzgBackendStatus surfaces browser KZG scheduler diagnostics', () => {
+  const status = normalizeKzgBackendStatus({
+    rustCommitBackend: 'webgpu-msm',
+    kzgCommitBackend: 'webgpu',
+    kzgSchedulerQueueWaitMs: 12,
+    kzgSchedulerTotalMs: 34,
+    kzgSchedulerDepthAtEnqueue: 3,
+    kzgSchedulerActiveAtEnqueue: 1,
+    kzgSchedulerMaxQueueDepth: 32,
+    kzgSchedulerFallbackCount: 2,
+  })
+
+  assert.equal(status.schedulerQueueWaitMs, 12)
+  assert.equal(status.schedulerTotalMs, 34)
+  assert.equal(status.schedulerQueueDepth, 3)
+  assert.equal(status.schedulerActive, 1)
+  assert.equal(status.schedulerMaxQueueDepth, 32)
+  assert.equal(status.schedulerFallbackCount, 2)
+})
+
 test('patchUploadPipelineStatus preserves nested state and records elapsed time', () => {
   const initial = createUploadPipelineStatus({
     dealId: '42',

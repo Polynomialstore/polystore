@@ -8,8 +8,12 @@
 import init, { WasmMdu0Builder, PolyStoreWasm } from '../lib/polystoreCoreRuntime.js';
 import { createBrowserKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend';
 import {
+    committedExpansionToUserMduBrowserKzgResult,
+    commitUserMduUncommittedWithBrowserKzg,
     expandUserMduRsWithBrowserKzg,
     kzgCommitDiagnosticsForBackend,
+    parseCommittedExpansion,
+    parseUserMduUncommittedExpansion,
 } from '../lib/upload/userMduBrowserKzg';
 
 let wasmInitialized = false;
@@ -165,6 +169,12 @@ function commitBlobsWithPool(data: Uint8Array): Promise<Uint8Array> {
 
 function kzgCommitDiagnostics() {
     return kzgCommitDiagnosticsForBackend(kzgCommitBackend);
+}
+
+function committedFallbackReason(fallbackReason: unknown): string | undefined {
+    return typeof fallbackReason === 'string' && fallbackReason.trim()
+        ? `scheduler owner failed; used committed WASM fallback: ${fallbackReason}`
+        : undefined;
 }
 
 // Start fetching + compiling the WASM as soon as the worker loads so the first
@@ -601,6 +611,84 @@ self.onmessage = async (event) => {
                         ...kzgCommitDiagnostics(),
                     },
                 };
+                break;
+            }
+            case 'expandMduRsUncommitted':
+            case 'expandPayloadRsUncommitted': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+                const { data, k, m, profile = true, payloadId, sequence, mduIndex } = payload as {
+                    data: Uint8Array;
+                    k: number;
+                    m: number;
+                    profile?: boolean;
+                    payloadId?: string;
+                    sequence?: number;
+                    mduIndex?: number;
+                };
+                if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array');
+                const kind = type === 'expandMduRsUncommitted' ? 'mdu' : 'payload';
+                const raw = kind === 'mdu'
+                    ? polyStoreWasmInstance.expand_mdu_rs_flat_uncommitted(data, Number(k), Number(m))
+                    : polyStoreWasmInstance.expand_payload_rs_flat_uncommitted(data, Number(k), Number(m));
+                result = parseUserMduUncommittedExpansion(raw, {
+                    kind,
+                    k: Number(k),
+                    m: Number(m),
+                    profile,
+                    payloadId,
+                    sequence,
+                    mduIndex,
+                    label: kind === 'mdu' ? 'expandMduRsUncommitted' : 'expandPayloadRsUncommitted',
+                });
+                break;
+            }
+            case 'expandMduRsCommitted':
+            case 'expandPayloadRsCommitted': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+                const { data, k, m, profile = true, fallbackReason } = payload as {
+                    data: Uint8Array;
+                    k: number;
+                    m: number;
+                    profile?: boolean;
+                    fallbackReason?: string;
+                };
+                if (!(data instanceof Uint8Array)) throw new Error('data must be Uint8Array');
+                const isMdu = type === 'expandMduRsCommitted';
+                const raw = isMdu
+                    ? profile
+                        ? polyStoreWasmInstance.expand_mdu_rs_flat_committed_profiled(data, Number(k), Number(m))
+                        : polyStoreWasmInstance.expand_mdu_rs_flat_committed(data, Number(k), Number(m))
+                    : profile
+                        ? polyStoreWasmInstance.expand_payload_rs_flat_committed_profiled(data, Number(k), Number(m))
+                        : polyStoreWasmInstance.expand_payload_rs_flat_committed(data, Number(k), Number(m));
+                result = committedExpansionToUserMduBrowserKzgResult(
+                    parseCommittedExpansion(raw, isMdu ? 'expandMduRsCommitted' : 'expandPayloadRsCommitted'),
+                    committedFallbackReason(fallbackReason),
+                );
+                break;
+            }
+            case 'commitExpandedUserMdu': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+                if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+                const { expansion } = payload as {
+                    expansion: {
+                        shardsFlat: Uint8Array;
+                        shardLen: number;
+                        perf?: Record<string, unknown>;
+                    };
+                };
+                if (!expansion || !(expansion.shardsFlat instanceof Uint8Array)) {
+                    throw new Error('commitExpandedUserMdu requires uncommitted shards');
+                }
+                result = await commitUserMduUncommittedWithBrowserKzg({
+                    expansion: {
+                        shardsFlat: expansion.shardsFlat,
+                        shardLen: Number(expansion.shardLen),
+                        perf: expansion.perf ?? {},
+                    },
+                    wasm: polyStoreWasmInstance,
+                    kzgCommitBackend,
+                });
                 break;
             }
             case 'expandMduRs': {
