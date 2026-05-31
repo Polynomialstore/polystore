@@ -76,10 +76,9 @@ function isBundleCompatibilityError(status: number, body: string): boolean {
   const normalized = body.toLowerCase()
   if (normalized.trim() === '') return true
   return (
-    normalized.includes('invalid bundle') ||
+    normalized.includes('bundle') ||
     normalized.includes('invalid multipart') ||
     normalized.includes('unsupported media') ||
-    normalized.includes('bundle upload unsupported') ||
     normalized.includes('invalid artifact')
   )
 }
@@ -149,6 +148,26 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
       if (!Number.isInteger(parsedDealId) || parsedDealId < 0) {
         throw new Error(`invalid deal id for bundle upload: ${first.dealId}`)
       }
+      const firstManifestRoot = String(first.manifestRoot || '').trim()
+      const firstPreviousManifestRoot = String(first.previousManifestRoot || '').trim()
+      const firstUploadGeneration = String(first.uploadGeneration || '').trim()
+      for (const request of requests) {
+        if (targetUrls(request.target).bundle !== bundleUrl) {
+          throw new Error('bundle requests must target a single provider bundle endpoint')
+        }
+        if (String(request.dealId) !== String(first.dealId)) {
+          throw new Error('bundle requests must use a single deal_id')
+        }
+        if (String(request.manifestRoot || '').trim() !== firstManifestRoot) {
+          throw new Error('bundle requests must use a single manifest_root')
+        }
+        if (String(request.previousManifestRoot || '').trim() !== firstPreviousManifestRoot) {
+          throw new Error('bundle requests must use a single previous_manifest_root')
+        }
+        if (String(request.uploadGeneration || '').trim() !== firstUploadGeneration) {
+          throw new Error('bundle requests must use a single upload_generation')
+        }
+      }
 
       const artifacts = requests.map((request, index) => {
         const sparseArtifact = makeSparseArtifact(request.artifact)
@@ -157,9 +176,9 @@ export function createSparseHttpTransportPort(): UploadTransportPort {
       })
       const metaJson = JSON.stringify({
         deal_id: parsedDealId,
-        manifest_root: first.manifestRoot,
-        previous_manifest_root: String(first.previousManifestRoot || '').trim(),
-        upload_generation: String(first.uploadGeneration || '').trim(),
+        manifest_root: firstManifestRoot,
+        previous_manifest_root: firstPreviousManifestRoot,
+        upload_generation: firstUploadGeneration,
         artifacts: artifacts.map(({ request, sparseArtifact, part }) => ({
           part,
           kind: request.artifact.kind,
