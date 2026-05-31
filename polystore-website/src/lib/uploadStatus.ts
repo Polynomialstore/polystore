@@ -1,3 +1,21 @@
+export type UploadWorkerAutotuneStatus = {
+  selectedWorkerCount: number | null
+  staticWorkerCount: number | null
+  candidates: number[]
+  sampledCandidates: number[]
+  source: string | null
+  cacheHit: boolean | null
+  cacheKey: string | null
+  reason: string | null
+  scoreMs: number | null
+  sampleCount: number | null
+  hardwareConcurrency: number | null
+  totalJobs: number | null
+  rsK: number | null
+  rsM: number | null
+  timedOut: boolean | null
+}
+
 export type UploadPipelinePhase =
   | 'idle'
   | 'read_file'
@@ -114,6 +132,7 @@ export type UploadPipelineStatus = {
     peakActiveUploads: number | null
   }
   kzg: KzgBackendStatus
+  workerAutotune: UploadWorkerAutotuneStatus
   timing: UploadPipelineTiming
   latestEvent: string | null
   error: string | null
@@ -176,16 +195,35 @@ export type KzgDiagnosticsInput = {
 
 export type DeepPartialUploadPipelineStatus = Omit<
   Partial<UploadPipelineStatus>,
-  'file' | 'totals' | 'storage' | 'transport' | 'kzg' | 'timing'
+  'file' | 'totals' | 'storage' | 'transport' | 'kzg' | 'workerAutotune' | 'timing'
 > & {
   file?: Partial<UploadPipelineStatus['file']>
   totals?: Partial<UploadPipelineStatus['totals']>
   storage?: Partial<UploadPipelineStatus['storage']>
   transport?: Partial<UploadPipelineStatus['transport']>
   kzg?: Partial<UploadPipelineStatus['kzg']>
+  workerAutotune?: Partial<UploadPipelineStatus['workerAutotune']>
   timing?: Partial<UploadPipelineStatus['timing']> & {
     phases?: Record<string, number>
   }
+}
+
+export const PENDING_WORKER_AUTOTUNE_STATUS: UploadWorkerAutotuneStatus = {
+  selectedWorkerCount: null,
+  staticWorkerCount: null,
+  candidates: [],
+  sampledCandidates: [],
+  source: null,
+  cacheHit: null,
+  cacheKey: null,
+  reason: null,
+  scoreMs: null,
+  sampleCount: null,
+  hardwareConcurrency: null,
+  totalJobs: null,
+  rsK: null,
+  rsM: null,
+  timedOut: null,
 }
 
 export const PENDING_KZG_BACKEND_STATUS: KzgBackendStatus = {
@@ -358,6 +396,7 @@ export function createUploadPipelineStatus(input: {
       peakActiveUploads: null,
     },
     kzg: { ...PENDING_KZG_BACKEND_STATUS },
+    workerAutotune: { ...PENDING_WORKER_AUTOTUNE_STATUS },
     timing: {
       startedAtMs: now,
       updatedAtMs: now,
@@ -389,6 +428,7 @@ export function patchUploadPipelineStatus(
     storage: { ...base.storage, ...(patch.storage ?? {}) },
     transport: { ...base.transport, ...(patch.transport ?? {}) },
     kzg: { ...base.kzg, ...(patch.kzg ?? {}) },
+    workerAutotune: { ...base.workerAutotune, ...(patch.workerAutotune ?? {}) },
     timing: {
       ...base.timing,
       ...(patch.timing ?? {}),
@@ -425,6 +465,13 @@ export function sanitizeUploadPipelineStatus(status: UploadPipelineStatus): Uplo
       ...status.kzg,
       fallbackReason: truncate(status.kzg.fallbackReason, 500),
       calibrationCacheKey: truncate(status.kzg.calibrationCacheKey, 240),
+    },
+    workerAutotune: {
+      ...status.workerAutotune,
+      cacheKey: truncate(status.workerAutotune.cacheKey, 240),
+      reason: truncate(status.workerAutotune.reason, 500),
+      candidates: status.workerAutotune.candidates.slice(0, 16),
+      sampledCandidates: status.workerAutotune.sampledCandidates.slice(0, 16),
     },
   }
 }

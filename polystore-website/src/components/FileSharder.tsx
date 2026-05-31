@@ -2,7 +2,17 @@ import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { CheckCircle2, ClipboardCopy, Cpu, Database, FileJson, LoaderCircle, Network, UploadCloud, Wallet } from 'lucide-react';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
+import {
+  buildExpansionWorkerCalibrationPlan,
+  defaultExpansionWorkerAutotuneCacheStore,
+  finalizeExpansionWorkerAutotuneSelection,
+  getCachedExpansionWorkerAutotuneSelection,
+  pickExpansionWorkerCount,
+  staticExpansionWorkerAutotuneSelection,
+  type ExpansionWorkerAutotuneSample,
+  type ExpansionWorkerAutotuneSelection,
+  type ExpansionWorkerAutotuneShape,
+} from '../lib/expansionWorkers';
 import { workerClient } from '../lib/worker-client';
 import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
@@ -238,6 +248,7 @@ type PreparePerfProfile = {
   totalUserMdus: number
   totalWitnessMdus: number
   userConcurrency: number
+  workerAutotune: ExpansionWorkerAutotuneSelection | null
   manifestMs: number
   wallClock: {
     prepareMs: number
@@ -329,6 +340,12 @@ type PreparePerfProfile = {
     kzgSchedulerBatchSplitCount?: number
     kzgSchedulerBatchFallbackCount?: number
     commitWorkerCount?: number
+    workerAutotuneSource?: string
+    workerAutotuneReason?: string
+    workerAutotuneCacheHit?: boolean
+    workerAutotuneCandidates?: number[]
+    workerAutotuneSampledCandidates?: number[]
+    workerAutotuneScoreMs?: number | null
   }
   samples: {
     user: PreparePerfSample[]
@@ -350,6 +367,52 @@ function roundPerfMs(value: number | null | undefined): number | null {
   return Math.round(Number(value) * 100) / 100
 }
 
+function numberOrNull(value: number | null | undefined): number | null {
+  return Number.isFinite(value ?? NaN) ? Number(value) : null
+}
+
+function uploadWorkerAutotuneStatus(selection: ExpansionWorkerAutotuneSelection): UploadPipelineStatus['workerAutotune'] {
+  return {
+    selectedWorkerCount: selection.workerCount,
+    staticWorkerCount: selection.staticWorkerCount,
+    candidates: selection.candidates,
+    sampledCandidates: selection.sampledCandidates,
+    source: selection.source,
+    cacheHit: selection.cacheHit,
+    cacheKey: selection.cacheKey,
+    reason: selection.reason,
+    scoreMs: selection.scoreMs,
+    sampleCount: selection.sampleCount,
+    hardwareConcurrency: selection.hardwareConcurrency,
+    totalJobs: selection.totalJobs,
+    rsK: selection.rsK,
+    rsM: selection.rsM,
+    timedOut: selection.timedOut,
+  }
+}
+
+function shapeBackendFromDiagnostics(diagnostics: KzgDiagnosticsInput | null | undefined): Partial<ExpansionWorkerAutotuneShape> {
+  if (!diagnostics) return {}
+  const hasWebGpuSchedulerShape =
+    typeof diagnostics.kzgWebGpuCalibrationCacheKey === 'string' && diagnostics.kzgWebGpuCalibrationCacheKey.trim().length > 0
+  return {
+    kzgCommitBackend: hasWebGpuSchedulerShape
+      ? 'webgpu-scheduler'
+      : diagnostics.kzgCommitBackend ?? diagnostics.workerKzgCommitBackend,
+    rustCommitBackend: diagnostics.rustCommitBackend ?? diagnostics.workerRustCommitBackend,
+    kzgWebGpuAvailable: diagnostics.kzgWebGpuAvailable ?? diagnostics.workerKzgWebGpuAvailable,
+    kzgWebGpuProbeStatus: diagnostics.kzgWebGpuProbeStatus ?? diagnostics.workerKzgWebGpuProbeStatus,
+    kzgWebGpuCircuitOpen: diagnostics.kzgWebGpuCircuitOpen ?? diagnostics.workerKzgWebGpuCircuitOpen,
+    kzgWebGpuBucketWidth: numberOrNull(diagnostics.kzgWebGpuBucketWidth ?? diagnostics.workerKzgWebGpuBucketWidth),
+    kzgWebGpuReductionMode: diagnostics.kzgWebGpuReductionMode ?? diagnostics.workerKzgWebGpuReductionMode,
+    kzgWebGpuCalibrationStatus:
+      diagnostics.kzgWebGpuCalibrationStatus ?? diagnostics.workerKzgWebGpuCalibrationStatus,
+    kzgWebGpuCalibrationSource: diagnostics.kzgWebGpuCalibrationSource ?? diagnostics.workerKzgWebGpuCalibrationSource,
+    kzgWebGpuCalibrationCacheKey:
+      diagnostics.kzgWebGpuCalibrationCacheKey ?? diagnostics.workerKzgWebGpuCalibrationCacheKey,
+  }
+}
+
 type PolyStoreBrowserPerfBundle = {
   browserPerfLog: Array<Record<string, unknown>>
   browserPerfLast: Record<string, unknown> | null
@@ -360,6 +423,9 @@ type PolyStoreBrowserPerfBundle = {
 
 type PolyStorePrepareSummary = PreparePerfProfile['summary'] & {
   prepareWallMs: number
+  workerAutotuneSelectedWorkerCount?: number | null
+  workerAutotuneSource?: string | null
+  workerAutotuneCacheHit?: boolean | null
   manifestMs: number
   userStageWallMs: number
   witnessConcatWallMs: number
@@ -3904,12 +3970,61 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
             ? Math.max(1, Number(navigator.hardwareConcurrency))
             : 4
+        let workerAutotuneSelection: ExpansionWorkerAutotuneSelection | null = null
 
         if (useMode2) {
-          const userConcurrency = pickExpansionWorkerCount(prepareHardwareConcurrency, totalUserChunks)
+          const schedulerStatus = workerClient.getUserMduKzgSchedulerStatus()
+          let preflightKzgDiagnostics: KzgDiagnosticsInput | null = null
+          try {
+            preflightKzgDiagnostics = await workerClient.getKzgCommitDiagnostics()
+            updateUploadKzgStatus(preflightKzgDiagnostics, 'kzg:preflight')
+          } catch (error) {
+            console.warn('Worker KZG diagnostics unavailable before upload-prep autotune.', error)
+          }
+          const workerAutotuneShape: ExpansionWorkerAutotuneShape = {
+            hardwareConcurrency: prepareHardwareConcurrency,
+            totalJobs: totalUserChunks,
+            rsK,
+            rsM,
+            ...shapeBackendFromDiagnostics(preflightKzgDiagnostics),
+            schedulerOwner: 'browser-user-mdu-kzg-scheduler-v1',
+            schedulerConcurrency: schedulerStatus.concurrency,
+            schedulerMaxQueueDepth: schedulerStatus.maxQueueDepth,
+          }
+          const workerAutotuneEnabled = import.meta.env.VITE_POLYSTORE_EXPANSION_WORKER_AUTOTUNE !== '0'
+          const workerCalibrationPlan = buildExpansionWorkerCalibrationPlan(workerAutotuneShape, {
+            enabled: workerAutotuneEnabled,
+          })
+          const cachedWorkerAutotune = workerAutotuneEnabled
+            ? getCachedExpansionWorkerAutotuneSelection(workerAutotuneShape, defaultExpansionWorkerAutotuneCacheStore)
+            : null
+          workerAutotuneSelection =
+            cachedWorkerAutotune ??
+            staticExpansionWorkerAutotuneSelection(
+              workerAutotuneShape,
+              workerCalibrationPlan.source,
+              cachedWorkerAutotune ? 'cached worker autotune result' : workerCalibrationPlan.reason,
+            )
+          let userConcurrency = workerAutotuneSelection.workerCount
+          updateUploadStatus(
+            { workerAutotune: uploadWorkerAutotuneStatus(workerAutotuneSelection) },
+            cachedWorkerAutotune ? 'worker_autotune:cache_hit' : 'worker_autotune:cache_miss',
+          )
+          browserPerfLog('worker_autotune:initial', {
+            selectedWorkerCount: workerAutotuneSelection.workerCount,
+            staticWorkerCount: workerAutotuneSelection.staticWorkerCount,
+            source: workerAutotuneSelection.source,
+            cacheHit: workerAutotuneSelection.cacheHit,
+            candidates: workerAutotuneSelection.candidates,
+            cacheKey: workerAutotuneSelection.cacheKey,
+            reason: workerAutotuneSelection.reason,
+            totalUserMdus: totalUserChunks,
+            rsK,
+            rsM,
+          })
           let nextUserIndex = 0
 
-          const processMode2UserMdu = async (i: number): Promise<void> => {
+          const processMode2UserMdu = async (i: number, activeUserConcurrency = userConcurrency): Promise<void> => {
             const opStart = performance.now()
             const isExisting = appendMode2 && i < existingUserCount
             const nonTrivialBlobs = nonTrivialBlobsForPayload(userPayloads[i] ?? 0)
@@ -3917,7 +4032,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             setShardProgress((p) => ({
               ...p,
               phase: 'shard_user',
-              label: userConcurrency > 1 ? `Sharding user MDUs in parallel (${userConcurrency} workers)...` : `Sharding user MDU #${i}...`,
+              label: activeUserConcurrency > 1 ? `Sharding user MDUs in parallel (${activeUserConcurrency} workers)...` : `Sharding user MDU #${i}...`,
               currentOpStartedAtMs: opStart,
               currentMduKind: 'user',
               currentMduIndex: i,
@@ -4063,7 +4178,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               kind: 'user',
               rawBytes: isExisting ? userPayloads[i] ?? 0 : rawChunk.byteLength,
               expansionPath: isExisting ? 'encoded_mdu' : 'payload',
-              concurrency: userConcurrency,
+              concurrency: activeUserConcurrency,
               encodeMs,
               copyMs,
               wasmMs,
@@ -4145,19 +4260,85 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             )
           }
 
-          const workers = Array.from({ length: userConcurrency }, async () => {
-            let hasMore = true
-            while (hasMore) {
-              const i = nextUserIndex
-              nextUserIndex += 1
-              if (i >= totalUserChunks) {
-                hasMore = false
-                continue
+          const runMode2UserPool = async (workerCount: number, stopIndexExclusive = totalUserChunks): Promise<void> => {
+            const boundedWorkerCount = Math.max(1, Math.min(Math.floor(workerCount), Math.max(1, stopIndexExclusive - nextUserIndex)))
+            const workers = Array.from({ length: boundedWorkerCount }, async () => {
+              while (nextUserIndex < stopIndexExclusive && nextUserIndex < totalUserChunks) {
+                const i = nextUserIndex
+                nextUserIndex += 1
+                await processMode2UserMdu(i, boundedWorkerCount)
               }
-              await processMode2UserMdu(i)
+            })
+            await Promise.all(workers)
+          }
+
+          if (!cachedWorkerAutotune && workerCalibrationPlan.shouldCalibrate) {
+            const calibrationSamples: ExpansionWorkerAutotuneSample[] = []
+            const calibrationStart = performance.now()
+            let calibrationTimedOut = false
+            addLog(
+              `> Autotuning upload-prep workers across candidates ${workerCalibrationPlan.candidates.join(', ')} (bounded sample)...`,
+            )
+            for (const batch of workerCalibrationPlan.sampleBatches) {
+              if (performance.now() - calibrationStart >= workerCalibrationPlan.timeoutMs) {
+                calibrationTimedOut = true
+                break
+              }
+              const batchStartIndex = nextUserIndex
+              const batchStop = Math.min(totalUserChunks, batchStartIndex + batch.sampleJobs)
+              const actualSampleJobs = batchStop - batchStartIndex
+              if (actualSampleJobs <= 0) break
+              const sampleStart = performance.now()
+              addLog(`> Worker autotune sample: ${batch.workerCount} workers over ${actualSampleJobs} user MDU(s)...`)
+              await runMode2UserPool(batch.workerCount, batchStop)
+              const wallMs = performance.now() - sampleStart
+              calibrationSamples.push({
+                workerCount: batch.workerCount,
+                wallMs,
+                sampleJobs: actualSampleJobs,
+                scoreMs: wallMs / Math.max(1, actualSampleJobs),
+              })
             }
-          })
-          await Promise.all(workers)
+            if (calibrationSamples.length < workerCalibrationPlan.sampleBatches.length) {
+              calibrationTimedOut = true
+            }
+            workerAutotuneSelection = finalizeExpansionWorkerAutotuneSelection(
+              workerAutotuneShape,
+              calibrationSamples,
+              {
+                timedOut: calibrationTimedOut,
+                calibrationComplete: !calibrationTimedOut,
+                cacheStore: defaultExpansionWorkerAutotuneCacheStore,
+              },
+            )
+            userConcurrency = workerAutotuneSelection.workerCount
+            updateUploadStatus(
+              { workerAutotune: uploadWorkerAutotuneStatus(workerAutotuneSelection) },
+              workerAutotuneSelection.source === 'calibrated'
+                ? 'worker_autotune:calibrated'
+                : 'worker_autotune:fallback',
+            )
+            browserPerfLog('worker_autotune:complete', {
+              selectedWorkerCount: workerAutotuneSelection.workerCount,
+              staticWorkerCount: workerAutotuneSelection.staticWorkerCount,
+              source: workerAutotuneSelection.source,
+              cacheHit: workerAutotuneSelection.cacheHit,
+              candidates: workerAutotuneSelection.candidates,
+              sampledCandidates: workerAutotuneSelection.sampledCandidates,
+              samples: calibrationSamples,
+              scoreMs: roundPerfMs(workerAutotuneSelection.scoreMs),
+              cacheKey: workerAutotuneSelection.cacheKey,
+              reason: workerAutotuneSelection.reason,
+              totalUserMdus: totalUserChunks,
+              rsK,
+              rsM,
+            })
+            addLog(`> Upload-prep worker selection: ${userConcurrency} workers (${workerAutotuneSelection.reason}).`)
+          }
+
+          if (nextUserIndex < totalUserChunks) {
+            await runMode2UserPool(userConcurrency, totalUserChunks)
+          }
         } else {
           for (let i = 0; i < totalUserChunks; i++) {
               const opStart = performance.now();
@@ -4766,7 +4947,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           totalMdus: finalMdus.length,
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
-          userConcurrency: useMode2 ? pickExpansionWorkerCount(prepareHardwareConcurrency, totalUserChunks) : 1,
+          userConcurrency: useMode2 ? workerAutotuneSelection?.workerCount ?? pickExpansionWorkerCount(prepareHardwareConcurrency, totalUserChunks) : 1,
+          workerAutotune: workerAutotuneSelection,
           manifestMs,
           wallClock: {
             prepareMs: elapsedMs,
@@ -4862,6 +5044,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             kzgSchedulerBatchSplitCount: kzgDiagnosticSample?.workerKzgSchedulerBatchSplitCount,
             kzgSchedulerBatchFallbackCount: kzgDiagnosticSample?.workerKzgSchedulerBatchFallbackCount,
             commitWorkerCount: kzgDiagnosticSample?.workerCommitWorkerCount,
+            workerAutotuneSource: workerAutotuneSelection?.source,
+            workerAutotuneReason: workerAutotuneSelection?.reason,
+            workerAutotuneCacheHit: workerAutotuneSelection?.cacheHit,
+            workerAutotuneCandidates: workerAutotuneSelection?.candidates,
+            workerAutotuneSampledCandidates: workerAutotuneSelection?.sampledCandidates,
+            workerAutotuneScoreMs: workerAutotuneSelection?.scoreMs,
           },
           samples: perfSamples,
         }
@@ -4895,6 +5083,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             mdu0AppendWallMs: roundPerfMs(mdu0AppendMs) ?? 0,
             mdu0StageWallMs: roundPerfMs(mdu0StageMs) ?? 0,
             rootsAssembleWallMs: roundPerfMs(rootsAssembleMs) ?? 0,
+            workerAutotuneSelectedWorkerCount: workerAutotuneSelection?.workerCount ?? null,
+            workerAutotuneSource: workerAutotuneSelection?.source ?? null,
+            workerAutotuneCacheHit: workerAutotuneSelection?.cacheHit ?? null,
             ...prepareProfile.summary,
           }
           ;(
@@ -4940,6 +5131,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         console.log('[perf] prepare summary', {
           prepareWallMs: roundPerfMs(elapsedMs),
           userConcurrency: prepareProfile.userConcurrency,
+          workerAutotuneSource: workerAutotuneSelection?.source,
+          workerAutotuneCacheHit: workerAutotuneSelection?.cacheHit,
+          workerAutotuneCandidates: workerAutotuneSelection?.candidates,
+          workerAutotuneSampledCandidates: workerAutotuneSelection?.sampledCandidates,
+          workerAutotuneReason: workerAutotuneSelection?.reason,
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
           userStageWallMs: roundPerfMs(userStageMs),
@@ -4988,6 +5184,10 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           totalUserMdus: totalUserChunks,
           totalWitnessMdus: witnessMduCount,
           userConcurrency: prepareProfile.userConcurrency,
+          workerAutotuneSource: workerAutotuneSelection?.source,
+          workerAutotuneCacheHit: workerAutotuneSelection?.cacheHit,
+          workerAutotuneCandidates: workerAutotuneSelection?.candidates,
+          workerAutotuneSampledCandidates: workerAutotuneSelection?.sampledCandidates,
           userStageWallMs: roundPerfMs(userStageMs),
           witnessConcatWallMs: roundPerfMs(witnessConcatMs),
           witnessStageWallMs: roundPerfMs(witnessStageMs),
@@ -5335,6 +5535,13 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         value: [uploadStatus.kzg.calibrationStatus, uploadStatus.kzg.calibrationSource]
           .filter(Boolean)
           .join(' / ') || 'default',
+      },
+      {
+        label: 'prep workers',
+        value:
+          uploadStatus.workerAutotune.selectedWorkerCount === null
+            ? 'pending'
+            : `${uploadStatus.workerAutotune.selectedWorkerCount} (${uploadStatus.workerAutotune.source ?? 'static'})`,
       },
       { label: 'storage', value: uploadStatus.storage.stage.replace(/_/g, ' ') },
       { label: 'transport', value: uploadStatus.transport.mode.replace(/-/g, ' ') },
