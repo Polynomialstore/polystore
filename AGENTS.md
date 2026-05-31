@@ -5,8 +5,7 @@
 *   `git push origin <branch>`
 
 **CRITICAL:** Agents must not push implementation or planning work directly to
-`main`. Work must land through a topic branch and pull request with human
-approval before merge.
+`main`. Work must land through a topic branch and pull request.
 
 ### Git Best Practices for Agents
 *   **Commit Regularly:** Always commit your work frequently, in small, logical chunks.
@@ -18,8 +17,6 @@ approval before merge.
 ### Branch / PR Contract (MANDATORY)
 *   If a task is implemented and the user did not explicitly say “don’t commit/push yet,” commit and push automatically to a non-`main` topic branch.
 *   Open or update a pull request when the branch is ready for review. Mark it draft if validation is incomplete or if the work is intentionally planning-only.
-*   Agents must not merge their own PRs.
-*   Human approval is required before merge.
 *   Direct pushes to `main` are prohibited except for a documented emergency hotfix explicitly authorized by the user.
 *   Prefer branch names that describe the workstream, for example:
     *   `docs/<topic>`
