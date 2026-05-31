@@ -8,6 +8,7 @@ import {
   describeUserMduKzgExpansionShape,
   estimateUserMduKzgBatchMemoryBytes,
   planUserMduKzgBatch,
+  recommendedUserMduKzgBatchCapForWebGpuAdapter,
   splitUserMduKzgBatch,
   validateHomogeneousUserMduKzgBatch,
 } from './userMduKzgBatch'
@@ -87,4 +88,19 @@ test('fallback splitter halves oversized batches deterministically', () => {
   assert.deepEqual(splitUserMduKzgBatch(1), [1, 0])
   assert.deepEqual(splitUserMduKzgBatch(2), [1, 1])
   assert.deepEqual(splitUserMduKzgBatch(5), [3, 2])
+})
+
+test('adapter batch cap keeps Apple Metal below the measured timeout cliff', () => {
+  assert.equal(
+    recommendedUserMduKzgBatchCapForWebGpuAdapter({ vendor: 'Apple', architecture: 'Metal', isFallbackAdapter: false }, 4),
+    3,
+  )
+  assert.equal(
+    recommendedUserMduKzgBatchCapForWebGpuAdapter(null, 4, 'MacIntel'),
+    3,
+  )
+  assert.equal(
+    recommendedUserMduKzgBatchCapForWebGpuAdapter({ vendor: 'NVIDIA', architecture: 'Ampere', isFallbackAdapter: false }, 4, 'Linux x86_64'),
+    4,
+  )
 })

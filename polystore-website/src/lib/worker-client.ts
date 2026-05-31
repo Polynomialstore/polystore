@@ -3,6 +3,7 @@
 // This file provides a simple client API to interact with the gateway.worker.ts
 // It abstracts the message passing and Promise-based communication.
 import { DEFAULT_EXPANSION_HARDWARE_CONCURRENCY, pickExpansionWorkerCount } from './expansionWorkers'
+import { recommendedUserMduKzgBatchCapForWebGpuAdapter } from './upload/userMduKzgBatch'
 import { UserMduKzgScheduler } from './upload/userMduKzgScheduler'
 import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './upload/userMduBrowserKzg'
 
@@ -273,7 +274,20 @@ export interface ExpandedStripe {
       browserKzgBatchCommitMs?: number;
       browserKzgBatchRootMs?: number;
       browserKzgBatchSplitCount?: number;
+      browserKzgBatchTimeoutCount?: number;
     };
+}
+
+type KzgBackendStatusMessage = {
+  webgpu?: {
+    adapter?: {
+      vendor?: string
+      architecture?: string
+      device?: string
+      description?: string
+      isFallbackAdapter?: boolean
+    } | null
+  }
 }
 
 export type KzgCommitDiagnostics = {
@@ -291,6 +305,13 @@ export type KzgCommitDiagnostics = {
   kzgWebGpuCalibrationStatus?: string
   kzgWebGpuCalibrationSource?: string
   kzgWebGpuCalibrationCacheKey?: string
+  kzgWebGpuCommitTimeoutCount?: number
+  kzgWebGpuBatchTooLargeCount?: number
+  kzgWebGpuLastTimeoutBlobs?: number
+  kzgWebGpuLastTimeoutBytes?: number
+  kzgWebGpuLastTimeoutBatchMdus?: number
+  kzgWebGpuLastTimeoutRetryable?: boolean
+  kzgWebGpuLastTimeoutAdapterCacheKey?: string
   kzgSchedulerSequence?: number
   kzgSchedulerQueueWaitMs?: number
   kzgSchedulerCommitMs?: number
@@ -311,6 +332,9 @@ export type KzgCommitDiagnostics = {
   kzgSchedulerBatchPlanReason?: string
   kzgSchedulerBatchSplitCount?: number
   kzgSchedulerBatchFallbackCount?: number
+  kzgSchedulerBatchTimeoutCount?: number
+  kzgSchedulerSafeMaxBatchMdus?: number
+  kzgSchedulerRetriedBatchSizes?: string
   kzgSchedulerOwner?: string
   commitWorkerCount?: number
 }
@@ -390,6 +414,22 @@ export const workerClient = {
     const setupCopy = trustedSetupBytes.slice()
     const result = await sendMessageToWorker('initPolyStoreWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer]) as string
     await initializeExpansionPool(setupCopy)
+    const platformHint = navigator.platform || navigator.userAgent || ''
+    const platformCap = recommendedUserMduKzgBatchCapForWebGpuAdapter(null, userMduKzgScheduler.getStatus().safeMaxBatchMdus, platformHint)
+    if (platformCap < userMduKzgScheduler.getStatus().safeMaxBatchMdus) {
+      userMduKzgScheduler.setAdaptiveBatchCap(platformCap, 'conservative WebGPU platform cap')
+    }
+    try {
+      const status = await sendMessageToWorker('getKzgBackendStatus', {}) as KzgBackendStatusMessage
+      const fallbackCap = userMduKzgScheduler.getStatus().safeMaxBatchMdus
+      const recommendedCap = recommendedUserMduKzgBatchCapForWebGpuAdapter(status?.webgpu?.adapter, fallbackCap, platformHint)
+      if (recommendedCap < fallbackCap) {
+        userMduKzgScheduler.setAdaptiveBatchCap(recommendedCap, 'conservative WebGPU adapter cap')
+      }
+    } catch {
+      // Status is best-effort. Split/retry still protects the upload path if the
+      // initial adapter-specific cap cannot be installed.
+    }
     return result
   },
 

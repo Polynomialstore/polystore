@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { KZG_BLOB_SIZE } from '../kzgCommitBackend'
+import { KZG_BLOB_SIZE, WebGpuKzgCommitTimeoutError } from '../kzgCommitBackend'
 import { UserMduKzgScheduler } from './userMduKzgScheduler'
 import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './userMduBrowserKzg'
 
@@ -62,8 +62,29 @@ function resultFor(sequence: number): UserMduBrowserKzgResult {
       kzgWebGpuCalibrationStatus: 'cached',
       kzgWebGpuCalibrationSource: 'cache',
       kzgWebGpuCalibrationCacheKey: 'test',
+      kzgWebGpuCommitTimeoutCount: 0,
+      kzgWebGpuBatchTooLargeCount: 0,
+      kzgWebGpuLastTimeoutBlobs: 0,
+      kzgWebGpuLastTimeoutBytes: 0,
+      kzgWebGpuLastTimeoutBatchMdus: 0,
+      kzgWebGpuLastTimeoutRetryable: false,
+      kzgWebGpuLastTimeoutAdapterCacheKey: '',
     },
   }
+}
+
+function webGpuTimeout(batchMduCount: number, blobs = batchMduCount * 3): WebGpuKzgCommitTimeoutError {
+  return new WebGpuKzgCommitTimeoutError({
+    kind: 'webgpu-commit-timeout',
+    blobs,
+    bytes: blobs * KZG_BLOB_SIZE,
+    timeoutMs: 60_000,
+    batchMduCount,
+    retryableAsSmallerBatch: batchMduCount > 1,
+    bucketWidth: 10,
+    reductionMode: 'parallel16',
+    adapterCacheKey: 'test-adapter',
+  })
 }
 
 test('KZG scheduler preserves enqueue order even when later RS expansion finishes first', async () => {
@@ -263,4 +284,89 @@ test('KZG scheduler splits failed batches down to per-MDU commits before using f
   assert.equal(results[0].perf.kzgSchedulerBatchSize, 4)
   assert.ok((results[0].perf.kzgSchedulerBatchSplitCount ?? 0) >= 3)
   assert.equal(scheduler.getStatus().batchSplitCount, 3)
+})
+
+test('KZG scheduler treats typed multi-MDU WebGPU timeout as batch-too-large and retries smaller batches', async () => {
+  let releaseFirst!: (value: UserMduUncommittedExpansion) => void
+  const first = new Promise<UserMduUncommittedExpansion>((resolve) => {
+    releaseFirst = resolve
+  })
+  const batchCalls: number[][] = []
+  const singleCalls: number[] = []
+  const scheduler = new UserMduKzgScheduler({ maxQueueDepth: 8, batch: { maxBatchMdus: 4, maxBatchBlobs: 12 } })
+
+  const tasks = Array.from({ length: 4 }, (_, sequence) =>
+    scheduler.enqueue({
+      sequence,
+      expansion: sequence === 0 ? first : Promise.resolve(expansion(sequence)),
+      commit: async (expanded) => {
+        singleCalls.push(expanded.sequence ?? -1)
+        return resultFor(expanded.sequence ?? 0)
+      },
+      commitBatch: async (expandedBatch) => {
+        const sequences = expandedBatch.map((expanded) => expanded.sequence ?? -1)
+        batchCalls.push(sequences)
+        if (expandedBatch.length === 4) throw webGpuTimeout(4, 12)
+        return expandedBatch.map((expanded) => resultFor(expanded.sequence ?? 0))
+      },
+      fallback: async (reason) => {
+        const fallback = resultFor(sequence)
+        fallback.perf.rustCommitBackend = 'blst'
+        fallback.perf.browserKzgCommitFallbackReason = reason
+        return fallback
+      },
+    }),
+  )
+
+  await Promise.resolve()
+  releaseFirst(expansion(0))
+  const results = await Promise.all(tasks)
+
+  assert.deepEqual(batchCalls, [[0, 1, 2, 3], [0, 1], [2, 3]])
+  assert.deepEqual(singleCalls, [])
+  assert.equal(results[0].perf.rustCommitBackend, 'webgpu-msm')
+  assert.equal(results[0].perf.browserKzgCommitFallbackReason, undefined)
+  assert.equal(results[0].perf.kzgSchedulerBatchTimeoutCount, 1)
+  assert.equal(results[0].perf.kzgSchedulerSafeMaxBatchMdus, 2)
+  assert.equal(results[0].perf.kzgSchedulerRetriedBatchSizes, '2,2')
+  assert.equal(scheduler.getStatus().batchTimeoutCount, 1)
+  assert.equal(scheduler.getStatus().safeMaxBatchMdus, 2)
+  assert.deepEqual(scheduler.getStatus().lastRetriedBatchSizes, [2, 2])
+})
+
+test('KZG scheduler uses fallback when a single-MDU retry still times out', async () => {
+  const batchCalls: number[][] = []
+  const fallbackReasons: string[] = []
+  const scheduler = new UserMduKzgScheduler({ maxQueueDepth: 4, batch: { maxBatchMdus: 2, maxBatchBlobs: 6 } })
+
+  const tasks = Array.from({ length: 2 }, (_, sequence) =>
+    scheduler.enqueue({
+      sequence,
+      expansion: Promise.resolve(expansion(sequence)),
+      commit: async () => {
+        throw webGpuTimeout(1, 3)
+      },
+      commitBatch: async (expandedBatch) => {
+        batchCalls.push(expandedBatch.map((expanded) => expanded.sequence ?? -1))
+        throw webGpuTimeout(expandedBatch.length, expandedBatch.length * 3)
+      },
+      fallback: async (reason) => {
+        fallbackReasons.push(reason)
+        const fallback = resultFor(sequence)
+        fallback.perf.rustCommitBackend = 'blst'
+        fallback.perf.browserKzgCommitFallbackReason = reason
+        return fallback
+      },
+    }),
+  )
+
+  const results = await Promise.all(tasks)
+
+  assert.deepEqual(batchCalls, [[0, 1]])
+  assert.equal(results[0].perf.rustCommitBackend, 'blst')
+  assert.equal(results[1].perf.rustCommitBackend, 'blst')
+  assert.match(fallbackReasons[0], /WebGPU commit exceeded 60000ms/)
+  assert.equal(results[0].perf.kzgSchedulerBatchTimeoutCount, 1)
+  assert.equal(results[0].perf.kzgSchedulerBatchFallbackCount, 2)
+  assert.equal(scheduler.getStatus().batchFallbackCount, 2)
 })

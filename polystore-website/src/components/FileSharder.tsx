@@ -190,6 +190,13 @@ type PreparePerfSample = {
   workerKzgSchedulerBatchBytes?: number
   workerKzgSchedulerBatchSplitCount?: number
   workerKzgSchedulerBatchFallbackCount?: number
+  workerKzgSchedulerBatchTimeoutCount?: number
+  workerKzgSchedulerSafeMaxBatchMdus?: number
+  workerKzgWebGpuCommitTimeoutCount?: number
+  workerKzgWebGpuBatchTooLargeCount?: number
+  workerKzgWebGpuLastTimeoutBlobs?: number
+  workerKzgWebGpuLastTimeoutBytes?: number
+  workerKzgWebGpuLastTimeoutBatchMdus?: number
   workerRustEncodeMs: number
   workerRustRsMs: number
   workerRustCommitDecodeMs: number
@@ -321,6 +328,13 @@ type PreparePerfProfile = {
     kzgSchedulerBatchBytes?: number
     kzgSchedulerBatchSplitCount?: number
     kzgSchedulerBatchFallbackCount?: number
+    kzgSchedulerBatchTimeoutCount?: number
+    kzgSchedulerSafeMaxBatchMdus?: number
+    kzgWebGpuCommitTimeoutCount?: number
+    kzgWebGpuBatchTooLargeCount?: number
+    kzgWebGpuLastTimeoutBlobs?: number
+    kzgWebGpuLastTimeoutBytes?: number
+    kzgWebGpuLastTimeoutBatchMdus?: number
     commitWorkerCount?: number
   }
   samples: {
@@ -3727,11 +3741,23 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             const workerKzgSchedulerActiveAtEnqueue = Number(result.perf?.kzgSchedulerActiveAtEnqueue ?? 0) || undefined
             const workerKzgSchedulerMaxQueueDepth = Number(result.perf?.kzgSchedulerMaxQueueDepth ?? 0) || undefined
             const workerKzgSchedulerFallbackCount = Number(result.perf?.kzgSchedulerFallbackCount ?? 0) || undefined
-            const workerKzgSchedulerBatchSize = Number(result.perf?.kzgSchedulerBatchSize ?? 0) || undefined
-            const workerKzgSchedulerBatchBlobs = Number(result.perf?.kzgSchedulerBatchBlobs ?? 0) || undefined
-            const workerKzgSchedulerBatchBytes = Number(result.perf?.kzgSchedulerBatchBytes ?? 0) || undefined
-            const workerKzgSchedulerBatchSplitCount = Number(result.perf?.kzgSchedulerBatchSplitCount ?? 0) || undefined
+            const workerKzgSchedulerBatchSize =
+              Number(result.perf?.kzgSchedulerBatchSize ?? 0) || Number(result.perf?.browserKzgBatchSize ?? 0) || undefined
+            const workerKzgSchedulerBatchBlobs =
+              Number(result.perf?.kzgSchedulerBatchBlobs ?? 0) || Number(result.perf?.browserKzgBatchBlobs ?? 0) || undefined
+            const workerKzgSchedulerBatchBytes =
+              Number(result.perf?.kzgSchedulerBatchBytes ?? 0) || Number(result.perf?.browserKzgBatchBytes ?? 0) || undefined
+            const workerKzgSchedulerBatchSplitCount =
+              Number(result.perf?.kzgSchedulerBatchSplitCount ?? 0) || Number(result.perf?.browserKzgBatchSplitCount ?? 0) || undefined
             const workerKzgSchedulerBatchFallbackCount = Number(result.perf?.kzgSchedulerBatchFallbackCount ?? 0) || undefined
+            const workerKzgSchedulerBatchTimeoutCount =
+              Number(result.perf?.kzgSchedulerBatchTimeoutCount ?? 0) || Number(result.perf?.browserKzgBatchTimeoutCount ?? 0) || undefined
+            const workerKzgSchedulerSafeMaxBatchMdus = Number(result.perf?.kzgSchedulerSafeMaxBatchMdus ?? 0) || undefined
+            const workerKzgWebGpuCommitTimeoutCount = Number(result.perf?.kzgWebGpuCommitTimeoutCount ?? 0) || undefined
+            const workerKzgWebGpuBatchTooLargeCount = Number(result.perf?.kzgWebGpuBatchTooLargeCount ?? 0) || undefined
+            const workerKzgWebGpuLastTimeoutBlobs = Number(result.perf?.kzgWebGpuLastTimeoutBlobs ?? 0) || undefined
+            const workerKzgWebGpuLastTimeoutBytes = Number(result.perf?.kzgWebGpuLastTimeoutBytes ?? 0) || undefined
+            const workerKzgWebGpuLastTimeoutBatchMdus = Number(result.perf?.kzgWebGpuLastTimeoutBatchMdus ?? 0) || undefined
             const workerRustEncodeMs = Number(result.perf?.rustEncodeMs ?? 0)
             const workerRustRsMs = Number(result.perf?.rustRsMs ?? 0)
             const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
@@ -3828,6 +3854,13 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerKzgSchedulerBatchBytes,
               workerKzgSchedulerBatchSplitCount,
               workerKzgSchedulerBatchFallbackCount,
+              workerKzgSchedulerBatchTimeoutCount,
+              workerKzgSchedulerSafeMaxBatchMdus,
+              workerKzgWebGpuCommitTimeoutCount,
+              workerKzgWebGpuBatchTooLargeCount,
+              workerKzgWebGpuLastTimeoutBlobs,
+              workerKzgWebGpuLastTimeoutBytes,
+              workerKzgWebGpuLastTimeoutBatchMdus,
               workerRustEncodeMs,
               workerRustRsMs,
               workerRustCommitDecodeMs,
@@ -4577,6 +4610,13 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             kzgSchedulerBatchBytes: kzgDiagnosticSample?.workerKzgSchedulerBatchBytes,
             kzgSchedulerBatchSplitCount: kzgDiagnosticSample?.workerKzgSchedulerBatchSplitCount,
             kzgSchedulerBatchFallbackCount: kzgDiagnosticSample?.workerKzgSchedulerBatchFallbackCount,
+            kzgSchedulerBatchTimeoutCount: kzgDiagnosticSample?.workerKzgSchedulerBatchTimeoutCount,
+            kzgSchedulerSafeMaxBatchMdus: kzgDiagnosticSample?.workerKzgSchedulerSafeMaxBatchMdus,
+            kzgWebGpuCommitTimeoutCount: kzgDiagnosticSample?.workerKzgWebGpuCommitTimeoutCount,
+            kzgWebGpuBatchTooLargeCount: kzgDiagnosticSample?.workerKzgWebGpuBatchTooLargeCount,
+            kzgWebGpuLastTimeoutBlobs: kzgDiagnosticSample?.workerKzgWebGpuLastTimeoutBlobs,
+            kzgWebGpuLastTimeoutBytes: kzgDiagnosticSample?.workerKzgWebGpuLastTimeoutBytes,
+            kzgWebGpuLastTimeoutBatchMdus: kzgDiagnosticSample?.workerKzgWebGpuLastTimeoutBatchMdus,
             commitWorkerCount: kzgDiagnosticSample?.workerCommitWorkerCount,
           },
           samples: perfSamples,

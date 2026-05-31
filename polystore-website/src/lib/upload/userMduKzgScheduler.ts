@@ -1,3 +1,4 @@
+import { isWebGpuKzgCommitTimeoutError } from '../kzgCommitBackend'
 import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './userMduBrowserKzg'
 import {
   normalizeUserMduKzgBatchConstraints,
@@ -38,6 +39,9 @@ export type UserMduKzgSchedulerDiagnostics = {
   batchPlanReason: UserMduKzgBatchPlan['reason']
   batchSplitCount: number
   batchFallbackCount: number
+  batchTimeoutCount: number
+  safeMaxBatchMdus: number
+  retriedBatchSizes: string
   owner: 'browser-user-mdu-kzg-scheduler-v1'
 }
 
@@ -84,6 +88,10 @@ export type UserMduKzgSchedulerStatus = {
   fallbackCount: number
   batchSplitCount: number
   batchFallbackCount: number
+  batchTimeoutCount: number
+  safeMaxBatchMdus: number
+  adaptiveBatchCapReason: string | null
+  lastRetriedBatchSizes: number[]
   lastBatchSize: number | null
   lastBatchBlobs: number | null
   lastBatchBytes: number | null
@@ -164,6 +172,9 @@ export function attachUserMduKzgSchedulerDiagnostics(
       kzgSchedulerBatchPlanReason: diagnostics.batchPlanReason,
       kzgSchedulerBatchSplitCount: diagnostics.batchSplitCount,
       kzgSchedulerBatchFallbackCount: diagnostics.batchFallbackCount,
+      kzgSchedulerBatchTimeoutCount: diagnostics.batchTimeoutCount,
+      kzgSchedulerSafeMaxBatchMdus: diagnostics.safeMaxBatchMdus,
+      kzgSchedulerRetriedBatchSizes: diagnostics.retriedBatchSizes,
       kzgSchedulerOwner: diagnostics.owner,
     },
   }
@@ -174,7 +185,7 @@ export class UserMduKzgScheduler {
   private readonly concurrency: number
   private readonly now: () => number
   private readonly batchEnabled: boolean
-  private readonly batchConstraints: NormalizedUserMduKzgBatchConstraints
+  private batchConstraints: NormalizedUserMduKzgBatchConstraints
   private queue: QueuedTask[] = []
   private active = 0
   private completed = 0
@@ -182,6 +193,10 @@ export class UserMduKzgScheduler {
   private fallbackCount = 0
   private batchSplitCount = 0
   private batchFallbackCount = 0
+  private batchTimeoutCount = 0
+  private adaptiveBatchCapMdus: number | null = null
+  private adaptiveBatchCapReason: string | null = null
+  private lastRetriedBatchSizes: number[] = []
   private lastBatchSize: number | null = null
   private lastBatchBlobs: number | null = null
   private lastBatchBytes: number | null = null
@@ -212,6 +227,10 @@ export class UserMduKzgScheduler {
       fallbackCount: this.fallbackCount,
       batchSplitCount: this.batchSplitCount,
       batchFallbackCount: this.batchFallbackCount,
+      batchTimeoutCount: this.batchTimeoutCount,
+      safeMaxBatchMdus: this.effectiveBatchConstraints().maxBatchMdus,
+      adaptiveBatchCapReason: this.adaptiveBatchCapReason,
+      lastRetriedBatchSizes: [...this.lastRetriedBatchSizes],
       lastBatchSize: this.lastBatchSize,
       lastBatchBlobs: this.lastBatchBlobs,
       lastBatchBytes: this.lastBatchBytes,
@@ -220,6 +239,34 @@ export class UserMduKzgScheduler {
       lastQueueWaitMs: this.lastQueueWaitMs,
       lastTotalMs: this.lastTotalMs,
     }
+  }
+
+  setAdaptiveBatchCap(maxBatchMdus: number | null, reason?: string): void {
+    if (maxBatchMdus === null) {
+      this.adaptiveBatchCapMdus = null
+      this.adaptiveBatchCapReason = null
+      return
+    }
+    const normalized = Math.floor(Number(maxBatchMdus))
+    if (!Number.isFinite(normalized) || normalized <= 0) return
+    this.adaptiveBatchCapMdus = Math.max(1, Math.min(this.batchConstraints.maxBatchMdus, normalized))
+    this.adaptiveBatchCapReason = reason ?? null
+  }
+
+  private effectiveBatchConstraints(): NormalizedUserMduKzgBatchConstraints {
+    if (!this.adaptiveBatchCapMdus) return this.batchConstraints
+    return {
+      ...this.batchConstraints,
+      maxBatchMdus: Math.max(1, Math.min(this.batchConstraints.maxBatchMdus, this.adaptiveBatchCapMdus)),
+    }
+  }
+
+  private reduceAdaptiveBatchCapAfterTimeout(batchSize: number, retrySizes: number[]): void {
+    const retryCap = Math.max(1, ...retrySizes)
+    const currentCap = this.adaptiveBatchCapMdus ?? this.batchConstraints.maxBatchMdus
+    const nextCap = Math.max(1, Math.min(currentCap, retryCap, batchSize - 1 || 1))
+    this.adaptiveBatchCapMdus = nextCap
+    this.adaptiveBatchCapReason = `reduced after WebGPU batch timeout at ${batchSize} user MDU(s)`
   }
 
   enqueue(task: UserMduKzgSchedulerTask): Promise<UserMduBrowserKzgResult> {
@@ -273,6 +320,7 @@ export class UserMduKzgScheduler {
     meta: BatchMeta,
     position: number,
   ): UserMduKzgSchedulerDiagnostics {
+    const effectiveConstraints = this.effectiveBatchConstraints()
     return {
       sequence: item.task.sequence,
       queueWaitMs: Math.max(0, startedAtMs - item.enqueuedAtMs),
@@ -287,12 +335,15 @@ export class UserMduKzgScheduler {
       batchBlobs: meta.plan.blobs,
       batchBytes: meta.plan.bytes,
       batchEstimatedMemoryBytes: meta.plan.estimatedMemoryBytes,
-      batchMaxMdus: this.batchConstraints.maxBatchMdus,
-      batchMaxBlobs: this.batchConstraints.maxBatchBlobs,
-      batchMaxBytes: this.batchConstraints.maxBatchBytes,
+      batchMaxMdus: effectiveConstraints.maxBatchMdus,
+      batchMaxBlobs: effectiveConstraints.maxBatchBlobs,
+      batchMaxBytes: effectiveConstraints.maxBatchBytes,
       batchPlanReason: meta.plan.reason,
       batchSplitCount: this.batchSplitCount - meta.splitCountAtStart,
       batchFallbackCount: this.batchFallbackCount - meta.fallbackCountAtStart,
+      batchTimeoutCount: this.batchTimeoutCount,
+      safeMaxBatchMdus: effectiveConstraints.maxBatchMdus,
+      retriedBatchSizes: this.lastRetriedBatchSizes.join(','),
       owner: OWNER,
     }
   }
@@ -306,7 +357,8 @@ export class UserMduKzgScheduler {
   private collectReadyBatch(first: QueuedTask, firstExpansion: UserMduUncommittedExpansion): { batch: BatchItem[]; plan: UserMduKzgBatchPlan } {
     const batch: BatchItem[] = [{ queued: first, expansion: firstExpansion }]
     let acceptedFromQueue = 0
-    let plan = planUserMduKzgBatch([firstExpansion], this.batchConstraints)
+    const constraints = this.effectiveBatchConstraints()
+    let plan = planUserMduKzgBatch([firstExpansion], constraints)
 
     if (!this.batchEnabled || !first.task.commitBatch) {
       return { batch, plan }
@@ -316,7 +368,7 @@ export class UserMduKzgScheduler {
       if (!queued.task.commitBatch || queued.task.signal?.aborted) break
       if (queued.expansionState.status !== 'fulfilled') break
       const candidateExpansions = [...batch.map((item) => item.expansion), queued.expansionState.value]
-      const candidatePlan = planUserMduKzgBatch(candidateExpansions, this.batchConstraints)
+      const candidatePlan = planUserMduKzgBatch(candidateExpansions, constraints)
       if (candidatePlan.count !== candidateExpansions.length) {
         plan = candidatePlan.count === batch.length ? candidatePlan : plan
         break
@@ -385,6 +437,12 @@ export class UserMduKzgScheduler {
       const [leftCount, rightCount] = splitUserMduKzgBatch(batch.length)
       if (leftCount <= 0 || rightCount <= 0) {
         return Promise.all(batch.map((item) => this.commitSingle(item, startedAtMs, meta, errorMessage(error))))
+      }
+      const retrySizes = [leftCount, rightCount].filter((value) => value > 0)
+      this.lastRetriedBatchSizes = retrySizes
+      if (isWebGpuKzgCommitTimeoutError(error)) {
+        this.batchTimeoutCount += 1
+        this.reduceAdaptiveBatchCapAfterTimeout(batch.length, retrySizes)
       }
       const left = batch.slice(0, leftCount)
       const right = batch.slice(leftCount)

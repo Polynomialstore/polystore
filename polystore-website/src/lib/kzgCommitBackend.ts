@@ -1,5 +1,6 @@
 import {
   calibrateWebGpuKzgMsmAdapter,
+  createWebGpuKzgMsmAdapterCacheKey,
   createWebGpuKzgMsmCommitter,
   defaultWebGpuKzgMsmAdapterCalibration,
   defaultWebGpuKzgMsmCalibrationCache,
@@ -63,11 +64,55 @@ export type KzgCommitBackendStatus = {
   webgpu?: WebGpuKzgStatus
 }
 
+export type KzgCommitBatchContext = {
+  /** Number of logical user MDUs represented by this commitment batch. */
+  batchMduCount?: number
+  /** Human-readable source for diagnostics (for example, `user-mdu-batch`). */
+  batchLabel?: string
+  /** Set false for callers that cannot safely retry smaller WebGPU batches. */
+  allowWebGpuBatchTimeoutRetry?: boolean
+}
+
+export type WebGpuKzgCommitTimeoutDetails = {
+  kind: 'webgpu-commit-timeout'
+  blobs: number
+  bytes: number
+  timeoutMs: number
+  batchMduCount: number
+  batchLabel?: string
+  retryableAsSmallerBatch: boolean
+  bucketWidth?: number
+  reductionMode?: WebGpuKzgMsmReductionMode
+  adapter?: WebGpuKzgAdapterInfo | null
+  adapterCacheKey?: string
+}
+
+export class WebGpuKzgCommitTimeoutError extends Error {
+  readonly details: WebGpuKzgCommitTimeoutDetails
+
+  constructor(details: WebGpuKzgCommitTimeoutDetails) {
+    super(
+      `WebGPU commit exceeded ${details.timeoutMs}ms for ${details.batchMduCount} user MDU(s), ${details.blobs} blob(s), ${details.bytes} byte(s)`,
+    )
+    this.name = 'WebGpuKzgCommitTimeoutError'
+    this.details = details
+  }
+}
+
+export function isWebGpuKzgCommitTimeoutError(error: unknown): error is WebGpuKzgCommitTimeoutError {
+  return error instanceof WebGpuKzgCommitTimeoutError ||
+    ((error as { name?: unknown; details?: { kind?: unknown } } | null)?.name === 'WebGpuKzgCommitTimeoutError' &&
+      (error as { details?: { kind?: unknown } }).details?.kind === 'webgpu-commit-timeout')
+}
+
 export type KzgCommitBackend = {
   readonly kind: KzgCommitBackendKind
   getStatus(): KzgCommitBackendStatus
-  commitBlobs(blobsFlat: Uint8Array): Uint8Array | Promise<Uint8Array>
-  commitBlobsProfiled(blobsFlat: Uint8Array): KzgCommitProfiledResult | Promise<KzgCommitProfiledResult>
+  commitBlobs(blobsFlat: Uint8Array, context?: KzgCommitBatchContext): Uint8Array | Promise<Uint8Array>
+  commitBlobsProfiled(
+    blobsFlat: Uint8Array,
+    context?: KzgCommitBatchContext,
+  ): KzgCommitProfiledResult | Promise<KzgCommitProfiledResult>
 }
 
 type GpuBufferLike = {
@@ -181,6 +226,15 @@ export type WebGpuKzgSchedulerStatus = {
   lastWebGpuMs?: number
   lastWasmMs?: number
   lastFallbackReason?: string
+  commitTimeoutCount?: number
+  batchTooLargeCount?: number
+  lastTimeoutBlobs?: number
+  lastTimeoutBytes?: number
+  lastTimeoutBatchMdus?: number
+  lastTimeoutRetryable?: boolean
+  lastTimeoutBucketWidth?: number
+  lastTimeoutReductionMode?: WebGpuKzgMsmReductionMode
+  lastTimeoutAdapterCacheKey?: string
 }
 
 export type CreateKzgCommitBackendOptions = {
@@ -282,6 +336,15 @@ async function withTimeout<T>(
     promise.then((value) => ({ timedOut: false as const, value })),
     delay(timeoutMs, { timedOut: true as const }),
   ])
+}
+
+function normalizeBatchMduCount(context?: KzgCommitBatchContext): number {
+  const value = Math.floor(Number(context?.batchMduCount ?? 1))
+  return Number.isFinite(value) && value > 0 ? value : 1
+}
+
+function canRetryWebGpuTimeoutAsSmallerBatch(context: KzgCommitBatchContext | undefined): boolean {
+  return context?.allowWebGpuBatchTimeoutRetry !== false && normalizeBatchMduCount(context) > 1
 }
 
 async function readAdapterInfo(adapter: GpuAdapterLike): Promise<WebGpuKzgAdapterInfo | null> {
@@ -468,12 +531,12 @@ export class WebGpuKzgLifecycleBackend implements KzgCommitBackend {
     }
   }
 
-  commitBlobs(blobsFlat: Uint8Array): Uint8Array | Promise<Uint8Array> {
-    return this.wasmFallback.commitBlobs(blobsFlat)
+  commitBlobs(blobsFlat: Uint8Array, context?: KzgCommitBatchContext): Uint8Array | Promise<Uint8Array> {
+    return this.wasmFallback.commitBlobs(blobsFlat, context)
   }
 
-  commitBlobsProfiled(blobsFlat: Uint8Array): KzgCommitProfiledResult | Promise<KzgCommitProfiledResult> {
-    return this.wasmFallback.commitBlobsProfiled(blobsFlat)
+  commitBlobsProfiled(blobsFlat: Uint8Array, context?: KzgCommitBatchContext): KzgCommitProfiledResult | Promise<KzgCommitProfiledResult> {
+    return this.wasmFallback.commitBlobsProfiled(blobsFlat, context)
   }
 }
 
@@ -644,6 +707,56 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
     })
   }
 
+  private retireTimedOutCommitter(
+    committer: WebGpuKzgMsmCommitter | null,
+    promise: Promise<WebGpuKzgMsmResult>,
+  ): void {
+    if (!committer) return
+    if (this.committer === committer) {
+      this.committer = null
+      this.status = {
+        ...this.status,
+        available: false,
+      }
+    }
+    promise.catch(() => undefined).finally(() => committer.destroy())
+  }
+
+  private makeCommitTimeoutError(
+    blobs: number,
+    context: KzgCommitBatchContext | undefined,
+  ): WebGpuKzgCommitTimeoutError {
+    const batchMduCount = normalizeBatchMduCount(context)
+    return new WebGpuKzgCommitTimeoutError({
+      kind: 'webgpu-commit-timeout',
+      blobs,
+      bytes: blobs * KZG_BLOB_SIZE,
+      timeoutMs: this.commitTimeoutMs,
+      batchMduCount,
+      batchLabel: context?.batchLabel,
+      retryableAsSmallerBatch: canRetryWebGpuTimeoutAsSmallerBatch(context),
+      bucketWidth: this.status.bucketWidth,
+      reductionMode: this.status.reductionMode,
+      adapter: this.status.adapter ?? null,
+      adapterCacheKey: createWebGpuKzgMsmAdapterCacheKey(this.status.adapter ?? null),
+    })
+  }
+
+  private recordCommitTimeout(error: WebGpuKzgCommitTimeoutError): void {
+    const scheduler = this.status.scheduler
+    this.updateScheduler({
+      commitTimeoutCount: (scheduler?.commitTimeoutCount ?? 0) + 1,
+      batchTooLargeCount: (scheduler?.batchTooLargeCount ?? 0) + (error.details.retryableAsSmallerBatch ? 1 : 0),
+      lastTimeoutBlobs: error.details.blobs,
+      lastTimeoutBytes: error.details.bytes,
+      lastTimeoutBatchMdus: error.details.batchMduCount,
+      lastTimeoutRetryable: error.details.retryableAsSmallerBatch,
+      lastTimeoutBucketWidth: error.details.bucketWidth,
+      lastTimeoutReductionMode: error.details.reductionMode,
+      lastTimeoutAdapterCacheKey: error.details.adapterCacheKey,
+    })
+  }
+
   private async initCommitter(): Promise<WebGpuKzgMsmCommitter> {
     if (this.committer) return this.committer
     const committerOptions: WebGpuKzgMsmOptions = {
@@ -750,7 +863,18 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
     }
     if (this.status.scheduler?.circuitOpen) return false
     if (!(await this.ensureCalibration(realBatchBlobs))) return false
-    if (this.status.scheduler?.probeStatus === 'passed') return true
+    if (this.status.scheduler?.probeStatus === 'passed') {
+      if (this.committer) return true
+      try {
+        await this.initCommitter()
+        return true
+      } catch (error) {
+        const reason = `WebGPU committer reinitialization failed: ${error instanceof Error ? error.message : String(error)}`
+        this.openCircuit(reason)
+        this.updateScheduler({ probeStatus: 'failed' })
+        return false
+      }
+    }
     if (this.probePromise) return this.probePromise
 
     this.updateScheduler({ probeStatus: 'running' })
@@ -771,7 +895,7 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
       const gpuPromise = committer.commitBlobs(probeBlob)
       const timed = await withTimeout(gpuPromise, this.probeTimeoutMs)
       if (timed.timedOut) {
-        gpuPromise.catch(() => undefined).finally(() => this.committer?.destroy())
+        gpuPromise.catch(() => undefined).finally(() => committer.destroy())
         this.openCircuit(`WebGPU probe exceeded ${this.probeTimeoutMs}ms`)
         this.updateScheduler({ probeStatus: 'timeout', lastProbeMs: nowMs(this.options.now) - probeStarted, lastWasmMs: wasmMs })
         return false
@@ -819,30 +943,45 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
     }
   }
 
-  async commitBlobs(blobsFlat: Uint8Array): Promise<Uint8Array> {
+  async commitBlobs(blobsFlat: Uint8Array, context?: KzgCommitBatchContext): Promise<Uint8Array> {
     const blobs = assertBlobBatch(blobsFlat)
     if (blobs < this.minBlobs) {
       this.fallBack(`batch below WebGPU threshold: ${blobs} < ${this.minBlobs}`)
-      return this.wasmFallback.commitBlobs(blobsFlat)
+      return this.wasmFallback.commitBlobs(blobsFlat, context)
     }
     if (!(await this.probe(blobs)) || !this.committer) {
-      return this.wasmFallback.commitBlobs(blobsFlat)
+      return this.wasmFallback.commitBlobs(blobsFlat, context)
     }
 
-    const gpuPromise = this.committer.commitBlobs(blobsFlat)
-    const timed = await withTimeout(gpuPromise, this.commitTimeoutMs)
+    const committer = this.committer
+    const gpuPromise = committer.commitBlobs(blobsFlat)
+    let timed: { timedOut: false; value: WebGpuKzgMsmResult } | { timedOut: true }
+    try {
+      timed = await withTimeout(gpuPromise, this.commitTimeoutMs)
+    } catch (error) {
+      const reason = `WebGPU commit failed: ${error instanceof Error ? error.message : String(error)}`
+      this.openCircuit(reason)
+      return this.wasmFallback.commitBlobs(blobsFlat, context)
+    }
     if (timed.timedOut) {
-      gpuPromise.catch(() => undefined).finally(() => this.committer?.destroy())
+      this.retireTimedOutCommitter(committer, gpuPromise)
+      const timeoutError = this.makeCommitTimeoutError(blobs, context)
+      this.recordCommitTimeout(timeoutError)
+      if (timeoutError.details.retryableAsSmallerBatch) {
+        throw timeoutError
+      }
       this.openCircuit(`WebGPU commit exceeded ${this.commitTimeoutMs}ms`)
-      return this.wasmFallback.commitBlobs(blobsFlat)
+      return this.wasmFallback.commitBlobs(blobsFlat, context)
     }
 
     this.status = {
       ...this.status,
+      available: true,
       fallbackActive: false,
       selectedBackend: 'webgpu',
       bucketWidth: timed.value.debug?.bucketWidth ?? this.status.bucketWidth,
       reductionMode: timed.value.debug?.reductionMode ?? this.status.reductionMode,
+      reason: undefined,
     }
     this.updateScheduler({
       bucketWidth: timed.value.debug?.bucketWidth ?? this.status.bucketWidth,
@@ -853,30 +992,45 @@ export class ScheduledWebGpuKzgCommitBackend implements KzgCommitBackend {
     return timed.value.commitments
   }
 
-  async commitBlobsProfiled(blobsFlat: Uint8Array): Promise<KzgCommitProfiledResult> {
+  async commitBlobsProfiled(blobsFlat: Uint8Array, context?: KzgCommitBatchContext): Promise<KzgCommitProfiledResult> {
     const blobs = assertBlobBatch(blobsFlat)
     if (blobs < this.minBlobs) {
       this.fallBack(`batch below WebGPU threshold: ${blobs} < ${this.minBlobs}`)
-      return this.wasmFallback.commitBlobsProfiled(blobsFlat)
+      return this.wasmFallback.commitBlobsProfiled(blobsFlat, context)
     }
     if (!(await this.probe(blobs)) || !this.committer) {
-      return this.wasmFallback.commitBlobsProfiled(blobsFlat)
+      return this.wasmFallback.commitBlobsProfiled(blobsFlat, context)
     }
 
-    const gpuPromise = this.committer.commitBlobs(blobsFlat)
-    const timed = await withTimeout(gpuPromise, this.commitTimeoutMs)
+    const committer = this.committer
+    const gpuPromise = committer.commitBlobs(blobsFlat)
+    let timed: { timedOut: false; value: WebGpuKzgMsmResult } | { timedOut: true }
+    try {
+      timed = await withTimeout(gpuPromise, this.commitTimeoutMs)
+    } catch (error) {
+      const reason = `WebGPU commit failed: ${error instanceof Error ? error.message : String(error)}`
+      this.openCircuit(reason)
+      return this.wasmFallback.commitBlobsProfiled(blobsFlat, context)
+    }
     if (timed.timedOut) {
-      gpuPromise.catch(() => undefined).finally(() => this.committer?.destroy())
+      this.retireTimedOutCommitter(committer, gpuPromise)
+      const timeoutError = this.makeCommitTimeoutError(blobs, context)
+      this.recordCommitTimeout(timeoutError)
+      if (timeoutError.details.retryableAsSmallerBatch) {
+        throw timeoutError
+      }
       this.openCircuit(`WebGPU commit exceeded ${this.commitTimeoutMs}ms`)
-      return this.wasmFallback.commitBlobsProfiled(blobsFlat)
+      return this.wasmFallback.commitBlobsProfiled(blobsFlat, context)
     }
 
     this.status = {
       ...this.status,
+      available: true,
       fallbackActive: false,
       selectedBackend: 'webgpu',
       bucketWidth: timed.value.debug?.bucketWidth ?? this.status.bucketWidth,
       reductionMode: timed.value.debug?.reductionMode ?? this.status.reductionMode,
+      reason: undefined,
     }
     this.updateScheduler({
       bucketWidth: timed.value.debug?.bucketWidth ?? this.status.bucketWidth,

@@ -73,6 +73,14 @@ test('normalizeKzgBackendStatus surfaces browser KZG scheduler diagnostics', () 
     kzgSchedulerBatchBytes: 50_331_648,
     kzgSchedulerBatchSplitCount: 1,
     kzgSchedulerBatchFallbackCount: 0,
+    kzgSchedulerBatchTimeoutCount: 1,
+    kzgSchedulerSafeMaxBatchMdus: 2,
+    kzgWebGpuCommitTimeoutCount: 2,
+    kzgWebGpuBatchTooLargeCount: 1,
+    kzgWebGpuLastTimeoutBlobs: 384,
+    kzgWebGpuLastTimeoutBytes: 50_331_648,
+    kzgWebGpuLastTimeoutBatchMdus: 4,
+    kzgWebGpuLastTimeoutRetryable: true,
   })
 
   assert.equal(status.schedulerQueueWaitMs, 12)
@@ -86,6 +94,34 @@ test('normalizeKzgBackendStatus surfaces browser KZG scheduler diagnostics', () 
   assert.equal(status.schedulerBatchBytes, 50_331_648)
   assert.equal(status.schedulerBatchSplitCount, 1)
   assert.equal(status.schedulerBatchFallbackCount, null)
+  assert.equal(status.schedulerBatchTimeoutCount, 1)
+  assert.equal(status.schedulerSafeMaxBatchMdus, 2)
+  assert.equal(status.webGpuCommitTimeoutCount, 2)
+  assert.equal(status.webGpuBatchTooLargeCount, 1)
+  assert.equal(status.webGpuLastTimeoutBlobs, 384)
+  assert.equal(status.webGpuLastTimeoutBytes, 50_331_648)
+  assert.equal(status.webGpuLastTimeoutBatchMdus, 4)
+  assert.equal(status.webGpuLastTimeoutRetryable, true)
+})
+
+test('normalizeKzgBackendStatus surfaces worker-side browser KZG batch split diagnostics', () => {
+  const status = normalizeKzgBackendStatus({
+    rustCommitBackend: 'webgpu-msm',
+    kzgCommitBackend: 'webgpu',
+    kzgSchedulerBatchSplitCount: 0,
+    kzgSchedulerBatchTimeoutCount: 0,
+    browserKzgBatchSize: 4,
+    browserKzgBatchBlobs: 384,
+    browserKzgBatchBytes: 50_331_648,
+    browserKzgBatchSplitCount: 1,
+    browserKzgBatchTimeoutCount: 1,
+  })
+
+  assert.equal(status.schedulerBatchSize, 4)
+  assert.equal(status.schedulerBatchBlobs, 384)
+  assert.equal(status.schedulerBatchBytes, 50_331_648)
+  assert.equal(status.schedulerBatchSplitCount, 1)
+  assert.equal(status.schedulerBatchTimeoutCount, 1)
 })
 
 test('patchUploadPipelineStatus preserves nested state and records elapsed time', () => {

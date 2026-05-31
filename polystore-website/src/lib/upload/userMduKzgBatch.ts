@@ -42,6 +42,34 @@ export const DEFAULT_USER_MDU_KZG_BATCH_CONSTRAINTS: NormalizedUserMduKzgBatchCo
   maxEstimatedMemoryBytes: DEFAULT_MAX_ESTIMATED_MEMORY_BYTES,
 }
 
+export type UserMduKzgAdapterInfoLike = {
+  vendor?: string
+  architecture?: string
+  device?: string
+  description?: string
+  isFallbackAdapter?: boolean
+} | null | undefined
+
+export function recommendedUserMduKzgBatchCapForWebGpuAdapter(
+  adapter: UserMduKzgAdapterInfoLike,
+  fallback = DEFAULT_MAX_BATCH_MDUS,
+  platformHint = '',
+): number {
+  const normalizedFallback = positiveInteger(fallback, DEFAULT_MAX_BATCH_MDUS)
+  const vendor = String(adapter?.vendor ?? '').toLowerCase()
+  const architecture = String(adapter?.architecture ?? '').toLowerCase()
+  const device = String(adapter?.device ?? '').toLowerCase()
+  const description = String(adapter?.description ?? '').toLowerCase()
+  const platform = String(platformHint).toLowerCase()
+  const isAppleMetal =
+    vendor.includes('apple') ||
+    architecture.includes('metal') ||
+    device.includes('apple') ||
+    description.includes('metal') ||
+    platform.includes('mac')
+  return isAppleMetal ? Math.min(normalizedFallback, 3) : normalizedFallback
+}
+
 function positiveInteger(value: number | undefined, fallback: number): number {
   const parsed = Math.floor(Number(value ?? fallback))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
