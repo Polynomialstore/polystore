@@ -10,6 +10,7 @@ const uploadSizeBytes = Number(process.env.SPARSE_FILE_SIZE_BYTES || 192 * 1024)
 const largeUploadTimeoutMs = uploadSizeBytes > 32 * 1024 * 1024 ? 900_000 : 120_000
 const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
 const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
+const bundleUploadsEnabled = process.env.SPARSE_BUNDLE_UPLOADS === '1'
 
 function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
@@ -26,9 +27,11 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const chainIdHex = `0x${chainId.toString(16)}`
   const polystoreAddress = ethToPolystoreAddress(account.address)
 
-  const mduUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string }> = []
-  const manifestUploads: Array<{ bodyLen: number; fullSize: number | null }> = []
-  const shardUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string; slot: string }> = []
+  const mduUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string; viaBundle?: boolean }> = []
+  const manifestUploads: Array<{ bodyLen: number; fullSize: number | null; viaBundle?: boolean }> = []
+  const shardUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string; slot: string; viaBundle?: boolean }> = []
+  const bundleUploads: Array<{ artifactCount: number; bodyLen: number; target: string }> = []
+  let perArtifactPostRequests = 0
   let gatewayUploadAttempts = 0
   let gatewayProbeAttempts = 0
   let activeUploads = 0
@@ -83,9 +86,67 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
     await route.fulfill({ status: 599, body: 'gateway disabled in sparse e2e' })
   })
 
-  // Force per-artifact sparse uploads in this test; the bundle path is covered elsewhere.
   await page.route('**/sp/upload_bundle*', async (route) => {
-    await route.fulfill({ status: 404, body: 'bundle disabled in sparse e2e' })
+    if (!bundleUploadsEnabled) {
+      await route.fulfill({ status: 404, body: 'bundle disabled in sparse e2e' })
+      return
+    }
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'content-type,x-polystore-deal-id,x-polystore-manifest-root,x-polystore-previous-manifest-root,x-polystore-upload-generation',
+        },
+      })
+      return
+    }
+
+    const body = route.request().postDataBuffer() || Buffer.alloc(0)
+    expect(body.subarray(0, 4).toString('utf8')).toBe('NLB2')
+    const metaLen = body.readUInt32LE(4)
+    const meta = JSON.parse(body.subarray(8, 8 + metaLen).toString('utf8')) as {
+      manifest_root: string
+      artifacts: Array<{ kind: 'mdu' | 'manifest' | 'shard'; mdu_index?: number; slot?: number; full_size: number; send_size: number }>
+    }
+    let offset = 8 + metaLen
+    for (const artifact of meta.artifacts) {
+      const sendSize = Number(artifact.send_size || artifact.full_size || 0)
+      const part = body.subarray(offset, offset + sendSize)
+      offset += sendSize
+      if (artifact.kind === 'mdu') {
+        mduUploads.push({
+          bodyLen: part.length,
+          fullSize: Number(artifact.full_size),
+          mduIndex: String(artifact.mdu_index ?? ''),
+          viaBundle: true,
+        })
+      } else if (artifact.kind === 'manifest') {
+        manifestUploads.push({
+          bodyLen: part.length,
+          fullSize: Number(artifact.full_size),
+          viaBundle: true,
+        })
+      } else {
+        shardUploads.push({
+          bodyLen: part.length,
+          fullSize: Number(artifact.full_size),
+          mduIndex: String(artifact.mdu_index ?? ''),
+          slot: String(artifact.slot ?? ''),
+          viaBundle: true,
+        })
+      }
+    }
+    expect(offset).toBe(body.length)
+    bundleUploads.push({ artifactCount: meta.artifacts.length, bodyLen: body.length, target: route.request().url() })
+    return recordConcurrentUpload(() =>
+      route.fulfill({
+        status: 200,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: 'OK',
+      }),
+    )
   })
 
   const failGatewayProbe = async (route: import('@playwright/test').Route) => {
@@ -99,6 +160,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   await page.route('http://localhost:8080/health', failGatewayProbe)
 
   await page.route('**/sp/upload_mdu', async (route) => {
+    perArtifactPostRequests += 1
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
     const fullSizeHeader = headers['x-polystore-full-size']
@@ -111,6 +173,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   })
 
   await page.route('**/sp/upload_manifest', async (route) => {
+    perArtifactPostRequests += 1
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
     const fullSizeHeader = headers['x-polystore-full-size']
@@ -122,6 +185,7 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   })
 
   await page.route('**/sp/upload_shard', async (route) => {
+    perArtifactPostRequests += 1
     const headers = route.request().headers()
     const body = route.request().postDataBuffer() || Buffer.alloc(0)
     const fullSizeHeader = headers['x-polystore-full-size']
@@ -327,15 +391,60 @@ test('Thick Client: no-gateway Mode 2 browser upload sends sparse MDU, manifest,
   const sparseManifestUploads = manifestUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
   const sparseShardUploads = shardUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
 
+  const uploadStatus = await page.evaluate(() => {
+    return (window as Window & { __polyStoreUploadStatus?: unknown }).__polyStoreUploadStatus ?? null
+  }) as {
+    storage?: {
+      stagedArtifacts?: number | null
+      uploadedArtifacts?: number | null
+    }
+    transport?: {
+      requestCount?: number | null
+      bundleCount?: number | null
+      artifactCount?: number | null
+      bytesSent?: number | null
+      fallbackCount?: number | null
+      fallbackReason?: string | null
+      peakActiveUploads?: number | null
+    }
+  } | null
+  const logicalArtifactCount = mduUploads.length + manifestUploads.length + shardUploads.length
+  const providerRequestCount = bundleUploads.length + perArtifactPostRequests
+
   console.log('[direct sparse upload evidence]', {
     uploadSizeBytes,
+    bundleUploadsEnabled,
     gatewayProbeAttempts,
     mduUploads,
     manifestUploads,
     shardUploads,
+    bundleUploads,
+    perArtifactPostRequests,
+    providerRequestCount,
+    logicalArtifactCount,
+    uploadStatus,
     peakActiveUploads,
     perf,
   })
+
+  if (bundleUploadsEnabled) {
+    expect(bundleUploads.length).toBeGreaterThan(0)
+    expect(perArtifactPostRequests).toBe(0)
+    expect(providerRequestCount).toBeLessThan(logicalArtifactCount)
+    expect(uploadStatus?.transport?.bundleCount ?? 0).toBeGreaterThan(0)
+    expect(uploadStatus?.transport?.fallbackCount ?? 0).toBe(0)
+  } else {
+    expect(bundleUploads.length).toBe(0)
+    expect(perArtifactPostRequests).toBe(logicalArtifactCount)
+    const fallbackCount = uploadStatus?.transport?.fallbackCount ?? 0
+    if (fallbackCount > 0) {
+      expect(uploadStatus?.transport?.fallbackReason || '').toMatch(/bundle/i)
+    } else {
+      // Pipelined browser staging intentionally uses per-artifact generation uploads
+      // until the final manifest root is known, so no bundle fallback is required.
+      expect(uploadStatus?.storage?.stagedArtifacts ?? 0).toBeGreaterThan(0)
+    }
+  }
 
   expect(sparseMduUploads.length).toBeGreaterThan(0)
   expect(sparseManifestUploads.length).toBeGreaterThan(0)

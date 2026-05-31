@@ -146,6 +146,7 @@ test('http transport bundles target artifacts into one binary bundle request', a
         dealId: '42',
         manifestRoot: '0xnext',
         previousManifestRoot: '0xprev',
+        uploadGeneration: 'browser-run-7',
         target: {
           baseUrl: 'http://provider.test/',
           mduPath: '/sp/upload_mdu',
@@ -164,6 +165,7 @@ test('http transport bundles target artifacts into one binary bundle request', a
         dealId: '42',
         manifestRoot: '0xnext',
         previousManifestRoot: '0xprev',
+        uploadGeneration: 'browser-run-7',
         target: {
           baseUrl: 'http://provider.test/',
           mduPath: '/sp/upload_mdu',
@@ -184,10 +186,65 @@ test('http transport bundles target artifacts into one binary bundle request', a
 
   assert.equal(receivedUrl, 'http://provider.test/sp/upload_bundle')
   assert.equal(receivedContentType, 'application/x.polystore-bundle-v2')
-  assert.match(receivedMeta, /"deal_id":42/)
-  assert.match(receivedMeta, /"kind":"mdu"/)
-  assert.match(receivedMeta, /"kind":"manifest"/)
+  const meta = JSON.parse(receivedMeta) as {
+    deal_id: number
+    manifest_root: string
+    previous_manifest_root: string
+    upload_generation: string
+    artifacts: Array<{ part: string; kind: string; full_size: number; send_size: number; mdu_index?: number }>
+  }
+  assert.equal(meta.deal_id, 42)
+  assert.equal(meta.manifest_root, '0xnext')
+  assert.equal(meta.previous_manifest_root, '0xprev')
+  assert.equal(meta.upload_generation, 'browser-run-7')
+  assert.deepStrictEqual(meta.artifacts, [
+    { part: 'artifact_00', kind: 'mdu', mdu_index: 0, full_size: 8, send_size: 3 },
+    { part: 'artifact_01', kind: 'manifest', full_size: 16, send_size: 1 },
+  ])
   assert.deepStrictEqual(Array.from(receivedBytes.slice(-4)), [1, 2, 3, 9])
+})
+
+test('http transport rejects mixed bundle targets before sending', async () => {
+  const originalFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = (async () => {
+    calls += 1
+    return new Response('OK', { status: 200 })
+  }) as typeof fetch
+  try {
+    const transport = createSparseHttpTransportPort()
+    await assert.rejects(
+      () =>
+        transport.sendBundle?.([
+          {
+            dealId: '42',
+            manifestRoot: '0xnext',
+            target: {
+              baseUrl: 'http://provider-a.test',
+              mduPath: '/sp/upload_mdu',
+              manifestPath: '/sp/upload_manifest',
+              bundlePath: '/sp/upload_bundle',
+            },
+            artifact: { kind: 'manifest', bytes: new Uint8Array([1]) },
+          },
+          {
+            dealId: '42',
+            manifestRoot: '0xnext',
+            target: {
+              baseUrl: 'http://provider-b.test',
+              mduPath: '/sp/upload_mdu',
+              manifestPath: '/sp/upload_manifest',
+              bundlePath: '/sp/upload_bundle',
+            },
+            artifact: { kind: 'manifest', bytes: new Uint8Array([2]) },
+          },
+        ]) ?? Promise.resolve(),
+      /single provider bundle endpoint/,
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  assert.equal(calls, 0)
 })
 
 test('http transport marks bundle upload unsupported on 404', async () => {

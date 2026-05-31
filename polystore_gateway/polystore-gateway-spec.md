@@ -78,11 +78,21 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 
 *   **`POST /sp/upload_shard`** *(Striped Provider API)*
     *   **Input:** Raw shard bytes (body) with headers:
-        * `X-PolyStore-Deal-ID` (uint64), `X-PolyStore-Mdu-Index` (uint64), `X-PolyStore-Slot` (uint64), `X-PolyStore-Manifest-Root` (`0x` + 96 hex).
-    *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<manifest_root_key>/`.
+        * `X-PolyStore-Deal-ID` (uint64), `X-PolyStore-Mdu-Index` (uint64), `X-PolyStore-Slot` (uint64), and either `X-PolyStore-Manifest-Root` (`0x` + 96 hex) **or** `X-PolyStore-Upload-Generation` (browser-run staging id).
+    *   **Logic:** With a manifest root, stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<manifest_root_key>/`. With only `upload_generation`, stores it under `uploads/deals/<deal_id>/staging/<generation>/` until `/sp/upload_manifest` supplies the final root and promotes the generation.
     *   **Role:** Slot-specific shard ingestion for the striped StripeReplica layout.
         *   **Provider is a dumb pipe:** the server does not need to understand layout variants beyond writing/serving bytes addressed by the headers.
         *   Metadata MDUs (MDU #0 + Witness) remain replicated to all slots via `/sp/upload_mdu`.
+
+*   **`POST /sp/upload_bundle`** *(Optional provider bundle API)*
+    *   **Role:** Reduces browser direct-upload round trips by sending all Mode 2 artifacts for one provider in a single request. Support is optional; browsers MUST fall back to `/sp/upload_mdu`, `/sp/upload_shard`, and `/sp/upload_manifest` if the endpoint returns unsupported/invalid-bundle responses.
+    *   **Content-Type:** `application/x.polystore-bundle-v2`.
+    *   **Binary format:** `"NLB2"` magic (4 bytes), little-endian `uint32` metadata JSON length, metadata JSON, then artifact bodies concatenated in metadata order.
+    *   **Metadata JSON:** `{ "deal_id": uint64, "manifest_root": "0x...", "previous_manifest_root": "0x...", "upload_generation": "optional-devnet-id", "artifacts": [{ "part": "artifact_00", "kind": "mdu|shard|manifest", "mdu_index": uint64?, "slot": uint64?, "full_size": int64, "send_size": int64 }] }`.
+    *   **Sparse artifacts:** `send_size` MAY be smaller than `full_size`; providers write the prefix bytes and zero-extend/truncate the stored file to `full_size`, matching per-artifact `X-PolyStore-Full-Size` semantics.
+    *   **Validation:** All artifacts in a bundle share the same deal/root/generation scope. Providers reject missing/invalid roots, too many artifacts, duplicate target filenames, malformed generation IDs, body length mismatches, and unexpected trailing bytes without committing partial files.
+    *   **Staging note:** bundle uploads are root-bound for #198 compatibility. Browser pipelining stages early shards/metadata with per-artifact `/sp/upload_*` requests carrying `X-PolyStore-Upload-Generation`; the final `/sp/upload_manifest` request carries both `X-PolyStore-Manifest-Root` and the generation id to promote the staged artifacts.
+    *   **CORS:** Providers answer `OPTIONS /sp/upload_bundle` and allow `Content-Type` plus `X-PolyStore-*` headers so browser-only uploads remain gateway-optional.
 
 *   **`POST /gateway/mirror_mdu` / `/gateway/mirror_manifest` / `/gateway/mirror_shard`** *(Gateway mirror helpers)*
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.

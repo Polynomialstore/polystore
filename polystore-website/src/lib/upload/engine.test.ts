@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildCommitRequest, createUploadEngine, type UploadTransportRequest } from './engine'
+import { buildCommitRequest, createUploadEngine, type UploadTaskEvent, type UploadTransportRequest } from './engine'
 
 function makeRecordingTransport(failAt?: (request: UploadTransportRequest) => string | null) {
   const calls: UploadTransportRequest[] = []
@@ -328,6 +328,102 @@ test('upload engine: pipelined generation does not finalize manifest after artif
   assert.deepEqual(starts, ['mdu'])
 })
 
+test('upload engine: pipelined generation emits queued/staged/activation progress', async () => {
+  const target = {
+    baseUrl: 'http://provider-a',
+    mduPath: '/sp/upload_mdu',
+    manifestPath: '/sp/upload_manifest',
+    label: 'provider-a',
+  }
+  const events: UploadTaskEvent[] = []
+  const engine = createUploadEngine({
+    transport: {
+      async sendArtifact() {
+        await new Promise((resolve) => setTimeout(resolve, 1))
+      },
+    },
+    parallelism: { direct: 1 },
+  })
+
+  async function* artifacts() {
+    yield {
+      target,
+      artifact: { kind: 'shard' as const, index: 7, slot: 2, bytes: new Uint8Array([1]), fullSize: 8 },
+    }
+  }
+
+  const result = await engine.uploadPipelinedGeneration({
+    dealId: '26',
+    previousManifestRoot: '0xprev',
+    uploadGeneration: 'browser-run-3',
+    artifacts: artifacts(),
+    manifest: Promise.resolve({
+      manifestRoot: '0xnext',
+      manifestBlob: new Uint8Array([9]),
+      manifestTargets: [target],
+    }),
+    onTaskEvent(event) {
+      events.push(event)
+    },
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(
+    events.map((event) => `${event.phase}:${event.kind}:${event.staged ? 'staged' : event.activating ? 'activating' : 'bound'}`),
+    [
+      'queued:shard:staged',
+      'start:shard:staged',
+      'end:shard:staged',
+      'start:manifest:activating',
+      'end:manifest:activating',
+    ],
+  )
+  assert.equal(result.transportStats?.queuedArtifactCount, 1)
+  assert.equal(result.transportStats?.stagedArtifactCount, 1)
+  assert.equal(result.transportStats?.activatedArtifactCount, 1)
+})
+
+test('upload engine: pipelined generation reports manifest computation failure without activation', async () => {
+  const target = {
+    baseUrl: 'http://provider-a',
+    mduPath: '/sp/upload_mdu',
+    manifestPath: '/sp/upload_manifest',
+    label: 'provider-a',
+  }
+  const starts: string[] = []
+  const engine = createUploadEngine({
+    transport: {
+      async sendArtifact(request: UploadTransportRequest) {
+        starts.push(`${request.artifact.kind}:${request.manifestRoot || 'staged'}`)
+      },
+    },
+  })
+
+  async function* artifacts() {
+    yield {
+      target,
+      artifact: { kind: 'mdu' as const, index: 0, bytes: new Uint8Array([1]), fullSize: 8 },
+    }
+  }
+
+  let rejectManifest!: (error: Error) => void
+  const manifest = new Promise<never>((_, reject) => {
+    rejectManifest = reject
+  })
+  setTimeout(() => rejectManifest(new Error('manifest kzg failed')), 0)
+
+  const result = await engine.uploadPipelinedGeneration({
+    dealId: '27',
+    uploadGeneration: 'browser-run-4',
+    artifacts: artifacts(),
+    manifest,
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, 'manifest kzg failed')
+  assert.deepEqual(starts, ['mdu:staged'])
+})
+
 test('upload engine: striped upload overlaps metadata and shard requests with combined bounded concurrency', async () => {
   let activeTotal = 0
   let peakTotal = 0
@@ -510,6 +606,104 @@ test('upload engine: striped upload bundles requests per target when transport s
       'provider-b:manifest:manifest:-',
     ],
   ])
+  assert.equal(result.transportStats?.bundleCount, 2)
+  assert.equal(result.transportStats?.requestCount, 2)
+  assert.equal(result.transportStats?.bundledArtifactCount, 8)
+})
+
+test('upload engine: bundle unsupported falls back per target without replaying successful bundles', async () => {
+  const bundleCalls: string[] = []
+  const artifactCalls: string[] = []
+  const events: UploadTaskEvent[] = []
+  const transport = {
+    async sendArtifact(request: UploadTransportRequest) {
+      artifactCalls.push(`${request.target.label}:${request.artifact.kind}:${request.artifact.index ?? 'manifest'}:${request.artifact.slot ?? '-'}`)
+    },
+    async sendBundle(requests: UploadTransportRequest[]) {
+      const label = requests[0]?.target.label || 'unknown'
+      bundleCalls.push(label)
+      if (label === 'provider-b') {
+        const err = new Error('bundle upload unsupported')
+        err.name = 'BundleUnsupportedUploadError'
+        throw err
+      }
+    },
+  }
+
+  const engine = createUploadEngine({ transport })
+  const result = await engine.uploadStriped({
+    dealId: '18',
+    manifestRoot: '0xbundle',
+    previousManifestRoot: '0xprev',
+    manifestBlob: new Uint8Array([5, 4, 3]),
+    manifestBlobFullSize: 128 * 1024,
+    metadataMdus: [{ index: 0, data: new Uint8Array([1]), fullSize: 8 * 1024 * 1024 }],
+    shardSets: [
+      {
+        index: 2,
+        shards: [
+          { data: new Uint8Array([7]), fullSize: 1024 },
+          { data: new Uint8Array([8]), fullSize: 1024 },
+        ],
+      },
+    ],
+    metadataTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-b',
+      },
+    ],
+    shardTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-b',
+      },
+    ],
+    onTaskEvent(event) {
+      events.push(event)
+    },
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(bundleCalls.sort(), ['provider-a', 'provider-b'])
+  assert.deepEqual(artifactCalls, [
+    'provider-b:mdu:0:-',
+    'provider-b:shard:2:1',
+    'provider-b:manifest:manifest:-',
+  ])
+  assert.equal(result.transportStats?.bundleCount, 2)
+  assert.equal(result.transportStats?.perArtifactCount, 3)
+  assert.equal(result.transportStats?.fallbackCount, 1)
+  assert.match(result.transportStats?.fallbackReason || '', /unsupported/)
+  assert.equal(events.some((event) => event.phase === 'fallback' && event.fallbackArtifactCount === 3), true)
+  assert.equal(
+    events.some((event) => event.phase === 'end' && event.ok === false && event.error?.includes('unsupported')),
+    false,
+  )
 })
 
 test('buildCommitRequest: mode2 derives total mdus from witness + user counts', () => {

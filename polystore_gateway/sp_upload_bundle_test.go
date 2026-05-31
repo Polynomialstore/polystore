@@ -262,6 +262,192 @@ func TestSpUploadBundle_AcceptsBinaryBundleV2(t *testing.T) {
 	}
 }
 
+func TestSpUploadBundle_RejectsShortBinaryBundleAsBadRequest(t *testing.T) {
+	useTempUploadDir(t)
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
+
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-bundle-short")
+	dealID := uint64(3)
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: "nil1owner", CID: ""},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	reqMeta := spUploadBundleRequest{
+		DealID:               ptrUint64(dealID),
+		ManifestRoot:         manifestRoot.Canonical,
+		PreviousManifestRoot: "",
+		UploadGeneration:     "browser-run-7",
+		Artifacts: []spUploadBundleArtifact{
+			{
+				Part:     "artifact_00",
+				Kind:     spUploadBundleKindMDU,
+				MduIndex: ptrUint64(0),
+				FullSize: int64(types.MDU_SIZE),
+				SendSize: 8,
+			},
+		},
+	}
+	metaBytes, err := json.Marshal(reqMeta)
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+
+	var body bytes.Buffer
+	var header [8]byte
+	copy(header[:4], []byte(spUploadBundleV2Magic))
+	binary.LittleEndian.PutUint32(header[4:], uint32(len(metaBytes)))
+	body.Write(header[:])
+	body.Write(metaBytes)
+	body.Write([]byte{0xA1, 0xA2, 0xA3, 0xA4})
+
+	req := httptest.NewRequest(http.MethodPost, "/sp/upload_bundle", &body)
+	req.Header.Set("Content-Type", spUploadBundleV2MediaType)
+	req.Header.Set("Content-Length", strconv.Itoa(body.Len()))
+
+	w := httptest.NewRecorder()
+	testRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("invalid bundle body")) {
+		t.Fatalf("expected invalid bundle body response, got %q", w.Body.String())
+	}
+
+	rootDir := filepath.Join(uploadDir, "deals", "3", manifestRoot.Key)
+	if _, err := os.Stat(filepath.Join(rootDir, "mdu_0.bin")); !os.IsNotExist(err) {
+		t.Fatalf("expected partial mdu not to be committed, stat err=%v", err)
+	}
+}
+
+func TestSpUploadBundle_OptionsCORS(t *testing.T) {
+	req := httptest.NewRequest(http.MethodOptions, "/sp/upload_bundle", nil)
+	req.Header.Set("Origin", "https://web.polynomialstore.com")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "content-type,x-polystore-upload-generation")
+
+	w := httptest.NewRecorder()
+	testRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://web.polynomialstore.com" {
+		t.Fatalf("expected origin echo, got %q", got)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
+		t.Fatalf("expected private network CORS header, got %q", got)
+	}
+	allowHeaders := w.Header().Get("Access-Control-Allow-Headers")
+	for _, want := range []string{"content-type", "x-polystore-upload-generation"} {
+		if !csvHeaderContains(allowHeaders, want) {
+			t.Fatalf("expected allow headers to include %q, got %q", want, allowHeaders)
+		}
+	}
+}
+
+func TestSpUploadBundle_RejectsTooManyArtifacts(t *testing.T) {
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-bundle-too-many")
+	artifacts := make([]spUploadBundleArtifact, spUploadBundleMaxArtifacts+1)
+	for i := range artifacts {
+		artifacts[i] = spUploadBundleArtifact{
+			Part:     "artifact_" + strconv.Itoa(i),
+			Kind:     spUploadBundleKindManifest,
+			FullSize: int64(types.BLOB_SIZE),
+			SendSize: 1,
+		}
+	}
+	metaBytes, err := json.Marshal(spUploadBundleRequest{
+		DealID:       ptrUint64(5),
+		ManifestRoot: manifestRoot.Canonical,
+		Artifacts:    artifacts,
+	})
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+
+	var body bytes.Buffer
+	var header [8]byte
+	copy(header[:4], []byte(spUploadBundleV2Magic))
+	binary.LittleEndian.PutUint32(header[4:], uint32(len(metaBytes)))
+	body.Write(header[:])
+	body.Write(metaBytes)
+
+	req := httptest.NewRequest(http.MethodPost, "/sp/upload_bundle", &body)
+	req.Header.Set("Content-Type", spUploadBundleV2MediaType)
+
+	w := httptest.NewRecorder()
+	testRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("bundle contains too many artifacts")) {
+		t.Fatalf("expected too many artifacts error, got %q", w.Body.String())
+	}
+}
+
+func TestSpUploadBundle_RejectsInvalidGenerationID(t *testing.T) {
+	useTempUploadDir(t)
+	resetPolyfsCASStatusCountersForTest()
+	resetPolyfsUploadRootPreflightCacheForTest()
+
+	manifestRoot := mustTestManifestRoot(t, "sp-upload-bundle-generation")
+	dealID := uint64(4)
+
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
+		dealID: {Owner: "nil1owner", CID: ""},
+	})
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	metaBytes, err := json.Marshal(spUploadBundleRequest{
+		DealID:           ptrUint64(dealID),
+		ManifestRoot:     manifestRoot.Canonical,
+		UploadGeneration: "bad/generation",
+		Artifacts: []spUploadBundleArtifact{{
+			Part:     "artifact_00",
+			Kind:     spUploadBundleKindManifest,
+			FullSize: int64(types.BLOB_SIZE),
+			SendSize: 1,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+
+	var body bytes.Buffer
+	var header [8]byte
+	copy(header[:4], []byte(spUploadBundleV2Magic))
+	binary.LittleEndian.PutUint32(header[4:], uint32(len(metaBytes)))
+	body.Write(header[:])
+	body.Write(metaBytes)
+	body.WriteByte(0)
+
+	req := httptest.NewRequest(http.MethodPost, "/sp/upload_bundle", &body)
+	req.Header.Set("Content-Type", spUploadBundleV2MediaType)
+
+	w := httptest.NewRecorder()
+	testRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("upload_generation contains invalid characters")) {
+		t.Fatalf("expected generation validation error, got %q", w.Body.String())
+	}
+}
+
 func ptrUint64(v uint64) *uint64 {
 	return &v
 }

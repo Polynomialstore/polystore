@@ -39,6 +39,8 @@ export type UploadPipelineStorageStage =
   | 'browser_memory'
   | 'opfs'
   | 'upload_queue'
+  | 'provider_staged'
+  | 'manifest_activation'
   | 'provider'
   | 'chain'
 
@@ -110,6 +112,8 @@ export type UploadPipelineStatus = {
     browserMemoryBytes: number | null
     opfsBytes: number | null
     queuedArtifacts: number | null
+    activeArtifacts: number | null
+    stagedArtifacts: number | null
     uploadedArtifacts: number | null
   }
   transport: {
@@ -117,6 +121,15 @@ export type UploadPipelineStatus = {
     target: string | null
     retries: number
     lastError: string | null
+    artifactCount: number | null
+    perArtifactCount: number | null
+    bundledArtifactCount: number | null
+    bundleCount: number | null
+    requestCount: number | null
+    bytesSent: number | null
+    fallbackCount: number | null
+    fallbackReason: string | null
+    peakActiveUploads: number | null
   }
   kzg: KzgBackendStatus
   workerAutotune: UploadWorkerAutotuneStatus
@@ -363,6 +376,8 @@ export function createUploadPipelineStatus(input: {
       browserMemoryBytes: null,
       opfsBytes: null,
       queuedArtifacts: null,
+      activeArtifacts: null,
+      stagedArtifacts: null,
       uploadedArtifacts: null,
     },
     transport: {
@@ -370,6 +385,15 @@ export function createUploadPipelineStatus(input: {
       target: null,
       retries: 0,
       lastError: null,
+      artifactCount: null,
+      perArtifactCount: null,
+      bundledArtifactCount: null,
+      bundleCount: null,
+      requestCount: null,
+      bytesSent: null,
+      fallbackCount: null,
+      fallbackReason: null,
+      peakActiveUploads: null,
     },
     kzg: { ...PENDING_KZG_BACKEND_STATUS },
     workerAutotune: { ...PENDING_WORKER_AUTOTUNE_STATUS },
@@ -435,6 +459,7 @@ export function sanitizeUploadPipelineStatus(status: UploadPipelineStatus): Uplo
       ...status.transport,
       target: truncate(status.transport.target, 240),
       lastError: truncate(status.transport.lastError, 500),
+      fallbackReason: truncate(status.transport.fallbackReason, 500),
     },
     kzg: {
       ...status.kzg,

@@ -55,7 +55,14 @@ import {
   PLANNER_TRIVIAL_BLOB_WEIGHT,
   weightedWorkForMdu,
 } from '../lib/upload/planner';
-import { createUploadEngine, type UploadTaskEvent, type UploadTarget } from '../lib/upload/engine';
+import {
+  createUploadEngine,
+  type PipelinedManifestBinding,
+  type PipelinedUploadArtifact,
+  type UploadEngineResult,
+  type UploadTaskEvent,
+  type UploadTarget,
+} from '../lib/upload/engine';
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
 import { pickUploadParallelism } from '../lib/upload/uploadParallelism';
 import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
@@ -680,6 +687,48 @@ const dealSetupPollIntervalMs = 1_000
 const dealSetupMaxAttempts = 30
 const MDU_SIZE_BYTES = 8 * 1024 * 1024
 const MANIFEST_BLOB_SIZE_BYTES = 128 * 1024
+
+interface UploadTransportCounters {
+  queued: number
+  uploaded: number
+  staged: number
+  activated: number
+  artifactCount: number
+  perArtifactCount: number
+  bundledArtifactCount: number
+  bundleCount: number
+  requestCount: number
+  bytesSent: number
+  fallbackCount: number
+  fallbackReason: string | null
+  activeUploads: number
+  peakActiveUploads: number
+  queuedArtifacts: Set<string>
+  startedBundles: Set<string>
+  finishedBundles: Set<string>
+}
+
+function createUploadTransportCounters(): UploadTransportCounters {
+  return {
+    queued: 0,
+    uploaded: 0,
+    staged: 0,
+    activated: 0,
+    artifactCount: 0,
+    perArtifactCount: 0,
+    bundledArtifactCount: 0,
+    bundleCount: 0,
+    requestCount: 0,
+    bytesSent: 0,
+    fallbackCount: 0,
+    fallbackReason: null,
+    activeUploads: 0,
+    peakActiveUploads: 0,
+    queuedArtifacts: new Set<string>(),
+    startedBundles: new Set<string>(),
+    finishedBundles: new Set<string>(),
+  }
+}
 function makePreparedMdu(index: number, data: Uint8Array, fullSize = MDU_SIZE_BYTES): PreparedBrowserMdu {
   const sparse = makeSparseArtifact({ kind: 'mdu', index, bytes: data, fullSize })
   return { index, data: sparse.bytes, fullSize: sparse.fullSize }
@@ -704,6 +753,81 @@ function buildMode2UploadTarget(baseUrl: string): UploadTarget {
     bundlePath: '/sp/upload_bundle',
     label: baseUrl,
   }
+}
+
+type AsyncUploadArtifactQueue<T> = AsyncIterable<T> & {
+  push(item: T): void
+  close(): void
+  fail(error: unknown): void
+  readonly size: number
+}
+
+function createAsyncUploadArtifactQueue<T>(): AsyncUploadArtifactQueue<T> {
+  const values: T[] = []
+  const waiters: Array<{
+    resolve: (result: IteratorResult<T>) => void
+    reject: (error: unknown) => void
+  }> = []
+  let closed = false
+  let failure: unknown = null
+
+  const flush = () => {
+    while (waiters.length > 0) {
+      const waiter = waiters.shift()
+      if (!waiter) continue
+      if (failure) {
+        waiter.reject(failure)
+      } else if (values.length > 0) {
+        waiter.resolve({ value: values.shift() as T, done: false })
+      } else if (closed) {
+        waiter.resolve({ value: undefined as T, done: true })
+      } else {
+        waiters.unshift(waiter)
+        return
+      }
+    }
+  }
+
+  return {
+    get size() {
+      return values.length
+    },
+    push(item: T) {
+      if (failure || closed) return
+      values.push(item)
+      flush()
+    },
+    close() {
+      if (failure || closed) return
+      closed = true
+      flush()
+    },
+    fail(error: unknown) {
+      if (failure || closed) return
+      failure = error instanceof Error ? error : new Error(String(error))
+      flush()
+    },
+    [Symbol.asyncIterator]() {
+      return {
+        next(): Promise<IteratorResult<T>> {
+          if (failure) return Promise.reject(failure)
+          if (values.length > 0) return Promise.resolve({ value: values.shift() as T, done: false })
+          if (closed) return Promise.resolve({ value: undefined as T, done: true })
+          return new Promise<IteratorResult<T>>((resolve, reject) => {
+            waiters.push({ resolve, reject })
+          })
+        },
+      }
+    },
+  }
+}
+
+function createBrowserUploadGenerationId(dealId: string): string {
+  const randomPart =
+    globalThis.crypto && 'randomUUID' in globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  return `browser-${String(dealId || 'deal').replace(/[^a-zA-Z0-9_.-]/g, '-')}-${randomPart}`.slice(0, 96)
 }
 
 export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }: FileSharderProps) {
@@ -758,7 +882,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   const lastStaleCommitMessageRef = useRef<string | null>(null)
   const browserPerfRunRef = useRef<BrowserPerfRun | null>(null)
   const browserPerfSeqRef = useRef(1)
-  const uploadArtifactCountsRef = useRef({ queued: 0, uploaded: 0 })
+  const uploadTransportCountersRef = useRef<UploadTransportCounters>(createUploadTransportCounters())
   const [uploadStatus, setUploadStatus] = useState<UploadPipelineStatus | null>(null)
   const uploadStatusRef = useRef<UploadPipelineStatus | null>(null)
   const dealSetupAttemptRef = useRef(0)
@@ -947,7 +1071,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       if (!run) return
       run.phaseStarts[phase] = performance.now()
       if (phase === 'upload') {
-        uploadArtifactCountsRef.current = { queued: 0, uploaded: 0 }
+        uploadTransportCountersRef.current = createUploadTransportCounters()
       }
       browserPerfLog(`${phase}:start`, extra)
       const uploadPhase = browserPerfPhaseToUploadPhase(phase)
@@ -1004,12 +1128,68 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
   const browserPerfUploadTaskEvent = useCallback(
     (event: UploadTaskEvent) => {
-      const uploadArtifactCounts = uploadArtifactCountsRef.current
-      if (event.phase === 'start') {
-        uploadArtifactCounts.queued += 1
-      } else if (event.phase === 'end' && event.ok !== false) {
-        uploadArtifactCounts.uploaded += 1
+      const counters = uploadTransportCountersRef.current
+      const bundleId = event.bundleId || ''
+      const bundleArtifactCount = Math.max(0, Number(event.bundleArtifactCount) || 0)
+      const bundleBytes = Math.max(0, Number(event.bundleBytes) || 0)
+      const artifactKey = `${event.target}|${event.kind}|${event.index ?? 'manifest'}|${event.slot ?? '-'}`
+      const markQueued = () => {
+        if (counters.queuedArtifacts.has(artifactKey)) return
+        counters.queuedArtifacts.add(artifactKey)
+        counters.queued += 1
+        counters.artifactCount += 1
       }
+
+      if (event.phase === 'queued') {
+        markQueued()
+      } else if (event.phase === 'start') {
+        markQueued()
+        if (event.transportKind === 'bundle' && bundleId) {
+          if (!counters.startedBundles.has(bundleId)) {
+            counters.startedBundles.add(bundleId)
+            counters.bundleCount += 1
+            counters.bundledArtifactCount += bundleArtifactCount || 1
+            counters.requestCount += 1
+            counters.bytesSent += bundleBytes || event.bytes
+            counters.activeUploads += 1
+            counters.peakActiveUploads = Math.max(counters.peakActiveUploads, counters.activeUploads)
+          }
+        } else {
+          counters.perArtifactCount += 1
+          counters.requestCount += 1
+          counters.bytesSent += event.bytes
+          counters.activeUploads += 1
+          counters.peakActiveUploads = Math.max(counters.peakActiveUploads, counters.activeUploads)
+        }
+      } else if (event.phase === 'fallback') {
+        counters.fallbackCount += 1
+        counters.fallbackReason = event.fallbackReason || event.error || counters.fallbackReason
+        const fallbackArtifacts = Math.max(0, Number(event.fallbackArtifactCount) || bundleArtifactCount || 0)
+        counters.perArtifactCount += fallbackArtifacts
+        counters.requestCount += fallbackArtifacts
+        counters.bytesSent += event.bytes
+        if (bundleId && !counters.finishedBundles.has(bundleId)) {
+          counters.finishedBundles.add(bundleId)
+          counters.activeUploads = Math.max(0, counters.activeUploads - 1)
+        }
+      } else if (event.phase === 'end') {
+        if (event.ok !== false) {
+          counters.uploaded += 1
+          if (event.staged) counters.staged += 1
+          if (event.activating) counters.activated += 1
+        }
+        if (event.transportKind === 'bundle' && bundleId) {
+          if (!counters.finishedBundles.has(bundleId)) {
+            counters.finishedBundles.add(bundleId)
+            counters.activeUploads = Math.max(0, counters.activeUploads - 1)
+          }
+        } else if (!event.fallbackReason) {
+          counters.activeUploads = Math.max(0, counters.activeUploads - 1)
+        }
+      } else if (event.phase === 'activate') {
+        counters.activated += 1
+      }
+
       browserPerfLog(`upload_task:${event.phase}`, {
         artifactKind: event.kind,
         target: event.target,
@@ -1020,21 +1200,78 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         durationMs: event.durationMs !== undefined ? roundPerfMs(event.durationMs) : null,
         ok: event.ok ?? null,
         error: event.error ?? null,
+        transportKind: event.transportKind ?? null,
+        bundleId: event.bundleId ?? null,
+        bundleArtifactCount: event.bundleArtifactCount ?? null,
+        bundleBytes: event.bundleBytes ?? null,
+        fallbackArtifactCount: event.fallbackArtifactCount ?? null,
+        fallbackReason: event.fallbackReason ?? null,
+        queuedDepth: event.queuedDepth ?? null,
+        staged: event.staged ?? null,
+        activating: event.activating ?? null,
+        requestCount: counters.requestCount,
+        bytesSent: counters.bytesSent,
+        activeUploads: counters.activeUploads,
+        peakActiveUploads: counters.peakActiveUploads,
       })
+      const isFallback = event.phase === 'fallback'
+      const isQueued = event.phase === 'queued'
+      const isActivating = Boolean(event.activating)
+      const nextStage =
+        event.ok === false
+          ? 'upload_queue'
+          : isActivating
+            ? event.phase === 'end'
+              ? 'provider'
+              : 'manifest_activation'
+            : event.phase === 'end' && event.staged
+              ? 'provider_staged'
+              : event.phase === 'end'
+                ? 'provider'
+                : 'upload_queue'
       updateUploadStatus(
         {
           phase: 'upload_transport',
-          phaseLabel: event.phase === 'start' ? 'Uploading artifact' : event.ok === false ? 'Artifact upload failed' : 'Uploaded artifact',
-          tone: event.ok === false ? 'error' : 'active',
+          phaseLabel: isFallback
+            ? 'Bundle unsupported; using per-artifact fallback'
+            : isQueued
+              ? 'Queued artifact for provider staging'
+              : event.phase === 'start'
+                ? isActivating
+                  ? 'Activating final manifest'
+                  : event.transportKind === 'bundle'
+                    ? 'Uploading provider bundle'
+                    : event.staged
+                      ? 'Uploading staged artifact'
+                      : 'Uploading artifact'
+                : event.ok === false
+                  ? 'Artifact upload failed'
+                  : isActivating
+                    ? 'Final manifest activated staged artifacts'
+                    : event.staged
+                      ? 'Staged artifact at provider'
+                      : 'Uploaded artifact',
+          tone: event.ok === false ? 'error' : isFallback ? 'warning' : 'active',
           storage: {
-            stage: event.phase === 'end' && event.ok !== false ? 'provider' : 'upload_queue',
-            queuedArtifacts: uploadArtifactCounts.queued,
-            uploadedArtifacts: uploadArtifactCounts.uploaded,
+            stage: nextStage,
+            queuedArtifacts: counters.queued,
+            activeArtifacts: counters.activeUploads,
+            stagedArtifacts: counters.staged,
+            uploadedArtifacts: counters.uploaded,
           },
           transport: {
             mode: event.kind === 'shard' ? 'striped-provider' : 'direct-provider',
             target: event.target,
             lastError: event.error ?? null,
+            artifactCount: counters.artifactCount,
+            perArtifactCount: counters.perArtifactCount,
+            bundledArtifactCount: counters.bundledArtifactCount,
+            bundleCount: counters.bundleCount,
+            requestCount: counters.requestCount,
+            bytesSent: counters.bytesSent,
+            fallbackCount: counters.fallbackCount,
+            fallbackReason: counters.fallbackReason,
+            peakActiveUploads: counters.peakActiveUploads,
           },
           totals: {
             bytesDone: event.phase === 'end' && event.ok !== false ? event.bytes : undefined,
@@ -1072,7 +1309,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       workTotal: 0,
     }
     uploadStatusRef.current = null
-    uploadArtifactCountsRef.current = { queued: 0, uploaded: 0 }
+    uploadTransportCountersRef.current = createUploadTransportCounters()
     setUploadStatus(null)
     if (typeof window !== 'undefined') {
       const statusWindow = window as typeof window & {
@@ -3571,6 +3808,113 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
     setShards(() => uploadPlan.shardItems.map((item) => ({ ...item })));
 
+    type BrowserPipelineController = {
+      uploadGeneration: string
+      targets: UploadTarget[]
+      queue: AsyncUploadArtifactQueue<PipelinedUploadArtifact>
+      result: Promise<UploadEngineResult>
+      resolveManifest: (binding: PipelinedManifestBinding) => void
+      failed: boolean
+      failureMessage: string | null
+      startedAtMs: number
+    }
+
+    let browserPipeline: BrowserPipelineController | null = null
+    const enqueuePipelinedArtifact = (artifact: PipelinedUploadArtifact) => {
+      if (!browserPipeline || browserPipeline.failed) return
+      browserPipeline.queue.push(artifact)
+    }
+
+    if (useMode2) {
+      const slotCount = rsK + rsM
+      const bases = slotBases.slice(0, slotCount)
+      const providers = slotProviders.slice(0, slotCount)
+      if (bases.length < slotCount || providers.length < slotCount || bases.some((base) => !base) || providers.some((provider) => !provider)) {
+        const message = 'Missing provider endpoints for all Mode 2 slots.'
+        setMode2UploadError(message)
+        setShardProgress((p) => ({
+          ...p,
+          phase: 'error',
+          label: message,
+          currentOpStartedAtMs: null,
+          lastOpMs: performance.now() - startTs,
+        }))
+        browserPerfEndPhase('prepare', {
+          ok: false,
+          error: message,
+        })
+        setProcessing(false)
+        return
+      }
+
+      const uploadGeneration = createBrowserUploadGenerationId(dealId)
+      const queue = createAsyncUploadArtifactQueue<PipelinedUploadArtifact>()
+      let resolveManifest!: (binding: PipelinedManifestBinding) => void
+      const manifestPromise = new Promise<PipelinedManifestBinding>((resolve) => {
+        resolveManifest = resolve
+      })
+      const targets = bases.map((base) => buildMode2UploadTarget(base))
+      browserPerfStartPhase('upload', {
+        trigger: 'pipeline',
+        mode: 'mode2',
+        uploadGeneration,
+        providerCount: slotCount,
+        expectedUserShardArtifacts: totalUserChunks * slotCount,
+        expectedMetadataArtifacts: (1 + witnessMduCount) * slotCount,
+        expectedManifestArtifacts: slotCount,
+      })
+      setMode2Uploading(true)
+      setMode2UploadError(null)
+      setMode2UploadComplete(false)
+      updateUploadStatus(
+        {
+          phase: 'upload_transport',
+          phaseLabel: 'Provider staging pipeline active',
+          tone: 'active',
+          storage: {
+            stage: 'upload_queue',
+            queuedArtifacts: 0,
+            activeArtifacts: 0,
+            stagedArtifacts: 0,
+            uploadedArtifacts: 0,
+          },
+          transport: {
+            mode: 'striped-provider',
+            artifactCount: 0,
+            requestCount: 0,
+            bytesSent: 0,
+            peakActiveUploads: 0,
+          },
+        },
+        'upload_pipeline:start',
+      )
+      const controller: BrowserPipelineController = {
+        uploadGeneration,
+        targets,
+        queue,
+        result: Promise.resolve({ ok: false, steps: [], error: 'pipeline not started' }),
+        resolveManifest,
+        failed: false,
+        failureMessage: null,
+        startedAtMs: performance.now(),
+      }
+      controller.result = uploadEngine.uploadPipelinedGeneration({
+        dealId,
+        previousManifestRoot: baseManifestRoot || '',
+        uploadGeneration,
+        artifacts: queue,
+        manifest: manifestPromise,
+        onTaskEvent: browserPerfUploadTaskEvent,
+        onPipelineError: (error) => {
+          controller.failed = true
+          controller.failureMessage = error.message
+          queue.fail(error)
+        },
+      })
+      browserPipeline = controller
+      addLog(`> Provider staging pipeline started (generation ${uploadGeneration}).`)
+    }
+
     const toU8 = (v: Uint8Array | number[]): Uint8Array => (v instanceof Uint8Array ? v : new Uint8Array(v));
 
     try {
@@ -3814,6 +4158,19 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               }
             }
             mode2UserShards[i] = { index: i, shards: shardsList }
+            if (browserPipeline) {
+              const slabIndex = 1 + witnessMduCount + i
+              for (let slot = 0; slot < shardsList.length; slot += 1) {
+                const shard = shardsList[slot]
+                const target = browserPipeline.targets[slot]
+                if (shard && target) {
+                  enqueuePipelinedArtifact({
+                    target,
+                    artifact: { kind: 'shard', index: slabIndex, slot, bytes: shard.data, fullSize: shard.fullSize },
+                  })
+                }
+              }
+            }
 
             const opMs = performance.now() - opStart
             const perfSample: PreparePerfSample = {
@@ -4263,7 +4620,21 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
-            witnessMdus.push(makePreparedMdu(1 + i, witnessMduBytes)); 
+            const preparedWitnessMdu = makePreparedMdu(1 + i, witnessMduBytes)
+            witnessMdus.push(preparedWitnessMdu);
+            if (browserPipeline) {
+              for (const target of browserPipeline.targets) {
+                enqueuePipelinedArtifact({
+                  target,
+                  artifact: {
+                    kind: 'mdu',
+                    index: preparedWitnessMdu.index,
+                    bytes: preparedWitnessMdu.data,
+                    fullSize: preparedWitnessMdu.fullSize,
+                  },
+                })
+              }
+            }
 
             const opMs = performance.now() - opStart;
             const perfSample: PreparePerfSample = {
@@ -4409,6 +4780,20 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             ? mdu0PrepareResult.perf.rustCommitMsmSubphasesAvailable
             : undefined
         const mdu0Root = toU8(mdu0PrepareResult.mdu_root);
+        const preparedMdu0 = makePreparedMdu(0, mdu0Bytes)
+        if (browserPipeline) {
+          for (const target of browserPipeline.targets) {
+            enqueuePipelinedArtifact({
+              target,
+              artifact: {
+                kind: 'mdu',
+                index: preparedMdu0.index,
+                bytes: preparedMdu0.data,
+                fullSize: preparedMdu0.fullSize,
+              },
+            })
+          }
+        }
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
         const opMs = performance.now() - opStartMdu0;
         const mdu0StageMs = opMs
@@ -4506,7 +4891,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         console.log('[perf] manifest aggregation', { ms: manifestMs, roots: allRoots.length / 32 });
         
         const finalMdus = [
-          makePreparedMdu(0, mdu0Bytes),
+          preparedMdu0,
           ...witnessMdus,
           ...userMdus.map((m) => ({ ...m, index: 1 + witnessMduCount + m.index })),
         ];
@@ -4539,7 +4924,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             ? `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User); ${mode2UserShards.length} striped user MDUs uploaded for this generation`
             : `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`,
         );
-        const elapsedMs = performance.now() - startTs;
+        const prepareCompletedAtMs = performance.now();
+        const elapsedMs = prepareCompletedAtMs - startTs;
         const sumBy = (samples: PreparePerfSample[], pick: (sample: PreparePerfSample) => number) =>
           samples.reduce((total, sample) => total + pick(sample), 0)
         const allSamples = [...perfSamples.user, ...perfSamples.witness, ...perfSamples.meta]
@@ -4859,9 +5245,132 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           `Done. Client-side expansion complete. Time: ${formatDuration(elapsedMs)}. Data: ${sizeLabel}. Speed: ${speedStr}.`,
         );
 
+        if (browserPipeline) {
+          autoUploadManifestRef.current = finalRootHex
+          browserPipeline.queue.close()
+          if (!browserPipeline.failed) {
+            browserPipeline.resolveManifest({
+              manifestRoot: finalRootHex,
+              manifestBlob: finalManifest.bytes,
+              manifestBlobFullSize: finalManifest.fullSize,
+              manifestTargets: browserPipeline.targets,
+            })
+          }
+
+          const pipelineResult = await browserPipeline.result
+          const uploadFinishedAtMs = performance.now()
+          const uploadWallMs = uploadFinishedAtMs - browserPipeline.startedAtMs
+          const prepareUploadOverlapMs = Math.max(
+            0,
+            Math.min(prepareCompletedAtMs, uploadFinishedAtMs) - browserPipeline.startedAtMs,
+          )
+          const transportSummary = pipelineResult.transportStats
+          browserPerfEndPhase('upload', {
+            ok: pipelineResult.ok,
+            mode: 'mode2',
+            uploadGeneration: browserPipeline.uploadGeneration,
+            prepareUploadOverlapMs: roundPerfMs(prepareUploadOverlapMs),
+            uploadWallMs: roundPerfMs(uploadWallMs),
+            requestCount: transportSummary?.requestCount ?? null,
+            bundleCount: transportSummary?.bundleCount ?? null,
+            artifactCount: transportSummary?.artifactCount ?? null,
+            queuedArtifactCount: transportSummary?.queuedArtifactCount ?? null,
+            stagedArtifactCount: transportSummary?.stagedArtifactCount ?? null,
+            activatedArtifactCount: transportSummary?.activatedArtifactCount ?? null,
+            perArtifactCount: transportSummary?.perArtifactCount ?? null,
+            bundledArtifactCount: transportSummary?.bundledArtifactCount ?? null,
+            bytesSent: transportSummary?.bytesSent ?? null,
+            fallbackCount: transportSummary?.fallbackCount ?? null,
+            fallbackReason: transportSummary?.fallbackReason ?? null,
+            peakActiveUploads: transportSummary?.peakActiveUploads ?? null,
+            error: pipelineResult.error ?? browserPipeline.failureMessage ?? null,
+          })
+
+          if (pipelineResult.ok) {
+            setMode2UploadComplete(true)
+            setMode2UploadError(null)
+            updateUploadStatus(
+              {
+                phase: 'chain_handoff',
+                phaseLabel: 'Provider staging activated; chain commit pending',
+                tone: 'active',
+                storage: {
+                  stage: 'provider',
+                  stagedArtifacts: transportSummary?.stagedArtifactCount ?? null,
+                  uploadedArtifacts: transportSummary?.artifactCount ?? null,
+                },
+                transport: {
+                  mode: 'striped-provider',
+                  artifactCount: transportSummary?.artifactCount ?? null,
+                  perArtifactCount: transportSummary?.perArtifactCount ?? null,
+                  bundledArtifactCount: transportSummary?.bundledArtifactCount ?? null,
+                  bundleCount: transportSummary?.bundleCount ?? null,
+                  requestCount: transportSummary?.requestCount ?? null,
+                  bytesSent: transportSummary?.bytesSent ?? null,
+                  fallbackCount: transportSummary?.fallbackCount ?? null,
+                  fallbackReason: transportSummary?.fallbackReason ?? null,
+                  peakActiveUploads: transportSummary?.peakActiveUploads ?? null,
+                },
+                timing: {
+                  phases: {
+                    upload_wall: roundPerfMs(uploadWallMs) ?? uploadWallMs,
+                    prepare_upload_overlap: roundPerfMs(prepareUploadOverlapMs) ?? prepareUploadOverlapMs,
+                  },
+                },
+              },
+              'upload_pipeline:activated',
+            )
+            addLog(
+              `> Provider staging activated for ${String(transportSummary?.artifactCount ?? 0)} artifacts ` +
+                `(overlap ${formatDuration(prepareUploadOverlapMs)}, upload wall ${formatDuration(uploadWallMs)}).`,
+            )
+          } else {
+            const message = pipelineResult.error || browserPipeline.failureMessage || 'Provider staging pipeline failed'
+            setMode2UploadComplete(false)
+            setMode2UploadError(message)
+            updateUploadStatus(
+              {
+                phase: 'error',
+                phaseLabel: `Provider staging failed: ${message}`,
+                tone: 'error',
+                error: message,
+                storage: {
+                  stage: 'upload_queue',
+                  stagedArtifacts: transportSummary?.stagedArtifactCount ?? null,
+                  uploadedArtifacts: transportSummary?.artifactCount ?? null,
+                },
+                transport: {
+                  mode: 'striped-provider',
+                  lastError: message,
+                  artifactCount: transportSummary?.artifactCount ?? null,
+                  perArtifactCount: transportSummary?.perArtifactCount ?? null,
+                  requestCount: transportSummary?.requestCount ?? null,
+                  bytesSent: transportSummary?.bytesSent ?? null,
+                  peakActiveUploads: transportSummary?.peakActiveUploads ?? null,
+                },
+              },
+              'upload_pipeline:error',
+            )
+            addLog(`> Provider staging failed after partial upload. Final manifest was not activated: ${message}`)
+          }
+          setMode2Uploading(false)
+        }
+
     } catch (e: unknown) {
         console.error(e);
         const msg = e instanceof Error ? e.message : String(e);
+        if (browserPipeline) {
+          browserPipeline.failed = true
+          browserPipeline.failureMessage = msg
+          browserPipeline.queue.fail(e)
+          setMode2Uploading(false)
+          browserPerfEndPhase('upload', {
+            ok: false,
+            mode: 'mode2',
+            uploadGeneration: browserPipeline.uploadGeneration,
+            error: msg,
+          })
+        }
         browserPerfLog('run:error', {
           error: msg,
         })
@@ -4888,7 +5397,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     } finally {
         setProcessing(false);
     }
-  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, browserPerfEndPhase, browserPerfLog, browserPerfStartPhase, browserPerfStartRun, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded, updateUploadKzgStatus, updateUploadStatus]);
+  }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, browserPerfEndPhase, browserPerfLog, browserPerfStartPhase, browserPerfStartRun, browserPerfUploadTaskEvent, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, slotBases, slotProviders, stripeParams, stripeParamsLoaded, updateUploadKzgStatus, updateUploadStatus, uploadEngine]);
 
   // Helper for encoding (matches polystore_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
@@ -5002,6 +5511,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     const timingPhases = uploadStatus.timing.phases
     const uploaded = uploadStatus.storage.uploadedArtifacts
     const queued = uploadStatus.storage.queuedArtifacts
+    const staged = uploadStatus.storage.stagedArtifacts
+    const activeArtifacts = uploadStatus.storage.activeArtifacts
+    const requestCount = uploadStatus.transport.requestCount
+    const bundleCount = uploadStatus.transport.bundleCount
+    const bytesSent = uploadStatus.transport.bytesSent
+    const fallbackCount = uploadStatus.transport.fallbackCount
     return [
       { label: 'phase', value: uploadStatus.phaseLabel },
       { label: 'kzg', value: uploadStatus.kzg.label },
@@ -5049,6 +5564,27 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             ? '—'
             : `${String(uploaded ?? 0)} uploaded / ${String(queued ?? 0)} queued`,
       },
+      {
+        label: 'pipeline',
+        value:
+          staged === null && activeArtifacts === null
+            ? '—'
+            : `${String(staged ?? 0)} staged • ${String(activeArtifacts ?? 0)} active`,
+      },
+      {
+        label: 'requests',
+        value:
+          requestCount === null
+            ? '—'
+            : `${requestCount} reqs${bundleCount && bundleCount > 0 ? ` (${bundleCount} bundles)` : ''}`,
+      },
+      {
+        label: 'sent',
+        value: bytesSent === null ? '—' : formatBytes(bytesSent),
+      },
+      ...(fallbackCount && fallbackCount > 0
+        ? [{ label: 'fallback', value: uploadStatus.transport.fallbackReason || `${fallbackCount} bundle fallback(s)` }]
+        : []),
     ]
   }, [uploadStatus])
 
@@ -5091,9 +5627,19 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       }
 
       const ok = isMode2 ? await uploadMode2() : await uploadMdus(collectedMdus)
+      const transportSummary = uploadStatusRef.current?.transport
       browserPerfEndPhase('upload', {
         ok,
         mode: isMode2 ? 'mode2' : 'mode1',
+        requestCount: transportSummary?.requestCount ?? null,
+        bundleCount: transportSummary?.bundleCount ?? null,
+        artifactCount: transportSummary?.artifactCount ?? null,
+        perArtifactCount: transportSummary?.perArtifactCount ?? null,
+        bundledArtifactCount: transportSummary?.bundledArtifactCount ?? null,
+        bytesSent: transportSummary?.bytesSent ?? null,
+        fallbackCount: transportSummary?.fallbackCount ?? null,
+        fallbackReason: transportSummary?.fallbackReason ?? null,
+        peakActiveUploads: transportSummary?.peakActiveUploads ?? null,
       })
       if (ok) {
         updateUploadStatus(

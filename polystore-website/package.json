@@ -28,6 +28,7 @@
     "perf:worker-autotune-sim": "tsx scripts/benchmark_worker_autotune_sim.ts",
     "perf:browser-kzg-baseline": "tsx scripts/benchmark_browser_kzg_baseline.ts",
     "perf:upload-pipeline": "tsx scripts/benchmark_upload_pipelining.ts",
+    "perf:upload-bundle": "tsx scripts/benchmark_bundle_upload_shape.ts",
     "perf:msm-windows": "tsx scripts/benchmark_pippenger_windows.ts",
     "perf:kzg-compare": "tsx scripts/benchmark_kzg_commit_compare.ts",
     "perf:kzg-browser": "tsx scripts/benchmark_browser_kzg_commit.ts",

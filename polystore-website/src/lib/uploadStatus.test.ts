@@ -126,9 +126,36 @@ test('patchUploadPipelineStatus preserves nested state and records elapsed time'
   assert.equal(next.totals.totalMdus, 3)
   assert.equal(next.totals.workDone, 1)
   assert.equal(next.storage.stage, 'browser_memory')
+  assert.equal(next.storage.activeArtifacts, null)
+  assert.equal(next.storage.stagedArtifacts, null)
   assert.equal(next.workerAutotune.selectedWorkerCount, 5)
   assert.deepEqual(next.workerAutotune.candidates, [1, 3, 5, 6])
   assert.equal(next.timing.elapsedMs, 150)
+})
+
+test('patchUploadPipelineStatus tracks staged provider artifacts', () => {
+  const initial = createUploadPipelineStatus({ dealId: '42', nowMs: 0 })
+  const next = patchUploadPipelineStatus(
+    initial,
+    {
+      phase: 'upload_transport',
+      phaseLabel: 'Staging artifacts',
+      storage: {
+        stage: 'provider_staged',
+        queuedArtifacts: 4,
+        activeArtifacts: 1,
+        stagedArtifacts: 3,
+        uploadedArtifacts: 3,
+      },
+    },
+    50,
+  )
+
+  assert.equal(next.storage.stage, 'provider_staged')
+  assert.equal(next.storage.queuedArtifacts, 4)
+  assert.equal(next.storage.activeArtifacts, 1)
+  assert.equal(next.storage.stagedArtifacts, 3)
+  assert.equal(next.storage.uploadedArtifacts, 3)
 })
 
 test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
@@ -142,6 +169,10 @@ test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
     phaseLabel: 'p'.repeat(800),
     latestEvent: 'l'.repeat(800),
     error: 'e'.repeat(800),
+    transport: {
+      ...status.transport,
+      fallbackReason: 't'.repeat(800),
+    },
     kzg: {
       ...status.kzg,
       fallbackReason: 'f'.repeat(800),
@@ -160,6 +191,7 @@ test('sanitizeUploadPipelineStatus truncates user-controlled text', () => {
   assert.equal(sanitized.latestEvent?.length, 160)
   assert.equal(sanitized.file.name?.length, 160)
   assert.equal(sanitized.error?.length, 500)
+  assert.equal(sanitized.transport.fallbackReason?.length, 500)
   assert.equal(sanitized.kzg.fallbackReason?.length, 500)
   assert.equal(sanitized.workerAutotune.cacheKey?.length, 240)
   assert.equal(sanitized.workerAutotune.reason?.length, 500)
