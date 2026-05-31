@@ -37,7 +37,7 @@ export interface UploadProgressStep {
 }
 
 export interface UploadTaskEvent {
-  phase: 'start' | 'end'
+  phase: 'start' | 'end' | 'fallback'
   kind: SparseArtifactKind
   target: string
   index?: number
@@ -47,6 +47,24 @@ export interface UploadTaskEvent {
   durationMs?: number
   ok?: boolean
   error?: string
+  transportKind?: 'artifact' | 'bundle'
+  bundleId?: string
+  bundleArtifactCount?: number
+  bundleBytes?: number
+  fallbackArtifactCount?: number
+  fallbackReason?: string
+}
+
+export interface UploadTransportStats {
+  artifactCount: number
+  perArtifactCount: number
+  bundledArtifactCount: number
+  bundleCount: number
+  requestCount: number
+  bytesSent: number
+  fallbackCount: number
+  fallbackReason?: string
+  peakActiveUploads: number
 }
 
 export interface UploadTransportRequest {
@@ -95,6 +113,7 @@ export interface UploadEngineResult {
   ok: boolean
   steps: UploadProgressStep[]
   error?: string
+  transportStats?: UploadTransportStats
 }
 
 export interface DirectUploadInput {
@@ -324,6 +343,46 @@ const DEFAULT_DIRECT_UPLOAD_CONCURRENCY = 4
 const DEFAULT_STRIPED_METADATA_UPLOAD_CONCURRENCY = 6
 const DEFAULT_STRIPED_SHARD_UPLOAD_CONCURRENCY = 6
 
+function createUploadTransportStats(): UploadTransportStats {
+  return {
+    artifactCount: 0,
+    perArtifactCount: 0,
+    bundledArtifactCount: 0,
+    bundleCount: 0,
+    requestCount: 0,
+    bytesSent: 0,
+    fallbackCount: 0,
+    fallbackReason: undefined,
+    peakActiveUploads: 0,
+  }
+}
+
+function artifactPayloadBytes(task: UploadTask): number {
+  return Math.max(0, task.request.artifact.bytes.byteLength)
+}
+
+function bundlePayloadBytes(bundle: UploadTaskBundle): number {
+  return bundle.tasks.reduce((sum, task) => sum + artifactPayloadBytes(task), 0)
+}
+
+function mergeUploadTransportStats(...statsList: Array<UploadTransportStats | undefined>): UploadTransportStats | undefined {
+  const filtered = statsList.filter((stats): stats is UploadTransportStats => Boolean(stats))
+  if (filtered.length === 0) return undefined
+  const merged = createUploadTransportStats()
+  for (const stats of filtered) {
+    merged.artifactCount += stats.artifactCount
+    merged.perArtifactCount += stats.perArtifactCount
+    merged.bundledArtifactCount += stats.bundledArtifactCount
+    merged.bundleCount += stats.bundleCount
+    merged.requestCount += stats.requestCount
+    merged.bytesSent += stats.bytesSent
+    merged.fallbackCount += stats.fallbackCount
+    merged.peakActiveUploads = Math.max(merged.peakActiveUploads, stats.peakActiveUploads)
+    if (!merged.fallbackReason && stats.fallbackReason) merged.fallbackReason = stats.fallbackReason
+  }
+  return merged
+}
+
 function normalizeConcurrency(value: number | undefined, fallback: number): number {
   const normalized = Number(value)
   if (!Number.isFinite(normalized) || normalized <= 0) return fallback
@@ -346,15 +405,17 @@ async function runUploadTasks(
   let nextIndex = 0
   let active = 0
   let firstError: string | null = null
+  const stats = createUploadTransportStats()
+  stats.artifactCount = tasks.length
 
   return await new Promise<UploadEngineResult>((resolve) => {
     const settleIfDone = () => {
       if (active !== 0) return
       if (nextIndex < tasks.length && (!firstError || continueOnError)) return
       if (firstError) {
-        resolve({ ok: false, steps, error: firstError })
+        resolve({ ok: false, steps, error: firstError, transportStats: stats })
       } else {
-        resolve({ ok: true, steps })
+        resolve({ ok: true, steps, transportStats: stats })
       }
     }
 
@@ -363,6 +424,10 @@ async function runUploadTasks(
         const task = tasks[nextIndex]
         nextIndex += 1
         active += 1
+        stats.perArtifactCount += 1
+        stats.requestCount += 1
+        stats.bytesSent += artifactPayloadBytes(task)
+        stats.peakActiveUploads = Math.max(stats.peakActiveUploads, active)
         const startedAt = trackTaskEvents ? (typeof performance !== 'undefined' ? performance.now() : Date.now()) : 0
         const target = trackTaskEvents ? task.request.target.label || task.request.target.baseUrl : ''
         const index = trackTaskEvents && 'index' in task.request.artifact ? task.request.artifact.index : undefined
@@ -378,6 +443,7 @@ async function runUploadTasks(
             slot,
             bytes,
             fullSize,
+            transportKind: 'artifact',
           })
         }
 
@@ -400,6 +466,7 @@ async function runUploadTasks(
                 fullSize,
                 durationMs: finishedAt - startedAt,
                 ok: true,
+                transportKind: 'artifact',
               })
             }
             if (trackProgress) {
@@ -422,6 +489,7 @@ async function runUploadTasks(
                 durationMs: finishedAt - startedAt,
                 ok: false,
                 error: message,
+                transportKind: 'artifact',
               })
             }
             if (trackProgress) {
@@ -450,6 +518,7 @@ async function runPipelinedUploadTaskProducer(
   const trackTaskEvents = Boolean(input.onTaskEvent)
   let producerDone = false
   let firstError: string | null = null
+  const stats = createUploadTransportStats()
   const queue: PipelinedUploadArtifact[] = []
   const waiters: Array<() => void> = []
 
@@ -475,6 +544,10 @@ async function runPipelinedUploadTaskProducer(
       target: item.target,
       artifact: item.artifact,
     }
+    stats.artifactCount += 1
+    stats.perArtifactCount += 1
+    stats.requestCount += 1
+    stats.bytesSent += Math.max(0, request.artifact.bytes.byteLength)
     const startedAt = trackTaskEvents ? (typeof performance !== 'undefined' ? performance.now() : Date.now()) : 0
     const target = trackTaskEvents ? request.target.label || request.target.baseUrl : ''
     const index = trackTaskEvents && 'index' in request.artifact ? request.artifact.index : undefined
@@ -490,6 +563,7 @@ async function runPipelinedUploadTaskProducer(
         slot,
         bytes,
         fullSize,
+        transportKind: 'artifact',
       })
     }
     try {
@@ -506,6 +580,7 @@ async function runPipelinedUploadTaskProducer(
           fullSize,
           durationMs: finishedAt - startedAt,
           ok: true,
+          transportKind: 'artifact',
         })
       }
     } catch (error: unknown) {
@@ -523,6 +598,7 @@ async function runPipelinedUploadTaskProducer(
           durationMs: finishedAt - startedAt,
           ok: false,
           error: message,
+          transportKind: 'artifact',
         })
       }
       throw new Error(message)
@@ -561,7 +637,7 @@ async function runPipelinedUploadTaskProducer(
   }
 
   await Promise.all([produce(), ...Array.from({ length: Math.max(1, concurrency) }, () => worker())])
-  return firstError ? { ok: false, steps: [], error: firstError } : { ok: true, steps: [] }
+  return firstError ? { ok: false, steps: [], error: firstError, transportStats: stats } : { ok: true, steps: [], transportStats: stats }
 }
 
 function groupUploadTasksByTarget(tasks: UploadTask[]): UploadTaskBundle[] {
@@ -592,7 +668,7 @@ async function runUploadTaskBundles(
   concurrency: number,
   transport: UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
   options?: { continueOnError?: boolean },
-): Promise<UploadEngineResult & { bundleUnsupported?: boolean }> {
+): Promise<UploadEngineResult> {
   const trackProgress = Boolean(onProgress) && initialSteps.length > 0
   const trackTaskEvents = Boolean(onTaskEvent)
   const continueOnError = Boolean(options?.continueOnError)
@@ -600,27 +676,30 @@ async function runUploadTaskBundles(
   let nextIndex = 0
   let active = 0
   let firstError: string | null = null
-  let bundleUnsupported = false
+  const stats = createUploadTransportStats()
+  stats.artifactCount = bundles.reduce((sum, bundle) => sum + bundle.tasks.length, 0)
 
-  return await new Promise<UploadEngineResult & { bundleUnsupported?: boolean }>((resolve) => {
+  return await new Promise<UploadEngineResult>((resolve) => {
     const settleIfDone = () => {
       if (active !== 0) return
-      if (nextIndex < bundles.length && (!firstError || continueOnError) && !bundleUnsupported) return
-      if (bundleUnsupported) {
-        resolve({ ok: false, steps, error: 'bundle upload unsupported', bundleUnsupported: true })
-      } else if (firstError) {
-        resolve({ ok: false, steps, error: firstError })
+      if (nextIndex < bundles.length && (!firstError || continueOnError)) return
+      if (firstError) {
+        resolve({ ok: false, steps, error: firstError, transportStats: stats })
       } else {
-        resolve({ ok: true, steps })
+        resolve({ ok: true, steps, transportStats: stats })
       }
     }
 
     const launchNext = () => {
-      while ((continueOnError || !firstError) && !bundleUnsupported && active < concurrency && nextIndex < bundles.length) {
+      while ((continueOnError || !firstError) && active < concurrency && nextIndex < bundles.length) {
         const bundle = bundles[nextIndex]
+        const bundleIndex = nextIndex
         nextIndex += 1
         active += 1
+        stats.peakActiveUploads = Math.max(stats.peakActiveUploads, active)
         const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        const bundleId = `${bundle.target}#${bundleIndex}`
+        const bundleBytes = bundlePayloadBytes(bundle)
         const events = trackTaskEvents
           ? bundle.tasks.map((task) => ({
               request: task.request,
@@ -632,6 +711,11 @@ async function runUploadTaskBundles(
             }))
           : []
 
+        stats.bundleCount += 1
+        stats.bundledArtifactCount += bundle.tasks.length
+        stats.requestCount += 1
+        stats.bytesSent += bundleBytes
+
         if (trackTaskEvents) {
           for (const event of events) {
             onTaskEvent?.({
@@ -642,6 +726,10 @@ async function runUploadTaskBundles(
               slot: event.slot,
               bytes: event.bytes,
               fullSize: event.fullSize,
+              transportKind: 'bundle',
+              bundleId,
+              bundleArtifactCount: bundle.tasks.length,
+              bundleBytes,
             })
           }
         }
@@ -653,12 +741,66 @@ async function runUploadTaskBundles(
           steps = emitProgress(steps, onProgress)
         }
 
-        void transport
-          .sendBundle(bundle.tasks.map((task) => task.request))
-          .then(() => {
-            const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
-            if (trackTaskEvents) {
-              for (const event of events) {
+        const completeBundle = (ok: boolean, message?: string) => {
+          const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+          if (trackTaskEvents) {
+            for (const event of events) {
+              onTaskEvent?.({
+                phase: 'end',
+                kind: event.request.artifact.kind,
+                target: event.target,
+                index: event.index,
+                slot: event.slot,
+                bytes: event.bytes,
+                fullSize: event.fullSize,
+                durationMs: finishedAt - startedAt,
+                ok,
+                error: message,
+                transportKind: 'bundle',
+                bundleId,
+                bundleArtifactCount: bundle.tasks.length,
+                bundleBytes,
+              })
+            }
+          }
+          if (trackProgress) {
+            for (const task of bundle.tasks) {
+              steps = updateStep(steps, task.stepIndex, ok ? { status: 'complete' } : { status: 'error', error: message })
+            }
+            steps = emitProgress(steps, onProgress)
+          }
+        }
+
+        const fallbackToArtifacts = async (reason: string): Promise<void> => {
+          stats.fallbackCount += 1
+          if (!stats.fallbackReason) stats.fallbackReason = reason
+          if (trackTaskEvents && events.length > 0) {
+            const first = events[0]
+            onTaskEvent?.({
+              phase: 'fallback',
+              kind: first.request.artifact.kind,
+              target: first.target,
+              bytes: bundleBytes,
+              fullSize: bundleBytes,
+              transportKind: 'artifact',
+              bundleId,
+              bundleArtifactCount: bundle.tasks.length,
+              bundleBytes,
+              fallbackArtifactCount: bundle.tasks.length,
+              fallbackReason: reason,
+            })
+          }
+
+          for (let i = 0; i < bundle.tasks.length; i += 1) {
+            const task = bundle.tasks[i]
+            const event = events[i]
+            stats.perArtifactCount += 1
+            stats.requestCount += 1
+            stats.bytesSent += artifactPayloadBytes(task)
+            try {
+              await transport.sendArtifact(task.request)
+              if (trackTaskEvents && event) {
+                const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
                 onTaskEvent?.({
                   phase: 'end',
                   kind: event.request.artifact.kind,
@@ -669,26 +811,21 @@ async function runUploadTaskBundles(
                   fullSize: event.fullSize,
                   durationMs: finishedAt - startedAt,
                   ok: true,
+                  transportKind: 'artifact',
+                  bundleId,
+                  bundleArtifactCount: bundle.tasks.length,
+                  bundleBytes,
+                  fallbackReason: reason,
                 })
               }
-            }
-            if (trackProgress) {
-              for (const task of bundle.tasks) {
-                steps = updateStep(steps, task.stepIndex, { status: 'complete' })
+              if (trackProgress) {
+                steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'complete' }), onProgress)
               }
-              steps = emitProgress(steps, onProgress)
-            }
-          })
-          .catch((error: unknown) => {
-            if (isBundleUnsupportedError(error)) {
-              bundleUnsupported = true
-              return
-            }
-            const message = error instanceof Error ? error.message : String(error)
-            if (!firstError) firstError = message
-            const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
-            if (trackTaskEvents) {
-              for (const event of events) {
+            } catch (error: unknown) {
+              const message = error instanceof Error ? error.message : String(error)
+              if (!firstError) firstError = message
+              if (trackTaskEvents && event) {
+                const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
                 onTaskEvent?.({
                   phase: 'end',
                   kind: event.request.artifact.kind,
@@ -700,21 +837,39 @@ async function runUploadTaskBundles(
                   durationMs: finishedAt - startedAt,
                   ok: false,
                   error: message,
+                  transportKind: 'artifact',
+                  bundleId,
+                  bundleArtifactCount: bundle.tasks.length,
+                  bundleBytes,
+                  fallbackReason: reason,
                 })
               }
-            }
-            if (trackProgress) {
-              for (const task of bundle.tasks) {
-                steps = updateStep(steps, task.stepIndex, { status: 'error', error: message })
+              if (trackProgress) {
+                steps = emitProgress(updateStep(steps, task.stepIndex, { status: 'error', error: message }), onProgress)
               }
-              steps = emitProgress(steps, onProgress)
+              if (!continueOnError) return
             }
-          })
-          .finally(() => {
+          }
+        }
+
+        void (async () => {
+          try {
+            await transport.sendBundle(bundle.tasks.map((task) => task.request))
+            completeBundle(true)
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error)
+            if (isBundleUnsupportedError(error)) {
+              await fallbackToArtifacts(message || 'bundle upload unsupported')
+              return
+            }
+            if (!firstError) firstError = message
+            completeBundle(false, message)
+          } finally {
             active -= 1
             launchNext()
             settleIfDone()
-          })
+          }
+        })()
       }
 
       settleIfDone()
@@ -814,10 +969,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           1,
           ports.transport as UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
         )
-        if (!bundleResult.bundleUnsupported) {
-          return bundleResult
-        }
-        steps = trackSteps ? emitProgress(buildDirectUploadSteps(input), input.onProgress) : []
+        return bundleResult
       }
 
       return runUploadTasks(tasks, steps, input.onProgress, input.onTaskEvent, directConcurrency, ports.transport)
@@ -930,10 +1082,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           ports.transport as UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
           { continueOnError: true },
         )
-        if (!bundleResult.bundleUnsupported) {
-          return bundleResult
-        }
-        steps = trackSteps ? emitProgress(buildStripedUploadSteps(input), input.onProgress) : []
+        return bundleResult
       }
 
       return runUploadTasks(
@@ -1022,10 +1171,7 @@ export function createUploadEngine(options: UploadEngineOptions) {
           1,
           ports.transport as UploadTransportPort & Required<Pick<UploadTransportPort, 'sendBundle'>>,
         )
-        if (!bundleResult.bundleUnsupported) {
-          return bundleResult
-        }
-        steps = trackSteps ? emitProgress(buildStripedSlotUploadSteps(input), input.onProgress) : []
+        return bundleResult
       }
 
       const slotConcurrency = Math.max(1, Math.min(tasks.length, stripedMetadataConcurrency + stripedShardConcurrency))
@@ -1049,7 +1195,11 @@ export function createUploadEngine(options: UploadEngineOptions) {
           artifact: { kind: 'manifest', bytes: manifest.manifestBlob, fullSize: manifest.manifestBlobFullSize } as const,
         },
       }))
-      return runUploadTasks(manifestTasks, [], undefined, input.onTaskEvent, directConcurrency, ports.transport)
+      const manifestResult = await runUploadTasks(manifestTasks, [], undefined, input.onTaskEvent, directConcurrency, ports.transport)
+      return {
+        ...manifestResult,
+        transportStats: mergeUploadTransportStats(artifactResult.transportStats, manifestResult.transportStats),
+      }
     },
 
     async commitPreparedContent(input: PreparedCommitInput): Promise<ChainCommitRequest> {

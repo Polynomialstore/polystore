@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildCommitRequest, createUploadEngine, type UploadTransportRequest } from './engine'
+import { buildCommitRequest, createUploadEngine, type UploadTaskEvent, type UploadTransportRequest } from './engine'
 
 function makeRecordingTransport(failAt?: (request: UploadTransportRequest) => string | null) {
   const calls: UploadTransportRequest[] = []
@@ -510,6 +510,104 @@ test('upload engine: striped upload bundles requests per target when transport s
       'provider-b:manifest:manifest:-',
     ],
   ])
+  assert.equal(result.transportStats?.bundleCount, 2)
+  assert.equal(result.transportStats?.requestCount, 2)
+  assert.equal(result.transportStats?.bundledArtifactCount, 8)
+})
+
+test('upload engine: bundle unsupported falls back per target without replaying successful bundles', async () => {
+  const bundleCalls: string[] = []
+  const artifactCalls: string[] = []
+  const events: UploadTaskEvent[] = []
+  const transport = {
+    async sendArtifact(request: UploadTransportRequest) {
+      artifactCalls.push(`${request.target.label}:${request.artifact.kind}:${request.artifact.index ?? 'manifest'}:${request.artifact.slot ?? '-'}`)
+    },
+    async sendBundle(requests: UploadTransportRequest[]) {
+      const label = requests[0]?.target.label || 'unknown'
+      bundleCalls.push(label)
+      if (label === 'provider-b') {
+        const err = new Error('bundle upload unsupported')
+        err.name = 'BundleUnsupportedUploadError'
+        throw err
+      }
+    },
+  }
+
+  const engine = createUploadEngine({ transport })
+  const result = await engine.uploadStriped({
+    dealId: '18',
+    manifestRoot: '0xbundle',
+    previousManifestRoot: '0xprev',
+    manifestBlob: new Uint8Array([5, 4, 3]),
+    manifestBlobFullSize: 128 * 1024,
+    metadataMdus: [{ index: 0, data: new Uint8Array([1]), fullSize: 8 * 1024 * 1024 }],
+    shardSets: [
+      {
+        index: 2,
+        shards: [
+          { data: new Uint8Array([7]), fullSize: 1024 },
+          { data: new Uint8Array([8]), fullSize: 1024 },
+        ],
+      },
+    ],
+    metadataTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-b',
+      },
+    ],
+    shardTargets: [
+      {
+        baseUrl: 'http://provider-a',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-a',
+      },
+      {
+        baseUrl: 'http://provider-b',
+        mduPath: '/sp/upload_mdu',
+        manifestPath: '/sp/upload_manifest',
+        shardPath: '/sp/upload_shard',
+        bundlePath: '/sp/upload_bundle',
+        label: 'provider-b',
+      },
+    ],
+    onTaskEvent(event) {
+      events.push(event)
+    },
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(bundleCalls.sort(), ['provider-a', 'provider-b'])
+  assert.deepEqual(artifactCalls, [
+    'provider-b:mdu:0:-',
+    'provider-b:shard:2:1',
+    'provider-b:manifest:manifest:-',
+  ])
+  assert.equal(result.transportStats?.bundleCount, 2)
+  assert.equal(result.transportStats?.perArtifactCount, 3)
+  assert.equal(result.transportStats?.fallbackCount, 1)
+  assert.match(result.transportStats?.fallbackReason || '', /unsupported/)
+  assert.equal(events.some((event) => event.phase === 'fallback' && event.fallbackArtifactCount === 3), true)
+  assert.equal(
+    events.some((event) => event.phase === 'end' && event.ok === false && event.error?.includes('unsupported')),
+    false,
+  )
 })
 
 test('buildCommitRequest: mode2 derives total mdus from witness + user counts', () => {

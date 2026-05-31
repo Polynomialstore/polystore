@@ -17,17 +17,20 @@ import (
 )
 
 const (
-	spUploadBundleKindMDU      = "mdu"
-	spUploadBundleKindShard    = "shard"
-	spUploadBundleKindManifest = "manifest"
-	spUploadBundleV2Magic      = "NLB2"
-	spUploadBundleV2MediaType  = "application/x.polystore-bundle-v2"
+	spUploadBundleKindMDU       = "mdu"
+	spUploadBundleKindShard     = "shard"
+	spUploadBundleKindManifest  = "manifest"
+	spUploadBundleV2Magic       = "NLB2"
+	spUploadBundleV2MediaType   = "application/x.polystore-bundle-v2"
+	spUploadBundleMaxArtifacts  = 4096
+	spUploadBundleMaxGeneration = 128
 )
 
 type spUploadBundleRequest struct {
 	DealID               *uint64                  `json:"deal_id"`
 	ManifestRoot         string                   `json:"manifest_root"`
 	PreviousManifestRoot string                   `json:"previous_manifest_root,omitempty"`
+	UploadGeneration     string                   `json:"upload_generation,omitempty"`
 	Artifacts            []spUploadBundleArtifact `json:"artifacts"`
 }
 
@@ -46,6 +49,43 @@ type spUploadBundleResolvedArtifact struct {
 	fullSize   int64
 	sendSize   int64
 	maxBodyLen int64
+}
+
+type spUploadBundleBodyError struct {
+	err error
+}
+
+func (e spUploadBundleBodyError) Error() string {
+	return e.err.Error()
+}
+
+func (e spUploadBundleBodyError) Unwrap() error {
+	return e.err
+}
+
+func newSpUploadBundleBodyError(format string, args ...interface{}) error {
+	return spUploadBundleBodyError{err: fmt.Errorf(format, args...)}
+}
+
+func isSpUploadBundleBodyError(err error) bool {
+	_, ok := err.(spUploadBundleBodyError)
+	return ok
+}
+
+func validateSpUploadBundleGenerationID(generation string) error {
+	generation = strings.TrimSpace(generation)
+	if generation == "" {
+		return nil
+	}
+	if len(generation) > spUploadBundleMaxGeneration {
+		return fmt.Errorf("upload_generation is too long")
+	}
+	for _, r := range generation {
+		if r < 0x20 || r == 0x7f || r == '/' || r == '\\' {
+			return fmt.Errorf("upload_generation contains invalid characters")
+		}
+	}
+	return nil
 }
 
 func (a spUploadBundleArtifact) resolve() (spUploadBundleResolvedArtifact, error) {
@@ -119,9 +159,9 @@ func copyBundleArtifactBody(tmp *os.File, src io.Reader, resolved spUploadBundle
 	}
 	if n != resolved.sendSize {
 		if n > resolved.sendSize {
-			return n, fmt.Errorf("artifact %s exceeded declared send_size", resolved.meta.Part)
+			return n, newSpUploadBundleBodyError("artifact %s exceeded declared send_size", resolved.meta.Part)
 		}
-		return n, fmt.Errorf("artifact %s shorter than declared send_size", resolved.meta.Part)
+		return n, newSpUploadBundleBodyError("artifact %s shorter than declared send_size", resolved.meta.Part)
 	}
 	return n, nil
 }
@@ -157,7 +197,7 @@ func storeBundleArtifact(rootDir string, resolved spUploadBundleResolvedArtifact
 			return fmt.Errorf("failed to discard existing artifact body: %w", discardErr)
 		}
 		if n != resolved.sendSize {
-			return fmt.Errorf("bundle artifact size mismatch")
+			return newSpUploadBundleBodyError("bundle artifact size mismatch")
 		}
 		profile.addCount("received_body_bytes", uint64(n))
 		profile.addCount("stored_size_bytes", uint64(info.Size()))
@@ -228,7 +268,7 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 		releaseMode2UploadProfile(profile)
 	}()
 
-	setCORS(w)
+	setCORSForRequest(w, r)
 	if r.Method == http.MethodOptions {
 		statusCode = http.StatusNoContent
 		w.WriteHeader(http.StatusNoContent)
@@ -316,6 +356,18 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bundle artifacts are required", http.StatusBadRequest)
 		return
 	}
+	if len(req.Artifacts) > spUploadBundleMaxArtifacts {
+		statusCode = http.StatusBadRequest
+		outcome = "too_many_artifacts"
+		http.Error(w, "bundle contains too many artifacts", http.StatusBadRequest)
+		return
+	}
+	if err := validateSpUploadBundleGenerationID(req.UploadGeneration); err != nil {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_upload_generation"
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	profile.setCount("artifact_count", uint64(len(req.Artifacts)))
 
 	parsed, err := parseManifestRoot(clientManifestRoot)
@@ -400,6 +452,12 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 			resolved := artifactsByPart[artifact.Part]
 			if err := storeBundleArtifact(rootDir, resolved, io.LimitReader(r.Body, resolved.sendSize), profile); err != nil {
 				log.Printf("SpUploadBundle: failed to store binary artifact part=%s target=%s: %v", artifact.Part, resolved.filename, err)
+				if isSpUploadBundleBodyError(err) {
+					statusCode = http.StatusBadRequest
+					outcome = "invalid_bundle_body"
+					http.Error(w, "invalid bundle body", http.StatusBadRequest)
+					return
+				}
 				statusCode = http.StatusInternalServerError
 				outcome = "artifact_store_failed"
 				http.Error(w, "failed to store bundle artifact", http.StatusInternalServerError)
@@ -453,6 +511,12 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 			if err := storeBundleArtifact(rootDir, resolved, part, profile); err != nil {
 				log.Printf("SpUploadBundle: failed to store multipart artifact part=%s target=%s: %v", partName, resolved.filename, err)
 				_ = part.Close()
+				if isSpUploadBundleBodyError(err) {
+					statusCode = http.StatusBadRequest
+					outcome = "invalid_bundle_body"
+					http.Error(w, "invalid bundle body", http.StatusBadRequest)
+					return
+				}
 				statusCode = http.StatusInternalServerError
 				outcome = "artifact_store_failed"
 				http.Error(w, "failed to store bundle artifact", http.StatusInternalServerError)

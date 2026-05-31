@@ -99,6 +99,15 @@ export type UploadPipelineStatus = {
     target: string | null
     retries: number
     lastError: string | null
+    artifactCount: number | null
+    perArtifactCount: number | null
+    bundledArtifactCount: number | null
+    bundleCount: number | null
+    requestCount: number | null
+    bytesSent: number | null
+    fallbackCount: number | null
+    fallbackReason: string | null
+    peakActiveUploads: number | null
   }
   kzg: KzgBackendStatus
   timing: UploadPipelineTiming
@@ -332,6 +341,15 @@ export function createUploadPipelineStatus(input: {
       target: null,
       retries: 0,
       lastError: null,
+      artifactCount: null,
+      perArtifactCount: null,
+      bundledArtifactCount: null,
+      bundleCount: null,
+      requestCount: null,
+      bytesSent: null,
+      fallbackCount: null,
+      fallbackReason: null,
+      peakActiveUploads: null,
     },
     kzg: { ...PENDING_KZG_BACKEND_STATUS },
     timing: {
@@ -395,6 +413,7 @@ export function sanitizeUploadPipelineStatus(status: UploadPipelineStatus): Uplo
       ...status.transport,
       target: truncate(status.transport.target, 240),
       lastError: truncate(status.transport.lastError, 500),
+      fallbackReason: truncate(status.transport.fallbackReason, 500),
     },
     kzg: {
       ...status.kzg,

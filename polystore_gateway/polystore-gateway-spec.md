@@ -84,6 +84,15 @@ These endpoints support the `polystore-website` "Thin Client" flow.
         *   **Provider is a dumb pipe:** the server does not need to understand layout variants beyond writing/serving bytes addressed by the headers.
         *   Metadata MDUs (MDU #0 + Witness) remain replicated to all slots via `/sp/upload_mdu`.
 
+*   **`POST /sp/upload_bundle`** *(Optional provider bundle API)*
+    *   **Role:** Reduces browser direct-upload round trips by sending all Mode 2 artifacts for one provider in a single request. Support is optional; browsers MUST fall back to `/sp/upload_mdu`, `/sp/upload_shard`, and `/sp/upload_manifest` if the endpoint returns unsupported/invalid-bundle responses.
+    *   **Content-Type:** `application/x.polystore-bundle-v2`.
+    *   **Binary format:** `"NLB2"` magic (4 bytes), little-endian `uint32` metadata JSON length, metadata JSON, then artifact bodies concatenated in metadata order.
+    *   **Metadata JSON:** `{ "deal_id": uint64, "manifest_root": "0x...", "previous_manifest_root": "0x...", "upload_generation": "optional-devnet-id", "artifacts": [{ "part": "artifact_00", "kind": "mdu|shard|manifest", "mdu_index": uint64?, "slot": uint64?, "full_size": int64, "send_size": int64 }] }`.
+    *   **Sparse artifacts:** `send_size` MAY be smaller than `full_size`; providers write the prefix bytes and zero-extend/truncate the stored file to `full_size`, matching per-artifact `X-PolyStore-Full-Size` semantics.
+    *   **Validation:** All artifacts in a bundle share the same deal/root/generation scope. Providers reject missing/invalid roots, too many artifacts, duplicate target filenames, malformed generation IDs, body length mismatches, and unexpected trailing bytes without committing partial files.
+    *   **CORS:** Providers answer `OPTIONS /sp/upload_bundle` and allow `Content-Type` plus `X-PolyStore-*` headers so browser-only uploads remain gateway-optional.
+
 *   **`POST /gateway/mirror_mdu` / `/gateway/mirror_manifest` / `/gateway/mirror_shard`** *(Gateway mirror helpers)*
     *   **Input:** Same headers/payloads as `/sp/upload_mdu`, `/sp/upload_manifest`, `/sp/upload_shard`.
     *   **Role:** Optional browser-side mirroring into a local user-gateway cache (used when the user-gateway is running in proxy mode and `/sp/*` endpoints are not exposed on that process).
