@@ -14,6 +14,11 @@ import {
   parseTrustedSetupG1Srs,
   parseKzgCommitProfiledResult,
 } from './kzgCommitBackend'
+import {
+  WebGpuKzgMsmCalibrationCache,
+  defaultWebGpuKzgMsmAdapterCalibration,
+  type WebGpuKzgMsmOptions,
+} from './webgpuKzgMsm'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -102,6 +107,7 @@ function fakeCommitter(options: {
   totalMs?: number
   delayMs?: number
   commitmentsSeed?: number
+  bucketWidth?: number
   reductionMode?: 'serial' | 'parallel16' | 'parallel32' | 'parallel64'
 }) {
   const destroyed = { value: false }
@@ -130,7 +136,7 @@ function fakeCommitter(options: {
           },
           blobs,
           debug: {
-            bucketWidth: 10,
+            bucketWidth: options.bucketWidth ?? 10,
             reductionMode: options.reductionMode ?? 'serial',
             bucketCount: 1,
             baseIndexCount: 1,
@@ -353,6 +359,93 @@ test('browser backend selects WebGPU after bounded parity probe', async () => {
   assert.equal(status.webgpu?.fallbackActive, false)
   assert.equal(status.webgpu?.scheduler?.probeStatus, 'passed')
   assert.equal(status.webgpu?.reductionMode, 'serial')
+})
+
+test('browser backend applies bounded calibration winner and reports diagnostics', async () => {
+  const calls: Array<WebGpuKzgMsmOptions | undefined> = []
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    webGpuMode: 'force',
+    webGpuCalibrationMode: 'force',
+    webGpuCalibrationBlobCount: 1,
+    webGpuCalibrationRuns: 1,
+    webGpuCalibrationTimeoutMs: 1000,
+    webGpuCalibrationCache: new WebGpuKzgMsmCalibrationCache({ storage: null }),
+    navigatorLike: fakeNavigator({ vendor: 'nvidia', architecture: 'ampere', isFallbackAdapter: false }),
+    webGpuCommitterFactory: async (options) => {
+      calls.push(options)
+      const totalMs = options?.bucketWidth === 12 && options.reductionMode === 'parallel16' ? 5 : 20
+      return fakeCommitter({ totalMs, bucketWidth: options?.bucketWidth, reductionMode: options?.reductionMode }).committer as never
+    },
+  })
+
+  assert.deepEqual(await backend.commitBlobs(blobBatch(2)), commitments(2))
+  const status = backend.getStatus()
+  assert.equal(status.selectedBackend, 'webgpu')
+  assert.equal(status.webgpu?.bucketWidth, 12)
+  assert.equal(status.webgpu?.reductionMode, 'parallel16')
+  assert.equal(status.webgpu?.calibration?.status, 'passed')
+  assert.equal(status.webgpu?.calibration?.source, 'benchmark-matrix')
+  assert.equal(status.webgpu?.scheduler?.bucketWidth, 12)
+  assert.ok(calls.some((call) => call?.bucketWidth === 10 && call.reductionMode === 'serial'))
+  assert.ok(calls.some((call) => call?.bucketWidth === 12 && call.reductionMode === 'parallel16'))
+})
+
+test('browser backend uses cached calibration instead of default adapter rule', async () => {
+  const info = { vendor: 'nvidia', architecture: 'ampere', device: 'rtx-3060-ti', isFallbackAdapter: false }
+  const cache = new WebGpuKzgMsmCalibrationCache({ storage: null })
+  cache.set(info, {
+    ...defaultWebGpuKzgMsmAdapterCalibration(info),
+    bucketWidth: 12,
+    reductionMode: 'parallel16',
+    source: 'benchmark-matrix',
+    reason: 'cached winner',
+    score: 4.58,
+    measuredFixture: { blobs: 96, bytes: 96 * KZG_BLOB_SIZE, runs: 1, candidates: 2, metric: 'median-total-ms', wasmMs: 28.3 },
+    measuredAtMs: 123,
+  })
+  const calls: Array<WebGpuKzgMsmOptions | undefined> = []
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    webGpuMode: 'force',
+    webGpuCalibrationCache: cache,
+    navigatorLike: fakeNavigator(info),
+    webGpuCommitterFactory: async (options) => {
+      calls.push(options)
+      return fakeCommitter({ totalMs: 5, bucketWidth: options?.bucketWidth, reductionMode: options?.reductionMode }).committer as never
+    },
+  })
+
+  assert.deepEqual(await backend.commitBlobs(blobBatch(1)), commitments(1))
+  assert.equal(backend.getStatus().webgpu?.calibration?.status, 'cached')
+  assert.equal(backend.getStatus().webgpu?.bucketWidth, 12)
+  assert.equal(calls[0]?.bucketWidth, 12)
+  assert.equal(calls[0]?.reductionMode, 'parallel16')
+})
+
+test('browser backend opens circuit when calibration parity fails', async () => {
+  const backend = await createBrowserKzgCommitBackend(dynamicMockWasm(), await loadTrustedSetupBytes(), {
+    preferWebGpu: true,
+    webGpuMode: 'force',
+    webGpuCalibrationMode: 'force',
+    webGpuCalibrationBlobCount: 1,
+    webGpuCalibrationCache: new WebGpuKzgMsmCalibrationCache({ storage: null }),
+    navigatorLike: fakeNavigator({ vendor: 'nvidia', architecture: 'ampere', isFallbackAdapter: false }),
+    webGpuCommitterFactory: async (options) =>
+      fakeCommitter({
+        totalMs: 5,
+        commitmentsSeed: 99,
+        bucketWidth: options?.bucketWidth,
+        reductionMode: options?.reductionMode,
+      }).committer as never,
+  })
+
+  assert.deepEqual(await backend.commitBlobs(blobBatch(1)), commitments(1))
+  const status = backend.getStatus()
+  assert.equal(status.selectedBackend, 'wasm-blst')
+  assert.equal(status.webgpu?.scheduler?.circuitOpen, true)
+  assert.equal(status.webgpu?.calibration?.status, 'failed')
+  assert.match(status.fallbackReason || '', /calibration failed/)
 })
 
 test('browser backend falls back when auto probe is slower than WASM', async () => {

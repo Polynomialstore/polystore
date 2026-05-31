@@ -245,3 +245,44 @@ not JavaScript allocation churn. The PR therefore closes #179 by making the
 measured throughput path reproducible, adapter-aware, lower-allocation, and
 guarded by benchmark evidence rather than by landing a new unproven batched
 shader pipeline.
+
+## #193 Runtime Autotune Contract
+
+Issue #193 turns the benchmark-matrix output into a runtime calibration
+contract for browser uploads. The stable contract exposed by
+`webgpuKzgMsm.ts`/`kzgCommitBackend.ts` is:
+
+- cache key: `webgpu-msm-calibration-v2|vendor|architecture|device|description|isFallbackAdapter`
+- cached schema fields: `version`, `cacheKey`, `bucketWidth`, `reductionMode`,
+  `minBlobs`, `minBytes`, `source`, `reason`, `score`, `measuredFixture`, and
+  `measuredAtMs`
+- runtime diagnostics: `bucketWidth`, `reductionMode`, `calibration.status`,
+  `calibration.source`, `calibration.cacheKey`, scheduler probe state, and the
+  existing fallback/circuit-breaker fields
+- bounded runtime calibration: auto mode only calibrates once a real batch is at
+  least 64 blobs, using a small deterministic 4-blob fixture and the WASM/blst
+  oracle for parity; small uploads keep the adapter default and do not pay the
+  calibration matrix cost
+- fallback rules: stale cache version, adapter-key mismatch, calibration
+  timeout, parity failure, or device loss invalidates the cached entry and falls
+  back to WASM/blst rather than accepting non-identical commitments
+
+The PR-grade native GPU matrix command for #193 and follow-up tickets is:
+
+```sh
+cd polystore-website
+npm run perf:kzg-webgpu-msm:matrix
+```
+
+That script expands to the required 64/96/256 blob matrix across bucket widths
+`10,12,13` and reduction modes `serial,parallel16`. For environments where CI
+or headless Chrome resolves to SwiftShader, use diagnostic mode to capture the
+skip/fallback reason without failing the run:
+
+```sh
+POLYSTORE_WEBGPU_MSM_BLOBS_LIST=1 \
+POLYSTORE_WEBGPU_MSM_BUCKET_WIDTHS=10 \
+POLYSTORE_WEBGPU_MSM_REDUCTIONS=serial \
+POLYSTORE_WEBGPU_MSM_RUNS=1 \
+npm run diagnose:kzg-webgpu-msm
+```

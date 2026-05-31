@@ -175,7 +175,11 @@ export function kzgCommitDiagnosticsForBackend(kzgCommitBackend: KzgCommitBacken
     kzgWebGpuProbeTimeoutMs: scheduler?.probeTimeoutMs ?? 0,
     kzgWebGpuCommitTimeoutMs: scheduler?.commitTimeoutMs ?? 0,
     kzgWebGpuMinBlobs: scheduler?.minBlobs ?? 0,
-    kzgWebGpuReductionMode: status?.webgpu?.reductionMode ?? '',
+    kzgWebGpuBucketWidth: status?.webgpu?.bucketWidth ?? scheduler?.bucketWidth ?? 0,
+    kzgWebGpuReductionMode: status?.webgpu?.reductionMode ?? scheduler?.reductionMode ?? '',
+    kzgWebGpuCalibrationStatus: status?.webgpu?.calibration?.status ?? scheduler?.calibrationStatus ?? '',
+    kzgWebGpuCalibrationSource: status?.webgpu?.calibration?.source ?? scheduler?.calibrationSource ?? '',
+    kzgWebGpuCalibrationCacheKey: status?.webgpu?.calibration?.cacheKey ?? '',
   }
 }
 
