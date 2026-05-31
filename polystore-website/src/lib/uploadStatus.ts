@@ -48,6 +48,11 @@ export type KzgBackendStatus = {
   schedulerActive: number | null
   schedulerMaxQueueDepth: number | null
   schedulerFallbackCount: number | null
+  schedulerBatchSize: number | null
+  schedulerBatchBlobs: number | null
+  schedulerBatchBytes: number | null
+  schedulerBatchSplitCount: number | null
+  schedulerBatchFallbackCount: number | null
   probeTimeoutMs: number | null
   commitTimeoutMs: number | null
   minBlobs: number | null
@@ -136,6 +141,16 @@ export type KzgDiagnosticsInput = {
   workerKzgSchedulerMaxQueueDepth?: number
   kzgSchedulerFallbackCount?: number
   workerKzgSchedulerFallbackCount?: number
+  kzgSchedulerBatchSize?: number
+  workerKzgSchedulerBatchSize?: number
+  kzgSchedulerBatchBlobs?: number
+  workerKzgSchedulerBatchBlobs?: number
+  kzgSchedulerBatchBytes?: number
+  workerKzgSchedulerBatchBytes?: number
+  kzgSchedulerBatchSplitCount?: number
+  workerKzgSchedulerBatchSplitCount?: number
+  kzgSchedulerBatchFallbackCount?: number
+  workerKzgSchedulerBatchFallbackCount?: number
   kzgWebGpuProbeTimeoutMs?: number
   workerKzgWebGpuProbeTimeoutMs?: number
   kzgWebGpuCommitTimeoutMs?: number
@@ -180,6 +195,11 @@ export const PENDING_KZG_BACKEND_STATUS: KzgBackendStatus = {
   schedulerActive: null,
   schedulerMaxQueueDepth: null,
   schedulerFallbackCount: null,
+  schedulerBatchSize: null,
+  schedulerBatchBlobs: null,
+  schedulerBatchBytes: null,
+  schedulerBatchSplitCount: null,
+  schedulerBatchFallbackCount: null,
   probeTimeoutMs: null,
   commitTimeoutMs: null,
   minBlobs: null,
@@ -259,6 +279,11 @@ export function normalizeKzgBackendStatus(input?: KzgDiagnosticsInput | null): K
     schedulerActive: firstNumber(input.kzgSchedulerActiveAtEnqueue, input.workerKzgSchedulerActiveAtEnqueue),
     schedulerMaxQueueDepth: firstNumber(input.kzgSchedulerMaxQueueDepth, input.workerKzgSchedulerMaxQueueDepth),
     schedulerFallbackCount: firstNumber(input.kzgSchedulerFallbackCount, input.workerKzgSchedulerFallbackCount),
+    schedulerBatchSize: firstNumber(input.kzgSchedulerBatchSize, input.workerKzgSchedulerBatchSize),
+    schedulerBatchBlobs: firstNumber(input.kzgSchedulerBatchBlobs, input.workerKzgSchedulerBatchBlobs),
+    schedulerBatchBytes: firstNumber(input.kzgSchedulerBatchBytes, input.workerKzgSchedulerBatchBytes),
+    schedulerBatchSplitCount: firstNumber(input.kzgSchedulerBatchSplitCount, input.workerKzgSchedulerBatchSplitCount),
+    schedulerBatchFallbackCount: firstNumber(input.kzgSchedulerBatchFallbackCount, input.workerKzgSchedulerBatchFallbackCount),
     probeTimeoutMs: firstNumber(input.kzgWebGpuProbeTimeoutMs, input.workerKzgWebGpuProbeTimeoutMs),
     commitTimeoutMs: firstNumber(input.kzgWebGpuCommitTimeoutMs, input.workerKzgWebGpuCommitTimeoutMs),
     minBlobs: firstNumber(input.kzgWebGpuMinBlobs, input.workerKzgWebGpuMinBlobs),

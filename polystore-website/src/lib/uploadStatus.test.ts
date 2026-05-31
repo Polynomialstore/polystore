@@ -68,6 +68,11 @@ test('normalizeKzgBackendStatus surfaces browser KZG scheduler diagnostics', () 
     kzgSchedulerActiveAtEnqueue: 1,
     kzgSchedulerMaxQueueDepth: 32,
     kzgSchedulerFallbackCount: 2,
+    kzgSchedulerBatchSize: 4,
+    kzgSchedulerBatchBlobs: 384,
+    kzgSchedulerBatchBytes: 50_331_648,
+    kzgSchedulerBatchSplitCount: 1,
+    kzgSchedulerBatchFallbackCount: 0,
   })
 
   assert.equal(status.schedulerQueueWaitMs, 12)
@@ -76,6 +81,11 @@ test('normalizeKzgBackendStatus surfaces browser KZG scheduler diagnostics', () 
   assert.equal(status.schedulerActive, 1)
   assert.equal(status.schedulerMaxQueueDepth, 32)
   assert.equal(status.schedulerFallbackCount, 2)
+  assert.equal(status.schedulerBatchSize, 4)
+  assert.equal(status.schedulerBatchBlobs, 384)
+  assert.equal(status.schedulerBatchBytes, 50_331_648)
+  assert.equal(status.schedulerBatchSplitCount, 1)
+  assert.equal(status.schedulerBatchFallbackCount, null)
 })
 
 test('patchUploadPipelineStatus preserves nested state and records elapsed time', () => {

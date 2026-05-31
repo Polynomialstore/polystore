@@ -9,11 +9,14 @@ import init, { WasmMdu0Builder, PolyStoreWasm } from '../lib/polystoreCoreRuntim
 import { createBrowserKzgCommitBackend, type KzgCommitBackend } from '../lib/kzgCommitBackend';
 import {
     committedExpansionToUserMduBrowserKzgResult,
+    commitUserMduBatchUncommittedWithBrowserKzg,
     commitUserMduUncommittedWithBrowserKzg,
     expandUserMduRsWithBrowserKzg,
     kzgCommitDiagnosticsForBackend,
     parseCommittedExpansion,
     parseUserMduUncommittedExpansion,
+    type UserMduBrowserKzgResult,
+    type UserMduUncommittedExpansion,
 } from '../lib/upload/userMduBrowserKzg';
 
 let wasmInitialized = false;
@@ -175,6 +178,35 @@ function committedFallbackReason(fallbackReason: unknown): string | undefined {
     return typeof fallbackReason === 'string' && fallbackReason.trim()
         ? `scheduler owner failed; used committed WASM fallback: ${fallbackReason}`
         : undefined;
+}
+
+async function commitUserMduBatchWithSplitting(
+    expansions: UserMduUncommittedExpansion[],
+    splitCount = { value: 0 },
+): Promise<UserMduBrowserKzgResult[]> {
+    if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+    if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+    try {
+        const results = await commitUserMduBatchUncommittedWithBrowserKzg({
+            expansions,
+            wasm: polyStoreWasmInstance,
+            kzgCommitBackend,
+        });
+        return results.map((result) => ({
+            ...result,
+            perf: {
+                ...result.perf,
+                browserKzgBatchSplitCount: splitCount.value,
+            },
+        }));
+    } catch (error) {
+        if (expansions.length <= 1) throw error;
+        splitCount.value += 1;
+        const mid = Math.ceil(expansions.length / 2);
+        const left = await commitUserMduBatchWithSplitting(expansions.slice(0, mid), splitCount);
+        const right = await commitUserMduBatchWithSplitting(expansions.slice(mid), splitCount);
+        return [...left, ...right];
+    }
 }
 
 // Start fetching + compiling the WASM as soon as the worker loads so the first
@@ -689,6 +721,19 @@ self.onmessage = async (event) => {
                     wasm: polyStoreWasmInstance,
                     kzgCommitBackend,
                 });
+                break;
+            }
+            case 'commitExpandedUserMduBatch': {
+                const { expansions } = payload as { expansions: UserMduUncommittedExpansion[] };
+                if (!Array.isArray(expansions) || expansions.length === 0) {
+                    throw new Error('commitExpandedUserMduBatch requires at least one uncommitted user MDU');
+                }
+                for (const [index, expansion] of expansions.entries()) {
+                    if (!expansion || !(expansion.shardsFlat instanceof Uint8Array)) {
+                        throw new Error(`commitExpandedUserMduBatch item ${index} requires uncommitted shards`);
+                    }
+                }
+                result = await commitUserMduBatchWithSplitting(expansions);
                 break;
             }
             case 'expandMduRs': {
