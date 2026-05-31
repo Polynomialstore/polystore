@@ -189,3 +189,78 @@ test('KZG scheduler bounds queue depth', async () => {
     /queue is full/,
   )
 })
+
+test('KZG scheduler batches ready sequence-adjacent user MDUs and resolves each promise deterministically', async () => {
+  let releaseFirst!: (value: UserMduUncommittedExpansion) => void
+  const first = new Promise<UserMduUncommittedExpansion>((resolve) => {
+    releaseFirst = resolve
+  })
+  const batchCalls: number[][] = []
+  const singleCalls: number[] = []
+  const scheduler = new UserMduKzgScheduler({ maxQueueDepth: 8, batch: { maxBatchMdus: 4, maxBatchBlobs: 12 } })
+
+  const makeTask = (sequence: number, expansionPromise: Promise<UserMduUncommittedExpansion>) => ({
+    sequence,
+    expansion: expansionPromise,
+    commit: async (expanded: UserMduUncommittedExpansion) => {
+      singleCalls.push(expanded.sequence ?? -1)
+      return resultFor(expanded.sequence ?? 0)
+    },
+    commitBatch: async (expandedBatch: UserMduUncommittedExpansion[]) => {
+      batchCalls.push(expandedBatch.map((expanded) => expanded.sequence ?? -1))
+      return expandedBatch.map((expanded) => resultFor(expanded.sequence ?? 0))
+    },
+  })
+
+  const p0 = scheduler.enqueue(makeTask(0, first))
+  const p1 = scheduler.enqueue(makeTask(1, Promise.resolve(expansion(1))))
+  const p2 = scheduler.enqueue(makeTask(2, Promise.resolve(expansion(2))))
+
+  await Promise.resolve()
+  releaseFirst(expansion(0))
+  const [r0, r1, r2] = await Promise.all([p0, p1, p2])
+
+  assert.deepEqual(batchCalls, [[0, 1, 2]])
+  assert.deepEqual(singleCalls, [])
+  assert.equal(r0.perf.kzgSchedulerSequence, 0)
+  assert.equal(r1.perf.kzgSchedulerSequence, 1)
+  assert.equal(r2.perf.kzgSchedulerSequence, 2)
+  assert.equal(r0.perf.kzgSchedulerBatchSize, 3)
+  assert.equal(r1.perf.kzgSchedulerBatchPosition, 1)
+  assert.equal(r2.perf.kzgSchedulerBatchBlobs, 9)
+})
+
+test('KZG scheduler splits failed batches down to per-MDU commits before using fallback', async () => {
+  let releaseFirst!: (value: UserMduUncommittedExpansion) => void
+  const first = new Promise<UserMduUncommittedExpansion>((resolve) => {
+    releaseFirst = resolve
+  })
+  const batchCalls: number[][] = []
+  const singleCalls: number[] = []
+  const scheduler = new UserMduKzgScheduler({ maxQueueDepth: 8, batch: { maxBatchMdus: 4, maxBatchBlobs: 12 } })
+
+  const tasks = Array.from({ length: 4 }, (_, sequence) =>
+    scheduler.enqueue({
+      sequence,
+      expansion: sequence === 0 ? first : Promise.resolve(expansion(sequence)),
+      commit: async (expanded) => {
+        singleCalls.push(expanded.sequence ?? -1)
+        return resultFor(expanded.sequence ?? 0)
+      },
+      commitBatch: async (expandedBatch) => {
+        batchCalls.push(expandedBatch.map((expanded) => expanded.sequence ?? -1))
+        throw new Error('synthetic batch timeout')
+      },
+    }),
+  )
+
+  await Promise.resolve()
+  releaseFirst(expansion(0))
+  const results = await Promise.all(tasks)
+
+  assert.deepEqual(batchCalls, [[0, 1, 2, 3], [0, 1], [2, 3]])
+  assert.deepEqual(singleCalls, [0, 1, 2, 3])
+  assert.equal(results[0].perf.kzgSchedulerBatchSize, 4)
+  assert.ok((results[0].perf.kzgSchedulerBatchSplitCount ?? 0) >= 3)
+  assert.equal(scheduler.getStatus().batchSplitCount, 3)
+})

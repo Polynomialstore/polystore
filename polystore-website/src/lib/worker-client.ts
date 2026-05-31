@@ -265,6 +265,14 @@ export interface ExpandedStripe {
       rows?: number;
       shardsTotal?: number;
       browserKzgCommitFallbackReason?: string;
+      browserKzgBatchSize?: number;
+      browserKzgBatchPosition?: number;
+      browserKzgBatchBlobs?: number;
+      browserKzgBatchBytes?: number;
+      browserKzgBatchEstimatedMemoryBytes?: number;
+      browserKzgBatchCommitMs?: number;
+      browserKzgBatchRootMs?: number;
+      browserKzgBatchSplitCount?: number;
     };
 }
 
@@ -292,6 +300,17 @@ export type KzgCommitDiagnostics = {
   kzgSchedulerQueueDepthAtStart?: number
   kzgSchedulerMaxQueueDepth?: number
   kzgSchedulerFallbackCount?: number
+  kzgSchedulerBatchSize?: number
+  kzgSchedulerBatchPosition?: number
+  kzgSchedulerBatchBlobs?: number
+  kzgSchedulerBatchBytes?: number
+  kzgSchedulerBatchEstimatedMemoryBytes?: number
+  kzgSchedulerBatchMaxMdus?: number
+  kzgSchedulerBatchMaxBlobs?: number
+  kzgSchedulerBatchMaxBytes?: number
+  kzgSchedulerBatchPlanReason?: string
+  kzgSchedulerBatchSplitCount?: number
+  kzgSchedulerBatchFallbackCount?: number
   kzgSchedulerOwner?: string
   commitWorkerCount?: number
 }
@@ -331,6 +350,22 @@ async function expandStripeWithScheduledKzg(
       { expansion: expanded },
       [expanded.shardsFlat.buffer],
     ) as Promise<UserMduBrowserKzgResult>,
+    commitBatch: async (expandedBatch) => {
+      const transferables: Transferable[] = []
+      const seen = new Set<ArrayBuffer>()
+      for (const expanded of expandedBatch) {
+        const buffer = expanded.shardsFlat.buffer as ArrayBuffer
+        if (!seen.has(buffer)) {
+          seen.add(buffer)
+          transferables.push(buffer)
+        }
+      }
+      return sendMessageToWorker(
+        'commitExpandedUserMduBatch',
+        { expansions: expandedBatch },
+        transferables,
+      ) as Promise<UserMduBrowserKzgResult[]>
+    },
     fallback: async (reason) => {
       const result = await sendExpansionMessageToWorker(
         committedType,

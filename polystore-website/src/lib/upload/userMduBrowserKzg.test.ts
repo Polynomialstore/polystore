@@ -5,6 +5,7 @@ import test from 'node:test'
 import init, { PolyStoreWasm } from '../../../public/wasm/polystore_core.js'
 import { createWasmBlstKzgCommitBackend, KZG_BLOB_SIZE, type KzgCommitBackend, type KzgCommitBackendStatus } from '../kzgCommitBackend'
 import {
+  commitUserMduBatchUncommittedWithBrowserKzg,
   expandUserMduRsWithBrowserKzg,
   parseUserMduUncommittedExpansion,
   toUserMduUint8Array,
@@ -242,6 +243,39 @@ test('partial payload expansion uses the same browser KZG route and preserves sh
   assert.equal(result.perf.shardCount, 3)
   assert.equal(result.perf.rows, 1)
   assert.equal(result.perf.shardsTotal, 3)
+})
+
+test('batch browser KZG commits multiple uncommitted user MDUs in one backend call and demuxes roots', async () => {
+  const { wasm, calls, payloadShards, shardLen } = makeWasm()
+  const { backend, calls: backendCalls } = makeBackend({ selectedBackend: 'webgpu', witnessSeed: 31 })
+  const first = parseUserMduUncommittedExpansion(
+    { shards_flat: payloadShards.slice(), shard_len: shardLen, perf: { encode_ms: 1, rs_ms: 2, total_ms: 3, rows: 1, shards_total: 3, shard_len: shardLen } },
+    { kind: 'payload', k: 2, m: 1, payloadId: 'a', sequence: 0 },
+  )
+  const second = parseUserMduUncommittedExpansion(
+    { shards_flat: payloadShards.slice(), shard_len: shardLen, perf: { encode_ms: 4, rs_ms: 5, total_ms: 9, rows: 1, shards_total: 3, shard_len: shardLen } },
+    { kind: 'payload', k: 2, m: 1, payloadId: 'b', sequence: 1 },
+  )
+
+  const results = await commitUserMduBatchUncommittedWithBrowserKzg({
+    expansions: [first, second],
+    wasm,
+    kzgCommitBackend: backend,
+  })
+
+  assert.equal(backendCalls.commitProfiled, 1)
+  assert.equal(calls.computeRoot, 2)
+  assert.equal(results.length, 2)
+  assert.equal(results[0].witness_flat.byteLength, 3 * 48)
+  assert.equal(results[1].witness_flat.byteLength, 3 * 48)
+  assert.deepEqual(results[0].mdu_root, rootFromWitness(results[0].witness_flat))
+  assert.deepEqual(results[1].mdu_root, rootFromWitness(results[1].witness_flat))
+  assert.deepEqual(results[0].shards_flat, first.shardsFlat)
+  assert.deepEqual(results[1].shards_flat, second.shardsFlat)
+  assert.equal(results[0].perf.browserKzgBatchSize, 2)
+  assert.equal(results[1].perf.browserKzgBatchPosition, 1)
+  assert.equal(results[1].perf.browserKzgBatchBlobs, 6)
+  assert.equal(results[0].perf.rustCommitBackend, 'webgpu-msm')
 })
 
 test('browser KZG failure falls back to the existing committed WASM path', async () => {

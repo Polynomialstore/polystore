@@ -4,6 +4,11 @@ import {
   type KzgCommitBackend,
   type KzgCommitPerf,
 } from '../kzgCommitBackend'
+import {
+  concatenateUserMduKzgBatch,
+  demuxUserMduKzgCommitments,
+  estimateUserMduKzgBatchMemoryBytes,
+} from './userMduKzgBatch'
 
 export type UserMduExpansionKind = 'mdu' | 'payload'
 
@@ -41,6 +46,14 @@ export type UserMduBrowserKzgPerf = ReturnType<typeof kzgCommitDiagnosticsForBac
   rows: number
   shardsTotal: number
   browserKzgCommitFallbackReason?: string
+  browserKzgBatchSize?: number
+  browserKzgBatchPosition?: number
+  browserKzgBatchBlobs?: number
+  browserKzgBatchBytes?: number
+  browserKzgBatchEstimatedMemoryBytes?: number
+  browserKzgBatchCommitMs?: number
+  browserKzgBatchRootMs?: number
+  browserKzgBatchSplitCount?: number
   kzgSchedulerSequence?: number
   kzgSchedulerQueueWaitMs?: number
   kzgSchedulerCommitMs?: number
@@ -50,6 +63,17 @@ export type UserMduBrowserKzgPerf = ReturnType<typeof kzgCommitDiagnosticsForBac
   kzgSchedulerQueueDepthAtStart?: number
   kzgSchedulerMaxQueueDepth?: number
   kzgSchedulerFallbackCount?: number
+  kzgSchedulerBatchSize?: number
+  kzgSchedulerBatchPosition?: number
+  kzgSchedulerBatchBlobs?: number
+  kzgSchedulerBatchBytes?: number
+  kzgSchedulerBatchEstimatedMemoryBytes?: number
+  kzgSchedulerBatchMaxMdus?: number
+  kzgSchedulerBatchMaxBlobs?: number
+  kzgSchedulerBatchMaxBytes?: number
+  kzgSchedulerBatchPlanReason?: string
+  kzgSchedulerBatchSplitCount?: number
+  kzgSchedulerBatchFallbackCount?: number
   kzgSchedulerOwner?: string
 }
 
@@ -308,6 +332,22 @@ function committedPerfToKzgCommitPerf(perf: CommittedExpansionPerf): KzgCommitPe
   }
 }
 
+function scaleKzgCommitPerf(perf: KzgCommitPerf, ratio: number, blobs: number): KzgCommitPerf {
+  const scale = (value: number) => (Number.isFinite(value) ? value * ratio : 0)
+  return {
+    decodeMs: scale(perf.decodeMs),
+    transformMs: scale(perf.transformMs),
+    msmScalarPrepMs: scale(perf.msmScalarPrepMs),
+    msmBucketFillMs: scale(perf.msmBucketFillMs),
+    msmReduceMs: scale(perf.msmReduceMs),
+    msmDoubleMs: scale(perf.msmDoubleMs),
+    msmMs: scale(perf.msmMs),
+    compressMs: scale(perf.compressMs),
+    totalMs: scale(perf.totalMs),
+    blobs,
+  }
+}
+
 function committedFallback(
   options: ExpandWithBrowserKzgOptions,
   now: () => number,
@@ -423,6 +463,82 @@ export async function commitUserMduUncommittedWithBrowserKzg(options: {
       diagnostics,
     ),
   }
+}
+
+export async function commitUserMduBatchUncommittedWithBrowserKzg(options: {
+  expansions: UserMduUncommittedExpansion[]
+  wasm: Pick<UserMduBrowserKzgWasm, 'compute_mdu_root'>
+  kzgCommitBackend: KzgCommitBackend
+  now?: () => number
+  totalStartMs?: number
+}): Promise<UserMduBrowserKzgResult[]> {
+  const { expansions, wasm, kzgCommitBackend } = options
+  if (!Array.isArray(expansions) || expansions.length === 0) {
+    throw new Error('browser KZG batch requires at least one uncommitted user MDU')
+  }
+  const now = options.now ?? defaultNow
+  const totalStart = options.totalStartMs
+  const batchBlobs = expansions.reduce((sum, expansion) => sum + expansion.shardsFlat.byteLength / KZG_BLOB_SIZE, 0)
+  const batchBytes = expansions.reduce((sum, expansion) => sum + expansion.shardsFlat.byteLength, 0)
+  const batchEstimatedMemoryBytes = estimateUserMduKzgBatchMemoryBytes(batchBytes, batchBlobs)
+  const batchBlobsFlat = concatenateUserMduKzgBatch(expansions)
+
+  const commitStart = now()
+  const committedRaw = await kzgCommitBackend.commitBlobsProfiled(batchBlobsFlat)
+  const commitMs = now() - commitStart
+  const witnessFlat = committedRaw.witnessFlat
+  const expectedWitnessBytes = batchBlobs * KZG_COMMITMENT_SIZE
+  if (witnessFlat.byteLength !== expectedWitnessBytes) {
+    throw new Error(`browser KZG batch returned ${witnessFlat.byteLength} witness bytes, expected ${expectedWitnessBytes}`)
+  }
+
+  const witnessGroups = demuxUserMduKzgCommitments(witnessFlat, expansions)
+  const rootStart = now()
+  const roots = witnessGroups.map((group, index) => {
+    const root = wasm.compute_mdu_root(group) as unknown
+    const rootBytes = toUserMduUint8Array(root)
+    if (rootBytes.byteLength !== 32) {
+      throw new Error(`compute_mdu_root for batch item ${index} returned ${rootBytes.byteLength} bytes, expected 32`)
+    }
+    return rootBytes
+  })
+  const rootMs = now() - rootStart
+  const diagnostics = kzgCommitDiagnosticsForBackend(kzgCommitBackend)
+
+  return expansions.map((expansion, index) => {
+    const itemBlobs = expansion.shardsFlat.byteLength / KZG_BLOB_SIZE
+    const ratio = batchBlobs > 0 ? itemBlobs / batchBlobs : 0
+    const itemCommitPerf = scaleKzgCommitPerf(committedRaw.perf, ratio, itemBlobs)
+    const itemCommitMs = commitMs * ratio
+    const itemRootMs = rootMs / expansions.length
+    return {
+      witness_flat: witnessGroups[index],
+      mdu_root: roots[index],
+      shards_flat: expansion.shardsFlat,
+      shard_len: expansion.shardLen,
+      perf: {
+        ...perfFromSplitAndCommit(
+          expansion.perf,
+          itemCommitPerf,
+          itemCommitMs,
+          itemRootMs,
+          totalStart === undefined
+            ? numberField(expansion.perf.total_ms) + itemCommitMs + itemRootMs
+            : now() - totalStart,
+          expansion.shardsFlat,
+          expansion.shardLen,
+          diagnostics,
+        ),
+        browserKzgBatchSize: expansions.length,
+        browserKzgBatchPosition: index,
+        browserKzgBatchBlobs: batchBlobs,
+        browserKzgBatchBytes: batchBytes,
+        browserKzgBatchEstimatedMemoryBytes: batchEstimatedMemoryBytes,
+        browserKzgBatchCommitMs: commitMs,
+        browserKzgBatchRootMs: rootMs,
+      },
+    }
+  })
 }
 
 export async function expandUserMduRsWithBrowserKzg(

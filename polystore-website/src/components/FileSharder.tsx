@@ -185,6 +185,11 @@ type PreparePerfSample = {
   workerKzgSchedulerActiveAtEnqueue?: number
   workerKzgSchedulerMaxQueueDepth?: number
   workerKzgSchedulerFallbackCount?: number
+  workerKzgSchedulerBatchSize?: number
+  workerKzgSchedulerBatchBlobs?: number
+  workerKzgSchedulerBatchBytes?: number
+  workerKzgSchedulerBatchSplitCount?: number
+  workerKzgSchedulerBatchFallbackCount?: number
   workerRustEncodeMs: number
   workerRustRsMs: number
   workerRustCommitDecodeMs: number
@@ -311,6 +316,11 @@ type PreparePerfProfile = {
     kzgWebGpuMinBlobs?: number
     kzgSchedulerMaxQueueDepth?: number
     kzgSchedulerFallbackCount?: number
+    kzgSchedulerBatchSize?: number
+    kzgSchedulerBatchBlobs?: number
+    kzgSchedulerBatchBytes?: number
+    kzgSchedulerBatchSplitCount?: number
+    kzgSchedulerBatchFallbackCount?: number
     commitWorkerCount?: number
   }
   samples: {
@@ -3720,6 +3730,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             const workerKzgSchedulerActiveAtEnqueue = Number(result.perf?.kzgSchedulerActiveAtEnqueue ?? 0) || undefined
             const workerKzgSchedulerMaxQueueDepth = Number(result.perf?.kzgSchedulerMaxQueueDepth ?? 0) || undefined
             const workerKzgSchedulerFallbackCount = Number(result.perf?.kzgSchedulerFallbackCount ?? 0) || undefined
+            const workerKzgSchedulerBatchSize = Number(result.perf?.kzgSchedulerBatchSize ?? 0) || undefined
+            const workerKzgSchedulerBatchBlobs = Number(result.perf?.kzgSchedulerBatchBlobs ?? 0) || undefined
+            const workerKzgSchedulerBatchBytes = Number(result.perf?.kzgSchedulerBatchBytes ?? 0) || undefined
+            const workerKzgSchedulerBatchSplitCount = Number(result.perf?.kzgSchedulerBatchSplitCount ?? 0) || undefined
+            const workerKzgSchedulerBatchFallbackCount = Number(result.perf?.kzgSchedulerBatchFallbackCount ?? 0) || undefined
             const workerRustEncodeMs = Number(result.perf?.rustEncodeMs ?? 0)
             const workerRustRsMs = Number(result.perf?.rustRsMs ?? 0)
             const workerRustCommitDecodeMs = Number(result.perf?.rustCommitDecodeMs ?? 0)
@@ -3811,6 +3826,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               workerKzgSchedulerActiveAtEnqueue,
               workerKzgSchedulerMaxQueueDepth,
               workerKzgSchedulerFallbackCount,
+              workerKzgSchedulerBatchSize,
+              workerKzgSchedulerBatchBlobs,
+              workerKzgSchedulerBatchBytes,
+              workerKzgSchedulerBatchSplitCount,
+              workerKzgSchedulerBatchFallbackCount,
               workerRustEncodeMs,
               workerRustRsMs,
               workerRustCommitDecodeMs,
@@ -4555,6 +4575,11 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             kzgWebGpuMinBlobs: kzgDiagnosticSample?.workerKzgWebGpuMinBlobs,
             kzgSchedulerMaxQueueDepth: kzgDiagnosticSample?.workerKzgSchedulerMaxQueueDepth,
             kzgSchedulerFallbackCount: kzgDiagnosticSample?.workerKzgSchedulerFallbackCount,
+            kzgSchedulerBatchSize: kzgDiagnosticSample?.workerKzgSchedulerBatchSize,
+            kzgSchedulerBatchBlobs: kzgDiagnosticSample?.workerKzgSchedulerBatchBlobs,
+            kzgSchedulerBatchBytes: kzgDiagnosticSample?.workerKzgSchedulerBatchBytes,
+            kzgSchedulerBatchSplitCount: kzgDiagnosticSample?.workerKzgSchedulerBatchSplitCount,
+            kzgSchedulerBatchFallbackCount: kzgDiagnosticSample?.workerKzgSchedulerBatchFallbackCount,
             commitWorkerCount: kzgDiagnosticSample?.workerCommitWorkerCount,
           },
           samples: perfSamples,
