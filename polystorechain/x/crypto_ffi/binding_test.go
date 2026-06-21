@@ -105,6 +105,30 @@ func TestDecodePayloadFromMduZeroLen(t *testing.T) {
 	}
 }
 
+func TestVerifyMdu0RootTableProofRejectsWrongTargetRoot(t *testing.T) {
+	path := mustFindTrustedSetup(t)
+	if err := Init(path); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	const mduIndex = uint64(4097)
+	targetRoot := deterministicRoot(mduIndex)
+	polyfsRoot, mdu0 := buildBenchmarkMdu0(t, mduIndex, targetRoot)
+	rootTableDuCommitment, rootTableDuMerkleProof, rootTableOpeningProof, _, err := ComputeMdu0RootTableProof(mdu0, mduIndex, targetRoot)
+	if err != nil {
+		t.Fatalf("ComputeMdu0RootTableProof failed: %v", err)
+	}
+
+	wrongTargetRoot := deterministicRoot(mduIndex + 1)
+	ok, err := VerifyMdu0RootTableProof(polyfsRoot, mduIndex, wrongTargetRoot, rootTableDuCommitment, rootTableDuMerkleProof, rootTableOpeningProof)
+	if err != nil {
+		t.Fatalf("VerifyMdu0RootTableProof returned error for wrong root: %v", err)
+	}
+	if ok {
+		t.Fatal("VerifyMdu0RootTableProof accepted a mismatched target MDU root")
+	}
+}
+
 func BenchmarkVerifyMdu0RootTableProof(b *testing.B) {
 	path := mustFindTrustedSetup(b)
 	if err := Init(path); err != nil {
