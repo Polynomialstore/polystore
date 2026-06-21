@@ -124,6 +124,13 @@ At `MsgUpdateDealContent*` time:
 - Validate `polyfs_root` format (32-byte MDU #0 Merkle root; see `rfcs/rfc-polyfs-root-contract.md`)
 - Require `size_bytes > 0`
 - Require `total_mdus > 0` and `witness_mdus >= 0` (new fields in message; see §4)
+- Enforce the MDU #0 root-table capacity invariant from `rfcs/rfc-polyfs-root-contract.md`:
+  - `total_mdus = 1 + witness_mdus + user_mdus`
+  - `witness_mdus < total_mdus`
+  - `user_mdus = total_mdus - 1 - witness_mdus`
+  - `witness_mdus + user_mdus <= 65,536`
+  - equivalently, `total_mdus <= 65,537`
+  - reject the commit if these bounds would let a verifier derive `root_table_du >= 16`
 - Set:
   - `Deal.polyfs_root = new`
   - `Deal.size_bytes = new`
