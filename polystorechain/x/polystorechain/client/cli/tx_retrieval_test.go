@@ -6,19 +6,21 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+
+	"polystorechain/x/polystorechain/types"
 )
 
 func TestDecodeHexBytes(t *testing.T) {
-	value := "0x" + strings.Repeat("11", 48)
-	out, err := decodeHexBytes(value, 48)
+	value := "0x" + strings.Repeat("11", types.POLYFS_ROOT_SIZE)
+	out, err := decodeHexBytes(value, types.POLYFS_ROOT_SIZE)
 	if err != nil {
 		t.Fatalf("decodeHexBytes failed: %v", err)
 	}
-	if len(out) != 48 {
-		t.Fatalf("expected 48 bytes, got %d", len(out))
+	if len(out) != types.POLYFS_ROOT_SIZE {
+		t.Fatalf("expected %d bytes, got %d", types.POLYFS_ROOT_SIZE, len(out))
 	}
 
-	_, err = decodeHexBytes("0x"+strings.Repeat("22", 16), 48)
+	_, err = decodeHexBytes("0x"+strings.Repeat("22", 16), types.POLYFS_ROOT_SIZE)
 	if err == nil {
 		t.Fatal("expected error for invalid length")
 	}

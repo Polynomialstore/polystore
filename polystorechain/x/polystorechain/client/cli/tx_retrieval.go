@@ -303,7 +303,7 @@ func CmdOpenRetrievalSession() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			manifestRoot, err := decodeHexBytes(manifestHex, 48)
+			manifestRoot, err := decodeHexBytes(manifestHex, types.POLYFS_ROOT_SIZE)
 			if err != nil {
 				return err
 			}
