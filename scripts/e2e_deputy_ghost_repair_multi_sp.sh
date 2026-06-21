@@ -5,7 +5,7 @@
 # 1) Start devnet alpha multi-SP stack.
 # 2) Create a Mode 2 deal.
 # 3) Upload + commit a file (PolyFS).
-# 4) Plan a retrieval session for the first blob and open it on-chain.
+# 4) Plan a retrieval session for an active single-slot blob and open it on-chain.
 # 5) Kill the assigned slot provider ("ghost").
 # 6) Fetch through the router: it should fall back to a deputy provider.
 # 7) Deputy submits the on-chain retrieval proof.
@@ -170,6 +170,49 @@ for s in slots:
     sys.exit(0)
 print("")
 ' "$slot_index"
+}
+
+active_data_slot_json() {
+  local data_shards="$1"
+  python3 -c '
+import json, sys
+try:
+  data_shards = int(sys.argv[1])
+except Exception:
+  data_shards = 8
+try:
+  data = json.load(sys.stdin)
+except Exception:
+  print("")
+  raise SystemExit(0)
+deal = data.get("deal") or {}
+slots = deal.get("mode2_slots") or []
+for s in slots:
+  if not isinstance(s, dict):
+    continue
+  try:
+    slot = int(s.get("slot", ""))
+  except Exception:
+    continue
+  if slot < 0 or slot >= data_shards:
+    continue
+  status = s.get("status")
+  active = status == "SLOT_STATUS_ACTIVE" or status == 1 or status == "1"
+  provider = (s.get("provider") or "").strip()
+  if active and provider:
+    print(json.dumps(s))
+    raise SystemExit(0)
+print("")
+' "$data_shards"
+}
+
+mode2_data_shards_from_hint() {
+  python3 -c '
+import re, sys
+hint = sys.argv[1] if len(sys.argv) > 1 else ""
+m = re.search(r"rs=(\d+)\s*\+\s*(\d+)", hint)
+print(m.group(1) if m else "8")
+' "$1"
 }
 
 extract_last_json() {
@@ -461,6 +504,7 @@ fi
 echo "==> Using deal owner: $FAUCET_ADDR"
 
 SERVICE_HINT="General:rs=8+4"
+MODE2_DATA_SHARDS="$(mode2_data_shards_from_hint "$SERVICE_HINT")"
 
 echo "==> Creating Mode 2 deal..."
 CREATE_RES_RAW="$("$POLYSTORECHAIND_BIN" tx "$CHAIN_MODULE_CLI_NAME" create-deal "$DEAL_DURATION_BLOCKS" 1000000 500000 \
@@ -504,6 +548,11 @@ FILENAME="$(echo "$UPLOAD_RESP" | python3 -c 'import sys, json; j=json.load(sys.
 
 if [ -z "$MANIFEST_ROOT" ] || [ -z "$SIZE_BYTES" ] || [ -z "$TOTAL_MDUS" ] || [ -z "$WITNESS_MDUS" ] || [ -z "$FILENAME" ]; then
   echo "ERROR: upload response missing required fields" >&2
+  echo "$UPLOAD_RESP" >&2
+  exit 1
+fi
+if ! [[ "$SIZE_BYTES" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: upload response size_bytes is not numeric: $SIZE_BYTES" >&2
   echo "$UPLOAD_RESP" >&2
   exit 1
 fi
@@ -572,8 +621,43 @@ wait_for_epoch_window "$MIN_GHOST_REPAIR_REMAINING_BLOCKS" 180 1 || {
   exit 1
 }
 
-echo "==> Planning retrieval session for first blob..."
-PLAN_RESP="$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/plan-retrieval-session/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(urlencode "$FILENAME")&range_start=0&range_len=$RAW_BLOB_PAYLOAD_BYTES")"
+echo "==> Selecting an active data slot to ghost..."
+ACTIVE_SLOT_JSON=""
+for _ in $(seq 1 30); do
+  DEAL_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID" || echo "{}")"
+  ACTIVE_SLOT_JSON="$(echo "$DEAL_JSON" | active_data_slot_json "$MODE2_DATA_SHARDS")"
+  if [ -n "$ACTIVE_SLOT_JSON" ]; then
+    break
+  fi
+  sleep 1
+done
+if [ -z "$ACTIVE_SLOT_JSON" ]; then
+  echo "ERROR: failed to find an ACTIVE data slot before ghosting" >&2
+  echo "$DEAL_JSON" >&2
+  exit 1
+fi
+TARGET_DATA_SLOT="$(echo "$ACTIVE_SLOT_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("slot",""))' 2>/dev/null || true)"
+TARGET_ACTIVE_PROVIDER="$(echo "$ACTIVE_SLOT_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("provider",""))' 2>/dev/null || true)"
+if [ -z "$TARGET_DATA_SLOT" ] || [ -z "$TARGET_ACTIVE_PROVIDER" ]; then
+  echo "ERROR: active slot selection missing slot/provider" >&2
+  echo "$ACTIVE_SLOT_JSON" >&2
+  exit 1
+fi
+PLAN_RANGE_START="$((TARGET_DATA_SLOT * RAW_BLOB_PAYLOAD_BYTES))"
+if [ "$PLAN_RANGE_START" -ge "$SIZE_BYTES" ]; then
+  echo "ERROR: selected active slot range starts beyond uploaded file" >&2
+  echo "    slot=$TARGET_DATA_SLOT range_start=$PLAN_RANGE_START size_bytes=$SIZE_BYTES data_shards=$MODE2_DATA_SHARDS" >&2
+  exit 1
+fi
+PLAN_RANGE_LEN="$RAW_BLOB_PAYLOAD_BYTES"
+if [ "$((PLAN_RANGE_START + PLAN_RANGE_LEN))" -gt "$SIZE_BYTES" ]; then
+  PLAN_RANGE_LEN="$((SIZE_BYTES - PLAN_RANGE_START))"
+fi
+FETCH_RANGE_END="$((PLAN_RANGE_START + PLAN_RANGE_LEN - 1))"
+echo "    selected slot=$TARGET_DATA_SLOT active_provider=$TARGET_ACTIVE_PROVIDER range=${PLAN_RANGE_START}-${FETCH_RANGE_END}"
+
+echo "==> Planning retrieval session for selected blob..."
+PLAN_RESP="$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/plan-retrieval-session/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(urlencode "$FILENAME")&range_start=$PLAN_RANGE_START&range_len=$PLAN_RANGE_LEN")"
 PLAN_PROVIDER="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("provider",""))' 2>/dev/null || true)"
 PLAN_PROVIDER_SOURCE="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("provider_source",""))' 2>/dev/null || true)"
 PLAN_MODE2_SLOT="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; v=json.load(sys.stdin).get("mode2_slot",""); print("" if v is None else v)' 2>/dev/null || true)"
@@ -585,6 +669,11 @@ PLAN_START_BLOB="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.
 PLAN_BLOB_COUNT="$(echo "$PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("blob_count",""))' 2>/dev/null || true)"
 if [ -z "$PLAN_PROVIDER" ] || [ -z "$PLAN_MODE2_SLOT" ] || [ -z "$PLAN_START_MDU" ] || [ -z "$PLAN_START_BLOB" ] || [ -z "$PLAN_BLOB_COUNT" ]; then
   echo "ERROR: plan response missing required fields" >&2
+  echo "$PLAN_RESP" >&2
+  exit 1
+fi
+if [ "$PLAN_MODE2_SLOT" != "$TARGET_DATA_SLOT" ]; then
+  echo "ERROR: planned slot does not match selected active slot (selected=$TARGET_DATA_SLOT planned=$PLAN_MODE2_SLOT)" >&2
   echo "$PLAN_RESP" >&2
   exit 1
 fi
@@ -614,14 +703,13 @@ echo "==> Simulating ghosting: stopping planned provider..."
 kill_provider_listener "$PORT"
 sleep 1
 
-echo "==> Fetching first blob via router (should fall back to deputy)..."
+echo "==> Fetching selected blob via router (should fall back to deputy)..."
 OUT_FILE="$(mktemp)"
 HDR_FILE="$(mktemp)"
-start_end="$((RAW_BLOB_PAYLOAD_BYTES - 1))"
 FETCH_EXIT=0
 HTTP_CODE="$(timeout 120s curl -sS -D "$HDR_FILE" -o "$OUT_FILE" \
   -H "X-PolyStore-Session-Id: $SESSION_HEX" \
-  -H "Range: bytes=0-${start_end}" \
+  -H "Range: bytes=${PLAN_RANGE_START}-${FETCH_RANGE_END}" \
   "$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(urlencode "$FILENAME")" \
   -w '%{http_code}')" || FETCH_EXIT=$?
 
@@ -711,7 +799,7 @@ fi
 echo "    repair started: slot=$REPAIR_SLOT_INDEX pending_provider=$PENDING_PROVIDER repair_target_gen=$REPAIR_TARGET_GEN"
 
 echo "==> Confirming planner routes around repairing slots..."
-PLAN2_RESP="$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/plan-retrieval-session/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(urlencode "$FILENAME")&range_start=0&range_len=$RAW_BLOB_PAYLOAD_BYTES")"
+PLAN2_RESP="$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/plan-retrieval-session/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(urlencode "$FILENAME")&range_start=$PLAN_RANGE_START&range_len=$PLAN_RANGE_LEN")"
 PLAN2_PROVIDER="$(echo "$PLAN2_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("provider",""))' 2>/dev/null || true)"
 PLAN2_START_MDU="$(echo "$PLAN2_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("start_mdu_index",""))' 2>/dev/null || true)"
 PLAN2_START_BLOB="$(echo "$PLAN2_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("start_blob_index",""))' 2>/dev/null || true)"
@@ -730,13 +818,13 @@ fi
 open_retrieval_session "$PENDING_PROVIDER" "$PLAN2_START_MDU" "$PLAN2_START_BLOB" "$PLAN2_BLOB_COUNT"
 PENDING_SESSION_HEX="$OPEN_SESSION_HEX"
 
-echo "==> Fetching first blob via pending provider..."
+echo "==> Fetching selected blob via pending provider..."
 PENDING_OUT_FILE="$(mktemp)"
 PENDING_HDR_FILE="$(mktemp)"
 PENDING_FETCH_EXIT=0
 PENDING_HTTP_CODE="$(timeout 120s curl -sS -D "$PENDING_HDR_FILE" -o "$PENDING_OUT_FILE" \
   -H "X-PolyStore-Session-Id: $PENDING_SESSION_HEX" \
-  -H "Range: bytes=0-${start_end}" \
+  -H "Range: bytes=${PLAN_RANGE_START}-${FETCH_RANGE_END}" \
   "$GATEWAY_BASE/gateway/fetch/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(urlencode "$FILENAME")" \
   -w '%{http_code}')" || PENDING_FETCH_EXIT=$?
 if [ "$PENDING_FETCH_EXIT" -ne 0 ]; then
