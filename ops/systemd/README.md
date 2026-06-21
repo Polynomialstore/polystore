@@ -49,6 +49,17 @@ sudo systemctl restart polystorechaind && sudo systemctl status --no-pager polys
 ./scripts/redeploy_polystorechaind.sh --verify-only
 ```
 
+### Full Devnet Stack Rollout
+
+For proof-format-coupled changes that must update the chain, gateway, faucet,
+CLI, runtime library, and all local providers together, use:
+
+- runbook: `docs/devnet-polyfs-root-rollout.md`
+- script: `scripts/update_devnet_stack.sh`
+
+The stack rollout script covers provider1 through provider4 and restarts tunnel
+services only when `--restart-tunnels` is supplied.
+
 4) Tail logs:
 
 ```bash
