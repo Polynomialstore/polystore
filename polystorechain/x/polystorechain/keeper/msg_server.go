@@ -46,8 +46,8 @@ func parseOptionalManifestRootField(value string, label string) ([]byte, error) 
 		return nil, nil
 	}
 	decoded, err := hex.DecodeString(strings.TrimPrefix(trimmed, "0x"))
-	if err != nil || len(decoded) != 48 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("%s must be empty or a 48-byte hex manifest root", label)
+	if err != nil || len(decoded) != types.POLYFS_ROOT_SIZE {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("%s must be empty or a 32-byte hex PolyFS root", label)
 	}
 	return decoded, nil
 }
@@ -67,6 +67,72 @@ func validatePreviousManifestRootMatch(previous []byte, current []byte) error {
 		"stale previous_manifest_root (expected %s, got %s)",
 		manifestRootHexOrEmpty(current),
 		manifestRootHexOrEmpty(previous),
+	)
+}
+
+func flattenProofPath(path [][]byte) ([]byte, bool) {
+	if len(path) == 0 {
+		return nil, false
+	}
+	flattened := make([]byte, 0, len(path)*32)
+	for _, node := range path {
+		if len(node) != 32 {
+			return nil, false
+		}
+		flattened = append(flattened, node...)
+	}
+	return flattened, true
+}
+
+func verifyPolyFSChainedProof(polyfsRoot []byte, chainedProof *types.ChainedProof, leafCount uint64) (bool, error) {
+	if chainedProof == nil {
+		return false, nil
+	}
+	if chainedProof.MduIndex == 0 {
+		return false, nil
+	}
+	if len(polyfsRoot) != types.POLYFS_ROOT_SIZE ||
+		len(chainedProof.MduRootFr) != 32 ||
+		len(chainedProof.ManifestOpening) != 48 ||
+		len(chainedProof.RootTableDuCommitment) != 48 ||
+		len(chainedProof.BlobCommitment) != 48 ||
+		len(chainedProof.ZValue) != 32 ||
+		len(chainedProof.YValue) != 32 ||
+		len(chainedProof.KzgOpeningProof) != 48 {
+		return false, nil
+	}
+	if uint64(chainedProof.BlobIndex) >= leafCount {
+		return false, nil
+	}
+	rootTableMerkle, ok := flattenProofPath(chainedProof.RootTableDuMerklePath)
+	if !ok {
+		return false, nil
+	}
+	blobMerkle, ok := flattenProofPath(chainedProof.MerklePath)
+	if !ok {
+		return false, nil
+	}
+
+	ok, err := crypto_ffi.VerifyMdu0RootTableProof(
+		polyfsRoot,
+		chainedProof.MduIndex,
+		chainedProof.MduRootFr,
+		chainedProof.RootTableDuCommitment,
+		rootTableMerkle,
+		chainedProof.ManifestOpening,
+	)
+	if err != nil || !ok {
+		return ok, err
+	}
+	return crypto_ffi.VerifyMduProof(
+		chainedProof.MduRootFr,
+		chainedProof.BlobCommitment,
+		blobMerkle,
+		chainedProof.BlobIndex,
+		leafCount,
+		chainedProof.ZValue,
+		chainedProof.YValue,
+		chainedProof.KzgOpeningProof,
 	)
 }
 
@@ -852,8 +918,8 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 
 	// Atomic Update
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(msg.Cid, "0x"))
-	if err != nil || len(manifestRoot) != 48 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid manifest root (must be 48-byte hex): %s", msg.Cid)
+	if err != nil || len(manifestRoot) != types.POLYFS_ROOT_SIZE {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid PolyFS root (must be 32-byte hex): %s", msg.Cid)
 	}
 
 	if !bytes.Equal(deal.ManifestRoot, manifestRoot) {
@@ -1036,8 +1102,8 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	}
 
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(intent.Cid, "0x"))
-	if err != nil || len(manifestRoot) != 48 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid manifest root: %s", intent.Cid)
+	if err != nil || len(manifestRoot) != types.POLYFS_ROOT_SIZE {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid PolyFS root: %s", intent.Cid)
 	}
 
 	if !bytes.Equal(deal.ManifestRoot, manifestRoot) {
@@ -1190,14 +1256,6 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if chainedProof == nil {
 			return false, nil
 		}
-		if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 ||
-			len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
-			len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
-			return false, nil
-		}
-		if len(deal.ManifestRoot) != 48 {
-			return false, nil
-		}
 		if uint64(chainedProof.BlobIndex) >= stripe.leafCount {
 			return false, nil
 		}
@@ -1240,19 +1298,16 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			}
 		}
 
-		flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
-		for _, node := range chainedProof.MerklePath {
-			if len(node) != 32 {
-				return false, nil
-			}
-			flattenedMerkle = append(flattenedMerkle, node...)
-		}
-
 		if logInput {
+			flattenedMerkle, _ := flattenProofPath(chainedProof.MerklePath)
+			flattenedRootTableMerkle, _ := flattenProofPath(chainedProof.RootTableDuMerklePath)
 			ctx.Logger().Info("VerifyChainedProof Input",
-				"ManifestRoot", hex.EncodeToString(deal.ManifestRoot),
+				"PolyFSRoot", hex.EncodeToString(deal.ManifestRoot),
 				"MduIndex", chainedProof.MduIndex,
 				"MduRootFr", hex.EncodeToString(chainedProof.MduRootFr),
+				"RootTableDuCommitment", hex.EncodeToString(chainedProof.RootTableDuCommitment),
+				"RootTableMerklePath", hex.EncodeToString(flattenedRootTableMerkle),
+				"RootTableOpening", hex.EncodeToString(chainedProof.ManifestOpening),
 				"BlobCommitment", hex.EncodeToString(chainedProof.BlobCommitment),
 				"BlobIndex", chainedProof.BlobIndex,
 				"MerklePath", hex.EncodeToString(flattenedMerkle),
@@ -1262,23 +1317,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			)
 		}
 
-		v, err := crypto_ffi.VerifyChainedProof(
-			deal.ManifestRoot,
-			chainedProof.MduIndex,
-			chainedProof.ManifestOpening,
-			chainedProof.MduRootFr,
-			chainedProof.BlobCommitment,
-			uint64(chainedProof.BlobIndex),
-			stripe.leafCount,
-			flattenedMerkle,
-			chainedProof.ZValue,
-			chainedProof.YValue,
-			chainedProof.KzgOpeningProof,
-		)
-		if err != nil {
-			return false, err
-		}
-		return v, nil
+		return verifyPolyFSChainedProof(deal.ManifestRoot, chainedProof, stripe.leafCount)
 	}
 
 	epochStartHeight := int64(1)
@@ -2209,8 +2248,8 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	if msg == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
 	}
-	if len(msg.ManifestRoot) != 48 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 48 bytes")
+	if len(msg.ManifestRoot) != types.POLYFS_ROOT_SIZE {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 32 bytes")
 	}
 	if msg.BlobCount == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob_count must be > 0")
@@ -2227,7 +2266,7 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	if height >= deal.EndBlock {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
 	}
-	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
+	if len(deal.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root does not match current deal state")
 	}
 
@@ -2490,8 +2529,8 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 	if msg == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
 	}
-	if len(msg.ManifestRoot) != 48 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 48 bytes")
+	if len(msg.ManifestRoot) != types.POLYFS_ROOT_SIZE {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 32 bytes")
 	}
 	if msg.BlobCount == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob_count must be > 0")
@@ -2508,7 +2547,7 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 	if height >= deal.EndBlock {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
 	}
-	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
+	if len(deal.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root does not match current deal state")
 	}
 
@@ -2765,8 +2804,8 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	if msg == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
 	}
-	if len(msg.ManifestRoot) != 48 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 48 bytes")
+	if len(msg.ManifestRoot) != types.POLYFS_ROOT_SIZE {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root must be 32 bytes")
 	}
 	if msg.BlobCount == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob_count must be > 0")
@@ -2803,7 +2842,7 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	if height >= deal.EndBlock {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", msg.DealId, deal.EndBlock)
 	}
-	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
+	if len(deal.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytesEqual(deal.ManifestRoot, msg.ManifestRoot) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("manifest_root does not match current deal state")
 	}
 
@@ -2949,7 +2988,7 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 		if strings.TrimSpace(task.Provider) != strings.TrimSpace(msg.Provider) {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task provider mismatch")
 		}
-		if len(task.ManifestRoot) != 48 || !bytesEqual(task.ManifestRoot, msg.ManifestRoot) {
+		if len(task.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytesEqual(task.ManifestRoot, msg.ManifestRoot) {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("audit task manifest_root mismatch")
 		}
 		if task.StartMduIndex != msg.StartMduIndex ||
@@ -3081,7 +3120,7 @@ func (k msgServer) verifyAndConsumeVoucher(ctx sdk.Context, deal *types.Deal, op
 	if v.DealId != open.DealId {
 		return sdkerrors.ErrUnauthorized.Wrap("voucher deal_id mismatch")
 	}
-	if len(v.ManifestRoot) != 48 || !bytesEqual(v.ManifestRoot, open.ManifestRoot) {
+	if len(v.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytesEqual(v.ManifestRoot, open.ManifestRoot) {
 		return sdkerrors.ErrUnauthorized.Wrap("voucher manifest_root mismatch")
 	}
 	if strings.TrimSpace(v.Provider) != "" && strings.TrimSpace(v.Provider) != strings.TrimSpace(open.Provider) {
@@ -3385,7 +3424,7 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", session.DealId)
 	}
-	if len(deal.ManifestRoot) != 48 || !bytesEqual(deal.ManifestRoot, session.ManifestRoot) {
+	if len(deal.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytesEqual(deal.ManifestRoot, session.ManifestRoot) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("deal manifest_root changed since session open")
 	}
 	if uint64(len(msg.Proofs)) != session.BlobCount {
@@ -3421,43 +3460,7 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	}
 
 	verifyChainedProof := func(chainedProof *types.ChainedProof) (bool, error) {
-		if chainedProof == nil {
-			return false, nil
-		}
-		if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 ||
-			len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
-			len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
-			return false, nil
-		}
-		if len(deal.ManifestRoot) != 48 {
-			return false, nil
-		}
-
-		flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
-		for _, node := range chainedProof.MerklePath {
-			if len(node) != 32 {
-				return false, nil
-			}
-			flattenedMerkle = append(flattenedMerkle, node...)
-		}
-
-		v, err := crypto_ffi.VerifyChainedProof(
-			deal.ManifestRoot,
-			chainedProof.MduIndex,
-			chainedProof.ManifestOpening,
-			chainedProof.MduRootFr,
-			chainedProof.BlobCommitment,
-			uint64(chainedProof.BlobIndex),
-			stripe.leafCount,
-			flattenedMerkle,
-			chainedProof.ZValue,
-			chainedProof.YValue,
-			chainedProof.KzgOpeningProof,
-		)
-		if err != nil {
-			return false, err
-		}
-		return v, nil
+		return verifyPolyFSChainedProof(deal.ManifestRoot, chainedProof, stripe.leafCount)
 	}
 
 	for i := uint64(0); i < session.BlobCount; i++ {

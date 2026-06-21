@@ -313,7 +313,7 @@ func TestSponsoredRetrievalCompletionPaysProofProviderWithoutOwnerEscrowDebit(t 
 		DealId:         resDeal.DealId,
 		Provider:       assignedProvider,
 		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
-		StartMduIndex:  0,
+		StartMduIndex:  proof.MduIndex,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,

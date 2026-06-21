@@ -21,7 +21,7 @@ import (
 var eip712DevChainID = big.NewInt(31337)
 
 func makeManifestRootHex(fill byte) string {
-	return "0x" + hex.EncodeToString(bytes.Repeat([]byte{fill}, 48))
+	return "0x" + hex.EncodeToString(bytes.Repeat([]byte{fill}, types.POLYFS_ROOT_SIZE))
 }
 
 func signCreateIntentEIP712(t *testing.T, intent *types.EvmCreateDealIntent, privKey *ecdsa.PrivateKey) []byte {
@@ -167,8 +167,8 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 		CreatorEvm:           evmAddr.Hex(),
 		DealId:               createRes.DealId,
 		PreviousManifestRoot: "",
-		Cid:                  makeManifestRootHex(0xab), // 48-byte hex
-		SizeBytes:            1024 * 1024 * 100,         // 100 MB
+		Cid:                  makeManifestRootHex(0xab),
+		SizeBytes:            1024 * 1024 * 100, // 100 MB
 		TotalMdus:            3,
 		WitnessMdus:          1,
 		Nonce:                2,

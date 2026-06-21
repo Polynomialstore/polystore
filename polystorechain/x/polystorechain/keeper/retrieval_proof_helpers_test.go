@@ -38,9 +38,9 @@ func commitValidMode2ContentAndProof(
 	require.NoError(t, err)
 	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
-	require.NoError(t, err)
+	const targetMduIndex = uint64(2) // MDU #0 metadata + one witness MDU, then first user MDU.
+	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
+	rootTableDuCommitment, rootTableDuMerklePath, rootTableOpening := mustMdu0RootTableProof(t, mdu0, targetMduIndex, root)
 
 	const leafIndex = uint64(0)
 	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, rsK, rsM, witnessFlat, shards, leafIndex, 0)
@@ -49,22 +49,24 @@ func commitValidMode2ContentAndProof(
 	_, err = msgServer.UpdateDealContent(ctx, &types.MsgUpdateDealContent{
 		Creator:     owner,
 		DealId:      dealID,
-		Cid:         manifestCid,
+		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
 		TotalMdus:   3,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
-	return manifestCid, types.ChainedProof{
-		MduIndex:        0,
-		MduRootFr:       root,
-		ManifestOpening: manifestProof,
-		BlobCommitment:  commitment,
-		MerklePath:      merklePath,
-		BlobIndex:       uint32(leafIndex),
-		ZValue:          z,
-		YValue:          y,
-		KzgOpeningProof: kzgProof,
+	return polyfsCid, types.ChainedProof{
+		MduIndex:              targetMduIndex,
+		MduRootFr:             root,
+		ManifestOpening:       rootTableOpening,
+		RootTableDuCommitment: rootTableDuCommitment,
+		RootTableDuMerklePath: rootTableDuMerklePath,
+		BlobCommitment:        commitment,
+		MerklePath:            merklePath,
+		BlobIndex:             uint32(leafIndex),
+		ZValue:                z,
+		YValue:                y,
+		KzgOpeningProof:       kzgProof,
 	}
 }

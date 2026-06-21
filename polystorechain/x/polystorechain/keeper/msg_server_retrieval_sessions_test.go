@@ -69,10 +69,13 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
-	// Commit a minimal (but valid) manifest: include root at index 0 so proofs can target mdu_index=0.
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
-	require.NoError(t, err)
+	const targetMduIndex = uint64(4097)
+	const witnessMdus = uint64(1)
+	const totalMdus = targetMduIndex + 1
+	const committedSize = (totalMdus - 1 - witnessMdus) * uint64(types.MDU_SIZE)
+
+	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
+	rootTableDuCommitment, rootTableDuMerklePath, rootTableOpening := mustMdu0RootTableProof(t, mdu0, targetMduIndex, root)
 
 	const leafIndex = uint64(0)
 	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, k, m, witnessFlat, shards, leafIndex, 0)
@@ -81,22 +84,22 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     owner,
 		DealId:      resDeal.DealId,
-		Cid:         manifestCid,
-		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
-		WitnessMdus: 1,
+		Cid:         polyfsCid,
+		Size_:       committedSize,
+		TotalMdus:   totalMdus,
+		WitnessMdus: witnessMdus,
 	})
 	require.NoError(t, err)
 	deal, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
 	require.NoError(t, err)
-	require.Len(t, deal.ManifestRoot, 48)
+	require.Len(t, deal.ManifestRoot, types.POLYFS_ROOT_SIZE)
 
 	openRes, err := msgServer.OpenRetrievalSession(f.ctx, &types.MsgOpenRetrievalSession{
 		Creator:        owner,
 		DealId:         resDeal.DealId,
 		Provider:       assignedProvider,
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  targetMduIndex,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
@@ -112,15 +115,17 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 	require.NoError(t, err)
 
 	proof := types.ChainedProof{
-		MduIndex:        0,
-		MduRootFr:       root,
-		ManifestOpening: manifestProof,
-		BlobCommitment:  commitment,
-		MerklePath:      merklePath,
-		BlobIndex:       uint32(leafIndex),
-		ZValue:          z,
-		YValue:          y,
-		KzgOpeningProof: kzgProof,
+		MduIndex:              targetMduIndex,
+		MduRootFr:             root,
+		ManifestOpening:       rootTableOpening,
+		RootTableDuCommitment: rootTableDuCommitment,
+		RootTableDuMerklePath: rootTableDuMerklePath,
+		BlobCommitment:        commitment,
+		MerklePath:            merklePath,
+		BlobIndex:             uint32(leafIndex),
+		ZValue:                z,
+		YValue:                y,
+		KzgOpeningProof:       kzgProof,
 	}
 
 	_, err = msgServer.SubmitRetrievalSessionProof(f.ctx, &types.MsgSubmitRetrievalSessionProof{
@@ -182,8 +187,8 @@ func TestRetrievalSession_OpenRejectsNonceReplay(t *testing.T) {
 	require.NoError(t, err)
 	assignedProvider := resDeal.AssignedProviders[0]
 
-	// Commit any 48-byte manifest_root (no need for KZG verification in this test).
-	manifestRoot := make([]byte, 48)
+	// Commit any 32-byte PolyFS root (no need for KZG verification in this test).
+	manifestRoot := make([]byte, types.POLYFS_ROOT_SIZE)
 	for i := range manifestRoot {
 		manifestRoot[i] = byte(i + 1)
 	}
