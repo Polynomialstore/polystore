@@ -89,15 +89,34 @@ except Exception:
 '
 }
 
+tick_chain_height() {
+  if [ -z "${FAUCET_ADDR:-}" ]; then
+    return 0
+  fi
+  "$POLYSTORECHAIND_BIN" tx bank send faucet "$FAUCET_ADDR" 1aatom \
+    --chain-id "$CHAIN_ID" \
+    --node "$NODE_ADDR" \
+    --home "$CHAIN_HOME" \
+    --keyring-backend test \
+    --yes \
+    --fees 1aatom \
+    --broadcast-mode sync \
+    --output json >/dev/null 2>&1 || true
+}
+
 wait_for_height() {
   local target="$1"
   local attempts="${2:-120}"
   local delay="${3:-1}"
+  local drive_height="${4:-0}"
   for _ in $(seq 1 "$attempts"); do
     local h
     h="$(rpc_height)"
     if [ "$h" -ge "$target" ]; then
       return 0
+    fi
+    if [ "$drive_height" = "1" ]; then
+      tick_chain_height
     fi
     sleep "$delay"
   done
@@ -772,6 +791,7 @@ for _ in $(seq 1 180); do
   if { [ "$SLOT_STATUS" = "SLOT_STATUS_REPAIRING" ] || [ "$SLOT_STATUS" = "2" ]; } && [ -n "$PENDING_PROVIDER" ]; then
     break
   fi
+  tick_chain_height
   sleep 1
 done
 if [ -z "$REPAIR_SLOT_JSON" ]; then
@@ -866,7 +886,8 @@ NEXT_EPOCH_END="$(( ( (CUR_H + EPOCH_LEN - 1) / EPOCH_LEN ) * EPOCH_LEN ))"
 if [ "$NEXT_EPOCH_END" -le "$CUR_H" ]; then
   NEXT_EPOCH_END="$((CUR_H + EPOCH_LEN))"
 fi
-wait_for_height "$NEXT_EPOCH_END" 180 1 || { echo "ERROR: timed out waiting for repair-completion epoch end" >&2; exit 1; }
+echo "    current_height=$CUR_H target_epoch_end_height=$NEXT_EPOCH_END"
+wait_for_height "$NEXT_EPOCH_END" 180 1 1 || { echo "ERROR: timed out waiting for repair-completion epoch end" >&2; exit 1; }
 sleep 2
 
 FINAL_DEAL_JSON="$(timeout 10s curl -sS "$LCD_BASE/polystorechain/polystorechain/v1/deals/$DEAL_ID")"
