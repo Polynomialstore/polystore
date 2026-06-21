@@ -122,7 +122,7 @@ DEAL_ID=$(echo "$CREATE_TX" | jq -r '(.logs[0].events[]? // .events[]?) | select
 echo "[E2E] Deal ID: $DEAL_ID"
 
 echo "[E2E] Committing dummy content..."
-DUMMY_MANIFEST_ROOT="0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+DUMMY_MANIFEST_ROOT="0x0000000000000000000000000000000000000000000000000000000000000000"
 UPDATE_RES=$(yes | "$BINARY" tx polystorechain update-deal-content --deal-id "$DEAL_ID" --cid "$DUMMY_MANIFEST_ROOT" --size 1024 --total-mdus 3 --witness-mdus 1 --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 UPDATE_HASH=$(echo "$UPDATE_RES" | jq -r '.txhash')
 sleep 4

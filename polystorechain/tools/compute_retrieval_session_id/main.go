@@ -17,7 +17,7 @@ func main() {
 		owner          = flag.String("owner", "", "bech32 owner address")
 		dealID         = flag.Uint64("deal-id", 0, "deal id")
 		provider       = flag.String("provider", "", "bech32 provider address")
-		manifestRoot   = flag.String("manifest-root", "", "48-byte manifest root as hex, with or without 0x")
+		manifestRoot   = flag.String("manifest-root", "", "32-byte PolyFS root as hex, with or without 0x")
 		startMduIndex  = flag.Uint64("start-mdu-index", 0, "start mdu index")
 		startBlobIndex = flag.Uint("start-blob-index", 0, "start blob index")
 		blobCount      = flag.Uint64("blob-count", 0, "blob count")

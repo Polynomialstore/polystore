@@ -2291,7 +2291,7 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := parseManifestRootOrEmpty(rawPreviousManifestRoot); err != nil {
-		http.Error(w, "previous_manifest_root must be empty or a valid 48-byte manifest root", http.StatusBadRequest)
+		http.Error(w, "previous_manifest_root must be empty or a valid 32-byte PolyFS root", http.StatusBadRequest)
 		return
 	}
 	rawDealID, okDealID := req.Intent["deal_id"]
