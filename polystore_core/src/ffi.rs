@@ -758,6 +758,144 @@ pub extern "C" fn polystore_compute_blob_proof(
     }
 }
 
+/// Computes the V2 MDU #0 root-table proof material for a target MDU root.
+///
+/// Inputs:
+/// - mdu0_bytes: full 8 MiB MDU #0 bytes.
+/// - mdu_index: target MDU index after MDU #0; valid range is 1..=65536.
+/// - target_mdu_root: 32-byte target MDU Merkle root.
+///
+/// Outputs:
+/// - out_root_table_du_commitment: 48-byte KZG commitment for the root-table DU.
+/// - out_root_table_du_merkle_proof: serialized Merkle path from that DU to polyfs_root.
+/// - out_root_table_du_merkle_proof_len: in/out capacity and actual length.
+/// - out_root_table_opening_proof: 48-byte KZG proof for the root-table cell.
+/// - out_root_table_opening_y: 32-byte opened field value for diagnostics/parity.
+#[unsafe(no_mangle)]
+pub extern "C" fn polystore_compute_mdu0_root_table_proof(
+    mdu0_bytes: *const u8,
+    mdu0_bytes_len: usize,
+    mdu_index: u64,
+    target_mdu_root: *const u8,
+    out_root_table_du_commitment: *mut u8,
+    out_root_table_du_merkle_proof: *mut u8,
+    out_root_table_du_merkle_proof_len: *mut usize,
+    out_root_table_opening_proof: *mut u8,
+    out_root_table_opening_y: *mut u8,
+) -> c_int {
+    let ctx = match KZG_CTX.get() {
+        Some(c) => c,
+        None => return -1, // Not initialized
+    };
+
+    if mdu0_bytes.is_null()
+        || target_mdu_root.is_null()
+        || out_root_table_du_commitment.is_null()
+        || out_root_table_du_merkle_proof.is_null()
+        || out_root_table_du_merkle_proof_len.is_null()
+        || out_root_table_opening_proof.is_null()
+        || out_root_table_opening_y.is_null()
+        || mdu0_bytes_len != crate::kzg::MDU_SIZE
+    {
+        return -2;
+    }
+
+    let mdu0_slice = unsafe { std::slice::from_raw_parts(mdu0_bytes, mdu0_bytes_len) };
+    let target_root_slice = unsafe { std::slice::from_raw_parts(target_mdu_root, 32) };
+
+    match ctx.compute_mdu0_root_table_proof(mdu0_slice, mdu_index, target_root_slice) {
+        Ok(proof) => {
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    proof.root_table_du_commitment.as_slice().as_ptr(),
+                    out_root_table_du_commitment,
+                    48,
+                );
+                std::ptr::copy_nonoverlapping(
+                    proof.root_table_opening_proof.as_slice().as_ptr(),
+                    out_root_table_opening_proof,
+                    48,
+                );
+                std::ptr::copy_nonoverlapping(
+                    proof.root_table_opening_y.as_slice().as_ptr(),
+                    out_root_table_opening_y,
+                    32,
+                );
+
+                let proof_len = proof.root_table_du_merkle_proof.len();
+                if *out_root_table_du_merkle_proof_len < proof_len {
+                    *out_root_table_du_merkle_proof_len = proof_len;
+                    return -7; // Buffer too small
+                }
+                std::ptr::copy_nonoverlapping(
+                    proof.root_table_du_merkle_proof.as_ptr(),
+                    out_root_table_du_merkle_proof,
+                    proof_len,
+                );
+                *out_root_table_du_merkle_proof_len = proof_len;
+            }
+            0
+        }
+        Err(_e) => {
+            #[cfg(feature = "debug-print")]
+            eprintln!("ERROR: Failed to compute MDU0 root-table proof");
+            -3
+        }
+    }
+}
+
+/// Verifies the V2 Hop 1 path:
+/// polyfs_root -> MDU #0 root-table DU commitment -> target MDU root.
+#[unsafe(no_mangle)]
+pub extern "C" fn polystore_verify_mdu0_root_table_proof(
+    polyfs_root: *const u8,
+    mdu_index: u64,
+    target_mdu_root: *const u8,
+    root_table_du_commitment: *const u8,
+    root_table_du_merkle_proof: *const u8,
+    root_table_du_merkle_proof_len: usize,
+    root_table_opening_proof: *const u8,
+) -> c_int {
+    let ctx = match KZG_CTX.get() {
+        Some(c) => c,
+        None => return -1, // Not initialized
+    };
+
+    if polyfs_root.is_null()
+        || target_mdu_root.is_null()
+        || root_table_du_commitment.is_null()
+        || root_table_du_merkle_proof.is_null()
+        || root_table_opening_proof.is_null()
+    {
+        return -2;
+    }
+
+    let polyfs_root_slice = unsafe { std::slice::from_raw_parts(polyfs_root, 32) };
+    let target_root_slice = unsafe { std::slice::from_raw_parts(target_mdu_root, 32) };
+    let du_commitment_slice = unsafe { std::slice::from_raw_parts(root_table_du_commitment, 48) };
+    let du_merkle_proof_slice = unsafe {
+        std::slice::from_raw_parts(root_table_du_merkle_proof, root_table_du_merkle_proof_len)
+    };
+    let opening_proof_slice = unsafe { std::slice::from_raw_parts(root_table_opening_proof, 48) };
+
+    match ctx.verify_mdu0_root_table_proof(
+        polyfs_root_slice,
+        mdu_index,
+        target_root_slice,
+        du_commitment_slice,
+        du_merkle_proof_slice,
+        opening_proof_slice,
+    ) {
+        Ok(true) => 1,
+        Ok(false) => 0,
+        Err(_e) => {
+            #[cfg(feature = "debug-print")]
+            eprintln!("ERROR: MDU0 root-table proof verification error");
+            -3
+        }
+    }
+}
+
 /// Verifies a "Triple Proof" (Chained Verification).
 ///
 /// Hop 1: Verify MDU Root is in Manifest (KZG).
