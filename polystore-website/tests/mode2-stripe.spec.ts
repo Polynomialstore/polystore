@@ -257,12 +257,14 @@ async function completeUploadAndCommit(
       await uploadBtn.click({ force: true })
       await expect
         .poll(async () => {
+          if (await isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true)) return true
           const enabled = await commitBtn.isEnabled().catch(() => false)
           if (enabled) return true
           const text = ((await uploadBtn.textContent().catch(() => '')) || '').trim()
           return /Upload Complete/i.test(text)
         }, { timeout: 120_000 })
         .toBe(true)
+      if (await isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true)) return
     }
     await page.waitForTimeout(500)
   }
