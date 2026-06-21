@@ -235,7 +235,7 @@ fi
 echo "Deal ID: $DEAL_ID"
 
 MANIFEST_ROOT="0x$(python3 - <<'PY'
-print("11" * 48)
+print("11" * 32)
 PY
 )"
 SIZE_BYTES=131072
