@@ -51,7 +51,7 @@ For each file payload (plaintext):
 ### 3.2 Download pipeline (normative)
 
 1) Retrieve ciphertext bytes (session-gated).
-2) Verify proofs against `Deal.manifest_root`.
+2) Verify proofs against `Deal.polyfs_root` (the MDU #0 PolyFS root).
 3) Decrypt to recover wrapped bytes.
 4) Parse header and:
    - if `encoding == NONE`: return payload bytes,

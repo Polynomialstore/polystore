@@ -60,7 +60,7 @@ From Deal state:
 1. If `deal_creation_fee > 0`, transfer `deal_creation_fee` from creator → fee collector.
 2. If `initial_escrow_amount > 0`, transfer `initial_escrow_amount` from creator → module account.
 3. Initialize deal with:
-   - `manifest_root = empty`
+   - `polyfs_root = empty`
    - `size_bytes = 0`
    - `total_mdus = 0` (until first commit; see `rfcs/rfc-mode2-onchain-state.md`)
    - `escrow_balance = initial_escrow_amount`
@@ -118,7 +118,7 @@ Let:
 
 **Must-fail conditions:**
 - `Deal.escrow_balance < total` → reject
-- `manifest_root` must match `Deal.manifest_root` (pin)
+- `polyfs_root` must match `Deal.polyfs_root` (pin)
 
 **Accounting at open:**
 1. Burn `base_fee` from module account (non-refundable).
@@ -196,4 +196,3 @@ elasticity_cost = base_stripe_cost * delta_replication
 - Storage lock-in: update content with increasing size charges `delta*duration*price` and rejects if insufficient funds.
 - Retrieval fees: open burns base fee, locks variable, completion burns cut + pays provider, cancel refunds variable.
 - Elasticity: scaling denied when exceeding `max_monthly_spend` or `escrow_balance`.
-

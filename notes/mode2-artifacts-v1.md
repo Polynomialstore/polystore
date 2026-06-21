@@ -6,11 +6,11 @@ The goal is that the **gateway** and the **browser/WASM** implementation can pro
 
 ## Directory Roots
 
-- **Gateway (disk):** `polystore_gateway/uploads/deals/<deal_id>/<manifest_root_key>/`
+- **Gateway (disk):** `polystore_gateway/uploads/deals/<deal_id>/<polyfs_root_key>/`
 - **Browser (OPFS):** `OPFS:/deal-<deal_id>/`
 
-`manifest_root_key` is a filesystem-safe key derived from the 48-byte manifest root:
-- canonical form `0x<96 hex chars>`
+`polyfs_root_key` is a filesystem-safe key derived from the 32-byte PolyFS root:
+- canonical form `0x<64 hex chars>`
 - key form: lowercased hex **without** the `0x` prefix
 
 ## Required Files (within the directory)
@@ -37,10 +37,12 @@ For each provider slot `slot` (0..N-1), where `N = K + M`, store:
   - length = `rows * BLOB_SIZE`
   - where `rows = 64 / K` and `BLOB_SIZE = 128 KiB`
 
-### Manifest Blob
+### Legacy Flat Manifest Blob
 
 - `manifest.bin`
-  - 128 KiB manifest blob produced alongside the 48-byte manifest commitment (the on-chain `manifest_root`)
+  - Legacy alpha/debug artifact produced alongside the retired 48-byte flat manifest commitment.
+  - New PolyFS-root deals MUST NOT require this file for fetch, proof generation, repair, or trust-root validation.
+  - If retained during transition, it must be clearly treated as cache/debug data rather than canonical committed state.
 
 ## Determinism Rules
 
@@ -81,7 +83,6 @@ This matches the leaf index mapping used for proofs:
 Golden vectors live in `testdata/mode2-artifacts-v1/` and define expected SHA-256 hashes for:
 - `mdu_0.bin`, witness MDUs
 - all shard files
-- `manifest.bin`
+- any retained legacy/debug `manifest.bin`
 
 These vectors are used by Rust, Go, and web unit tests to enforce deterministic outputs and cross-implementation parity.
-

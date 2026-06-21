@@ -1,41 +1,43 @@
 # Technical Specification: The Triple Proof (PolyFS Volume Architecture)
 
-This mechanism enables the blockchain to verify a specific byte of data (e.g., inside file "video.mp4", MDU #500) while storing only a single 48-byte commitment (`Deal.manifest_root`) for the entire Deal.
+This mechanism enables the blockchain to verify a specific blob of data (e.g., inside file "video.mp4", MDU #500) while storing only a single deal root for the entire Deal.
 
-It uses a **Hybrid Merkle-KZG** architecture to support efficient filesystem mapping and petabyte scalability.
+It uses a **Hybrid Merkle-KZG** architecture to support efficient filesystem mapping and large slab verification.
+
+**Normative root contract:** `rfcs/rfc-polyfs-root-contract.md` is the source of truth for the MDU #0 trust root migration tracked by issue #212. This note describes the resulting architecture.
 
 ### 0. Naming & API Implications (PolyFS SSoT)
 
-*   **`manifest_root` is deal-level:** A 48-byte KZG commitment anchoring the entire slab (MDU #0 + Witness + User MDUs). Some codepaths may still label this as `cid` as a legacy alias. For REST APIs, it is encoded as **96 hex chars** (optional `0x` prefix) representing the 48-byte compressed G1 value. Gateways MUST normalize consistently:
-    *   Canonical string form for logs/responses: `0x` + lowercase hex (96 chars).
-    *   Canonical on-disk directory key `manifest_root_key`: lowercase hex **without** `0x` (96 chars), derived by decoding then re-encoding (not by string trimming alone).
-    *   Parsing must be strict: reject invalid compressed-point encodings and invalid subgroup points (return `400` in gateway APIs).
-*   **`file_path` is file-level:** The authoritative identifier for a file *within* a deal. Retrieval/proof APIs must be keyed by `(deal_id, manifest_root, file_path)` and resolved from PolyFS (`uploads/<manifest_root_key>/mdu_0.bin` + on-disk `mdu_*.bin`), with no fallback to `uploads/index.json` or “single-file deal” heuristics.
+*   **`polyfs_root` is deal-level:** A 32-byte Merkle root over the 64 KZG commitments of MDU #0. This root anchors the entire slab because MDU #0 contains the root table for all other MDUs. Some transitional codepaths may still label this value `manifest_root` or `cid`; those names are legacy aliases and MUST NOT imply the retired 48-byte flat-manifest KZG root.
+    *   Canonical string form for logs/responses: `0x` + lowercase hex (64 chars).
+    *   Canonical on-disk directory key `polyfs_root_key`: lowercase hex **without** `0x` (64 chars), derived by decoding then re-encoding (not by string trimming alone).
+    *   Parsing must be strict: reject non-hex, wrong-width, or legacy 96-hex roots for new committed deals (return `400` in gateway APIs).
+*   **`file_path` is file-level:** The authoritative identifier for a file *within* a deal. Retrieval/proof APIs must be keyed by `(deal_id, polyfs_root, file_path)` and resolved from PolyFS (`uploads/<polyfs_root_key>/mdu_0.bin` + on-disk `mdu_*.bin`), with no fallback to `uploads/index.json` or “single-file deal” heuristics.
     *   `file_path` MUST be unique within a deal. If an upload targets an existing `file_path`, the gateway must overwrite deterministically (update-in-place or tombstone + replace) so fetch/prove cannot return stale bytes.
     *   `GET /gateway/list-files/...` should return a deduplicated view (latest non-tombstone record per `file_path`). If the on-disk File Table contains ambiguous duplicates, fail fast with a clear non-200 (prefer `409`) until repaired.
 *   **`owner` is access control (gateway):** Gateway REST APIs that serve or prove deal content (e.g., `/gateway/fetch`, `/gateway/list-files`, `/gateway/prove-retrieval`) MUST require the deal owner (`owner`, PolyStore Chain bech32) alongside `deal_id` and verify `(deal_id, owner)` against chain state. Owner mismatches must return a clear non-200 (prefer `403`) as JSON.
 *   **`file_path` must be canonical:** Treat it as a relative, slash-separated path (no leading `/`, no `..` traversal, no `\\` separators, reject empty/whitespace-only). Gateways must decode **at most once** (URL query params are decoded by the HTTP stack; JSON bodies are already-decoded strings) and match case-sensitively against PolyFS File Table entries.
     *   Beware `+` vs `%20`: Go’s query parser treats `+` as space. Clients MUST use `%20` for spaces (JS `encodeURIComponent`) and servers should treat decoded strings as canonical.
-*   **Gateway error contract (target):** Missing/empty/unsafe `file_path` is a hard `400` with a remediation hint; tombstone/not-found is `404`; stale `manifest_root` (doesn’t match chain deal state, including the thin-provisioned “empty root” case) should be a clear non-200 (prefer `409`). Errors MUST be JSON (and set `Content-Type: application/json`) even when the success path is a byte stream.
+*   **Gateway error contract (target):** Missing/empty/unsafe `file_path` is a hard `400` with a remediation hint; tombstone/not-found is `404`; stale `polyfs_root` (doesn’t match chain deal state, including the thin-provisioned “empty root” case) should be a clear non-200 (prefer `409`). Errors MUST be JSON (and set `Content-Type: application/json`) even when the success path is a byte stream.
     *   If the PolyFS File Table is internally inconsistent (e.g., ambiguous duplicate `file_path` entries), the gateway should return a clear non-200 (prefer `409`) rather than serving potentially stale bytes.
 
 ### 1. The Data Model: "Elastic Filesystem on Slab"
 
 We treat the Deal as an **Elastic Volume** (Slab) with a structured layout: **Super-Manifest (MDU #0)**, followed by **Witness MDUs**, and then **User Data MDUs**.
 
-*   **Thin provisioning (no tiers):** Deals are created with `manifest_root = empty`, `size = 0`, `total_mdus = 0` until the first `MsgUpdateDealContent*` commits the initial slab root. Any sizing inputs (e.g., `max_user_mdus` used to size the Witness region) are devnet policy parameters, not user-selected tiers.
+*   **Thin provisioning (no tiers):** Deals are created with `polyfs_root = empty`, `size = 0`, `total_mdus = 0` until the first `MsgUpdateDealContent*` commits the initial slab root. Any sizing inputs (e.g., `max_user_mdus` used to size the Witness region) are devnet policy parameters, not user-selected tiers.
 *   **High-water mark:** Once enforced, `Deal.total_mdus` is the on-chain upper bound for valid `(mdu_index, ...)` challenges/receipts. Some gateway APIs may surface this as `allocated_length` / `total_mdus` in responses.
 
 #### A. On-Chain State (`Deal`)
 
-The blockchain stores a KZG commitment to the Manifest MDU and tracks the "High Water Mark" of the slab in MDUs.
+The blockchain stores `polyfs_root`, the Merkle root of MDU #0's 64 KZG commitments, and tracks the "High Water Mark" of the slab in MDUs.
 
 ```protobuf
 message Deal {
     uint64 id = 1;
-    // 48-byte KZG commitment (BLS12-381 G1, compressed) to the Manifest MDU.
-    // The Manifest MDU commits to the list of per-MDU roots (Hop 1).
-    bytes manifest_root = 2;
+    // 32-byte Merkle root over the 64 KZG commitments for MDU #0.
+    // MDU #0's root table commits to the list of per-MDU roots after MDU #0.
+    bytes polyfs_root = 2;
 
     // Current size of committed content in bytes (mutable).
     uint64 size = 3;
@@ -52,14 +54,15 @@ MDU #0 is an 8 MiB unit strictly partitioned into two regions:
 
 | Blob Range | Content | Format | Capacity |
 | :--- | :--- | :--- | :--- |
-| **0 - 15** | **Root Table** | `[Scalar; 65536]` | Roots for 512GB |
+| **0 - 15** | **Root Table** | `[Scalar; 65536]` | Roots for MDUs #1..#65536 |
 | **16 - 63** | **File Table** | Header + `[FileRecord; N]` | ~98k Files |
 
 **1. The Root Table (Blobs 0-15)**
 A contiguous array of 32-byte BLS12-381 Scalars.
-*   **Indexing:** `RootTable[i]` stores the per‑MDU root (Merkle root encoded as a scalar) for `MDU #(i+1)` in slab order. `RootTable[0]` refers to `MDU #1` (first Witness MDU) and `RootTable[W]` refers to `MDU #(W+1)` (first User Data MDU).
+*   **Indexing:** `RootTable[i]` stores the deterministic field binding for the per-MDU root of `MDU #(i+1)` in slab order. `RootTable[0]` refers to `MDU #1` (first Witness MDU) and `RootTable[W]` refers to `MDU #(W+1)` (first User Data MDU).
 *   **Addressing:** `Root(i)` is located at `Offset = i * 32` within the 2MB region of MDU #0.
-*   **Purpose:** The on-disk “map” for mounting the slab and generating proofs. The chain verifies proofs against `Deal.manifest_root` (the commitment), not by reading `RootTable` directly.
+*   **Encoding:** For each target MDU root, compute `mdu_root_fr = ReduceMduRootToFr(mdu_root)` and store `FrToBytesBE(mdu_root_fr)`. The exact reduction is frozen in `rfcs/rfc-polyfs-root-contract.md`; implementations must not silently choose a different reduction.
+*   **Purpose:** The on-disk "map" for mounting the slab and generating proofs. The chain verifies root-table openings against the MDU #0 DU commitment that is Merkle-included under `Deal.polyfs_root`, not by reading `RootTable` directly.
 
 **2. The File Table (Blobs 16-63)**
 A metadata region describing the files stored within the User Data Slab.
@@ -132,16 +135,21 @@ These are the MDUs that store the actual file content (raw bytes).
     *   If `Target_MDU_Index > 0` and `Target_MDU_Index <= W`: Witness MDU. Hop 2 is to find a Blob commitment for a Data MDU.
     *   If `Target_MDU_Index > W`: User Data MDU. Hop 2 is to find a Data Blob.
 
-3.  **Hop 1: Verify The Map (Deal Manifest -> Target MDU Root) [KZG]**
-    *   *KZG Check:* Verify `VerifyKZG(Deal.manifest_root, Proof.mdu_index, Proof.mdu_root_fr, Proof.manifest_opening)`.
-    *   *Result:* We now trust `Proof.mdu_root_fr` is the true root for `Proof.mdu_index`.
+3.  **Hop 1a: Verify The Super-Manifest DU (Deal Root -> Root-Table DU Commitment) [Merkle]**
+    *   Compute `root_table_index = Target_MDU_Index - 1`, `root_table_du = root_table_index / 4096`, and `root_table_cell = root_table_index % 4096`.
+    *   *Merkle Check:* Verify the supplied root-table DU commitment is included in `Deal.polyfs_root` at `root_table_du`.
 
-4.  **Hop 2: Verify The Molecule (MDU Root -> Blob Commitment) [Merkle]**
+4.  **Hop 1b: Verify The Map Cell (Root-Table DU -> Target MDU Root) [KZG]**
+    *   Derive `mdu_root_fr = ReduceMduRootToFr(Proof.mdu_root)`.
+    *   *KZG Check:* Verify the root-table DU KZG opening at `root_table_cell` returns `mdu_root_fr`.
+    *   *Result:* We now trust `Proof.mdu_root` is the true root for `Proof.mdu_index`.
+
+5.  **Hop 2: Verify The Molecule (MDU Root -> Blob Commitment) [Merkle]**
     *   The prover supplies `Proof.blob_commitment` (48 bytes) and `Proof.merkle_path`.
-    *   *Merkle Check:* Verify `VerifyMerkle(Proof.mdu_root_fr, Proof.blob_commitment, Proof.merkle_path)` (at `Proof.blob_index`).
+    *   *Merkle Check:* Verify `VerifyMerkle(Proof.mdu_root, Proof.blob_commitment, Proof.merkle_path)` (at `Proof.blob_index`).
     *   **Note:** Witness MDUs are an acceleration structure for the prover to *find* `blob_commitment`; they are not required in the on-chain verification chain.
 
-5.  **Hop 3: Verify The Atom (Blob Commitment -> Data Byte) [KZG]**
+6.  **Hop 3: Verify The Atom (Blob Commitment -> Data Byte) [KZG]**
     *   *KZG Check:* Verify `VerifyKZG(Proof.blob_commitment, Proof.z_value, Proof.y_value, Proof.kzg_opening_proof)`.
     *   *Result:* The data byte is valid.
 
@@ -150,11 +158,11 @@ These are the MDUs that store the actual file content (raw bytes).
 ### 3. Lifecycle & Filesystem Logic
 
 #### 3.1 Initialization (Lazy Fill)
-*   **CreateDeal (thin):** `manifest_root = empty`, `size = 0`, `total_mdus = 0`. No content challenges are meaningful until a root is committed.
+*   **CreateDeal (thin):** `polyfs_root = empty`, `size = 0`, `total_mdus = 0`. No content challenges are meaningful until a root is committed.
 *   **First Commit (gateway/provider):**
     1. Initialize a slab as `MDU #0 + W Witness MDUs` (all zero-filled/empty) plus any required User Data MDUs.
-    2. Compute the new `manifest_root`.
-*   **Chain:** User signs `MsgUpdateDealContent*` to set `Deal.manifest_root`, `Deal.size`, and advance `Deal.total_mdus` to reflect the committed slab. Challenges for newly added MDUs become valid when `mdu_index < total_mdus`.
+    2. Compute the new `polyfs_root`.
+*   **Chain:** User signs `MsgUpdateDealContent*` to set `Deal.polyfs_root`, `Deal.size`, and advance `Deal.total_mdus` to reflect the committed slab. Challenges for newly added MDUs become valid when `mdu_index < total_mdus`.
 
 #### 3.2 Sequential Write (Expansion)
 *   **Scenario:** User uploads 1GB file.
@@ -163,7 +171,7 @@ These are the MDUs that store the actual file content (raw bytes).
     2.  Updates `Root Table` in MDU #0 for these User Data MDUs.
     3.  Updates **Witness MDUs** with the KZG Blob Commitments for these User Data MDUs.
     4.  Appends `FileRecord` to `File Table` in MDU #0.
-*   **Chain:** User signs `MsgUpdateDealContent` updating `manifest_root`, `size`, and setting `total_mdus = 1 + W + 125`.
+*   **Chain:** User signs `MsgUpdateDealContent` updating `polyfs_root`, `size`, and setting `total_mdus = 1 + W + 125`.
 *   **Safety:** Challenges for newly added User Data MDUs are now valid (`mdu_index < total_mdus`).
 
 #### 3.3 Deletion & Fragmentation (Tombstones)

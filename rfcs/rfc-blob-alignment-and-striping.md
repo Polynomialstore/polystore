@@ -125,7 +125,7 @@ This section defines the normative flow for a file "Life Cycle" in the striped l
 1.  **Routing:** Using the slot-major mapping, the chain computes `rows = 64 / K` and `slot = leaf_index / rows`. For default `K=8`, `rows = 8`, so `slot = 13 / 8 = 1`, therefore $SP_1$ is responsible.
 2.  **Lookup:** $SP_1$ reads local **Witness MDU** to find `Commitment #13` and sibling commitments.
 3.  **Proof Gen:**
-    *   **Hop 1:** Verify `MDU_Root` vs `Manifest`.
+    *   **Hop 1:** Verify `MDU_Root` through the MDU #0 root table anchored by `Deal.polyfs_root`.
     *   **Hop 2:** Verify `Commitment #13` vs `MDU_Root` (Merkle Proof using Witness data).
     *   **Hop 3:** Verify `Byte` vs `Commitment #13` (KZG Opening using local Data).
 4.  **Submit:** $SP_1$ sends the chained proof. Chain verifies without knowing about striping.

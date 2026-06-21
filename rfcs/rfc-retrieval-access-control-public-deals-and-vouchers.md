@@ -1,9 +1,14 @@
 # RFC: Retrieval Access Control + Sponsored & Protocol Retrieval Sessions (Draft)
 
 **Status:** Implemented in devnet
-**Last updated:** 2026-01-23
+**Last updated:** 2026-06-21
 **Scope:** Chain (`polystorechain/`), Gateway/router (`polystore_gateway/`), Providers, UI (`polystore-website/`), and side projects (public explorers)
 **Hard constraints respected:** does **not** change storage lock‑in pricing or the settlement semantics of **owner‑paid** retrieval sessions in `rfcs/rfc-pricing-and-escrow-accounting.md`; no off-chain oracles; deterministic on-chain behavior.
+
+**Root contract dependency:** retrieval sessions pin the canonical 32-byte
+`Deal.polyfs_root` defined in `rfcs/rfc-polyfs-root-contract.md`. Legacy
+`manifest_root` field names may remain as wire/API aliases during migration, but
+they MUST carry the canonical PolyFS root after the MDU #0 migration.
 
 ---
 
@@ -122,7 +127,7 @@ Fields (conceptual):
 - `creator` (tx signer; pays)
 - `deal_id`
 - `provider` or `slot`
-- `manifest_root`
+- `polyfs_root`
 - `start_mdu_index`, `start_blob_index`, `blob_count`, `expires_at`
 - `auth` (oneof):
   - empty (public mode)
@@ -134,7 +139,7 @@ Handler semantics (normative):
 1) Enforce deal ACTIVE + term coupling:
    - `current_height < Deal.end_block`
    - `expires_at <= Deal.end_block`
-   - `manifest_root == Deal.manifest_root`
+   - `polyfs_root == Deal.polyfs_root`
 2) Enforce deal policy based on `Deal.retrieval_policy` (see §6.2).
 3) Compute `base_fee` and `variable_fee` using the same fee schedule and rounding rules as the frozen RFC.
 4) `total = base_fee + variable_fee`. If `max_total_fee` is set, reject unless `total <= max_total_fee`.
@@ -160,7 +165,7 @@ Fields (conceptual):
 - `purpose` (enum): `PROTOCOL_AUDIT | PROTOCOL_REPAIR`
 - `deal_id`
 - `provider` or `slot` (the *serving* provider/slot for the bytes being fetched)
-- `manifest_root`
+- `polyfs_root`
 - `start_mdu_index`, `start_blob_index`, `blob_count`, `expires_at`
 - `auth` (oneof):
   - `AuditTaskRef { epoch, task_id }` (deterministic audit assignment; see §6.3)
@@ -213,7 +218,7 @@ This budget funds:
 All opens MUST enforce:
 - `current_height < Deal.end_block` (deal ACTIVE)
 - `expires_at <= Deal.end_block`
-- `manifest_root == Deal.manifest_root`
+- `polyfs_root == Deal.polyfs_root`
 - provider/slot belongs to the deal assignment (for striped deals, slot binding must match the current assignment)
 
 ### 6.2 Policy checks for sponsored opens (`MsgOpenRetrievalSessionSponsored`)
@@ -238,7 +243,7 @@ A protocol audit session is only valid if it is bound to a deterministic audit a
 **Normative model (v1 hook):**
 - The chain maintains an `AuditTask` store keyed by `(epoch, task_id)`:
   - `assignee` (provider address)
-  - `deal_id`, `slot/provider`, `manifest_root`
+  - `deal_id`, `slot/provider`, `polyfs_root`
   - `(start_mdu_index, start_blob_index, blob_count)`
   - `expires_at` (bounded TTL)
 - `MsgOpenProtocolRetrievalSession(purpose=PROTOCOL_AUDIT, auth=AuditTaskRef{epoch, task_id})` MUST enforce:
@@ -280,7 +285,7 @@ A voucher is a signature from `voucher_signer` (default owner) authorizing a spe
 Voucher payload MUST include:
 
 - `deal_id`
-- `manifest_root`
+- `polyfs_root`
 - `provider/slot` binding (optional; if omitted, any assigned provider may be used)
 - `start_mdu_index`, `start_blob_index`, `blob_count` (or an explicit max blob_count)
 - `expires_at` (block height)

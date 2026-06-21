@@ -22,28 +22,33 @@ This creates two distinct risks:
 
 ## Model
 Every PolyFS mutation is a generation swap:
-* base generation: `previous_manifest_root = H1`
-* proposed generation: `new_manifest_root = H2`
+* base generation: `previous_polyfs_root = H1`
+* proposed generation: `new_polyfs_root = H2`
+
+`previous_manifest_root` and `new_manifest_root` are legacy alpha aliases only
+during the issue #212 migration. For new deals they MUST carry the 32-byte
+`polyfs_root` value if accepted at all; they MUST NOT carry the retired 48-byte
+flat-manifest KZG root.
 
 The owner signs an update intent containing both values. The chain only accepts the mutation if the currently committed deal root is still `H1`.
 
 ## Normative Rules
 
 ### 1. Signed CAS
-* `previous_manifest_root` MUST be part of the owner-signed `MsgUpdateDealContent*` payload.
-* The chain MUST validate `previous_manifest_root == Deal.manifest_root` at execution time.
+* `previous_polyfs_root` MUST be part of the owner-signed `MsgUpdateDealContent*` payload.
+* The chain MUST validate `previous_polyfs_root == Deal.polyfs_root` at execution time.
 * If the comparison fails, the transaction MUST be rejected as stale.
-* Any provider- or gateway-supplied copy of `previous_manifest_root` is preflight/advisory only.
+* Any provider- or gateway-supplied copy of `previous_polyfs_root` is preflight/advisory only.
 
 ### 2. Browser and gateway bootstrap
-* A client MUST compare its local cached generation to on-chain `Deal.manifest_root` before preparing an append or rewrite.
+* A client MUST compare its local cached generation to on-chain `Deal.polyfs_root` before preparing an append or rewrite.
 * If the cache is missing or stale, the client MUST bootstrap the current committed generation from the retrieval path before mutating.
 * A client MUST NOT silently rebuild from empty state when a committed generation already exists.
 
 ### 3. Staged generations at providers/gateways
-* Uploaded bytes for `new_manifest_root` SHOULD be staged provisionally until the chain swap succeeds.
-* The currently committed generation `previous_manifest_root` MUST remain available while `new_manifest_root` is provisional.
-* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the current reference header is `X-PolyStore-Previous-Manifest-Root`.
+* Uploaded bytes for `new_polyfs_root` SHOULD be staged provisionally until the chain swap succeeds.
+* The currently committed generation `previous_polyfs_root` MUST remain available while `new_polyfs_root` is provisional.
+* Provider/gateway artifact ingest MAY accept an advisory expected-base header for the staged generation; the preferred header is `X-PolyStore-Previous-PolyFS-Root`. The legacy `X-PolyStore-Previous-Manifest-Root` header may be accepted only as a 32-byte-root alias during transition.
 * If that expected-base header is present and stale, the provider/gateway SHOULD reject the upload before consuming artifact bytes.
 * A stale or failed chain swap MUST NOT delete or replace the current generation.
 
@@ -68,7 +73,7 @@ Current devnet reference policy:
 * the gateway exposes the effective retention window as `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL` and reports it in `/status` as `polyfs_generation_provisional_retention_ttl_seconds`
 * `POLYSTORE_PROVISIONAL_GENERATION_RETENTION_TTL=0` disables age-based provisional-generation GC
 * the gateway SHOULD expose stale CAS preflight pressure in `/status` so concurrent-writer / abandoned-upload churn is observable; the current reference keys are `polyfs_cas_preflight_conflicts_total`, `polyfs_cas_preflight_conflicts_legacy`, `polyfs_cas_preflight_conflicts_evm`, and `polyfs_cas_preflight_conflicts_upload`
-* the gateway SHOULD expose per-deal local generation inspection; the current reference endpoint is `GET /gateway/deal-generations/{deal_id}`, which returns active/provisional/incomplete/invalid classification plus `previous_manifest_root` and on-disk byte counts
+* the gateway SHOULD expose per-deal local generation inspection; the current reference endpoint is `GET /gateway/deal-generations/{deal_id}`, which returns active/provisional/incomplete/invalid classification plus `previous_polyfs_root` and on-disk byte counts
 
 ## Implementation Notes
 Current implementation anchors signed CAS at:

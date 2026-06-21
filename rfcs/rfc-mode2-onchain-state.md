@@ -2,7 +2,7 @@
 
 **Status:** Implemented in devnet / migration cleanup pending
 **Scope:** Chain protocol state (`polystorechain/`)
-**Depends on:** `spec.md` §6.2, §8.3–§8.4; `rfcs/rfc-blob-alignment-and-striping.md`
+**Depends on:** `spec.md` §6.2, §8.3–§8.4; `rfcs/rfc-blob-alignment-and-striping.md`; `rfcs/rfc-polyfs-root-contract.md`
 **Motivation:** Appendix B #2 (striped encoding), #6 (write semantics beyond append-only; near-term constraints)
 
 ---
@@ -32,13 +32,13 @@ This RFC freezes a **concrete on-chain representation** for the striped layout a
 
 ### 1.2 Generations
 - **Generation:** a monotonically increasing counter `current_gen`
-- Every on-chain content commit that changes `Deal.manifest_root` MUST increment `current_gen`.
+- Every on-chain content commit that changes the deal root (`Deal.polyfs_root`; legacy alias `Deal.manifest_root` during migration) MUST increment `current_gen`.
 - Reads are always defined against the **current generation**.
 
 ### 1.3 Slab accounting fields (naming freeze)
 For chain policy and bounds checks we freeze:
 - `size_bytes`: total logical bytes of file contents in PolyFS (sum of non-tombstone file lengths)
-- `total_mdus`: total number of committed MDU roots in the Manifest commitment (includes metadata + witness + user MDUs)
+- `total_mdus`: total number of committed MDUs in the PolyFS slab (includes MDU #0 + witness + user MDUs)
 - `witness_mdus`: number of witness MDUs committed after MDU #0 (metadata region size)
 - `user_mdus = total_mdus - 1 - witness_mdus` (derived; must be non-negative)
 
@@ -92,7 +92,7 @@ message Deal {
   repeated DealSlot mode2_slots = 16;      // length N, slot-ordered
 
   // --- Generation / write coordination ---
-  uint64 current_gen = 17; // increments on every manifest_root change
+  uint64 current_gen = 17; // increments on every polyfs_root change
 
   // --- Slab accounting (bounds + policy) ---
   uint64 total_mdus = 14;     // already exists; MUST be set on first content commit
@@ -117,15 +117,15 @@ message Deal {
 At `MsgCreateDeal*` time:
 - `mode2_profile` and `mode2_slots` are derived from the request (legacy: parsed from `service_hint`)
 - `current_gen = 0`
-- `manifest_root = empty`, `size_bytes = 0`, `total_mdus = 0`, `witness_mdus = 0`
+- `polyfs_root = empty`, `size_bytes = 0`, `total_mdus = 0`, `witness_mdus = 0`
 
-### 3.2 UpdateDealContent (commit new manifest)
+### 3.2 UpdateDealContent (commit new PolyFS root)
 At `MsgUpdateDealContent*` time:
-- Validate `manifest_root` format (already implemented)
+- Validate `polyfs_root` format (32-byte MDU #0 Merkle root; see `rfcs/rfc-polyfs-root-contract.md`)
 - Require `size_bytes > 0`
 - Require `total_mdus > 0` and `witness_mdus >= 0` (new fields in message; see §4)
 - Set:
-  - `Deal.manifest_root = new`
+  - `Deal.polyfs_root = new`
   - `Deal.size_bytes = new`
   - `Deal.total_mdus = new_total_mdus`
   - `Deal.witness_mdus = new_witness_mdus`
@@ -217,4 +217,3 @@ Remaining cleanup:
 1. Add or document the migration/backfill path for older deals that predate typed striped state.
 2. Decide when schema/wire names like `mode2_profile` and `mode2_slots` can be renamed or formally frozen as compatibility identifiers.
 3. Keep the gap report authoritative for overlay elasticity, which is still not modeled end-to-end in typed slot state.
-
