@@ -45,36 +45,34 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	}
 	mduRootFr, _ := merkleRootAndPath(leafHashes, 0)
 
-	roots := make([][]byte, 3)
-	roots[0] = make([]byte, 32)
-	roots[1] = make([]byte, 32)
-	roots[2] = make([]byte, 32)
-	copy(roots[2], mduRootFr)
-	commitment, manifestBlob, err := crypto_ffi.ComputeManifestCommitment(roots)
-	if err != nil {
-		t.Fatalf("ComputeManifestCommitment failed: %v", err)
-	}
-	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", commitment))
-	if err != nil {
-		t.Fatalf("parseManifestRoot(manifest commitment) failed: %v", err)
-	}
-
-	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
-	os.MkdirAll(dealDir, 0755)
-	defer os.RemoveAll(dealDir)
-
 	// Create MDU #0
 	b := crypto_ffi.NewMdu0Builder(1)
 	defer b.Free()
 
 	// Add File Record
 	b.AppendFile("video.mp4", uint64(len(fileContent)), 0)
+	if err := b.SetRoot(b.GetWitnessCount(), mduRootFr); err != nil {
+		t.Fatalf("SetRoot(user) failed: %v", err)
+	}
 
 	mdu0Data, _ := b.Bytes()
-	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0644)
+	if err := materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
+		t.Fatalf("materialize MDU #0 root table failed: %v", err)
+	}
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
+	if err != nil {
+		t.Fatalf("ComputeMduMerkleRoot(mdu0) failed: %v", err)
+	}
+	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", rootBytes))
+	if err != nil {
+		t.Fatalf("parseManifestRoot(polyfs root) failed: %v", err)
+	}
 
-	// manifest.bin must exist for proof generation.
-	os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0644)
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	os.MkdirAll(dealDir, 0755)
+	defer os.RemoveAll(dealDir)
+
+	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0644)
 
 	// Witness MDU #1 holds blob commitments for user ordinal 0 (first 3072 bytes).
 	os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain), 0644)
@@ -152,31 +150,31 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 	}
 	mduRootFr, _ := merkleRootAndPath(leafHashes, 0)
 
-	roots := make([][]byte, 3)
-	roots[0] = make([]byte, 32)
-	roots[1] = make([]byte, 32)
-	roots[2] = make([]byte, 32)
-	copy(roots[2], mduRootFr)
-	commitment, manifestBlob, err := crypto_ffi.ComputeManifestCommitment(roots)
-	if err != nil {
-		t.Fatalf("ComputeManifestCommitment failed: %v", err)
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	b.AppendFile("video.mp4", uint64(len(fileContent)), 0)
+	if err := b.SetRoot(b.GetWitnessCount(), mduRootFr); err != nil {
+		t.Fatalf("SetRoot(user) failed: %v", err)
 	}
-	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", commitment))
+
+	mdu0Data, _ := b.Bytes()
+	if err := materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
+		t.Fatalf("materialize MDU #0 root table failed: %v", err)
+	}
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
 	if err != nil {
-		t.Fatalf("parseManifestRoot(manifest commitment) failed: %v", err)
+		t.Fatalf("ComputeMduMerkleRoot(mdu0) failed: %v", err)
+	}
+	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", rootBytes))
+	if err != nil {
+		t.Fatalf("parseManifestRoot(polyfs root) failed: %v", err)
 	}
 
 	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
 	os.MkdirAll(dealDir, 0o755)
 	defer os.RemoveAll(dealDir)
 
-	b := crypto_ffi.NewMdu0Builder(1)
-	defer b.Free()
-	b.AppendFile("video.mp4", uint64(len(fileContent)), 0)
-
-	mdu0Data, _ := b.Bytes()
 	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644)
-	os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0o644)
 	os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain), 0o644)
 	os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent), 0o644)
 

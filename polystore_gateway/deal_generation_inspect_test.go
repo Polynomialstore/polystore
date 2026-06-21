@@ -65,8 +65,8 @@ func TestListDealGenerationDetails_SortsAndClassifies(t *testing.T) {
 	if err := os.Remove(filepath.Join(incompleteDir, mode2SlabCompleteMarker)); err != nil {
 		t.Fatalf("remove complete marker: %v", err)
 	}
-	if err := os.Remove(filepath.Join(incompleteDir, "manifest.bin")); err != nil {
-		t.Fatalf("remove manifest.bin: %v", err)
+	if err := os.Remove(filepath.Join(incompleteDir, "mdu_0.bin")); err != nil {
+		t.Fatalf("remove mdu_0.bin: %v", err)
 	}
 
 	details, activePointer, err := listDealGenerationDetails(dealID, time.Now().UTC())

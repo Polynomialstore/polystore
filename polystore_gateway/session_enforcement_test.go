@@ -39,18 +39,35 @@ func TestGatewayFetch_AllowsBundledDownloadSession_WhenOnchainSessionsRequired(t
 
 	filePath := "sync.txt"
 	fileContent := []byte("hello from bundled download session")
-	manifestRoot := mustTestManifestRoot(t, "bundled-download-session")
-	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
-	require.NoError(t, os.MkdirAll(dealDir, 0o755))
+	encodedData := encodeRawToMdu(fileContent)
+
+	commitmentBytes := 48
+	witnessPlain := make([]byte, 0, niltypes.BLOBS_PER_MDU*commitmentBytes)
+	for leaf := uint32(0); leaf < niltypes.BLOBS_PER_MDU; leaf++ {
+		commitment, _, _, _, _, err := crypto_ffi.ComputeMduProofTest(encodedData, leaf)
+		require.NoError(t, err)
+		witnessPlain = append(witnessPlain, commitment...)
+	}
+	mduRootFr, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessPlain)
+	require.NoError(t, err)
 
 	b := crypto_ffi.NewMdu0Builder(1)
 	defer b.Free()
 	b.AppendFile(filePath, uint64(len(fileContent)), 0)
+	require.NoError(t, b.SetRoot(b.GetWitnessCount(), mduRootFr))
 	mdu0Data, _ := b.Bytes()
+	require.NoError(t, materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}))
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
+	require.NoError(t, err)
+	manifestRoot, err := parseManifestRoot("0x" + hex.EncodeToString(rootBytes))
+	require.NoError(t, err)
+
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	require.NoError(t, os.MkdirAll(dealDir, 0o755))
+
 	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "manifest.bin"), make([]byte, 128*1024), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(make([]byte, niltypes.BLOBS_PER_MDU*48)), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodedData, 0o644))
 
 	const dealID = uint64(1)
 	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -134,29 +151,23 @@ func TestGatewayFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 	}
 	mduRootFr, _ := merkleRootAndPath(leafHashes, 0)
 
-	roots := make([][]byte, 3)
-	roots[0] = make([]byte, 32)
-	roots[1] = make([]byte, 32)
-	roots[2] = make([]byte, 32)
-	copy(roots[2], mduRootFr)
-	commitment, manifestBlob, err := crypto_ffi.ComputeManifestCommitment(roots)
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	b.AppendFile("video.mp4", uint64(len(fileContent)), 0)
+	require.NoError(t, b.SetRoot(b.GetWitnessCount(), mduRootFr))
+	mdu0Data, _ := b.Bytes()
+	require.NoError(t, materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}))
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
+	require.NoError(t, err)
+	manifestRoot, err := parseManifestRoot("0x" + hex.EncodeToString(rootBytes))
 	if err != nil {
-		t.Fatalf("ComputeManifestCommitment failed: %v", err)
-	}
-	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", commitment))
-	if err != nil {
-		t.Fatalf("parseManifestRoot(manifest commitment) failed: %v", err)
+		t.Fatalf("parseManifestRoot(polyfs root) failed: %v", err)
 	}
 
 	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
 	require.NoError(t, os.MkdirAll(dealDir, 0o755))
 
-	b := crypto_ffi.NewMdu0Builder(1)
-	defer b.Free()
-	b.AppendFile("video.mp4", uint64(len(fileContent)), 0)
-	mdu0Data, _ := b.Bytes()
 	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent), 0o644))
 
@@ -293,30 +304,24 @@ func TestGatewayDebugRawFetch_RequiresOnchainSession_WhenEnabled(t *testing.T) {
 
 	owner := testDealOwner(t)
 
-	roots := make([][]byte, 2)
-	roots[0] = make([]byte, 32)
-	roots[1] = make([]byte, 32)
-	commitment, _, err := crypto_ffi.ComputeManifestCommitment(roots)
-	if err != nil {
-		t.Fatalf("ComputeManifestCommitment failed: %v", err)
-	}
-	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", commitment))
-	if err != nil {
-		t.Fatalf("parseManifestRoot failed: %v", err)
-	}
-
 	filePath := "debug.md"
 	fileContent := []byte("Hello Debug Raw Fetch")
-
-	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
-	if err := os.MkdirAll(dealDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll failed: %v", err)
-	}
 
 	b := crypto_ffi.NewMdu0Builder(1)
 	defer b.Free()
 	b.AppendFile(filePath, uint64(len(fileContent)), 0)
 	mdu0Data, _ := b.Bytes()
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
+	require.NoError(t, err)
+	manifestRoot, err := parseManifestRoot("0x" + hex.EncodeToString(rootBytes))
+	if err != nil {
+		t.Fatalf("parseManifestRoot failed: %v", err)
+	}
+
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644); err != nil {
 		t.Fatalf("write mdu_0.bin failed: %v", err)
 	}
