@@ -445,8 +445,8 @@ func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contr
 		return nil, errors.New("openRetrievalSession: invalid provider")
 	}
 	manifestRoot, err := asBytes(args["manifestRoot"])
-	if err != nil || len(manifestRoot) != 48 {
-		return nil, errors.New("openRetrievalSession: manifestRoot must be 48 bytes")
+	if err != nil || len(manifestRoot) != types.POLYFS_ROOT_SIZE {
+		return nil, errors.New("openRetrievalSession: manifestRoot must be 32 bytes")
 	}
 	startMduIndex, err := asUint64(args["startMduIndex"])
 	if err != nil {
@@ -532,8 +532,8 @@ func (p *Precompile) runOpenRetrievalSessions(ctx sdk.Context, evm *vm.EVM, cont
 		if provider == "" {
 			return nil, errors.New("openRetrievalSessions: invalid provider")
 		}
-		if len(input.ManifestRoot) != 48 {
-			return nil, errors.New("openRetrievalSessions: manifestRoot must be 48 bytes")
+		if len(input.ManifestRoot) != types.POLYFS_ROOT_SIZE {
+			return nil, errors.New("openRetrievalSessions: manifestRoot must be 32 bytes")
 		}
 		if input.BlobCount == 0 {
 			return nil, errors.New("openRetrievalSessions: blobCount must be > 0")
@@ -603,8 +603,8 @@ func (p *Precompile) runOpenRetrievalSessionsSponsored(ctx sdk.Context, evm *vm.
 		if err != nil {
 			return nil, errors.New("openRetrievalSessionsSponsored: invalid provider")
 		}
-		if len(input.ManifestRoot) != 48 {
-			return nil, errors.New("openRetrievalSessionsSponsored: manifestRoot must be 48 bytes")
+		if len(input.ManifestRoot) != types.POLYFS_ROOT_SIZE {
+			return nil, errors.New("openRetrievalSessionsSponsored: manifestRoot must be 32 bytes")
 		}
 		if input.BlobCount == 0 {
 			return nil, errors.New("openRetrievalSessionsSponsored: blobCount must be > 0")
@@ -731,8 +731,8 @@ func (p *Precompile) runComputeRetrievalSessions(ctx sdk.Context, evm *vm.EVM, c
 		if err != nil {
 			return nil, errors.New("computeRetrievalSessions: invalid provider")
 		}
-		if len(input.ManifestRoot) != 48 {
-			return nil, errors.New("computeRetrievalSessions: manifestRoot must be 48 bytes")
+		if len(input.ManifestRoot) != types.POLYFS_ROOT_SIZE {
+			return nil, errors.New("computeRetrievalSessions: manifestRoot must be 32 bytes")
 		}
 		if input.BlobCount == 0 {
 			return nil, errors.New("computeRetrievalSessions: blobCount must be > 0")
@@ -798,8 +798,8 @@ func (p *Precompile) runComputeRetrievalSessionIds(ctx sdk.Context, evm *vm.EVM,
 		if err != nil {
 			return nil, errors.New("computeRetrievalSessionIds: invalid provider")
 		}
-		if len(input.ManifestRoot) != 48 {
-			return nil, errors.New("computeRetrievalSessionIds: manifestRoot must be 48 bytes")
+		if len(input.ManifestRoot) != types.POLYFS_ROOT_SIZE {
+			return nil, errors.New("computeRetrievalSessionIds: manifestRoot must be 32 bytes")
 		}
 		if input.BlobCount == 0 {
 			return nil, errors.New("computeRetrievalSessionIds: blobCount must be > 0")
@@ -1108,15 +1108,15 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 	if err != nil {
 		return nil, errors.New("updateDealContent: invalid previousManifestRoot")
 	}
-	if len(previousManifestRoot) != 0 && len(previousManifestRoot) != 48 {
-		return nil, errors.New("updateDealContent: previousManifestRoot must be empty or 48 bytes")
+	if len(previousManifestRoot) != 0 && len(previousManifestRoot) != types.POLYFS_ROOT_SIZE {
+		return nil, errors.New("updateDealContent: previousManifestRoot must be empty or 32 bytes")
 	}
 	manifestRoot, err := asBytes(args["manifestRoot"])
 	if err != nil {
 		return nil, errors.New("updateDealContent: invalid manifestRoot")
 	}
-	if len(manifestRoot) != 48 {
-		return nil, errors.New("updateDealContent: manifestRoot must be 48 bytes")
+	if len(manifestRoot) != types.POLYFS_ROOT_SIZE {
+		return nil, errors.New("updateDealContent: manifestRoot must be 32 bytes")
 	}
 	sizeBytes, err := asUint64(args["sizeBytes"])
 	if err != nil || sizeBytes == 0 {
@@ -1359,7 +1359,7 @@ func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contra
 	if !isAssignedProvider {
 		return nil, errors.New("proveRetrievalBatch: provider is not assigned to deal")
 	}
-	if len(deal.ManifestRoot) != 48 {
+	if len(deal.ManifestRoot) != types.POLYFS_ROOT_SIZE {
 		return nil, errors.New("proveRetrievalBatch: deal has no committed manifest_root")
 	}
 
@@ -1544,13 +1544,25 @@ func decodeChunks(v any) ([]decodedChunk, error) {
 }
 
 func verifyChainedProof(ctx sdk.Context, manifestRoot []byte, leafCount uint64, chainedProof types.ChainedProof) (bool, error) {
-	if len(manifestRoot) != 48 {
+	if len(manifestRoot) != types.POLYFS_ROOT_SIZE {
 		return false, nil
 	}
 	if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 ||
-		len(chainedProof.BlobCommitment) != 48 || len(chainedProof.MerklePath) == 0 ||
+		len(chainedProof.RootTableDuCommitment) != 48 || len(chainedProof.BlobCommitment) != 48 ||
+		len(chainedProof.RootTableDuMerklePath) == 0 || len(chainedProof.MerklePath) == 0 ||
 		len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
 		return false, nil
+	}
+	if chainedProof.MduIndex == 0 || uint64(chainedProof.BlobIndex) >= leafCount {
+		return false, nil
+	}
+
+	flattenedRootTableMerkle := make([]byte, 0, len(chainedProof.RootTableDuMerklePath)*32)
+	for _, node := range chainedProof.RootTableDuMerklePath {
+		if len(node) != 32 {
+			return false, nil
+		}
+		flattenedRootTableMerkle = append(flattenedRootTableMerkle, node...)
 	}
 
 	flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
@@ -1561,27 +1573,43 @@ func verifyChainedProof(ctx sdk.Context, manifestRoot []byte, leafCount uint64, 
 		flattenedMerkle = append(flattenedMerkle, node...)
 	}
 
-	ok, err := crypto_ffi.VerifyChainedProof(
+	ok, err := crypto_ffi.VerifyMdu0RootTableProof(
 		manifestRoot,
 		chainedProof.MduIndex,
+		chainedProof.MduRootFr,
+		chainedProof.RootTableDuCommitment,
+		flattenedRootTableMerkle,
 		chainedProof.ManifestOpening,
+	)
+	if err != nil {
+		ctx.Logger().Error("VerifyMdu0RootTableProof error", "error", err)
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+
+	ok, err = crypto_ffi.VerifyMduProof(
 		chainedProof.MduRootFr,
 		chainedProof.BlobCommitment,
-		uint64(chainedProof.BlobIndex),
-		leafCount,
 		flattenedMerkle,
+		chainedProof.BlobIndex,
+		leafCount,
 		chainedProof.ZValue,
 		chainedProof.YValue,
 		chainedProof.KzgOpeningProof,
 	)
 	if err != nil {
-		ctx.Logger().Error("VerifyChainedProof error", "error", err)
+		ctx.Logger().Error("VerifyMduProof error", "error", err)
 		return false, err
 	}
 	return ok, nil
 }
 
 func (p *Precompile) emitEventDealCreated(evm *vm.EVM, dealID uint64, owner common.Address) {
+	if evm == nil || evm.StateDB == nil {
+		return
+	}
 	ev, ok := p.abi.Events["DealCreated"]
 	if !ok {
 		return
@@ -1598,6 +1626,9 @@ func (p *Precompile) emitEventDealCreated(evm *vm.EVM, dealID uint64, owner comm
 }
 
 func (p *Precompile) emitEventDealContentUpdated(evm *vm.EVM, dealID uint64, manifestRoot []byte, sizeBytes uint64) {
+	if evm == nil || evm.StateDB == nil {
+		return
+	}
 	ev, ok := p.abi.Events["DealContentUpdated"]
 	if !ok {
 		return
@@ -1637,6 +1668,9 @@ func (p *Precompile) emitEventDealSetupSlotBumped(evm *vm.EVM, dealID uint64, sl
 }
 
 func (p *Precompile) emitEventRetrievalProved(evm *vm.EVM, dealID uint64, owner common.Address, provider string, filePath string, bytesServed uint64, nonce uint64) {
+	if evm == nil || evm.StateDB == nil {
+		return
+	}
 	ev, ok := p.abi.Events["RetrievalProved"]
 	if !ok {
 		return
@@ -1653,6 +1687,9 @@ func (p *Precompile) emitEventRetrievalProved(evm *vm.EVM, dealID uint64, owner 
 }
 
 func (p *Precompile) emitEventRetrievalSessionOpened(evm *vm.EVM, dealID uint64, owner common.Address, provider string, sessionID [32]byte) {
+	if evm == nil || evm.StateDB == nil {
+		return
+	}
 	ev, ok := p.abi.Events["RetrievalSessionOpened"]
 	if !ok {
 		return
@@ -1669,6 +1706,9 @@ func (p *Precompile) emitEventRetrievalSessionOpened(evm *vm.EVM, dealID uint64,
 }
 
 func (p *Precompile) emitEventRetrievalSessionConfirmed(evm *vm.EVM, sessionID [32]byte, owner common.Address) {
+	if evm == nil || evm.StateDB == nil {
+		return
+	}
 	ev, ok := p.abi.Events["RetrievalSessionConfirmed"]
 	if !ok {
 		return
