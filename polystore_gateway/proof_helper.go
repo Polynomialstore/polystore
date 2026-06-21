@@ -20,19 +20,19 @@ import (
 )
 
 // submitRetrievalProofNew submits a retrieval proof for a specific MDU.
-// mduIndex is the index in the Deal Slab (0=Manifest, 1..W=Witness, W+1..=Data).
+// mduIndex is the index in the Deal Slab (0=MDU #0, 1..W=Witness, W+1..=Data).
 // mduPath must point to the encoded 8 MiB MDU bytes stored on disk.
 //
 // providerKeyName is the local keyring name used to submit the proof (MsgSubmitRetrievalProof).
-func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string, providerKeyName string, ownerAddr string) (string, error) {
+func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, mdu0Path string, providerKeyName string, ownerAddr string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if abs, err := filepath.Abs(mduPath); err == nil {
 		mduPath = abs
 	}
-	if abs, err := filepath.Abs(manifestPath); err == nil {
-		manifestPath = abs
+	if abs, err := filepath.Abs(mdu0Path); err == nil {
+		mdu0Path = abs
 	}
 	if strings.TrimSpace(providerKeyName) == "" {
 		providerKeyName = envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
@@ -59,12 +59,6 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	defer os.Remove(encodedMduPath)
 	defer os.Remove(prefix + ".json")
 
-	// 2. Encode Manifest (MDU #0)
-	// manifestPath points to "manifest.bin", which is the Encoded Manifest Blob.
-	// So we don't need to encode or extract it. It IS the blob.
-
-	manifestBlobPath := manifestPath
-
 	// 4. Sign Receipt (Must be signed by Deal Owner)
 	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
@@ -90,7 +84,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		epochStr,
 		encodedMduPath,
 		trustedSetup,
-		manifestBlobPath, // Pass the specific 128KB Blob
+		mdu0Path,
 		mduIndexStr,
 		"--from", signer,
 		"--home", homeDir,
@@ -153,7 +147,7 @@ type proofCacheKey struct {
 	dealID        uint64
 	mduIndex      uint64
 	mduPath       string
-	manifestPath  string
+	mdu0Path      string
 	encodedBlob   uint32
 	leafIndex     uint64
 	leafCount     uint64
@@ -161,10 +155,10 @@ type proofCacheKey struct {
 }
 
 type cachedProof struct {
-	mduModTime      int64
-	manifestModTime int64
-	payload         []byte
-	proofHashHex    string
+	mduModTime   int64
+	mdu0ModTime  int64
+	payload      []byte
+	proofHashHex string
 }
 
 var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
@@ -174,13 +168,13 @@ var proofHeaderCache sync.Map // map[proofCacheKey]*cachedProof
 //
 //	{ "proof_details": <ChainedProof> }
 //
-// This function is performance critical and caches results keyed by (mduIndex,mduPath,manifestPath,blobIndex,epoch).
-func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, manifestPath string, encodedBlobIndex uint32, leafIndex uint64, leafCount uint64, zHint uint64) ([]byte, string, error) {
+// This function is performance critical and caches results keyed by (mduIndex,mduPath,mdu0Path,blobIndex,epoch).
+func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, mdu0Path string, encodedBlobIndex uint32, leafIndex uint64, leafCount uint64, zHint uint64) ([]byte, string, error) {
 	if abs, err := filepath.Abs(mduPath); err == nil {
 		mduPath = abs
 	}
-	if abs, err := filepath.Abs(manifestPath); err == nil {
-		manifestPath = abs
+	if abs, err := filepath.Abs(mdu0Path); err == nil {
+		mdu0Path = abs
 	}
 	if epoch == 0 {
 		epoch = 1
@@ -190,16 +184,16 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to stat MDU: %w", err)
 	}
-	manifestStat, err := os.Stat(manifestPath)
+	mdu0Stat, err := os.Stat(mdu0Path)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to stat manifest: %w", err)
+		return nil, "", fmt.Errorf("failed to stat MDU #0: %w", err)
 	}
 
 	key := proofCacheKey{
 		dealID:        dealID,
 		mduIndex:      mduIndex,
 		mduPath:       mduPath,
-		manifestPath:  manifestPath,
+		mdu0Path:      mdu0Path,
 		encodedBlob:   encodedBlobIndex,
 		leafIndex:     leafIndex,
 		leafCount:     leafCount,
@@ -208,17 +202,17 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 
 	if cachedAny, ok := proofHeaderCache.Load(key); ok {
 		cached := cachedAny.(*cachedProof)
-		if cached.mduModTime == mduStat.ModTime().UnixNano() && cached.manifestModTime == manifestStat.ModTime().UnixNano() {
+		if cached.mduModTime == mduStat.ModTime().UnixNano() && cached.mdu0ModTime == mdu0Stat.ModTime().UnixNano() {
 			return cached.payload, cached.proofHashHex, nil
 		}
 	}
 
-	manifestBlob, err := os.ReadFile(manifestPath)
+	mdu0Bytes, err := os.ReadFile(mdu0Path)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to read manifest: %w", err)
+		return nil, "", fmt.Errorf("failed to read MDU #0: %w", err)
 	}
-	if len(manifestBlob) != types.BLOB_SIZE {
-		return nil, "", fmt.Errorf("invalid Manifest size: %d", len(manifestBlob))
+	if len(mdu0Bytes) != types.MDU_SIZE {
+		return nil, "", fmt.Errorf("invalid MDU #0 size: %d", len(mdu0Bytes))
 	}
 
 	dealDir := filepath.Dir(mduPath)
@@ -280,21 +274,27 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 		return nil, "", fmt.Errorf("ComputeBlobProof failed: %w", err)
 	}
 
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
+	rootTableDuCommitment, rootTableDuMerkleFlat, rootTableOpening, _, err := crypto_ffi.ComputeMdu0RootTableProof(mdu0Bytes, mduIndex, root)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("ComputeMdu0RootTableProof failed: %w", err)
+	}
+	rootTableDuMerklePath, err := splitMerkleProof32(rootTableDuMerkleFlat)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid root-table Merkle proof: %w", err)
 	}
 
 	chainedProof := types.ChainedProof{
-		MduIndex:        mduIndex,
-		MduRootFr:       root,
-		ManifestOpening: manifestProof,
-		BlobCommitment:  blobCommitment,
-		MerklePath:      merklePath,
-		BlobIndex:       uint32(leafIndex),
-		ZValue:          z,
-		YValue:          y,
-		KzgOpeningProof: kzgProofBytes,
+		MduIndex:              mduIndex,
+		MduRootFr:             root,
+		ManifestOpening:       rootTableOpening,
+		RootTableDuCommitment: rootTableDuCommitment,
+		RootTableDuMerklePath: rootTableDuMerklePath,
+		BlobCommitment:        blobCommitment,
+		MerklePath:            merklePath,
+		BlobIndex:             uint32(leafIndex),
+		ZValue:                z,
+		YValue:                y,
+		KzgOpeningProof:       kzgProofBytes,
 	}
 
 	proofHash, err := types.HashChainedProof(&chainedProof)
@@ -324,10 +324,10 @@ func generateProofHeaderJSON(ctx context.Context, dealID uint64, epoch uint64, m
 	}
 
 	proofHeaderCache.Store(key, &cachedProof{
-		mduModTime:      mduStat.ModTime().UnixNano(),
-		manifestModTime: manifestStat.ModTime().UnixNano(),
-		payload:         headerPayload,
-		proofHashHex:    proofHashHex,
+		mduModTime:   mduStat.ModTime().UnixNano(),
+		mdu0ModTime:  mdu0Stat.ModTime().UnixNano(),
+		payload:      headerPayload,
+		proofHashHex: proofHashHex,
 	})
 
 	return headerPayload, proofHashHex, nil
@@ -399,4 +399,31 @@ func merkleRootAndPath(leaves [][32]byte, leafIndex int) ([]byte, [][]byte) {
 	root := make([]byte, 32)
 	copy(root, level[0][:])
 	return root, path
+}
+
+func splitMerkleProof32(flat []byte) ([][]byte, error) {
+	if len(flat) == 0 {
+		return nil, fmt.Errorf("empty proof")
+	}
+	if len(flat)%32 != 0 {
+		return nil, fmt.Errorf("length %d is not a multiple of 32", len(flat))
+	}
+	path := make([][]byte, 0, len(flat)/32)
+	for i := 0; i < len(flat); i += 32 {
+		node := make([]byte, 32)
+		copy(node, flat[i:i+32])
+		path = append(path, node)
+	}
+	return path, nil
+}
+
+func flattenMerkleProof32(path [][]byte) ([]byte, error) {
+	flat := make([]byte, 0, len(path)*32)
+	for i, node := range path {
+		if len(node) != 32 {
+			return nil, fmt.Errorf("node %d length %d", i, len(node))
+		}
+		flat = append(flat, node...)
+	}
+	return flat, nil
 }
