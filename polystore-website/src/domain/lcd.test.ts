@@ -33,3 +33,21 @@ test('normalizeLcdDealsResponse maps manifest_root bytes to Deal.cid hex', () =>
   assert.deepEqual(deals[0].providers, ['nil1p1', 'nil1p2'])
 })
 
+test('normalizeLcdDealsResponse accepts PolyFS 32-byte manifest_root bytes', () => {
+  const bytes = new Uint8Array(32)
+  bytes.fill(0x22)
+  const base64 = Buffer.from(bytes).toString('base64')
+
+  const deals = normalizeLcdDealsResponse({
+    deals: [
+      {
+        id: 8,
+        owner: 'nil1owner',
+        manifest_root: base64,
+      },
+    ],
+  })
+
+  assert.equal(deals.length, 1)
+  assert.equal(deals[0].cid, `0x${Buffer.from(bytes).toString('hex')}`)
+})
