@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,19 +21,6 @@ func TestGatewayDebugRawFetch_ByPath_NoManifestBin(t *testing.T) {
 		t.Fatalf("crypto_ffi.Init failed: %v", err)
 	}
 
-	// Produce a valid manifest root (G1 compressed) for directory naming.
-	roots := make([][]byte, 2)
-	roots[0] = make([]byte, 32)
-	roots[1] = make([]byte, 32)
-	commitment, _, err := crypto_ffi.ComputeManifestCommitment(roots)
-	if err != nil {
-		t.Fatalf("ComputeManifestCommitment failed: %v", err)
-	}
-	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", commitment))
-	if err != nil {
-		t.Fatalf("parseManifestRoot failed: %v", err)
-	}
-
 	// Create a minimal PolyFS slab:
 	// - mdu_0.bin: file record
 	// - mdu_1.bin: user-data MDU containing the file bytes
@@ -41,15 +28,23 @@ func TestGatewayDebugRawFetch_ByPath_NoManifestBin(t *testing.T) {
 	filePath := "debug.md"
 	fileContent := []byte("Hello Debug Raw Fetch")
 
-	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
-	if err := os.MkdirAll(dealDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll failed: %v", err)
-	}
-
 	b := crypto_ffi.NewMdu0Builder(1)
 	defer b.Free()
 	b.AppendFile(filePath, uint64(len(fileContent)), 0)
 	mdu0Data, _ := b.Bytes()
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
+	if err != nil {
+		t.Fatalf("ComputeMduMerkleRoot failed: %v", err)
+	}
+	manifestRoot, err := parseManifestRoot("0x" + hex.EncodeToString(rootBytes))
+	if err != nil {
+		t.Fatalf("parseManifestRoot failed: %v", err)
+	}
+
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644); err != nil {
 		t.Fatalf("write mdu_0.bin failed: %v", err)
 	}

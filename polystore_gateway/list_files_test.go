@@ -34,8 +34,14 @@ func TestGatewayListFiles_Basic(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Data, 0o644); err != nil {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), make([]byte, 8*1024*1024), 0o644); err != nil {
+		t.Fatalf("write mdu_1.bin: %v", err)
+	}
 
-	srv := dynamicMockDealServer(map[uint64]struct{ Owner string; CID string }{
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
 		1: {Owner: "nil1owner", CID: manifestRoot.Canonical},
 	})
 	defer srv.Close()
@@ -94,7 +100,10 @@ func TestGatewayListFiles_WithOwnerCheck(t *testing.T) {
 		t.Fatalf("write mdu_0.bin: %v", err)
 	}
 
-	srv := dynamicMockDealServer(map[uint64]struct{ Owner string; CID string }{
+	srv := dynamicMockDealServer(map[uint64]struct {
+		Owner string
+		CID   string
+	}{
 		1: {Owner: "nil1owner", CID: manifestRoot.Canonical},
 	})
 	defer srv.Close()

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -25,8 +24,7 @@ import (
 
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/gorilla/mux"
-
-	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	"golang.org/x/crypto/blake2s"
 
 	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
@@ -82,12 +80,7 @@ func setupMockCombinedOutput(t *testing.T, mockFn func(ctx context.Context, name
 
 func deterministicManifestRootHex(tag string) string {
 	sum := sha256.Sum256([]byte(tag))
-	scalar := new(big.Int).SetBytes(sum[:])
-	scalar.Add(scalar, big.NewInt(1))
-	var p gnarkBls12381.G1Affine
-	p.ScalarMultiplicationBase(scalar)
-	b := p.Bytes()
-	return "0x" + hex.EncodeToString(b[:])
+	return "0x" + hex.EncodeToString(sum[:])
 }
 
 func mustTestManifestRoot(t *testing.T, tag string) ManifestRoot {
@@ -1193,26 +1186,37 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 		witnessPlain[i] = 0xaa
 	}
 
-	// We need a manifest root. We can compute a dummy one or use deterministic.
-	// But GatewayFetch checks chain root matches.
-	// We'll use a deterministic one and assume it matches the slab we build.
-	manifestRoot := mustTestManifestRoot(t, "deal0-manual")
-	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
-	if err := os.MkdirAll(dealDir, 0o755); err != nil {
-		t.Fatalf("mkdir deal dir: %v", err)
-	}
-
 	// Create MDU #0 (File Table)
 	b := crypto_ffi.NewMdu0Builder(1)
 	defer b.Free()
 	b.AppendFile("deal0_test.txt", uint64(len(fileContent)), 0)
+	leafHashes := make([][32]byte, 0, 64)
+	for i := 0; i < len(witnessPlain); i += commitmentBytes {
+		sum := blake2s.Sum256(witnessPlain[i : i+commitmentBytes])
+		leafHashes = append(leafHashes, sum)
+	}
+	mduRootFr, _ := merkleRootAndPath(leafHashes, 0)
+	if err := b.SetRoot(b.GetWitnessCount(), mduRootFr); err != nil {
+		t.Fatalf("SetRoot(user) failed: %v", err)
+	}
 
 	mdu0Bytes, _ := b.Bytes()
+	if err := materializeMdu0RootTable(mdu0Bytes, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
+		t.Fatalf("materialize MDU #0 root table failed: %v", err)
+	}
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
+	if err != nil {
+		t.Fatalf("ComputeMduMerkleRoot(mdu0) failed: %v", err)
+	}
+	manifestRoot, err := parseManifestRoot("0x" + hex.EncodeToString(rootBytes))
+	if err != nil {
+		t.Fatalf("parseManifestRoot(polyfs root) failed: %v", err)
+	}
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
 	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644)
-
-	// Create manifest.bin (128KB dummy)
-	manifestBlob := make([]byte, 128*1024)
-	os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0o644)
 
 	// Create Witness MDU #1
 	os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain), 0o644)

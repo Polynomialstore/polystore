@@ -403,8 +403,8 @@ dealLoop:
 		}
 
 		dealDir := dealScopedDir(deal.dealID, deal.manifestRoot)
-		manifestPath := filepath.Join(dealDir, "manifest.bin")
-		if _, err := os.Stat(manifestPath); err != nil {
+		mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
+		if _, err := os.Stat(mdu0Path); err != nil {
 			continue
 		}
 
@@ -453,7 +453,7 @@ dealLoop:
 					log.Printf("system liveness: expected skip deal=%d slot=%d ord=%d reason=%s attempt=%d retry_in=%s: %v", deal.dealID, slotU, ordinal, reason, attempt, retryIn.Round(time.Second), err)
 					continue
 				}
-				proof, err := generateSystemChainedProof(ctx, epochSeed, deal.dealID, dealDir, manifestPath, stripe, mduIndex, blobIndex)
+				proof, err := generateSystemChainedProof(ctx, epochSeed, deal.dealID, dealDir, mdu0Path, stripe, mduIndex, blobIndex)
 				if err != nil {
 					reason, retryIn, attempt, expected := systemProverState.recordFailure(key, now, err)
 					snapshot.ProofGenFailures++
@@ -950,13 +950,13 @@ func mustParseBigIntHex(raw string) *big.Int {
 	return n
 }
 
-func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID uint64, dealDir string, manifestPath string, stripe stripeParams, mduIndex uint64, blobIndex uint32) (*types.ChainedProof, error) {
-	manifestBlob, err := os.ReadFile(manifestPath)
+func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID uint64, dealDir string, mdu0Path string, stripe stripeParams, mduIndex uint64, blobIndex uint32) (*types.ChainedProof, error) {
+	mdu0Bytes, err := os.ReadFile(mdu0Path)
 	if err != nil {
 		return nil, err
 	}
-	if len(manifestBlob) != types.BLOB_SIZE {
-		return nil, fmt.Errorf("invalid manifest size: %d", len(manifestBlob))
+	if len(mdu0Bytes) != types.MDU_SIZE {
+		return nil, fmt.Errorf("invalid MDU #0 size: %d", len(mdu0Bytes))
 	}
 
 	meta, err := loadSlabIndex(dealDir)
@@ -1011,21 +1011,27 @@ func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID 
 		return nil, err
 	}
 
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
+	rootTableDuCommitment, rootTableDuMerkleFlat, rootTableOpening, _, err := crypto_ffi.ComputeMdu0RootTableProof(mdu0Bytes, mduIndex, root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ComputeMdu0RootTableProof failed: %w", err)
+	}
+	rootTableDuMerklePath, err := splitMerkleProof32(rootTableDuMerkleFlat)
+	if err != nil {
+		return nil, fmt.Errorf("invalid root-table Merkle proof: %w", err)
 	}
 
 	return &types.ChainedProof{
-		MduIndex:        mduIndex,
-		MduRootFr:       root,
-		ManifestOpening: manifestProof,
-		BlobCommitment:  blobCommitment,
-		MerklePath:      merklePath,
-		BlobIndex:       blobIndex,
-		ZValue:          z,
-		YValue:          y,
-		KzgOpeningProof: kzgProofBytes,
+		MduIndex:              mduIndex,
+		MduRootFr:             root,
+		ManifestOpening:       rootTableOpening,
+		RootTableDuCommitment: rootTableDuCommitment,
+		RootTableDuMerklePath: rootTableDuMerklePath,
+		BlobCommitment:        blobCommitment,
+		MerklePath:            merklePath,
+		BlobIndex:             blobIndex,
+		ZValue:                z,
+		YValue:                y,
+		KzgOpeningProof:       kzgProofBytes,
 	}, nil
 }
 

@@ -3,8 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,31 +35,30 @@ func buildTestSlab(t *testing.T, filePath string, fileContent []byte) ManifestRo
 	}
 	mduRootFr, _ := merkleRootAndPath(leafHashes, 0)
 
-	roots := make([][]byte, 3)
-	roots[0] = make([]byte, 32)
-	roots[1] = make([]byte, 32)
-	roots[2] = make([]byte, 32)
-	copy(roots[2], mduRootFr)
-	commitment, manifestBlob, err := crypto_ffi.ComputeManifestCommitment(roots)
-	if err != nil {
-		t.Fatalf("ComputeManifestCommitment failed: %v", err)
+	b := crypto_ffi.NewMdu0Builder(1)
+	defer b.Free()
+	b.AppendFile(filePath, uint64(len(fileContent)), 0)
+	if err := b.SetRoot(b.GetWitnessCount(), mduRootFr); err != nil {
+		t.Fatalf("SetRoot(user) failed: %v", err)
 	}
-	manifestRoot, err := parseManifestRoot("0x" + fmt.Sprintf("%x", commitment))
+	mdu0Data, _ := b.Bytes()
+	if err := materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
+		t.Fatalf("materialize MDU #0 root table failed: %v", err)
+	}
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
 	if err != nil {
-		t.Fatalf("parseManifestRoot(manifest commitment) failed: %v", err)
+		t.Fatalf("ComputeMduMerkleRoot failed: %v", err)
+	}
+	manifestRoot, err := parseManifestRoot("0x" + hex.EncodeToString(rootBytes))
+	if err != nil {
+		t.Fatalf("parseManifestRoot(polyfs root) failed: %v", err)
 	}
 
 	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {
 		t.Fatalf("mkdir deal dir: %v", err)
 	}
-
-	b := crypto_ffi.NewMdu0Builder(1)
-	defer b.Free()
-	b.AppendFile(filePath, uint64(len(fileContent)), 0)
-	mdu0Data, _ := b.Bytes()
 	writeFile(t, filepath.Join(dealDir, "mdu_0.bin"), mdu0Data)
-	writeFile(t, filepath.Join(dealDir, "manifest.bin"), manifestBlob)
 	writeFile(t, filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain))
 	writeFile(t, filepath.Join(dealDir, "mdu_2.bin"), encodeRawToMdu(fileContent))
 

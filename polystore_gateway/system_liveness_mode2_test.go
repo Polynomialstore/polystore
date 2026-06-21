@@ -49,37 +49,15 @@ func TestSystemLivenessGeneratesProofFromMode2SlotShard(t *testing.T) {
 	mduIndex := uint64(1) + result.witnessMdus
 	blobIndex := uint32(0) // slot 0, row 0 in Mode 2 slot-major witness layout.
 	dealDir := dealScopedDir(dealID, result.manifestRoot)
-	manifestPath := filepath.Join(dealDir, "manifest.bin")
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 
 	var seed [32]byte
-	proof, err := generateSystemChainedProof(context.Background(), seed, dealID, dealDir, manifestPath, stripe, mduIndex, blobIndex)
+	proof, err := generateSystemChainedProof(context.Background(), seed, dealID, dealDir, mdu0Path, stripe, mduIndex, blobIndex)
 	if err != nil {
 		t.Fatalf("generateSystemChainedProof failed: %v", err)
 	}
 
-	flatMerklePath := make([]byte, 0, len(proof.MerklePath)*32)
-	for _, node := range proof.MerklePath {
-		flatMerklePath = append(flatMerklePath, node...)
-	}
-	ok, err := crypto_ffi.VerifyChainedProof(
-		result.manifestRoot.Bytes[:],
-		proof.MduIndex,
-		proof.ManifestOpening,
-		proof.MduRootFr,
-		proof.BlobCommitment,
-		uint64(proof.BlobIndex),
-		stripe.leafCount,
-		flatMerklePath,
-		proof.ZValue,
-		proof.YValue,
-		proof.KzgOpeningProof,
-	)
-	if err != nil {
-		t.Fatalf("VerifyChainedProof failed: %v", err)
-	}
-	if !ok {
-		t.Fatalf("generated system liveness proof did not verify")
-	}
+	requirePolyFSProofVerifies(t, result.manifestRoot.Bytes[:], proof, stripe.leafCount)
 }
 
 func TestSystemLivenessGeneratesProofForEveryMode2Slot(t *testing.T) {
@@ -107,39 +85,17 @@ func TestSystemLivenessGeneratesProofForEveryMode2Slot(t *testing.T) {
 	}
 	mduIndex := uint64(1) + result.witnessMdus
 	dealDir := dealScopedDir(dealID, result.manifestRoot)
-	manifestPath := filepath.Join(dealDir, "manifest.bin")
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 
 	var seed [32]byte
 	for slot := uint64(0); slot < stripe.slotCount; slot++ {
 		blobIndex := uint32(slot * stripe.rows)
-		proof, err := generateSystemChainedProof(context.Background(), seed, dealID, dealDir, manifestPath, stripe, mduIndex, blobIndex)
+		proof, err := generateSystemChainedProof(context.Background(), seed, dealID, dealDir, mdu0Path, stripe, mduIndex, blobIndex)
 		if err != nil {
 			t.Fatalf("generateSystemChainedProof slot %d failed: %v", slot, err)
 		}
 
-		flatMerklePath := make([]byte, 0, len(proof.MerklePath)*32)
-		for _, node := range proof.MerklePath {
-			flatMerklePath = append(flatMerklePath, node...)
-		}
-		ok, err := crypto_ffi.VerifyChainedProof(
-			result.manifestRoot.Bytes[:],
-			proof.MduIndex,
-			proof.ManifestOpening,
-			proof.MduRootFr,
-			proof.BlobCommitment,
-			uint64(proof.BlobIndex),
-			stripe.leafCount,
-			flatMerklePath,
-			proof.ZValue,
-			proof.YValue,
-			proof.KzgOpeningProof,
-		)
-		if err != nil {
-			t.Fatalf("VerifyChainedProof slot %d failed: %v", slot, err)
-		}
-		if !ok {
-			t.Fatalf("generated system liveness proof did not verify for slot %d", slot)
-		}
+		requirePolyFSProofVerifies(t, result.manifestRoot.Bytes[:], proof, stripe.leafCount)
 	}
 }
 
@@ -174,41 +130,19 @@ func TestSystemLivenessGeneratesProofAfterMode2Append(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stripeParamsFromHint failed: %v", err)
 	}
-	manifestPath := filepath.Join(finalDir, "manifest.bin")
+	mdu0Path := filepath.Join(finalDir, "mdu_0.bin")
 
 	var seed [32]byte
 	for userOrdinal := uint64(0); userOrdinal < appended.userMdus; userOrdinal++ {
 		mduIndex := uint64(1) + appended.witnessMdus + userOrdinal
 		for slot := uint64(0); slot < stripe.slotCount; slot++ {
 			blobIndex := uint32(slot * stripe.rows)
-			proof, err := generateSystemChainedProof(context.Background(), seed, dealID, finalDir, manifestPath, stripe, mduIndex, blobIndex)
+			proof, err := generateSystemChainedProof(context.Background(), seed, dealID, finalDir, mdu0Path, stripe, mduIndex, blobIndex)
 			if err != nil {
 				t.Fatalf("generateSystemChainedProof user_mdu=%d slot=%d failed: %v", userOrdinal, slot, err)
 			}
 
-			flatMerklePath := make([]byte, 0, len(proof.MerklePath)*32)
-			for _, node := range proof.MerklePath {
-				flatMerklePath = append(flatMerklePath, node...)
-			}
-			ok, err := crypto_ffi.VerifyChainedProof(
-				appended.manifestRoot.Bytes[:],
-				proof.MduIndex,
-				proof.ManifestOpening,
-				proof.MduRootFr,
-				proof.BlobCommitment,
-				uint64(proof.BlobIndex),
-				stripe.leafCount,
-				flatMerklePath,
-				proof.ZValue,
-				proof.YValue,
-				proof.KzgOpeningProof,
-			)
-			if err != nil {
-				t.Fatalf("VerifyChainedProof user_mdu=%d slot=%d failed: %v", userOrdinal, slot, err)
-			}
-			if !ok {
-				t.Fatalf("generated appended system liveness proof did not verify for user_mdu=%d slot=%d", userOrdinal, slot)
-			}
+			requirePolyFSProofVerifies(t, appended.manifestRoot.Bytes[:], proof, stripe.leafCount)
 		}
 	}
 }
@@ -231,7 +165,7 @@ func TestSystemLivenessLiveArtifactProofs(t *testing.T) {
 		t.Fatalf("stripeParamsFromHint failed: %v", err)
 	}
 	dealID := uint64(0)
-	manifestPath := filepath.Join(dealDir, "manifest.bin")
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 
 	var seed [32]byte
 	for slot := uint64(0); slot < stripe.slotCount; slot++ {
@@ -240,34 +174,56 @@ func TestSystemLivenessLiveArtifactProofs(t *testing.T) {
 			continue
 		}
 		blobIndex := uint32(slot * stripe.rows)
-		proof, err := generateSystemChainedProof(context.Background(), seed, dealID, dealDir, manifestPath, stripe, 2, blobIndex)
+		proof, err := generateSystemChainedProof(context.Background(), seed, dealID, dealDir, mdu0Path, stripe, 2, blobIndex)
 		if err != nil {
 			t.Fatalf("generateSystemChainedProof slot %d failed: %v", slot, err)
 		}
 
-		flatMerklePath := make([]byte, 0, len(proof.MerklePath)*32)
-		for _, node := range proof.MerklePath {
-			flatMerklePath = append(flatMerklePath, node...)
-		}
-		ok, err := crypto_ffi.VerifyChainedProof(
-			manifestRoot.Bytes[:],
-			proof.MduIndex,
-			proof.ManifestOpening,
-			proof.MduRootFr,
-			proof.BlobCommitment,
-			uint64(proof.BlobIndex),
-			stripe.leafCount,
-			flatMerklePath,
-			proof.ZValue,
-			proof.YValue,
-			proof.KzgOpeningProof,
-		)
-		if err != nil {
-			t.Fatalf("VerifyChainedProof slot %d failed: %v", slot, err)
-		}
-		if !ok {
-			t.Fatalf("generated system liveness proof did not verify for slot %d", slot)
-		}
+		requirePolyFSProofVerifies(t, manifestRoot.Bytes[:], proof, stripe.leafCount)
+	}
+}
+
+func requirePolyFSProofVerifies(t *testing.T, polyfsRoot []byte, proof *types.ChainedProof, leafCount uint64) {
+	t.Helper()
+
+	rootTablePath, err := flattenMerkleProof32(proof.RootTableDuMerklePath)
+	if err != nil {
+		t.Fatalf("flatten root-table proof: %v", err)
+	}
+	ok, err := crypto_ffi.VerifyMdu0RootTableProof(
+		polyfsRoot,
+		proof.MduIndex,
+		proof.MduRootFr,
+		proof.RootTableDuCommitment,
+		rootTablePath,
+		proof.ManifestOpening,
+	)
+	if err != nil {
+		t.Fatalf("VerifyMdu0RootTableProof failed: %v", err)
+	}
+	if !ok {
+		t.Fatalf("MDU #0 root-table proof did not verify")
+	}
+
+	blobPath, err := flattenMerkleProof32(proof.MerklePath)
+	if err != nil {
+		t.Fatalf("flatten blob Merkle proof: %v", err)
+	}
+	ok, err = crypto_ffi.VerifyMduProof(
+		proof.MduRootFr,
+		proof.BlobCommitment,
+		blobPath,
+		proof.BlobIndex,
+		leafCount,
+		proof.ZValue,
+		proof.YValue,
+		proof.KzgOpeningProof,
+	)
+	if err != nil {
+		t.Fatalf("VerifyMduProof failed: %v", err)
+	}
+	if !ok {
+		t.Fatalf("target MDU blob proof did not verify")
 	}
 }
 

@@ -2656,18 +2656,18 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		mduPath = reconPath
 	}
 
-	manifestPath := filepath.Join(dealDir, "manifest.bin")
-	if _, err := os.Stat(manifestPath); err != nil {
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
+	if _, err := os.Stat(mdu0Path); err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(
 				w,
 				http.StatusConflict,
-				"manifest blob missing on disk",
-				"Re-upload or run the gateway in full ingest mode (not POLYSTORE_FAST_INGEST)",
+				"MDU #0 missing on disk",
+				"Re-upload or refresh the gateway slab cache",
 			)
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to read manifest blob", err.Error())
+		writeJSONError(w, http.StatusInternalServerError, "failed to read MDU #0", err.Error())
 		return
 	}
 
@@ -2681,7 +2681,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		providerKeyName = name
 	}
 
-	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, manifestPath, providerKeyName, dealOwner)
+	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, mdu0Path, providerKeyName, dealOwner)
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
 		// Surface the underlying chain/CLI error in the HTTP response so CI/E2E
@@ -3224,7 +3224,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusForbidden, "session owner mismatch", "")
 				return
 			}
-			if len(onchainSession.ManifestRoot) != 48 || !bytes.Equal(onchainSession.ManifestRoot, dealRoot.Bytes[:]) {
+			if len(onchainSession.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytes.Equal(onchainSession.ManifestRoot, dealRoot.Bytes[:]) {
 				writeJSONError(w, http.StatusBadRequest, "session manifest_root mismatch", "session is pinned to a different deal content")
 				return
 			}
@@ -3461,7 +3461,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate Proof Details payload (for receipt submission).
-	manifestPath := filepath.Join(dealDir, "manifest.bin")
+	mdu0Path := filepath.Join(dealDir, "mdu_0.bin")
 	var proofPayload []byte
 	var proofHash string
 	var proofMs int64
@@ -3625,7 +3625,7 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		epochID = dlEpochID
 	}
 
-	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, epochID, mduIdx, mduPath, manifestPath, blobIndex, leafIndex, stripe.leafCount, absOffset)
+	proofPayload, proofHash, err = generateProofHeaderJSON(r.Context(), dealID, epochID, mduIdx, mduPath, mdu0Path, blobIndex, leafIndex, stripe.leafCount, absOffset)
 	proofMs = time.Since(proofStart).Milliseconds()
 	if err != nil {
 		log.Printf("GatewayFetch: generateProofHeaderJSON failed: %v", err)
@@ -4772,11 +4772,7 @@ func fastShardQuick(path string) (string, uint64, uint64, error) {
 	}
 	size := uint64(len(data))
 	hash := sha256.Sum256(data)
-	// Pad the 32-byte SHA256 hash with 16 zero bytes to make it 48 bytes.
-	// This is NOT a cryptographically valid KZG commitment, but passes length check.
-	paddedHash := make([]byte, 48)
-	copy(paddedHash[:32], hash[:])
-	cid := "0x" + hex.EncodeToString(paddedHash)
+	cid := "0x" + hex.EncodeToString(hash[:])
 
 	const mduSize uint64 = 8 * 1024 * 1024
 	userMdus := size / mduSize
@@ -5339,7 +5335,7 @@ func fetchDealOwnerAndCID(dealID uint64) (owner string, cid string, err error) {
 
 type dealMeta struct {
 	Owner        string
-	ManifestRoot string // canonical 0x + lowercase hex (48 bytes)
+	ManifestRoot string // canonical 0x + lowercase hex (32-byte PolyFS root)
 	EndBlock     uint64
 }
 
