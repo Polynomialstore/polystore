@@ -2474,12 +2474,14 @@ func (m *VirtualStripe) GetOverlayProviders() []string {
 	return nil
 }
 
-// ChainedProof implements the "Triple Proof" architecture for 3-hop verification.
+// ChainedProof implements the MDU #0 PolyFS-root proof path.
 type ChainedProof struct {
-	// Hop 1: Identity (Deal -> MDU)
-	MduIndex        uint64 `protobuf:"varint,1,opt,name=mdu_index,json=mduIndex,proto3" json:"mdu_index,omitempty"`
-	MduRootFr       []byte `protobuf:"bytes,2,opt,name=mdu_root_fr,json=mduRootFr,proto3" json:"mdu_root_fr,omitempty"`
-	ManifestOpening []byte `protobuf:"bytes,3,opt,name=manifest_opening,json=manifestOpening,proto3" json:"manifest_opening,omitempty"`
+	// Hop 1: Deal PolyFS root -> MDU #0 root-table DU -> target MDU root.
+	MduIndex              uint64   `protobuf:"varint,1,opt,name=mdu_index,json=mduIndex,proto3" json:"mdu_index,omitempty"`
+	MduRootFr             []byte   `protobuf:"bytes,2,opt,name=mdu_root_fr,json=mduRootFr,proto3" json:"mdu_root_fr,omitempty"`
+	ManifestOpening       []byte   `protobuf:"bytes,3,opt,name=manifest_opening,json=manifestOpening,proto3" json:"manifest_opening,omitempty"`
+	RootTableDuCommitment []byte   `protobuf:"bytes,10,opt,name=root_table_du_commitment,json=rootTableDuCommitment,proto3" json:"root_table_du_commitment,omitempty"`
+	RootTableDuMerklePath [][]byte `protobuf:"bytes,11,rep,name=root_table_du_merkle_path,json=rootTableDuMerklePath,proto3" json:"root_table_du_merkle_path,omitempty"`
 	// Hop 2: Structure (MDU -> Blob)
 	BlobCommitment []byte   `protobuf:"bytes,4,opt,name=blob_commitment,json=blobCommitment,proto3" json:"blob_commitment,omitempty"`
 	MerklePath     [][]byte `protobuf:"bytes,5,rep,name=merkle_path,json=merklePath,proto3" json:"merkle_path,omitempty"`
@@ -2540,6 +2542,20 @@ func (m *ChainedProof) GetMduRootFr() []byte {
 func (m *ChainedProof) GetManifestOpening() []byte {
 	if m != nil {
 		return m.ManifestOpening
+	}
+	return nil
+}
+
+func (m *ChainedProof) GetRootTableDuCommitment() []byte {
+	if m != nil {
+		return m.RootTableDuCommitment
+	}
+	return nil
+}
+
+func (m *ChainedProof) GetRootTableDuMerklePath() [][]byte {
+	if m != nil {
+		return m.RootTableDuMerklePath
 	}
 	return nil
 }
@@ -5150,6 +5166,22 @@ func (m *ChainedProof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.RootTableDuMerklePath) > 0 {
+		for iNdEx := len(m.RootTableDuMerklePath) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.RootTableDuMerklePath[iNdEx])
+			copy(dAtA[i:], m.RootTableDuMerklePath[iNdEx])
+			i = encodeVarintTypes(dAtA, i, uint64(len(m.RootTableDuMerklePath[iNdEx])))
+			i--
+			dAtA[i] = 0x5a
+		}
+	}
+	if len(m.RootTableDuCommitment) > 0 {
+		i -= len(m.RootTableDuCommitment)
+		copy(dAtA[i:], m.RootTableDuCommitment)
+		i = encodeVarintTypes(dAtA, i, uint64(len(m.RootTableDuCommitment)))
+		i--
+		dAtA[i] = 0x52
+	}
 	if len(m.KzgOpeningProof) > 0 {
 		i -= len(m.KzgOpeningProof)
 		copy(dAtA[i:], m.KzgOpeningProof)
@@ -6486,6 +6518,16 @@ func (m *ChainedProof) Size() (n int) {
 	l = len(m.KzgOpeningProof)
 	if l > 0 {
 		n += 1 + l + sovTypes(uint64(l))
+	}
+	l = len(m.RootTableDuCommitment)
+	if l > 0 {
+		n += 1 + l + sovTypes(uint64(l))
+	}
+	if len(m.RootTableDuMerklePath) > 0 {
+		for _, b := range m.RootTableDuMerklePath {
+			l = len(b)
+			n += 1 + l + sovTypes(uint64(l))
+		}
 	}
 	return n
 }
@@ -11942,6 +11984,72 @@ func (m *ChainedProof) Unmarshal(dAtA []byte) error {
 			if m.KzgOpeningProof == nil {
 				m.KzgOpeningProof = []byte{}
 			}
+			iNdEx = postIndex
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RootTableDuCommitment", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RootTableDuCommitment = append(m.RootTableDuCommitment[:0], dAtA[iNdEx:postIndex]...)
+			if m.RootTableDuCommitment == nil {
+				m.RootTableDuCommitment = []byte{}
+			}
+			iNdEx = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RootTableDuMerklePath", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RootTableDuMerklePath = append(m.RootTableDuMerklePath, make([]byte, postIndex-iNdEx))
+			copy(m.RootTableDuMerklePath[len(m.RootTableDuMerklePath)-1], dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

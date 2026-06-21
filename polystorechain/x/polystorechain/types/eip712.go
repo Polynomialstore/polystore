@@ -128,11 +128,17 @@ func HashChainedProof(proof *ChainedProof) (common.Hash, error) {
 	// The verifier also enforces lengths in the MsgProveLiveness flow.
 	if len(proof.MduRootFr) != 32 ||
 		len(proof.ManifestOpening) != 48 ||
+		len(proof.RootTableDuCommitment) != 48 ||
 		len(proof.BlobCommitment) != 48 ||
 		len(proof.ZValue) != 32 ||
 		len(proof.YValue) != 32 ||
 		len(proof.KzgOpeningProof) != 48 {
 		return common.Hash{}, nil
+	}
+	for _, node := range proof.RootTableDuMerklePath {
+		if len(node) != 32 {
+			return common.Hash{}, nil
+		}
 	}
 	for _, node := range proof.MerklePath {
 		if len(node) != 32 {
@@ -142,13 +148,21 @@ func HashChainedProof(proof *ChainedProof) (common.Hash, error) {
 
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], proof.MduIndex)
-	buf := make([]byte, 0, 8+32+48+48+4+len(proof.MerklePath)*32+4+32+32+48)
+	buf := make([]byte, 0, 8+32+48+48+4+len(proof.RootTableDuMerklePath)*32+48+4+len(proof.MerklePath)*32+4+32+32+48)
 	buf = append(buf, b[:]...)
 	buf = append(buf, proof.MduRootFr...)
 	buf = append(buf, proof.ManifestOpening...)
-	buf = append(buf, proof.BlobCommitment...)
+	buf = append(buf, proof.RootTableDuCommitment...)
 
 	var c [4]byte
+	binary.BigEndian.PutUint32(c[:], uint32(len(proof.RootTableDuMerklePath)))
+	buf = append(buf, c[:]...)
+	for _, node := range proof.RootTableDuMerklePath {
+		buf = append(buf, node...)
+	}
+
+	buf = append(buf, proof.BlobCommitment...)
+
 	binary.BigEndian.PutUint32(c[:], uint32(len(proof.MerklePath)))
 	buf = append(buf, c[:]...)
 	for _, node := range proof.MerklePath {
@@ -257,13 +271,14 @@ func HashDownloadSessionReceipt(receipt *DownloadSessionReceipt) (common.Hash, e
 }
 
 // HashRetrievalVoucher computes the EIP-712 struct hash for a sponsored retrieval voucher.
-// Note: manifest_root is a dynamic bytes field and is hashed as keccak256(manifest_root) per EIP-712.
+// Note: manifest_root carries the 32-byte PolyFS root during the transition and is hashed as
+// keccak256(manifest_root) per EIP-712.
 func HashRetrievalVoucher(v *VoucherAuth) (common.Hash, error) {
 	if v == nil {
 		return common.Hash{}, nil
 	}
-	if len(v.ManifestRoot) != 48 {
-		return common.Hash{}, fmt.Errorf("manifest_root must be 48 bytes")
+	if len(v.ManifestRoot) != POLYFS_ROOT_SIZE {
+		return common.Hash{}, fmt.Errorf("manifest_root must be 32 bytes")
 	}
 
 	provider := strings.TrimSpace(v.Provider)

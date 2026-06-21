@@ -58,7 +58,7 @@ func setupRetrievalExpiryDeal(t *testing.T) (*fixture, *trackingBankKeeper, type
 	})
 	require.NoError(t, err)
 
-	manifestRoot := make([]byte, 48)
+	manifestRoot := make([]byte, types.POLYFS_ROOT_SIZE)
 	for i := range manifestRoot {
 		manifestRoot[i] = byte(i + 1)
 	}
