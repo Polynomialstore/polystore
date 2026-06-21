@@ -74,7 +74,8 @@ MDU #0 is partitioned as:
 | 0..15 | 2 MiB | Root table |
 | 16..63 | 6 MiB | File table |
 
-The root table has 65,536 scalar cells. It stores roots for MDUs after MDU #0:
+The root table has 65,536 scalar cells. It stores roots for MDUs after MDU #0.
+Apply this mapping only after rejecting `mdu_index == 0`:
 
 ```text
 root_table_index = mdu_index - 1
