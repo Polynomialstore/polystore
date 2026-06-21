@@ -10,7 +10,7 @@ const COSMOS_CHAIN_ID = process.env.POLYSTORE_COSMOS_CHAIN_ID ?? '31337'
 const MDU_SIZE = 8 * 1024 * 1024
 const MANIFEST_SIZE = 128 * 1024
 const VALID_MANIFEST_ROOT =
-  '0x85f0ae2fcfd15f3a37873f6d9315f8065df1846d65c5501ebbc6b31d510dcedb0e03001784b59572b58085b39416aed3'
+  '0x85f0ae2fcfd15f3a37873f6d9315f8065df1846d65c5501ebbc6b31d510dcedb'
 
 function asViemTypedData<T extends { domain: { chainId: number } }>(typedData: T) {
   return {
