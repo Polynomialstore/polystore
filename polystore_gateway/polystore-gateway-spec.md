@@ -204,8 +204,12 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **Role:** Educational/visualization endpoint; **not** required for fetch/prove and not a canonical trust root.
 
 *   **`GET /gateway/mdu-kzg/{polyfs_root}/{mdu_index}`**
-    *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match).
-    *   **Logic:** Returns the 64 blob commitments for the specified MDU index (derived from Witness MDUs) and the derived MDU root.
+    *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match), `mdu_kind` / profile selector if the kind cannot be inferred from the slab segment (`metadata`, `witness`, `replicated_user`, `mode2_user_sp_mdu`).
+    *   **Logic:** Returns the profile-selected blob commitments for the specified MDU index (derived from Witness MDUs for user-data MDUs) and the derived MDU root.
+        * The response MUST include the selected `mdu_kind`, `root_profile`, `leaf_count`, `commitments`, and `derived_mdu_root`.
+        * Replicated metadata/user MDUs use 64 leaves.
+        * Mode 2 striped user SP-MDUs use `leaf_count = (K + M) * (64 / K)`; the default `K=8,M=4` profile returns 96 commitments, not 64.
+        * Callers MUST compute/cross-check the MDU root with the returned `leaf_count`; truncating parity leaves produces a root that cannot match the committed MDU root.
     *   **Role:** Educational/visualization endpoint; **not** required for fetch/prove.
 
 *   **`GET /gateway/manifest/{cid}`** *(Deprecated)*
