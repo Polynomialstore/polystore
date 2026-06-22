@@ -39,7 +39,7 @@ Environment:
   POLYSTORE_PROVIDER_BASES      Space-separated provider-daemon base URLs.
                                 Default: one URL per resolved provider-daemon
                                 service, starting at http://127.0.0.1:8091.
-                                Duplicate bases are rejected.
+                                Duplicate canonical bases are rejected.
   POLYSTORE_SKIP_BUILD=1        Same as --skip-build.
   POLYSTORE_DRY_RUN=1           Same as --dry-run.
   POLYSTORE_RESTART_TUNNELS=1   Same as --restart-tunnels.
@@ -278,10 +278,61 @@ set_default_provider_bases() {
 
 provider_base_duplicate_key() {
   local base="$1"
+  local scheme authority path host port
 
   while [[ "$base" == */ ]]; do
     base="${base%/}"
   done
+
+  if [[ "$base" =~ ^([A-Za-z][A-Za-z0-9+.-]*)://([^/]+)(/.*)?$ ]]; then
+    scheme="${BASH_REMATCH[1],,}"
+    authority="${BASH_REMATCH[2]}"
+    path="${BASH_REMATCH[3]:-}"
+
+    if [[ "$authority" =~ ^\[([^]]+)\](:([0-9]+))?$ ]]; then
+      host="${BASH_REMATCH[1],,}"
+      port="${BASH_REMATCH[3]:-}"
+      case "$host" in
+        ::1)
+          host="127.0.0.1"
+          ;;
+        *)
+          host="[$host]"
+          ;;
+      esac
+    elif [[ "$authority" =~ ^([^:]+):([0-9]+)$ ]]; then
+      host="${BASH_REMATCH[1],,}"
+      port="${BASH_REMATCH[2]}"
+    else
+      host="${authority,,}"
+      port=""
+    fi
+
+    case "$host" in
+      localhost|127.0.0.1)
+        host="127.0.0.1"
+        ;;
+    esac
+
+    if [[ -z "$port" ]]; then
+      case "$scheme" in
+        http)
+          port="80"
+          ;;
+        https)
+          port="443"
+          ;;
+      esac
+    fi
+
+    if [[ -n "$port" ]]; then
+      printf '%s://%s:%s%s' "$scheme" "$host" "$port" "$path"
+    else
+      printf '%s://%s%s' "$scheme" "$host" "$path"
+    fi
+    return
+  fi
+
   printf '%s' "$base"
 }
 
@@ -303,7 +354,7 @@ require_unique_provider_bases() {
         continue
       fi
 
-      echo "ERROR: duplicate provider-daemon health base: $left_base" >&2
+      echo "ERROR: duplicate provider-daemon health base: $left_base and $right_base" >&2
       echo "       $left_service and $right_service both resolve to the same provider endpoint." >&2
       echo "       Each provider-daemon service must have a unique health base so healthchecks cannot poll one surviving endpoint twice." >&2
       if [[ "$PROVIDER_BASES_FROM_ENV" -eq 1 ]]; then

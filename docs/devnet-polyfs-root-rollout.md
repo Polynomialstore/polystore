@@ -21,7 +21,7 @@ It restarts services in this order:
 6. Preflight hub root service units with non-mutating, non-sudo `systemctl show`, including dry-runs, so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped.
 7. If `--restart-tunnels` is supplied, preflight tunnel user service units with non-mutating `systemctl --user show`.
 8. Resolve `provider-daemon` service managers with non-mutating unit checks, including dry-runs. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
-9. Derive default provider health targets from known resolved service names unless `POLYSTORE_PROVIDER_BASES` is set. Unknown custom service names require explicit bases, and duplicate provider health bases fail before any service-stop mutation.
+9. Derive default provider health targets from known resolved service names unless `POLYSTORE_PROVIDER_BASES` is set. Unknown custom service names require explicit bases, and duplicate canonical provider health bases fail before any service-stop mutation.
 10. Preflight root service control. Live non-root runs must prove passwordless sudo authorization for the exact hub and root-managed `provider-daemon` `systemctl stop/start` actions before any `provider-daemon` is stopped.
 11. If `--restart-tunnels` is supplied, stop tunnel user services before taking down the devnet stack.
 12. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
@@ -42,7 +42,7 @@ templates:
 - EVM JSON-RPC: `http://127.0.0.1:8545`
 - `user-gateway` via legacy router service: `http://127.0.0.1:8080`
 - Faucet: `http://127.0.0.1:8081`
-- `provider-daemon` services: derived from resolved provider service names. The four local user-provider layout maps `polystore-provider1.service` through `polystore-provider4.service` to `8091` through `8094`; the checked-in single root-provider template maps `polystore-gateway-provider.service` to `8091`. If a configured provider inventory resolves two services to the same health base, the rollout exits before stopping services.
+- `provider-daemon` services: derived from resolved provider service names. The four local user-provider layout maps `polystore-provider1.service` through `polystore-provider4.service` to `8091` through `8094`; the checked-in single root-provider template maps `polystore-gateway-provider.service` to `8091`. If a configured provider inventory resolves two services to the same canonical health base, including `localhost`/`127.0.0.1` aliases or omitted default ports, the rollout exits before stopping services.
 
 Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 `POLYSTORE_EVM_BASE`, `POLYSTORE_ROUTER_BASE`, `POLYSTORE_FAUCET_BASE`, and
@@ -54,7 +54,7 @@ env binds the managed devnet `user-gateway` to another port such as `18080`, set
 Set `POLYSTORE_PROVIDER_BASES` when a host's provider ports do not follow the
 default known service-name mapping or when using custom provider service names.
 When set, it must provide exactly one base URL for each resolved
-`provider-daemon` service, and every base must be unique, so rollout
+`provider-daemon` service, and every canonical base must be unique, so rollout
 healthchecks cannot silently poll one surviving endpoint twice while skipping a
 restarted provider.
 
