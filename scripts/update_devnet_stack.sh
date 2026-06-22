@@ -242,19 +242,42 @@ root_systemctl() {
   run_cmd sudo -n systemctl "$@"
 }
 
+provider_base_for_service() {
+  local service="$1"
+  local provider_index port
+
+  if [[ "$service" =~ ^polystore-provider([0-9]+)\.service$ ]]; then
+    provider_index="${BASH_REMATCH[1]}"
+    port=$((8090 + provider_index))
+    printf 'http://127.0.0.1:%s' "$port"
+    return 0
+  fi
+
+  if [[ "$service" == "polystore-gateway-provider.service" ]]; then
+    printf 'http://127.0.0.1:8091'
+    return 0
+  fi
+
+  return 1
+}
+
 set_default_provider_bases() {
-  local count="$1"
-  local i port
+  local service base
 
   PROVIDER_BASES=()
-  for ((i = 0; i < count; i += 1)); do
-    port=$((8091 + i))
-    PROVIDER_BASES+=("http://127.0.0.1:$port")
+  for service in "$@"; do
+    if ! base="$(provider_base_for_service "$service")"; then
+      echo "ERROR: cannot derive provider-daemon base URL for service: $service" >&2
+      echo "       Set POLYSTORE_PROVIDER_BASES with one URL per resolved provider-daemon service." >&2
+      exit 1
+    fi
+    PROVIDER_BASES+=("$base")
   done
 }
 
 resolve_provider_bases() {
   local expected_count="$1"
+  shift
   local actual_count="${#PROVIDER_BASES[@]}"
   local prefix=""
 
@@ -273,7 +296,7 @@ resolve_provider_bases() {
     return
   fi
 
-  set_default_provider_bases "$expected_count"
+  set_default_provider_bases "$@"
   echo "    ${prefix}provider-daemon bases derived from resolved services: ${PROVIDER_BASES[*]}"
 }
 
@@ -367,7 +390,7 @@ resolve_provider_service_scopes() {
     if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
       echo "    DRY-RUN root manager: ${PROVIDER_ROOT_SERVICES[*]}"
     fi
-    resolve_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))"
+    resolve_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))" "${PROVIDER_USER_SERVICES[@]}" "${PROVIDER_ROOT_SERVICES[@]}"
     PROVIDER_SERVICE_SCOPES_RESOLVED=1
     return
   fi
@@ -429,7 +452,7 @@ resolve_provider_service_scopes() {
   if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
     echo "    root manager: ${PROVIDER_ROOT_SERVICES[*]}"
   fi
-  resolve_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))"
+  resolve_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))" "${PROVIDER_USER_SERVICES[@]}" "${PROVIDER_ROOT_SERVICES[@]}"
   PROVIDER_SERVICE_SCOPES_RESOLVED=1
 }
 

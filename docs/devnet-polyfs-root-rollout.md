@@ -21,7 +21,7 @@ It restarts services in this order:
 6. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
 7. Preflight hub root service units so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped.
 8. Resolve `provider-daemon` service managers. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
-9. Derive default provider health targets from the resolved service count unless `POLYSTORE_PROVIDER_BASES` is set.
+9. Derive default provider health targets from known resolved service names unless `POLYSTORE_PROVIDER_BASES` is set. Unknown custom service names require explicit bases.
 10. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
 11. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
 12. Install artifacts with backups and sha256 evidence.
@@ -39,7 +39,7 @@ templates:
 - EVM JSON-RPC: `http://127.0.0.1:8545`
 - `user-gateway` via legacy router service: `http://127.0.0.1:8080`
 - Faucet: `http://127.0.0.1:8081`
-- `provider-daemon` services: derived from resolved provider services, starting at `http://127.0.0.1:8091`. The four local user-provider layout resolves to `8091` through `8094`; the checked-in single root-provider template resolves to `8091`.
+- `provider-daemon` services: derived from resolved provider service names. The four local user-provider layout maps `polystore-provider1.service` through `polystore-provider4.service` to `8091` through `8094`; the checked-in single root-provider template maps `polystore-gateway-provider.service` to `8091`.
 
 Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 `POLYSTORE_EVM_BASE`, `POLYSTORE_ROUTER_BASE`, `POLYSTORE_FAUCET_BASE`, and
@@ -49,9 +49,10 @@ Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 env binds the managed devnet `user-gateway` to another port such as `18080`, set
 `POLYSTORE_ROUTER_BASE` explicitly before running the rollout.
 Set `POLYSTORE_PROVIDER_BASES` when a host's provider ports do not follow the
-default one-port-per-resolved-service sequence. When set, it must provide
-exactly one base URL for each resolved `provider-daemon` service so rollout
-healthchecks cannot silently skip a restarted provider.
+default known service-name mapping or when using custom provider service names.
+When set, it must provide exactly one base URL for each resolved
+`provider-daemon` service so rollout healthchecks cannot silently skip a
+restarted provider.
 
 Provider service management is controlled by `POLYSTORE_PROVIDER_SERVICE_SCOPE`:
 
