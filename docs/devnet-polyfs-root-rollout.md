@@ -18,7 +18,7 @@ It restarts services in this order:
 3. Preflight all build artifacts before stopping any service.
 4. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
 5. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
-6. Resolve `provider-daemon` service managers. The default `auto` mode supports both the local user-service provider layout and the checked-in root provider template.
+6. Resolve `provider-daemon` service managers. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
 7. Derive default provider health targets from the resolved service count unless `POLYSTORE_PROVIDER_BASES` is set.
 8. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
 9. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
@@ -55,6 +55,9 @@ Provider service management is controlled by `POLYSTORE_PROVIDER_SERVICE_SCOPE`:
 - `root`: require every configured provider service to exist in the root systemd manager. With the checked-in provider template, use this with `POLYSTORE_PROVIDER_SERVICES=polystore-gateway-provider.service`.
 
 If a service name exists in both managers, `auto` exits before stopping services; set the scope explicitly for that host.
+The default `auto` inventory intentionally does not include the checked-in root
+provider template, because a loaded-but-unused root template can collide with
+the four user-provider devnet layout on port `8091`.
 
 ## State Policy
 

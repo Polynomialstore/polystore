@@ -22,9 +22,9 @@ Flags:
 
 Environment:
   POLYSTORE_PROVIDER_SERVICES   Space-separated provider-daemon services to restart.
-                                Default: polystore-provider1..polystore-provider4
-                                plus the checked-in root provider template when
-                                POLYSTORE_PROVIDER_SERVICE_SCOPE=auto.
+                                Default: polystore-provider1..polystore-provider4,
+                                or the checked-in root provider template when
+                                POLYSTORE_PROVIDER_SERVICE_SCOPE=root.
   POLYSTORE_PROVIDER_SERVICE_SCOPE
                                 Provider service manager: auto, user, or root
                                 (default: auto).
@@ -130,8 +130,6 @@ if [[ -n "${POLYSTORE_PROVIDER_SERVICES+x}" ]]; then
   read -r -a PROVIDER_SERVICES <<<"$POLYSTORE_PROVIDER_SERVICES"
 elif [[ "$PROVIDER_SERVICE_SCOPE" == "root" ]]; then
   PROVIDER_SERVICES=("${DEFAULT_ROOT_PROVIDER_SERVICES[@]}")
-elif [[ "$PROVIDER_SERVICE_SCOPE" == "auto" ]]; then
-  PROVIDER_SERVICES=("${DEFAULT_USER_PROVIDER_SERVICES[@]}" "${DEFAULT_ROOT_PROVIDER_SERVICES[@]}")
 else
   PROVIDER_SERVICES=("${DEFAULT_USER_PROVIDER_SERVICES[@]}")
 fi
@@ -321,7 +319,6 @@ resolve_provider_service_scopes() {
           PROVIDER_USER_SERVICES=("${PROVIDER_SERVICES[@]}")
         else
           PROVIDER_USER_SERVICES=("${DEFAULT_USER_PROVIDER_SERVICES[@]}")
-          PROVIDER_ROOT_SERVICES=("${DEFAULT_ROOT_PROVIDER_SERVICES[@]}")
         fi
         ;;
     esac
