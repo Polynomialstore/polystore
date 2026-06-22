@@ -163,14 +163,16 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 	require.NotNil(t, createRes)
 
 	// 2. Update Deal Content
+	sizeBytes := uint64(1024 * 1024 * 100) // 100 MB
+	totalMdus, witnessMdus := polyfsTestLayoutForSize(sizeBytes)
 	updateIntent := &types.EvmUpdateContentIntent{
 		CreatorEvm:           evmAddr.Hex(),
 		DealId:               createRes.DealId,
 		PreviousManifestRoot: "",
 		Cid:                  makeManifestRootHex(0xab),
-		SizeBytes:            1024 * 1024 * 100, // 100 MB
-		TotalMdus:            3,
-		WitnessMdus:          1,
+		SizeBytes:            sizeBytes,
+		TotalMdus:            totalMdus,
+		WitnessMdus:          witnessMdus,
 		Nonce:                2,
 		ChainId:              chainID,
 	}
@@ -311,14 +313,16 @@ func TestUpdateDealContentFromEvm_AllowsLargeContent(t *testing.T) {
 	require.NoError(t, err)
 
 	// 2. Commit 5 GiB content; dynamic sizing should allow this.
+	sizeBytes := uint64(5 * 1024 * 1024 * 1024) // 5 GiB
+	totalMdus, witnessMdus := polyfsTestLayoutForSize(sizeBytes)
 	updateIntent := &types.EvmUpdateContentIntent{
 		CreatorEvm:           evmAddr.Hex(),
 		DealId:               createRes.DealId,
 		PreviousManifestRoot: "",
 		Cid:                  makeManifestRootHex(0xcc),
-		SizeBytes:            5 * 1024 * 1024 * 1024, // 5 GiB
-		TotalMdus:            3,
-		WitnessMdus:          1,
+		SizeBytes:            sizeBytes,
+		TotalMdus:            totalMdus,
+		WitnessMdus:          witnessMdus,
 		Nonce:                2,
 		ChainId:              chainID,
 	}

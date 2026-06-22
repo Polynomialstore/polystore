@@ -67,7 +67,7 @@ func setupRetrievalExpiryDeal(t *testing.T) (*fixture, *trackingBankKeeper, type
 		DealId:      resDeal.DealId,
 		Cid:         "0x" + hexEncode(manifestRoot),
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)

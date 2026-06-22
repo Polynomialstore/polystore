@@ -70,9 +70,9 @@ func TestRetrievalSession_Lifecycle_ConfirmThenProof(t *testing.T) {
 	require.NoError(t, err)
 
 	const targetMduIndex = uint64(4097)
-	const witnessMdus = uint64(1)
+	const witnessMdus = uint64(3)
 	const totalMdus = targetMduIndex + 1
-	const committedSize = (totalMdus - 1 - witnessMdus) * uint64(types.MDU_SIZE)
+	const committedSize = (totalMdus - 1 - witnessMdus) * polyfsTestRawMduPayloadBytes
 
 	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
 	rootTableDuCommitment, rootTableDuMerklePath, rootTableOpening := mustMdu0RootTableProof(t, mdu0, targetMduIndex, root)
@@ -197,7 +197,7 @@ func TestRetrievalSession_OpenRejectsNonceReplay(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         "0x" + hexEncode(manifestRoot),
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)

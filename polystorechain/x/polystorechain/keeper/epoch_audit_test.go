@@ -57,8 +57,8 @@ func setupAuditBudgetMode2Deal(t *testing.T, f *fixture, bank *trackingBankKeepe
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       1,
-		TotalMdus:   2, // meta=1, user=1
-		WitnessMdus: 0,
+		TotalMdus:   3, // metadata: MDU #0 + one Witness MDU, user=1
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 	return ctx2

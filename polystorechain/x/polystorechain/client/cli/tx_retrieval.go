@@ -49,7 +49,7 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 				return err
 			}
 			if mduIndex == 0 {
-				return fmt.Errorf("mdu-index must target a data/witness MDU (>= 1), not MDU #0")
+				return fmt.Errorf("mdu-index must target a user data MDU; MDU #0 and Witness MDUs are metadata")
 			}
 
 			// 1. Read File & Compute Proof
