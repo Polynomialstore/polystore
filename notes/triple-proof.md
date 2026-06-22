@@ -134,11 +134,11 @@ raw payload capacity, not `user_data_mdus * 8 MiB`.
 1.  **Context Derivation:**
     *   From `Challenge`, derive `Target_MDU_Index` (the 0-indexed MDU number being challenged, starting from MDU #0).
     *   **Safety Check:** `Target_MDU_Index` must be < `Deal.total_mdus`.
-    *   **Content-proof Check:** Retrieval and liveness challenges MUST target `Target_MDU_Index > 0`. MDU #0 is the committed super-manifest itself; it is authenticated directly by `Deal.polyfs_root` and must not be looked up through the root table.
+    *   **Content-proof Check:** Retrieval and liveness challenges MUST target a user-data MDU: `Target_MDU_Index > W`. MDU #0 and Witness MDUs are metadata regions, not content-proof targets.
 
 2.  **Determine MDU Type:**
     *   If `Target_MDU_Index == 0`: reject this proof shape. A future metadata proof for bytes inside MDU #0 needs the separate direct path `Deal.polyfs_root -> MDU0.DU commitment -> KZG opening`, not the root-table path below.
-    *   If `Target_MDU_Index > 0` and `Target_MDU_Index <= W`: Witness MDU. Hop 2 is to find a Blob commitment for a Data MDU.
+    *   If `Target_MDU_Index > 0` and `Target_MDU_Index <= W`: reject this content-proof shape. Witness MDUs cache replicated metadata for proof generation; they must not satisfy retrieval or liveness challenges for user data.
     *   If `Target_MDU_Index > W`: User Data MDU. Hop 2 is to find a Data Blob.
 
 3.  **Hop 1a: Verify The Super-Manifest DU (Deal Root -> Root-Table DU Commitment) [Merkle]**
