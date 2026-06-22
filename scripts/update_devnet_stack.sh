@@ -441,6 +441,11 @@ resolve_provider_service_scopes() {
           echo "       user LoadState=$(describe_load_state "$user_state"), root LoadState=$(describe_load_state "$root_state")." >&2
           exit 1
         fi
+
+        echo "ERROR: default provider-daemon service is not loaded in user or root systemd managers: $service" >&2
+        echo "       user LoadState=$(describe_load_state "$user_state"), root LoadState=$(describe_load_state "$root_state")." >&2
+        echo "       The default devnet inventory requires provider1-provider4; set POLYSTORE_PROVIDER_SERVICES explicitly for partial devnets." >&2
+        exit 1
       done
 
       if [[ "$found_any" -ne 1 ]]; then
