@@ -522,6 +522,70 @@ same_install_path() {
   [[ "$(realpath -m "$src")" == "$(realpath -m "$dst")" ]]
 }
 
+preflight_install_destination() {
+  local src="$1"
+  local dst="$2"
+  local dst_dir backup_subdir backup_dir write_test
+
+  if same_install_path "$src" "$dst"; then
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    DRY-RUN: would verify target write access for $dst"
+    return 0
+  fi
+
+  dst_dir="$(dirname "$dst")"
+  backup_subdir="$(dirname "${dst#"$TARGET_ROOT"/}")"
+  backup_dir="$BACKUP_DIR/$backup_subdir"
+
+  if [[ -e "$dst" && ! -f "$dst" ]]; then
+    echo "ERROR: install target exists but is not a regular file: $dst" >&2
+    echo "       Fix the target path before stopping services." >&2
+    exit 1
+  fi
+
+  if ! mkdir -p "$dst_dir" "$backup_dir"; then
+    echo "ERROR: cannot create install/backup directories for $dst" >&2
+    echo "       dst_dir=$dst_dir backup_dir=$backup_dir" >&2
+    exit 1
+  fi
+
+  if [[ ! -w "$dst_dir" ]]; then
+    echo "ERROR: install target directory is not writable: $dst_dir" >&2
+    echo "       Fix permissions before stopping services." >&2
+    exit 1
+  fi
+
+  if [[ ! -w "$backup_dir" ]]; then
+    echo "ERROR: backup directory is not writable: $backup_dir" >&2
+    echo "       Fix permissions before stopping services." >&2
+    exit 1
+  fi
+
+  write_test="$backup_dir/.polystore-rollout-preflight-write-test"
+  if ! : >"$write_test"; then
+    echo "ERROR: cannot write backup preflight marker: $write_test" >&2
+    echo "       Fix permissions before stopping services." >&2
+    exit 1
+  fi
+  rm -f "$write_test"
+
+  if [[ -e "$dst" ]]; then
+    if [[ ! -r "$dst" ]]; then
+      echo "ERROR: existing install target cannot be read for backup: $dst" >&2
+      echo "       Fix permissions before stopping services." >&2
+      exit 1
+    fi
+    if [[ ! -w "$dst" ]]; then
+      echo "ERROR: existing install target is not writable for replacement: $dst" >&2
+      echo "       Fix permissions before stopping services." >&2
+      exit 1
+    fi
+  fi
+}
+
 install_with_backup() {
   local src="$1"
   local dst="$2"
@@ -631,7 +695,9 @@ preflight_install_plan() {
   for i in "${!sources[@]}"; do
     if same_install_path "${sources[$i]}" "${destinations[$i]}"; then
       echo "    source equals target; install will be skipped: ${destinations[$i]}"
+      continue
     fi
+    preflight_install_destination "${sources[$i]}" "${destinations[$i]}"
   done
 }
 
