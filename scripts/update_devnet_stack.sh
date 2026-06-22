@@ -233,6 +233,12 @@ sha256_if_present() {
   fi
 }
 
+same_install_path() {
+  local src="$1"
+  local dst="$2"
+  [[ "$(realpath -m "$src")" == "$(realpath -m "$dst")" ]]
+}
+
 install_with_backup() {
   local src="$1"
   local dst="$2"
@@ -255,6 +261,15 @@ install_with_backup() {
   sha256_if_present "$src"
   if [[ -e "$dst" ]]; then
     sha256_if_present "$dst"
+  fi
+
+  if same_install_path "$src" "$dst"; then
+    if [[ "$DRY_RUN" == "1" ]]; then
+      echo "    DRY-RUN: source and target are the same path; install would be skipped"
+    else
+      echo "    source and target are the same path; skipping install"
+    fi
+    return 0
   fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -301,6 +316,33 @@ preflight_artifacts() {
     echo "ERROR: missing install artifacts; aborting before service stop" >&2
     exit 1
   fi
+}
+
+preflight_install_plan() {
+  local sources=(
+    "$SOURCE_ROOT/polystore_core/target/release/libpolystore_core.so"
+    "$SOURCE_ROOT/polystorechain/polystorechaind"
+    "$SOURCE_ROOT/polystore_gateway/polystore_gateway"
+    "$SOURCE_ROOT/polystore_faucet/polystore_faucet"
+    "$SOURCE_ROOT/polystore_cli/target/release/polystore_cli"
+    "$SOURCE_ROOT/polystorechain/trusted_setup.txt"
+  )
+  local destinations=(
+    "$TARGET_ROOT/polystore_core/target/release/libpolystore_core.so"
+    "$TARGET_ROOT/polystorechain/polystorechaind"
+    "$TARGET_ROOT/polystore_gateway/polystore_gateway"
+    "$TARGET_ROOT/polystore_faucet/polystore_faucet"
+    "$TARGET_ROOT/polystore_cli/target/release/polystore_cli"
+    "$TARGET_ROOT/polystorechain/trusted_setup.txt"
+  )
+  local i
+
+  echo "==> Preflighting install plan before stopping services"
+  for i in "${!sources[@]}"; do
+    if same_install_path "${sources[$i]}" "${destinations[$i]}"; then
+      echo "    source equals target; install will be skipped: ${destinations[$i]}"
+    fi
+  done
 }
 
 build_artifacts() {
@@ -407,6 +449,7 @@ run_healthchecks() {
 print_source_evidence
 build_artifacts
 preflight_artifacts
+preflight_install_plan
 preflight_root_service_control
 
 echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
