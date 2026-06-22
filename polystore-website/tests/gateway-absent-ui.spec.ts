@@ -10,7 +10,7 @@ const capturePreparePerf = process.env.CAPTURE_PREPARE_PERF === '1'
 const stopAfterPreparePerf = process.env.STOP_AFTER_PREPARE_PERF === '1'
 
 function extractManifestRoot(text: string): string {
-  const match = String(text || '').match(/0x[0-9a-fA-F]{96}/)
+  const match = String(text || '').match(/0x(?:[0-9a-fA-F]{96}|[0-9a-fA-F]{64})/)
   return (match?.[0] || '').toLowerCase()
 }
 
@@ -31,6 +31,17 @@ async function isUploaderResetToInitialState(page: Page): Promise<boolean> {
   return step2State === 'idle' && step3State === 'idle' && step4State === 'idle' && fileInputCount > 0
 }
 
+async function hasDealFileRow(page: Page, expectedFilePath: string): Promise<boolean> {
+  return page
+    .locator('[data-testid="deal-detail-file-row"]')
+    .evaluateAll(
+      (rows, filePath) =>
+        rows.some((row) => row.getAttribute('data-file-path') === filePath || (row.textContent || '').includes(filePath)),
+      expectedFilePath,
+    )
+    .catch(() => false)
+}
+
 async function isCommitCompleteOrReset(
   page: Page,
   commitBtn: ReturnType<Page['getByTestId']>,
@@ -44,8 +55,7 @@ async function isCommitCompleteOrReset(
     if (currentManifest && currentManifest !== initialManifestRoot) return true
   }
   if (expectedFilePath) {
-    const fileRow = page.getByTestId('deal-detail-file-row').filter({ hasText: expectedFilePath })
-    if ((await fileRow.count().catch(() => 0)) > 0) return true
+    if (await hasDealFileRow(page, expectedFilePath)) return true
   }
   const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
   if (panelState === 'success') return true

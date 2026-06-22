@@ -13,7 +13,7 @@ const mode2FastUploadWaitMs = isMode2Fast ? 180_000 : 300_000
 const mode2FastMaybeDownloadMs = isMode2Fast ? 60_000 : 120_000
 
 function extractManifestRoot(text: string): string {
-  const match = String(text || '').match(/0x[0-9a-fA-F]{96}/)
+  const match = String(text || '').match(/0x(?:[0-9a-fA-F]{96}|[0-9a-fA-F]{64})/)
   return (match?.[0] || '').toLowerCase()
 }
 
@@ -201,6 +201,17 @@ async function isUploaderResetToInitialState(page: Page): Promise<boolean> {
   return step2State === 'idle' && step3State === 'idle' && step4State === 'idle' && fileInputCount > 0
 }
 
+async function hasDealFileRow(page: Page, expectedFilePath: string): Promise<boolean> {
+  return page
+    .locator('[data-testid="deal-detail-file-row"]')
+    .evaluateAll(
+      (rows, filePath) =>
+        rows.some((row) => row.getAttribute('data-file-path') === filePath || (row.textContent || '').includes(filePath)),
+      expectedFilePath,
+    )
+    .catch(() => false)
+}
+
 async function isCommitCompleteOrReset(
   page: Page,
   commitBtn: Locator,
@@ -214,8 +225,7 @@ async function isCommitCompleteOrReset(
     if (currentManifest && currentManifest !== initialManifestRoot) return true
   }
   if (expectedFilePath) {
-    const fileRow = page.getByTestId('deal-detail-file-row').filter({ hasText: expectedFilePath })
-    if ((await fileRow.count().catch(() => 0)) > 0) return true
+    if (await hasDealFileRow(page, expectedFilePath)) return true
   }
   const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
   if (panelState === 'success') return true
@@ -1102,8 +1112,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const manifestCell = page.getByTestId(`deal-manifest-${dealId}`)
     if (await manifestCell.count().catch(() => 0)) {
       const rawManifest = (await manifestCell.first().textContent().catch(() => '')) || ''
-      const match = rawManifest.match(/0x[0-9a-fA-F]{96}/)
-      committedManifestRoot = match?.[0] || ''
+      committedManifestRoot = extractManifestRoot(rawManifest)
     }
     if (routerManifestDirName) {
       seedBaseDir = path.join(routerDealDir, String(routerManifestDirName))
