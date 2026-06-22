@@ -85,7 +85,7 @@ require_cmd go
 require_cmd bash
 
 if [[ " ${GOFLAGS:-} " != *" -mod="* ]]; then
-  export GOFLAGS="${GOFLAGS:-}${GOFLAGS:+ }-mod=mod"
+  export GOFLAGS="${GOFLAGS:-}${GOFLAGS:+ }-mod=readonly"
 fi
 
 if [ "$RUN_LIVE_DEVNET" = "1" ]; then
