@@ -248,6 +248,30 @@ set_default_provider_bases() {
   done
 }
 
+resolve_provider_bases() {
+  local expected_count="$1"
+  local actual_count="${#PROVIDER_BASES[@]}"
+  local prefix=""
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    prefix="DRY-RUN "
+  fi
+
+  if [[ "$PROVIDER_BASES_FROM_ENV" -eq 1 ]]; then
+    if [[ "$actual_count" -ne "$expected_count" ]]; then
+      echo "ERROR: POLYSTORE_PROVIDER_BASES has $actual_count entries but $expected_count provider-daemon services were resolved." >&2
+      echo "       Provide exactly one base URL per provider-daemon service, or unset POLYSTORE_PROVIDER_BASES to derive defaults." >&2
+      exit 1
+    fi
+
+    echo "    ${prefix}provider-daemon bases from POLYSTORE_PROVIDER_BASES: ${PROVIDER_BASES[*]}"
+    return
+  fi
+
+  set_default_provider_bases "$expected_count"
+  echo "    ${prefix}provider-daemon bases derived from resolved services: ${PROVIDER_BASES[*]}"
+}
+
 user_unit_load_state() {
   local service="$1"
   if [[ "$IS_ROOT" -eq 1 ]]; then
@@ -328,10 +352,7 @@ resolve_provider_service_scopes() {
     if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
       echo "    DRY-RUN root manager: ${PROVIDER_ROOT_SERVICES[*]}"
     fi
-    if [[ "$PROVIDER_BASES_FROM_ENV" -ne 1 ]]; then
-      set_default_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))"
-      echo "    DRY-RUN provider-daemon bases derived from resolved services: ${PROVIDER_BASES[*]}"
-    fi
+    resolve_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))"
     PROVIDER_SERVICE_SCOPES_RESOLVED=1
     return
   fi
@@ -392,10 +413,7 @@ resolve_provider_service_scopes() {
   if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
     echo "    root manager: ${PROVIDER_ROOT_SERVICES[*]}"
   fi
-  if [[ "$PROVIDER_BASES_FROM_ENV" -ne 1 ]]; then
-    set_default_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))"
-    echo "    provider-daemon bases derived from resolved services: ${PROVIDER_BASES[*]}"
-  fi
+  resolve_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))"
   PROVIDER_SERVICE_SCOPES_RESOLVED=1
 }
 

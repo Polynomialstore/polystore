@@ -46,7 +46,9 @@ Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 as a generic router example; this machine's live `/etc/polystore` legacy router
 env binds the managed devnet `user-gateway` to `18080`.
 Set `POLYSTORE_PROVIDER_BASES` when a host's provider ports do not follow the
-default one-port-per-resolved-service sequence.
+default one-port-per-resolved-service sequence. When set, it must provide
+exactly one base URL for each resolved `provider-daemon` service so rollout
+healthchecks cannot silently skip a restarted provider.
 
 Provider service management is controlled by `POLYSTORE_PROVIDER_SERVICE_SCOPE`:
 
