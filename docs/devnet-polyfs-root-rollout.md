@@ -19,12 +19,13 @@ It restarts services in this order:
 4. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
 5. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
 6. Resolve `provider-daemon` service managers. The default `auto` mode supports both the local user-service provider layout and the checked-in root provider template.
-7. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
-8. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
-9. Install artifacts with backups and sha256 evidence.
-10. Start chain first.
-11. Start faucet and the `user-gateway` legacy router service.
-12. Start all resolved `provider-daemon` services, including provider4 when the local user-service layout is present.
+7. Derive default provider health targets from the resolved service count unless `POLYSTORE_PROVIDER_BASES` is set.
+8. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
+9. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
+10. Install artifacts with backups and sha256 evidence.
+11. Start chain first.
+12. Start faucet and the `user-gateway` legacy router service.
+13. Start all resolved `provider-daemon` services, including provider4 when the local user-service layout is present.
 
 Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
 
@@ -35,7 +36,7 @@ The default health endpoints match the current local devnet on this machine:
 - EVM JSON-RPC: `http://127.0.0.1:8545`
 - `user-gateway` via legacy router service: `http://127.0.0.1:18080`
 - Faucet: `http://127.0.0.1:8081`
-- `provider-daemon` services: `http://127.0.0.1:8091` through `http://127.0.0.1:8094`
+- `provider-daemon` services: derived from resolved provider services, starting at `http://127.0.0.1:8091`. The four local user-provider layout resolves to `8091` through `8094`; the checked-in single root-provider template resolves to `8091`.
 
 Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 `POLYSTORE_EVM_BASE`, `POLYSTORE_ROUTER_BASE`, `POLYSTORE_FAUCET_BASE`, and
@@ -44,6 +45,8 @@ Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 `user-gateway` endpoint. The checked-in systemd template still documents `8080`
 as a generic router example; this machine's live `/etc/polystore` legacy router
 env binds the managed devnet `user-gateway` to `18080`.
+Set `POLYSTORE_PROVIDER_BASES` when a host's provider ports do not follow the
+default one-port-per-resolved-service sequence.
 
 Provider service management is controlled by `POLYSTORE_PROVIDER_SERVICE_SCOPE`:
 

@@ -37,7 +37,8 @@ Environment:
                                 for compatibility (default: http://127.0.0.1:18080).
   POLYSTORE_FAUCET_BASE         Faucet base URL (default: http://127.0.0.1:8081).
   POLYSTORE_PROVIDER_BASES      Space-separated provider-daemon base URLs.
-                                Default: http://127.0.0.1:8091..8094.
+                                Default: one URL per resolved provider-daemon
+                                service, starting at http://127.0.0.1:8091.
   POLYSTORE_SKIP_BUILD=1        Same as --skip-build.
   POLYSTORE_DRY_RUN=1           Same as --dry-run.
   POLYSTORE_RESTART_TUNNELS=1   Same as --restart-tunnels.
@@ -141,7 +142,13 @@ LCD_BASE="${POLYSTORE_LCD_BASE:-http://127.0.0.1:1317}"
 EVM_BASE="${POLYSTORE_EVM_BASE:-http://127.0.0.1:8545}"
 ROUTER_BASE="${POLYSTORE_ROUTER_BASE:-http://127.0.0.1:18080}"
 FAUCET_BASE="${POLYSTORE_FAUCET_BASE:-http://127.0.0.1:8081}"
-read -r -a PROVIDER_BASES <<<"${POLYSTORE_PROVIDER_BASES:-http://127.0.0.1:8091 http://127.0.0.1:8092 http://127.0.0.1:8093 http://127.0.0.1:8094}"
+PROVIDER_BASES_FROM_ENV=0
+if [[ -n "${POLYSTORE_PROVIDER_BASES+x}" ]]; then
+  PROVIDER_BASES_FROM_ENV=1
+  read -r -a PROVIDER_BASES <<<"$POLYSTORE_PROVIDER_BASES"
+else
+  PROVIDER_BASES=()
+fi
 
 if [[ "$IS_ROOT" -ne 1 && "$(id -un)" != "$RUN_USER" ]]; then
   echo "ERROR: non-root update must run as POLYSTORE_RUN_USER=$RUN_USER." >&2
@@ -232,6 +239,17 @@ root_systemctl() {
   run_cmd sudo -n systemctl "$@"
 }
 
+set_default_provider_bases() {
+  local count="$1"
+  local i port
+
+  PROVIDER_BASES=()
+  for ((i = 0; i < count; i += 1)); do
+    port=$((8091 + i))
+    PROVIDER_BASES+=("http://127.0.0.1:$port")
+  done
+}
+
 user_unit_load_state() {
   local service="$1"
   if [[ "$IS_ROOT" -eq 1 ]]; then
@@ -313,6 +331,10 @@ resolve_provider_service_scopes() {
     if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
       echo "    DRY-RUN root manager: ${PROVIDER_ROOT_SERVICES[*]}"
     fi
+    if [[ "$PROVIDER_BASES_FROM_ENV" -ne 1 ]]; then
+      set_default_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))"
+      echo "    DRY-RUN provider-daemon bases derived from resolved services: ${PROVIDER_BASES[*]}"
+    fi
     PROVIDER_SERVICE_SCOPES_RESOLVED=1
     return
   fi
@@ -372,6 +394,10 @@ resolve_provider_service_scopes() {
   fi
   if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
     echo "    root manager: ${PROVIDER_ROOT_SERVICES[*]}"
+  fi
+  if [[ "$PROVIDER_BASES_FROM_ENV" -ne 1 ]]; then
+    set_default_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))"
+    echo "    provider-daemon bases derived from resolved services: ${PROVIDER_BASES[*]}"
   fi
   PROVIDER_SERVICE_SCOPES_RESOLVED=1
 }
@@ -597,7 +623,11 @@ print_source_evidence() {
   echo "    evm base: $EVM_BASE"
   echo "    user-gateway base: $ROUTER_BASE (POLYSTORE_ROUTER_BASE legacy env alias)"
   echo "    faucet base: $FAUCET_BASE"
-  echo "    provider-daemon bases: ${PROVIDER_BASES[*]}"
+  if [[ "$PROVIDER_BASES_FROM_ENV" -eq 1 ]]; then
+    echo "    provider-daemon bases: ${PROVIDER_BASES[*]}"
+  else
+    echo "    provider-daemon bases: derived from resolved provider services"
+  fi
   if [[ "$RESTART_TUNNELS" == "1" ]]; then
     echo "    tunnel services: ${TUNNEL_SERVICES[*]}"
   else
