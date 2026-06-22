@@ -39,7 +39,8 @@ Environment:
   POLYSTORE_PROVIDER_BASES      Space-separated provider-daemon base URLs.
                                 Default: one URL per resolved provider-daemon
                                 service, starting at http://127.0.0.1:8091.
-                                Duplicate canonical bases are rejected.
+                                Duplicate provider services and duplicate
+                                canonical bases are rejected.
   POLYSTORE_SKIP_BUILD=1        Same as --skip-build.
   POLYSTORE_DRY_RUN=1           Same as --dry-run.
   POLYSTORE_RESTART_TUNNELS=1   Same as --restart-tunnels.
@@ -139,6 +140,18 @@ elif [[ "$PROVIDER_SERVICE_SCOPE" == "root" ]]; then
 else
   PROVIDER_SERVICES=("${DEFAULT_USER_PROVIDER_SERVICES[@]}")
 fi
+declare -A SEEN_PROVIDER_SERVICES=()
+for provider_service in "${PROVIDER_SERVICES[@]}"; do
+  if [[ -n "${SEEN_PROVIDER_SERVICES[$provider_service]:-}" ]]; then
+    echo "ERROR: duplicate provider-daemon service: $provider_service" >&2
+    echo "       Each provider-daemon service may appear only once, so the rollout cannot stop/start one unit twice while healthchecking different provider bases." >&2
+    if [[ "$PROVIDER_SERVICES_FROM_ENV" -eq 1 ]]; then
+      echo "       Fix POLYSTORE_PROVIDER_SERVICES to list each provider-daemon service once." >&2
+    fi
+    exit 2
+  fi
+  SEEN_PROVIDER_SERVICES["$provider_service"]=1
+done
 read -r -a ROOT_SERVICES <<<"polystorechaind.service polystore-faucet.service polystore-gateway-router.service"
 read -r -a TUNNEL_SERVICES <<<"${POLYSTORE_TUNNEL_SERVICES:-cloudflared-hub.service cloudflared-providers.service}"
 RPC_BASE="${POLYSTORE_RPC_BASE:-http://127.0.0.1:26657}"
