@@ -30,11 +30,15 @@ The Merkle construction is part of the consensus contract:
 
 - Leaf `i` is `BLAKE2s-256(kzg_commitment_i)`, where `kzg_commitment_i` is the
   48-byte compressed KZG commitment for the corresponding DU/shard blob.
-- Internal nodes are `BLAKE2s-256(left_child || right_child)`.
+- Internal nodes with both children are `BLAKE2s-256(left_child || right_child)`.
 - Leaf ordering is profile-specific and internal-node concatenation preserves
   that left-to-right order.
-- No padding, empty-root value, or odd-leaf promotion is used for committed MDU
-  roots. Every supported root profile has a fixed leaf count.
+- No padding, duplicated-last-leaf rule, or empty-root value is used for
+  committed MDU roots. Every supported root profile has a fixed leaf count.
+- For non-power-of-two fixed leaf counts, if a level has an unpaired final node,
+  carry that node unchanged into the next level. Proof generation omits a
+  sibling for that level, and verification must use the profile's fixed leaf
+  count to reconstruct the same carry-forward path.
 
 The supported root profiles are:
 
@@ -229,6 +233,20 @@ Because Witness MDUs consume root-table slots, the maximum user bytes are below
 Witness MDUs are replicated proof-generation metadata. They cache target blob
 commitments so providers can build Hop 2 proofs without contacting the original
 client.
+
+Witness sizing MUST budget the target root profile's leaf count, not a
+hard-coded 64 commitments per user MDU. For a uniform user-data profile:
+
+```text
+commitments_per_user_mdu = target_mdu_leaf_count(profile)
+witness_commitment_bytes = user_mdu_count * commitments_per_user_mdu * 48
+W = ceil(witness_commitment_bytes / 8 MiB)
+```
+
+For the default Mode 2 profile `K=8`, `M=4`,
+`commitments_per_user_mdu == 96`. A gateway/client that reserves only
+`user_mdu_count * 64` commitments for those slabs underallocates Witness MDUs
+and cannot generate proofs for parity-slot leaves `64..95`.
 
 Witness MDUs are not an independent trust root. The trust chain remains:
 
