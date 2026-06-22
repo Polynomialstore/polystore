@@ -366,33 +366,8 @@ resolve_provider_service_scopes() {
   PROVIDER_USER_SERVICES=()
   PROVIDER_ROOT_SERVICES=()
   echo "==> Resolving provider-daemon service managers"
-
   if [[ "$DRY_RUN" == "1" ]]; then
-    case "$PROVIDER_SERVICE_SCOPE" in
-      user)
-        PROVIDER_USER_SERVICES=("${PROVIDER_SERVICES[@]}")
-        ;;
-      root)
-        PROVIDER_ROOT_SERVICES=("${PROVIDER_SERVICES[@]}")
-        ;;
-      auto)
-        if [[ "$PROVIDER_SERVICES_FROM_ENV" -eq 1 ]]; then
-          echo "    DRY-RUN: auto scope for explicit POLYSTORE_PROVIDER_SERVICES resolves in live mode"
-          PROVIDER_USER_SERVICES=("${PROVIDER_SERVICES[@]}")
-        else
-          PROVIDER_USER_SERVICES=("${DEFAULT_USER_PROVIDER_SERVICES[@]}")
-        fi
-        ;;
-    esac
-    if [[ "${#PROVIDER_USER_SERVICES[@]}" -gt 0 ]]; then
-      echo "    DRY-RUN user manager: ${PROVIDER_USER_SERVICES[*]}"
-    fi
-    if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
-      echo "    DRY-RUN root manager: ${PROVIDER_ROOT_SERVICES[*]}"
-    fi
-    resolve_provider_bases "$((${#PROVIDER_USER_SERVICES[@]} + ${#PROVIDER_ROOT_SERVICES[@]}))" "${PROVIDER_USER_SERVICES[@]}" "${PROVIDER_ROOT_SERVICES[@]}"
-    PROVIDER_SERVICE_SCOPES_RESOLVED=1
-    return
+    echo "    DRY-RUN: validating loaded provider-daemon services with non-mutating systemctl show"
   fi
 
   case "$PROVIDER_SERVICE_SCOPE" in
@@ -896,14 +871,15 @@ preflight_tunnel_services_loaded
 resolve_provider_service_scopes
 preflight_root_service_control
 
-echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
-provider_systemctl stop
-root_systemctl stop polystore-gateway-router.service polystore-faucet.service
-root_systemctl stop polystorechaind.service
 if [[ "$RESTART_TUNNELS" == "1" ]]; then
   echo "==> Stopping tunnel user services"
   user_systemctl stop "${TUNNEL_SERVICES[@]}"
 fi
+
+echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
+provider_systemctl stop
+root_systemctl stop polystore-gateway-router.service polystore-faucet.service
+root_systemctl stop polystorechaind.service
 
 echo "==> Installing binaries and runtime inputs"
 install_with_backup "$SOURCE_ROOT/polystore_core/target/release/libpolystore_core.so" "$TARGET_ROOT/polystore_core/target/release/libpolystore_core.so" 755
