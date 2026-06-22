@@ -14,18 +14,20 @@ The script rebuilds as the configured run user, then installs:
 It restarts services in this order:
 
 1. Preflight source/target layout. Build mode refuses `--source-root == --target-root` so live artifacts are not overwritten while services are still running.
-2. Build artifacts as `--run-user`/`POLYSTORE_RUN_USER`; when invoked with `sudo`, this avoids root-owned Cargo/Go outputs in the source checkout.
-3. Preflight all build artifacts before stopping any service.
-4. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
-5. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
-6. Resolve `provider-daemon` service managers. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
-7. Derive default provider health targets from the resolved service count unless `POLYSTORE_PROVIDER_BASES` is set.
-8. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
-9. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
-10. Install artifacts with backups and sha256 evidence.
-11. Start chain first.
-12. Start faucet and the `user-gateway` legacy router service.
-13. Start all resolved `provider-daemon` services, including provider4 when the local user-service layout is present.
+2. Preflight local command dependencies required for post-restart health polling, including `curl`.
+3. Build artifacts as `--run-user`/`POLYSTORE_RUN_USER`; when invoked with `sudo`, this avoids root-owned Cargo/Go outputs in the source checkout.
+4. Preflight all build artifacts before stopping any service.
+5. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
+6. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
+7. Preflight hub root service units so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped.
+8. Resolve `provider-daemon` service managers. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
+9. Derive default provider health targets from the resolved service count unless `POLYSTORE_PROVIDER_BASES` is set.
+10. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
+11. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
+12. Install artifacts with backups and sha256 evidence.
+13. Start chain first.
+14. Start faucet and the `user-gateway` legacy router service.
+15. Start all resolved `provider-daemon` services, including provider4 when the local user-service layout is present.
 
 Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
 
@@ -95,3 +97,5 @@ services are still running.
 In live non-root mode, the script also verifies passwordless `sudo systemctl`
 access before printing the service-stop plan. On this host, dry runs report that
 check without requiring a sudo prompt.
+Live runs also verify that all configured hub root service units are loaded and
+that `curl` is available before any service-stop mutation.

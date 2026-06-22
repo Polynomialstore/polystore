@@ -427,6 +427,16 @@ provider_systemctl() {
   fi
 }
 
+preflight_required_tools() {
+  echo "==> Preflighting local command dependencies"
+  if ! command -v curl >/dev/null; then
+    echo "ERROR: curl is required for post-restart health polling before service mutation." >&2
+    echo "       Install curl or run from a host image that includes it." >&2
+    exit 1
+  fi
+  echo "    curl: $(command -v curl)"
+}
+
 preflight_root_service_control() {
   echo "==> Preflighting root service control before stopping services"
   if [[ "$IS_ROOT" -eq 1 ]]; then
@@ -444,6 +454,26 @@ preflight_root_service_control() {
     echo "       Re-run with sudo or configure passwordless sudo for systemctl service control." >&2
     exit 1
   fi
+}
+
+preflight_root_services_loaded() {
+  local service load_state
+
+  echo "==> Preflighting hub root service units"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    DRY-RUN: would require loaded root services: ${ROOT_SERVICES[*]}"
+    return
+  fi
+
+  for service in "${ROOT_SERVICES[@]}"; do
+    load_state="$(root_unit_load_state "$service" || true)"
+    if ! unit_is_loaded "$load_state"; then
+      echo "ERROR: hub root service $service was not found in the root systemd manager." >&2
+      echo "       Fix POLYSTORE root service inventory before stopping provider-daemon services." >&2
+      exit 1
+    fi
+  done
+  echo "    root services loaded: ${ROOT_SERVICES[*]}"
 }
 
 preflight_source_target_layout() {
@@ -694,10 +724,12 @@ run_healthchecks() {
 
 print_source_evidence
 preflight_source_target_layout
+preflight_required_tools
 build_artifacts
 preflight_artifacts
 preflight_install_plan
 preflight_root_service_control
+preflight_root_services_loaded
 resolve_provider_service_scopes
 
 echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
