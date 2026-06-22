@@ -130,6 +130,7 @@ At `MsgUpdateDealContent*` time:
   - `user_mdus = total_mdus - 1 - witness_mdus`
   - if `size_bytes > 0`, require `user_mdus >= 1`
   - require `size_bytes <= user_mdus * RawMduPayloadBytes`, where `RawMduPayloadBytes = (8 MiB / 32) * 31 = 8,126,464`
+  - if `user_mdus > 0`, require `witness_mdus >= ceil(user_mdus * target_mdu_leaf_count(mode2_profile) * 48 / 8 MiB)` so the committed Witness region covers every user-MDU blob commitment required by the selected root profile
   - `witness_mdus + user_mdus <= 65,536`
   - equivalently, `total_mdus <= 65,537`
   - reject the commit if these bounds would let a verifier derive `root_table_du >= 16`
