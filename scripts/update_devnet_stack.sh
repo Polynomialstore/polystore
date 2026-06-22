@@ -205,6 +205,25 @@ root_systemctl() {
   run_cmd sudo -n systemctl "$@"
 }
 
+preflight_root_service_control() {
+  echo "==> Preflighting root service control before stopping services"
+  if [[ "$IS_ROOT" -eq 1 ]]; then
+    echo "    running as root; root systemd control is available"
+    return
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    DRY-RUN: would verify passwordless sudo for root systemd control"
+    return
+  fi
+
+  if ! sudo -n systemctl show --property=Version --value >/dev/null; then
+    echo "ERROR: passwordless sudo systemctl is required before stopping provider-daemon services." >&2
+    echo "       Re-run with sudo or configure passwordless sudo for systemctl service control." >&2
+    exit 1
+  fi
+}
+
 sha256_if_present() {
   local path="$1"
   if [[ -f "$path" ]]; then
@@ -388,6 +407,7 @@ run_healthchecks() {
 print_source_evidence
 build_artifacts
 preflight_artifacts
+preflight_root_service_control
 
 echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
 user_systemctl stop "${PROVIDER_SERVICES[@]}"

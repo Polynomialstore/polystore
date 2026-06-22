@@ -15,12 +15,13 @@ It restarts services in this order:
 
 1. Build artifacts as `--run-user`/`POLYSTORE_RUN_USER`; when invoked with `sudo`, this avoids root-owned Cargo/Go outputs in the source checkout.
 2. Preflight all build artifacts before stopping any service.
-3. Stop `provider-daemon` user services: `polystore-provider1.service` through `polystore-provider4.service`.
-4. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
-5. Install artifacts with backups and sha256 evidence.
-6. Start chain first.
-7. Start faucet and the `user-gateway` legacy router service.
-8. Start all `provider-daemon` services, including provider4.
+3. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
+4. Stop `provider-daemon` user services: `polystore-provider1.service` through `polystore-provider4.service`.
+5. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
+6. Install artifacts with backups and sha256 evidence.
+7. Start chain first.
+8. Start faucet and the `user-gateway` legacy router service.
+9. Start all `provider-daemon` services, including provider4.
 
 Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
 
@@ -66,3 +67,7 @@ preflight artifact status, stop/start order, install paths, and healthcheck
 commands without mutating services or files. If a required artifact is missing,
 the dry run exits before printing any service-stop plan, matching live rollout
 safety behavior.
+
+In live non-root mode, the script also verifies passwordless `sudo systemctl`
+access before printing the service-stop plan. On this host, dry runs report that
+check without requiring a sudo prompt.
