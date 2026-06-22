@@ -274,8 +274,8 @@ func TestProtocolAuditSession_RequiresStoredTask(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       1,
-		TotalMdus:   2,
-		WitnessMdus: 0,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 

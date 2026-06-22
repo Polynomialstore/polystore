@@ -363,7 +363,7 @@ func TestOpenRetrievalSession_RejectsExpiredDeal(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)

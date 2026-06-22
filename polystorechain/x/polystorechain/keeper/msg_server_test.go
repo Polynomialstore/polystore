@@ -799,9 +799,9 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 
 	const targetMduIndex = uint64(4097)
-	const witnessMdus = uint64(1)
+	const witnessMdus = uint64(3)
 	const totalMdus = targetMduIndex + 1
-	const committedSize = (totalMdus - 1 - witnessMdus) * uint64(types.MDU_SIZE)
+	const committedSize = (totalMdus - 1 - witnessMdus) * polyfsTestRawMduPayloadBytes
 
 	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
 
@@ -1021,7 +1021,7 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
@@ -1149,7 +1149,7 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
-	const totalMdus = uint64(3)
+	const totalMdus = uint64(4)
 	const witnessMdus = uint64(1)
 	metaMdus := uint64(1) + witnessMdus
 	targetMduIndex := metaMdus

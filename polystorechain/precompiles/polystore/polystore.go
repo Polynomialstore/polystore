@@ -1394,6 +1394,9 @@ func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contra
 		if err != nil {
 			return nil, fmt.Errorf("proveRetrievalBatch: invalid deal proof profile: %w", err)
 		}
+		if c.Proof.MduIndex <= deal.WitnessMdus {
+			return nil, errors.New("proveRetrievalBatch: proof must target a user data MDU")
+		}
 		ok, err := verifyChainedProof(ctx, deal.ManifestRoot, leafCount, c.Proof)
 		if err != nil {
 			return nil, fmt.Errorf("proveRetrievalBatch: triple proof verification error: %w", err)

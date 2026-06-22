@@ -40,6 +40,12 @@ func wallDurationToBlocks(wallDuration uint64) uint64 {
 // Ensure msgServer implements the types.MsgServer interface
 var _ types.MsgServer = msgServer{}
 
+const (
+	polyfsRootTableCapacityMdus = uint64(16 * (types.BLOB_SIZE / 32))
+	polyfsRawMduPayloadBytes    = uint64((types.MDU_SIZE / 32) * 31)
+	polyfsCommitmentBytes       = uint64(48)
+)
+
 func parseOptionalManifestRootField(value string, label string) ([]byte, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -68,6 +74,59 @@ func validatePreviousManifestRootMatch(previous []byte, current []byte) error {
 		manifestRootHexOrEmpty(current),
 		manifestRootHexOrEmpty(previous),
 	)
+}
+
+func ceilDivUint64(n, d uint64) uint64 {
+	if n == 0 {
+		return 0
+	}
+	return 1 + (n-1)/d
+}
+
+func validatePolyFSContentLayout(deal types.Deal, sizeBytes uint64, totalMdus uint64, witnessMdus uint64) error {
+	if totalMdus == 0 {
+		return sdkerrors.ErrInvalidRequest.Wrap("total_mdus must be non-zero")
+	}
+	metaMdus, overflow := addUint64(1, witnessMdus)
+	if overflow {
+		return sdkerrors.ErrInvalidRequest.Wrap("metadata mdu count overflows uint64")
+	}
+	if totalMdus <= metaMdus {
+		return sdkerrors.ErrInvalidRequest.Wrapf("total_mdus must exceed metadata mdus (got total_mdus=%d witness_mdus=%d)", totalMdus, witnessMdus)
+	}
+	userMdus := totalMdus - metaMdus
+	rootTableMdus, overflow := addUint64(witnessMdus, userMdus)
+	if overflow || rootTableMdus > polyfsRootTableCapacityMdus {
+		return sdkerrors.ErrInvalidRequest.Wrapf("total_mdus exceeds MDU #0 root-table capacity (witness_mdus=%d user_mdus=%d capacity=%d)", witnessMdus, userMdus, polyfsRootTableCapacityMdus)
+	}
+
+	rawCapacity, overflow := mulUint64(userMdus, polyfsRawMduPayloadBytes)
+	if overflow || sizeBytes > rawCapacity {
+		return sdkerrors.ErrInvalidRequest.Wrapf("size_bytes exceeds committed user MDU raw payload capacity (size=%d user_mdus=%d raw_capacity=%d)", sizeBytes, userMdus, rawCapacity)
+	}
+
+	stripe, err := stripeParamsForDeal(deal)
+	if err != nil {
+		return sdkerrors.ErrInvalidRequest.Wrapf("invalid deal proof profile: %s", err)
+	}
+	witnessBytesPerUserMdu, overflow := mulUint64(stripe.leafCount, polyfsCommitmentBytes)
+	if overflow {
+		return sdkerrors.ErrInvalidRequest.Wrap("witness bytes per user MDU overflows uint64")
+	}
+	requiredWitnessBytes, overflow := mulUint64(userMdus, witnessBytesPerUserMdu)
+	if overflow {
+		return sdkerrors.ErrInvalidRequest.Wrap("required witness bytes overflows uint64")
+	}
+	requiredWitnessMdus := ceilDivUint64(requiredWitnessBytes, uint64(types.MDU_SIZE))
+	if witnessMdus < requiredWitnessMdus {
+		return sdkerrors.ErrInvalidRequest.Wrapf("witness_mdus underprovisioned for user MDU commitments (got=%d required=%d user_mdus=%d leaf_count=%d)", witnessMdus, requiredWitnessMdus, userMdus, stripe.leafCount)
+	}
+
+	return nil
+}
+
+func isPolyFSUserDataMduTarget(deal types.Deal, mduIndex uint64) bool {
+	return mduIndex > deal.WitnessMdus
 }
 
 func flattenProofPath(path [][]byte) ([]byte, bool) {
@@ -900,12 +959,8 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	if msg.Size_ == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("new content size cannot be zero")
 	}
-	if msg.TotalMdus == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_mdus must be non-zero")
-	}
-	metaMdus := uint64(1) + msg.WitnessMdus
-	if msg.TotalMdus <= metaMdus {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("total_mdus must exceed metadata mdus (got total_mdus=%d witness_mdus=%d)", msg.TotalMdus, msg.WitnessMdus)
+	if err := validatePolyFSContentLayout(deal, msg.Size_, msg.TotalMdus, msg.WitnessMdus); err != nil {
+		return nil, err
 	}
 
 	// Append-only invariants (PolyFS on slab).
@@ -1067,6 +1122,9 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	height := uint64(ctx.BlockHeight())
 	if height >= deal.EndBlock {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("deal %d expired at end_block=%d", intent.DealId, deal.EndBlock)
+	}
+	if err := validatePolyFSContentLayout(deal, intent.SizeBytes, intent.TotalMdus, intent.WitnessMdus); err != nil {
+		return nil, err
 	}
 
 	// --- TERM DEPOSIT (Storage Lock-in) ---
@@ -1254,6 +1312,9 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	verifyChainedProof := func(chainedProof *types.ChainedProof, logInput bool, requireSlotAuth bool) (bool, error) {
 		if chainedProof == nil {
+			return false, nil
+		}
+		if !isPolyFSUserDataMduTarget(deal, chainedProof.MduIndex) {
 			return false, nil
 		}
 		if uint64(chainedProof.BlobIndex) >= stripe.leafCount {
@@ -3460,6 +3521,9 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	}
 
 	verifyChainedProof := func(chainedProof *types.ChainedProof) (bool, error) {
+		if chainedProof == nil || !isPolyFSUserDataMduTarget(deal, chainedProof.MduIndex) {
+			return false, nil
+		}
 		return verifyPolyFSChainedProof(deal.ManifestRoot, chainedProof, stripe.leafCount)
 	}
 

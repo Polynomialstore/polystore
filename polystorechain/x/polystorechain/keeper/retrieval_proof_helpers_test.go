@@ -51,7 +51,7 @@ func commitValidMode2ContentAndProof(
 		DealId:      dealID,
 		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)

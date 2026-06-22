@@ -104,7 +104,7 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 		DealId:      resDeal.DealId,
 		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
@@ -247,7 +247,7 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
