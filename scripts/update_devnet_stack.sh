@@ -34,7 +34,7 @@ Environment:
   POLYSTORE_LCD_BASE            Hub LCD base URL (default: http://127.0.0.1:1317).
   POLYSTORE_EVM_BASE            Hub EVM JSON-RPC base URL (default: http://127.0.0.1:8545).
   POLYSTORE_ROUTER_BASE         user-gateway base URL; legacy env alias keeps router naming
-                                for compatibility (default: http://127.0.0.1:18080).
+                                for compatibility (default: http://127.0.0.1:8080).
   POLYSTORE_FAUCET_BASE         Faucet base URL (default: http://127.0.0.1:8081).
   POLYSTORE_PROVIDER_BASES      Space-separated provider-daemon base URLs.
                                 Default: one URL per resolved provider-daemon
@@ -138,7 +138,7 @@ read -r -a TUNNEL_SERVICES <<<"${POLYSTORE_TUNNEL_SERVICES:-cloudflared-hub.serv
 RPC_BASE="${POLYSTORE_RPC_BASE:-http://127.0.0.1:26657}"
 LCD_BASE="${POLYSTORE_LCD_BASE:-http://127.0.0.1:1317}"
 EVM_BASE="${POLYSTORE_EVM_BASE:-http://127.0.0.1:8545}"
-ROUTER_BASE="${POLYSTORE_ROUTER_BASE:-http://127.0.0.1:18080}"
+ROUTER_BASE="${POLYSTORE_ROUTER_BASE:-http://127.0.0.1:8080}"
 FAUCET_BASE="${POLYSTORE_FAUCET_BASE:-http://127.0.0.1:8081}"
 PROVIDER_BASES_FROM_ENV=0
 if [[ -n "${POLYSTORE_PROVIDER_BASES+x}" ]]; then

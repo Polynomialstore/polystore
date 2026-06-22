@@ -31,12 +31,13 @@ It restarts services in this order:
 
 Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
 
-The default health endpoints match the current local devnet on this machine:
+The default health endpoints match the checked-in local devnet and systemd
+templates:
 
 - RPC: `http://127.0.0.1:26657`
 - LCD: `http://127.0.0.1:1317`
 - EVM JSON-RPC: `http://127.0.0.1:8545`
-- `user-gateway` via legacy router service: `http://127.0.0.1:18080`
+- `user-gateway` via legacy router service: `http://127.0.0.1:8080`
 - Faucet: `http://127.0.0.1:8081`
 - `provider-daemon` services: derived from resolved provider services, starting at `http://127.0.0.1:8091`. The four local user-provider layout resolves to `8091` through `8094`; the checked-in single root-provider template resolves to `8091`.
 
@@ -44,9 +45,9 @@ Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 `POLYSTORE_EVM_BASE`, `POLYSTORE_ROUTER_BASE`, `POLYSTORE_FAUCET_BASE`, and
 `POLYSTORE_PROVIDER_BASES` if a target machine uses different ports. The
 `POLYSTORE_ROUTER_BASE` env name is a legacy compatibility alias for the
-`user-gateway` endpoint. The checked-in systemd template still documents `8080`
-as a generic router example; this machine's live `/etc/polystore` legacy router
-env binds the managed devnet `user-gateway` to `18080`.
+`user-gateway` endpoint. If a target host's live `/etc/polystore` legacy router
+env binds the managed devnet `user-gateway` to another port such as `18080`, set
+`POLYSTORE_ROUTER_BASE` explicitly before running the rollout.
 Set `POLYSTORE_PROVIDER_BASES` when a host's provider ports do not follow the
 default one-port-per-resolved-service sequence. When set, it must provide
 exactly one base URL for each resolved `provider-daemon` service so rollout
