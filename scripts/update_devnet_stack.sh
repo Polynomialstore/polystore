@@ -294,7 +294,16 @@ root_unit_load_state() {
 
 unit_is_loaded() {
   local load_state="$1"
-  [[ -n "$load_state" && "$load_state" != "not-found" ]]
+  [[ "$load_state" == "loaded" ]]
+}
+
+describe_load_state() {
+  local load_state="$1"
+  if [[ -n "$load_state" ]]; then
+    printf '%s' "$load_state"
+  else
+    printf 'unavailable'
+  fi
 }
 
 require_provider_service_loaded() {
@@ -309,7 +318,8 @@ require_provider_service_loaded() {
   fi
 
   if ! unit_is_loaded "$load_state"; then
-    echo "ERROR: provider-daemon service $service was not found in the $scope systemd manager." >&2
+    echo "ERROR: provider-daemon service $service is not loaded in the $scope systemd manager." >&2
+    echo "       LoadState=$(describe_load_state "$load_state"); fix the unit before stopping services." >&2
     exit 1
   fi
 }
@@ -394,13 +404,14 @@ resolve_provider_service_scopes() {
         fi
 
         if [[ "$PROVIDER_SERVICES_FROM_ENV" -eq 1 ]]; then
-          echo "ERROR: provider-daemon service not found in user or root systemd managers: $service" >&2
+          echo "ERROR: provider-daemon service is not loaded in user or root systemd managers: $service" >&2
+          echo "       user LoadState=$(describe_load_state "$user_state"), root LoadState=$(describe_load_state "$root_state")." >&2
           exit 1
         fi
       done
 
       if [[ "$found_any" -ne 1 ]]; then
-        echo "ERROR: no provider-daemon services were found in user or root systemd managers." >&2
+        echo "ERROR: no provider-daemon services were loaded in user or root systemd managers." >&2
         echo "       Set POLYSTORE_PROVIDER_SERVICES and POLYSTORE_PROVIDER_SERVICE_SCOPE for this host." >&2
         exit 1
       fi
@@ -468,7 +479,8 @@ preflight_root_services_loaded() {
   for service in "${ROOT_SERVICES[@]}"; do
     load_state="$(root_unit_load_state "$service" || true)"
     if ! unit_is_loaded "$load_state"; then
-      echo "ERROR: hub root service $service was not found in the root systemd manager." >&2
+      echo "ERROR: hub root service $service is not loaded in the root systemd manager." >&2
+      echo "       LoadState=$(describe_load_state "$load_state"); fix the unit before stopping services." >&2
       echo "       Fix POLYSTORE root service inventory before stopping provider-daemon services." >&2
       exit 1
     fi
