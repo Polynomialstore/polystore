@@ -135,6 +135,8 @@ const polystoreABIJSON = `[
           {"name":"mduIndex","type":"uint64"},
           {"name":"mduRootFr","type":"bytes"},
           {"name":"manifestOpening","type":"bytes"},
+          {"name":"rootTableDuCommitment","type":"bytes"},
+          {"name":"rootTableDuMerklePath","type":"bytes[]"},
           {"name":"blobCommitment","type":"bytes"},
           {"name":"merklePath","type":"bytes[]"},
           {"name":"blobIndex","type":"uint32"},
@@ -1388,11 +1390,9 @@ func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contra
 			return nil, errors.New("proveRetrievalBatch: bytes overflow")
 		}
 
-		leafCount := types.BlobsPerMdu
-		if parsed, err := types.ParseServiceHint(deal.ServiceHint); err == nil {
-			if rs, ok, err := types.RSParamsFromHint(parsed); err == nil && ok {
-				leafCount = rs.LeafCount
-			}
+		leafCount, err := proofLeafCountForDeal(deal)
+		if err != nil {
+			return nil, fmt.Errorf("proveRetrievalBatch: invalid deal proof profile: %w", err)
 		}
 		ok, err := verifyChainedProof(ctx, deal.ManifestRoot, leafCount, c.Proof)
 		if err != nil {
@@ -1500,6 +1500,23 @@ func decodeChunks(v any) ([]decodedChunk, error) {
 		if proof.ManifestOpening, err = asBytes(pv.FieldByName("ManifestOpening").Interface()); err != nil {
 			return nil, fmt.Errorf("chunk[%d].proof.manifestOpening invalid: %w", i, err)
 		}
+		if proof.RootTableDuCommitment, err = asBytes(pv.FieldByName("RootTableDuCommitment").Interface()); err != nil {
+			return nil, fmt.Errorf("chunk[%d].proof.rootTableDuCommitment invalid: %w", i, err)
+		}
+		rtAny := pv.FieldByName("RootTableDuMerklePath").Interface()
+		rtRv := reflect.ValueOf(rtAny)
+		if !rtRv.IsValid() || rtRv.Kind() != reflect.Slice {
+			return nil, fmt.Errorf("chunk[%d].proof.rootTableDuMerklePath invalid", i)
+		}
+		rootTablePath := make([][]byte, 0, rtRv.Len())
+		for j := 0; j < rtRv.Len(); j++ {
+			b, err := asBytes(rtRv.Index(j).Interface())
+			if err != nil {
+				return nil, fmt.Errorf("chunk[%d].proof.rootTableDuMerklePath[%d] invalid: %w", i, j, err)
+			}
+			rootTablePath = append(rootTablePath, b)
+		}
+		proof.RootTableDuMerklePath = rootTablePath
 		if proof.BlobCommitment, err = asBytes(pv.FieldByName("BlobCommitment").Interface()); err != nil {
 			return nil, fmt.Errorf("chunk[%d].proof.blobCommitment invalid: %w", i, err)
 		}
@@ -1541,6 +1558,31 @@ func decodeChunks(v any) ([]decodedChunk, error) {
 		})
 	}
 	return out, nil
+}
+
+func proofLeafCountForDeal(deal types.Deal) (uint64, error) {
+	if deal.RedundancyMode == 2 && deal.Mode2Profile != nil && deal.Mode2Profile.K > 0 && deal.Mode2Profile.M > 0 {
+		k := uint64(deal.Mode2Profile.K)
+		m := uint64(deal.Mode2Profile.M)
+		if k == 0 || m == 0 {
+			return 0, fmt.Errorf("mode2_profile K and M must be > 0")
+		}
+		if types.BlobsPerMdu%k != 0 {
+			return 0, fmt.Errorf("mode2_profile K must divide %d", types.BlobsPerMdu)
+		}
+		return (k + m) * (types.BlobsPerMdu / k), nil
+	}
+
+	if parsed, err := types.ParseServiceHint(deal.ServiceHint); err == nil {
+		rs, ok, err := types.RSParamsFromHint(parsed)
+		if err != nil {
+			return 0, err
+		}
+		if ok {
+			return rs.LeafCount, nil
+		}
+	}
+	return types.BlobsPerMdu, nil
 }
 
 func verifyChainedProof(ctx sdk.Context, manifestRoot []byte, leafCount uint64, chainedProof types.ChainedProof) (bool, error) {
