@@ -39,6 +39,7 @@ Environment:
   POLYSTORE_PROVIDER_BASES      Space-separated provider-daemon base URLs.
                                 Default: one URL per resolved provider-daemon
                                 service, starting at http://127.0.0.1:8091.
+                                Duplicate bases are rejected.
   POLYSTORE_SKIP_BUILD=1        Same as --skip-build.
   POLYSTORE_DRY_RUN=1           Same as --dry-run.
   POLYSTORE_RESTART_TUNNELS=1   Same as --restart-tunnels.
@@ -275,9 +276,50 @@ set_default_provider_bases() {
   done
 }
 
+provider_base_duplicate_key() {
+  local base="$1"
+
+  while [[ "$base" == */ ]]; do
+    base="${base%/}"
+  done
+  printf '%s' "$base"
+}
+
+require_unique_provider_bases() {
+  local services=("$@")
+  local i j left_base right_base left_key right_key left_service right_service
+
+  for i in "${!PROVIDER_BASES[@]}"; do
+    left_base="${PROVIDER_BASES[$i]}"
+    left_key="$(provider_base_duplicate_key "$left_base")"
+    left_service="${services[$i]:-provider-daemon$((i + 1))}"
+
+    for ((j = i + 1; j < ${#PROVIDER_BASES[@]}; j++)); do
+      right_base="${PROVIDER_BASES[$j]}"
+      right_key="$(provider_base_duplicate_key "$right_base")"
+      right_service="${services[$j]:-provider-daemon$((j + 1))}"
+
+      if [[ "$left_key" != "$right_key" ]]; then
+        continue
+      fi
+
+      echo "ERROR: duplicate provider-daemon health base: $left_base" >&2
+      echo "       $left_service and $right_service both resolve to the same provider endpoint." >&2
+      echo "       Each provider-daemon service must have a unique health base so healthchecks cannot poll one surviving endpoint twice." >&2
+      if [[ "$PROVIDER_BASES_FROM_ENV" -eq 1 ]]; then
+        echo "       Fix POLYSTORE_PROVIDER_BASES to provide one unique base URL per resolved provider-daemon service." >&2
+      else
+        echo "       Set POLYSTORE_PROVIDER_BASES explicitly, or remove the duplicate provider service from POLYSTORE_PROVIDER_SERVICES." >&2
+      fi
+      exit 1
+    done
+  done
+}
+
 resolve_provider_bases() {
   local expected_count="$1"
   shift
+  local resolved_services=("$@")
   local actual_count="${#PROVIDER_BASES[@]}"
   local prefix=""
 
@@ -292,11 +334,13 @@ resolve_provider_bases() {
       exit 1
     fi
 
+    require_unique_provider_bases "${resolved_services[@]}"
     echo "    ${prefix}provider-daemon bases from POLYSTORE_PROVIDER_BASES: ${PROVIDER_BASES[*]}"
     return
   fi
 
   set_default_provider_bases "$@"
+  require_unique_provider_bases "${resolved_services[@]}"
   echo "    ${prefix}provider-daemon bases derived from resolved services: ${PROVIDER_BASES[*]}"
 }
 
