@@ -120,7 +120,10 @@ This contiguous block of MDUs (immediately following MDU #0) stores the KZG Blob
 
 #### D. MDU #(W+1)..(total_mdus-1): The User Data MDUs
 
-These are the MDUs that store the actual file content (raw bytes).
+These are the MDUs that store the actual file content after scalar packing.
+Each 8 MiB encoded user MDU carries `(8 MiB / 32) * 31 = 8,126,464`
+raw payload bytes. Content admission and `size_bytes` validation must use this
+raw payload capacity, not `user_data_mdus * 8 MiB`.
 
 ---
 
