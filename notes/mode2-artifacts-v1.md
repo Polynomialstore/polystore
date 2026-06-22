@@ -37,6 +37,13 @@ For each provider slot `slot` (0..N-1), where `N = K + M`, store:
   - length = `rows * BLOB_SIZE`
   - where `rows = 64 / K` and `BLOB_SIZE = 128 KiB`
 
+## Optional / Debug Files
+
+Files in this section MUST be excluded from required-artifact conformance
+checks and golden-vector required-file lists. They may be present to help
+transition or visualization, but canonical PolyFS-root validation must succeed
+without them.
+
 ### Legacy Flat Manifest Blob
 
 - `manifest.bin`
