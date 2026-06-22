@@ -26,6 +26,22 @@ polyfs_root = MerkleRoot(
 Where each `DU` is a 128 KiB KZG blob and MDU #0 is the 8 MiB PolyFS
 super-manifest containing the root table and file table.
 
+The Merkle construction is part of the consensus contract:
+
+- The tree has exactly 64 leaves for every MDU root in this protocol version.
+- Leaf `i` is `BLAKE2s-256(kzg_commitment_i)`, where `kzg_commitment_i` is the
+  48-byte compressed KZG commitment for `DU[i]`.
+- Internal nodes are `BLAKE2s-256(left_child || right_child)`.
+- Leaves are ordered by increasing DU index and internal-node concatenation
+  preserves that left-to-right order.
+- No padding, empty-root value, or odd-leaf promotion is used for MDU roots,
+  because each MDU always contains exactly 64 DUs.
+
+The same Merkle construction authenticates:
+
+- `polyfs_root`, the root over MDU #0's 64 DU commitments.
+- Target MDU roots, the roots over a non-zero MDU's 64 DU commitments.
+
 ## 2. Root Field Semantics
 
 The canonical chain field for new deals is `polyfs_root`.
@@ -91,6 +107,19 @@ Therefore:
 
 The root table covers `mdu_index` values `1..65536` inclusive. MDU #0 is
 authenticated directly by `polyfs_root`, not by a root-table entry.
+
+Root-table KZG openings use the same 4096-cell blob evaluation domain as normal
+data blobs. For `root_table_cell = c`, the opening point is:
+
+```text
+z = omega^c mod FrModulus
+omega = 7^((FrModulus - 1) / 4096) mod FrModulus
+FrModulus = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
+```
+
+`z` is encoded as a canonical 32-byte big-endian BLS12-381 scalar. Verifiers
+MUST NOT interpret `root_table_cell` as a raw integer field element or byte
+offset.
 
 ## 5. Root-Table Entry Encoding
 
