@@ -827,6 +827,9 @@ impl KzgContext {
         if mdu_merkle_root.len() != 32 || challenged_kzg_commitment.len() != 48 {
             return Err(KzgError::InvalidDataLength);
         }
+        if merkle_proof_bytes.len() % 32 != 0 {
+            return Err(KzgError::InvalidDataLength);
+        }
 
         let leaf_hash = Blake2s256Hasher::hash(challenged_kzg_commitment);
 
