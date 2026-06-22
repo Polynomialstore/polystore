@@ -317,6 +317,11 @@ root_unit_load_state() {
     return
   fi
 
+  if [[ "$DRY_RUN" == "1" ]]; then
+    systemctl show "$service" --property=LoadState --value 2>/dev/null
+    return
+  fi
+
   sudo -n systemctl show "$service" --property=LoadState --value 2>/dev/null
 }
 
@@ -500,8 +505,7 @@ preflight_root_services_loaded() {
 
   echo "==> Preflighting hub root service units"
   if [[ "$DRY_RUN" == "1" ]]; then
-    echo "    DRY-RUN: would require loaded root services: ${ROOT_SERVICES[*]}"
-    return
+    echo "    DRY-RUN: validating loaded root services with non-mutating systemctl show: ${ROOT_SERVICES[*]}"
   fi
 
   for service in "${ROOT_SERVICES[@]}"; do

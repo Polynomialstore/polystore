@@ -19,7 +19,7 @@ It restarts services in this order:
 4. Preflight all build artifacts before stopping any service.
 5. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
 6. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
-7. Preflight hub root service units so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped.
+7. Preflight hub root service units with non-mutating `systemctl show`, including dry-runs, so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped.
 8. Resolve `provider-daemon` service managers. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
 9. Derive default provider health targets from known resolved service names unless `POLYSTORE_PROVIDER_BASES` is set. Unknown custom service names require explicit bases.
 10. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
@@ -85,11 +85,12 @@ Use:
 scripts/update_devnet_stack.sh --dry-run --skip-build
 ```
 
-This prints the source commit, target paths, `provider-daemon` inventory,
-preflight artifact status, stop/start order, install paths, and healthcheck
-commands without mutating services or files. If a required artifact is missing,
-the dry run exits before printing any service-stop plan, matching live rollout
-safety behavior.
+This validates source layout, command dependencies, hub root unit inventory,
+provider health target derivation, and install preflight behavior, then prints
+the source commit, target paths, `provider-daemon` inventory, preflight artifact
+status, stop/start order, install paths, and healthcheck commands without
+mutating services or files. If a required artifact is missing, the dry run exits
+before printing any service-stop plan, matching live rollout safety behavior.
 
 If `--source-root` and `--target-root` refer to the same live checkout, matching
 artifact paths are supported only with `--skip-build`: they are reported before
@@ -99,5 +100,6 @@ services are still running.
 In live non-root mode, the script also verifies passwordless `sudo systemctl`
 access before printing the service-stop plan. On this host, dry runs report that
 check without requiring a sudo prompt.
-Live runs also verify that all configured hub root service units are loaded and
-that `curl` is available before any service-stop mutation.
+Dry-runs and live runs both verify that all configured hub root service units
+are loaded. Live runs also verify that `curl` is available before any
+service-stop mutation.
