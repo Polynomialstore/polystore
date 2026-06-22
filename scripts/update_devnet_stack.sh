@@ -498,11 +498,22 @@ preflight_root_service_control() {
     return
   fi
 
-  if ! sudo -n systemctl show --property=Version --value >/dev/null; then
-    echo "ERROR: passwordless sudo systemctl is required before stopping provider-daemon services." >&2
-    echo "       Re-run with sudo or configure passwordless sudo for systemctl service control." >&2
-    exit 1
+  preflight_root_systemctl_authorized stop polystore-gateway-router.service polystore-faucet.service
+  preflight_root_systemctl_authorized stop polystorechaind.service
+  preflight_root_systemctl_authorized start polystorechaind.service
+  preflight_root_systemctl_authorized start polystore-faucet.service polystore-gateway-router.service
+}
+
+preflight_root_systemctl_authorized() {
+  if sudo -n -l systemctl "$@" >/dev/null 2>&1; then
+    echo "    sudo authorization OK: systemctl $*"
+    return
   fi
+
+  echo "ERROR: passwordless sudo authorization is required before stopping provider-daemon services." >&2
+  echo "       Missing authorization for: systemctl $*" >&2
+  echo "       Re-run as root or configure passwordless sudo for the exact systemctl stop/start actions." >&2
+  exit 1
 }
 
 preflight_root_services_loaded() {

@@ -18,7 +18,7 @@ It restarts services in this order:
 3. Build artifacts as `--run-user`/`POLYSTORE_RUN_USER`; when invoked with `sudo`, this avoids root-owned Cargo/Go outputs in the source checkout.
 4. Preflight all build artifacts before stopping any service.
 5. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
-6. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
+6. Preflight root service control. Live non-root runs must prove passwordless sudo authorization for the exact root `systemctl stop/start` actions before any `provider-daemon` is stopped.
 7. Preflight hub root service units with non-mutating `systemctl show`, including dry-runs, so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped.
 8. Resolve `provider-daemon` service managers. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
 9. Derive default provider health targets from known resolved service names unless `POLYSTORE_PROVIDER_BASES` is set. Unknown custom service names require explicit bases.
@@ -97,9 +97,10 @@ artifact paths are supported only with `--skip-build`: they are reported before
 the stop plan and skipped during install. Without `--skip-build`, the script
 exits before building so it cannot partially overwrite live artifacts while
 services are still running.
-In live non-root mode, the script also verifies passwordless `sudo systemctl`
-access before printing the service-stop plan. On this host, dry runs report that
-check without requiring a sudo prompt.
+In live non-root mode, the script also verifies passwordless sudo authorization
+for the exact root `systemctl stop/start` actions before printing the
+service-stop plan. On this host, dry runs report that check without requiring a
+sudo prompt.
 Dry-runs and live runs both verify that all configured hub root service units
 are loaded. Live runs also verify that `curl` is available before any
 service-stop mutation.
