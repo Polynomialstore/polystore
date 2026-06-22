@@ -109,9 +109,11 @@ struct FileRecordV1 {
 This contiguous block of MDUs (immediately following MDU #0) stores the KZG Blob Commitments required for Hop 2 of the Triple Proof.
 
 *   **Calculation of W (Number of Witness MDUs):**
-    *   For a *planned* maximum of `N_user_mdus`, total blob commitments = `N_user_mdus * 64`.
-    *   Total size of commitments = `N_user_mdus * 64 * 48 bytes`.
-    *   `W = ceil( (N_user_mdus * 64 * 48) / (8 * 1024 * 1024) )`.
+    *   For a *planned* maximum of `N_user_mdus`, total blob commitments = `N_user_mdus * commitments_per_user_mdu`.
+    *   `commitments_per_user_mdu` is the target MDU root profile leaf count selected by the committed deal mode/profile. Replicated user MDUs use 64. Mode 2 striped user SP-MDUs use `L = (K+M)*(64/K)`; the default `K=8`, `M=4` profile uses 96.
+    *   Total size of commitments = `N_user_mdus * commitments_per_user_mdu * 48 bytes`.
+    *   `W = ceil( (N_user_mdus * commitments_per_user_mdu * 48) / (8 * 1024 * 1024) )`.
+    *   A Mode 2 gateway/client MUST NOT reserve Witness MDUs with the old `N_user_mdus * 64` formula, because that omits parity-slot commitments and prevents proofs for leaves `64..95`.
     *   **Devnet note:** `N_user_mdus` is currently an off-chain input (e.g., a gateway/client parameter). The on-chain Deal does not store this reservation.
 *   **Structure:** Witness MDUs are a packed, contiguous array of 48-byte G1 Points (Compressed).
 *   **Indexing:** The `kzg_commitment` for `User_Data_MDU_X, Blob_Y` is located at a deterministic offset within the Witness MDUs.
