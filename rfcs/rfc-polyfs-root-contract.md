@@ -207,7 +207,7 @@ Let:
 
 ```text
 W = witness_mdus
-S = user_mdus
+S = user_data_mdus
 total_mdus = 1 + W + S
 ```
 
@@ -218,15 +218,33 @@ W + S <= 65,536
 total_mdus <= 65,537
 ```
 
-The public "512 GiB-class" capacity refers to logical user MDU slots before
-metadata overhead. Actual user capacity is:
+`S` counts committed user-data MDU slots. It is not a raw byte count and it
+MUST NOT be used as `S * 8 MiB` for raw file admission.
+
+Each 8 MiB user MDU is an encoded scalar buffer. With the shared 31-byte
+payload into 32-byte scalar packing rule:
 
 ```text
-S * 8 MiB
+RawMduPayloadBytes = (8 MiB / 32) * 31 = 8,126,464 bytes
+EncodedUserSlabBytes = S * 8 MiB
+MaxRawPayloadBytes = S * RawMduPayloadBytes
 ```
 
-Because Witness MDUs consume root-table slots, the maximum user bytes are below
-512 GiB whenever `W > 0`.
+For a committed live file set with raw payload byte demand `P`, content commit
+validation MUST require:
+
+```text
+P <= MaxRawPayloadBytes
+```
+
+If a file set needs `RawMduPayloadBytes + 1` bytes, it requires at least two
+user-data MDUs and the corresponding root-table and Witness entries. A gateway
+or chain admission check that accepts the file set with `S = 1` because
+`P <= 8 MiB` is invalid.
+
+The public "512 GiB-class" capacity refers to encoded user MDU address space
+before metadata overhead. Raw payload capacity is lower due to scalar packing,
+and it is further reduced whenever Witness MDUs consume root-table slots.
 
 ## 8. Witness MDUs
 
