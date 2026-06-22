@@ -224,6 +224,20 @@ preflight_root_service_control() {
   fi
 }
 
+preflight_source_target_layout() {
+  echo "==> Preflighting source/target layout"
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "    build skipped; source root may equal target root only for already-staged artifacts"
+    return
+  fi
+
+  if [[ "$(realpath -m "$SOURCE_ROOT")" == "$(realpath -m "$TARGET_ROOT")" ]]; then
+    echo "ERROR: refusing to build with --source-root equal to --target-root." >&2
+    echo "       Build from a separate checkout, or use --skip-build only after artifacts are already staged in place." >&2
+    exit 1
+  fi
+}
+
 sha256_if_present() {
   local path="$1"
   if [[ -f "$path" ]]; then
@@ -447,6 +461,7 @@ run_healthchecks() {
 }
 
 print_source_evidence
+preflight_source_target_layout
 build_artifacts
 preflight_artifacts
 preflight_install_plan
