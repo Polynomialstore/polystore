@@ -19,17 +19,18 @@ It restarts services in this order:
 4. Preflight all build artifacts before stopping any service.
 5. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
 6. Preflight hub root service units with non-mutating, non-sudo `systemctl show`, including dry-runs, so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped.
-7. Resolve `provider-daemon` service managers. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
-8. Derive default provider health targets from known resolved service names unless `POLYSTORE_PROVIDER_BASES` is set. Unknown custom service names require explicit bases.
-9. Preflight root service control. Live non-root runs must prove passwordless sudo authorization for the exact hub and root-managed `provider-daemon` `systemctl stop/start` actions before any `provider-daemon` is stopped.
-10. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
-11. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
-12. Install artifacts with backups and sha256 evidence.
-13. Start chain first.
-14. Start faucet and the `user-gateway` legacy router service.
-15. Start all resolved `provider-daemon` services, including provider4 when the local user-service layout is present.
+7. If `--restart-tunnels` is supplied, preflight tunnel user service units with non-mutating `systemctl --user show`.
+8. Resolve `provider-daemon` service managers. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
+9. Derive default provider health targets from known resolved service names unless `POLYSTORE_PROVIDER_BASES` is set. Unknown custom service names require explicit bases.
+10. Preflight root service control. Live non-root runs must prove passwordless sudo authorization for the exact hub and root-managed `provider-daemon` `systemctl stop/start` actions before any `provider-daemon` is stopped.
+11. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
+12. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
+13. Install artifacts with backups and sha256 evidence.
+14. Start chain first.
+15. Start faucet and the `user-gateway` legacy router service.
+16. Start all resolved `provider-daemon` services, including provider4 when the local user-service layout is present.
 
-Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
+Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes. When enabled, tunnel user units must be loaded before any service-stop mutation, and tunnel stop/start failures are fatal because local healthchecks do not prove the public tunnel process restarted.
 
 The default health endpoints match the checked-in local devnet and systemd
 templates:
@@ -86,9 +87,10 @@ scripts/update_devnet_stack.sh --dry-run --skip-build
 ```
 
 This validates source layout, command dependencies, hub root unit inventory,
-provider health target derivation, and install preflight behavior, then prints
-the source commit, target paths, `provider-daemon` inventory, preflight artifact
-status, stop/start order, install paths, and healthcheck commands without
+optional tunnel user unit inventory, provider health target derivation, and
+install preflight behavior, then prints the source commit, target paths,
+`provider-daemon` inventory, preflight artifact status, stop/start order, install
+paths, and healthcheck commands without
 mutating services or files. If a required artifact is missing, the dry run exits
 before printing any service-stop plan, matching live rollout safety behavior.
 

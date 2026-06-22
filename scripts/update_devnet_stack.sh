@@ -538,6 +538,30 @@ preflight_root_services_loaded() {
   echo "    root services loaded: ${ROOT_SERVICES[*]}"
 }
 
+preflight_tunnel_services_loaded() {
+  local service load_state
+
+  if [[ "$RESTART_TUNNELS" != "1" ]]; then
+    return
+  fi
+
+  echo "==> Preflighting tunnel user service units"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    DRY-RUN: validating loaded tunnel user services with non-mutating systemctl --user show: ${TUNNEL_SERVICES[*]}"
+  fi
+
+  for service in "${TUNNEL_SERVICES[@]}"; do
+    load_state="$(user_unit_load_state "$service" || true)"
+    if ! unit_is_loaded "$load_state"; then
+      echo "ERROR: tunnel service $service is not loaded in the user systemd manager." >&2
+      echo "       LoadState=$(describe_load_state "$load_state"); fix the unit before stopping services." >&2
+      echo "       Unset --restart-tunnels if this rollout does not need tunnel restarts." >&2
+      exit 1
+    fi
+  done
+  echo "    tunnel services loaded: ${TUNNEL_SERVICES[*]}"
+}
+
 preflight_source_target_layout() {
   echo "==> Preflighting source/target layout"
   if [[ "$SKIP_BUILD" == "1" ]]; then
@@ -868,6 +892,7 @@ build_artifacts
 preflight_artifacts
 preflight_install_plan
 preflight_root_services_loaded
+preflight_tunnel_services_loaded
 resolve_provider_service_scopes
 preflight_root_service_control
 
@@ -877,7 +902,7 @@ root_systemctl stop polystore-gateway-router.service polystore-faucet.service
 root_systemctl stop polystorechaind.service
 if [[ "$RESTART_TUNNELS" == "1" ]]; then
   echo "==> Stopping tunnel user services"
-  user_systemctl stop "${TUNNEL_SERVICES[@]}" || true
+  user_systemctl stop "${TUNNEL_SERVICES[@]}"
 fi
 
 echo "==> Installing binaries and runtime inputs"
