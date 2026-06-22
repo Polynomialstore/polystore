@@ -2,6 +2,7 @@ use polystore_core::kzg::{
     BLOB_SIZE, BLOBS_PER_MDU, KzgContext, MDU_SIZE, MDU0_ROOT_TABLE_CAPACITY,
     encode_mdu_root_for_root_table, root_table_position_for_mdu_index,
 };
+use std::ffi::CString;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -31,6 +32,11 @@ fn polyfs_root_for_mdu0(ctx: &KzgContext, mdu0: &[u8]) -> [u8; 32] {
     let commitments = ctx.mdu_to_kzg_commitments(mdu0).unwrap();
     assert_eq!(commitments.len(), BLOBS_PER_MDU);
     ctx.create_mdu_merkle_root(&commitments).unwrap()
+}
+
+fn init_ffi_context() {
+    let path = CString::new(trusted_setup_path().to_str().unwrap()).unwrap();
+    assert_eq!(polystore_core::ffi::polystore_init(path.as_ptr()), 0);
 }
 
 #[test]
@@ -258,6 +264,83 @@ fn old_flat_manifest_boundary_fails_while_mdu0_path_passes() {
         )
         .unwrap();
     assert!(new_ok, "MDU #0 root-table path verifies mdu_index 4096");
+}
+
+#[test]
+fn ffi_mdu0_root_table_proof_round_trip_covers_high_index() {
+    init_ffi_context();
+
+    let mdu_index = 4097;
+    let target_root = test_root(0xab, mdu_index);
+    let mut mdu0 = vec![0u8; MDU_SIZE];
+    write_root_table_entry(&mut mdu0, mdu_index, &target_root);
+
+    let mut polyfs_root = [0u8; 32];
+    assert_eq!(
+        polystore_core::ffi::polystore_compute_mdu_merkle_root(
+            mdu0.as_ptr(),
+            mdu0.len(),
+            polyfs_root.as_mut_ptr(),
+        ),
+        0
+    );
+
+    let mut root_table_du_commitment = [0u8; 48];
+    let mut root_table_du_merkle_proof = [0u8; 6 * 32];
+    let mut root_table_du_merkle_proof_len = root_table_du_merkle_proof.len();
+    let mut root_table_opening_proof = [0u8; 48];
+    let mut root_table_opening_y = [0u8; 32];
+
+    assert_eq!(
+        polystore_core::ffi::polystore_compute_mdu0_root_table_proof(
+            mdu0.as_ptr(),
+            mdu0.len(),
+            mdu_index,
+            target_root.as_ptr(),
+            root_table_du_commitment.as_mut_ptr(),
+            root_table_du_merkle_proof.as_mut_ptr(),
+            &mut root_table_du_merkle_proof_len,
+            root_table_opening_proof.as_mut_ptr(),
+            root_table_opening_y.as_mut_ptr(),
+        ),
+        0
+    );
+    assert_eq!(root_table_du_merkle_proof_len, 6 * 32);
+    assert_eq!(
+        root_table_opening_y,
+        encode_mdu_root_for_root_table(&target_root).unwrap()
+    );
+
+    assert_eq!(
+        polystore_core::ffi::polystore_verify_mdu0_root_table_proof(
+            polyfs_root.as_ptr(),
+            mdu_index,
+            target_root.as_ptr(),
+            root_table_du_commitment.as_ptr(),
+            root_table_du_merkle_proof.as_ptr(),
+            root_table_du_merkle_proof_len,
+            root_table_opening_proof.as_ptr(),
+        ),
+        1
+    );
+
+    let mut undersized_merkle_proof = [0u8; 32];
+    let mut undersized_merkle_proof_len = undersized_merkle_proof.len();
+    assert_eq!(
+        polystore_core::ffi::polystore_compute_mdu0_root_table_proof(
+            mdu0.as_ptr(),
+            mdu0.len(),
+            mdu_index,
+            target_root.as_ptr(),
+            root_table_du_commitment.as_mut_ptr(),
+            undersized_merkle_proof.as_mut_ptr(),
+            &mut undersized_merkle_proof_len,
+            root_table_opening_proof.as_mut_ptr(),
+            root_table_opening_y.as_mut_ptr(),
+        ),
+        -7
+    );
+    assert_eq!(undersized_merkle_proof_len, 6 * 32);
 }
 
 #[test]
