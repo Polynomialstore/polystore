@@ -467,13 +467,16 @@ resolve_provider_service_scopes() {
 }
 
 provider_systemctl() {
+  local status=0
+
   resolve_provider_service_scopes
   if [[ "${#PROVIDER_USER_SERVICES[@]}" -gt 0 ]]; then
-    user_systemctl "$@" "${PROVIDER_USER_SERVICES[@]}"
+    user_systemctl "$@" "${PROVIDER_USER_SERVICES[@]}" || status=$?
   fi
   if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
-    root_systemctl "$@" "${PROVIDER_ROOT_SERVICES[@]}"
+    root_systemctl "$@" "${PROVIDER_ROOT_SERVICES[@]}" || status=$?
   fi
+  return "$status"
 }
 
 preflight_required_tools() {
@@ -819,7 +822,9 @@ print_source_evidence() {
 
 print_service_status() {
   echo "==> Root service activity"
-  root_systemctl is-active "${ROOT_SERVICES[@]}"
+  if ! root_systemctl is-active "${ROOT_SERVICES[@]}"; then
+    echo "WARNING: root service activity status probe failed after healthchecks." >&2
+  fi
   if [[ "$DRY_RUN" != "1" ]]; then
     if [[ "$IS_ROOT" -eq 1 ]]; then
       systemctl --no-pager --full status "${ROOT_SERVICES[@]}" | sed -n '1,160p' || true
@@ -829,7 +834,9 @@ print_service_status() {
   fi
 
   echo "==> Provider service activity"
-  provider_systemctl is-active
+  if ! provider_systemctl is-active; then
+    echo "WARNING: provider-daemon activity status probe failed after healthchecks." >&2
+  fi
   if [[ "$DRY_RUN" != "1" ]]; then
     if [[ "${#PROVIDER_USER_SERVICES[@]}" -gt 0 && "$IS_ROOT" -eq 1 ]]; then
       runuser -u "$RUN_USER" -- env XDG_RUNTIME_DIR="/run/user/$RUN_UID" systemctl --user --no-pager --full status "${PROVIDER_USER_SERVICES[@]}" | sed -n '1,200p' || true

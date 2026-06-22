@@ -104,3 +104,6 @@ that check without requiring a sudo prompt.
 Dry-runs and live runs both verify that all configured hub root service units
 are loaded. Live runs also verify that `curl` is available before any
 service-stop mutation.
+Final `systemctl is-active` status probes are best-effort evidence after the
+healthchecks have passed; a restricted sudoers policy for status commands should
+not mark an otherwise healthy rollout as failed.
