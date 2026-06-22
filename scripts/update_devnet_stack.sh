@@ -570,13 +570,17 @@ preflight_artifacts() {
     fi
 
     missing=1
-    echo "MISSING $artifact" >&2
+    if [[ "$DRY_RUN" == "1" ]]; then
+      echo "DRY-RUN MISSING $artifact"
+    else
+      echo "MISSING $artifact" >&2
+    fi
   done
 
   if [[ "$missing" -ne 0 ]]; then
     if [[ "$DRY_RUN" == "1" ]]; then
-      echo "ERROR: missing install artifacts; dry-run aborting before service-stop plan" >&2
-      exit 1
+      echo "    DRY-RUN: missing artifacts would be produced by the build step or fail before service stop in live mode"
+      return
     fi
 
     echo "ERROR: missing install artifacts; aborting before service stop" >&2
