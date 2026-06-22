@@ -21,8 +21,13 @@ Flags:
   -h, --help              Show this help
 
 Environment:
-  POLYSTORE_PROVIDER_SERVICES   Space-separated user services to restart.
-                                Default: polystore-provider1..polystore-provider4.
+  POLYSTORE_PROVIDER_SERVICES   Space-separated provider-daemon services to restart.
+                                Default: polystore-provider1..polystore-provider4
+                                plus the checked-in root provider template when
+                                POLYSTORE_PROVIDER_SERVICE_SCOPE=auto.
+  POLYSTORE_PROVIDER_SERVICE_SCOPE
+                                Provider service manager: auto, user, or root
+                                (default: auto).
   POLYSTORE_TUNNEL_SERVICES     Space-separated tunnel user services.
                                 Default: cloudflared-hub.service cloudflared-providers.service.
   POLYSTORE_RPC_BASE            Hub Tendermint RPC base URL (default: http://127.0.0.1:26657).
@@ -115,7 +120,20 @@ if [[ "$(id -u)" -eq 0 ]]; then
   IS_ROOT=1
 fi
 
-read -r -a PROVIDER_SERVICES <<<"${POLYSTORE_PROVIDER_SERVICES:-polystore-provider1.service polystore-provider2.service polystore-provider3.service polystore-provider4.service}"
+DEFAULT_USER_PROVIDER_SERVICES=(polystore-provider1.service polystore-provider2.service polystore-provider3.service polystore-provider4.service)
+DEFAULT_ROOT_PROVIDER_SERVICES=(polystore-gateway-provider.service)
+PROVIDER_SERVICES_FROM_ENV=0
+PROVIDER_SERVICE_SCOPE="${POLYSTORE_PROVIDER_SERVICE_SCOPE:-auto}"
+if [[ -n "${POLYSTORE_PROVIDER_SERVICES+x}" ]]; then
+  PROVIDER_SERVICES_FROM_ENV=1
+  read -r -a PROVIDER_SERVICES <<<"$POLYSTORE_PROVIDER_SERVICES"
+elif [[ "$PROVIDER_SERVICE_SCOPE" == "root" ]]; then
+  PROVIDER_SERVICES=("${DEFAULT_ROOT_PROVIDER_SERVICES[@]}")
+elif [[ "$PROVIDER_SERVICE_SCOPE" == "auto" ]]; then
+  PROVIDER_SERVICES=("${DEFAULT_USER_PROVIDER_SERVICES[@]}" "${DEFAULT_ROOT_PROVIDER_SERVICES[@]}")
+else
+  PROVIDER_SERVICES=("${DEFAULT_USER_PROVIDER_SERVICES[@]}")
+fi
 read -r -a ROOT_SERVICES <<<"polystorechaind.service polystore-faucet.service polystore-gateway-router.service"
 read -r -a TUNNEL_SERVICES <<<"${POLYSTORE_TUNNEL_SERVICES:-cloudflared-hub.service cloudflared-providers.service}"
 RPC_BASE="${POLYSTORE_RPC_BASE:-http://127.0.0.1:26657}"
@@ -129,6 +147,15 @@ if [[ "$IS_ROOT" -ne 1 && "$(id -un)" != "$RUN_USER" ]]; then
   echo "ERROR: non-root update must run as POLYSTORE_RUN_USER=$RUN_USER." >&2
   exit 1
 fi
+
+case "$PROVIDER_SERVICE_SCOPE" in
+  auto|user|root)
+    ;;
+  *)
+    echo "ERROR: POLYSTORE_PROVIDER_SERVICE_SCOPE must be auto, user, or root." >&2
+    exit 2
+    ;;
+esac
 
 if [[ "$DRY_RUN" != "1" && ! -w "$TARGET_ROOT" ]]; then
   echo "ERROR: $TARGET_ROOT is not writable by $(id -un)." >&2
@@ -203,6 +230,160 @@ root_systemctl() {
   fi
 
   run_cmd sudo -n systemctl "$@"
+}
+
+user_unit_load_state() {
+  local service="$1"
+  if [[ "$IS_ROOT" -eq 1 ]]; then
+    runuser -u "$RUN_USER" -- env XDG_RUNTIME_DIR="/run/user/$RUN_UID" systemctl --user show "$service" --property=LoadState --value 2>/dev/null
+    return
+  fi
+
+  env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$RUN_UID}" systemctl --user show "$service" --property=LoadState --value 2>/dev/null
+}
+
+root_unit_load_state() {
+  local service="$1"
+  if [[ "$IS_ROOT" -eq 1 ]]; then
+    systemctl show "$service" --property=LoadState --value 2>/dev/null
+    return
+  fi
+
+  sudo -n systemctl show "$service" --property=LoadState --value 2>/dev/null
+}
+
+unit_is_loaded() {
+  local load_state="$1"
+  [[ -n "$load_state" && "$load_state" != "not-found" ]]
+}
+
+require_provider_service_loaded() {
+  local scope="$1"
+  local service="$2"
+  local load_state
+
+  if [[ "$scope" == "user" ]]; then
+    load_state="$(user_unit_load_state "$service" || true)"
+  else
+    load_state="$(root_unit_load_state "$service" || true)"
+  fi
+
+  if ! unit_is_loaded "$load_state"; then
+    echo "ERROR: provider-daemon service $service was not found in the $scope systemd manager." >&2
+    exit 1
+  fi
+}
+
+declare -a PROVIDER_USER_SERVICES=()
+declare -a PROVIDER_ROOT_SERVICES=()
+PROVIDER_SERVICE_SCOPES_RESOLVED=0
+
+resolve_provider_service_scopes() {
+  local service user_state root_state found_any=0
+
+  if [[ "$PROVIDER_SERVICE_SCOPES_RESOLVED" -eq 1 ]]; then
+    return
+  fi
+
+  PROVIDER_USER_SERVICES=()
+  PROVIDER_ROOT_SERVICES=()
+  echo "==> Resolving provider-daemon service managers"
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    case "$PROVIDER_SERVICE_SCOPE" in
+      user)
+        PROVIDER_USER_SERVICES=("${PROVIDER_SERVICES[@]}")
+        ;;
+      root)
+        PROVIDER_ROOT_SERVICES=("${PROVIDER_SERVICES[@]}")
+        ;;
+      auto)
+        if [[ "$PROVIDER_SERVICES_FROM_ENV" -eq 1 ]]; then
+          echo "    DRY-RUN: auto scope for explicit POLYSTORE_PROVIDER_SERVICES resolves in live mode"
+          PROVIDER_USER_SERVICES=("${PROVIDER_SERVICES[@]}")
+        else
+          PROVIDER_USER_SERVICES=("${DEFAULT_USER_PROVIDER_SERVICES[@]}")
+          PROVIDER_ROOT_SERVICES=("${DEFAULT_ROOT_PROVIDER_SERVICES[@]}")
+        fi
+        ;;
+    esac
+    if [[ "${#PROVIDER_USER_SERVICES[@]}" -gt 0 ]]; then
+      echo "    DRY-RUN user manager: ${PROVIDER_USER_SERVICES[*]}"
+    fi
+    if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
+      echo "    DRY-RUN root manager: ${PROVIDER_ROOT_SERVICES[*]}"
+    fi
+    PROVIDER_SERVICE_SCOPES_RESOLVED=1
+    return
+  fi
+
+  case "$PROVIDER_SERVICE_SCOPE" in
+    user)
+      for service in "${PROVIDER_SERVICES[@]}"; do
+        require_provider_service_loaded user "$service"
+      done
+      PROVIDER_USER_SERVICES=("${PROVIDER_SERVICES[@]}")
+      ;;
+    root)
+      for service in "${PROVIDER_SERVICES[@]}"; do
+        require_provider_service_loaded root "$service"
+      done
+      PROVIDER_ROOT_SERVICES=("${PROVIDER_SERVICES[@]}")
+      ;;
+    auto)
+      for service in "${PROVIDER_SERVICES[@]}"; do
+        user_state="$(user_unit_load_state "$service" || true)"
+        root_state="$(root_unit_load_state "$service" || true)"
+
+        if unit_is_loaded "$user_state" && unit_is_loaded "$root_state"; then
+          echo "ERROR: provider-daemon service $service exists in both user and root managers." >&2
+          echo "       Set POLYSTORE_PROVIDER_SERVICE_SCOPE=user or root for this rollout." >&2
+          exit 1
+        fi
+
+        if unit_is_loaded "$user_state"; then
+          PROVIDER_USER_SERVICES+=("$service")
+          found_any=1
+          continue
+        fi
+
+        if unit_is_loaded "$root_state"; then
+          PROVIDER_ROOT_SERVICES+=("$service")
+          found_any=1
+          continue
+        fi
+
+        if [[ "$PROVIDER_SERVICES_FROM_ENV" -eq 1 ]]; then
+          echo "ERROR: provider-daemon service not found in user or root systemd managers: $service" >&2
+          exit 1
+        fi
+      done
+
+      if [[ "$found_any" -ne 1 ]]; then
+        echo "ERROR: no provider-daemon services were found in user or root systemd managers." >&2
+        echo "       Set POLYSTORE_PROVIDER_SERVICES and POLYSTORE_PROVIDER_SERVICE_SCOPE for this host." >&2
+        exit 1
+      fi
+      ;;
+  esac
+
+  if [[ "${#PROVIDER_USER_SERVICES[@]}" -gt 0 ]]; then
+    echo "    user manager: ${PROVIDER_USER_SERVICES[*]}"
+  fi
+  if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
+    echo "    root manager: ${PROVIDER_ROOT_SERVICES[*]}"
+  fi
+  PROVIDER_SERVICE_SCOPES_RESOLVED=1
+}
+
+provider_systemctl() {
+  resolve_provider_service_scopes
+  if [[ "${#PROVIDER_USER_SERVICES[@]}" -gt 0 ]]; then
+    user_systemctl "$@" "${PROVIDER_USER_SERVICES[@]}"
+  fi
+  if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
+    root_systemctl "$@" "${PROVIDER_ROOT_SERVICES[@]}"
+  fi
 }
 
 preflight_root_service_control() {
@@ -409,6 +590,7 @@ print_source_evidence() {
     git -C "$SOURCE_ROOT" status --short || true
   fi
   echo "    provider-daemon services: ${PROVIDER_SERVICES[*]}"
+  echo "    provider-daemon service scope: $PROVIDER_SERVICE_SCOPE"
   echo "    root services: ${ROOT_SERVICES[*]}"
   echo "    rpc base: $RPC_BASE"
   echo "    lcd base: $LCD_BASE"
@@ -435,12 +617,17 @@ print_service_status() {
   fi
 
   echo "==> Provider service activity"
-  user_systemctl is-active "${PROVIDER_SERVICES[@]}"
+  provider_systemctl is-active
   if [[ "$DRY_RUN" != "1" ]]; then
-    if [[ "$IS_ROOT" -eq 1 ]]; then
-      runuser -u "$RUN_USER" -- env XDG_RUNTIME_DIR="/run/user/$RUN_UID" systemctl --user --no-pager --full status "${PROVIDER_SERVICES[@]}" | sed -n '1,200p' || true
-    else
-      env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$RUN_UID}" systemctl --user --no-pager --full status "${PROVIDER_SERVICES[@]}" | sed -n '1,200p' || true
+    if [[ "${#PROVIDER_USER_SERVICES[@]}" -gt 0 && "$IS_ROOT" -eq 1 ]]; then
+      runuser -u "$RUN_USER" -- env XDG_RUNTIME_DIR="/run/user/$RUN_UID" systemctl --user --no-pager --full status "${PROVIDER_USER_SERVICES[@]}" | sed -n '1,200p' || true
+    elif [[ "${#PROVIDER_USER_SERVICES[@]}" -gt 0 ]]; then
+      env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$RUN_UID}" systemctl --user --no-pager --full status "${PROVIDER_USER_SERVICES[@]}" | sed -n '1,200p' || true
+    fi
+    if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 && "$IS_ROOT" -eq 1 ]]; then
+      systemctl --no-pager --full status "${PROVIDER_ROOT_SERVICES[@]}" | sed -n '1,200p' || true
+    elif [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
+      sudo -n systemctl --no-pager --full status "${PROVIDER_ROOT_SERVICES[@]}" | sed -n '1,200p' || true
     fi
   fi
 }
@@ -466,9 +653,10 @@ build_artifacts
 preflight_artifacts
 preflight_install_plan
 preflight_root_service_control
+resolve_provider_service_scopes
 
 echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
-user_systemctl stop "${PROVIDER_SERVICES[@]}"
+provider_systemctl stop
 root_systemctl stop polystore-gateway-router.service polystore-faucet.service
 root_systemctl stop polystorechaind.service
 if [[ "$RESTART_TUNNELS" == "1" ]]; then
@@ -490,7 +678,7 @@ wait_http "LCD node_info" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 9
 root_systemctl start polystore-faucet.service polystore-gateway-router.service
 wait_http "faucet" "$FAUCET_BASE/health" 45
 wait_http "user-gateway (legacy router service)" "$ROUTER_BASE/health" 45
-user_systemctl start "${PROVIDER_SERVICES[@]}"
+provider_systemctl start
 for i in "${!PROVIDER_BASES[@]}"; do
   wait_http "provider-daemon$((i + 1))" "${PROVIDER_BASES[$i]}/health" 45
 done

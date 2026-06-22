@@ -18,12 +18,13 @@ It restarts services in this order:
 3. Preflight all build artifacts before stopping any service.
 4. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
 5. Preflight root service control. Live non-root runs must prove `sudo -n systemctl` works before any `provider-daemon` is stopped.
-6. Stop `provider-daemon` user services: `polystore-provider1.service` through `polystore-provider4.service`.
-7. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
-8. Install artifacts with backups and sha256 evidence.
-9. Start chain first.
-10. Start faucet and the `user-gateway` legacy router service.
-11. Start all `provider-daemon` services, including provider4.
+6. Resolve `provider-daemon` service managers. The default `auto` mode supports both the local user-service provider layout and the checked-in root provider template.
+7. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
+8. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
+9. Install artifacts with backups and sha256 evidence.
+10. Start chain first.
+11. Start faucet and the `user-gateway` legacy router service.
+12. Start all resolved `provider-daemon` services, including provider4 when the local user-service layout is present.
 
 Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
 
@@ -43,6 +44,14 @@ Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 `user-gateway` endpoint. The checked-in systemd template still documents `8080`
 as a generic router example; this machine's live `/etc/polystore` legacy router
 env binds the managed devnet `user-gateway` to `18080`.
+
+Provider service management is controlled by `POLYSTORE_PROVIDER_SERVICE_SCOPE`:
+
+- `auto` (default): resolve each default or configured provider service against user and root systemd managers before any stop/start action.
+- `user`: require every configured provider service to exist in the user systemd manager.
+- `root`: require every configured provider service to exist in the root systemd manager. With the checked-in provider template, use this with `POLYSTORE_PROVIDER_SERVICES=polystore-gateway-provider.service`.
+
+If a service name exists in both managers, `auto` exits before stopping services; set the scope explicitly for that host.
 
 ## State Policy
 
