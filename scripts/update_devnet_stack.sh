@@ -317,12 +317,7 @@ root_unit_load_state() {
     return
   fi
 
-  if [[ "$DRY_RUN" == "1" ]]; then
-    systemctl show "$service" --property=LoadState --value 2>/dev/null
-    return
-  fi
-
-  sudo -n systemctl show "$service" --property=LoadState --value 2>/dev/null
+  systemctl show "$service" --property=LoadState --value 2>/dev/null
 }
 
 unit_is_loaded() {
