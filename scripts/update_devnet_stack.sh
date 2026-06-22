@@ -25,7 +25,9 @@ Environment:
                                 Default: polystore-provider1..polystore-provider4.
   POLYSTORE_TUNNEL_SERVICES     Space-separated tunnel user services.
                                 Default: cloudflared-hub.service cloudflared-providers.service.
+  POLYSTORE_RPC_BASE            Hub Tendermint RPC base URL (default: http://127.0.0.1:26657).
   POLYSTORE_LCD_BASE            Hub LCD base URL (default: http://127.0.0.1:1317).
+  POLYSTORE_EVM_BASE            Hub EVM JSON-RPC base URL (default: http://127.0.0.1:8545).
   POLYSTORE_ROUTER_BASE         Router gateway base URL (default: http://127.0.0.1:18080).
   POLYSTORE_FAUCET_BASE         Faucet base URL (default: http://127.0.0.1:8081).
   POLYSTORE_PROVIDER_BASES      Space-separated provider gateway base URLs.
@@ -45,17 +47,30 @@ SKIP_BUILD="${POLYSTORE_SKIP_BUILD:-0}"
 DRY_RUN="${POLYSTORE_DRY_RUN:-0}"
 RESTART_TUNNELS="${POLYSTORE_RESTART_TUNNELS:-0}"
 
+need_value() {
+  local flag="$1"
+  local value="${2:-}"
+  if [[ -z "$value" || "$value" == -* ]]; then
+    echo "ERROR: $flag requires a value" >&2
+    usage >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --source-root)
+      need_value "$@"
       SOURCE_ROOT="$2"
       shift 2
       ;;
     --target-root)
+      need_value "$@"
       TARGET_ROOT="$2"
       shift 2
       ;;
     --run-user)
+      need_value "$@"
       RUN_USER="$2"
       shift 2
       ;;
@@ -94,7 +109,9 @@ fi
 read -r -a PROVIDER_SERVICES <<<"${POLYSTORE_PROVIDER_SERVICES:-polystore-provider1.service polystore-provider2.service polystore-provider3.service polystore-provider4.service}"
 read -r -a ROOT_SERVICES <<<"polystorechaind.service polystore-faucet.service polystore-gateway-router.service"
 read -r -a TUNNEL_SERVICES <<<"${POLYSTORE_TUNNEL_SERVICES:-cloudflared-hub.service cloudflared-providers.service}"
+RPC_BASE="${POLYSTORE_RPC_BASE:-http://127.0.0.1:26657}"
 LCD_BASE="${POLYSTORE_LCD_BASE:-http://127.0.0.1:1317}"
+EVM_BASE="${POLYSTORE_EVM_BASE:-http://127.0.0.1:8545}"
 ROUTER_BASE="${POLYSTORE_ROUTER_BASE:-http://127.0.0.1:18080}"
 FAUCET_BASE="${POLYSTORE_FAUCET_BASE:-http://127.0.0.1:8081}"
 read -r -a PROVIDER_BASES <<<"${POLYSTORE_PROVIDER_BASES:-http://127.0.0.1:8091 http://127.0.0.1:8092 http://127.0.0.1:8093 http://127.0.0.1:8094}"
@@ -130,6 +147,17 @@ run_in_dir() {
     return 0
   fi
   (cd "$dir" && "$@")
+}
+
+goflags_with_mod() {
+  local current="${GOFLAGS:-}"
+  if [[ " $current " == *" -mod="* ]]; then
+    printf '%s' "$current"
+  elif [[ -n "$current" ]]; then
+    printf '%s -mod=mod' "$current"
+  else
+    printf '%s' "-mod=mod"
+  fi
 }
 
 user_systemctl() {
@@ -204,9 +232,9 @@ build_artifacts() {
 
   echo "==> Building coupled devnet artifacts"
   run_in_dir "$SOURCE_ROOT/polystore_core" cargo build --release
-  run_in_dir "$SOURCE_ROOT/polystorechain" env GOFLAGS="${GOFLAGS:-} -mod=mod" go build -o "$SOURCE_ROOT/polystorechain/polystorechaind" ./cmd/polystorechaind
-  run_in_dir "$SOURCE_ROOT/polystore_gateway" env GOFLAGS="${GOFLAGS:-} -mod=mod" go build -o "$SOURCE_ROOT/polystore_gateway/polystore_gateway" .
-  run_in_dir "$SOURCE_ROOT/polystore_faucet" env GOFLAGS="${GOFLAGS:-} -mod=mod" go build -o "$SOURCE_ROOT/polystore_faucet/polystore_faucet" .
+  run_in_dir "$SOURCE_ROOT/polystorechain" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystorechain/polystorechaind" ./cmd/polystorechaind
+  run_in_dir "$SOURCE_ROOT/polystore_gateway" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystore_gateway/polystore_gateway" .
+  run_in_dir "$SOURCE_ROOT/polystore_faucet" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystore_faucet/polystore_faucet" .
   run_in_dir "$SOURCE_ROOT/polystore_cli" cargo build --release
 }
 
@@ -247,7 +275,9 @@ print_source_evidence() {
   fi
   echo "    provider services: ${PROVIDER_SERVICES[*]}"
   echo "    root services: ${ROOT_SERVICES[*]}"
+  echo "    rpc base: $RPC_BASE"
   echo "    lcd base: $LCD_BASE"
+  echo "    evm base: $EVM_BASE"
   echo "    router base: $ROUTER_BASE"
   echo "    faucet base: $FAUCET_BASE"
   echo "    provider bases: ${PROVIDER_BASES[*]}"
@@ -289,7 +319,7 @@ run_healthchecks() {
   done
 
   echo "==> Running scripted healthchecks"
-  run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh hub --lcd "$LCD_BASE" --gateway "$ROUTER_BASE" --faucet "$FAUCET_BASE"
+  run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh hub --rpc "$RPC_BASE" --lcd "$LCD_BASE" --evm "$EVM_BASE" --gateway "$ROUTER_BASE" --faucet "$FAUCET_BASE"
   for provider_base in "${PROVIDER_BASES[@]}"; do
     run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh provider --provider "$provider_base" --hub-lcd "$LCD_BASE"
   done

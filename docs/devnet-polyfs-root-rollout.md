@@ -24,16 +24,19 @@ Tunnel services are not restarted by default. Use `--restart-tunnels` only when 
 
 The default health endpoints match the current local devnet on this machine:
 
+- RPC: `http://127.0.0.1:26657`
 - LCD: `http://127.0.0.1:1317`
+- EVM JSON-RPC: `http://127.0.0.1:8545`
 - Router gateway: `http://127.0.0.1:18080`
 - Faucet: `http://127.0.0.1:8081`
 - Providers: `http://127.0.0.1:8091` through `http://127.0.0.1:8094`
 
-Override these with `POLYSTORE_LCD_BASE`, `POLYSTORE_ROUTER_BASE`,
-`POLYSTORE_FAUCET_BASE`, and `POLYSTORE_PROVIDER_BASES` if a target machine uses
-different ports. The checked-in systemd template still documents `8080` as a
-generic router example; this machine's live `/etc/polystore` router env binds
-the managed devnet router to `18080`.
+Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
+`POLYSTORE_EVM_BASE`, `POLYSTORE_ROUTER_BASE`, `POLYSTORE_FAUCET_BASE`, and
+`POLYSTORE_PROVIDER_BASES` if a target machine uses different ports. The
+checked-in systemd template still documents `8080` as a generic router example;
+this machine's live `/etc/polystore` router env binds the managed devnet router
+to `18080`.
 
 ## State Policy
 
