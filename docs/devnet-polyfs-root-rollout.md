@@ -30,8 +30,9 @@ It restarts services in this order:
 15. Start chain first.
 16. Start faucet and the `user-gateway` legacy router service.
 17. Start all resolved `provider-daemon` services, including provider4 when the local user-service layout is present.
+18. If `--restart-tunnels` is supplied, verify restarted tunnel user services are active before reporting `DONE`.
 
-Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes. When enabled, tunnel user units must be loaded before any service-stop mutation, tunnel stop runs before the devnet stack is taken down, and tunnel stop/start failures are fatal because local healthchecks do not prove the public tunnel process restarted.
+Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes. When enabled, tunnel user units must be loaded before any service-stop mutation, tunnel stop runs before the devnet stack is taken down, and tunnel stop/start plus post-restart `is-active` failures are fatal because local healthchecks do not prove the public tunnel process restarted.
 
 The default health endpoints match the checked-in local devnet and systemd
 templates:

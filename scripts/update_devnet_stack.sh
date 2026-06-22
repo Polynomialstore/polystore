@@ -843,6 +843,21 @@ print_service_status() {
       sudo -n systemctl --no-pager --full status "${PROVIDER_ROOT_SERVICES[@]}" | sed -n '1,200p' || true
     fi
   fi
+
+  if [[ "$RESTART_TUNNELS" == "1" ]]; then
+    echo "==> Tunnel service activity"
+    if ! user_systemctl is-active "${TUNNEL_SERVICES[@]}"; then
+      echo "ERROR: tunnel service activity status probe failed after restart." >&2
+      return 1
+    fi
+    if [[ "$DRY_RUN" != "1" ]]; then
+      if [[ "$IS_ROOT" -eq 1 ]]; then
+        runuser -u "$RUN_USER" -- env XDG_RUNTIME_DIR="/run/user/$RUN_UID" systemctl --user --no-pager --full status "${TUNNEL_SERVICES[@]}" | sed -n '1,160p' || true
+      else
+        env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$RUN_UID}" systemctl --user --no-pager --full status "${TUNNEL_SERVICES[@]}" | sed -n '1,160p' || true
+      fi
+    fi
+  fi
 }
 
 run_healthchecks() {
