@@ -147,7 +147,8 @@ These are the MDUs that store the actual file content (raw bytes).
 
 5.  **Hop 2: Verify The Molecule (MDU Root -> Blob Commitment) [Merkle]**
     *   The prover supplies `Proof.blob_commitment` (48 bytes) and `Proof.merkle_path`.
-    *   *Merkle Check:* Verify `VerifyMerkle(Proof.mdu_root, Proof.blob_commitment, Proof.merkle_path)` (at `Proof.blob_index`).
+    *   *Merkle Check:* Select the target MDU root profile from the committed deal mode/profile and MDU kind, reject `Proof.blob_index` outside that profile's leaf count, then verify `VerifyMerkle(Proof.mdu_root, Proof.blob_commitment, Proof.merkle_path)` at `Proof.blob_index`.
+    *   *Leaf Count:* MDU #0, Witness MDUs, and Mode 1 replicated user MDUs use 64 leaves. Mode 2 striped user SP-MDUs use the slot-major `leaf_index` and `L = (K+M)*(64/K)` leaves from `rfcs/rfc-blob-alignment-and-striping.md` (96 leaves for the default `K=8`, `M=4` profile).
     *   **Note:** Witness MDUs are an acceleration structure for the prover to *find* `blob_commitment`; they are not required in the on-chain verification chain.
 
 6.  **Hop 3: Verify The Atom (Blob Commitment -> Data Byte) [KZG]**
