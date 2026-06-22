@@ -13,12 +13,13 @@ The script rebuilds and installs:
 
 It restarts services in this order:
 
-1. Stop user providers: `polystore-provider1.service` through `polystore-provider4.service`.
-2. Stop hub services: `polystore-gateway-router.service`, `polystore-faucet.service`, then `polystorechaind.service`.
-3. Install artifacts with backups and sha256 evidence.
-4. Start chain first.
-5. Start faucet and router.
-6. Start all providers, including provider4.
+1. Preflight all build artifacts before stopping any service.
+2. Stop `provider-daemon` user services: `polystore-provider1.service` through `polystore-provider4.service`.
+3. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
+4. Install artifacts with backups and sha256 evidence.
+5. Start chain first.
+6. Start faucet and the `user-gateway` legacy router service.
+7. Start all `provider-daemon` services, including provider4.
 
 Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
 
@@ -27,16 +28,17 @@ The default health endpoints match the current local devnet on this machine:
 - RPC: `http://127.0.0.1:26657`
 - LCD: `http://127.0.0.1:1317`
 - EVM JSON-RPC: `http://127.0.0.1:8545`
-- Router gateway: `http://127.0.0.1:18080`
+- `user-gateway` via legacy router service: `http://127.0.0.1:18080`
 - Faucet: `http://127.0.0.1:8081`
-- Providers: `http://127.0.0.1:8091` through `http://127.0.0.1:8094`
+- `provider-daemon` services: `http://127.0.0.1:8091` through `http://127.0.0.1:8094`
 
 Override these with `POLYSTORE_RPC_BASE`, `POLYSTORE_LCD_BASE`,
 `POLYSTORE_EVM_BASE`, `POLYSTORE_ROUTER_BASE`, `POLYSTORE_FAUCET_BASE`, and
 `POLYSTORE_PROVIDER_BASES` if a target machine uses different ports. The
-checked-in systemd template still documents `8080` as a generic router example;
-this machine's live `/etc/polystore` router env binds the managed devnet router
-to `18080`.
+`POLYSTORE_ROUTER_BASE` env name is a legacy compatibility alias for the
+`user-gateway` endpoint. The checked-in systemd template still documents `8080`
+as a generic router example; this machine's live `/etc/polystore` legacy router
+env binds the managed devnet `user-gateway` to `18080`.
 
 ## State Policy
 
@@ -58,4 +60,8 @@ Use:
 scripts/update_devnet_stack.sh --dry-run --skip-build
 ```
 
-This prints the source commit, target paths, provider inventory, stop/start order, install paths, and healthcheck commands without mutating services or files.
+This prints the source commit, target paths, `provider-daemon` inventory,
+preflight artifact status, stop/start order, install paths, and healthcheck
+commands without mutating services or files. If a required artifact is missing,
+the dry run exits before printing any service-stop plan, matching live rollout
+safety behavior.

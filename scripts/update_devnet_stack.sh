@@ -17,7 +17,7 @@ Flags:
   --run-user USER         User that owns user systemd services (default: SUDO_USER or current user)
   --skip-build            Install existing artifacts without rebuilding
   --dry-run               Print actions without building, installing, or restarting
-  --restart-tunnels       Restart cloudflared user services after provider services
+  --restart-tunnels       Restart cloudflared user services after provider-daemon services
   -h, --help              Show this help
 
 Environment:
@@ -28,9 +28,10 @@ Environment:
   POLYSTORE_RPC_BASE            Hub Tendermint RPC base URL (default: http://127.0.0.1:26657).
   POLYSTORE_LCD_BASE            Hub LCD base URL (default: http://127.0.0.1:1317).
   POLYSTORE_EVM_BASE            Hub EVM JSON-RPC base URL (default: http://127.0.0.1:8545).
-  POLYSTORE_ROUTER_BASE         Router gateway base URL (default: http://127.0.0.1:18080).
+  POLYSTORE_ROUTER_BASE         user-gateway base URL; legacy env alias keeps router naming
+                                for compatibility (default: http://127.0.0.1:18080).
   POLYSTORE_FAUCET_BASE         Faucet base URL (default: http://127.0.0.1:8081).
-  POLYSTORE_PROVIDER_BASES      Space-separated provider gateway base URLs.
+  POLYSTORE_PROVIDER_BASES      Space-separated provider-daemon base URLs.
                                 Default: http://127.0.0.1:8091..8094.
   POLYSTORE_SKIP_BUILD=1        Same as --skip-build.
   POLYSTORE_DRY_RUN=1           Same as --dry-run.
@@ -224,6 +225,39 @@ install_with_backup() {
   sha256_if_present "$dst"
 }
 
+preflight_artifacts() {
+  local missing=0
+  local artifacts=(
+    "$SOURCE_ROOT/polystore_core/target/release/libpolystore_core.so"
+    "$SOURCE_ROOT/polystorechain/polystorechaind"
+    "$SOURCE_ROOT/polystore_gateway/polystore_gateway"
+    "$SOURCE_ROOT/polystore_faucet/polystore_faucet"
+    "$SOURCE_ROOT/polystore_cli/target/release/polystore_cli"
+    "$SOURCE_ROOT/polystorechain/trusted_setup.txt"
+  )
+
+  echo "==> Preflighting install artifacts before stopping services"
+  for artifact in "${artifacts[@]}"; do
+    if [[ -f "$artifact" ]]; then
+      sha256_if_present "$artifact"
+      continue
+    fi
+
+    missing=1
+    echo "MISSING $artifact" >&2
+  done
+
+  if [[ "$missing" -ne 0 ]]; then
+    if [[ "$DRY_RUN" == "1" ]]; then
+      echo "ERROR: missing install artifacts; dry-run aborting before service-stop plan" >&2
+      exit 1
+    fi
+
+    echo "ERROR: missing install artifacts; aborting before service stop" >&2
+    exit 1
+  fi
+}
+
 build_artifacts() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "==> Skipping builds (--skip-build)"
@@ -273,14 +307,14 @@ print_source_evidence() {
     echo "    source status:"
     git -C "$SOURCE_ROOT" status --short || true
   fi
-  echo "    provider services: ${PROVIDER_SERVICES[*]}"
+  echo "    provider-daemon services: ${PROVIDER_SERVICES[*]}"
   echo "    root services: ${ROOT_SERVICES[*]}"
   echo "    rpc base: $RPC_BASE"
   echo "    lcd base: $LCD_BASE"
   echo "    evm base: $EVM_BASE"
-  echo "    router base: $ROUTER_BASE"
+  echo "    user-gateway base: $ROUTER_BASE (POLYSTORE_ROUTER_BASE legacy env alias)"
   echo "    faucet base: $FAUCET_BASE"
-  echo "    provider bases: ${PROVIDER_BASES[*]}"
+  echo "    provider-daemon bases: ${PROVIDER_BASES[*]}"
   if [[ "$RESTART_TUNNELS" == "1" ]]; then
     echo "    tunnel services: ${TUNNEL_SERVICES[*]}"
   else
@@ -312,10 +346,10 @@ print_service_status() {
 
 run_healthchecks() {
   wait_http "LCD node_info" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 90
-  wait_http "router gateway" "$ROUTER_BASE/health" 45
+  wait_http "user-gateway (legacy router service)" "$ROUTER_BASE/health" 45
   wait_http "faucet" "$FAUCET_BASE/health" 45
   for i in "${!PROVIDER_BASES[@]}"; do
-    wait_http "provider$((i + 1))" "${PROVIDER_BASES[$i]}/health" 45
+    wait_http "provider-daemon$((i + 1))" "${PROVIDER_BASES[$i]}/health" 45
   done
 
   echo "==> Running scripted healthchecks"
@@ -327,9 +361,10 @@ run_healthchecks() {
 
 print_source_evidence
 build_artifacts
+preflight_artifacts
 
-echo "==> Stop order: providers -> router/faucet -> chain"
-user_systemctl stop "${PROVIDER_SERVICES[@]}" || true
+echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
+user_systemctl stop "${PROVIDER_SERVICES[@]}"
 root_systemctl stop polystore-gateway-router.service polystore-faucet.service
 root_systemctl stop polystorechaind.service
 if [[ "$RESTART_TUNNELS" == "1" ]]; then
@@ -345,15 +380,15 @@ install_with_backup "$SOURCE_ROOT/polystore_faucet/polystore_faucet" "$TARGET_RO
 install_with_backup "$SOURCE_ROOT/polystore_cli/target/release/polystore_cli" "$TARGET_ROOT/polystore_cli/target/release/polystore_cli" 755
 install_with_backup "$SOURCE_ROOT/polystorechain/trusted_setup.txt" "$TARGET_ROOT/polystorechain/trusted_setup.txt" 644
 
-echo "==> Start order: chain -> faucet/router -> providers"
+echo "==> Start order: chain -> faucet/user-gateway -> provider-daemons"
 root_systemctl start polystorechaind.service
 wait_http "LCD node_info" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 90
 root_systemctl start polystore-faucet.service polystore-gateway-router.service
 wait_http "faucet" "$FAUCET_BASE/health" 45
-wait_http "router gateway" "$ROUTER_BASE/health" 45
+wait_http "user-gateway (legacy router service)" "$ROUTER_BASE/health" 45
 user_systemctl start "${PROVIDER_SERVICES[@]}"
 for i in "${!PROVIDER_BASES[@]}"; do
-  wait_http "provider$((i + 1))" "${PROVIDER_BASES[$i]}/health" 45
+  wait_http "provider-daemon$((i + 1))" "${PROVIDER_BASES[$i]}/health" 45
 done
 if [[ "$RESTART_TUNNELS" == "1" ]]; then
   echo "==> Starting tunnel user services"
