@@ -417,6 +417,95 @@ func TestPrecompileUpdateAndOpenRetrievalAcceptsPolyFSRoot(t *testing.T) {
 	require.NotEqual(t, [32]byte{}, sessionID)
 }
 
+func TestProofLeafCountForDealUsesMode2Profile(t *testing.T) {
+	leafCount, err := proofLeafCountForDeal(types.Deal{
+		RedundancyMode: 2,
+		ServiceHint:    "General",
+		Mode2Profile:   &types.StripeReplicaProfile{K: 8, M: 4},
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(96), leafCount)
+
+	leafCount, err = proofLeafCountForDeal(types.Deal{ServiceHint: "General"})
+	require.NoError(t, err)
+	require.Equal(t, types.BlobsPerMdu, leafCount)
+
+	leafCount, err = proofLeafCountForDeal(types.Deal{ServiceHint: "General:rs=2+1"})
+	require.NoError(t, err)
+	require.Equal(t, uint64(96), leafCount)
+
+	_, err = proofLeafCountForDeal(types.Deal{
+		RedundancyMode: 2,
+		ServiceHint:    "General",
+		Mode2Profile:   &types.StripeReplicaProfile{K: 7, M: 4},
+	})
+	require.ErrorContains(t, err, "must divide")
+}
+
+func TestProveRetrievalBatchABIDecodesRootTableProofFields(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	type proofTuple struct {
+		MduIndex              uint64
+		MduRootFr             []byte
+		ManifestOpening       []byte
+		RootTableDuCommitment []byte
+		RootTableDuMerklePath [][]byte
+		BlobCommitment        []byte
+		MerklePath            [][]byte
+		BlobIndex             uint32
+		ZValue                []byte
+		YValue                []byte
+		KzgOpeningProof       []byte
+	}
+	type chunkTuple struct {
+		RangeStart uint64
+		RangeLen   uint64
+		Proof      proofTuple
+	}
+
+	method := precompile.abi.Methods["proveRetrievalBatch"]
+	rootTablePath := [][]byte{bytesOf(0x44, 32), bytesOf(0x45, 32)}
+	blobPath := [][]byte{bytesOf(0x55, 32)}
+	input, err := method.Inputs.Pack(
+		uint64(1),
+		"nil1provider",
+		"/demo.bin",
+		uint64(7),
+		[]chunkTuple{{
+			RangeStart: 0,
+			RangeLen:   128 * 1024,
+			Proof: proofTuple{
+				MduIndex:              2,
+				MduRootFr:             bytesOf(0x11, 32),
+				ManifestOpening:       bytesOf(0x22, 48),
+				RootTableDuCommitment: bytesOf(0x33, 48),
+				RootTableDuMerklePath: rootTablePath,
+				BlobCommitment:        bytesOf(0x66, 48),
+				MerklePath:            blobPath,
+				BlobIndex:             95,
+				ZValue:                bytesOf(0x77, 32),
+				YValue:                bytesOf(0x88, 32),
+				KzgOpeningProof:       bytesOf(0x99, 48),
+			},
+		}},
+	)
+	require.NoError(t, err)
+
+	args := make(map[string]any)
+	require.NoError(t, method.Inputs.UnpackIntoMap(args, input))
+	chunks, err := decodeChunks(args["chunks"])
+	require.NoError(t, err)
+	require.Len(t, chunks, 1)
+
+	require.Equal(t, uint32(95), chunks[0].Proof.BlobIndex)
+	require.Equal(t, bytesOf(0x33, 48), chunks[0].Proof.RootTableDuCommitment)
+	require.Equal(t, rootTablePath, chunks[0].Proof.RootTableDuMerklePath)
+	require.Equal(t, blobPath, chunks[0].Proof.MerklePath)
+}
+
 func TestPrecompileRejectsLegacy48ByteManifestRoot(t *testing.T) {
 	f := initFixture(t)
 	precompile, err := New(&f.keeper)
