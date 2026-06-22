@@ -486,7 +486,11 @@ kill_provider_listener() {
     pids="$(fuser -n tcp "$port" 2>/dev/null || true)"
   fi
   if [ -n "$pids" ]; then
-    kill $pids 2>/dev/null || true
+    while IFS= read -r pid; do
+      if [ -n "$pid" ]; then
+        kill "$pid" 2>/dev/null || true
+      fi
+    done < <(printf '%s\n' "$pids" | tr '[:space:]' '\n')
   fi
 }
 

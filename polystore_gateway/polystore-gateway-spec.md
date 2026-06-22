@@ -79,7 +79,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 *   **`POST /sp/upload_shard`** *(Striped Provider API)*
     *   **Input:** Raw shard bytes (body) with headers:
         * `X-PolyStore-Deal-ID` (uint64), `X-PolyStore-Mdu-Index` (uint64), `X-PolyStore-Slot` (uint64), `X-PolyStore-PolyFS-Root` (`0x` + 64 hex). Legacy clients may send `X-PolyStore-Manifest-Root` only if it carries the 32-byte `polyfs_root` value.
-    *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/<polyfs_root_key>/`.
+    *   **Logic:** Stores the shard as `mdu_<index>_slot_<slot>.bin` under `uploads/deals/<deal_id>/<polyfs_root_key>/`.
     *   **Role:** Slot-specific shard ingestion for the striped StripeReplica layout.
         *   **Provider is a dumb pipe:** the server does not need to understand layout variants beyond writing/serving bytes addressed by the headers.
         *   Metadata MDUs (MDU #0 + Witness) remain replicated to all slots via `/sp/upload_mdu`.
@@ -154,7 +154,7 @@ These endpoints support the `polystore-website` "Thin Client" flow.
         *   Owner mismatch (or invalid owner format) should return a clear non-200 (prefer `403`) as JSON.
         *   If `polyfs_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
         *   The gateway MUST canonicalize `polyfs_root` consistently (decode -> re-encode) for filesystem paths and logs to avoid duplicate deal directories.
-        *   The gateway resolves the file from `uploads/<polyfs_root_key>/mdu_0.bin` (PolyFS File Table) and streams the requested bytes. Proof submission is performed separately via `/gateway/session-proof` or `/sp/session-proof`.
+        *   The gateway resolves the file from `uploads/deals/<deal_id>/<polyfs_root_key>/mdu_0.bin` (PolyFS File Table) and streams the requested bytes. Proof submission is performed separately via `/gateway/session-proof` or `/sp/session-proof`.
         *   Non-200 responses MUST be JSON with a short remediation hint (even though the success path is a byte stream) and set `Content-Type: application/json`, e.g. `{ "error": "...", "hint": "..." }`.
 
 *   **`POST /gateway/session-proof`**
@@ -185,14 +185,14 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 
 *   **`GET /gateway/list-files/{polyfs_root}`** *(legacy route name `{manifest_root}` may remain during transition)*
     *   **Query Params:** `deal_id`, `owner` (required for access control / deal-owner match).
-    *   **Logic:** Reads `uploads/<polyfs_root_key>/mdu_0.bin`, parses the PolyFS File Table, and returns a deduplicated list of active files (latest non-tombstone record per `file_path`) plus computed total size.
+    *   **Logic:** Reads `uploads/deals/<deal_id>/<polyfs_root_key>/mdu_0.bin`, parses the PolyFS File Table, and returns a deduplicated list of active files (latest non-tombstone record per `file_path`) plus computed total size.
     *   **Response (target):** `{ "polyfs_root": "0x...", "total_size_bytes": 123, "files": [{ "path": "dir/file.txt", "size_bytes": 123, "start_offset": 0, "flags": 0 }] }`.
     *   **Role:** The authoritative source for the Deal Explorer “Files (PolyFS)” list.
     *   **Errors (target):** Missing/invalid params return `400`; owner mismatch returns a clear non-200 (prefer `403`); stale `polyfs_root` should return a clear non-200 (prefer `409`).
 
 *   **`GET /gateway/slab/{polyfs_root}`** *(legacy route name `{manifest_root}` may remain during transition)*
     *   **Query Params:** `deal_id`, `owner` (optional; enforced together for access control / deal-owner match).
-    *   **Logic:** Reads `uploads/<polyfs_root_key>/mdu_0.bin` and the on-disk `mdu_*.bin` set to return a slab summary:
+    *   **Logic:** Reads `uploads/deals/<deal_id>/<polyfs_root_key>/mdu_0.bin` and the on-disk `mdu_*.bin` set to return a slab summary:
         * total MDUs, witness MDUs, user MDUs, and segment ranges (MDU #0 / Witness / User).
     *   **Role:** Powers the Deal Explorer “Manifest” tab to show the real slab layout (not the legacy shard JSON debug output).
 
@@ -225,7 +225,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gat
 
 2.  **Triple Proof Generation:**
     *   Session‑proof submission uses on‑disk PolyFS slabs to build `ChainedProof` objects for the requested blob range.
-    *   **Target (PolyFS SSoT):** Proof inputs are derived from the on-disk slab (`uploads/<polyfs_root_key>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, legacy `manifest.bin`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
+    *   **Target (PolyFS SSoT):** Proof inputs are derived from the deal-scoped on-disk slab (`uploads/deals/<deal_id>/<polyfs_root_key>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, legacy `manifest.bin`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
     *   **Gap:** In a production "Thick Client", the browser would generate or verify these proofs locally. Here, the Gateway can generate and relay them, effectively simulating a "perfect" SP.
 
 3.  **Local Storage:**

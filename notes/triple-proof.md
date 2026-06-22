@@ -12,7 +12,7 @@ It uses a **Hybrid Merkle-KZG** architecture to support efficient filesystem map
     *   Canonical string form for logs/responses: `0x` + lowercase hex (64 chars).
     *   Canonical on-disk directory key `polyfs_root_key`: lowercase hex **without** `0x` (64 chars), derived by decoding then re-encoding (not by string trimming alone).
     *   Parsing must be strict: reject non-hex, wrong-width, or legacy 96-hex roots for new committed deals (return `400` in gateway APIs).
-*   **`file_path` is file-level:** The authoritative identifier for a file *within* a deal. Retrieval/proof APIs must be keyed by `(deal_id, polyfs_root, file_path)` and resolved from PolyFS (`uploads/<polyfs_root_key>/mdu_0.bin` + on-disk `mdu_*.bin`), with no fallback to `uploads/index.json` or “single-file deal” heuristics.
+*   **`file_path` is file-level:** The authoritative identifier for a file *within* a deal. Retrieval/proof APIs must be keyed by `(deal_id, polyfs_root, file_path)` and resolved from PolyFS (`uploads/deals/<deal_id>/<polyfs_root_key>/mdu_0.bin` + on-disk `mdu_*.bin`), with no fallback to `uploads/index.json` or “single-file deal” heuristics.
     *   `file_path` MUST be unique within a deal. If an upload targets an existing `file_path`, the gateway must overwrite deterministically (update-in-place or tombstone + replace) so fetch/prove cannot return stale bytes.
     *   `GET /gateway/list-files/...` should return a deduplicated view (latest non-tombstone record per `file_path`). If the on-disk File Table contains ambiguous duplicates, fail fast with a clear non-200 (prefer `409`) until repaired.
 *   **`owner` is access control (gateway):** Gateway REST APIs that serve or prove deal content (e.g., `/gateway/fetch`, `/gateway/list-files`, `/gateway/prove-retrieval`) MUST require the deal owner (`owner`, PolyStore Chain bech32) alongside `deal_id` and verify `(deal_id, owner)` against chain state. Owner mismatches must return a clear non-200 (prefer `403`) as JSON.
@@ -129,14 +129,15 @@ These are the MDUs that store the actual file content (raw bytes).
 1.  **Context Derivation:**
     *   From `Challenge`, derive `Target_MDU_Index` (the 0-indexed MDU number being challenged, starting from MDU #0).
     *   **Safety Check:** `Target_MDU_Index` must be < `Deal.total_mdus`.
+    *   **Content-proof Check:** Retrieval and liveness challenges MUST target `Target_MDU_Index > 0`. MDU #0 is the committed super-manifest itself; it is authenticated directly by `Deal.polyfs_root` and must not be looked up through the root table.
 
 2.  **Determine MDU Type:**
-    *   If `Target_MDU_Index == 0`: MDU #0 (Super-Manifest). Hop 2 is to find a Root within its Root Table.
+    *   If `Target_MDU_Index == 0`: reject this proof shape. A future metadata proof for bytes inside MDU #0 needs the separate direct path `Deal.polyfs_root -> MDU0.DU commitment -> KZG opening`, not the root-table path below.
     *   If `Target_MDU_Index > 0` and `Target_MDU_Index <= W`: Witness MDU. Hop 2 is to find a Blob commitment for a Data MDU.
     *   If `Target_MDU_Index > W`: User Data MDU. Hop 2 is to find a Data Blob.
 
 3.  **Hop 1a: Verify The Super-Manifest DU (Deal Root -> Root-Table DU Commitment) [Merkle]**
-    *   Compute `root_table_index = Target_MDU_Index - 1`, `root_table_du = root_table_index / 4096`, and `root_table_cell = root_table_index % 4096`.
+    *   Because `Target_MDU_Index == 0` was rejected above, compute `root_table_index = Target_MDU_Index - 1`, `root_table_du = root_table_index / 4096`, and `root_table_cell = root_table_index % 4096`.
     *   *Merkle Check:* Verify the supplied root-table DU commitment is included in `Deal.polyfs_root` at `root_table_du`.
 
 4.  **Hop 1b: Verify The Map Cell (Root-Table DU -> Target MDU Root) [KZG]**
