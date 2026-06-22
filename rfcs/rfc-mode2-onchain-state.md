@@ -128,6 +128,8 @@ At `MsgUpdateDealContent*` time:
   - `total_mdus = 1 + witness_mdus + user_mdus`
   - `witness_mdus < total_mdus`
   - `user_mdus = total_mdus - 1 - witness_mdus`
+  - if `size_bytes > 0`, require `user_mdus >= 1`
+  - require `size_bytes <= user_mdus * RawMduPayloadBytes`, where `RawMduPayloadBytes = (8 MiB / 32) * 31 = 8,126,464`
   - `witness_mdus + user_mdus <= 65,536`
   - equivalently, `total_mdus <= 65,537`
   - reject the commit if these bounds would let a verifier derive `root_table_du >= 16`
