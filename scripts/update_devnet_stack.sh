@@ -25,6 +25,11 @@ Environment:
                                 Default: polystore-provider1..polystore-provider4.
   POLYSTORE_TUNNEL_SERVICES     Space-separated tunnel user services.
                                 Default: cloudflared-hub.service cloudflared-providers.service.
+  POLYSTORE_LCD_BASE            Hub LCD base URL (default: http://127.0.0.1:1317).
+  POLYSTORE_ROUTER_BASE         Router gateway base URL (default: http://127.0.0.1:18080).
+  POLYSTORE_FAUCET_BASE         Faucet base URL (default: http://127.0.0.1:8081).
+  POLYSTORE_PROVIDER_BASES      Space-separated provider gateway base URLs.
+                                Default: http://127.0.0.1:8091..8094.
   POLYSTORE_SKIP_BUILD=1        Same as --skip-build.
   POLYSTORE_DRY_RUN=1           Same as --dry-run.
   POLYSTORE_RESTART_TUNNELS=1   Same as --restart-tunnels.
@@ -89,6 +94,10 @@ fi
 read -r -a PROVIDER_SERVICES <<<"${POLYSTORE_PROVIDER_SERVICES:-polystore-provider1.service polystore-provider2.service polystore-provider3.service polystore-provider4.service}"
 read -r -a ROOT_SERVICES <<<"polystorechaind.service polystore-faucet.service polystore-gateway-router.service"
 read -r -a TUNNEL_SERVICES <<<"${POLYSTORE_TUNNEL_SERVICES:-cloudflared-hub.service cloudflared-providers.service}"
+LCD_BASE="${POLYSTORE_LCD_BASE:-http://127.0.0.1:1317}"
+ROUTER_BASE="${POLYSTORE_ROUTER_BASE:-http://127.0.0.1:18080}"
+FAUCET_BASE="${POLYSTORE_FAUCET_BASE:-http://127.0.0.1:8081}"
+read -r -a PROVIDER_BASES <<<"${POLYSTORE_PROVIDER_BASES:-http://127.0.0.1:8091 http://127.0.0.1:8092 http://127.0.0.1:8093 http://127.0.0.1:8094}"
 
 if [[ "$IS_ROOT" -ne 1 && "$(id -un)" != "$RUN_USER" ]]; then
   echo "ERROR: non-root update must run as POLYSTORE_RUN_USER=$RUN_USER." >&2
@@ -238,6 +247,10 @@ print_source_evidence() {
   fi
   echo "    provider services: ${PROVIDER_SERVICES[*]}"
   echo "    root services: ${ROOT_SERVICES[*]}"
+  echo "    lcd base: $LCD_BASE"
+  echo "    router base: $ROUTER_BASE"
+  echo "    faucet base: $FAUCET_BASE"
+  echo "    provider bases: ${PROVIDER_BASES[*]}"
   if [[ "$RESTART_TUNNELS" == "1" ]]; then
     echo "    tunnel services: ${TUNNEL_SERVICES[*]}"
   else
@@ -268,20 +281,18 @@ print_service_status() {
 }
 
 run_healthchecks() {
-  wait_http "LCD node_info" "http://127.0.0.1:1317/cosmos/base/tendermint/v1beta1/node_info" 90
-  wait_http "router gateway" "http://127.0.0.1:18080/health" 45
-  wait_http "faucet" "http://127.0.0.1:8081/health" 45
-  wait_http "provider1" "http://127.0.0.1:8091/health" 45
-  wait_http "provider2" "http://127.0.0.1:8092/health" 45
-  wait_http "provider3" "http://127.0.0.1:8093/health" 45
-  wait_http "provider4" "http://127.0.0.1:8094/health" 45
+  wait_http "LCD node_info" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 90
+  wait_http "router gateway" "$ROUTER_BASE/health" 45
+  wait_http "faucet" "$FAUCET_BASE/health" 45
+  for i in "${!PROVIDER_BASES[@]}"; do
+    wait_http "provider$((i + 1))" "${PROVIDER_BASES[$i]}/health" 45
+  done
 
   echo "==> Running scripted healthchecks"
-  run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh hub --lcd http://127.0.0.1:1317 --gateway http://127.0.0.1:18080 --faucet http://127.0.0.1:8081
-  run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd http://127.0.0.1:1317
-  run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8092 --hub-lcd http://127.0.0.1:1317
-  run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8093 --hub-lcd http://127.0.0.1:1317
-  run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8094 --hub-lcd http://127.0.0.1:1317
+  run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh hub --lcd "$LCD_BASE" --gateway "$ROUTER_BASE" --faucet "$FAUCET_BASE"
+  for provider_base in "${PROVIDER_BASES[@]}"; do
+    run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh provider --provider "$provider_base" --hub-lcd "$LCD_BASE"
+  done
 }
 
 print_source_evidence
@@ -306,15 +317,14 @@ install_with_backup "$SOURCE_ROOT/polystorechain/trusted_setup.txt" "$TARGET_ROO
 
 echo "==> Start order: chain -> faucet/router -> providers"
 root_systemctl start polystorechaind.service
-wait_http "LCD node_info" "http://127.0.0.1:1317/cosmos/base/tendermint/v1beta1/node_info" 90
+wait_http "LCD node_info" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 90
 root_systemctl start polystore-faucet.service polystore-gateway-router.service
-wait_http "faucet" "http://127.0.0.1:8081/health" 45
-wait_http "router gateway" "http://127.0.0.1:18080/health" 45
+wait_http "faucet" "$FAUCET_BASE/health" 45
+wait_http "router gateway" "$ROUTER_BASE/health" 45
 user_systemctl start "${PROVIDER_SERVICES[@]}"
-wait_http "provider1" "http://127.0.0.1:8091/health" 45
-wait_http "provider2" "http://127.0.0.1:8092/health" 45
-wait_http "provider3" "http://127.0.0.1:8093/health" 45
-wait_http "provider4" "http://127.0.0.1:8094/health" 45
+for i in "${!PROVIDER_BASES[@]}"; do
+  wait_http "provider$((i + 1))" "${PROVIDER_BASES[$i]}/health" 45
+done
 if [[ "$RESTART_TUNNELS" == "1" ]]; then
   echo "==> Starting tunnel user services"
   user_systemctl start "${TUNNEL_SERVICES[@]}"

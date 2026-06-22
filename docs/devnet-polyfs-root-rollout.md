@@ -22,6 +22,19 @@ It restarts services in this order:
 
 Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
 
+The default health endpoints match the current local devnet on this machine:
+
+- LCD: `http://127.0.0.1:1317`
+- Router gateway: `http://127.0.0.1:18080`
+- Faucet: `http://127.0.0.1:8081`
+- Providers: `http://127.0.0.1:8091` through `http://127.0.0.1:8094`
+
+Override these with `POLYSTORE_LCD_BASE`, `POLYSTORE_ROUTER_BASE`,
+`POLYSTORE_FAUCET_BASE`, and `POLYSTORE_PROVIDER_BASES` if a target machine uses
+different ports. The checked-in systemd template still documents `8080` as a
+generic router example; this machine's live `/etc/polystore` router env binds
+the managed devnet router to `18080`.
+
 ## State Policy
 
 The PolyFS root migration changes the trust root for new deals from the retired flat `manifest.bin` commitment to the MDU #0 PolyFS root. The rollout script is intentionally a binary/runtime rollout tool; it does not reset chain state and it does not silently migrate old committed deals.
