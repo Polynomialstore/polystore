@@ -28,19 +28,33 @@ super-manifest containing the root table and file table.
 
 The Merkle construction is part of the consensus contract:
 
-- The tree has exactly 64 leaves for every MDU root in this protocol version.
 - Leaf `i` is `BLAKE2s-256(kzg_commitment_i)`, where `kzg_commitment_i` is the
-  48-byte compressed KZG commitment for `DU[i]`.
+  48-byte compressed KZG commitment for the corresponding DU/shard blob.
 - Internal nodes are `BLAKE2s-256(left_child || right_child)`.
-- Leaves are ordered by increasing DU index and internal-node concatenation
-  preserves that left-to-right order.
-- No padding, empty-root value, or odd-leaf promotion is used for MDU roots,
-  because each MDU always contains exactly 64 DUs.
+- Leaf ordering is profile-specific and internal-node concatenation preserves
+  that left-to-right order.
+- No padding, empty-root value, or odd-leaf promotion is used for committed MDU
+  roots. Every supported root profile has a fixed leaf count.
 
-The same Merkle construction authenticates:
+The supported root profiles are:
+
+| MDU kind | Leaf count | Leaf ordering |
+| --- | ---: | --- |
+| MDU #0 super-manifest | 64 | increasing DU index `0..63` |
+| Replicated metadata MDU, including Witness MDUs | 64 | increasing DU index `0..63` |
+| Mode 1 replicated user MDU | 64 | increasing DU index `0..63` |
+| Mode 2 striped user SP-MDU | `L = (K+M) * (64/K)` | slot-major `leaf_index` from `rfcs/rfc-blob-alignment-and-striping.md` |
+
+The default Mode 2 profile `K=8`, `M=4` therefore has `L=96` target-MDU
+leaves. Verifiers MUST select the target MDU root profile from the committed
+deal mode/profile and reject `blob_index` / `leaf_index` values outside that
+profile's fixed leaf count.
+
+This construction authenticates:
 
 - `polyfs_root`, the root over MDU #0's 64 DU commitments.
-- Target MDU roots, the roots over a non-zero MDU's 64 DU commitments.
+- Target MDU roots, whose leaf count and ordering are determined by their MDU
+  kind and the committed deal profile.
 
 ## 2. Root Field Semantics
 
@@ -130,7 +144,7 @@ not the raw root bytes interpreted ambiguously.
 For each target MDU root:
 
 ```text
-mdu_root       = 32-byte Merkle root over the target MDU's KZG commitments
+mdu_root       = 32-byte Merkle root over the target MDU's profile-selected KZG commitments
 mdu_root_fr    = ReduceMduRootToFr(mdu_root)
 root_table_cell_bytes = FrToBytesBE(mdu_root_fr)
 ```
@@ -170,6 +184,9 @@ The proof must carry, or allow the verifier to derive:
 - target blob commitment
 - Merkle path from target blob commitment to `mdu_root`
 - `blob_index` / Mode 2 `leaf_index`
+- target MDU root profile, derived from the committed deal mode/profile and MDU
+  kind, so the verifier can validate the Hop 2 Merkle path against the correct
+  fixed leaf count
 - blob KZG opening point and value
 
 Synthetic liveness challenges target user data MDUs, not MDU #0 or Witness MDUs.
@@ -229,6 +246,10 @@ Challenge positions remain blob-oriented:
 
 For Mode 2, `blob_index` is interpreted as the slot-major `leaf_index` defined
 in `rfcs/rfc-blob-alignment-and-striping.md`.
+
+Verifiers MUST reject challenges whose `blob_index` is outside the target MDU
+root profile's leaf count. For the default Mode 2 profile, this means
+`blob_index < 96`; for replicated 64-DU roots, this means `blob_index < 64`.
 
 Retrieval sessions continue to pin the current deal root. After migration, that
 pin is `polyfs_root`, not the old 48-byte flat `manifest_root`.
