@@ -502,6 +502,10 @@ preflight_root_service_control() {
   preflight_root_systemctl_authorized stop polystorechaind.service
   preflight_root_systemctl_authorized start polystorechaind.service
   preflight_root_systemctl_authorized start polystore-faucet.service polystore-gateway-router.service
+  if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
+    preflight_root_systemctl_authorized stop "${PROVIDER_ROOT_SERVICES[@]}"
+    preflight_root_systemctl_authorized start "${PROVIDER_ROOT_SERVICES[@]}"
+  fi
 }
 
 preflight_root_systemctl_authorized() {
@@ -861,9 +865,9 @@ preflight_required_tools
 build_artifacts
 preflight_artifacts
 preflight_install_plan
-preflight_root_service_control
 preflight_root_services_loaded
 resolve_provider_service_scopes
+preflight_root_service_control
 
 echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
 provider_systemctl stop
