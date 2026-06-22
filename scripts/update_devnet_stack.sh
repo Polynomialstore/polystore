@@ -100,6 +100,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 RUN_UID="$(id -u "$RUN_USER")"
+if ! RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"; then
+  echo "ERROR: could not look up run user $RUN_USER." >&2
+  exit 1
+fi
+if [[ -z "$RUN_HOME" ]]; then
+  echo "ERROR: could not determine home directory for run user $RUN_USER." >&2
+  exit 1
+fi
 STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_DIR="$TARGET_ROOT/backups/update-$STAMP"
 IS_ROOT=0
@@ -148,6 +156,24 @@ run_in_dir() {
     return 0
   fi
   (cd "$dir" && "$@")
+}
+
+run_build_in_dir() {
+  local dir="$1"
+  shift
+
+  if [[ "$IS_ROOT" -eq 1 && "$RUN_USER" != "root" ]]; then
+    printf '+ (cd %q && runuser -u %q -- env HOME=%q XDG_RUNTIME_DIR=%q' "$dir" "$RUN_USER" "$RUN_HOME" "/run/user/$RUN_UID"
+    printf ' %q' "$@"
+    printf ')\n'
+    if [[ "$DRY_RUN" == "1" ]]; then
+      return 0
+    fi
+    (cd "$dir" && runuser -u "$RUN_USER" -- env HOME="$RUN_HOME" XDG_RUNTIME_DIR="/run/user/$RUN_UID" "$@")
+    return
+  fi
+
+  run_in_dir "$dir" "$@"
 }
 
 goflags_with_mod() {
@@ -265,11 +291,11 @@ build_artifacts() {
   fi
 
   echo "==> Building coupled devnet artifacts"
-  run_in_dir "$SOURCE_ROOT/polystore_core" cargo build --release
-  run_in_dir "$SOURCE_ROOT/polystorechain" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystorechain/polystorechaind" ./cmd/polystorechaind
-  run_in_dir "$SOURCE_ROOT/polystore_gateway" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystore_gateway/polystore_gateway" .
-  run_in_dir "$SOURCE_ROOT/polystore_faucet" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystore_faucet/polystore_faucet" .
-  run_in_dir "$SOURCE_ROOT/polystore_cli" cargo build --release
+  run_build_in_dir "$SOURCE_ROOT/polystore_core" cargo build --release
+  run_build_in_dir "$SOURCE_ROOT/polystorechain" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystorechain/polystorechaind" ./cmd/polystorechaind
+  run_build_in_dir "$SOURCE_ROOT/polystore_gateway" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystore_gateway/polystore_gateway" .
+  run_build_in_dir "$SOURCE_ROOT/polystore_faucet" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystore_faucet/polystore_faucet" .
+  run_build_in_dir "$SOURCE_ROOT/polystore_cli" cargo build --release
 }
 
 wait_http() {

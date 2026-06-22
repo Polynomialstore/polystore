@@ -2,7 +2,7 @@
 
 Use `scripts/update_devnet_stack.sh` when rolling out proof-format-coupled changes to the local trusted devnet on this machine.
 
-The script rebuilds and installs:
+The script rebuilds as the configured run user, then installs:
 
 - `polystore_core/target/release/libpolystore_core.so`
 - `polystorechain/polystorechaind`
@@ -13,13 +13,14 @@ The script rebuilds and installs:
 
 It restarts services in this order:
 
-1. Preflight all build artifacts before stopping any service.
-2. Stop `provider-daemon` user services: `polystore-provider1.service` through `polystore-provider4.service`.
-3. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
-4. Install artifacts with backups and sha256 evidence.
-5. Start chain first.
-6. Start faucet and the `user-gateway` legacy router service.
-7. Start all `provider-daemon` services, including provider4.
+1. Build artifacts as `--run-user`/`POLYSTORE_RUN_USER`; when invoked with `sudo`, this avoids root-owned Cargo/Go outputs in the source checkout.
+2. Preflight all build artifacts before stopping any service.
+3. Stop `provider-daemon` user services: `polystore-provider1.service` through `polystore-provider4.service`.
+4. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
+5. Install artifacts with backups and sha256 evidence.
+6. Start chain first.
+7. Start faucet and the `user-gateway` legacy router service.
+8. Start all `provider-daemon` services, including provider4.
 
 Tunnel services are not restarted by default. Use `--restart-tunnels` only when endpoint or tunnel config changes.
 
