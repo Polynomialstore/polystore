@@ -578,12 +578,15 @@ preflight_artifacts() {
   done
 
   if [[ "$missing" -ne 0 ]]; then
-    if [[ "$DRY_RUN" == "1" ]]; then
+    if [[ "$DRY_RUN" == "1" && "$SKIP_BUILD" != "1" ]]; then
       echo "    DRY-RUN: missing artifacts would be produced by the build step or fail before service stop in live mode"
       return
     fi
 
     echo "ERROR: missing install artifacts; aborting before service stop" >&2
+    if [[ "$DRY_RUN" == "1" && "$SKIP_BUILD" == "1" ]]; then
+      echo "       --skip-build dry-runs require staged artifacts because no build step can produce them." >&2
+    fi
     exit 1
   fi
 }
