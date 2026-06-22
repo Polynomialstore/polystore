@@ -169,6 +169,21 @@ fn mdu0_root_table_proof_rejects_tampering_and_invalid_indices() {
         .unwrap();
     assert!(!ok, "tampered MDU #0 DU merkle path must reject");
 
+    let mut malformed_merkle_proof = proof.root_table_du_merkle_proof.clone();
+    malformed_merkle_proof.push(0xff);
+    let malformed_result = ctx.verify_mdu0_root_table_proof(
+        &polyfs_root,
+        mdu_index,
+        &target_root,
+        &proof.root_table_du_commitment,
+        &malformed_merkle_proof,
+        &proof.root_table_opening_proof,
+    );
+    assert!(
+        malformed_result.is_err(),
+        "malformed MDU #0 DU merkle path length must reject"
+    );
+
     let mut tampered_target_root = target_root;
     tampered_target_root[0] ^= 0x01;
     let ok = ctx
