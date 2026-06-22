@@ -128,6 +128,11 @@ PROVIDER_SERVICE_SCOPE="${POLYSTORE_PROVIDER_SERVICE_SCOPE:-auto}"
 if [[ -n "${POLYSTORE_PROVIDER_SERVICES+x}" ]]; then
   PROVIDER_SERVICES_FROM_ENV=1
   read -r -a PROVIDER_SERVICES <<<"$POLYSTORE_PROVIDER_SERVICES"
+  if [[ "${#PROVIDER_SERVICES[@]}" -eq 0 ]]; then
+    echo "ERROR: POLYSTORE_PROVIDER_SERVICES was provided but no provider-daemon services were listed." >&2
+    echo "       Unset it to use the default provider inventory, or provide one or more service names." >&2
+    exit 2
+  fi
 elif [[ "$PROVIDER_SERVICE_SCOPE" == "root" ]]; then
   PROVIDER_SERVICES=("${DEFAULT_ROOT_PROVIDER_SERVICES[@]}")
 else
