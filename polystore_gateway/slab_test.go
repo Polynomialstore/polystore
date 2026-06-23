@@ -11,7 +11,30 @@ import (
 	"testing"
 
 	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
+
+func TestGatewayMdu0BuilderWitnessCountUsesRawPayloadCapacity(t *testing.T) {
+	oneWitnessMax := uint64(RawMduCapacity) / (uint64(types.BLOBS_PER_MDU) * 48)
+
+	oneWitness := crypto_ffi.NewMdu0Builder(oneWitnessMax)
+	defer oneWitness.Free()
+	if got := oneWitness.GetWitnessCount(); got != 1 {
+		t.Fatalf("expected boundary to fit in one witness MDU, got %d", got)
+	}
+
+	twoWitness := crypto_ffi.NewMdu0Builder(oneWitnessMax + 1)
+	defer twoWitness.Free()
+	if got := twoWitness.GetWitnessCount(); got != 2 {
+		t.Fatalf("expected boundary+1 to require two witness MDUs, got %d", got)
+	}
+
+	codexBoundary := crypto_ffi.NewMdu0Builder(2700)
+	defer codexBoundary.Free()
+	if got := codexBoundary.GetWitnessCount(); got != 2 {
+		t.Fatalf("expected 2700 user MDUs to require two witness MDUs, got %d", got)
+	}
+}
 
 func TestGatewaySlab_Basic(t *testing.T) {
 	useTempUploadDir(t)

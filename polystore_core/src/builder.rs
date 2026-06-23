@@ -9,6 +9,21 @@ pub const FILE_TABLE_END: usize = 64 * BLOB_SIZE;
 pub const FILE_TABLE_HEADER_SIZE: usize = 128;
 pub const FILE_RECORD_SIZE: usize = layout::FILE_RECORD_SIZE;
 pub const ROOT_SIZE: usize = 32;
+pub const SCALAR_BYTES: usize = 32;
+pub const SCALAR_PAYLOAD_BYTES: usize = 31;
+pub const MDU_PAYLOAD_BYTES: usize = (MDU_SIZE / SCALAR_BYTES) * SCALAR_PAYLOAD_BYTES;
+pub const COMMITMENT_SIZE: u64 = 48;
+
+fn ceil_div_u64(n: u64, d: u64) -> u64 {
+    if n == 0 { 0 } else { 1 + (n - 1) / d }
+}
+
+fn witness_mdu_count_for(max_user_mdus: u64, commitments_per_mdu: u64) -> u64 {
+    let total_commitment_bytes = max_user_mdus
+        .saturating_mul(commitments_per_mdu)
+        .saturating_mul(COMMITMENT_SIZE);
+    ceil_div_u64(total_commitment_bytes, MDU_PAYLOAD_BYTES as u64)
+}
 
 pub struct Mdu0Builder {
     pub buffer: Vec<u8>,
@@ -29,9 +44,7 @@ impl Mdu0Builder {
         } else {
             commitments_per_mdu
         };
-        // Calculate W
-        let total_commitment_bytes = (max_user_mdus * commitments * 48) as f64;
-        let w = (total_commitment_bytes / MDU_SIZE as f64).ceil() as u64;
+        let w = witness_mdu_count_for(max_user_mdus, commitments);
 
         let mut header = FileTableHeader::default();
         header.record_size = FILE_RECORD_SIZE as u16;
@@ -66,8 +79,7 @@ impl Mdu0Builder {
         } else {
             commitments_per_mdu
         };
-        let total_commitment_bytes = (max_user_mdus * commitments * 48) as f64;
-        let witness_mdu_count = (total_commitment_bytes / MDU_SIZE as f64).ceil() as u64;
+        let witness_mdu_count = witness_mdu_count_for(max_user_mdus, commitments);
 
         let header_slice = &data[FILE_TABLE_START..FILE_TABLE_START + FILE_TABLE_HEADER_SIZE];
         let header = FileTableHeader::from_bytes(header_slice);
@@ -215,13 +227,30 @@ mod tests {
 
         // 2. Verify W Calculation
         // 65536 MDUs * 64 blobs/MDU * 48 bytes/blob = 201,326,592 bytes
-        // 201,326,592 / 8,388,608 = 24.0000... -> 24 MDUs
-        let expected_w = 24u64;
+        // Witness commitments are stored as raw payload bytes inside encoded MDUs:
+        // 201,326,592 / 8,126,464 = 24.773... -> 25 MDUs
+        let expected_w = 25u64;
         assert_eq!(
             b.witness_mdu_count, expected_w,
             "W calculation failed. Want {}, got {}",
             expected_w, b.witness_mdu_count
         );
+    }
+
+    #[test]
+    fn test_witness_count_uses_raw_payload_capacity() {
+        let commitments_per_mdu = 64u64;
+        let witness_payload_capacity = MDU_PAYLOAD_BYTES as u64;
+        let commitments_per_witness = witness_payload_capacity / (commitments_per_mdu * 48);
+
+        let one_witness = Mdu0Builder::new(commitments_per_witness);
+        assert_eq!(one_witness.witness_mdu_count, 1);
+
+        let two_witness = Mdu0Builder::new(commitments_per_witness + 1);
+        assert_eq!(two_witness.witness_mdu_count, 2);
+
+        let codex_boundary = Mdu0Builder::new(2700);
+        assert_eq!(codex_boundary.witness_mdu_count, 2);
     }
 
     #[test]
