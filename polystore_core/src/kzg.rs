@@ -23,6 +23,9 @@ pub const MDU_SIZE: usize = 8 * 1024 * 1024;
 pub const SHARD_SIZE: usize = 1 * 1024 * 1024;
 pub const BLOB_SIZE: usize = 131072;
 pub const BLOBS_PER_MDU: usize = MDU_SIZE / BLOB_SIZE;
+pub const SCALARS_PER_BLOB: usize = BLOB_SIZE / 32;
+pub const MDU0_ROOT_TABLE_DUS: usize = 16;
+pub const MDU0_ROOT_TABLE_CAPACITY: u64 = (MDU0_ROOT_TABLE_DUS * SCALARS_PER_BLOB) as u64;
 
 pub type KzgCommitment = [u8; 48];
 pub type Bytes32 = [u8; 32];
@@ -86,8 +89,28 @@ pub enum KzgError {
     InvalidDataLength,
     #[error("Invalid MDU size")]
     InvalidMduSize,
+    #[error("Invalid MDU root-table index")]
+    InvalidMduIndex,
     #[error("Merkle Tree error: {0}")]
     MerkleTreeError(String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RootTablePosition {
+    pub mdu_index: u64,
+    pub root_table_index: usize,
+    pub root_table_du: usize,
+    pub root_table_cell: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Mdu0RootTableProof {
+    pub position: RootTablePosition,
+    pub target_mdu_root: Bytes32,
+    pub root_table_du_commitment: Bytes48,
+    pub root_table_du_merkle_proof: Vec<u8>,
+    pub root_table_opening_proof: Bytes48,
+    pub root_table_opening_y: Bytes32,
 }
 
 #[derive(Clone)]
@@ -675,8 +698,7 @@ impl KzgContext {
         let mut blob_bytes = vec![0u8; BLOB_SIZE];
         for (i, root) in mdu_roots.iter().enumerate().take(4096) {
             let start = i * 32;
-            blob_bytes[start..start + 32]
-                .copy_from_slice(&scalar_to_bytes_be(&reduce_bytes32_to_scalar(root)));
+            blob_bytes[start..start + 32].copy_from_slice(&encode_mdu_root_for_root_table(root)?);
         }
 
         let commitment = self.blob_to_commitment(&blob_bytes)?;
@@ -699,11 +721,100 @@ impl KzgContext {
 
         let mut root_arr = [0u8; 32];
         root_arr.copy_from_slice(mdu_root_bytes);
-        let y = reduce_bytes32_to_scalar(&root_arr);
-        let y_bytes = scalar_to_bytes_be(&y);
+        let y_bytes = encode_mdu_root_for_root_table(&root_arr)?;
 
         let z_bytes = crate::utils::z_for_cell(mdu_index);
         self.verify_proof(manifest_commitment_bytes, &z_bytes, &y_bytes, proof_bytes)
+    }
+
+    pub fn compute_mdu0_root_table_proof(
+        &self,
+        mdu0_bytes: &[u8],
+        mdu_index: u64,
+        target_mdu_root_bytes: &[u8],
+    ) -> Result<Mdu0RootTableProof, KzgError> {
+        if mdu0_bytes.len() != MDU_SIZE || target_mdu_root_bytes.len() != 32 {
+            return Err(KzgError::InvalidDataLength);
+        }
+
+        let position = root_table_position_for_mdu_index(mdu_index)?;
+        let mut target_mdu_root = [0u8; 32];
+        target_mdu_root.copy_from_slice(target_mdu_root_bytes);
+        let expected_y = encode_mdu_root_for_root_table(&target_mdu_root)?;
+
+        let commitments = self.mdu_to_kzg_commitments(mdu0_bytes)?;
+        let root_table_du_commitment = commitments[position.root_table_du];
+
+        let leaves: Vec<[u8; 32]> = commitments
+            .iter()
+            .map(|c| Blake2s256Hasher::hash(c))
+            .collect();
+        let merkle_tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&leaves);
+        let root_table_du_merkle_proof = merkle_tree.proof(&[position.root_table_du]).to_bytes();
+
+        let start = position.root_table_du * BLOB_SIZE;
+        let root_table_du_blob = &mdu0_bytes[start..start + BLOB_SIZE];
+        let z_bytes = crate::utils::z_for_cell(position.root_table_cell);
+        let (root_table_opening_proof, root_table_opening_y) =
+            self.compute_proof(root_table_du_blob, &z_bytes)?;
+
+        if root_table_opening_y != expected_y {
+            return Err(KzgError::Internal(
+                "root-table cell does not match target MDU root".into(),
+            ));
+        }
+
+        Ok(Mdu0RootTableProof {
+            position,
+            target_mdu_root,
+            root_table_du_commitment,
+            root_table_du_merkle_proof,
+            root_table_opening_proof,
+            root_table_opening_y,
+        })
+    }
+
+    pub fn verify_mdu0_root_table_proof(
+        &self,
+        polyfs_root_bytes: &[u8],
+        mdu_index: u64,
+        target_mdu_root_bytes: &[u8],
+        root_table_du_commitment_bytes: &[u8],
+        root_table_du_merkle_proof_bytes: &[u8],
+        root_table_opening_proof_bytes: &[u8],
+    ) -> Result<bool, KzgError> {
+        if polyfs_root_bytes.len() != 32
+            || target_mdu_root_bytes.len() != 32
+            || root_table_du_commitment_bytes.len() != 48
+            || root_table_opening_proof_bytes.len() != 48
+        {
+            return Err(KzgError::InvalidDataLength);
+        }
+
+        let position = root_table_position_for_mdu_index(mdu_index)?;
+
+        let merkle_ok = Self::verify_mdu_merkle_proof(
+            polyfs_root_bytes,
+            root_table_du_commitment_bytes,
+            position.root_table_du,
+            root_table_du_merkle_proof_bytes,
+            BLOBS_PER_MDU,
+        )?;
+        if !merkle_ok {
+            return Ok(false);
+        }
+
+        let mut target_mdu_root = [0u8; 32];
+        target_mdu_root.copy_from_slice(target_mdu_root_bytes);
+        let expected_y = encode_mdu_root_for_root_table(&target_mdu_root)?;
+        let z_bytes = crate::utils::z_for_cell(position.root_table_cell);
+
+        self.verify_proof(
+            root_table_du_commitment_bytes,
+            &z_bytes,
+            &expected_y,
+            root_table_opening_proof_bytes,
+        )
     }
 
     pub fn verify_mdu_merkle_proof(
@@ -714,6 +825,9 @@ impl KzgContext {
         num_leaves: usize,
     ) -> Result<bool, KzgError> {
         if mdu_merkle_root.len() != 32 || challenged_kzg_commitment.len() != 48 {
+            return Err(KzgError::InvalidDataLength);
+        }
+        if merkle_proof_bytes.len() % 32 != 0 {
             return Err(KzgError::InvalidDataLength);
         }
 
@@ -739,6 +853,35 @@ impl KzgContext {
 
         Ok(merkle_proof.verify(root_array, &indices, &leaves, num_leaves))
     }
+}
+
+pub fn root_table_position_for_mdu_index(mdu_index: u64) -> Result<RootTablePosition, KzgError> {
+    if mdu_index == 0 || mdu_index > MDU0_ROOT_TABLE_CAPACITY {
+        return Err(KzgError::InvalidMduIndex);
+    }
+
+    let root_table_index_u64 = mdu_index - 1;
+    let root_table_index =
+        usize::try_from(root_table_index_u64).map_err(|_| KzgError::InvalidMduIndex)?;
+    let root_table_du = root_table_index / SCALARS_PER_BLOB;
+    let root_table_cell = root_table_index % SCALARS_PER_BLOB;
+
+    Ok(RootTablePosition {
+        mdu_index,
+        root_table_index,
+        root_table_du,
+        root_table_cell,
+    })
+}
+
+pub fn encode_mdu_root_for_root_table(mdu_root_bytes: &[u8]) -> Result<Bytes32, KzgError> {
+    if mdu_root_bytes.len() != 32 {
+        return Err(KzgError::InvalidDataLength);
+    }
+
+    let mut root = [0u8; 32];
+    root.copy_from_slice(mdu_root_bytes);
+    Ok(scalar_to_bytes_be(&reduce_bytes32_to_scalar(&root)))
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1497,12 +1640,10 @@ fn webgpu_serialize_g1(point: &G1Affine) -> [u8; WEBGPU_G1_GPU_BYTES] {
     z_le[0] = 1;
 
     let mut out = [0u8; WEBGPU_G1_GPU_BYTES];
-    out[0..WEBGPU_FQ_GPU_BYTES]
-        .copy_from_slice(&webgpu_be_coord_to_gpu_limbs(&uncompressed[..48]));
+    out[0..WEBGPU_FQ_GPU_BYTES].copy_from_slice(&webgpu_be_coord_to_gpu_limbs(&uncompressed[..48]));
     out[WEBGPU_FQ_GPU_PADDED_BYTES..WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES]
         .copy_from_slice(&webgpu_be_coord_to_gpu_limbs(&uncompressed[48..96]));
-    out[2 * WEBGPU_FQ_GPU_PADDED_BYTES
-        ..2 * WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES]
+    out[2 * WEBGPU_FQ_GPU_PADDED_BYTES..2 * WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES]
         .copy_from_slice(&webgpu_fq_bytes_to_13bit(&z_le));
     out
 }
@@ -1511,24 +1652,22 @@ fn webgpu_deserialize_g1(bytes: &[u8]) -> Result<G1Projective, KzgError> {
     if bytes.len() != WEBGPU_G1_GPU_BYTES {
         return Err(KzgError::InvalidDataLength);
     }
-    let z = &bytes[2 * WEBGPU_FQ_GPU_PADDED_BYTES
-        ..2 * WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES];
+    let z = &bytes
+        [2 * WEBGPU_FQ_GPU_PADDED_BYTES..2 * WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES];
     if z.iter().all(|byte| *byte == 0) {
         return Ok(G1Projective::identity());
     }
 
     let x_be = webgpu_gpu_limbs_to_be_coord(&bytes[0..WEBGPU_FQ_GPU_BYTES]);
     let y_be = webgpu_gpu_limbs_to_be_coord(
-        &bytes[WEBGPU_FQ_GPU_PADDED_BYTES
-            ..WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES],
+        &bytes[WEBGPU_FQ_GPU_PADDED_BYTES..WEBGPU_FQ_GPU_PADDED_BYTES + WEBGPU_FQ_GPU_BYTES],
     );
     let mut uncompressed = [0u8; 96];
     uncompressed[..48].copy_from_slice(&x_be);
     uncompressed[48..].copy_from_slice(&y_be);
 
     let affine: Option<G1Affine> = Option::from(G1Affine::from_uncompressed(&uncompressed));
-    let affine = affine
-        .ok_or(KzgError::Internal("Invalid WebGPU G1 point".into()))?;
+    let affine = affine.ok_or(KzgError::Internal("Invalid WebGPU G1 point".into()))?;
     Ok(G1Projective::from(affine))
 }
 
