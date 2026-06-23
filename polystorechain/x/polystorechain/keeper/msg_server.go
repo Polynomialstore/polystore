@@ -41,9 +41,10 @@ func wallDurationToBlocks(wallDuration uint64) uint64 {
 var _ types.MsgServer = msgServer{}
 
 const (
-	polyfsRootTableCapacityMdus = uint64(16 * (types.BLOB_SIZE / 32))
-	polyfsRawMduPayloadBytes    = uint64((types.MDU_SIZE / 32) * 31)
-	polyfsCommitmentBytes       = uint64(48)
+	polyfsRootTableCapacityMdus  = uint64(16 * (types.BLOB_SIZE / 32))
+	polyfsRawMduPayloadBytes     = uint64((types.MDU_SIZE / 32) * 31)
+	polyfsWitnessMduPayloadBytes = polyfsRawMduPayloadBytes
+	polyfsCommitmentBytes        = uint64(48)
 )
 
 func parseOptionalManifestRootField(value string, label string) ([]byte, error) {
@@ -117,9 +118,9 @@ func validatePolyFSContentLayout(deal types.Deal, sizeBytes uint64, totalMdus ui
 	if overflow {
 		return sdkerrors.ErrInvalidRequest.Wrap("required witness bytes overflows uint64")
 	}
-	requiredWitnessMdus := ceilDivUint64(requiredWitnessBytes, uint64(types.MDU_SIZE))
+	requiredWitnessMdus := ceilDivUint64(requiredWitnessBytes, polyfsWitnessMduPayloadBytes)
 	if witnessMdus < requiredWitnessMdus {
-		return sdkerrors.ErrInvalidRequest.Wrapf("witness_mdus underprovisioned for user MDU commitments (got=%d required=%d user_mdus=%d leaf_count=%d)", witnessMdus, requiredWitnessMdus, userMdus, stripe.leafCount)
+		return sdkerrors.ErrInvalidRequest.Wrapf("witness_mdus underprovisioned for user MDU commitments (got=%d required=%d user_mdus=%d leaf_count=%d witness_payload_capacity=%d)", witnessMdus, requiredWitnessMdus, userMdus, stripe.leafCount, polyfsWitnessMduPayloadBytes)
 	}
 
 	return nil

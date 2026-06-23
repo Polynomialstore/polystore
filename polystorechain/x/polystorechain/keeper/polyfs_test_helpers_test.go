@@ -18,7 +18,7 @@ func polyfsTestLayoutForSize(sizeBytes uint64) (totalMdus uint64, witnessMdus ui
 		userMdus = 1
 	}
 	requiredWitnessBytes := userMdus * polyfsTestDefaultLeafCount * 48
-	witnessMdus = polyfsTestCeilDiv(requiredWitnessBytes, uint64(types.MDU_SIZE))
+	witnessMdus = polyfsTestCeilDiv(requiredWitnessBytes, polyfsTestRawMduPayloadBytes)
 	if witnessMdus == 0 {
 		witnessMdus = 1
 	}
