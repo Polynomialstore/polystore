@@ -24,8 +24,8 @@ PolyStore faces a fundamental architectural tension between Scalability and Perf
 ## 2. The Financial Container: Thin-Provisioned Deals (No Tiers)
 PolyStore uses a **thin-provisioned** Deal container model:
 
-*   `MsgCreateDeal*` creates a Deal with `manifest_root = empty`, `size = 0` (and `total_mdus = 0` until first commit).
-*   `MsgUpdateDealContent*` commits content and advances the Deal’s `manifest_root`, `size`, and `total_mdus`.
+*   `MsgCreateDeal*` creates a Deal with `polyfs_root = empty`, `size = 0` (and `total_mdus = 0` until first commit).
+*   `MsgUpdateDealContent*` commits content and advances the Deal’s `polyfs_root`, `size`, and `total_mdus`.
 *   There is **no user-selected capacity tier** and no on-chain `DealSize` enum.
 
 ### 2.1 Governance Policy
@@ -102,7 +102,7 @@ The maximum batch size is bounded by the Deal’s committed content (`Deal.size`
 ## 6. Implementation Directives
 1.  **Core Cryptography:** Hardcode `MDU_SIZE = 8,388,608` in `polystore_core`.
 2.  **Chain Logic (Thin Provisioning):**
-    *   `MsgCreateDeal*` initializes `size = 0`, `manifest_root = empty`, `total_mdus = 0` (until first content commit).
+    *   `MsgCreateDeal*` initializes `size = 0`, `polyfs_root = empty`, `total_mdus = 0` (until first content commit).
     *   `MsgUpdateDealContent*` enforces `size ≤ MAX_DEAL_BYTES` and advances the committed state.
     *   Remove `DealSize` / `size_tier` from request payloads and EIP-712 typed-data in all clients.
 3.  **Client SDK:** Implement `GetRange()` as the primary retrieval method. The SDK should default to requesting the largest necessary range (up to the remaining file span) to minimize $\text{Gas}_{Orch}$ costs for the user.

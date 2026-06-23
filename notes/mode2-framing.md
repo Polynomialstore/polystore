@@ -25,14 +25,16 @@ Key point: PolyFS defines the *logical bytes*; Mode 2 defines how each 8 MiB SP�
 
 The chain does not commit to “file hash = X” directly. It commits to a structure that implies all file bytes are fixed:
 
-- `Deal.manifest_root` (48B KZG) commits to a vector of per‑MDU roots.
+- `Deal.polyfs_root` (32B Merkle root) commits to MDU #0, the PolyFS super-manifest.
+- MDU #0 contains a root table whose first 16 DUs commit to the roots of MDUs after MDU #0.
 - For each MDU index, there is an `mdu_root` (Merkle root over blob commitments).
 - Each blob commitment (48B KZG) commits to 128 KiB blob bytes.
 
 A proof (Triple Proof / `ChainedProof`) establishes:
-1) the per‑MDU root is part of `Deal.manifest_root`
-2) the blob commitment is included in the per‑MDU Merkle tree
-3) the served blob bytes match the blob commitment
+1) the relevant MDU #0 root-table DU commitment is included in `Deal.polyfs_root`
+2) that root-table DU opens to the target per-MDU root
+3) the blob commitment is included in the target per-MDU Merkle tree
+4) the served blob bytes match the blob commitment
 
 So “what proofs commit to” means: what byte-objects are bound into these roots such that a provider can be held accountable (reward/slash) for them.
 
@@ -53,9 +55,10 @@ Mode 2 relies on fully replicated metadata so any repairer can know “what the 
 
 - **MDU #0 (PolyFS super-manifest):** file table + root table (points to the other MDUs)
 - **Witness MDUs:** packed array of expected 48-byte blob commitments for each *data-bearing* SP‑MDU (see §6 and §5 Design A)
-- **Manifest openings material:** enough information to produce Hop‑1 openings against on-chain `Deal.manifest_root`.
-  - In devnet today this is commonly stored as `manifest.bin` (the 128 KiB manifest blob).
-  - Protocol requirement: provers/repairers must be able to obtain Hop‑1 openings deterministically from replicated metadata, not by contacting the user.
+- **Root-table opening material:** enough information to produce Hop 1b openings from the MDU #0 root table.
+  - In alpha devnet this was commonly stored as `manifest.bin` (the 128 KiB flat-manifest blob).
+  - For the PolyFS root contract, `manifest.bin` is legacy/cache only and is not part of the canonical trust root.
+  - Protocol requirement: provers/repairers must be able to obtain root-table openings deterministically from replicated MDU #0 metadata, not by contacting the user.
 
 ### 4.2 Witness sizing
 
@@ -66,8 +69,8 @@ Witness size formula:
 - Witness MDUs `W = ceil(witness_bytes / 8 MiB)`
 
 Root table capacity constraint (PolyFS V1):
-- RootTable in MDU #0 is 2 MiB of 32-byte roots → max `65,536` roots.
-- Therefore the slab must satisfy: `1 + W + S <= 65,536`.
+- RootTable in MDU #0 is 2 MiB of 32-byte root field bindings -> max `65,536` roots for MDU #1 onward.
+- Therefore the slab must satisfy: `W + S <= 65,536`, or `total_mdus = 1 + W + S <= 65,537`.
 - This is why “512 GiB logical minus a few MDUs” happens (metadata consumes some root slots).
 
 ## 5) How parity is bound into the committed state
@@ -155,11 +158,11 @@ For **metadata** MDUs (`slab_mdu_index <= W`):
 
 1) **Parity accountability:** Design A is the current target, but must be explicitly adopted for Mode 2.
 
-2) **Hop‑1 openings source-of-truth:** specify how provers obtain manifest openings (and what is replicated).
+2) **Hop 1b openings source-of-truth:** specify the exact prover-side root-table opening material and cache format.
 
 3) **Parameter flexibility beyond `K | 64`:** if arbitrary `K` is desired (not dividing 64), the system needs an explicit padding/packing rule (out of scope for this note).
 
 4) **Sizing semantics:** clarify caps:
    - per-SP cap (e.g. 512 GiB) vs client-visible logical cap
-   - RS overhead factor `N/K` and metadata overhead (Witness + MDU #0 + manifest openings material)
-   - RootTable ceiling `1 + W + S <= 65,536` for PolyFS V1
+   - RS overhead factor `N/K` and metadata overhead (Witness + MDU #0 + root-table opening material)
+   - RootTable ceiling `W + S <= 65,536` for PolyFS V1

@@ -74,7 +74,7 @@ Before serving bytes, the serving node MUST validate (by querying chain state):
 
 1) `session.status == OPEN` and `current_height <= session.expires_at`
 2) `session.deal_id == requested_deal_id`
-3) `session.manifest_root == Deal.manifest_root` (content pin)
+3) `session.polyfs_root == Deal.polyfs_root` (content pin; legacy field names may remain during migration but must carry the 32-byte PolyFS root)
 4) **Provider binding**
    - For legacy full-replica compatibility, `session.provider` MUST be a member of `Deal.providers[]`.
    - For striped deals, `session.slot` MUST match the slot assignment for the provider serving the bytes.
