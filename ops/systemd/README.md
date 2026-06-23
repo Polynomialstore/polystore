@@ -1,6 +1,6 @@
 # systemd templates (Trusted Devnet Soft Launch)
 
-These are **templates** for running a long-lived hub + remote SP devnet using systemd.
+These are **templates** for running a long-lived hub plus remote `provider-daemon` devnet using systemd.
 
 Files:
 - `ops/systemd/*.service`: unit templates
@@ -48,6 +48,19 @@ Typical flow:
 sudo systemctl restart polystorechaind && sudo systemctl status --no-pager polystorechaind
 ./scripts/redeploy_polystorechaind.sh --verify-only
 ```
+
+### Full Devnet Stack Rollout
+
+For proof-format-coupled changes that must update the chain, `user-gateway`
+legacy router service, faucet, CLI, runtime library, and all local
+`provider-daemon` services together, use:
+
+- runbook: `docs/devnet-polyfs-root-rollout.md`
+- script: `scripts/update_devnet_stack.sh`
+
+The stack rollout script covers `provider-daemon` services provider1 through
+provider4 and restarts tunnel services only when `--restart-tunnels` is
+supplied.
 
 4) Tail logs:
 
