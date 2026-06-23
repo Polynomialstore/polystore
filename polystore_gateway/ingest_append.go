@@ -108,81 +108,50 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		return nil, "", 0, err
 	}
 
+	rootsByMduIndex := make(map[uint64][]byte, len(witnessRoots)+len(userRoots))
+	orderedSlabRoots := make([][]byte, 0, len(witnessRoots)+len(userRoots))
+
 	// Update Witness roots in MDU #0 (indices 0..W-1).
 	for i, wRoot := range witnessRoots {
-		rootBytes, err := decodeHex(wRoot)
+		rootBytes, err := decodeMduRootHex(fmt.Sprintf("witness MDU %d", i), wRoot)
 		if err != nil {
 			b.Free()
-			return nil, "", 0, fmt.Errorf("invalid witness root %q: %w", wRoot, err)
+			return nil, "", 0, err
 		}
-		var root [32]byte
-		copy(root[:], rootBytes)
-		if err := b.SetRoot(uint64(i), root[:]); err != nil {
+		if err := b.SetRoot(uint64(i), rootBytes); err != nil {
 			b.Free()
 			return nil, "", 0, fmt.Errorf("SetRoot (witness %d) failed: %w", i, err)
 		}
+		slabMduIndex := uint64(1) + uint64(i)
+		rootsByMduIndex[slabMduIndex] = rootBytes
+		orderedSlabRoots = append(orderedSlabRoots, rootBytes)
 	}
 
 	// Update User roots in MDU #0 (starting at index W).
 	baseIdx := witnessMduCount
 	for i, uRoot := range userRoots {
-		rootBytes, err := decodeHex(uRoot)
+		rootBytes, err := decodeMduRootHex(fmt.Sprintf("user MDU %d", i), uRoot)
 		if err != nil {
 			b.Free()
-			return nil, "", 0, fmt.Errorf("invalid user root %q: %w", uRoot, err)
+			return nil, "", 0, err
 		}
-		var root [32]byte
-		copy(root[:], rootBytes)
-		if err := b.SetRoot(baseIdx+uint64(i), root[:]); err != nil {
+		if err := b.SetRoot(baseIdx+uint64(i), rootBytes); err != nil {
 			b.Free()
 			return nil, "", 0, fmt.Errorf("SetRoot (user %d) failed: %w", i, err)
 		}
+		slabMduIndex := uint64(1) + witnessMduCount + uint64(i)
+		rootsByMduIndex[slabMduIndex] = rootBytes
+		orderedSlabRoots = append(orderedSlabRoots, rootBytes)
 	}
 
-	// Shard MDU #0 to derive its root for manifest aggregation.
+	// Materialize MDU #0 and derive PolyFS root artifacts.
 	mdu0Bytes, err := b.Bytes()
 	if err != nil {
 		b.Free()
 		return nil, "", 0, err
 	}
 
-	tmp0, err := os.CreateTemp(uploadDir, "mdu0-append-*.bin")
-	if err != nil {
-		b.Free()
-		return nil, "", 0, err
-	}
-	if _, err := tmp0.Write(mdu0Bytes); err != nil {
-		tmp0.Close()
-		b.Free()
-		return nil, "", 0, err
-	}
-	tmp0Name := tmp0.Name()
-	tmp0.Close()
-
-	mdu0Prefix := tmp0Name + ".shard"
-	mdu0Out, err := shardFile(ctx, tmp0Name, true, mdu0Prefix)
-	os.Remove(tmp0Name)
-	if err != nil {
-		b.Free()
-		return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err)
-	}
-	if len(mdu0Out.Mdus) == 0 {
-		b.Free()
-		return nil, "", 0, fmt.Errorf("MDU #0 produced no MDUs")
-	}
-
-	// Aggregate [Root_MDU0, Witness..., User...] -> ManifestRoot.
-	allRoots := []string{mdu0Out.Mdus[0].RootHex}
-	allRoots = append(allRoots, witnessRoots...)
-	allRoots = append(allRoots, userRoots...)
-
-	manifestRoot, manifestBlobHex, err := aggregateRootsWithContext(ctx, allRoots)
-	if err != nil {
-		b.Free()
-		return nil, "", 0, fmt.Errorf("aggregateRoots failed: %w", err)
-	}
-
-	parsedNewRoot, err := parseManifestRoot(manifestRoot)
+	parsedNewRoot, manifestBlob, err := computePolyfsManifestArtifacts(mdu0Bytes, rootsByMduIndex, orderedSlabRoots)
 	if err != nil {
 		b.Free()
 		return nil, "", 0, err
@@ -195,11 +164,6 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		return nil, "", 0, err
 	}
 
-	manifestBlob, err := decodeHex(manifestBlobHex)
-	if err != nil {
-		b.Free()
-		return nil, "", 0, err
-	}
 	if err := os.WriteFile(filepath.Join(newDir, "manifest.bin"), manifestBlob, 0o644); err != nil {
 		b.Free()
 		return nil, "", 0, err
@@ -257,7 +221,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		log.Printf("IngestAppendToDeal: warning: failed to write slab metadata for manifest_root=%s: %v", parsedNewRoot.Canonical, err)
 	}
 
-	allocatedLength := uint64(len(allRoots))
+	allocatedLength := totalMdus
 	return b, parsedNewRoot.Canonical, allocatedLength, nil
 }
 

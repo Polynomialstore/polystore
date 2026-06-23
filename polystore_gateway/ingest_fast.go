@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 // IngestNewDealFast creates a simplified Deal Slab for testing.
@@ -37,14 +38,30 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 	// We skip Witness generation completely. Witness roots (indices 0..W-1) remain zero.
 	witnessMduCount := b.GetWitnessCount()
 	baseIdx := witnessMduCount
+	rootsByMduIndex := make(map[uint64][]byte, len(shardOut.Mdus))
+	orderedSlabRoots := make([][]byte, 0, int(witnessMduCount)+len(shardOut.Mdus))
+	zeroRoot := make([]byte, types.POLYFS_ROOT_SIZE)
+	for i := uint64(0); i < witnessMduCount; i++ {
+		orderedSlabRoots = append(orderedSlabRoots, zeroRoot)
+	}
 	for _, mdu := range shardOut.Mdus {
-		rootBytes, _ := decodeHex(mdu.RootHex)
-		var root [32]byte
-		copy(root[:], rootBytes)
-		if err := b.SetRoot(baseIdx+uint64(mdu.Index), root[:]); err != nil {
+		if mdu.Index < 0 {
+			b.Free()
+			return nil, "", 0, fmt.Errorf("invalid user MDU index %d", mdu.Index)
+		}
+		rootBytes, err := decodeMduRootHex(fmt.Sprintf("user MDU %d", mdu.Index), mdu.RootHex)
+		if err != nil {
 			b.Free()
 			return nil, "", 0, err
 		}
+		userOrdinal := uint64(mdu.Index)
+		if err := b.SetRoot(baseIdx+userOrdinal, rootBytes); err != nil {
+			b.Free()
+			return nil, "", 0, err
+		}
+		slabMduIndex := uint64(1) + witnessMduCount + userOrdinal
+		rootsByMduIndex[slabMduIndex] = rootBytes
+		orderedSlabRoots = append(orderedSlabRoots, rootBytes)
 	}
 
 	// 4. Append File Record
@@ -54,38 +71,14 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 		return nil, "", 0, err
 	}
 
-	// 5. Shard MDU #0 (To get the Manifest Root)
+	// 5. Materialize MDU #0 and derive PolyFS root artifacts.
 	mdu0Bytes, err := b.Bytes()
 	if err != nil {
 		b.Free()
 		return nil, "", 0, err
 	}
-	tmp0, _ := os.CreateTemp(uploadDir, "mdu0-fast-*.bin")
-	tmp0.Write(mdu0Bytes)
-	tmp0Name := tmp0.Name()
-	tmp0.Close()
 
-	mdu0Prefix := tmp0Name + ".shard"
-	mdu0Out, err := shardFile(ctx, tmp0Name, true, mdu0Prefix)
-	if err != nil {
-		b.Free()
-		return nil, "", 0, fmt.Errorf("failed to shard MDU #0: %w", err)
-	}
-	os.Remove(tmp0Name)
-
-	if len(mdu0Out.Mdus) == 0 {
-		b.Free()
-		return nil, "", 0, fmt.Errorf("MDU #0 produced no MDUs")
-	}
-
-	// For Fast Mode, we assume the MDU #0 Root IS the Manifest Root.
-	// (Technically incorrect for Triple Proof, but sufficient for visual verification)
-	// Wait, shardFile returns a "ManifestRoot" which is the commitment of the MDU roots.
-	// Since we only sharded MDU #0 here, `mdu0Out.ManifestRootHex` is just Commit(Root_MDU0).
-	// This is consistent enough for a single-file view.
-	manifestRoot := mdu0Out.ManifestRootHex
-
-	parsedRoot, err := parseManifestRoot(manifestRoot)
+	parsedRoot, manifestBlob, err := computePolyfsManifestArtifacts(mdu0Bytes, rootsByMduIndex, orderedSlabRoots)
 	if err != nil {
 		b.Free()
 		return nil, "", 0, err
@@ -99,10 +92,15 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 	}
 
 	// Store MDU #0 (Raw)
-	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0644)
+	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0644); err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
 	// Store Manifest Blob (from shard output)
-	manifestBlob, _ := decodeHex(mdu0Out.ManifestBlobHex)
-	os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0644)
+	if err := os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0644); err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
 
 	// Move User Data MDUs (so fetch works)
 	for _, mdu := range shardOut.Mdus {
@@ -132,6 +130,6 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 		log.Printf("IngestNewDealFast: warning: failed to write slab metadata for manifest_root=%s: %v", parsedRoot.Canonical, err)
 	}
 
-	allocatedLength := uint64(len(mdu0Out.Mdus)) // Dummy length
+	allocatedLength := totalMdus
 	return b, parsedRoot.Canonical, allocatedLength, nil
 }
