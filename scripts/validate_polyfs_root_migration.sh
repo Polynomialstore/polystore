@@ -121,7 +121,7 @@ run bash -n \
   "$ROOT_DIR/e2e_slashing.sh"
 
 if [ -x "$ROOT_DIR/scripts/update_devnet_stack.sh" ]; then
-  run "$ROOT_DIR/scripts/update_devnet_stack.sh" --dry-run --skip-build
+  run "$ROOT_DIR/scripts/update_devnet_stack.sh" --dry-run
 else
   printf '\n>>> skipping rollout dry-run: scripts/update_devnet_stack.sh is not present on this branch yet\n'
 fi
