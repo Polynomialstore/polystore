@@ -194,6 +194,15 @@ func TestMode2BuildArtifactsAppend_PreservesActiveGenerationUntilCommitCleanup(t
 	if newMeta.PreviousManifestRoot != first.manifestRoot.Canonical {
 		t.Fatalf("expected previous_manifest_root=%s got=%s", first.manifestRoot.Canonical, newMeta.PreviousManifestRoot)
 	}
+	if len(newMeta.FileRecords) != 2 {
+		t.Fatalf("expected append metadata to retain 2 file records, got %d: %+v", len(newMeta.FileRecords), newMeta.FileRecords)
+	}
+	if newMeta.FileRecords[0].Path != "first.bin" || newMeta.FileRecords[0].StartOffset != 0 {
+		t.Fatalf("unexpected first file record after append: %+v", newMeta.FileRecords[0])
+	}
+	if newMeta.FileRecords[1].Path != "second.bin" || newMeta.FileRecords[1].StartOffset != RawMduCapacity {
+		t.Fatalf("unexpected second file record after append: %+v", newMeta.FileRecords[1])
+	}
 
 	active, err := readActiveDealGeneration(dealID)
 	if err != nil {

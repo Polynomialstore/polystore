@@ -49,7 +49,8 @@ import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFresh
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
 import { planPolyfsFileRangeChunks } from '../lib/rangeChunker'
-import { providerFetchMduWindowWithSession } from '../api/providerClient'
+import { decodePolyceV1, POLYCE_FLAG_COMPRESSION_ZSTD } from '../lib/polyce'
+import { providerFetchMdu, providerFetchMduWindowWithSession } from '../api/providerClient'
 import { lcdFetchDeal } from '../api/lcdClient'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import {
@@ -322,6 +323,14 @@ function queueCachedDownloadPersist(
   })
 }
 
+function sliceRange(bytes: Uint8Array, rangeStart: number, rangeLen: number): Uint8Array {
+  const start = Math.max(0, Math.floor(Number(rangeStart) || 0))
+  if (start >= bytes.byteLength) return new Uint8Array()
+  const maxLen = bytes.byteLength - start
+  const len = rangeLen > 0 ? Math.min(maxLen, Math.floor(Number(rangeLen) || 0)) : maxLen
+  return bytes.slice(start, start + len)
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null
   try {
@@ -423,20 +432,31 @@ function FileRow({
       throw new Error(`local slab not available (${cacheFreshness.reason})`)
     }
 
+    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
+    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
+    const compressed = (Number(file.flags || 0) & POLYCE_FLAG_COMPRESSION_ZSTD) !== 0
+    const readRangeStart = compressed ? 0 : safeStart
+    const readRangeLen = compressed ? 0 : safeLen
     return withTimeout(
       readPolyfsFileFromOpfs({
         dealId,
         file,
         allFiles,
-        rangeStart: Math.max(0, Number(downloadRangeStart || 0) || 0),
-        rangeLen: Math.max(0, Number(downloadRangeLen || 0) || 0),
+        rangeStart: readRangeStart,
+        rangeLen: readRangeLen,
       }),
       20_000,
       'local slab read',
-    ).catch((error: unknown) => {
-      const msg = error instanceof Error ? error.message : String(error)
-      throw new Error(`local slab not available (${msg})`)
-    })
+    )
+      .then(async (bytes) => {
+        const decoded = await decodePolyceV1(bytes)
+        const payload = decoded.payload
+        return compressed && (safeStart > 0 || safeLen > 0) ? sliceRange(payload, safeStart, safeLen) : payload
+      })
+      .catch((error: unknown) => {
+        const msg = error instanceof Error ? error.message : String(error)
+        throw new Error(`local slab not available (${msg})`)
+      })
   }
 
   const handleAutoDownload = async () => {
@@ -1055,7 +1075,8 @@ export function DealDetail({
   const [loadingManifestInfo, setLoadingManifestInfo] = useState(false)
   const [manifestInfoError, setManifestInfoError] = useState<string | null>(null)
   const [selectedMdu, setSelectedMdu] = useState<number>(0)
-  const displayManifestRoot = normalizeManifestRoot(manifestInfo?.manifest_root || slab?.manifest_root || committedManifestRoot)
+  const lastContentHydrationKeyRef = useRef<string>('')
+  const displayManifestRoot = normalizeManifestRoot(committedManifestRoot || manifestInfo?.manifest_root || slab?.manifest_root)
 
   useEffect(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
@@ -1957,10 +1978,18 @@ export function DealDetail({
   }, [fetchSlabLayout, resolveProviderHttpBase, resolveProviderP2pTarget, reconcileLocalMduCache])
 
   const fetchFiles = useCallback(async (cid: string, dealId: string, owner: string) => {
-    if (!cid || !dealId || !owner) return
+    void owner
+    if (!cid || !dealId) {
+      setLoadingFiles(false)
+      return
+    }
     setLoadingFiles(true)
     try {
-      let requirement = await inspectLocalDealIndexRequirement(String(dealId), cid)
+      let requirement = await withTimeout(
+        inspectLocalDealIndexRequirement(String(dealId), cid),
+        10_000,
+        'local PolyFS index inspection',
+      )
 
       // Browser Mode 2 commits update chain state and then atomically publish the OPFS slab.
       // On slow CI, Deal Detail can observe the new on-chain root a tick before OPFS has
@@ -1972,7 +2001,11 @@ export function DealDetail({
         const pollMs = 500
         while (Date.now() - retryStartedAt < maxWaitMs) {
           await new Promise((resolve) => setTimeout(resolve, pollMs))
-          const next = await inspectLocalDealIndexRequirement(String(dealId), cid)
+          const next = await withTimeout(
+            inspectLocalDealIndexRequirement(String(dealId), cid),
+            5_000,
+            'local PolyFS index inspection',
+          )
           if (next.status === 'ready') {
             requirement = next
             break
@@ -1994,7 +2027,7 @@ export function DealDetail({
         setFiles(null)
         return
       }
-      await fetchLocalFiles(dealId)
+      await withTimeout(fetchLocalFiles(dealId), 10_000, 'local PolyFS file list read')
     } catch (e) {
       console.error('Failed to fetch PolyFS file list', e)
       setDealIndexRequirement((prev) => ({
@@ -2135,7 +2168,39 @@ export function DealDetail({
     setFileActionError(null)
 
     try {
-      const fetchCommittedMdu = async (mduIndex: number, kindLabel: string): Promise<Uint8Array> => {
+      const fetchCommittedMetadataMdu = async (mduIndex: number, kindLabel: string): Promise<Uint8Array> => {
+        setDealIndexSyncMessage(`Fetching committed ${kindLabel} metadata from providers...`)
+        const providerBases =
+          serviceHint.mode === 'mode2'
+            ? dealProviders
+                .map((addr) => String(addr || '').trim())
+                .filter((addr) => addr)
+                .map((addr) => resolveProviderHttpBaseFor(addr))
+                .filter((base): base is string => Boolean(base))
+            : [providerBase].filter((base): base is string => Boolean(base))
+        if (!providerBases.length) {
+          throw new Error(`no provider base available for ${kindLabel} metadata`)
+        }
+        let lastError: unknown = null
+        for (const base of providerBases) {
+          try {
+            return await providerFetchMdu(base, manifestRoot, mduIndex, { dealId, owner })
+          } catch (err) {
+            lastError = err
+          }
+        }
+        const msg = lastError instanceof Error ? lastError.message : String(lastError || 'metadata provider fetch failed')
+        throw new Error(`failed to fetch committed ${kindLabel} metadata: ${msg}`)
+      }
+
+      const fetchCommittedMdu = async (
+        mduIndex: number,
+        kindLabel: string,
+        options: { metadata?: boolean } = {},
+      ): Promise<Uint8Array> => {
+        if (options.metadata) {
+          return fetchCommittedMetadataMdu(mduIndex, kindLabel)
+        }
         if (serviceHint.mode === 'mode2') {
           const dataSlotProviders = dealProviders
             .map((addr) => String(addr || '').trim())
@@ -2206,7 +2271,7 @@ export function DealDetail({
         }
       }
 
-      const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0')
+      const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0', { metadata: true })
       const parsedFiles = parsePolyfsFilesFromMdu0(mdu0Bytes)
       const { totalMdus, witnessMdus, userMdus } = deriveSlabLayoutFromMdu0(mdu0Bytes, parsedFiles)
       const rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes)
@@ -2218,20 +2283,20 @@ export function DealDetail({
       const committed = await workerClient.shardFile(new Uint8Array(mdu0Bytes))
       const mdu0Root = toU8((committed as { mdu_root?: Uint8Array | number[] }).mdu_root)
       if (mdu0Root.byteLength !== 32) throw new Error('invalid mdu_0 root length')
+      const mdu0RootHex = bytesTo0xHex(mdu0Root)
       const rootsAgg = new Uint8Array(totalMdus * 32)
       rootsAgg.set(mdu0Root, 0)
       for (let i = 0; i < rootTable.length; i += 1) {
         rootsAgg.set(rootTable[i], (i + 1) * 32)
       }
       const manifest = await workerClient.computeManifest(rootsAgg)
-      const computedManifestRoot = bytesTo0xHex(toU8((manifest as { root?: Uint8Array | number[] }).root))
       const manifestBlob = toU8((manifest as { blob?: Uint8Array | number[] }).blob)
       if (manifestBlob.byteLength === 0) throw new Error('failed to reconstruct manifest blob from committed MDUs')
-      if (normalizeManifestRoot(computedManifestRoot) !== normalizeManifestRoot(manifestRoot)) {
-        throw new Error(`committed mdu_0 produced mismatched manifest root: ${computedManifestRoot}`)
+      if (normalizeManifestRoot(mdu0RootHex) !== normalizeManifestRoot(manifestRoot)) {
+        throw new Error(`committed mdu_0 produced mismatched PolyFS root: ${mdu0RootHex}`)
       }
       const rootRecords = [
-        { mdu_index: 0, kind: 'mdu0' as const, root_hex: computedManifestRoot },
+        { mdu_index: 0, kind: 'mdu0' as const, root_hex: mdu0RootHex },
         ...rootTable.map((rootBytes, idx) => ({
           mdu_index: idx + 1,
           kind: (idx + 1) <= witnessMdus ? ('witness' as const) : ('user' as const),
@@ -2244,7 +2309,7 @@ export function DealDetail({
       const witnessMduArtifacts = await Promise.all(
         witnessMduIndexes.map(async (index) => ({
           index,
-          data: await fetchCommittedMdu(index, `witness mdu_${index}`),
+          data: await fetchCommittedMdu(index, `witness mdu_${index}`, { metadata: true }),
         })),
       )
 
@@ -2449,6 +2514,15 @@ export function DealDetail({
 
   useEffect(() => {
     if (!authoritativeDealLoaded) return
+    const hydrationKey = `${deal.id}:${committedManifestRoot || '<empty>'}:${requestOwner || '<owner>'}:${activeTab}`
+    const hydrationResolved =
+      !committedManifestRoot ||
+      files !== null ||
+      dealIndexRequirement.status === 'needs_sync_missing' ||
+      dealIndexRequirement.status === 'needs_sync_stale' ||
+      dealIndexRequirement.status === 'sync_failed'
+    if (lastContentHydrationKeyRef.current === hydrationKey && hydrationResolved) return
+    lastContentHydrationKeyRef.current = hydrationKey
     if (committedManifestRoot) {
       const owner = requestOwner
       setDealIndexSyncMessage('')
@@ -2481,7 +2555,20 @@ export function DealDetail({
     }
     setFileActionError(null)
     void fetchActivity(deal.id)
-  }, [activeTab, authoritativeDealLoaded, committedManifestRoot, deal.id, fetchFiles, fetchActivity, fetchLocalFiles, fetchManifestInfo, fetchSlab, requestOwner])
+  }, [
+    activeTab,
+    authoritativeDealLoaded,
+    committedManifestRoot,
+    deal.id,
+    dealIndexRequirement.status,
+    fetchFiles,
+    fetchActivity,
+    fetchLocalFiles,
+    fetchManifestInfo,
+    fetchSlab,
+    files,
+    requestOwner,
+  ])
 
   const requiresDealIndexSync =
     dealIndexRequirement.status === 'needs_sync_missing' ||

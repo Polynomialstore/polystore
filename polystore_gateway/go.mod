@@ -14,6 +14,7 @@ require (
 	github.com/klauspost/compress v1.18.1
 	github.com/libp2p/go-libp2p v0.42.0
 	github.com/multiformats/go-multiaddr v0.16.1
+	github.com/stretchr/testify v1.11.1
 	go.etcd.io/bbolt v1.4.0-alpha.1
 	golang.org/x/crypto v0.45.0
 	golang.org/x/sync v0.18.0
@@ -199,7 +200,6 @@ require (
 	github.com/spf13/cobra v1.10.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.20.1 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tendermint/go-amino v0.16.0 // indirect

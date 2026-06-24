@@ -246,10 +246,10 @@ func TestGatewayMdu_Basic(t *testing.T) {
 	}
 }
 
-func TestProviderGatewayMdu_RequiresOnchainSession(t *testing.T) {
+func TestProviderGatewayMdu_AllowsMetadataWithoutSessionAndRequiresSessionForUserData(t *testing.T) {
 	useTempUploadDir(t)
 
-	cid := mustTestManifestRoot(t, "provider-mdu-session-required")
+	cid := mustTestManifestRoot(t, "provider-mdu-metadata-sessionless")
 	dealDir := filepath.Join(uploadDir, cid.Key)
 	if err := os.MkdirAll(dealDir, 0o755); err != nil {
 		t.Fatalf("mkdir deal dir: %v", err)
@@ -301,11 +301,38 @@ func TestProviderGatewayMdu_RequiresOnchainSession(t *testing.T) {
 
 	r := mux.NewRouter()
 	registerProviderDaemonRoutes(r)
-	req := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+cid.Canonical+"/0?deal_id=1&owner="+owner, nil)
+	for _, tc := range []struct {
+		name       string
+		mduIndex   string
+		wantLength int
+	}{
+		{name: "mdu0", mduIndex: "0", wantLength: len(mdu0Bytes)},
+		{name: "witness", mduIndex: "1", wantLength: len(zeros)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+cid.Canonical+"/"+tc.mduIndex+"?deal_id=1&owner="+owner, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+			}
+			if got := w.Header().Get("X-PolyStore-Mdu-Index"); got != tc.mduIndex {
+				t.Fatalf("expected X-PolyStore-Mdu-Index=%s, got %q", tc.mduIndex, got)
+			}
+			if got := len(w.Body.Bytes()); got != tc.wantLength {
+				t.Fatalf("expected %d bytes, got %d", tc.wantLength, got)
+			}
+		})
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+cid.Canonical+"/2?deal_id=1&owner="+owner, nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 missing session, got %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("expected 400 missing session for user data, got %d (%s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "missing X-PolyStore-Session-Id") {
+		t.Fatalf("expected missing session error, got %s", w.Body.String())
 	}
 }
 
