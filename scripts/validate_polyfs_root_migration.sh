@@ -102,7 +102,7 @@ wait_http_once() {
   code="$(timeout 10s curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" 2>/dev/null || true)"
   code="${code:-000}"
   printf '%s %s -> HTTP %s\n' "$name" "$url" "$code"
-  [ "$code" != "000" ]
+  [[ "$code" =~ ^2[0-9][0-9]$ ]]
 }
 
 require_cmd cargo
@@ -156,6 +156,8 @@ else
 fi
 
 if [ "$RUN_LIVE_DEVNET" = "1" ]; then
+  live_failures=0
+
   printf '\n>>> live devnet service status\n'
   systemctl is-active polystorechaind.service polystore-faucet.service polystore-gateway-router.service || true
   systemctl --user is-active \
@@ -165,11 +167,11 @@ if [ "$RUN_LIVE_DEVNET" = "1" ]; then
     polystore-provider4.service || true
 
   printf '\n>>> live devnet endpoint health\n'
-  wait_http_once "chain-lcd" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" || true
-  wait_http_once "user-gateway" "$GATEWAY_BASE/health" || true
-  wait_http_once "faucet" "$FAUCET_BASE/health" || true
+  wait_http_once "chain-lcd" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" || live_failures=1
+  wait_http_once "user-gateway" "$GATEWAY_BASE/health" || live_failures=1
+  wait_http_once "faucet" "$FAUCET_BASE/health" || live_failures=1
   for i in "${!PROVIDER_BASES[@]}"; do
-    wait_http_once "provider$((i + 1))" "${PROVIDER_BASES[$i]}/health" || true
+    wait_http_once "provider$((i + 1))" "${PROVIDER_BASES[$i]}/health" || live_failures=1
   done
 
   if [ -x "$ROOT_DIR/scripts/devnet_healthcheck.sh" ]; then
@@ -178,7 +180,12 @@ if [ "$RUN_LIVE_DEVNET" = "1" ]; then
       --lcd "$LCD_BASE" \
       --evm "$EVM_BASE" \
       --gateway "$GATEWAY_BASE" \
-      --faucet "$FAUCET_BASE" || true
+      --faucet "$FAUCET_BASE" || live_failures=1
+  fi
+
+  if [ "$live_failures" -ne 0 ]; then
+    printf '\nERROR: live devnet validation failed; one or more endpoint health gates did not pass.\n' >&2
+    exit 1
   fi
 fi
 
