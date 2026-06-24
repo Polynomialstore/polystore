@@ -30,4 +30,12 @@ func TestValidatePolyFSContentLayout(t *testing.T) {
 
 	err = validatePolyFSContentLayout(deal, 100, polyfsRootTableCapacityMdus+2, 1)
 	require.ErrorContains(t, err, "root-table capacity")
+
+	const userMdusRequiringSecondWitness = uint64(2700)
+	sizeBytes := userMdusRequiringSecondWitness * polyfsRawMduPayloadBytes
+
+	err = validatePolyFSContentLayout(deal, sizeBytes, 1+1+userMdusRequiringSecondWitness, 1)
+	require.ErrorContains(t, err, "witness_mdus underprovisioned")
+
+	require.NoError(t, validatePolyFSContentLayout(deal, sizeBytes, 1+2+userMdusRequiringSecondWitness, 2))
 }

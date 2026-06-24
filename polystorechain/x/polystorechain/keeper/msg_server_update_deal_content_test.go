@@ -292,6 +292,13 @@ func TestUpdateDealContent_RejectsPolyFSLayoutInvariants(t *testing.T) {
 			witnessMdus: 1,
 			want:        "root-table capacity",
 		},
+		{
+			name:        "witness coverage uses raw encoded payload capacity",
+			size:        2700 * polyfsTestRawMduPayloadBytes,
+			totalMdus:   1 + 1 + 2700,
+			witnessMdus: 1,
+			want:        "witness_mdus underprovisioned",
+		},
 	}
 
 	for i, tc := range tests {

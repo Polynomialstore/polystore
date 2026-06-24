@@ -377,7 +377,7 @@ func TestOpenRetrievalSession_RejectsExpiredDeal(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       resDeal.AssignedProviders[0],
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,

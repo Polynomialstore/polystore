@@ -8,6 +8,7 @@ import { decodeFunctionData, encodeFunctionResult, type Hex } from 'viem'
 import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
+const manifestRootPattern = /^0x(?:[0-9a-f]{64}|[0-9a-f]{96})$/i
 
 function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
@@ -368,7 +369,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
       cid: dealCid,
       size: '0',
       escrow_balance: '1000000',
-      end_block: '1000',
+      end_block: '99999999',
       providers: ['nil1providera', 'nil1providerb', 'nil1providerc'],
     }
 
@@ -499,7 +500,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   capturedUserMduIndex = 1 + witnessCountAfterFirstCommit
   capturedMdu0 = await readActiveMdu(page, dealId, 0)
   capturedUserMdu = await readActiveMdu(page, dealId, capturedUserMduIndex)
-  expect(dealCid).toMatch(/^0x[0-9a-f]{96}$/i)
+  expect(dealCid).toMatch(manifestRootPattern)
 
   await clearDealOpfs(page, dealId)
   await page.reload({ waitUntil: 'networkidle' })
@@ -558,7 +559,7 @@ test('Thick Client: fresh browser bootstraps committed slab before Mode 2 append
   const slabMeta = await waitForActiveSlabMetadata(page, dealId)
   const filePaths = slabMeta.file_records.map((file) => file.path).sort()
   expect(filePaths).toEqual([fileA.name, fileB.name].sort())
-  expect(slabMeta.manifest_root).toMatch(/^0x[0-9a-f]{96}$/i)
+  expect(slabMeta.manifest_root).toMatch(manifestRootPattern)
   expect(uploadPreviousRoots).toContain(dealCid)
   // The append generation must upload shards for both the carried-forward user
   // MDU and the newly appended user MDU. Otherwise old files disappear once the

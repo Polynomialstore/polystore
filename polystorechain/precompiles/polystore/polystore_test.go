@@ -402,7 +402,7 @@ func TestPrecompileUpdateAndOpenRetrievalAcceptsPolyFSRoot(t *testing.T) {
 	provider := deal.Mode2Slots[0].Provider
 
 	openMethod := precompile.abi.Methods["openRetrievalSession"]
-	openInput, err := openMethod.Inputs.Pack(res.DealId, provider, polyfsRoot, uint64(1), uint32(0), uint64(1), uint64(1), uint64(0))
+	openInput, err := openMethod.Inputs.Pack(res.DealId, provider, polyfsRoot, uint64(2), uint32(0), uint64(1), uint64(1), uint64(0))
 	require.NoError(t, err)
 	contract = vm.NewPrecompile(caller, Address, uint256.NewInt(0), 5_000_000)
 	contract.Input = append(openMethod.ID, openInput...)
