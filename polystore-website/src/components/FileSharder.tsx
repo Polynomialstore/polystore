@@ -1664,6 +1664,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     browserPerfEndPhase,
     browserPerfLog,
     browserPerfStartPhase,
+    baseManifestRoot,
     collectedMdus,
     commitHash,
     currentManifestBlob,

@@ -346,51 +346,6 @@ async function waitForDealFileRow(
   return fileRow
 }
 
-async function waitForFileRowInAnyDeal(
-  page: Page,
-  filePath: string,
-  timeout = 180_000,
-): Promise<Locator> {
-  const filesTab = page.getByRole('button', { name: /^Files$/i }).first()
-  const fileList = page.getByTestId('deal-detail-file-list')
-  const refreshDealsBtn = page.getByRole('button', { name: /Refresh deals/i }).first()
-  const dealRows = page.locator('[data-testid^="deal-row-"]')
-  const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
-
-  const pollForRow = async (allowSync: boolean, pollTimeout: number) => {
-    await expect
-      .poll(async () => {
-      const totalRows = await dealRows.count().catch(() => 0)
-      for (let i = 0; i < totalRows; i += 1) {
-        const row = dealRows.nth(i)
-        await row.scrollIntoViewIfNeeded().catch(() => undefined)
-        await row.click({ force: true }).catch(() => undefined)
-        if (await filesTab.isVisible().catch(() => false)) {
-          await filesTab.click({ force: true }).catch(() => undefined)
-        }
-        if (allowSync && !(await fileRow.isVisible().catch(() => false))) {
-          await syncDealIndexIfNeeded(page, Math.max(60_000, Math.floor(timeout / 2))).catch(() => undefined)
-        }
-        if (!(await fileList.isVisible().catch(() => false))) continue
-        if (await fileRow.isVisible().catch(() => false)) return true
-      }
-      if (await refreshDealsBtn.isVisible().catch(() => false)) {
-        await refreshDealsBtn.click({ force: true }).catch(() => undefined)
-      }
-      return false
-    }, { timeout: pollTimeout })
-    .toBe(true)
-  }
-
-  try {
-    await pollForRow(false, Math.max(30_000, Math.floor(timeout / 2)))
-  } catch {
-    await pollForRow(true, timeout)
-  }
-
-  return fileRow
-}
-
 function resolveRouterUploadDir(): string {
   const fromEnv = String(process.env.E2E_ROUTER_UPLOAD_DIR || '').trim()
   if (fromEnv) return path.resolve(fromEnv)
