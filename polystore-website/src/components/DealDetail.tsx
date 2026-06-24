@@ -587,6 +587,7 @@ function FileRow({
       queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
         setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       })
+      markDownloadPath('Browser -> Provider', 'direct_sp', 'network_fetch', 'fresh')
       onFileActivity?.({
         dealId,
         filePath: file.path,

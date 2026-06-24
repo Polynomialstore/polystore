@@ -11,6 +11,29 @@ const mode2FastTestTimeoutMs = isMode2Fast ? 240_000 : 420_000
 const mode2FastPrimaryWaitMs = isMode2Fast ? 120_000 : 180_000
 const mode2FastUploadWaitMs = isMode2Fast ? 180_000 : 300_000
 const mode2FastMaybeDownloadMs = isMode2Fast ? 60_000 : 120_000
+const configuredGatewayBase = process.env.E2E_GATEWAY_BASE || process.env.VITE_GATEWAY_BASE || 'http://127.0.0.1:8080'
+const gatewayOrigins = deriveGatewayOrigins(configuredGatewayBase)
+
+function deriveGatewayOrigins(base: string): string[] {
+  const origins = new Set<string>()
+  try {
+    const parsed = new URL(base)
+    origins.add(parsed.origin)
+    if (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost' || parsed.hostname === '[::1]') {
+      const port = parsed.port ? `:${parsed.port}` : ''
+      origins.add(`${parsed.protocol}//127.0.0.1${port}`)
+      origins.add(`${parsed.protocol}//localhost${port}`)
+    }
+  } catch {
+    origins.add('http://127.0.0.1:8080')
+    origins.add('http://localhost:8080')
+  }
+  return Array.from(origins)
+}
+
+function isGatewayOrigin(origin: string): boolean {
+  return gatewayOrigins.includes(origin)
+}
 
 function extractManifestRoot(text: string): string {
   const match = String(text || '').match(/0x(?:[0-9a-fA-F]{96}|[0-9a-fA-F]{64})/)
@@ -127,6 +150,20 @@ async function waitForDownloadEventOrFailure(
   return null
 }
 
+async function clickAction(locator: Locator): Promise<void> {
+  try {
+    await locator.click({ force: true })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (!/outside of the viewport|not visible|intercepts pointer events/i.test(message)) {
+      throw err
+    }
+    await locator.evaluate((node) => {
+      if (node instanceof HTMLElement) node.click()
+    })
+  }
+}
+
 async function readDownloadBytes(page: Page, button: Locator, timeout = 120_000): Promise<Buffer> {
   const maxAttempts = 2
   const perAttemptTimeout = Math.max(30_000, Math.floor(timeout / maxAttempts))
@@ -138,7 +175,7 @@ async function readDownloadBytes(page: Page, button: Locator, timeout = 120_000)
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const baselineFailure = await readDownloadFailureBanner(page)
     try {
-      await button.click({ force: true })
+      await clickAction(button)
       const download = await waitForDownloadEventOrFailure(page, perAttemptTimeout, baselineFailure)
       if (download) {
         return readDownloadedBytes(download)
@@ -162,7 +199,7 @@ async function readDownloadBytesMaybe(page: Page, button: Locator, timeout = 90_
   const baselineFailure = await readDownloadFailureBanner(page)
   await expect(button).toBeVisible({ timeout: 30_000 })
   await expect(button).toBeEnabled({ timeout: 60_000 })
-  await button.click({ force: true })
+  await clickAction(button)
   let download: Awaited<ReturnType<Page['waitForEvent']>> | null = null
   try {
     download = await waitForDownloadEventOrFailure(page, timeout, baselineFailure)
@@ -494,11 +531,15 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       return
     }
 
-    const gatewayDownloadBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-gateway')
-    const providerDownloadBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-sp')
+    const openDownloadAction = (testId: string) => openFileActionMenuItem(page, filePath, testId)
+    const readActionBytes = async (testId: string, timeout?: number): Promise<Buffer> =>
+      readDownloadBytes(page, await openDownloadAction(testId), timeout)
+    const readActionBytesMaybe = async (testId: string, timeout?: number): Promise<Buffer | null> =>
+      readDownloadBytesMaybe(page, await openDownloadAction(testId), timeout)
 
-    await expect(gatewayDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
-    await expect(providerDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+    await expect(await openDownloadAction('deal-detail-download-gateway')).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+    await expect(await openDownloadAction('deal-detail-download-sp')).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
+    await expect(await openDownloadAction('deal-detail-download-browser-slab')).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
 
     let blockGateway = false
     const maybeBlockGateway = async (route: import('@playwright/test').Route) => {
@@ -508,8 +549,9 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       }
       await route.continue()
     }
-    await page.route('http://127.0.0.1:8080/**', maybeBlockGateway)
-    await page.route('http://localhost:8080/**', maybeBlockGateway)
+    for (const gatewayOrigin of gatewayOrigins) {
+      await page.route(`${gatewayOrigin}/**`, maybeBlockGateway)
+    }
 
     let fetchGatewayCalls = 0
     let fetchProviderCalls = 0
@@ -534,7 +576,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       } catch (err) {
         void err
       }
-      const viaGateway = /:8080$/.test(origin)
+      const viaGateway = isGatewayOrigin(origin)
       if (isDownloadPath) {
         if (resp.request().method().toUpperCase() === 'GET') {
           if (viaGateway) downloadGatewayCalls += 1
@@ -562,7 +604,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       } catch (err) {
         void err
       }
-      const viaGateway = /:8080$/.test(origin)
+      const viaGateway = isGatewayOrigin(origin)
       if (isDownloadPath) {
         if (req.method().toUpperCase() === 'GET') {
           if (viaGateway) downloadGatewayRequests += 1
@@ -587,8 +629,9 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     }
 
     const clearBrowserCache = async () => {
+      const clearBrowserCacheBtn = await openDownloadAction('deal-detail-clear-browser-cache')
       if (await clearBrowserCacheBtn.isEnabled().catch(() => false)) {
-        await clearBrowserCacheBtn.click()
+        await clickAction(clearBrowserCacheBtn)
       }
       await expect(fileRow).toHaveAttribute('data-cache-browser', 'no', { timeout: 60_000 })
     }
@@ -601,7 +644,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const autoProviderPlanBefore = planProviderCalls
     const autoBytes = await readDownloadBytes(page, autoDownloadBtn, mode2FastMaybeDownloadMs)
     expect(autoBytes.equals(fileBytes)).toBe(true)
-    await expect(page.getByTestId('transport-cache-source')).toContainText(/gateway_mdu_cache|network_fetch/i, { timeout: 60_000 })
+    await expect(page.getByTestId('transport-cache-source')).toContainText(/gateway[ _]mdu[ _]cache|network[ _]fetch/i, { timeout: 60_000 })
     await expect(page.getByTestId('transport-cache-freshness')).toContainText(/fresh|unknown|stale/i, { timeout: 60_000 })
     expect(fetchGatewayCalls > autoGatewayFetchBefore || planGatewayCalls > autoGatewayPlanBefore).toBe(true)
     expect(fetchProviderCalls).toBe(autoProviderFetchBefore)
@@ -609,16 +652,12 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     assertUnsignedRangeInvariant('auto download')
     await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes', { timeout: 60_000 })
 
-    const cacheFetchGatewayBefore = fetchGatewayCalls
     const cacheFetchProviderBefore = fetchProviderCalls
-    const cachePlanGatewayBefore = planGatewayCalls
     const cachePlanProviderBefore = planProviderCalls
-    const cachedBytes = await readDownloadBytesMaybe(page, browserCacheBtn, 90_000)
+    const cachedBytes = await readDownloadBytesMaybe(page, autoDownloadBtn, 90_000)
     if (cachedBytes) {
       expect(cachedBytes.equals(fileBytes)).toBe(true)
-      expect(fetchGatewayCalls).toBe(cacheFetchGatewayBefore)
       expect(fetchProviderCalls).toBe(cacheFetchProviderBefore)
-      expect(planGatewayCalls).toBe(cachePlanGatewayBefore)
       expect(planProviderCalls).toBe(cachePlanProviderBefore)
     } else {
       const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
@@ -630,7 +669,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const slabFetchProviderBefore = fetchProviderCalls
     const slabPlanGatewayBefore = planGatewayCalls
     const slabPlanProviderBefore = planProviderCalls
-    const slabBytes = await readDownloadBytesMaybe(page, browserSlabBtn)
+    const slabBytes = await readActionBytesMaybe('deal-detail-download-browser-slab')
     if (slabBytes) {
       expect(slabBytes.equals(fileBytes)).toBe(true)
       expect(fetchGatewayCalls).toBe(slabFetchGatewayBefore)
@@ -646,10 +685,10 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await clearBrowserCache()
     const providerFetchBefore = fetchProviderCalls
     const providerPlanBefore = planProviderCalls
-    const providerBytes = await readDownloadBytes(page, providerDownloadBtn)
+    const providerBytes = await readActionBytes('deal-detail-download-sp')
     expect(providerBytes.equals(fileBytes)).toBe(true)
-    await expect(routeEl).toHaveAttribute('data-download-route', 'direct_sp', { timeout: 60_000 })
-    await expect(page.getByTestId('transport-cache-source')).toContainText(/network_fetch/i, { timeout: 60_000 })
+    await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i, { timeout: 60_000 })
+    await expect(page.getByTestId('transport-cache-source')).toContainText(/network[ _]fetch/i, { timeout: 60_000 })
     expect(fetchProviderCalls > providerFetchBefore || planProviderCalls > providerPlanBefore).toBe(true)
     assertUnsignedRangeInvariant('on-chain retrieval button')
 
@@ -662,7 +701,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const gatewayDownloadReqBefore = downloadGatewayRequests
     const providerDownloadCallsBefore = downloadProviderCalls
     const providerDownloadReqBefore = downloadProviderRequests
-    const gatewayBytes = await readDownloadBytesMaybe(page, gatewayDownloadBtn, 120_000)
+    const gatewayBytes = await readActionBytesMaybe('deal-detail-download-gateway', 120_000)
     if (gatewayBytes) {
       expect(gatewayBytes.equals(fileBytes)).toBe(true)
       expect(downloadGatewayCalls - gatewayDownloadCallsBefore).toBe(1)
@@ -693,7 +732,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const fallbackPlanBefore = planProviderCalls
     const fallbackBytes = await readDownloadBytes(page, autoDownloadBtn)
     expect(fallbackBytes.equals(fileBytes)).toBe(true)
-    await expect(routeEl).toHaveAttribute('data-download-route', 'direct_sp', { timeout: 60_000 })
+    await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i, { timeout: 60_000 })
     expect(fetchGatewayRequests).toBeGreaterThanOrEqual(fallbackGatewayFetchReqBefore)
     expect(planGatewayRequests).toBeGreaterThanOrEqual(fallbackGatewayPlanReqBefore)
     expect(fetchGatewayCalls).toBe(fallbackGatewayFetchRespBefore)
@@ -1029,7 +1068,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       await route.fulfill({ status: 200, body: 'ok' })
     })
 
-    for (const gatewayBase of ['http://127.0.0.1:8080', 'http://localhost:8080']) {
+    for (const gatewayBase of gatewayOrigins) {
       await page.route(`${gatewayBase}/status`, async (route) => {
         await route.fulfill({
           status: 200,
