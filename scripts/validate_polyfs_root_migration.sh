@@ -138,12 +138,16 @@ run_in "$CHAIN_DIR" go test ./x/polystorechain/keeper -run 'TestProveLiveness_Ha
 
 run_in "$GATEWAY_DIR" go test . -run 'TestProofHeaderJSONHighIndexNoManifestBinVerifies|TestProofHeaderJSONRejectsStaleMdu0RootTable'
 
-run bash -n \
-  "$ROOT_DIR/e2e_retrieval_fees.sh" \
-  "$ROOT_DIR/e2e_open_retrieval_session_cli.sh" \
-  "$ROOT_DIR/e2e_open_retrieval_session_mode2_cli.sh" \
-  "$ROOT_DIR/e2e_test.sh" \
+E2E_SCRIPTS=(
+  "$ROOT_DIR/e2e_retrieval_fees.sh"
+  "$ROOT_DIR/e2e_open_retrieval_session_cli.sh"
+  "$ROOT_DIR/e2e_open_retrieval_session_mode2_cli.sh"
+  "$ROOT_DIR/e2e_test.sh"
   "$ROOT_DIR/e2e_slashing.sh"
+)
+for e2e_script in "${E2E_SCRIPTS[@]}"; do
+  run bash -n "$e2e_script"
+done
 
 if [ -x "$ROOT_DIR/scripts/update_devnet_stack.sh" ]; then
   run "$ROOT_DIR/scripts/update_devnet_stack.sh" --dry-run
