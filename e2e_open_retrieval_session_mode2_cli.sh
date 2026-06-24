@@ -255,13 +255,14 @@ import time
 print(time.time_ns())
 PY
 )
+START_MDU_INDEX=2
 
 banner "Opening retrieval session (Mode 2 slot-aware)"
 OPEN_RES=$(run_yes chain_tx open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER_ADDR" \
   --manifest-root "$MANIFEST_ROOT" \
-  --start-mdu-index 0 \
+  --start-mdu-index "$START_MDU_INDEX" \
   --start-blob-index "$START_BLOB_INDEX" \
   --blob-count 1 \
   --nonce "$NONCE" \
@@ -285,7 +286,7 @@ SESSION_ID=$(compute_retrieval_session_id_hex \
   "$DEAL_ID" \
   "$PROVIDER_ADDR" \
   "$MANIFEST_ROOT" \
-  0 \
+  "$START_MDU_INDEX" \
   "$START_BLOB_INDEX" \
   1 \
   "$NONCE" \
