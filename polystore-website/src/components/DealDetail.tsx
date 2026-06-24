@@ -47,7 +47,7 @@ import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
-import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
+import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel, readLocalGatewayConnectedHint } from '../lib/retrievalMode'
 import { planPolyfsFileRangeChunks } from '../lib/rangeChunker'
 import { decodePolyceV1, POLYCE_FLAG_COMPRESSION_ZSTD } from '../lib/polyce'
 import { providerFetchMdu, providerFetchMduWindowWithSession } from '../api/providerClient'
@@ -467,7 +467,7 @@ function FileRow({
     const dealId = String(deal.id)
     const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
     const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-    const preferGatewayRoute = gatewayModePreferred
+    const preferGatewayRoute = gatewayModePreferred && readLocalGatewayConnectedHint()
     try {
       if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
       const manifestHex = manifestRoot
@@ -560,7 +560,7 @@ function FileRow({
         })
         return
       } catch (fetchErr) {
-        if (!gatewayCached) throw fetchErr
+        if (!gatewayCached || !readLocalGatewayConnectedHint()) throw fetchErr
 
         const fallbackReason = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
         console.warn('Auto download transport path failed, falling back to gateway cache download', {
@@ -587,7 +587,6 @@ function FileRow({
       queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
         setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       })
-      markDownloadPath('Browser -> Provider', 'direct_sp', 'network_fetch', 'fresh')
       onFileActivity?.({
         dealId,
         filePath: file.path,
@@ -654,6 +653,7 @@ function FileRow({
       queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
         setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
       })
+      markDownloadPath('Browser -> Provider', 'direct_sp', 'network_fetch', 'fresh')
       onFileActivity?.({
         dealId,
         filePath: file.path,
