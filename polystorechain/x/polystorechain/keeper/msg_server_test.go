@@ -27,6 +27,67 @@ func mustComputeManifestCid(t *testing.T, mduRoots [][]byte) (cid string, manife
 	return "0x" + hex.EncodeToString(commitment), blob
 }
 
+func rootTablePositionForMduIndex(t *testing.T, mduIndex uint64) (du uint64, cell uint64) {
+	t.Helper()
+	require.GreaterOrEqual(t, mduIndex, uint64(1), "MDU #0 is metadata and is not represented in its root table")
+	idx := mduIndex - 1
+	return idx / 4096, idx % 4096
+}
+
+func splitFlatProofPath(t *testing.T, flat []byte) [][]byte {
+	t.Helper()
+	require.NotEmpty(t, flat)
+	require.Equal(t, 0, len(flat)%32)
+	out := make([][]byte, 0, len(flat)/32)
+	for off := 0; off < len(flat); off += 32 {
+		node := make([]byte, 32)
+		copy(node, flat[off:off+32])
+		out = append(out, node)
+	}
+	return out
+}
+
+func mustBuildPolyFSMdu0(t *testing.T, rootsByMdu map[uint64][]byte) (cid string, mdu0 []byte) {
+	t.Helper()
+	require.NotEmpty(t, rootsByMdu)
+
+	mdu0 = make([]byte, types.MDU_SIZE)
+	rootsByDu := make(map[uint64][][]byte)
+	for mduIndex, root := range rootsByMdu {
+		require.Len(t, root, 32)
+		du, cell := rootTablePositionForMduIndex(t, mduIndex)
+		require.Less(t, du, uint64(16), "MDU root table supports 16 DUs")
+		roots := rootsByDu[du]
+		for uint64(len(roots)) <= cell {
+			roots = append(roots, make([]byte, 32))
+		}
+		roots[cell] = root
+		rootsByDu[du] = roots
+	}
+
+	for du, roots := range rootsByDu {
+		_, blob := mustComputeManifestCid(t, roots)
+		start := int(du) * types.BLOB_SIZE
+		copy(mdu0[start:start+types.BLOB_SIZE], blob)
+	}
+
+	polyfsRoot, err := crypto_ffi.ComputeMduMerkleRoot(mdu0)
+	require.NoError(t, err)
+	return "0x" + hex.EncodeToString(polyfsRoot), mdu0
+}
+
+func mustMdu0RootTableProof(
+	t *testing.T,
+	mdu0 []byte,
+	mduIndex uint64,
+	targetMduRoot []byte,
+) (rootTableDuCommitment []byte, rootTableDuMerklePath [][]byte, rootTableOpening []byte) {
+	t.Helper()
+	duCommitment, duMerkleFlat, opening, _, err := crypto_ffi.ComputeMdu0RootTableProof(mdu0, mduIndex, targetMduRoot)
+	require.NoError(t, err)
+	return duCommitment, splitFlatProofPath(t, duMerkleFlat), opening
+}
+
 func mustDecodeHexBytes(t *testing.T, hexStr string) []byte {
 	t.Helper()
 	s := hexStr
@@ -130,11 +191,69 @@ func mustDeriveMode2Challenge(
 	return metaMdus + mduOrdinal, uint32(slot*rows + row)
 }
 
-// dummyManifestCid is a syntactically valid 48-byte hex string used by tests that
-// do not exercise KZG verification.
-const dummyManifestCid = "0x000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f"
+func mustFindMode2ChallengeForMdu(
+	t *testing.T,
+	baseCtx sdk.Context,
+	epochLen uint64,
+	dealID uint64,
+	currentGen uint64,
+	slot uint64,
+	totalMdus uint64,
+	witnessMdus uint64,
+	k uint64,
+	m uint64,
+	targetMduIndex uint64,
+	maxEpochID uint64,
+	maxOrdinal uint64,
+) (proofCtx sdk.Context, epochID uint64, ordinal uint64, leafIndex uint32) {
+	t.Helper()
+	require.NotZero(t, epochLen)
+	require.NotZero(t, maxEpochID)
+	require.NotZero(t, maxOrdinal)
 
-// Legacy alias: a number of tests use this name but only require a 48-byte hex string.
+	for epochID := uint64(1); epochID <= maxEpochID; epochID++ {
+		height := int64(1)
+		if epochID > 1 {
+			height = int64((epochID-1)*epochLen) + 1
+		}
+		candidateCtx := baseCtx.WithBlockHeight(height)
+		for ordinal := uint64(0); ordinal < maxOrdinal; ordinal++ {
+			mduIndex, leafIndex := mustDeriveMode2Challenge(
+				t,
+				candidateCtx.ChainID(),
+				epochID,
+				candidateCtx.HeaderHash(),
+				dealID,
+				currentGen,
+				slot,
+				ordinal,
+				totalMdus,
+				witnessMdus,
+				k,
+				m,
+			)
+			if mduIndex == targetMduIndex {
+				return candidateCtx, epochID, ordinal, leafIndex
+			}
+		}
+	}
+
+	require.FailNowf(
+		t,
+		"missing target challenge",
+		"no synthetic challenge hit MDU %d within %d epochs and %d ordinals",
+		targetMduIndex,
+		maxEpochID,
+		maxOrdinal,
+	)
+	return baseCtx, 0, 0, 0
+}
+
+// dummyManifestCid is a syntactically valid 32-byte PolyFS root hex string used by tests that
+// do not exercise KZG verification.
+const dummyManifestCid = "0x000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f"
+
+// Legacy alias: a number of tests use this name but only require a syntactically valid root.
 const validManifestCid = dummyManifestCid
 
 var testProviderEndpoints = []string{"/ip4/127.0.0.1/tcp/8080/http"}
@@ -573,8 +692,8 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Commit Content
-	cid, _ := mustComputeManifestCid(t, [][]byte{make([]byte, 32)})
+	// Commit Content with a syntactically valid PolyFS root; this test exercises invalid proof handling.
+	cid := validManifestCid
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     user,
 		DealId:      resDeal.DealId,
@@ -650,7 +769,7 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             user,
-		DurationBlocks:      1000,
+		DurationBlocks:      3000000,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(100000000),
 		MaxMonthlySpend:     math.NewInt(10000000),
@@ -679,26 +798,19 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
-	const totalMdus = uint64(3)
-	const witnessMdus = uint64(1)
-	metaMdus := uint64(1) + witnessMdus
+	const targetMduIndex = uint64(4097)
+	const witnessMdus = uint64(3)
+	const totalMdus = targetMduIndex + 1
+	const committedSize = (totalMdus - 1 - witnessMdus) * polyfsTestRawMduPayloadBytes
 
-	mduRoots := make([][]byte, totalMdus)
-	for i := range mduRoots {
-		mduRoots[i] = make([]byte, 32)
-	}
-	for i := metaMdus; i < totalMdus; i++ {
-		mduRoots[int(i)] = root
-	}
+	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
 
-	manifestCid, manifestBlob := mustComputeManifestCid(t, mduRoots)
-
-	// Commit Content with the real ManifestRoot commitment so VerifyChainedProof can succeed.
+	// Commit Content with the real PolyFS root so the chained proof can succeed.
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     user,
 		DealId:      resDeal.DealId,
-		Cid:         manifestCid,
-		Size_:       8 * 1024 * 1024,
+		Cid:         polyfsCid,
+		Size_:       committedSize,
 		TotalMdus:   totalMdus,
 		WitnessMdus: witnessMdus,
 	})
@@ -719,23 +831,47 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	}
 	require.True(t, found, "assigned provider must have a mode2 slot")
 
-	mduIndex, chunkIdx := mustDeriveMode2Challenge(
+	params := f.keeper.GetParams(f.ctx)
+	maxSyntheticOrdinals := params.QuotaMaxBlobs
+	if maxSyntheticOrdinals == 0 {
+		maxSyntheticOrdinals = 512
+	}
+	proofCtx, epochID, challengeOrdinal, mduIndex, chunkIdx := func() (sdk.Context, uint64, uint64, uint64, uint32) {
+		proofCtx, epochID, ordinal, leafIndex := mustFindMode2ChallengeForMdu(
+			t,
+			sdkCtx,
+			params.EpochLenBlocks,
+			resDeal.DealId,
+			deal.CurrentGen,
+			slot,
+			totalMdus,
+			witnessMdus,
+			rsK,
+			rsM,
+			targetMduIndex,
+			20000,
+			maxSyntheticOrdinals,
+		)
+		return proofCtx, epochID, ordinal, targetMduIndex, leafIndex
+	}()
+	t.Logf("high-index system proof challenge: epoch=%d ordinal=%d mdu=%d leaf=%d", epochID, challengeOrdinal, mduIndex, chunkIdx)
+	derivedMduIndex, derivedLeafIndex := mustDeriveMode2Challenge(
 		t,
-		sdkCtx.ChainID(),
-		1,
-		sdkCtx.HeaderHash(),
+		proofCtx.ChainID(),
+		epochID,
+		proofCtx.HeaderHash(),
 		resDeal.DealId,
 		deal.CurrentGen,
 		slot,
-		0,
+		challengeOrdinal,
 		totalMdus,
 		witnessMdus,
 		rsK,
 		rsM,
 	)
-
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
-	require.NoError(t, err)
+	require.Equal(t, targetMduIndex, derivedMduIndex)
+	require.Equal(t, chunkIdx, derivedLeafIndex)
+	rootTableDuCommitment, rootTableDuMerklePath, rootTableOpening := mustMdu0RootTableProof(t, mdu0, mduIndex, root)
 
 	leafCount := (rsK + rsM) * (64 / rsK)
 	require.True(t, uint64(chunkIdx) < leafCount)
@@ -744,24 +880,25 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	require.Equal(t, root, root2)
 
 	// Sanity: full chained proof should verify before submitting.
-	manifestCommitment := mustDecodeHexBytes(t, manifestCid)
 	flattenedMerkle := make([]byte, 0, len(merklePath)*32)
 	for _, node := range merklePath {
 		flattenedMerkle = append(flattenedMerkle, node...)
 	}
-	ok, err := crypto_ffi.VerifyChainedProof(
-		manifestCommitment,
+	flattenedRootTableMerkle := make([]byte, 0, len(rootTableDuMerklePath)*32)
+	for _, node := range rootTableDuMerklePath {
+		flattenedRootTableMerkle = append(flattenedRootTableMerkle, node...)
+	}
+	ok, err := crypto_ffi.VerifyMdu0RootTableProof(
+		mustDecodeHexBytes(t, polyfsCid),
 		mduIndex,
-		manifestProof,
 		root,
-		commitment,
-		uint64(chunkIdx),
-		leafCount,
-		flattenedMerkle,
-		z,
-		y,
-		kzgProof,
+		rootTableDuCommitment,
+		flattenedRootTableMerkle,
+		rootTableOpening,
 	)
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, err = crypto_ffi.VerifyMduProof(root, commitment, flattenedMerkle, chunkIdx, leafCount, z, y, kzgProof)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -769,25 +906,25 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	proofMsg := &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
-		EpochId: 1,
+		EpochId: epochID,
 		ProofType: &types.MsgProveLiveness_SystemProof{
 			SystemProof: &types.ChainedProof{
-				MduIndex:        mduIndex,
-				MduRootFr:       root,
-				ManifestOpening: manifestProof,
-
-				BlobCommitment: commitment,
-				MerklePath:     merklePath,
-				BlobIndex:      chunkIdx,
-
-				ZValue:          z,
-				YValue:          y,
-				KzgOpeningProof: kzgProof,
+				MduIndex:              mduIndex,
+				MduRootFr:             root,
+				ManifestOpening:       rootTableOpening,
+				RootTableDuCommitment: rootTableDuCommitment,
+				RootTableDuMerklePath: rootTableDuMerklePath,
+				BlobCommitment:        commitment,
+				MerklePath:            merklePath,
+				BlobIndex:             chunkIdx,
+				ZValue:                z,
+				YValue:                y,
+				KzgOpeningProof:       kzgProof,
 			},
 		},
 	}
 
-	res, err := msgServer.ProveLiveness(f.ctx, proofMsg)
+	res, err := msgServer.ProveLiveness(proofCtx, proofMsg)
 	require.NoError(t, err)
 	require.True(t, res.Success)
 	require.Equal(t, uint32(0), res.Tier) // Platinum
@@ -870,9 +1007,9 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
-	require.NoError(t, err)
+	const targetMduIndex = uint64(2)
+	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
+	rootTableDuCommitment, rootTableDuMerklePath, rootTableOpening := mustMdu0RootTableProof(t, mdu0, targetMduIndex, root)
 
 	const leafIndex = uint64(0)
 	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, rsK, rsM, witnessFlat, shards, leafIndex, 0)
@@ -882,9 +1019,9 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     owner,
 		DealId:      resDeal.DealId,
-		Cid:         manifestCid,
+		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
@@ -901,15 +1038,17 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 		RangeStart:  0,
 		RangeLen:    1024,
 		ProofDetails: types.ChainedProof{
-			MduIndex:        0,
-			MduRootFr:       root,
-			ManifestOpening: manifestProof,
-			BlobCommitment:  commitment,
-			MerklePath:      merklePath,
-			BlobIndex:       uint32(leafIndex),
-			ZValue:          z,
-			YValue:          y,
-			KzgOpeningProof: kzgProof,
+			MduIndex:              targetMduIndex,
+			MduRootFr:             root,
+			ManifestOpening:       rootTableOpening,
+			RootTableDuCommitment: rootTableDuCommitment,
+			RootTableDuMerklePath: rootTableDuMerklePath,
+			BlobCommitment:        commitment,
+			MerklePath:            merklePath,
+			BlobIndex:             uint32(leafIndex),
+			ZValue:                z,
+			YValue:                y,
+			KzgOpeningProof:       kzgProof,
 		},
 		UserSignature: []byte("not-a-real-signature"),
 		Nonce:         1,
@@ -1010,23 +1149,17 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
-	const totalMdus = uint64(3)
+	const totalMdus = uint64(4)
 	const witnessMdus = uint64(1)
 	metaMdus := uint64(1) + witnessMdus
+	targetMduIndex := metaMdus
 
-	mduRoots := make([][]byte, totalMdus)
-	for i := range mduRoots {
-		mduRoots[i] = make([]byte, 32)
-	}
-	for i := metaMdus; i < totalMdus; i++ {
-		mduRoots[int(i)] = root
-	}
-	manifestCid, manifestBlob := mustComputeManifestCid(t, mduRoots)
+	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     user,
 		DealId:      resDeal.DealId,
-		Cid:         manifestCid,
+		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
 		TotalMdus:   totalMdus,
 		WitnessMdus: witnessMdus,
@@ -1061,8 +1194,8 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 		rsK,
 		rsM,
 	)
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
-	require.NoError(t, err)
+	require.Equal(t, targetMduIndex, mduIndex)
+	rootTableDuCommitment, rootTableDuMerklePath, rootTableOpening := mustMdu0RootTableProof(t, mdu0, mduIndex, root)
 
 	leafCount := (rsK + rsM) * (64 / rsK)
 	require.True(t, uint64(chunkIdx) < leafCount)
@@ -1071,24 +1204,25 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	require.Equal(t, root, root2)
 
 	// Sanity: full chained proof should verify before submitting.
-	manifestCommitment := mustDecodeHexBytes(t, manifestCid)
 	flattenedMerkle := make([]byte, 0, len(merklePath)*32)
 	for _, node := range merklePath {
 		flattenedMerkle = append(flattenedMerkle, node...)
 	}
-	ok, err := crypto_ffi.VerifyChainedProof(
-		manifestCommitment,
+	flattenedRootTableMerkle := make([]byte, 0, len(rootTableDuMerklePath)*32)
+	for _, node := range rootTableDuMerklePath {
+		flattenedRootTableMerkle = append(flattenedRootTableMerkle, node...)
+	}
+	ok, err := crypto_ffi.VerifyMdu0RootTableProof(
+		mustDecodeHexBytes(t, polyfsCid),
 		mduIndex,
-		manifestProof,
 		root,
-		commitment,
-		uint64(chunkIdx),
-		leafCount,
-		flattenedMerkle,
-		z,
-		y,
-		kzgProof,
+		rootTableDuCommitment,
+		flattenedRootTableMerkle,
+		rootTableOpening,
 	)
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, err = crypto_ffi.VerifyMduProof(root, commitment, flattenedMerkle, chunkIdx, leafCount, z, y, kzgProof)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -1098,15 +1232,17 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 		EpochId: 1,
 		ProofType: &types.MsgProveLiveness_SystemProof{
 			SystemProof: &types.ChainedProof{
-				MduIndex:        mduIndex,
-				MduRootFr:       root,
-				ManifestOpening: manifestProof,
-				BlobCommitment:  commitment,
-				MerklePath:      merklePath,
-				BlobIndex:       chunkIdx,
-				ZValue:          z,
-				YValue:          y,
-				KzgOpeningProof: kzgProof,
+				MduIndex:              mduIndex,
+				MduRootFr:             root,
+				ManifestOpening:       rootTableOpening,
+				RootTableDuCommitment: rootTableDuCommitment,
+				RootTableDuMerklePath: rootTableDuMerklePath,
+				BlobCommitment:        commitment,
+				MerklePath:            merklePath,
+				BlobIndex:             chunkIdx,
+				ZValue:                z,
+				YValue:                y,
+				KzgOpeningProof:       kzgProof,
 			},
 		},
 	}
@@ -1117,7 +1253,7 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 
 	deal, err = f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
-	deal.ManifestRoot = bytes.Repeat([]byte{0x42}, 48)
+	deal.ManifestRoot = bytes.Repeat([]byte{0x42}, types.POLYFS_ROOT_SIZE)
 	require.NoError(t, f.keeper.Deals.Set(f.ctx, resDeal.DealId, deal))
 
 	res2, err := msgServer.ProveLiveness(f.ctx, okMsg)

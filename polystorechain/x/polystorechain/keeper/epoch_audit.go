@@ -220,7 +220,7 @@ func (k Keeper) deriveAuditTasks(ctx sdk.Context, epochID uint64) error {
 		if height < deal.StartBlock || height >= deal.EndBlock {
 			return false, nil
 		}
-		if len(deal.ManifestRoot) != 48 {
+		if len(deal.ManifestRoot) != types.POLYFS_ROOT_SIZE {
 			return false, nil
 		}
 		in, ok := slabInputs(deal)

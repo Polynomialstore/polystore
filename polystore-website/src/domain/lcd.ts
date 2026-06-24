@@ -63,7 +63,7 @@ function asString(value: unknown, fallback = ''): string {
 export function normalizeLcdDeal(input: unknown): LcdDeal | null {
   if (!isRecord(input)) return null
 
-  const manifestRootHex = toHexFromBase64OrHex(input['manifest_root'], { expectedBytes: [48] })
+  const manifestRootHex = toHexFromBase64OrHex(input['manifest_root'], { expectedBytes: [32, 48] })
   const cid = asString(input['cid']) || manifestRootHex
   const retrievalPolicy = isRecord(input['retrieval_policy'])
     ? {

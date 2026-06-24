@@ -235,7 +235,7 @@ fi
 echo "Deal ID: $DEAL_ID"
 
 MANIFEST_ROOT="0x$(python3 - <<'PY'
-print("11" * 48)
+print("11" * 32)
 PY
 )"
 SIZE_BYTES=131072
@@ -268,13 +268,14 @@ print(time.time_ns())
 PY
 )
 BLOB_COUNT=2
+START_MDU_INDEX=2
 
 banner "Opening retrieval session"
 OPEN_RES=$(run_yes chain_tx open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER" \
   --manifest-root "$MANIFEST_ROOT" \
-  --start-mdu-index 0 \
+  --start-mdu-index "$START_MDU_INDEX" \
   --start-blob-index 0 \
   --blob-count "$BLOB_COUNT" \
   --nonce "$NONCE" \
@@ -303,7 +304,7 @@ SESSION_ID=$(compute_retrieval_session_id_hex \
   "$DEAL_ID" \
   "$PROVIDER" \
   "$MANIFEST_ROOT" \
-  0 \
+  "$START_MDU_INDEX" \
   0 \
   "$BLOB_COUNT" \
   "$NONCE" \

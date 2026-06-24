@@ -79,7 +79,7 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusConflict, "session not OPEN", fmt.Sprintf("status: %s", onchainSession.Status))
 			return
 		}
-		if len(onchainSession.ManifestRoot) != 48 || !bytes.Equal(onchainSession.ManifestRoot, manifestRoot.Bytes[:]) {
+		if len(onchainSession.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytes.Equal(onchainSession.ManifestRoot, manifestRoot.Bytes[:]) {
 			writeJSONError(w, http.StatusBadRequest, "session manifest_root mismatch", "")
 			return
 		}

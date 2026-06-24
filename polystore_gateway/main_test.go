@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -25,8 +24,7 @@ import (
 
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/gorilla/mux"
-
-	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	"golang.org/x/crypto/blake2s"
 
 	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
@@ -82,12 +80,7 @@ func setupMockCombinedOutput(t *testing.T, mockFn func(ctx context.Context, name
 
 func deterministicManifestRootHex(tag string) string {
 	sum := sha256.Sum256([]byte(tag))
-	scalar := new(big.Int).SetBytes(sum[:])
-	scalar.Add(scalar, big.NewInt(1))
-	var p gnarkBls12381.G1Affine
-	p.ScalarMultiplicationBase(scalar)
-	b := p.Bytes()
-	return "0x" + hex.EncodeToString(b[:])
+	return "0x" + hex.EncodeToString(sum[:])
 }
 
 func mustTestManifestRoot(t *testing.T, tag string) ManifestRoot {
@@ -98,6 +91,13 @@ func mustTestManifestRoot(t *testing.T, tag string) ManifestRoot {
 		t.Fatalf("parseManifestRoot(%s) failed: %v", tag, err)
 	}
 	return root
+}
+
+func initCryptoForTest(t *testing.T) {
+	t.Helper()
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		t.Fatalf("crypto_ffi.Init failed: %v", err)
+	}
 }
 
 func encodeRawToMdu(raw []byte) []byte {
@@ -885,7 +885,7 @@ func TestHelperProcess(t *testing.T) {
 			ManifestBlobHex: "0xdeadbeef",
 			FileSize:        100,
 			Mdus: []MduData{
-				{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}},
+				{Index: 0, RootHex: deterministicManifestRootHex("helper-user-mdu-root"), Blobs: []string{"0xaaaa"}},
 			},
 		}
 		switch {
@@ -948,6 +948,7 @@ func handleSavePrefix(args []string) error {
 
 func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 	useTempUploadDir(t)
+	initCryptoForTest(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if name == polystoreCliPath {
 			if hasArg(args, "shard") {
@@ -958,28 +959,13 @@ func TestGatewayUpload_NewDealLifecycle(t *testing.T) {
 					ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
 					ManifestBlobHex: "0xdeadbeef",
 					FileSize:        100,
-					Mdus:            []MduData{{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}}},
+					Mdus:            []MduData{{Index: 0, RootHex: deterministicManifestRootHex("new-deal-lifecycle-user-mdu"), Blobs: []string{"0xaaaa"}}},
 				}
 				data, _ := json.Marshal(output)
 				return data, nil
 			}
 			if hasArg(args, "aggregate") {
-				outPath := ""
-				for i, arg := range args {
-					if arg == "--out" && i+1 < len(args) {
-						outPath = args[i+1]
-						break
-					}
-				}
-				if outPath != "" {
-					res := PolyStoreCliAggregateOutput{
-						ManifestRootHex: deterministicManifestRootHex("new-deal-lifecycle"),
-						ManifestBlobHex: "0xfeedface",
-					}
-					data, _ := json.Marshal(res)
-					_ = os.WriteFile(outPath, data, 0o644)
-				}
-				return []byte{}, nil
+				return nil, fmt.Errorf("legacy aggregate should not be called by Mode 1 ingest")
 			}
 		}
 		return []byte{}, nil
@@ -1100,8 +1086,9 @@ func TestGatewayUpload_TimeoutReturns408AndNoDealDir(t *testing.T) {
 	}
 }
 
-func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
+func TestIngestNewDeal_UsesMdu0PolyfsRootAndSkipsLegacyAggregate(t *testing.T) {
 	useTempUploadDir(t)
+	initCryptoForTest(t)
 	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if name == polystoreCliPath {
 			if hasArg(args, "shard") {
@@ -1109,11 +1096,7 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 					ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
 					ManifestBlobHex: "0xdeadbeef",
 					FileSize:        100,
-					Mdus:            []MduData{{Index: 0, RootHex: "0x1111", Blobs: []string{"0xaaaa"}}},
-				}
-				// Check for EXPECT_MDU0_RAW behavior, as it implies mocking mdu0 specifically.
-				if os.Getenv("EXPECT_MDU0_RAW") == "1" && strings.Contains(args[1], "mdu0") && !hasArg(args, "--raw") {
-					return nil, fmt.Errorf("expected --raw for mdu0 sharding")
+					Mdus:            []MduData{{Index: 0, RootHex: deterministicManifestRootHex("ingest-raw-user-mdu"), Blobs: []string{"0xaaaa"}}},
 				}
 				if err := handleSavePrefix(args); err != nil {
 					return nil, err
@@ -1122,27 +1105,11 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 				return data, nil
 			}
 			if hasArg(args, "aggregate") {
-				outPath := ""
-				for i, arg := range args {
-					if arg == "--out" && i+1 < len(args) {
-						outPath = args[i+1]
-						break
-					}
-				}
-				if outPath != "" {
-					res := PolyStoreCliAggregateOutput{
-						ManifestRootHex: deterministicManifestRootHex("ingest-raw"),
-						ManifestBlobHex: "0xfeedface",
-					}
-					data, _ := json.Marshal(res)
-					_ = os.WriteFile(outPath, data, 0o644)
-				}
-				return []byte{}, nil
+				return nil, fmt.Errorf("legacy aggregate should not be called by Mode 1 ingest")
 			}
 		}
 		return []byte{}, nil
 	})
-	t.Setenv("EXPECT_MDU0_RAW", "1")
 
 	input := filepath.Join(uploadDir, "file.txt")
 	if err := os.WriteFile(input, []byte("hi"), 0o644); err != nil {
@@ -1159,6 +1126,202 @@ func TestIngestNewDeal_Mdu0UsesRaw(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(uploadDir, parsed.Key)); err != nil {
 		t.Fatalf("expected deal dir to exist: %v", err)
+	}
+	mdu0Bytes, err := os.ReadFile(filepath.Join(uploadDir, parsed.Key, "mdu_0.bin"))
+	if err != nil {
+		t.Fatalf("read mdu_0.bin: %v", err)
+	}
+	mdu0Root, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
+	if err != nil {
+		t.Fatalf("ComputeMduMerkleRoot(mdu0) failed: %v", err)
+	}
+	if want := "0x" + hex.EncodeToString(mdu0Root); manifestRoot != want {
+		t.Fatalf("manifest_root should be MDU #0 PolyFS root: got %s want %s", manifestRoot, want)
+	}
+	if info, err := os.Stat(filepath.Join(uploadDir, parsed.Key, "manifest.bin")); err != nil {
+		t.Fatalf("expected manifest.bin to exist: %v", err)
+	} else if info.Size() == 0 {
+		t.Fatalf("expected manifest.bin to be non-empty")
+	}
+}
+
+func TestIngestAppendToDeal_UsesMdu0PolyfsRootAndSkipsLegacyAggregate(t *testing.T) {
+	useTempUploadDir(t)
+	initCryptoForTest(t)
+
+	oldPayload := []byte("old payload")
+	oldMdu, err := crypto_ffi.EncodePayloadToMdu(oldPayload)
+	if err != nil {
+		t.Fatalf("EncodePayloadToMdu(old) failed: %v", err)
+	}
+	oldRoot, err := crypto_ffi.ComputeMduMerkleRoot(oldMdu)
+	if err != nil {
+		t.Fatalf("ComputeMduMerkleRoot(old) failed: %v", err)
+	}
+
+	builder := crypto_ffi.NewMdu0Builder(256)
+	defer builder.Free()
+	witnessCount := builder.GetWitnessCount()
+	if err := builder.SetRoot(witnessCount, oldRoot); err != nil {
+		t.Fatalf("SetRoot(old user) failed: %v", err)
+	}
+	if err := builder.AppendFileWithFlags("old.txt", uint64(len(oldPayload)), 0, 0); err != nil {
+		t.Fatalf("AppendFileWithFlags(old) failed: %v", err)
+	}
+	mdu0Bytes, err := builder.Bytes()
+	if err != nil {
+		t.Fatalf("builder.Bytes failed: %v", err)
+	}
+
+	orderedRoots := make([][]byte, 0, int(witnessCount)+1)
+	zeroRoot := make([]byte, types.POLYFS_ROOT_SIZE)
+	for i := uint64(0); i < witnessCount; i++ {
+		orderedRoots = append(orderedRoots, zeroRoot)
+	}
+	orderedRoots = append(orderedRoots, oldRoot)
+	oldManifestRoot, oldManifestBlob, err := computePolyfsManifestArtifacts(
+		mdu0Bytes,
+		map[uint64][]byte{uint64(1) + witnessCount: oldRoot},
+		orderedRoots,
+	)
+	if err != nil {
+		t.Fatalf("compute old manifest artifacts failed: %v", err)
+	}
+
+	oldDir := filepath.Join(uploadDir, oldManifestRoot.Key)
+	if err := os.MkdirAll(oldDir, 0o755); err != nil {
+		t.Fatalf("mkdir old slab: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(oldDir, "manifest.bin"), oldManifestBlob, 0o644); err != nil {
+		t.Fatalf("write old manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(oldDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
+		t.Fatalf("write old mdu0: %v", err)
+	}
+	oldUserPath := filepath.Join(oldDir, fmt.Sprintf("mdu_%d.bin", uint64(1)+witnessCount))
+	if err := os.WriteFile(oldUserPath, oldMdu, 0o644); err != nil {
+		t.Fatalf("write old user mdu: %v", err)
+	}
+
+	setupMockCombinedOutput(t, func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name != polystoreCliPath {
+			return []byte{}, nil
+		}
+		if hasArg(args, "aggregate") {
+			return nil, fmt.Errorf("legacy aggregate should not be called by Mode 1 append")
+		}
+		if !hasArg(args, "shard") {
+			return []byte{}, nil
+		}
+
+		inputPath := ""
+		savePrefix := ""
+		raw := hasArg(args, "--raw")
+		for i, arg := range args {
+			switch arg {
+			case "shard":
+				if i+1 < len(args) {
+					inputPath = args[i+1]
+				}
+			case "--save-mdu-prefix":
+				if i+1 < len(args) {
+					savePrefix = args[i+1]
+				}
+			}
+		}
+		if inputPath == "" {
+			return nil, fmt.Errorf("missing shard input path")
+		}
+
+		input, err := os.ReadFile(inputPath)
+		if err != nil {
+			return nil, err
+		}
+
+		mdus := []MduData{}
+		if savePrefix != "" {
+			mduBytes := input
+			if !raw {
+				mduBytes, err = crypto_ffi.EncodePayloadToMdu(input)
+				if err != nil {
+					return nil, err
+				}
+			}
+			root, err := crypto_ffi.ComputeMduMerkleRoot(mduBytes)
+			if err != nil {
+				return nil, err
+			}
+			if err := os.MkdirAll(filepath.Dir(savePrefix), 0o755); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(fmt.Sprintf("%s.mdu.0.bin", savePrefix), mduBytes, 0o644); err != nil {
+				return nil, err
+			}
+			mdus = append(mdus, MduData{
+				Index:   0,
+				RootHex: "0x" + hex.EncodeToString(root),
+				Blobs:   []string{"0x" + strings.Repeat("00", 48)},
+			})
+		} else {
+			if len(input)%types.MDU_SIZE != 0 {
+				return nil, fmt.Errorf("raw recompute input has size %d, not a multiple of MDU_SIZE", len(input))
+			}
+			for offset, index := 0, 0; offset < len(input); offset, index = offset+types.MDU_SIZE, index+1 {
+				root, err := crypto_ffi.ComputeMduMerkleRoot(input[offset : offset+types.MDU_SIZE])
+				if err != nil {
+					return nil, err
+				}
+				mdus = append(mdus, MduData{
+					Index:   index,
+					RootHex: "0x" + hex.EncodeToString(root),
+					Blobs:   []string{"0x" + strings.Repeat("00", 48)},
+				})
+			}
+		}
+
+		output := PolyStoreCliOutput{
+			ManifestRootHex: deterministicManifestRootHex("append-shard-root"),
+			ManifestBlobHex: "0xdeadbeef",
+			FileSize:        uint64(len(input)),
+			Mdus:            mdus,
+		}
+		data, _ := json.Marshal(output)
+		return data, nil
+	})
+
+	newFile := filepath.Join(uploadDir, "new.txt")
+	if err := os.WriteFile(newFile, []byte("new payload"), 0o644); err != nil {
+		t.Fatalf("write new file: %v", err)
+	}
+
+	appendedBuilder, manifestRoot, allocatedLength, err := IngestAppendToDeal(context.Background(), newFile, oldManifestRoot.Canonical, 256, "new.txt", 0)
+	if err != nil {
+		t.Fatalf("IngestAppendToDeal failed: %v", err)
+	}
+	defer appendedBuilder.Free()
+
+	parsed, err := parseManifestRoot(manifestRoot)
+	if err != nil {
+		t.Fatalf("parseManifestRoot failed: %v", err)
+	}
+	if allocatedLength != uint64(1)+witnessCount+2 {
+		t.Fatalf("unexpected allocatedLength: got %d want %d", allocatedLength, uint64(1)+witnessCount+2)
+	}
+	newMdu0Bytes, err := os.ReadFile(filepath.Join(uploadDir, parsed.Key, "mdu_0.bin"))
+	if err != nil {
+		t.Fatalf("read appended mdu_0.bin: %v", err)
+	}
+	newMdu0Root, err := crypto_ffi.ComputeMduMerkleRoot(newMdu0Bytes)
+	if err != nil {
+		t.Fatalf("ComputeMduMerkleRoot(appended mdu0) failed: %v", err)
+	}
+	if want := "0x" + hex.EncodeToString(newMdu0Root); manifestRoot != want {
+		t.Fatalf("manifest_root should be appended MDU #0 PolyFS root: got %s want %s", manifestRoot, want)
+	}
+	if info, err := os.Stat(filepath.Join(uploadDir, parsed.Key, "manifest.bin")); err != nil {
+		t.Fatalf("expected appended manifest.bin to exist: %v", err)
+	} else if info.Size() == 0 {
+		t.Fatalf("expected appended manifest.bin to be non-empty")
 	}
 }
 
@@ -1193,26 +1356,37 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 		witnessPlain[i] = 0xaa
 	}
 
-	// We need a manifest root. We can compute a dummy one or use deterministic.
-	// But GatewayFetch checks chain root matches.
-	// We'll use a deterministic one and assume it matches the slab we build.
-	manifestRoot := mustTestManifestRoot(t, "deal0-manual")
-	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
-	if err := os.MkdirAll(dealDir, 0o755); err != nil {
-		t.Fatalf("mkdir deal dir: %v", err)
-	}
-
 	// Create MDU #0 (File Table)
 	b := crypto_ffi.NewMdu0Builder(1)
 	defer b.Free()
 	b.AppendFile("deal0_test.txt", uint64(len(fileContent)), 0)
+	leafHashes := make([][32]byte, 0, 64)
+	for i := 0; i < len(witnessPlain); i += commitmentBytes {
+		sum := blake2s.Sum256(witnessPlain[i : i+commitmentBytes])
+		leafHashes = append(leafHashes, sum)
+	}
+	mduRootFr, _ := merkleRootAndPath(leafHashes, 0)
+	if err := b.SetRoot(b.GetWitnessCount(), mduRootFr); err != nil {
+		t.Fatalf("SetRoot(user) failed: %v", err)
+	}
 
 	mdu0Bytes, _ := b.Bytes()
+	if err := materializeMdu0RootTable(mdu0Bytes, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
+		t.Fatalf("materialize MDU #0 root table failed: %v", err)
+	}
+	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
+	if err != nil {
+		t.Fatalf("ComputeMduMerkleRoot(mdu0) failed: %v", err)
+	}
+	manifestRoot, err := parseManifestRoot("0x" + hex.EncodeToString(rootBytes))
+	if err != nil {
+		t.Fatalf("parseManifestRoot(polyfs root) failed: %v", err)
+	}
+	dealDir := filepath.Join(uploadDir, manifestRoot.Key)
+	if err := os.MkdirAll(dealDir, 0o755); err != nil {
+		t.Fatalf("mkdir deal dir: %v", err)
+	}
 	os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644)
-
-	// Create manifest.bin (128KB dummy)
-	manifestBlob := make([]byte, 128*1024)
-	os.WriteFile(filepath.Join(dealDir, "manifest.bin"), manifestBlob, 0o644)
 
 	// Create Witness MDU #1
 	os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), encodeRawToMdu(witnessPlain), 0o644)

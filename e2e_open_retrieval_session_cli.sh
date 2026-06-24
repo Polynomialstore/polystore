@@ -205,7 +205,7 @@ fi
 echo "Deal ID: $DEAL_ID"
 
 MANIFEST_ROOT="0x$(python3 - <<'PY'
-print("22" * 48)
+print("22" * 32)
 PY
 )"
 SIZE_BYTES=131072
@@ -232,12 +232,13 @@ if [ -z "$PROVIDER_ADDR" ] || [ "$PROVIDER_ADDR" = "null" ]; then
   echo "$DEAL_JSON"
   exit 1
 fi
+START_MDU_INDEX=2
 
 OPEN_RES=$(run_yes chain_tx open-retrieval-session \
   --deal-id "$DEAL_ID" \
   --provider "$PROVIDER_ADDR" \
   --manifest-root "$MANIFEST_ROOT" \
-  --start-mdu-index 0 \
+  --start-mdu-index "$START_MDU_INDEX" \
   --start-blob-index 0 \
   --blob-count 1 \
   --nonce "$NONCE" \
@@ -261,7 +262,7 @@ SESSION_ID=$(compute_retrieval_session_id_hex \
   "$DEAL_ID" \
   "$PROVIDER_ADDR" \
   "$MANIFEST_ROOT" \
-  0 \
+  "$START_MDU_INDEX" \
   0 \
   1 \
   "$NONCE" \

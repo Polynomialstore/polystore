@@ -77,7 +77,7 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 	})
 	require.NoError(t, err)
 
-	// Commit Content (valid ManifestRoot) so chained proof verification can succeed.
+	// Commit Content (valid PolyFS root) so chained proof verification can succeed.
 	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 	mduData := make([]byte, 8*1024*1024)
 	dealAfterCreate, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
@@ -91,9 +91,9 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
-	require.NoError(t, err)
+	const targetMduIndex = uint64(2)
+	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
+	rootTableDuCommitment, rootTableDuMerklePath, rootTableOpening := mustMdu0RootTableProof(t, mdu0, targetMduIndex, root)
 
 	const leafIndex = uint64(0)
 	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, k, m, witnessFlat, shards, leafIndex, 0)
@@ -102,24 +102,26 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     owner,
 		DealId:      resDeal.DealId,
-		Cid:         manifestCid,
+		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
 	assignedProvider := resDeal.AssignedProviders[0]
 	proofDetails := types.ChainedProof{
-		MduIndex:        0,
-		MduRootFr:       root,
-		ManifestOpening: manifestProof,
-		BlobCommitment:  commitment,
-		MerklePath:      merklePath,
-		BlobIndex:       uint32(leafIndex),
-		ZValue:          z,
-		YValue:          y,
-		KzgOpeningProof: kzgProof,
+		MduIndex:              targetMduIndex,
+		MduRootFr:             root,
+		ManifestOpening:       rootTableOpening,
+		RootTableDuCommitment: rootTableDuCommitment,
+		RootTableDuMerklePath: rootTableDuMerklePath,
+		BlobCommitment:        commitment,
+		MerklePath:            merklePath,
+		BlobIndex:             uint32(leafIndex),
+		ZValue:                z,
+		YValue:                y,
+		KzgOpeningProof:       kzgProof,
 	}
 
 	receiptA := types.RetrievalReceipt{
@@ -218,7 +220,7 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Commit Content (valid ManifestRoot) so chained proof verification can succeed.
+	// Commit Content (valid PolyFS root) so chained proof verification can succeed.
 	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 	mduData := make([]byte, 8*1024*1024)
 	dealAfterCreate, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
@@ -232,9 +234,9 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduRootFromWitnessFlat(witnessFlat)
 	require.NoError(t, err)
 
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root, make([]byte, 32)})
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
-	require.NoError(t, err)
+	const targetMduIndex = uint64(2)
+	polyfsCid, mdu0 := mustBuildPolyFSMdu0(t, map[uint64][]byte{targetMduIndex: root})
+	rootTableDuCommitment, rootTableDuMerklePath, rootTableOpening := mustMdu0RootTableProof(t, mdu0, targetMduIndex, root)
 
 	const leafIndex = uint64(0)
 	root2, commitment, merklePath, z, y, kzgProof := buildMode2LeafProof(t, mduData, k, m, witnessFlat, shards, leafIndex, 0)
@@ -243,24 +245,26 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
 		Creator:     owner,
 		DealId:      resDeal.DealId,
-		Cid:         manifestCid,
+		Cid:         polyfsCid,
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
 	assignedProvider := resDeal.AssignedProviders[0]
 	proofDetails := types.ChainedProof{
-		MduIndex:        0,
-		MduRootFr:       root,
-		ManifestOpening: manifestProof,
-		BlobCommitment:  commitment,
-		MerklePath:      merklePath,
-		BlobIndex:       uint32(leafIndex),
-		ZValue:          z,
-		YValue:          y,
-		KzgOpeningProof: kzgProof,
+		MduIndex:              targetMduIndex,
+		MduRootFr:             root,
+		ManifestOpening:       rootTableOpening,
+		RootTableDuCommitment: rootTableDuCommitment,
+		RootTableDuMerklePath: rootTableDuMerklePath,
+		BlobCommitment:        commitment,
+		MerklePath:            merklePath,
+		BlobIndex:             uint32(leafIndex),
+		ZValue:                z,
+		YValue:                y,
+		KzgOpeningProof:       kzgProof,
 	}
 	proofHash, err := types.HashChainedProof(&proofDetails)
 	require.NoError(t, err)

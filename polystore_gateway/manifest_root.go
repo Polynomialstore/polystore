@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	gnarkBls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	"polystorechain/x/polystorechain/types"
 )
 
 var (
@@ -49,9 +49,9 @@ func configuredProvisionalGenerationRetentionTTL() time.Duration {
 }
 
 type ManifestRoot struct {
-	Bytes     [48]byte
-	Canonical string // 0x + lowercase hex (96 chars)
-	Key       string // lowercase hex (96 chars), no 0x
+	Bytes     [types.POLYFS_ROOT_SIZE]byte
+	Canonical string // 0x + lowercase hex (64 chars)
+	Key       string // lowercase hex (64 chars), no 0x
 }
 
 func parseManifestRoot(raw string) (ManifestRoot, error) {
@@ -60,26 +60,21 @@ func parseManifestRoot(raw string) (ManifestRoot, error) {
 		return ManifestRoot{}, fmt.Errorf("%w: empty", ErrInvalidManifestRoot)
 	}
 	trimmed = strings.TrimPrefix(trimmed, "0x")
-	if len(trimmed) != 96 {
-		return ManifestRoot{}, fmt.Errorf("%w: expected 96 hex chars (48 bytes), got %d", ErrInvalidManifestRoot, len(trimmed))
+	expectedHexLen := types.POLYFS_ROOT_SIZE * 2
+	if len(trimmed) != expectedHexLen {
+		return ManifestRoot{}, fmt.Errorf("%w: expected %d hex chars (%d bytes), got %d", ErrInvalidManifestRoot, expectedHexLen, types.POLYFS_ROOT_SIZE, len(trimmed))
 	}
 	decoded, err := hex.DecodeString(trimmed)
 	if err != nil {
 		return ManifestRoot{}, fmt.Errorf("%w: invalid hex: %v", ErrInvalidManifestRoot, err)
 	}
-	if len(decoded) != 48 {
-		return ManifestRoot{}, fmt.Errorf("%w: decoded length %d (expected 48)", ErrInvalidManifestRoot, len(decoded))
+	if len(decoded) != types.POLYFS_ROOT_SIZE {
+		return ManifestRoot{}, fmt.Errorf("%w: decoded length %d (expected %d)", ErrInvalidManifestRoot, len(decoded), types.POLYFS_ROOT_SIZE)
 	}
 
-	var point gnarkBls12381.G1Affine
-	if _, err := point.SetBytes(decoded); err != nil {
-		return ManifestRoot{}, fmt.Errorf("%w: invalid compressed G1: %v", ErrInvalidManifestRoot, err)
-	}
-
-	normalized := point.Bytes()
-	key := hex.EncodeToString(normalized[:])
+	key := hex.EncodeToString(decoded)
 	var out ManifestRoot
-	copy(out.Bytes[:], normalized[:])
+	copy(out.Bytes[:], decoded)
 	out.Key = key
 	out.Canonical = "0x" + key
 	return out, nil
@@ -391,7 +386,7 @@ func resolveDealDirForDeal(dealID uint64, root ManifestRoot, rawParam string) (s
 }
 
 func isManifestRootDirName(name string) bool {
-	if len(name) != 96 {
+	if len(name) != types.POLYFS_ROOT_SIZE*2 {
 		return false
 	}
 	_, err := hex.DecodeString(name)

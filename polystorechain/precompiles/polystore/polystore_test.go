@@ -361,3 +361,172 @@ func TestRunBumpDealSetupSlotSwapsProviderForEvmCaller(t *testing.T) {
 	require.NotEqual(t, oldProvider, updated.Mode2Slots[0].Provider)
 	require.Equal(t, updated.Mode2Slots[0].Provider, updated.Providers[0])
 }
+
+func TestPrecompileUpdateAndOpenRetrievalAcceptsPolyFSRoot(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx)
+	registerSetupBumpProviders(t, f, "precompile_polyfs_", 3)
+	msgServer := nilkeeper.NewMsgServerImpl(f.keeper)
+
+	caller := common.HexToAddress("0x0000000000000000000000000000000000000abc")
+	creator := sdk.AccAddress(caller.Bytes()).String()
+	res, err := msgServer.CreateDeal(sdk.WrapSDKContext(sdkCtx), &types.MsgCreateDeal{
+		Creator:             creator,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=2+1",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	})
+	require.NoError(t, err)
+
+	polyfsRoot := bytesOf(0x42, types.POLYFS_ROOT_SIZE)
+	updateMethod := precompile.abi.Methods["updateDealContent"]
+	updateInput, err := updateMethod.Inputs.Pack(res.DealId, []byte{}, polyfsRoot, uint64(1024), uint64(3), uint64(1))
+	require.NoError(t, err)
+	contract := vm.NewPrecompile(caller, Address, uint256.NewInt(0), 5_000_000)
+	contract.Input = append(updateMethod.ID, updateInput...)
+
+	updateOut, err := precompile.runUpdateDealContent(sdkCtx, nil, contract, &updateMethod, updateInput)
+	require.NoError(t, err)
+	updateDecoded, err := updateMethod.Outputs.Unpack(updateOut)
+	require.NoError(t, err)
+	require.Equal(t, true, updateDecoded[0])
+
+	deal, err := f.keeper.Deals.Get(sdkCtx, res.DealId)
+	require.NoError(t, err)
+	require.Equal(t, polyfsRoot, deal.ManifestRoot)
+	require.NotEmpty(t, deal.Mode2Slots)
+	provider := deal.Mode2Slots[0].Provider
+
+	openMethod := precompile.abi.Methods["openRetrievalSession"]
+	openInput, err := openMethod.Inputs.Pack(res.DealId, provider, polyfsRoot, uint64(2), uint32(0), uint64(1), uint64(1), uint64(0))
+	require.NoError(t, err)
+	contract = vm.NewPrecompile(caller, Address, uint256.NewInt(0), 5_000_000)
+	contract.Input = append(openMethod.ID, openInput...)
+
+	openOut, err := precompile.runOpenRetrievalSession(sdkCtx, nil, contract, &openMethod, openInput)
+	require.NoError(t, err)
+	openDecoded, err := openMethod.Outputs.Unpack(openOut)
+	require.NoError(t, err)
+	require.Len(t, openDecoded, 1)
+	sessionID, ok := openDecoded[0].([32]byte)
+	require.True(t, ok)
+	require.NotEqual(t, [32]byte{}, sessionID)
+}
+
+func TestProofLeafCountForDealUsesMode2Profile(t *testing.T) {
+	leafCount, err := proofLeafCountForDeal(types.Deal{
+		RedundancyMode: 2,
+		ServiceHint:    "General",
+		Mode2Profile:   &types.StripeReplicaProfile{K: 8, M: 4},
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(96), leafCount)
+
+	leafCount, err = proofLeafCountForDeal(types.Deal{ServiceHint: "General"})
+	require.NoError(t, err)
+	require.Equal(t, types.BlobsPerMdu, leafCount)
+
+	leafCount, err = proofLeafCountForDeal(types.Deal{ServiceHint: "General:rs=2+1"})
+	require.NoError(t, err)
+	require.Equal(t, uint64(96), leafCount)
+
+	_, err = proofLeafCountForDeal(types.Deal{
+		RedundancyMode: 2,
+		ServiceHint:    "General",
+		Mode2Profile:   &types.StripeReplicaProfile{K: 7, M: 4},
+	})
+	require.ErrorContains(t, err, "must divide")
+}
+
+func TestProveRetrievalBatchABIDecodesRootTableProofFields(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	type proofTuple struct {
+		MduIndex              uint64
+		MduRootFr             []byte
+		ManifestOpening       []byte
+		RootTableDuCommitment []byte
+		RootTableDuMerklePath [][]byte
+		BlobCommitment        []byte
+		MerklePath            [][]byte
+		BlobIndex             uint32
+		ZValue                []byte
+		YValue                []byte
+		KzgOpeningProof       []byte
+	}
+	type chunkTuple struct {
+		RangeStart uint64
+		RangeLen   uint64
+		Proof      proofTuple
+	}
+
+	method := precompile.abi.Methods["proveRetrievalBatch"]
+	rootTablePath := [][]byte{bytesOf(0x44, 32), bytesOf(0x45, 32)}
+	blobPath := [][]byte{bytesOf(0x55, 32)}
+	input, err := method.Inputs.Pack(
+		uint64(1),
+		"nil1provider",
+		"/demo.bin",
+		uint64(7),
+		[]chunkTuple{{
+			RangeStart: 0,
+			RangeLen:   128 * 1024,
+			Proof: proofTuple{
+				MduIndex:              2,
+				MduRootFr:             bytesOf(0x11, 32),
+				ManifestOpening:       bytesOf(0x22, 48),
+				RootTableDuCommitment: bytesOf(0x33, 48),
+				RootTableDuMerklePath: rootTablePath,
+				BlobCommitment:        bytesOf(0x66, 48),
+				MerklePath:            blobPath,
+				BlobIndex:             95,
+				ZValue:                bytesOf(0x77, 32),
+				YValue:                bytesOf(0x88, 32),
+				KzgOpeningProof:       bytesOf(0x99, 48),
+			},
+		}},
+	)
+	require.NoError(t, err)
+
+	args := make(map[string]any)
+	require.NoError(t, method.Inputs.UnpackIntoMap(args, input))
+	chunks, err := decodeChunks(args["chunks"])
+	require.NoError(t, err)
+	require.Len(t, chunks, 1)
+
+	require.Equal(t, uint32(95), chunks[0].Proof.BlobIndex)
+	require.Equal(t, bytesOf(0x33, 48), chunks[0].Proof.RootTableDuCommitment)
+	require.Equal(t, rootTablePath, chunks[0].Proof.RootTableDuMerklePath)
+	require.Equal(t, blobPath, chunks[0].Proof.MerklePath)
+}
+
+func TestPrecompileRejectsLegacy48ByteManifestRoot(t *testing.T) {
+	f := initFixture(t)
+	precompile, err := New(&f.keeper)
+	require.NoError(t, err)
+
+	method := precompile.abi.Methods["openRetrievalSession"]
+	input, err := method.Inputs.Pack(uint64(1), "nil1provider", bytesOf(0x11, 48), uint64(1), uint32(0), uint64(1), uint64(1), uint64(0))
+	require.NoError(t, err)
+
+	caller := common.HexToAddress("0x0000000000000000000000000000000000000abd")
+	contract := vm.NewPrecompile(caller, Address, uint256.NewInt(0), 5_000_000)
+	contract.Input = append(method.ID, input...)
+
+	_, err = precompile.runOpenRetrievalSession(sdk.UnwrapSDKContext(f.ctx), nil, contract, &method, input)
+	require.ErrorContains(t, err, "manifestRoot must be 32 bytes")
+}
+
+func bytesOf(value byte, length int) []byte {
+	out := make([]byte, length)
+	for i := range out {
+		out[i] = value
+	}
+	return out
+}

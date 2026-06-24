@@ -110,6 +110,8 @@ export const POLYSTORE_PRECOMPILE_ABI = [
               { name: 'mduIndex', type: 'uint64' },
               { name: 'mduRootFr', type: 'bytes' },
               { name: 'manifestOpening', type: 'bytes' },
+              { name: 'rootTableDuCommitment', type: 'bytes' },
+              { name: 'rootTableDuMerklePath', type: 'bytes[]' },
               { name: 'blobCommitment', type: 'bytes' },
               { name: 'merklePath', type: 'bytes[]' },
               { name: 'blobIndex', type: 'uint32' },

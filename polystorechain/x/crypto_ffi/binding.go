@@ -87,6 +87,26 @@ int polystore_compute_manifest_proof(
     unsigned char* out_proof,
     unsigned char* out_y
 );
+int polystore_compute_mdu0_root_table_proof(
+    const unsigned char* mdu0_bytes,
+    size_t mdu0_bytes_len,
+    unsigned long long mdu_index,
+    const unsigned char* target_mdu_root,
+    unsigned char* out_root_table_du_commitment,
+    unsigned char* out_root_table_du_merkle_proof,
+    size_t* out_root_table_du_merkle_proof_len,
+    unsigned char* out_root_table_opening_proof,
+    unsigned char* out_root_table_opening_y
+);
+int polystore_verify_mdu0_root_table_proof(
+    const unsigned char* polyfs_root,
+    unsigned long long mdu_index,
+    const unsigned char* target_mdu_root,
+    const unsigned char* root_table_du_commitment,
+    const unsigned char* root_table_du_merkle_proof,
+    size_t root_table_du_merkle_proof_len,
+    const unsigned char* root_table_opening_proof
+);
 int polystore_compute_blob_proof(
     const unsigned char* blob_bytes,
     size_t blob_bytes_len,
@@ -588,6 +608,77 @@ func ComputeManifestCommitment(mdu_roots [][]byte) (commitment []byte, manifest_
 		return nil, nil, fmt.Errorf("polystore_compute_manifest_commitment failed with code: %d", res)
 	}
 	return commitment, manifest_blob, nil
+}
+
+// ComputeMdu0RootTableProof computes the V2 Hop 1 proof for a target MDU root
+// from an 8 MiB MDU #0 image.
+func ComputeMdu0RootTableProof(
+	mdu0Bytes []byte,
+	mduIndex uint64,
+	targetMduRoot []byte,
+) (rootTableDuCommitment []byte, rootTableDuMerkleProof []byte, rootTableOpeningProof []byte, rootTableOpeningY []byte, err error) {
+	if len(mdu0Bytes) != types.MDU_SIZE {
+		return nil, nil, nil, nil, fmt.Errorf("invalid mdu0Bytes length: expected %d, got %d", types.MDU_SIZE, len(mdu0Bytes))
+	}
+	if len(targetMduRoot) != 32 {
+		return nil, nil, nil, nil, fmt.Errorf("invalid targetMduRoot length: expected 32, got %d", len(targetMduRoot))
+	}
+
+	rootTableDuCommitment = make([]byte, 48)
+	rootTableDuMerkleProof = make([]byte, 32*6)
+	rootTableOpeningProof = make([]byte, 48)
+	rootTableOpeningY = make([]byte, 32)
+	proofLen := C.size_t(len(rootTableDuMerkleProof))
+
+	res := C.polystore_compute_mdu0_root_table_proof(
+		(*C.uchar)(unsafe.Pointer(&mdu0Bytes[0])),
+		C.size_t(len(mdu0Bytes)),
+		C.ulonglong(mduIndex),
+		(*C.uchar)(unsafe.Pointer(&targetMduRoot[0])),
+		(*C.uchar)(unsafe.Pointer(&rootTableDuCommitment[0])),
+		(*C.uchar)(unsafe.Pointer(&rootTableDuMerkleProof[0])),
+		&proofLen,
+		(*C.uchar)(unsafe.Pointer(&rootTableOpeningProof[0])),
+		(*C.uchar)(unsafe.Pointer(&rootTableOpeningY[0])),
+	)
+	if res != 0 {
+		return nil, nil, nil, nil, fmt.Errorf("polystore_compute_mdu0_root_table_proof failed with code: %d", res)
+	}
+	rootTableDuMerkleProof = rootTableDuMerkleProof[:int(proofLen)]
+	return rootTableDuCommitment, rootTableDuMerkleProof, rootTableOpeningProof, rootTableOpeningY, nil
+}
+
+// VerifyMdu0RootTableProof verifies the V2 Hop 1 path:
+// PolyFS root -> MDU #0 root-table DU commitment -> target MDU root.
+func VerifyMdu0RootTableProof(
+	polyfsRoot []byte,
+	mduIndex uint64,
+	targetMduRoot []byte,
+	rootTableDuCommitment []byte,
+	rootTableDuMerkleProof []byte,
+	rootTableOpeningProof []byte,
+) (bool, error) {
+	if len(polyfsRoot) != types.POLYFS_ROOT_SIZE || len(targetMduRoot) != 32 ||
+		len(rootTableDuCommitment) != 48 || len(rootTableOpeningProof) != 48 ||
+		len(rootTableDuMerkleProof) == 0 {
+		return false, errors.New("invalid input lengths for MDU #0 root-table proof components")
+	}
+
+	res := C.polystore_verify_mdu0_root_table_proof(
+		(*C.uchar)(unsafe.Pointer(&polyfsRoot[0])),
+		C.ulonglong(mduIndex),
+		(*C.uchar)(unsafe.Pointer(&targetMduRoot[0])),
+		(*C.uchar)(unsafe.Pointer(&rootTableDuCommitment[0])),
+		(*C.uchar)(unsafe.Pointer(&rootTableDuMerkleProof[0])),
+		C.size_t(len(rootTableDuMerkleProof)),
+		(*C.uchar)(unsafe.Pointer(&rootTableOpeningProof[0])),
+	)
+	if res == 1 {
+		return true, nil
+	} else if res == 0 {
+		return false, nil
+	}
+	return false, fmt.Errorf("polystore_verify_mdu0_root_table_proof failed with code: %d", res)
 }
 
 // ComputeBlobProof computes a KZG opening proof for a single encoded 128 KiB blob.

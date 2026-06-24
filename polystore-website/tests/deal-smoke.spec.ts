@@ -8,6 +8,7 @@ import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/das
 
 const path = process.env.E2E_PATH || '/#/dashboard'
 const precompile = '0x0000000000000000000000000000000000000900'
+const manifestRootPattern = /^0x(?:[0-9a-f]{64}|[0-9a-f]{96})$/i
 
 function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
@@ -26,9 +27,11 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
   const txHash = (`0x${'11'.repeat(32)}` as Hex)
   const dealId = '1'
-  const manifestRoot = `0x${'aa'.repeat(48)}`
+  const manifestRoot = `0x${'aa'.repeat(32)}`
   const filePath = 'e2e.txt'
   const fileBytes = Buffer.alloc(1024 * 1024, 'A')
+  let dealManifestRoot = ''
+  let dealSize = '0'
 
   console.log(`Using random E2E wallet: ${account.address} -> ${polystoreAddress}`)
 
@@ -53,10 +56,10 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
           {
             id: dealId,
             owner: polystoreAddress,
-            cid: manifestRoot,
-            size: String(fileBytes.length),
+            cid: dealManifestRoot,
+            size: dealSize,
             escrow_balance: '1000000',
-            end_block: '1000',
+            end_block: '99999999',
             providers: ['nil1provider'],
           },
         ],
@@ -91,6 +94,8 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
 
   // Mock gateway endpoints used by Commit Content and DealDetail.
   await page.route('**/gateway/upload**', async (route) => {
+    dealManifestRoot = manifestRoot
+    dealSize = String(fileBytes.length)
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -280,7 +285,7 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   })
 
   const stagedManifestRoot = page.getByTestId('staged-manifest-root')
-  await expect(stagedManifestRoot).toHaveText(/^0x[0-9a-f]{96}$/i, { timeout: 180_000 })
+  await expect(stagedManifestRoot).toHaveText(manifestRootPattern, { timeout: 180_000 })
   expect((await stagedManifestRoot.textContent())?.trim() || '').toBe(manifestRoot)
 
   const dealManifestCell = page.getByTestId(`deal-manifest-${dealId}`)

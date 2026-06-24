@@ -53,7 +53,7 @@ func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	manifestRoot := make([]byte, 48)
+	manifestRoot := make([]byte, types.POLYFS_ROOT_SIZE)
 	for i := range manifestRoot {
 		manifestRoot[i] = byte(i + 1)
 	}
@@ -62,7 +62,7 @@ func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         "0x" + hexEncode(manifestRoot),
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       deal.Providers[0],
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      2,
 		Nonce:          1,
@@ -165,7 +165,7 @@ func TestRetrievalSessionCompletionPaysProviderAndBurnsVariableCut(t *testing.T)
 		DealId:         resDeal.DealId,
 		Provider:       assignedProvider,
 		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
-		StartMduIndex:  0,
+		StartMduIndex:  proof.MduIndex,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,

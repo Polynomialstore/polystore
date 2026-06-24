@@ -47,7 +47,7 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	require.NotEmpty(t, resDeal.AssignedProviders)
 	assignedProvider := resDeal.AssignedProviders[0]
 
-	manifestRoot := make([]byte, 48)
+	manifestRoot := make([]byte, types.POLYFS_ROOT_SIZE)
 	for i := range manifestRoot {
 		manifestRoot[i] = byte(i + 1)
 	}
@@ -56,21 +56,21 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         "0x" + hexEncode(manifestRoot),
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
 	deal, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
 	require.NoError(t, err)
-	require.Len(t, deal.ManifestRoot, 48)
+	require.Len(t, deal.ManifestRoot, types.POLYFS_ROOT_SIZE)
 
 	openRes, err := msgServer.OpenRetrievalSession(f.ctx, &types.MsgOpenRetrievalSession{
 		Creator:        owner,
 		DealId:         resDeal.DealId,
 		Provider:       assignedProvider,
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,

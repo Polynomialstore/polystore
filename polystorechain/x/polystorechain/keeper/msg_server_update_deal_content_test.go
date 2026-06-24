@@ -6,11 +6,34 @@ import (
 	"testing"
 
 	"cosmossdk.io/math"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
 	"polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
+
+func createDealForUpdateContentTest(t *testing.T, f *fixture, userTag byte) (types.MsgServer, string, uint64) {
+	t.Helper()
+
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	providers := make([]string, 0, int(types.DealBaseReplication))
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		providers = append(providers, makePolicyTestAddr(t, f, byte(1+i)))
+	}
+	registerPolicyTestProviders(t, f, sdk.UnwrapSDKContext(f.ctx), providers...)
+
+	user := makePolicyTestAddr(t, f, userTag)
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1000,
+		ServiceHint:         "General",
+		InitialEscrowAmount: math.NewInt(1000000),
+		MaxMonthlySpend:     math.NewInt(1000000),
+	})
+	require.NoError(t, err)
+	return msgServer, user, resDeal.DealId
+}
 
 func TestUpdateDealContent_HappyPath(t *testing.T) {
 	f := initFixture(t)
@@ -50,7 +73,7 @@ func TestUpdateDealContent_HappyPath(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       size,
-		TotalMdus:   3,
+		TotalMdus:   15,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
@@ -146,7 +169,7 @@ func TestUpdateDealContent_AllowsLargeContent(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       size,
-		TotalMdus:   3,
+		TotalMdus:   664,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
@@ -238,6 +261,63 @@ func TestUpdateDealContent_InvalidInput(t *testing.T) {
 		Creator: user, DealId: resDeal.DealId, Cid: validManifestCid, Size_: 0,
 	})
 	require.Error(t, err)
+}
+
+func TestUpdateDealContent_RejectsPolyFSLayoutInvariants(t *testing.T) {
+	tests := []struct {
+		name        string
+		size        uint64
+		totalMdus   uint64
+		witnessMdus uint64
+		want        string
+	}{
+		{
+			name:        "missing witness coverage",
+			size:        100,
+			totalMdus:   2,
+			witnessMdus: 0,
+			want:        "witness_mdus underprovisioned",
+		},
+		{
+			name:        "raw payload overflow",
+			size:        polyfsTestRawMduPayloadBytes + 1,
+			totalMdus:   3,
+			witnessMdus: 1,
+			want:        "raw payload capacity",
+		},
+		{
+			name:        "root table overflow",
+			size:        100,
+			totalMdus:   65_538,
+			witnessMdus: 1,
+			want:        "root-table capacity",
+		},
+		{
+			name:        "witness coverage uses raw encoded payload capacity",
+			size:        2700 * polyfsTestRawMduPayloadBytes,
+			totalMdus:   1 + 1 + 2700,
+			witnessMdus: 1,
+			want:        "witness_mdus underprovisioned",
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := initFixture(t)
+			msgServer, user, dealID := createDealForUpdateContentTest(t, f, byte(200+i))
+
+			_, err := msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+				Creator:     user,
+				DealId:      dealID,
+				Cid:         validManifestCid,
+				Size_:       tc.size,
+				TotalMdus:   tc.totalMdus,
+				WitnessMdus: tc.witnessMdus,
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.want)
+		})
+	}
 }
 
 func TestUpdateDealContent_RejectsStalePreviousManifestRoot(t *testing.T) {

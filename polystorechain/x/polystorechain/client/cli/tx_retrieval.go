@@ -23,7 +23,7 @@ import (
 
 func CmdSignRetrievalReceipt() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sign-retrieval-receipt [deal-id] [provider-addr] [epoch-id] [file-path] [trusted-setup] [manifest-path] [mdu-index]",
+		Use:   "sign-retrieval-receipt [deal-id] [provider-addr] [epoch-id] [file-path] [trusted-setup] [mdu0-path] [mdu-index]",
 		Short: "Generate and sign a retrieval receipt for a downloaded file",
 		Args:  cobra.ExactArgs(7),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -43,10 +43,13 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			}
 			filePath := args[3]
 			trustedSetupPath := args[4]
-			manifestPath := args[5]
+			mdu0Path := args[5]
 			mduIndex, err := strconv.ParseUint(args[6], 10, 64)
 			if err != nil {
 				return err
+			}
+			if mduIndex == 0 {
+				return fmt.Errorf("mdu-index must target a user data MDU; MDU #0 and Witness MDUs are metadata")
 			}
 
 			// 1. Read File & Compute Proof
@@ -79,37 +82,36 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 				merklePath = append(merklePath, merkleProof[i:i+32])
 			}
 
-			// --- Hop 1: Manifest Proof ---
-			// Read Manifest Blob
-			manifestBlob, err := ioutil.ReadFile(manifestPath)
+			// --- Hop 1: MDU #0 root-table proof ---
+			mdu0Bytes, err := ioutil.ReadFile(mdu0Path)
 			if err != nil {
-				return fmt.Errorf("failed to read manifest: %w", err)
+				return fmt.Errorf("failed to read MDU #0: %w", err)
 			}
-			if len(manifestBlob) != 131072 {
-				// Try to decode if it's hex string?
-				// Assuming CLI/polystore_gateway passes binary temp file.
-				// But nil-cli outputs hex. So polystore_gateway must decode or write binary.
-				// Let's assume it is binary 128KB.
-				// If not, try hex decode.
-			}
-
-			manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, mduIndex)
+			rootTableDuCommitment, rootTableDuMerkleFlat, rootTableOpening, _, err := crypto_ffi.ComputeMdu0RootTableProof(mdu0Bytes, mduIndex, root)
 			if err != nil {
-				return fmt.Errorf("ComputeManifestProof failed: %w", err)
+				return fmt.Errorf("ComputeMdu0RootTableProof failed: %w", err)
+			}
+			rootTableDuMerklePath := make([][]byte, 0, len(rootTableDuMerkleFlat)/32)
+			for i := 0; i < len(rootTableDuMerkleFlat); i += 32 {
+				end := i + 32
+				if end > len(rootTableDuMerkleFlat) {
+					return fmt.Errorf("invalid root-table Merkle proof length")
+				}
+				rootTableDuMerklePath = append(rootTableDuMerklePath, rootTableDuMerkleFlat[i:end])
 			}
 
 			chainedProof := types.ChainedProof{
-				MduIndex:        mduIndex,
-				MduRootFr:       root,
-				ManifestOpening: manifestProof,
-
-				BlobCommitment: commitment,
-				MerklePath:     merklePath,
-				BlobIndex:      chunkIndex,
-
-				ZValue:          z,
-				YValue:          y,
-				KzgOpeningProof: kzgProofBytes,
+				MduIndex:              mduIndex,
+				MduRootFr:             root,
+				ManifestOpening:       rootTableOpening,
+				RootTableDuCommitment: rootTableDuCommitment,
+				RootTableDuMerklePath: rootTableDuMerklePath,
+				BlobCommitment:        commitment,
+				MerklePath:            merklePath,
+				BlobIndex:             chunkIndex,
+				ZValue:                z,
+				YValue:                y,
+				KzgOpeningProof:       kzgProofBytes,
 			}
 
 			// 2. Prepare anti-replay fields
@@ -301,7 +303,7 @@ func CmdOpenRetrievalSession() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			manifestRoot, err := decodeHexBytes(manifestHex, 48)
+			manifestRoot, err := decodeHexBytes(manifestHex, types.POLYFS_ROOT_SIZE)
 			if err != nil {
 				return err
 			}
@@ -354,7 +356,7 @@ func CmdOpenRetrievalSession() *cobra.Command {
 
 	cmd.Flags().Uint64("deal-id", 0, "Deal ID")
 	cmd.Flags().String("provider", "", "Assigned provider address")
-	cmd.Flags().String("manifest-root", "", "Manifest root (48-byte hex)")
+	cmd.Flags().String("manifest-root", "", "PolyFS root (32-byte hex)")
 	cmd.Flags().Uint64("start-mdu-index", 0, "Starting MDU index")
 	cmd.Flags().Uint32("start-blob-index", 0, "Starting blob index within the MDU")
 	cmd.Flags().Uint64("blob-count", 0, "Number of blobs in the retrieval range")

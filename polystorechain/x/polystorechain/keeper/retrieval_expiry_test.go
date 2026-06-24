@@ -58,7 +58,7 @@ func setupRetrievalExpiryDeal(t *testing.T) (*fixture, *trackingBankKeeper, type
 	})
 	require.NoError(t, err)
 
-	manifestRoot := make([]byte, 48)
+	manifestRoot := make([]byte, types.POLYFS_ROOT_SIZE)
 	for i := range manifestRoot {
 		manifestRoot[i] = byte(i + 1)
 	}
@@ -67,7 +67,7 @@ func setupRetrievalExpiryDeal(t *testing.T) (*fixture, *trackingBankKeeper, type
 		DealId:      resDeal.DealId,
 		Cid:         "0x" + hexEncode(manifestRoot),
 		Size_:       8 * 1024 * 1024,
-		TotalMdus:   3,
+		TotalMdus:   4,
 		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func TestOpenRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       resDeal.AssignedProviders[0],
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
@@ -165,7 +165,7 @@ func TestOpenSponsoredRetrievalSessionRejectsExpiredDealWithoutBilling(t *testin
 		DealId:         resDeal.DealId,
 		Provider:       resDeal.AssignedProviders[0],
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
@@ -230,7 +230,7 @@ func TestOpenProtocolRetrievalSessionRejectsExpiredDealWithoutBilling(t *testing
 				DealId:         resDeal.DealId,
 				Provider:       servingProvider,
 				ManifestRoot:   deal.ManifestRoot,
-				StartMduIndex:  0,
+				StartMduIndex:  2,
 				StartBlobIndex: 0,
 				BlobCount:      1,
 				Nonce:          uint64(i + 1),

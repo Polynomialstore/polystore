@@ -105,8 +105,8 @@ func TestSponsoredOpen_Public_DoesNotTouchDealEscrow(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       1,
-		TotalMdus:   2,
-		WitnessMdus: 0,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
@@ -135,7 +135,7 @@ func TestSponsoredOpen_Public_DoesNotTouchDealEscrow(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       resDeal.AssignedProviders[0],
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
@@ -147,6 +147,94 @@ func TestSponsoredOpen_Public_DoesNotTouchDealEscrow(t *testing.T) {
 	after, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
 	require.NoError(t, err)
 	require.Equal(t, before.EscrowBalance, after.EscrowBalance)
+}
+
+func TestSponsoredOpen_RejectsMetadataMduRanges(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyNewDec(0)
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 2)
+	require.NoError(t, f.keeper.Params.Set(ctx, p))
+
+	for i := 0; i < 3; i++ {
+		providerBz := make([]byte, 20)
+		copy(providerBz, []byte("provider_meta_v1_"))
+		providerBz[19] = byte('0' + i)
+		provider, _ := f.addressCodec.BytesToString(providerBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      provider,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	ownerBz := make([]byte, 20)
+	copy(ownerBz, []byte("owner_meta_v1____"))
+	owner, _ := f.addressCodec.BytesToString(ownerBz)
+
+	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		DurationBlocks:      100,
+		ServiceHint:         "General:rs=2+1",
+		InitialEscrowAmount: math.NewInt(0),
+		MaxMonthlySpend:     math.NewInt(0),
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.UpdateDealContent(ctx, &types.MsgUpdateDealContent{
+		Creator:     owner,
+		DealId:      resDeal.DealId,
+		Cid:         validManifestCid,
+		Size_:       1,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+
+	sponsorBz := make([]byte, 20)
+	copy(sponsorBz, []byte("sponsor_meta_v1__"))
+	sponsor, _ := f.addressCodec.BytesToString(sponsorBz)
+	sponsorAddr, err := sdk.AccAddressFromBech32(sponsor)
+	require.NoError(t, err)
+	bank.setAccountBalance(sponsorAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	cases := []struct {
+		name          string
+		startMduIndex uint64
+		blobCount     uint64
+	}{
+		{name: "mdu0", startMduIndex: 0, blobCount: 1},
+		{name: "witness_mdu", startMduIndex: 1, blobCount: 1},
+		{name: "witness_range_crosses_into_user_data", startMduIndex: 1, blobCount: types.BlobsPerMdu + 1},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := msgServer.OpenRetrievalSessionSponsored(ctx, &types.MsgOpenRetrievalSessionSponsored{
+				Creator:        sponsor,
+				DealId:         resDeal.DealId,
+				Provider:       resDeal.AssignedProviders[0],
+				ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
+				StartMduIndex:  tc.startMduIndex,
+				StartBlobIndex: 0,
+				BlobCount:      tc.blobCount,
+				Nonce:          uint64(i + 1),
+				ExpiresAt:      0,
+				MaxTotalFee:    math.NewInt(0),
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "retrieval range must start at a user data MDU")
+		})
+	}
+
+	require.Equal(t, "100stake", bank.accountBalances[sponsorAddr.String()].String())
 }
 
 func TestSponsoredOpen_Public_RefundsLockedFeeToPayerOnCancel(t *testing.T) {
@@ -193,8 +281,8 @@ func TestSponsoredOpen_Public_RefundsLockedFeeToPayerOnCancel(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       1,
-		TotalMdus:   2,
-		WitnessMdus: 0,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
@@ -219,7 +307,7 @@ func TestSponsoredOpen_Public_RefundsLockedFeeToPayerOnCancel(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       resDeal.AssignedProviders[0],
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          123,
@@ -313,7 +401,7 @@ func TestSponsoredRetrievalCompletionPaysProofProviderWithoutOwnerEscrowDebit(t 
 		DealId:         resDeal.DealId,
 		Provider:       assignedProvider,
 		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
-		StartMduIndex:  0,
+		StartMduIndex:  proof.MduIndex,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
@@ -397,8 +485,8 @@ func TestSponsoredOpen_Voucher_ReplayRejected(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       1,
-		TotalMdus:   2,
-		WitnessMdus: 0,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
@@ -422,7 +510,7 @@ func TestSponsoredOpen_Voucher_ReplayRejected(t *testing.T) {
 		DealId:         resDeal.DealId,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
 		Provider:       "", // any assigned provider
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		ExpiresAt:      20,
@@ -437,7 +525,7 @@ func TestSponsoredOpen_Voucher_ReplayRejected(t *testing.T) {
 			DealId:         resDeal.DealId,
 			Provider:       resDeal.AssignedProviders[0],
 			ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-			StartMduIndex:  1,
+			StartMduIndex:  2,
 			StartBlobIndex: 0,
 			BlobCount:      1,
 			Nonce:          sessionNonce,
@@ -500,8 +588,8 @@ func TestSponsoredOpen_Allowlist_ProofVerification(t *testing.T) {
 		DealId:      resDeal.DealId,
 		Cid:         validManifestCid,
 		Size_:       1,
-		TotalMdus:   2,
-		WitnessMdus: 0,
+		TotalMdus:   3,
+		WitnessMdus: 1,
 	})
 	require.NoError(t, err)
 
@@ -546,7 +634,7 @@ func TestSponsoredOpen_Allowlist_ProofVerification(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       resDeal.AssignedProviders[0],
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
