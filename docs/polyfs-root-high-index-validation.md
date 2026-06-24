@@ -25,6 +25,9 @@ The default mode does not restart services. It validates:
 After #215, #216, and #217 are accepted as the selected rollout heads, run the actual rollout script from #217. Then collect non-mutating health evidence:
 
 ```sh
+POLYSTORE_ROUTER_BASE="${POLYSTORE_ROUTER_BASE:-http://127.0.0.1:18080}" \
+  scripts/update_devnet_stack.sh
+
 scripts/validate_polyfs_root_migration.sh --skip-build --live-devnet
 ```
 
@@ -38,6 +41,11 @@ This records active service state and endpoint health for:
 - `polystore-provider3.service`
 - `polystore-provider4.service`
 - ports `1317`, `18080`, `8081`, `8091`, `8092`, `8093`, and `8094`
+
+Set `POLYSTORE_ROUTER_BASE`, `POLYSTORE_PROVIDER_BASES`, or the other
+`POLYSTORE_*_BASE` variables when the target devnet uses a different local
+port map. The managed devnet on this machine binds the `user-gateway` service
+to `127.0.0.1:18080`.
 
 Endpoint health is not proof-format compatibility. The final closeout still needs a high-index proof accepted by the updated chain and a normal small lifecycle after the restart.
 
