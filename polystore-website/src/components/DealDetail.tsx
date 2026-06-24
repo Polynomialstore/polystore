@@ -2889,7 +2889,7 @@ export function DealDetail({
                     </div>
                   )}
 
-                      {loadingFiles ? (
+                      {loadingFiles && (!files || files.length === 0) ? (
                         <div className="nil-tab-panel text-xs text-muted-foreground">Loading file table…</div>
                       ) : requiresDealIndexSync ? (
                         <div

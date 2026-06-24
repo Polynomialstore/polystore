@@ -1918,7 +1918,7 @@ export function Dashboard() {
               </div>
             ) : targetDeal ? (
               <DealDetail
-                key={`${targetDeal.id}:${String(targetDeal.cid || '')}`}
+                key={`${targetDeal.id}:${String(targetDeal.owner || '')}`}
                 deal={targetDeal}
                 polystoreAddress={polystoreAddress}
                 onFileActivity={recordRecentActivity}
