@@ -83,7 +83,18 @@ async function openFileActionMenuItem(page: Page, filePath: string, testId: stri
   const item = page.locator(`[data-testid="${testId}"][data-file-path="${filePath}"]`)
   if (await item.isVisible().catch(() => false)) return item
   await expect(menuButton).toBeVisible({ timeout: 60_000 })
-  await menuButton.click({ force: true })
+  await menuButton.scrollIntoViewIfNeeded().catch(() => undefined)
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt === 0) {
+      await menuButton.click({ force: true })
+    } else {
+      await menuButton.evaluate((button) => {
+        if (button instanceof HTMLElement) button.click()
+      })
+    }
+    if (await item.isVisible().catch(() => false)) return item
+    await page.waitForTimeout(250)
+  }
   await expect(item).toBeVisible({ timeout: 30_000 })
   return item
 }
@@ -238,19 +249,20 @@ async function isCommitCompleteOrReset(
   dealId: string,
   initialManifestRoot: string,
   allowReset: boolean,
+  allowFileRowCompletion = true,
 ): Promise<boolean> {
   if (dealId) {
     const currentManifest = await readDealManifestRoot(page, dealId)
     if (currentManifest && currentManifest !== initialManifestRoot) return true
   }
-  if (expectedFilePath) {
+  if (allowFileRowCompletion && expectedFilePath) {
     if (await hasDealFileRow(page, expectedFilePath)) return true
   }
   const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
-  if (panelState === 'success') return true
+  if (allowFileRowCompletion && panelState === 'success') return true
   const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
   if (/Committed!/i.test(text)) return true
-  if (allowReset && (await isUploaderResetToInitialState(page))) return true
+  if (allowFileRowCompletion && allowReset && (await isUploaderResetToInitialState(page))) return true
   return false
 }
 
@@ -260,21 +272,45 @@ async function completeUploadAndCommit(
   expectedFilePath: string,
   dealId: string,
   timeout = 300_000,
+  options: { allowFileRowCompletion?: boolean } = {},
 ): Promise<void> {
   const page = uploadBtn.page()
+  const allowFileRowCompletion = options.allowFileRowCompletion ?? true
   await waitForUploadControls(uploadBtn, commitBtn, timeout).catch(() => undefined)
   const initialManifestRoot = dealId ? await readDealManifestRoot(page, dealId) : ''
 
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
-    if (await isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true)) return
+    if (
+      await isCommitCompleteOrReset(
+        page,
+        commitBtn,
+        expectedFilePath,
+        dealId,
+        initialManifestRoot,
+        true,
+        allowFileRowCompletion,
+      )
+    ) return
 
     const commitCount = await commitBtn.count().catch(() => 0)
     const commitEnabled = commitCount > 0 && (await commitBtn.isEnabled().catch(() => false))
     if (commitEnabled) {
       await commitBtn.click()
       await expect
-        .poll(() => isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true), { timeout: 180_000 })
+        .poll(
+          () =>
+            isCommitCompleteOrReset(
+              page,
+              commitBtn,
+              expectedFilePath,
+              dealId,
+              initialManifestRoot,
+              true,
+              allowFileRowCompletion,
+            ),
+          { timeout: 180_000 },
+        )
         .toBe(true)
       return
     }
@@ -286,20 +322,52 @@ async function completeUploadAndCommit(
       await uploadBtn.click({ force: true })
       await expect
         .poll(async () => {
-          if (await isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true)) return true
+          if (
+            await isCommitCompleteOrReset(
+              page,
+              commitBtn,
+              expectedFilePath,
+              dealId,
+              initialManifestRoot,
+              true,
+              allowFileRowCompletion,
+            )
+          ) return true
           const enabled = await commitBtn.isEnabled().catch(() => false)
           if (enabled) return true
           const text = ((await uploadBtn.textContent().catch(() => '')) || '').trim()
           return /Upload Complete/i.test(text)
         }, { timeout: 120_000 })
         .toBe(true)
-      if (await isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true)) return
+      if (
+        await isCommitCompleteOrReset(
+          page,
+          commitBtn,
+          expectedFilePath,
+          dealId,
+          initialManifestRoot,
+          true,
+          allowFileRowCompletion,
+        )
+      ) return
     }
     await page.waitForTimeout(500)
   }
 
   await expect
-    .poll(() => isCommitCompleteOrReset(page, commitBtn, expectedFilePath, dealId, initialManifestRoot, true), { timeout: 180_000 })
+    .poll(
+      () =>
+        isCommitCompleteOrReset(
+          page,
+          commitBtn,
+          expectedFilePath,
+          dealId,
+          initialManifestRoot,
+          true,
+          allowFileRowCompletion,
+        ),
+      { timeout: 180_000 },
+    )
     .toBe(true)
   await page.waitForTimeout(150)
 }
@@ -381,6 +449,74 @@ async function waitForDealFileRow(
   }
 
   return fileRow
+}
+
+async function installDealDetailContinuityProbe(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const root = document.querySelector('[data-testid="deal-detail"]')
+    if (!root) throw new Error('deal-detail root not found for continuity probe')
+
+    const probe = {
+      root,
+      rootReplaced: false,
+      loadingFileTableSeen: false,
+      observer: undefined as MutationObserver | undefined,
+    }
+
+    const scanLoadingState = () => {
+      if ((document.body.textContent || '').includes('Loading file table')) {
+        probe.loadingFileTableSeen = true
+      }
+    }
+
+    scanLoadingState()
+    probe.observer = new MutationObserver((records) => {
+      if (!document.contains(root)) {
+        probe.rootReplaced = true
+      }
+      for (const record of records) {
+        for (const node of Array.from(record.removedNodes)) {
+          if (node === root || (node instanceof Element && node.contains(root))) {
+            probe.rootReplaced = true
+          }
+        }
+      }
+      scanLoadingState()
+    })
+    probe.observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+
+    ;(window as unknown as { __dealDetailContinuityProbe?: typeof probe }).__dealDetailContinuityProbe = probe
+  })
+}
+
+async function readDealDetailContinuityProbe(page: Page): Promise<{
+  rootReplaced: boolean
+  loadingFileTableSeen: boolean
+  fileRowCount: number
+}> {
+  return page.evaluate(() => {
+    const probe = (window as unknown as {
+      __dealDetailContinuityProbe?: {
+        root: Element
+        rootReplaced: boolean
+        loadingFileTableSeen: boolean
+        observer?: MutationObserver
+      }
+    }).__dealDetailContinuityProbe
+    if (!probe) throw new Error('deal-detail continuity probe was not installed')
+
+    const currentRoot = document.querySelector('[data-testid="deal-detail"]')
+    const rootReplaced = probe.rootReplaced || !document.contains(probe.root) || currentRoot !== probe.root
+    const loadingFileTableSeen =
+      probe.loadingFileTableSeen || (document.body.textContent || '').includes('Loading file table')
+    probe.observer?.disconnect()
+
+    return {
+      rootReplaced,
+      loadingFileTableSeen,
+      fileRowCount: document.querySelectorAll('[data-testid="deal-detail-file-row"]').length,
+    }
+  })
 }
 
 function resolveRouterUploadDir(): string {
@@ -996,6 +1132,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await completeUploadAndCommit(uploadBtn, commitBtn, fileA.name, dealId, 300_000)
     await waitForDealFileRow(page, dealId, fileA.name, 180_000)
+    await installDealDetailContinuityProbe(page)
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: fileB.name,
@@ -1003,7 +1140,14 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       buffer: fileB.buffer,
     })
 
-    await completeUploadAndCommit(uploadBtn, commitBtn, fileB.name, dealId, 300_000)
+    await completeUploadAndCommit(uploadBtn, commitBtn, fileB.name, dealId, 300_000, {
+      allowFileRowCompletion: false,
+    })
+
+    const continuity = await readDealDetailContinuityProbe(page)
+    expect(continuity.rootReplaced).toBe(false)
+    expect(continuity.loadingFileTableSeen).toBe(false)
+    expect(continuity.fileRowCount).toBeGreaterThanOrEqual(1)
 
     const fileARow = await waitForDealFileRow(page, dealId, fileA.name, 240_000)
     const fileBRow = await waitForDealFileRow(page, dealId, fileB.name, 240_000)
