@@ -256,6 +256,18 @@ root_systemctl() {
   run_cmd sudo -n systemctl "$@"
 }
 
+root_systemctl_each() {
+  local action="$1"
+  shift
+
+  local status=0
+  local service
+  for service in "$@"; do
+    root_systemctl "$action" "$service" || status=$?
+  done
+  return "$status"
+}
+
 provider_base_for_service() {
   local service="$1"
   local provider_index port
@@ -552,7 +564,7 @@ provider_systemctl() {
     user_systemctl "$@" "${PROVIDER_USER_SERVICES[@]}" || status=$?
   fi
   if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
-    root_systemctl "$@" "${PROVIDER_ROOT_SERVICES[@]}" || status=$?
+    root_systemctl_each "$@" "${PROVIDER_ROOT_SERVICES[@]}" || status=$?
   fi
   return "$status"
 }
@@ -579,24 +591,45 @@ preflight_root_service_control() {
     return
   fi
 
-  preflight_root_systemctl_authorized stop polystore-gateway-router.service polystore-faucet.service
-  preflight_root_systemctl_authorized stop polystorechaind.service
-  preflight_root_systemctl_authorized start polystorechaind.service
-  preflight_root_systemctl_authorized start polystore-faucet.service polystore-gateway-router.service
+  preflight_root_systemctl_authorized_each stop polystore-gateway-router.service polystore-faucet.service
+  preflight_root_systemctl_authorized_each stop polystorechaind.service
+  preflight_root_systemctl_authorized_each start polystorechaind.service
+  preflight_root_systemctl_authorized_each start polystore-faucet.service polystore-gateway-router.service
   if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
-    preflight_root_systemctl_authorized stop "${PROVIDER_ROOT_SERVICES[@]}"
-    preflight_root_systemctl_authorized start "${PROVIDER_ROOT_SERVICES[@]}"
+    preflight_root_systemctl_authorized_each stop "${PROVIDER_ROOT_SERVICES[@]}"
+    preflight_root_systemctl_authorized_each start "${PROVIDER_ROOT_SERVICES[@]}"
   fi
 }
 
+preflight_root_systemctl_authorized_each() {
+  local action="$1"
+  shift
+
+  local service
+  for service in "$@"; do
+    preflight_root_systemctl_authorized "$action" "$service"
+  done
+}
+
 preflight_root_systemctl_authorized() {
-  if sudo -n -l systemctl "$@" >/dev/null 2>&1; then
-    echo "    sudo authorization OK: systemctl $*"
+  local systemctl_bin sudo_listing exact_command
+
+  systemctl_bin="$(command -v systemctl)"
+  exact_command="$systemctl_bin $*"
+  if ! sudo_listing="$(sudo -n -l 2>/dev/null)"; then
+    echo "ERROR: passwordless sudo authorization is required before stopping provider-daemon services." >&2
+    echo "       Could not inspect sudoers non-interactively." >&2
+    echo "       Re-run as root or configure passwordless sudo for the exact systemctl stop/start actions." >&2
+    exit 1
+  fi
+
+  if printf '%s\n' "$sudo_listing" | grep -F "NOPASSWD:" | grep -F -- "$exact_command" >/dev/null; then
+    echo "    sudo NOPASSWD OK: $exact_command"
     return
   fi
 
   echo "ERROR: passwordless sudo authorization is required before stopping provider-daemon services." >&2
-  echo "       Missing authorization for: systemctl $*" >&2
+  echo "       Missing NOPASSWD authorization for: $exact_command" >&2
   echo "       Re-run as root or configure passwordless sudo for the exact systemctl stop/start actions." >&2
   exit 1
 }
@@ -924,14 +957,14 @@ print_source_evidence() {
 
 print_service_status() {
   echo "==> Root service activity"
-  if ! root_systemctl is-active "${ROOT_SERVICES[@]}"; then
+  if ! root_systemctl_each is-active "${ROOT_SERVICES[@]}"; then
     echo "WARNING: root service activity status probe failed after healthchecks." >&2
   fi
   if [[ "$DRY_RUN" != "1" ]]; then
     if [[ "$IS_ROOT" -eq 1 ]]; then
       systemctl --no-pager --full status "${ROOT_SERVICES[@]}" | sed -n '1,160p' || true
     else
-      sudo -n systemctl --no-pager --full status "${ROOT_SERVICES[@]}" | sed -n '1,160p' || true
+      systemctl --no-pager --full status "${ROOT_SERVICES[@]}" | sed -n '1,160p' || true
     fi
   fi
 
@@ -1001,7 +1034,7 @@ fi
 
 echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
 provider_systemctl stop
-root_systemctl stop polystore-gateway-router.service polystore-faucet.service
+root_systemctl_each stop polystore-gateway-router.service polystore-faucet.service
 root_systemctl stop polystorechaind.service
 
 echo "==> Installing binaries and runtime inputs"
@@ -1015,7 +1048,7 @@ install_with_backup "$SOURCE_ROOT/polystorechain/trusted_setup.txt" "$TARGET_ROO
 echo "==> Start order: chain -> faucet/user-gateway -> provider-daemons"
 root_systemctl start polystorechaind.service
 wait_http "LCD node_info" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 90
-root_systemctl start polystore-faucet.service polystore-gateway-router.service
+root_systemctl_each start polystore-faucet.service polystore-gateway-router.service
 wait_http "faucet" "$FAUCET_BASE/health" 45
 wait_http "user-gateway (legacy router service)" "$ROUTER_BASE/health" 45
 provider_systemctl start
