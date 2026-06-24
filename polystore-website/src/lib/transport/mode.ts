@@ -65,7 +65,7 @@ export function isTrustedLocalGatewayBase(base: string): boolean {
     const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]'
     if (!isLoopback) return false
     if (parsed.port === '') return false
-    return parsed.port === '8080'
+    return parsed.port === '8080' || parsed.port === '18080'
   } catch {
     return false
   }
