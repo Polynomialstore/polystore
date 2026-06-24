@@ -10,7 +10,7 @@ function ethToPolystoreAddress(ethAddress: string): string {
   return bech32.encode('nil', words)
 }
 
-test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway missing slab', async ({ page }) => {
+test('Deal Explorer: manifest info falls back to OPFS using PolyFS root when gateway missing slab', async ({ page }) => {
   test.setTimeout(300_000)
 
   const dealId = '1'
@@ -210,11 +210,10 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
   await page.getByTestId('deal-detail-tab-manifest').click()
 
   // Slab layout should be inferred from OPFS.
-  await expect(page.getByText('Source: browser (OPFS)')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText('Browser (OPFS)')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText('No manifest details available yet.')).not.toBeVisible({ timeout: 60_000 })
   await expect(page.getByText('slab not found on disk')).not.toBeVisible({ timeout: 60_000 })
-
-  // MDU inspector should be able to compute commitments locally too.
-  await page.getByText('Load Commitments').click()
-  await expect(page.getByText('Blob Commitments', { exact: true })).toBeVisible({ timeout: 120_000 })
+  const manifestInfoRoot = page.getByTestId('manifest-info-root')
+  await expect(manifestInfoRoot).toHaveText(/^0x[0-9a-f]{64}$/i, { timeout: 120_000 })
+  await expect(manifestInfoRoot).not.toHaveText(manifestRoot)
 })

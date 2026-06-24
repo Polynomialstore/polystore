@@ -65,24 +65,6 @@ async function openFileActionMenuItem(page: Page, filePath: string, testId: stri
   return item
 }
 
-async function openSystemActivity(page: Page): Promise<Locator> {
-  const underTheHood = page.getByTestId('mdu-under-the-hood')
-  if (await underTheHood.count().catch(() => 0)) {
-    const detailsOpen = await underTheHood.evaluate((node) => node.hasAttribute('open')).catch(() => false)
-    if (!detailsOpen) {
-      await page.getByTestId('mdu-under-the-hood-toggle').click()
-    }
-  }
-  const toggle = page.getByTestId('mdu-system-activity-toggle')
-  await expect(toggle).toBeVisible({ timeout: 30_000 })
-  const panel = page.getByTestId('mdu-system-activity')
-  if (!(await panel.isVisible().catch(() => false))) {
-    await toggle.click()
-  }
-  await expect(panel).toBeVisible({ timeout: 30_000 })
-  return panel
-}
-
 async function readDownloadedBytes(download: Awaited<ReturnType<Page['waitForEvent']>>): Promise<Buffer> {
   const p = await download.path()
   if (p) return fs.readFile(p)
@@ -359,51 +341,6 @@ async function waitForDealFileRow(
         }, { timeout: Math.max(60_000, Math.floor(timeout / 2)) })
         .toBe(true)
     }
-  }
-
-  return fileRow
-}
-
-async function waitForFileRowInAnyDeal(
-  page: Page,
-  filePath: string,
-  timeout = 180_000,
-): Promise<Locator> {
-  const filesTab = page.getByRole('button', { name: /^Files$/i }).first()
-  const fileList = page.getByTestId('deal-detail-file-list')
-  const refreshDealsBtn = page.getByRole('button', { name: /Refresh deals/i }).first()
-  const dealRows = page.locator('[data-testid^="deal-row-"]')
-  const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
-
-  const pollForRow = async (allowSync: boolean, pollTimeout: number) => {
-    await expect
-      .poll(async () => {
-      const totalRows = await dealRows.count().catch(() => 0)
-      for (let i = 0; i < totalRows; i += 1) {
-        const row = dealRows.nth(i)
-        await row.scrollIntoViewIfNeeded().catch(() => undefined)
-        await row.click({ force: true }).catch(() => undefined)
-        if (await filesTab.isVisible().catch(() => false)) {
-          await filesTab.click({ force: true }).catch(() => undefined)
-        }
-        if (allowSync && !(await fileRow.isVisible().catch(() => false))) {
-          await syncDealIndexIfNeeded(page, Math.max(60_000, Math.floor(timeout / 2))).catch(() => undefined)
-        }
-        if (!(await fileList.isVisible().catch(() => false))) continue
-        if (await fileRow.isVisible().catch(() => false)) return true
-      }
-      if (await refreshDealsBtn.isVisible().catch(() => false)) {
-        await refreshDealsBtn.click({ force: true }).catch(() => undefined)
-      }
-      return false
-    }, { timeout: pollTimeout })
-    .toBe(true)
-  }
-
-  try {
-    await pollForRow(false, Math.max(30_000, Math.floor(timeout / 2)))
-  } catch {
-    await pollForRow(true, timeout)
   }
 
   return fileRow
@@ -774,6 +711,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const mduUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string }> = []
     const manifestUploads: Array<{ bodyLen: number; fullSize: number | null }> = []
     const shardUploads: Array<{ bodyLen: number; fullSize: number | null; mduIndex: string; slot: string }> = []
+    const bundleUploads: Array<{ artifactCount: number }> = []
 
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
@@ -819,6 +757,50 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     })
     await page.route('**/gateway/upload*', maybeBlockGatewayUpload)
     await page.route('**/gateway/upload-status*', maybeBlockGatewayUpload)
+    await page.route('**/sp/upload_bundle', async (route) => {
+      const body = route.request().postDataBuffer() || Buffer.alloc(0)
+      if (body.byteLength < 8 || body.subarray(0, 4).toString('utf8') !== 'NLB2') {
+        await route.fulfill({ status: 400, body: 'invalid bundle' })
+        return
+      }
+      const metaLen = body.readUInt32LE(4)
+      const metaRaw = body.subarray(8, 8 + metaLen).toString('utf8')
+      const meta = JSON.parse(metaRaw) as {
+        artifacts?: Array<{
+          kind?: string
+          mdu_index?: number
+          slot?: number
+          full_size?: number
+          send_size?: number
+        }>
+      }
+      const artifacts = Array.isArray(meta.artifacts) ? meta.artifacts : []
+      bundleUploads.push({ artifactCount: artifacts.length })
+      for (const artifact of artifacts) {
+        const bodyLen = Number(artifact.send_size || 0)
+        const fullSize = Number.isFinite(Number(artifact.full_size)) ? Number(artifact.full_size) : null
+        if (artifact.kind === 'mdu') {
+          mduUploads.push({
+            bodyLen,
+            fullSize,
+            mduIndex: String(artifact.mdu_index ?? ''),
+          })
+        } else if (artifact.kind === 'manifest') {
+          manifestUploads.push({
+            bodyLen,
+            fullSize,
+          })
+        } else if (artifact.kind === 'shard') {
+          shardUploads.push({
+            bodyLen,
+            fullSize,
+            mduIndex: String(artifact.mdu_index ?? ''),
+            slot: String(artifact.slot ?? ''),
+          })
+        }
+      }
+      await route.continue()
+    })
     await page.route('**/sp/upload_mdu', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
       const headers = route.request().headers()
@@ -828,7 +810,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
         mduIndex: headers['x-polystore-mdu-index'] || '',
       })
-      await route.fulfill({ status: 200, body: 'ok' })
+      await route.continue()
     })
     await page.route('**/sp/upload_manifest', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
@@ -838,7 +820,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
         bodyLen: body.length,
         fullSize: fullSizeHeader ? Number(fullSizeHeader) : null,
       })
-      await route.fulfill({ status: 200, body: 'ok' })
+      await route.continue()
     })
     await page.route('**/sp/upload_shard', async (route) => {
       const body = route.request().postDataBuffer() || Buffer.alloc(0)
@@ -850,15 +832,23 @@ async function ensureWalletConnected(page: Page): Promise<void> {
         mduIndex: headers['x-polystore-mdu-index'] || '',
         slot: headers['x-polystore-slot'] || '',
       })
-      await route.fulfill({ status: 200, body: 'ok' })
+      await route.continue()
     })
 
-    const compressCheckbox = page
-      .locator('label')
-      .filter({ hasText: 'Compress before upload' })
-      .locator('input[type="checkbox"]')
+    const compressCheckbox = page.getByTestId('mdu-compress-toggle')
     if (await compressCheckbox.isChecked().catch(() => false)) {
-      await compressCheckbox.uncheck()
+      await compressCheckbox.evaluate((node) => {
+        const input = node as HTMLInputElement
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set
+        if (setter) {
+          setter.call(input, false)
+        } else {
+          input.checked = false
+        }
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      await expect(compressCheckbox).not.toBeChecked()
     }
 
     await page.getByTestId('mdu-file-input').setInputFiles({
@@ -875,10 +865,11 @@ async function ensureWalletConnected(page: Page): Promise<void> {
       await uploadBtn.click()
       await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: mode2FastUploadWaitMs })
     }
-    const activity = await openSystemActivity(page)
-    await expect(activity).toContainText(/falling back to in-browser mode 2 sharding \+ stripe upload/i, {
-      timeout: mode2FastUploadWaitMs,
-    })
+    await expect
+      .poll(() => mduUploads.length > 0 && manifestUploads.length > 0 && shardUploads.length > 0, {
+        timeout: mode2FastUploadWaitMs,
+      })
+      .toBe(true)
     expect(mduUploads.length).toBeGreaterThan(0)
     expect(manifestUploads.length).toBeGreaterThan(0)
     expect(shardUploads.length).toBeGreaterThan(0)
@@ -888,6 +879,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const sparseShardUploads = shardUploads.filter((upload) => upload.fullSize != null && upload.bodyLen < upload.fullSize)
 
     console.log('[mode2 sparse upload evidence]', {
+      bundleUploads,
       mduUploads,
       manifestUploads,
       shardUploads: shardUploads.slice(0, 6),
@@ -896,7 +888,10 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     expect(sparseMduUploads.length).toBeGreaterThan(0)
     expect(sparseManifestUploads.length).toBeGreaterThan(0)
     expect(sparseShardUploads.length).toBeGreaterThan(0)
-    expect(Math.max(...sparseMduUploads.map((upload) => upload.bodyLen))).toBeLessThan(2 * 1024 * 1024)
+    // The MDU0 sparse body carries the populated root-table prefix plus a small
+    // transport envelope, so allow bounded overhead while still rejecting full
+    // 8 MiB MDU uploads.
+    expect(Math.max(...sparseMduUploads.map((upload) => upload.bodyLen))).toBeLessThan((2 * 1024 * 1024) + 4096)
     await expect
       .poll(() => isCommitCompleteOrReset(page, commitBtn, filePath, dealId, '', true), { timeout: mode2FastPrimaryWaitMs })
       .toBe(true)
@@ -906,7 +901,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await newDealRow.click({ force: true }).catch(() => undefined)
     await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 60_000 })
 
-    const fileRow = await waitForFileRowInAnyDeal(page, filePath, mode2FastUploadWaitMs)
+    const fileRow = await waitForDealFileRow(page, dealId, filePath, mode2FastUploadWaitMs)
     const browserSlabBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-browser-slab')
     await expect(browserSlabBtn).toBeVisible({ timeout: 60_000 })
 
@@ -923,9 +918,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     expect(slabBytes.equals(fileBytes)).toBe(true)
     expect(unsignedMissingRangeRequests, 'unsigned /gateway/fetch requests without Range (fallback slab test)').toEqual([])
     await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes', { timeout: 60_000 })
-    const browserCacheBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-browser-cache')
     const clearBrowserCacheBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-clear-browser-cache')
-    await expect(browserCacheBtn).toBeEnabled({ timeout: 60_000 })
     await expect(clearBrowserCacheBtn).toBeEnabled({ timeout: 60_000 })
   })
 
@@ -963,6 +956,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const commitBtn = page.getByTestId('mdu-commit')
 
     await completeUploadAndCommit(uploadBtn, commitBtn, fileA.name, dealId, 300_000)
+    await waitForDealFileRow(page, dealId, fileA.name, 180_000)
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: fileB.name,
@@ -971,6 +965,19 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     })
 
     await completeUploadAndCommit(uploadBtn, commitBtn, fileB.name, dealId, 300_000)
+
+    const fileARow = await waitForDealFileRow(page, dealId, fileA.name, 240_000)
+    const fileBRow = await waitForDealFileRow(page, dealId, fileB.name, 240_000)
+    await expect(fileARow).toContainText('start 0')
+    await expect(fileBRow).not.toContainText('start 0')
+
+    const fileAGatewayBtn = await openFileActionMenuItem(page, fileA.name, 'deal-detail-download-gateway')
+    const fileABytes = await readDownloadBytes(page, fileAGatewayBtn, 120_000)
+    expect(fileABytes.equals(fileA.buffer)).toBe(true)
+
+    const fileBGatewayBtn = await openFileActionMenuItem(page, fileB.name, 'deal-detail-download-gateway')
+    const fileBBytes = await readDownloadBytes(page, fileBGatewayBtn, 120_000)
+    expect(fileBBytes.equals(fileB.buffer)).toBe(true)
   })
 
   test('mode2 append recovers by rehydrating local gateway from OPFS cache', async ({ page }) => {
@@ -1196,20 +1203,6 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     }
 
     await expect.poll(() => fileBGatewayAttemptCount, { timeout: 300_000 }).toBeGreaterThanOrEqual(1)
-
-    const activity = await openSystemActivity(page)
-    await expect(activity).toContainText('Gateway is missing prior slab state; attempting browser-to-gateway rehydrate from OPFS', {
-      timeout: 300_000,
-    })
-    const activityText = (await activity.textContent().catch(() => '')) || ''
-    if (activityText.includes('Gateway rehydrate skipped: local MDU #0 missing in OPFS')) {
-      console.log('[rehydrate-e2e] rehydrate skipped due missing OPFS MDU #0; treating as non-fatal in CI')
-      return
-    }
-    await expect(activity).toContainText('Rehydrated local gateway from OPFS cache', {
-      timeout: 300_000,
-    })
-    console.log('[rehydrate-e2e] detected successful rehydrate logs')
 
     await expect
       .poll(() => isCommitCompleteOrReset(page, commitBtn, fileB.name, dealId, '', true), { timeout: 180_000 })

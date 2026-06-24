@@ -597,6 +597,9 @@ jobs:
         working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
+      - name: Build polystore_core (native)
+        run: cd polystore_core && cargo build --release
+
       - name: Run Mode2 Stripe E2E (fast)
         env:
           E2E_MODE2_FAST: '1'

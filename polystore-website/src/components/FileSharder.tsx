@@ -16,6 +16,7 @@ import {
   readManifestBlob,
   readManifestRoot,
   readMdu,
+  readSlabMetadata,
   readShard,
   writeManifestRoot,
   writeSlabMetadata,
@@ -30,7 +31,7 @@ import {
 import { decodeRawPrefixFromMdu, inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFetch';
 import { lcdFetchDeal } from '../api/lcdClient';
 import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient';
-import { providerFetchMduWindowWithSession } from '../api/providerClient';
+import { providerFetchMdu, providerFetchMduWindowWithSession } from '../api/providerClient';
 import { parseServiceHint } from '../lib/serviceHint';
 import { resolveProviderEndpoints } from '../lib/providerDiscovery';
 import { useLocalGateway } from '../hooks/useLocalGateway';
@@ -53,7 +54,8 @@ import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../l
 import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
 import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
 import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../lib/upload/gatewayRecovery';
-import { collectMode2SlotFailures } from '../lib/upload/mode2Recovery';
+import { collectMode2SlotFailures, isRecoverableMode2SlotFailure } from '../lib/upload/mode2Recovery';
+import { polyfsRootHexFromMdu0Root } from '../lib/upload/polyfsRoot';
 import { classifyPolyfsCommitError } from '../lib/polyfsCommitError';
 import { waitForTransactionReceipt } from '../lib/evmRpc';
 import {
@@ -1426,8 +1428,51 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
 
               let fileRecords: Array<{ path: string; start_offset: number; size_bytes: number; flags: number }> = []
               if (gatewayBase && owner) {
+                const previousCommittedRoot = normalizeManifestRoot(baseManifestRoot)
+                const fallbackRawPath = String(lastFileMetaRef.current?.filePath || '').trim() || 'upload.bin'
+                const fallbackPath = sanitizePolyfsRecordPath(fallbackRawPath)
+                let expectedFileRecords = fallbackPath ? 1 : 0
+                if (previousCommittedRoot && previousCommittedRoot !== safeRoot) {
+                  try {
+                    const previousMeta = await readSlabMetadata(String(dealId))
+                    const previousMetaRoot = normalizeManifestRoot(previousMeta?.manifest_root)
+                    if (previousMetaRoot === previousCommittedRoot && Array.isArray(previousMeta?.file_records)) {
+                      const expectedPaths = new Set(
+                        previousMeta.file_records
+                          .map((rec) => sanitizePolyfsRecordPath(String(rec.path || '')))
+                          .filter(Boolean),
+                      )
+                      if (fallbackPath) expectedPaths.add(fallbackPath)
+                      expectedFileRecords = Math.max(expectedFileRecords, expectedPaths.size)
+                    }
+                  } catch (e) {
+                    console.warn('Failed to inspect previous local file table for gateway append snapshot', {
+                      dealId,
+                      error: e,
+                    })
+                  }
+                }
+
+                const fetchGatewayFilesWithRetry = async () => {
+                  const deadline = Date.now() + 20_000
+                  let lastError = ''
+                  for (;;) {
+                    try {
+                      const files = await gatewayListFiles(gatewayBase, safeRoot, { dealId, owner })
+                      if (files.length >= expectedFileRecords) return files
+                      lastError = `gateway file table has ${files.length} records, expected at least ${expectedFileRecords}`
+                    } catch (e) {
+                      lastError = e instanceof Error ? e.message : String(e)
+                    }
+                    if (Date.now() >= deadline) {
+                      throw new Error(lastError || 'gateway file table did not become available')
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 500))
+                  }
+                }
+
                 try {
-                  const files = await gatewayListFiles(gatewayBase, safeRoot, { dealId, owner })
+                  const files = await fetchGatewayFilesWithRetry()
                   fileRecords = files.map((f) => ({
                     path: String(f.path || ''),
                     start_offset: Math.max(0, Number(f.start_offset) || 0),
@@ -1437,9 +1482,21 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                 } catch (e) {
                   console.warn('Failed to fetch gateway file table for local index snapshot', { dealId, error: e })
                 }
-              }
-
-              if (!fileRecords.length) {
+                if (!fileRecords.length && !previousCommittedRoot) {
+                  const fallbackRawPath = String(lastFileMetaRef.current?.filePath || '').trim() || 'upload.bin'
+                  const fallbackPath = sanitizePolyfsRecordPath(fallbackRawPath)
+                  if (fallbackPath) {
+                    fileRecords = [{
+                      path: fallbackPath,
+                      start_offset: 0,
+                      size_bytes: Math.max(0, Number(lastFileMetaRef.current?.fileSizeBytes || shardProgress.fileBytesTotal) || 0),
+                      flags: 0,
+                    }]
+                  }
+                } else if (!fileRecords.length) {
+                  addLog('> Gateway append file table unavailable; leaving local deal index unsynced instead of writing a partial index.')
+                }
+              } else if (!fileRecords.length) {
                 const fallbackRawPath = String(lastFileMetaRef.current?.filePath || '').trim() || 'upload.bin'
                 const fallbackPath = sanitizePolyfsRecordPath(fallbackRawPath)
                 if (fallbackPath) {
@@ -1450,6 +1507,10 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                     flags: 0,
                   }]
                 }
+              }
+
+              if (!fileRecords.length) {
+                return
               }
 
               try {
@@ -1603,6 +1664,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     browserPerfEndPhase,
     browserPerfLog,
     browserPerfStartPhase,
+    baseManifestRoot,
     collectedMdus,
     commitHash,
     currentManifestBlob,
@@ -1724,6 +1786,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         if (!retryFailure) {
           throw new Error(retryResult.error || `Slot ${params.slot} retry failed`)
         }
+        if (!isRecoverableMode2SlotFailure(retryFailure)) {
+          throw new Error(retryFailure.reason || retryResult.error || `Slot ${params.slot} retry failed`)
+        }
         currentProvider = retryFailure.provider || nextProvider
         addLog(`> Slot ${params.slot} retry failed on ${currentProvider}: ${retryFailure.reason}`)
       }
@@ -1806,7 +1871,12 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           throw new Error(result.error || 'Mode 2 upload failed')
         }
 
-        addLog(`> Detected ${failures.length} failing setup slot(s). Starting automatic replacement...`)
+        const recoverableFailures = failures.filter(isRecoverableMode2SlotFailure)
+        if (recoverableFailures.length === 0) {
+          throw new Error(failures[0]?.reason || result.error || 'Mode 2 upload failed')
+        }
+
+        addLog(`> Detected ${recoverableFailures.length} recoverable failing setup slot(s). Starting automatic replacement...`)
         let snapshot: DealSetupSnapshot = {
           baseManifestRoot: baseManifestRoot || '',
           owner: dealOwner,
@@ -1814,7 +1884,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           slotBases: bases,
           slotProviders: providers,
         }
-        for (const failure of failures) {
+        for (const failure of recoverableFailures) {
           const activeProvider = String(snapshot.slotProviders[failure.slot] || failure.provider || '').trim()
           if (!activeProvider) {
             throw new Error(`Unable to determine provider for failing slot ${failure.slot}`)
@@ -2059,6 +2129,19 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     const rows = mode2RowsForK(stripeParams.k)
 
     const fetchCommittedMdu = async (mduIndex: number, kindLabel: string): Promise<Uint8Array> => {
+      if (mduIndex === 0) {
+        addLog(`> Bootstrap fetch: fetching committed ${kindLabel} metadata...`)
+        let lastError: unknown = null
+        for (const entry of dataSlotProviders) {
+          try {
+            return await providerFetchMdu(entry.base, manifestRoot, mduIndex, { dealId, owner })
+          } catch (err) {
+            lastError = err
+          }
+        }
+        const msg = lastError instanceof Error ? lastError.message : String(lastError || 'metadata provider fetch failed')
+        throw new Error(`failed to fetch committed ${kindLabel} metadata: ${msg}`)
+      }
       addLog(`> Bootstrap fetch: opening retrieval sessions for committed ${kindLabel} slices...`)
       const requests = dataSlotProviders.map((entry) => ({
         key: `${mduIndex}:${entry.slot}`,
@@ -2150,7 +2233,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         shardFile: (data) => workerClient.shardFile(data),
         computeManifest: (roots) => workerClient.computeManifest(roots),
       })
-      addLog(`> Mode 2 append bootstrap: verified committed manifest root ${materialized.manifestRoot}.`)
+      addLog(`> Mode 2 append bootstrap: verified committed PolyFS root ${materialized.manifestRoot}.`)
       await writeSlabGenerationAtomically(dealId, {
         manifestRoot: materialized.manifestRoot,
         manifestBlob: materialized.manifestBlob,
@@ -3171,6 +3254,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         const gatewayBases = localGatewayCandidates(gatewaySeed)
         let gatewayErrorMessage = ''
         let gatewayUnreachable = false
+        let gatewayAppendStateMissing = false
         let providerUploadUnavailable = false
 
         for (let i = 0; i < gatewayBases.length; i++) {
@@ -3276,6 +3360,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               }
             }
 
+            if (isMissingGatewayAppendStateError(msg)) {
+              gatewayAppendStateMissing = true
+            }
             const providerPathUnavailable = isProviderUploadConnectivityError(msg)
             if (providerPathUnavailable) {
               providerUploadUnavailable = true
@@ -3308,7 +3395,40 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           setProcessing(false)
           return
         }
-        if (gatewayUnreachable) {
+        if (gatewayAppendStateMissing) {
+          if (file.size > gatewayFallbackWasmMaxFileBytes) {
+            const sizeLabel = formatBytes(file.size)
+            const errorMessage = `Gateway is missing prior append state while processing ${sizeLabel}. In-browser fallback is disabled for large files; keep the local gateway slab state available or rehydrate the gateway before retrying.`
+            browserPerfLog('gateway_ingest:fallback-blocked', {
+              error: errorMessage,
+              fileBytes: file.size,
+            })
+            addLog(`> ${errorMessage}`)
+            setMode2UploadError(errorMessage)
+            setShardProgress((p) => ({
+              ...p,
+              phase: 'error',
+              label: errorMessage,
+              currentOpStartedAtMs: null,
+              lastOpMs: performance.now() - startTs,
+            }))
+            setProcessing(false)
+            return
+          }
+
+          addLog('> Gateway is missing prior append state; falling back to in-browser Mode 2 sharding + stripe upload.')
+          browserPerfLog('gateway_ingest:fallback-browser-missing-append-state', {
+            fileBytes: file.size,
+          })
+          setMode2UploadError(null)
+          setShardProgress((p) => ({
+            ...p,
+            phase: 'planning',
+            label: 'Gateway missing append state; falling back to in-browser sharding...',
+            currentOpStartedAtMs: null,
+            lastOpMs: performance.now() - startTs,
+          }))
+        } else if (gatewayUnreachable) {
           if (file.size > gatewayFallbackWasmMaxFileBytes) {
             const sizeLabel = formatBytes(file.size)
             const errorMessage = `Gateway unavailable while processing ${sizeLabel}. In-browser fallback is disabled for large files; please keep the local gateway running, allow local network access for localhost/127.0.0.1, and retry.`
@@ -4460,7 +4580,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           ...userMdus.map((m) => ({ ...m, index: 1 + witnessMduCount + m.index })),
         ];
 
-        const finalRootHex = '0x' + Array.from(manifest.root).map(b => b.toString(16).padStart(2, '0')).join('');
+        const aggregateManifestRootHex = '0x' + Array.from(manifest.root).map(b => b.toString(16).padStart(2, '0')).join('');
+        const finalRootHex = polyfsRootHexFromMdu0Root(mdu0Root);
         const finalManifest = makePreparedManifest(toU8((manifest as unknown as { blob: Uint8Array | number[] }).blob));
 
         setCollectedMdus(finalMdus);
@@ -4481,8 +4602,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           userBytesDone: p.fileBytesTotal,
         }));
 
-        addLog(`> Manifest Root: ${finalRootHex.slice(0, 16)}...`);
-        console.log(`[Debug] Full Manifest Root: ${finalRootHex}`);
+        addLog(`> PolyFS Root: ${finalRootHex.slice(0, 16)}...`);
+        console.log(`[Debug] Full PolyFS Root: ${finalRootHex}`);
+        console.log(`[Debug] Aggregate Manifest Commitment: ${aggregateManifestRootHex}`);
         addLog(
           useMode2
             ? `> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User); ${mode2UserShards.length} striped user MDUs uploaded for this generation`
@@ -5590,6 +5712,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                                 type="checkbox"
                                 className="hidden"
                                 checked={compressUploads}
+                                data-testid="mdu-compress-toggle"
                                 disabled={processing || activeUploading}
                                 onChange={(e) => setCompressUploads(e.target.checked)}
                               />

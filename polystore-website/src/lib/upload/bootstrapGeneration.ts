@@ -1,4 +1,5 @@
 import { normalizeManifestRoot } from '../cacheFreshness'
+import { polyfsRootHexFromMdu0Root } from './polyfsRoot'
 
 export interface ExistingUserMdu {
   index: number
@@ -21,6 +22,7 @@ export interface CommittedMduResult {
 
 export interface MaterializedBootstrapGeneration {
   manifestRoot: string
+  aggregateManifestRoot: string
   manifestBlob: Uint8Array
   mdu0Bytes: Uint8Array
   witnessCount: number
@@ -140,16 +142,18 @@ export async function materializeBootstrapGeneration(
   }
 
   const manifest = await input.computeManifest(allRoots)
-  const manifestRoot = normalizeManifestRoot(
+  const aggregateManifestRoot = normalizeManifestRoot(
     `0x${Array.from(manifest.root).map((b) => b.toString(16).padStart(2, '0')).join('')}`,
   )
+  const manifestRoot = polyfsRootHexFromMdu0Root(mdu0Root)
   const expectedManifestRoot = normalizeManifestRoot(input.expectedManifestRoot)
   if (manifestRoot !== expectedManifestRoot) {
-    throw new Error(`bootstrap manifest root mismatch: got ${manifestRoot}, want ${expectedManifestRoot}`)
+    throw new Error(`bootstrap PolyFS root mismatch: got ${manifestRoot}, want ${expectedManifestRoot}`)
   }
 
   return {
     manifestRoot,
+    aggregateManifestRoot,
     manifestBlob: new Uint8Array(manifest.blob),
     mdu0Bytes,
     witnessCount,

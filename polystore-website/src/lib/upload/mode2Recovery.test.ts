@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { collectMode2SlotFailures } from './mode2Recovery'
+import { collectMode2SlotFailures, isRecoverableMode2SlotFailure } from './mode2Recovery'
 import type { UploadTaskEvent } from './engine'
 
 test('mode2 recovery: maps shard failures directly from slot events', () => {
@@ -99,4 +99,24 @@ test('mode2 recovery: de-duplicates multiple failures for the same slot', () => 
   assert.equal(out.length, 1)
   assert.equal(out[0]?.slot, 1)
   assert.equal(out[0]?.reason, 'connection refused')
+})
+
+test('mode2 recovery: does not replace providers for malformed client upload roots', () => {
+  const [failure] = collectMode2SlotFailures({
+    events: [
+      {
+        phase: 'end',
+        kind: 'manifest',
+        target: 'https://sp1.polynomialstore.com',
+        bytes: 4096,
+        ok: false,
+        error: 'invalid manifest root',
+      },
+    ],
+    slotBases: ['https://sp1.polynomialstore.com'],
+    slotProviders: ['nil1sp1'],
+  })
+
+  assert.ok(failure)
+  assert.equal(isRecoverableMode2SlotFailure(failure), false)
 })

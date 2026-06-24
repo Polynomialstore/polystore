@@ -16,7 +16,7 @@ test('materializeBootstrapGeneration builds witness/mdus/manifest and verifies r
       { index: 1, data: new Uint8Array([2, 2]) },
       { index: 0, data: new Uint8Array([1, 1]) },
     ],
-    expectedManifestRoot: `0x${'07'.repeat(32)}`,
+    expectedManifestRoot: `0x${'aa'.repeat(32)}`,
     rsK: 2,
     rsM: 1,
     rawMduCapacity: 4,
@@ -53,7 +53,8 @@ test('materializeBootstrapGeneration builds witness/mdus/manifest and verifies r
     },
   })
 
-  assert.equal(result.manifestRoot, `0x${'07'.repeat(32)}`)
+  assert.equal(result.manifestRoot, `0x${'aa'.repeat(32)}`)
+  assert.equal(result.aggregateManifestRoot, `0x${'07'.repeat(32)}`)
   assert.deepEqual(Array.from(result.manifestBlob), [7, 7, 7, 7])
   assert.deepEqual(Array.from(result.mdu0Bytes), [0xaa, 0xbb])
   assert.equal(result.witnessCount, 2)
@@ -105,7 +106,7 @@ test('materializeBootstrapGeneration rejects manifest mismatches', async () => {
         shardFile: async () => ({ mdu_root: rootByte(3) }),
         computeManifest: async () => ({ root: rootByte(4), blob: new Uint8Array([4]) }),
       }),
-    /bootstrap manifest root mismatch/,
+    /bootstrap PolyFS root mismatch/,
   )
 })
 
@@ -115,7 +116,7 @@ test('materializeBootstrapGeneration prefers payload-aware expansion for bootstr
   await materializeBootstrapGeneration({
     baseMdu0Bytes: new Uint8Array([5]),
     existingUserMdus: [{ index: 0, data: new Uint8Array([9, 9]), rawData: new Uint8Array([7, 7]) }],
-    expectedManifestRoot: `0x${'05'.repeat(32)}`,
+    expectedManifestRoot: `0x${'01'.repeat(32)}`,
     rsK: 2,
     rsM: 1,
     rawMduCapacity: 8,

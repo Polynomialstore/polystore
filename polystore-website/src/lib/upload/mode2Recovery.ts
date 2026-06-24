@@ -10,8 +10,27 @@ export interface Mode2SlotFailure {
   index?: number
 }
 
+const NON_RECOVERABLE_REASON_PATTERNS = [
+  'invalid manifest root',
+  'invalid_manifest_root',
+  'missing manifest root',
+  'missing_manifest_root',
+  'previous_manifest_root',
+  'stale manifest_root',
+  'invalid deal_id',
+  'invalid_deal_id',
+  'missing_headers',
+  'invalid upload_generation',
+  'invalid_upload_generation',
+]
+
 function normalizeTarget(value: string): string {
   return String(value || '').trim().replace(/\/+$/, '')
+}
+
+export function isRecoverableMode2SlotFailure(failure: Mode2SlotFailure): boolean {
+  const reason = String(failure.reason || '').toLowerCase()
+  return !NON_RECOVERABLE_REASON_PATTERNS.some((pattern) => reason.includes(pattern))
 }
 
 export function collectMode2SlotFailures(params: {
