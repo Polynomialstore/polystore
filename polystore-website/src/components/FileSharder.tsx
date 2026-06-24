@@ -2233,7 +2233,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         shardFile: (data) => workerClient.shardFile(data),
         computeManifest: (roots) => workerClient.computeManifest(roots),
       })
-      addLog(`> Mode 2 append bootstrap: verified committed manifest root ${materialized.manifestRoot}.`)
+      addLog(`> Mode 2 append bootstrap: verified committed PolyFS root ${materialized.manifestRoot}.`)
       await writeSlabGenerationAtomically(dealId, {
         manifestRoot: materialized.manifestRoot,
         manifestBlob: materialized.manifestBlob,
