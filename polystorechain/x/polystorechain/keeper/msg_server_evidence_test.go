@@ -70,7 +70,7 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       assignedProvider,
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,

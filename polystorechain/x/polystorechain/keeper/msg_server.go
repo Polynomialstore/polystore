@@ -130,6 +130,37 @@ func isPolyFSUserDataMduTarget(deal types.Deal, mduIndex uint64) bool {
 	return mduIndex > deal.WitnessMdus
 }
 
+func validatePolyFSRetrievalRange(deal types.Deal, stripe stripeParams, startMduIndex uint64, startBlobIndex uint32, blobCount uint64) (uint64, uint64, error) {
+	startBase, overflow := mulUint64(startMduIndex, stripe.leafCount)
+	if overflow {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index overflow")
+	}
+	startGlobal, overflow := addUint64(startBase, uint64(startBlobIndex))
+	if overflow {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	}
+	endGlobal, overflow := addUint64(startGlobal, blobCount)
+	if overflow {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	}
+	if !isPolyFSUserDataMduTarget(deal, startMduIndex) {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrapf("retrieval range must start at a user data MDU (start_mdu_index=%d witness_mdus=%d)", startMduIndex, deal.WitnessMdus)
+	}
+	if deal.TotalMdus != 0 {
+		if startMduIndex >= deal.TotalMdus {
+			return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index out of range")
+		}
+		maxGlobal, overflow := mulUint64(deal.TotalMdus, stripe.leafCount)
+		if overflow {
+			return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("deal content range overflow")
+		}
+		if endGlobal > maxGlobal {
+			return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
+		}
+	}
+	return startGlobal, endGlobal, nil
+}
+
 func flattenProofPath(path [][]byte) ([]byte, bool) {
 	if len(path) == 0 {
 		return nil, false
@@ -2367,10 +2398,8 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	if msg.StartBlobIndex >= uint32(stripe.leafCount) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("start_blob_index out of range")
 	}
-	startGlobal := msg.StartMduIndex*stripe.leafCount + uint64(msg.StartBlobIndex)
-	endGlobal, overflow := addUint64(startGlobal, msg.BlobCount)
-	if overflow {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	if _, _, err := validatePolyFSRetrievalRange(deal, stripe, msg.StartMduIndex, msg.StartBlobIndex, msg.BlobCount); err != nil {
+		return nil, err
 	}
 	if stripe.mode == 2 {
 		if msg.BlobCount == 0 {
@@ -2394,15 +2423,6 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		providerSlot, ok := providerSlotIndex(deal, msg.Provider)
 		if !ok || providerSlot != startSlot {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
-		}
-	}
-	if deal.TotalMdus != 0 {
-		if msg.StartMduIndex >= deal.TotalMdus {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index out of range")
-		}
-		maxGlobal := deal.TotalMdus * stripe.leafCount
-		if endGlobal > maxGlobal {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
 		}
 	}
 
@@ -2648,10 +2668,8 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 	if msg.StartBlobIndex >= uint32(stripe.leafCount) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("start_blob_index out of range")
 	}
-	startGlobal := msg.StartMduIndex*stripe.leafCount + uint64(msg.StartBlobIndex)
-	endGlobal, overflow := addUint64(startGlobal, msg.BlobCount)
-	if overflow {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	if _, _, err := validatePolyFSRetrievalRange(deal, stripe, msg.StartMduIndex, msg.StartBlobIndex, msg.BlobCount); err != nil {
+		return nil, err
 	}
 	if stripe.mode == 2 {
 		endIndex := uint64(msg.StartBlobIndex) + msg.BlobCount - 1
@@ -2672,15 +2690,6 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 		providerSlot, ok := providerSlotIndex(deal, msg.Provider)
 		if !ok || providerSlot != startSlot {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
-		}
-	}
-	if deal.TotalMdus != 0 {
-		if msg.StartMduIndex >= deal.TotalMdus {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index out of range")
-		}
-		maxGlobal := deal.TotalMdus * stripe.leafCount
-		if endGlobal > maxGlobal {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
 		}
 	}
 
@@ -2915,10 +2924,8 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	if msg.StartBlobIndex >= uint32(stripe.leafCount) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("start_blob_index out of range")
 	}
-	startGlobal := msg.StartMduIndex*stripe.leafCount + uint64(msg.StartBlobIndex)
-	endGlobal, overflow := addUint64(startGlobal, msg.BlobCount)
-	if overflow {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range overflow")
+	if _, _, err := validatePolyFSRetrievalRange(deal, stripe, msg.StartMduIndex, msg.StartBlobIndex, msg.BlobCount); err != nil {
+		return nil, err
 	}
 
 	// For protocol sessions, the serving provider must be an ACTIVE slot provider (or the active provider of a repairing slot).
@@ -2966,16 +2973,6 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 		}
 		if providerSlot != startSlot {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
-		}
-	}
-
-	if deal.TotalMdus != 0 {
-		if msg.StartMduIndex >= deal.TotalMdus {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index out of range")
-		}
-		maxGlobal := deal.TotalMdus * stripe.leafCount
-		if endGlobal > maxGlobal {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
 		}
 	}
 

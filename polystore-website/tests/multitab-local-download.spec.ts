@@ -5,6 +5,7 @@ import { bech32 } from 'bech32'
 import { type Hex } from 'viem'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
+const manifestRootPattern = /^0x(?:[0-9a-f]{64}|[0-9a-f]{96})$/i
 
 function ethToPolystoreAddress(ethAddress: string): string {
   const data = Buffer.from(ethAddress.replace(/^0x/, ''), 'hex')
@@ -182,7 +183,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
             cid: '',
             size: '0',
             escrow_balance: '1000000',
-            end_block: '1000',
+            end_block: '99999999',
             providers: providerAddrs,
             service_hint: 'General:rs=2+1',
           },
@@ -202,7 +203,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
           manifest_root: committedRoot ? Buffer.from(committedRoot.slice(2), 'hex').toString('base64') : '',
           size: committedRoot ? String(24 * 1024 * 1024) : '0',
           escrow_balance: '1000000',
-          end_block: '1000',
+          end_block: '99999999',
           providers: providerAddrs,
           service_hint: 'General:rs=2+1',
         },
@@ -309,7 +310,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   await expect(page.getByTestId('mdu-upload-card')).toHaveAttribute('data-panel-state', 'success', { timeout: 60_000 })
   await expect(page.getByTestId('mdu-commit')).toContainText(/Committed!/i, { timeout: 60_000 })
   await expect(page.getByTestId('mdu-upload-card').getByText(/^Upload file$/i)).toBeVisible({ timeout: 60_000 })
-  await expect.poll(() => committedRoot, { timeout: 30_000 }).toMatch(/^0x[0-9a-f]{96}$/i)
+  await expect.poll(() => committedRoot, { timeout: 30_000 }).toMatch(manifestRootPattern)
 
   // Second tab: chain reports committed CID, but gateway slab endpoints fail.
   const page2 = await context.newPage()
@@ -353,7 +354,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
             cid: committedRoot,
             size: String(24 * 1024 * 1024),
             escrow_balance: '1000000',
-            end_block: '1000',
+            end_block: '99999999',
             providers: providerAddrs,
             service_hint: 'General:rs=2+1',
           },
@@ -373,7 +374,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
           manifest_root: committedRoot ? Buffer.from(committedRoot.slice(2), 'hex').toString('base64') : '',
           size: String(24 * 1024 * 1024),
           escrow_balance: '1000000',
-          end_block: '1000',
+          end_block: '99999999',
           providers: providerAddrs,
           service_hint: 'General:rs=2+1',
         },

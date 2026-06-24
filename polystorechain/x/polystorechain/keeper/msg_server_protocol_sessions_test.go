@@ -117,7 +117,7 @@ func TestProtocolRepairSession_PendingProviderOnly_AndBudgetFundsFees(t *testing
 		DealId:         setup.deal.Id,
 		Provider:       setup.active,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0, // slot 0
 		BlobCount:      1,
 		Nonce:          1,
@@ -147,7 +147,7 @@ func TestProtocolRepairSession_PendingProviderOnly_AndBudgetFundsFees(t *testing
 		DealId:         setup.deal.Id,
 		Provider:       setup.active,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          2,
@@ -158,6 +158,46 @@ func TestProtocolRepairSession_PendingProviderOnly_AndBudgetFundsFees(t *testing
 		},
 	})
 	require.Error(t, err)
+}
+
+func TestProtocolRetrievalSession_RejectsMetadataMduRanges(t *testing.T) {
+	setup := setupProtocolRepairSession(t)
+
+	cases := []struct {
+		name          string
+		startMduIndex uint64
+		blobCount     uint64
+	}{
+		{name: "mdu0", startMduIndex: 0, blobCount: 1},
+		{name: "witness_mdu", startMduIndex: 1, blobCount: 1},
+		{name: "witness_range_crosses_into_user_data", startMduIndex: 1, blobCount: types.BlobsPerMdu + 1},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := setup.msgServer.OpenProtocolRetrievalSession(setup.ctx, &types.MsgOpenProtocolRetrievalSession{
+				Creator:        setup.pending,
+				Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR,
+				DealId:         setup.deal.Id,
+				Provider:       setup.active,
+				ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
+				StartMduIndex:  tc.startMduIndex,
+				StartBlobIndex: 0,
+				BlobCount:      tc.blobCount,
+				Nonce:          uint64(i + 1),
+				ExpiresAt:      0,
+				MaxTotalFee:    math.NewInt(0),
+				Auth: &types.MsgOpenProtocolRetrievalSession_Repair{
+					Repair: &types.RepairAuth{Slot: 0},
+				},
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "retrieval range must start at a user data MDU")
+		})
+	}
+
+	require.Equal(t, "1000stake", setup.bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+	require.True(t, setup.bank.moduleBalances[types.ModuleName].IsZero())
 }
 
 func TestProtocolRepairSession_RejectsTargetAndRangeMismatch(t *testing.T) {
@@ -171,7 +211,7 @@ func TestProtocolRepairSession_RejectsTargetAndRangeMismatch(t *testing.T) {
 		DealId:         setup.deal.Id,
 		Provider:       setup.pending,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
@@ -192,7 +232,7 @@ func TestProtocolRepairSession_RejectsTargetAndRangeMismatch(t *testing.T) {
 		DealId:         setup.deal.Id,
 		Provider:       setup.active,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 7, // rs=8+4 uses 8 rows per slot; blob 7..8 crosses slots.
 		BlobCount:      2,
 		Nonce:          2,
@@ -213,7 +253,7 @@ func TestProtocolRepairSession_RejectsTargetAndRangeMismatch(t *testing.T) {
 		DealId:         setup.deal.Id,
 		Provider:       setup.active,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          3,
@@ -303,7 +343,7 @@ func TestProtocolAuditSession_RequiresStoredTask(t *testing.T) {
 		Assignee:       assignee,
 		Provider:       serving,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		ExpiresAt:      0, // default to deal end_block
@@ -319,7 +359,7 @@ func TestProtocolAuditSession_RequiresStoredTask(t *testing.T) {
 		DealId:         deal.Id,
 		Provider:       serving,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
@@ -338,7 +378,7 @@ func TestProtocolAuditSession_RequiresStoredTask(t *testing.T) {
 		DealId:         deal.Id,
 		Provider:       serving,
 		ManifestRoot:   mustDecodeHexBytes(t, validManifestCid),
-		StartMduIndex:  1,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          2,

@@ -74,7 +74,7 @@ func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       deal.Providers[0],
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      2,
 		Nonce:          1,

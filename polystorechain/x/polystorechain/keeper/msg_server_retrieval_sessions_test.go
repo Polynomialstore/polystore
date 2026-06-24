@@ -209,7 +209,7 @@ func TestRetrievalSession_OpenRejectsNonceReplay(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       assignedProvider,
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
@@ -222,13 +222,104 @@ func TestRetrievalSession_OpenRejectsNonceReplay(t *testing.T) {
 		DealId:         resDeal.DealId,
 		Provider:       assignedProvider,
 		ManifestRoot:   deal.ManifestRoot,
-		StartMduIndex:  0,
+		StartMduIndex:  2,
 		StartBlobIndex: 0,
 		BlobCount:      1,
 		Nonce:          1,
 		ExpiresAt:      0,
 	})
 	require.Error(t, err)
+}
+
+func TestRetrievalSession_OpenRejectsMetadataMduRanges(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	for i := 0; i < 5; i++ {
+		addrBz := make([]byte, 20)
+		copy(addrBz, []byte("meta_provider_____"))
+		addrBz[15] = byte('A' + i)
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	privKey, err := gethCrypto.GenerateKey()
+	require.NoError(t, err)
+	evmAddr := gethCrypto.PubkeyToAddress(privKey.PublicKey)
+	owner := sdk.AccAddress(evmAddr.Bytes()).String()
+
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             owner,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		InitialEscrowAmount: math.NewInt(100000000),
+		MaxMonthlySpend:     math.NewInt(10000000),
+	})
+	require.NoError(t, err)
+
+	manifestRoot := make([]byte, types.POLYFS_ROOT_SIZE)
+	for i := range manifestRoot {
+		manifestRoot[i] = byte(i + 1)
+	}
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:     owner,
+		DealId:      resDeal.DealId,
+		Cid:         "0x" + hexEncode(manifestRoot),
+		Size_:       8 * 1024 * 1024,
+		TotalMdus:   4,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+	deal, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
+	require.NoError(t, err)
+	assignedProvider := resDeal.AssignedProviders[0]
+
+	cases := []struct {
+		name          string
+		startMduIndex uint64
+		blobCount     uint64
+	}{
+		{name: "mdu0", startMduIndex: 0, blobCount: 1},
+		{name: "witness_mdu", startMduIndex: 1, blobCount: 1},
+		{name: "witness_range_crosses_into_user_data", startMduIndex: 1, blobCount: types.BlobsPerMdu + 1},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := msgServer.OpenRetrievalSession(f.ctx, &types.MsgOpenRetrievalSession{
+				Creator:        owner,
+				DealId:         resDeal.DealId,
+				Provider:       assignedProvider,
+				ManifestRoot:   deal.ManifestRoot,
+				StartMduIndex:  tc.startMduIndex,
+				StartBlobIndex: 0,
+				BlobCount:      tc.blobCount,
+				Nonce:          uint64(i + 1),
+				ExpiresAt:      0,
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "retrieval range must start at a user data MDU")
+		})
+	}
+
+	_, err = msgServer.OpenRetrievalSession(f.ctx, &types.MsgOpenRetrievalSession{
+		Creator:        owner,
+		DealId:         resDeal.DealId,
+		Provider:       assignedProvider,
+		ManifestRoot:   deal.ManifestRoot,
+		StartMduIndex:  2,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          99,
+		ExpiresAt:      0,
+	})
+	require.NoError(t, err)
 }
 
 func hexEncode(bz []byte) string {

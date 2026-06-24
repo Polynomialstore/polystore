@@ -6,6 +6,7 @@ import { POLYSTORE_PRECOMPILE_ABI } from '../src/lib/polystorePrecompile'
 import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const path = process.env.E2E_PATH || '/#/dashboard'
+const manifestRootPattern = /^0x(?:[0-9a-f]{64}|[0-9a-f]{96})$/i
 const precompile = '0x0000000000000000000000000000000000000900'
 
 function ethToPolystoreAddress(ethAddress: string): string {
@@ -290,8 +291,8 @@ test('repro bug: download from commit content widget', async ({
           contentType: 'application/json',
           headers: { 'access-control-allow-origin': '*' },
           body: JSON.stringify({
-              manifest_root: '0x' + 'a'.repeat(96),
-              cid: '0x' + 'a'.repeat(96),
+              manifest_root: '0x' + 'a'.repeat(64),
+              cid: '0x' + 'a'.repeat(64),
               size_bytes: 17,
               file_size_bytes: 17,
               total_mdus: 1,
@@ -502,7 +503,7 @@ test('repro bug: download from commit content widget', async ({
     await expect
       .poll(async () => {
         const staged = ((await page.getByTestId('staged-manifest-root').first().textContent().catch(() => '')) || '').trim()
-        return /^0x[0-9a-f]{96}$/i.test(staged)
+        return manifestRootPattern.test(staged)
       }, { timeout: 20_000 })
       .toBe(true)
     stagedReady = true
