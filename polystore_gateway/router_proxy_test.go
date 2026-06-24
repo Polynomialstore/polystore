@@ -99,6 +99,63 @@ func TestRouterGatewayFetch_ProxiesByDealProvider(t *testing.T) {
 	}
 }
 
+func TestRouterGatewayListFiles_ProxiesByDealProvider(t *testing.T) {
+	requireOnchainSessionForTest(t, false)
+	dealProviderCache = sync.Map{}
+	dealProvidersCache = sync.Map{}
+	providerBaseCache = sync.Map{}
+
+	providerAddr := "nil1provider"
+	var gotPath string
+	providerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"files":[]}`))
+	}))
+	defer providerSrv.Close()
+
+	maddr := mustHTTPMultiaddr(t, providerSrv.URL)
+
+	lcdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deal": map[string]any{
+					"providers": []string{providerAddr},
+				},
+			})
+		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"provider": map[string]any{
+					"endpoints": []string{maddr},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcdSrv.Close()
+
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	r := mux.NewRouter()
+	r.HandleFunc("/gateway/list-files/{cid}", RouterGatewayListFiles).Methods("GET", "OPTIONS")
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/list-files/0xabc?deal_id=1&owner=nil1x", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if gotPath != "/sp/retrieval/list-files/0xabc" {
+		t.Fatalf("expected provider list-files path forwarded, got %q", gotPath)
+	}
+}
+
 func TestRouterGatewayFetch_UnsignedMissingRangeRejected(t *testing.T) {
 	requireOnchainSessionForTest(t, false)
 	oldRequireSig := requireRetrievalReqSig

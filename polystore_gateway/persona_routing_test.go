@@ -67,6 +67,21 @@ func TestProviderDaemonRoutes_DoNotExposeGatewaySurface(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"/gateway/list-files/0xabc?deal_id=1&owner=nil1x",
+		"/gateway/slab/0xabc?deal_id=1&owner=nil1x",
+		"/gateway/manifest-info/0xabc?deal_id=1&owner=nil1x",
+		"/gateway/mdu-kzg/0xabc/0?deal_id=1&owner=nil1x",
+		"/gateway/debug/raw-fetch/0xabc",
+	} {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected provider daemon to hide gateway surface %s, got %d", path, w.Code)
+		}
+	}
+
+	for _, path := range []string{
 		"/sp/retrieval/list-files/0xabc?deal_id=1&owner=nil1x",
 		"/sp/retrieval/slab/0xabc?deal_id=1&owner=nil1x",
 		"/sp/retrieval/manifest-info/0xabc?deal_id=1&owner=nil1x",
@@ -76,8 +91,8 @@ func TestProviderDaemonRoutes_DoNotExposeGatewaySurface(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		r.ServeHTTP(w, req)
-		if w.Code != http.StatusNotFound {
-			t.Fatalf("expected provider daemon to hide %s, got %d", path, w.Code)
+		if w.Code == http.StatusNotFound {
+			t.Fatalf("expected provider daemon to expose retrieval route %s", path)
 		}
 	}
 }

@@ -29,7 +29,7 @@ import { multiaddrToP2pTarget, type P2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
 import { classifyError, isRetryable } from '../lib/transport/errors'
-import { isGatewayTransportEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode'
+import { allowNonGatewayBackends, isGatewayTransportEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode'
 
 export interface FetchInput {
   dealId: string
@@ -716,9 +716,9 @@ export function useFetch() {
         }
 
         for (const c of group.chunks) {
-          const candidateProviders = gatewayModeActive
-            ? [provider]
-            : [provider, ...providerFallbackOrder.filter((candidate) => candidate !== provider)]
+          const candidateProviders = allowNonGatewayBackends(preferenceOverride ?? transport.preference)
+            ? [provider, ...providerFallbackOrder.filter((candidate) => candidate !== provider)]
+            : [provider]
           let rangeResult: Awaited<ReturnType<typeof transport.fetchRange>> | null = null
           let selectedProvider = provider
           let selectedSessionId: Hex | null = primarySessionId

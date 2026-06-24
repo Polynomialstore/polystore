@@ -85,10 +85,12 @@ test('resolveTransportPreference keeps explicit gateway_only unchanged', () => {
   assert.equal(resolved, 'gateway_only')
 })
 
-test('isTrustedLocalGatewayBase only allows loopback :8080', () => {
+test('isTrustedLocalGatewayBase only allows loopback user-gateway ports', () => {
   assert.equal(isTrustedLocalGatewayBase('http://localhost:8080'), true)
   assert.equal(isTrustedLocalGatewayBase('http://127.0.0.1:8080'), true)
   assert.equal(isTrustedLocalGatewayBase('https://localhost:8080'), true)
+  assert.equal(isTrustedLocalGatewayBase('http://localhost:18080'), true)
+  assert.equal(isTrustedLocalGatewayBase('http://127.0.0.1:18080'), true)
 
   assert.equal(isTrustedLocalGatewayBase('http://localhost:8081'), false)
   assert.equal(isTrustedLocalGatewayBase('http://127.0.0.1:8091'), false)
