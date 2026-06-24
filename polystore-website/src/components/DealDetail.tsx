@@ -449,9 +449,10 @@ function FileRow({
       'local slab read',
     )
       .then(async (bytes) => {
+        if (!compressed) return bytes
         const decoded = await decodePolyceV1(bytes)
         const payload = decoded.payload
-        return compressed && (safeStart > 0 || safeLen > 0) ? sliceRange(payload, safeStart, safeLen) : payload
+        return safeStart > 0 || safeLen > 0 ? sliceRange(payload, safeStart, safeLen) : payload
       })
       .catch((error: unknown) => {
         const msg = error instanceof Error ? error.message : String(error)
