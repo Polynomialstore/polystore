@@ -59,6 +59,7 @@ import {
   encodeConfirmRetrievalSessionsData,
   encodeOpenRetrievalSessionsData,
 } from '../lib/polystorePrecompile'
+import { polyfsRootHexFromMdu0Root } from '../lib/upload/polyfsRoot'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -2078,6 +2079,7 @@ export function DealDetail({
 
         const rootsOut: { kind: 'mdu0' | 'witness' | 'user'; mdu_index: number; root_hex: string; root_table_index?: number }[] = []
         const rootsAgg = new Uint8Array(32 * totalMdus)
+        let computedPolyfsRoot = ''
 
         for (let idx = 0; idx < totalMdus; idx++) {
           const bytes = await readMdu(String(dealId), idx)
@@ -2087,6 +2089,9 @@ export function DealDetail({
           const mduRoot = toU8((committed as { mdu_root?: Uint8Array | number[] }).mdu_root)
           if (mduRoot.byteLength !== 32) throw new Error(`invalid mdu_root length for MDU #${idx}`)
           rootsAgg.set(mduRoot, idx * 32)
+          if (idx === 0) {
+            computedPolyfsRoot = polyfsRootHexFromMdu0Root(mduRoot)
+          }
 
           const kind = idx === 0 ? 'mdu0' : idx <= witnessCount ? 'witness' : 'user'
           const rootHex = bytesTo0xHex(mduRoot)
@@ -2096,15 +2101,14 @@ export function DealDetail({
         }
 
         const manifest = await workerClient.computeManifest(rootsAgg)
-        const computedRoot = bytesTo0xHex(toU8((manifest as { root?: Uint8Array | number[] }).root))
         const blobHex = bytesTo0xHex(toU8((manifest as { blob?: Uint8Array | number[] }).blob))
 
-        if (cid && computedRoot.trim().toLowerCase() !== cid.trim().toLowerCase()) {
-          setManifestInfoError(`manifest root mismatch: computed=${shortHex(computedRoot)} expected=${shortHex(cid)}`)
+        if (cid && normalizeManifestRoot(computedPolyfsRoot) !== normalizeManifestRoot(cid)) {
+          setManifestInfoError(`manifest root mismatch: computed=${shortHex(computedPolyfsRoot)} expected=${shortHex(cid)}`)
         }
 
         setManifestInfo({
-          manifest_root: computedRoot || cid,
+          manifest_root: computedPolyfsRoot || cid,
           manifest_blob_hex: blobHex,
           total_mdus: totalMdus,
           witness_mdus: witnessCount,
@@ -3335,7 +3339,7 @@ export function DealDetail({
                         <div className="grid gap-2 sm:grid-cols-2">
                           <div className="bg-background/50 border border-border p-2">
                             <div className="text-[10px] text-muted-foreground uppercase">Manifest Root</div>
-                            <div className="font-mono-data text-[10px] text-foreground break-all">{manifestInfo.manifest_root}</div>
+                            <div data-testid="manifest-info-root" className="font-mono-data text-[10px] text-foreground break-all">{manifestInfo.manifest_root}</div>
                           </div>
                           <div className="bg-background/50 border border-border p-2">
                             <div className="text-[10px] text-muted-foreground uppercase">Manifest Blob</div>
