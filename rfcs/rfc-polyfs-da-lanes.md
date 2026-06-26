@@ -282,7 +282,10 @@ Required fields:
 * `lane_id`
 * `previous_lane_root`
 * `batch_data_root`
-* `polyfs_root_or_segment_root`
+* `polyfs_root_or_segment_root` as the storage-facing root/index commitment
+  for the batch;
+* `storage_segments`, with each segment binding `(deal_id,
+  polyfs_root_or_segment_root, logical_offset, length, first_mdu, mdu_count)`;
 * `namespace_or_app_id`
 * `size_bytes`
 * `total_mdus`
@@ -297,11 +300,20 @@ Required checks:
 * publisher satisfies `writer_policy`;
 * `previous_lane_root == lane.current_lane_root`;
 * batch size and fee satisfy lane policy;
-* backing deal root/segment state is known or staged;
+* every `storage_segments[*].deal_id` is one of the lane's backing deals;
+* `storage_segments` covers exactly `size_bytes` with no gaps, overlaps, or
+  zero-length segments, and the MDU ranges are compatible with `total_mdus` and
+  `witness_mdus`;
+* backing deal root/segment state is known or staged for every segment;
 * duplicate batch roots are rejected unless a policy explicitly allows
   idempotent retry; and
 * the batch enters `PENDING_DISPERSAL` or `PENDING_RANDOMNESS`, not
   `CERTIFIED`.
+
+The top-level `polyfs_root_or_segment_root` is not a substitute for
+`storage_segments`. It can be retained as a compact storage-facing commitment for
+single-deal or indexed layouts, but the segment list is the canonical input for
+later retrieval and sampling sessions.
 
 ### 9.3 `MsgSubmitProviderReadiness`
 
