@@ -221,6 +221,8 @@ message DABatchStorageSegment {
   uint64 length = 4;
   uint64 first_mdu = 5;
   uint64 mdu_count = 6;
+  uint64 deal_generation = 7;
+  uint64 deal_root_height = 8;
 }
 ```
 
@@ -229,7 +231,10 @@ is the PolyStore storage-facing root or segment root used to retrieve and prove
 the underlying bytes. `storage_segments` is the authoritative lane-to-deal
 mapping for retrieval and sampling. It lets a lane expand across multiple
 backing deals while preserving enough information to open deal-scoped
-retrieval/sample sessions for `(lane_id, batch_id, range)` later.
+retrieval/sample sessions for `(lane_id, batch_id, range)` later. Each segment
+also binds the committed PolyFS generation and chain height that made the segment
+valid, so older certified batches remain addressable after a backing deal
+advances to a later root.
 
 ### 8.3 `AvailabilityCertificate`
 
@@ -285,7 +290,8 @@ Required fields:
 * `polyfs_root_or_segment_root` as the storage-facing root/index commitment
   for the batch;
 * `storage_segments`, with each segment binding `(deal_id,
-  polyfs_root_or_segment_root, logical_offset, length, first_mdu, mdu_count)`;
+  polyfs_root_or_segment_root, logical_offset, length, first_mdu, mdu_count,
+  deal_generation, deal_root_height)`;
 * `namespace_or_app_id`
 * `size_bytes`
 * `total_mdus`
@@ -304,6 +310,8 @@ Required checks:
 * `storage_segments` covers exactly `size_bytes` with no gaps, overlaps, or
   zero-length segments, and the MDU ranges are compatible with `total_mdus` and
   `witness_mdus`;
+* every segment's `(deal_id, deal_generation, polyfs_root_or_segment_root)` maps
+  to a committed or pending-to-be-committed PolyFS root transition;
 * backing deal root/segment state is known or staged for every segment;
 * duplicate batch roots are rejected unless a policy explicitly allows
   idempotent retry; and
@@ -512,6 +520,37 @@ Rules:
 This is PolyStore's main differentiation: publication-time availability and
 long-lived retrieval accountability share one economic proof surface.
 
+### 13.1 Historical-Generation Sessions
+
+Current retrieval sessions are rooted in the backing deal's current committed
+PolyFS root. DA lanes need one additional mode because certified batch history is
+append-only while backing deals may continue to advance.
+
+For DA lane retrieval and sampling, the session opener MUST resolve
+`(lane_id, batch_id, range)` to the batch's `storage_segments`, then open a
+session against the recorded `(deal_id, deal_generation,
+polyfs_root_or_segment_root, logical_offset, length)` tuple. A historical segment
+is valid if:
+
+* the referenced batch is `CERTIFIED` or still within an active certification
+  window;
+* the segment's `deal_root_height` proves that the root was committed for the
+  backing deal;
+* the requested byte range is covered by the segment list; and
+* the segment is still inside the lane's retention window.
+
+This requires providers and gateways to keep DA-retained committed generations
+addressable by `(deal_id, deal_generation/root)` even when the deal's current
+root has moved forward. The current-root retrieval rule remains correct for
+ordinary mutable PolyFS reads; DA lane reads use the certificate and segment
+metadata as the authorization to open a historical-generation session.
+
+If an implementation does not support historical-generation sessions, it MUST use
+immutable backing deals or otherwise ensure that every certified segment remains
+the current retrievable root for its full retention period. That mode is simpler
+but less capacity-efficient, so it should be treated as a fallback rather than
+the preferred DA lane design.
+
 -----
 
 ## 14. Gateway and Provider Requirements
@@ -525,7 +564,8 @@ The user-gateway should support:
 * append-only lane submission;
 * staged artifact upload;
 * certificate polling;
-* range retrieval by `(lane_id, batch_id, range)`;
+* range retrieval by `(lane_id, batch_id, range)`, including segment-generation
+  resolution;
 * namespace or application id lookup; and
 * proof bundle export.
 
@@ -536,6 +576,8 @@ The provider-daemon should support:
 * validating staged artifact headers;
 * rejecting stale expected roots before accepting large uploads;
 * binding stored artifacts to lane id, batch id, slot id, and root;
+* keeping DA-retained committed generations addressable until their retention
+  windows expire;
 * readiness attestation;
 * sample serving;
 * sample proof construction;
@@ -763,8 +805,8 @@ Suggested claim to avoid:
    or both?
 7. Does the 8 MiB MDU remain appropriate for small rollup batches, or should DA
    lanes aggregate many small batches into larger PolyFS segments?
-8. How should lane root history interact with existing provisional-generation
-   cleanup?
+8. What retention and garbage-collection policy should DA-retained historical
+   generations use relative to provisional-generation cleanup?
 9. Which external integration should be first: OP Stack alt-DA, a generic SDK,
    or a source-DA archive bridge?
 10. What exact language is allowed in marketing before the Phase 3 proof work
