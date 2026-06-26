@@ -211,12 +211,25 @@ message DABatch {
   BatchStatus status = 13;
   uint64 publish_height = 14;
   uint64 certificate_id = 15;
+  repeated DABatchStorageSegment storage_segments = 16;
+}
+
+message DABatchStorageSegment {
+  uint64 deal_id = 1;
+  bytes polyfs_root_or_segment_root = 2;
+  uint64 logical_offset = 3;
+  uint64 length = 4;
+  uint64 first_mdu = 5;
+  uint64 mdu_count = 6;
 }
 ```
 
 `batch_data_root` is the external DA-facing root. `polyfs_root_or_segment_root`
 is the PolyStore storage-facing root or segment root used to retrieve and prove
-the underlying bytes.
+the underlying bytes. `storage_segments` is the authoritative lane-to-deal
+mapping for retrieval and sampling. It lets a lane expand across multiple
+backing deals while preserving enough information to open deal-scoped
+retrieval/sample sessions for `(lane_id, batch_id, range)` later.
 
 ### 8.3 `AvailabilityCertificate`
 
@@ -361,15 +374,18 @@ root, provider set hash, and certified height.
 PENDING_DISPERSAL
   -> PENDING_RANDOMNESS
   -> SAMPLING
-  -> CERTIFIED
-  -> FAILED
-  -> EXPIRED
+      -> CERTIFIED
+      -> FAILED
+      -> EXPIRED
 ```
 
 Rules:
 
 * A batch MUST NOT become `CERTIFIED` before the delayed-randomness and
   sampling/attestation policy has completed.
+* `CERTIFIED`, `FAILED`, and `EXPIRED` are sibling terminal outcomes of the
+  pending/sampling path. A certified batch MUST NOT later be rewritten as a
+  failed or expired batch.
 * A batch MUST NOT silently mutate after append. Any change creates a new batch
   or an explicit failed/replaced status.
 * A stale `previous_lane_root` MUST reject the append.
