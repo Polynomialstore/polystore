@@ -393,6 +393,9 @@ root, provider set hash, and certified height.
 
 Required checks:
 
+* every segment's `(deal_id, deal_generation, polyfs_root_or_segment_root)` is
+  committed in the backing deal state, with `deal_root_height` populated from
+  that committed transition;
 * `retention_until` is no greater than the minimum `deal_end_block` across the
   batch's `storage_segments`;
 * `retention_until` satisfies the lane's retention policy; and
