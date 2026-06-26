@@ -167,27 +167,163 @@ cost-of-failure: a rollup, RaaS provider, explorer, or infrastructure team.
 
 ## Competitor Landscape
 
-### Native DA archival paths
+### EthStorage: closest named competitor
 
-Celestia archival nodes, Ethereum archive/indexer paths, EigenDA retrieval
-nodes, Avail/Substrate archival modes, and similar systems are the most direct
-adjacent category. They have strong ecosystem alignment but often lack explicit
-third-party payment, public retrieval settlement, cross-DA abstraction, or
-long-horizon service accountability.
+EthStorage is the closest public competitor for this wedge because it already
+uses the language that the market is converging toward: long-term DA, expired
+blob retrieval, rollup derivation history, and Ethereum-native archival.
 
-### Specialized archivers
+EthStorage's rollup pitch is direct:
 
-Blobscan and EthStorage are the clearest public examples of the category
-emerging around Ethereum blobs. Blobscan is explorer/indexer/archive
-infrastructure. EthStorage explicitly positions around long-term rollup blob
-retrieval after L1 blob expiry.
+- An OP Stack rollup replaces or wraps the batch inbox so blob-carrying
+  transactions can also pay the EthStorage storage contract.
+- EthStorage nodes retain the blob data beyond Ethereum's native blob window.
+- The rollup or node operator can later use an es-node archiver API as a
+  fallback resource alongside the normal beacon API.
+- The archiver API mirrors the beacon endpoint shape
+  `/eth/v1/beacon/blobs/{block_id}`, with optional filtering by versioned hash.
+
+Its broader product is a programmable storage L2 for Ethereum:
+
+- data is written as EIP-4844 blobs and referenced by a key-value interface;
+- L1 contracts handle fees and proof verification;
+- es-nodes store replicas off chain and submit proof-of-storage work over time;
+- the developer surface is EVM-native, with Solidity, Foundry, ETH payments,
+  SDKs, FlatDirectory-style file tooling, and web3:// access;
+- the narrative is "pay once, store long term / permanently."
+
+Strengths:
+
+- **Clear wedge:** EthStorage talks directly to rollups that need expired blob
+  retrieval. That makes them the category-shaping competitor to watch.
+- **Ethereum-native buyer path:** ETH fees, L1 contracts, EVM tooling, and an
+  OP Stack tutorial reduce adoption friction for Ethereum rollups.
+- **API compatibility:** returning blob data through a beacon-like endpoint is
+  exactly what rollup node software wants for fallback blob retrieval.
+- **Protocol credibility:** the design includes storage-provider incentives,
+  proof-of-storage, and on-chain verification rather than only an S3 archive.
+- **Narrative clarity:** "EIP-4844 made blobs cheap but temporary; EthStorage
+  makes them durable" is easy to understand.
+
+Weaknesses or open questions:
+
+- **Ethereum-first scope:** the product is strongest when the buyer already
+  wants Ethereum-native contracts and OP Stack blob fallback. That leaves room
+  for a cross-DA archival layer covering Celestia namespaces, EigenDA blobs,
+  Avail blocks, and other future DA sources under one retrieval market.
+- **Retrieval accountability is less central:** EthStorage's public materials
+  emphasize storage proofs and long-term retention. PolyStore can make paid
+  retrieval completion, serving attribution, requester funding, sponsored
+  public reads, and retrieval SLAs the product center.
+- **Archive indexing is still a product surface:** an API compatible with
+  beacon blob lookup is useful, but rollup operators also need coverage maps,
+  gaps, source-chain metadata, derivation-batch mapping, and incident-response
+  workflows.
+- **Perpetual economics need buyer diligence:** one-time permanent-storage
+  narratives are attractive, but rollup teams will still ask who is accountable
+  when reads fail, how repair is funded, what latency is expected, and how fees
+  adapt if data volume grows faster than modeled.
+- **Early network assumptions matter:** if provider participation is still
+  controlled, staged, or uneven, customers may treat EthStorage as promising but
+  not yet a neutral archival market.
+
+PolyStore should not dismiss EthStorage. It should use EthStorage as proof that
+the category exists and then position against the parts EthStorage does not make
+central:
+
+1. **Multi-DA archival:** not only Ethereum blobs.
+2. **Paid retrieval as the primitive:** every important read is a session with a
+   payer, proof boundary, completion semantics, and provider accountability.
+3. **Public retrieval markets:** anyone can pay to retrieve public data without
+   draining the archive owner's escrow.
+4. **External-commitment mapping:** store DA bytes and expose verification
+   metadata back to Ethereum versioned hashes, Celestia namespace roots,
+   EigenDA commitments, or other source-native anchors.
+5. **Operational archive product:** coverage, gaps, repair, latency, hot/cold
+   routing, and audit evidence are first-class product outputs.
+
+The clean founder-level positioning is:
+
+**EthStorage is trying to make Ethereum blobs permanent. PolyStore should make
+historical DA retrieval accountable across DA ecosystems.**
+
+### Rollup-native blob archivers
+
+OP Stack and Arbitrum documentation make the need concrete. OP Stack node
+operators need blob-archiver fallback endpoints when syncing from a snapshot or
+genesis older than the blob retention window, or after being offline longer than
+the window. Arbitrum similarly tells node operators they need an Ethereum beacon
+chain node with historical blob data or a third-party provider that supports it.
+
+Base's open-source `blob-archiver` is a canonical example of the pragmatic
+incumbent:
+
+- it tracks the beacon chain;
+- writes blobs to file or S3-compatible storage;
+- exposes the blob sidecars API for retrieval;
+- explicitly notes that the archiver/API currently do not validate beacon-node
+  data, so operators must trust the beacon node or validate client-side.
+
+This competitor category is operationally important but weak as a protocol
+category. It proves that rollup software wants a beacon-compatible historical
+blob endpoint. It does not by itself provide decentralized custody, paid
+retrieval settlement, repair incentives, cross-DA indexing, or market-wide
+accountability.
+
+### Explorer and indexer archives
+
+Blobscan and The Graph validate demand from the explorer, analytics, and data
+infrastructure side.
+
+Blobscan is an EIP-4844 blob explorer with indexer, API, frontend, storage
+manager, and background upload jobs. It is closer to a public-good explorer plus
+archive than a storage protocol. Its value is discoverability, indexing, and
+historical visibility.
+
+The Graph frames blobs as an indexing problem: blobs expire, developers need
+access after expiry, and Firehose/Substreams can extract, transform, store, and
+query blob data. This is a strong data-product competitor, especially for
+analytics and structured querying, but it is not primarily a storage-deal and
+retrieval-settlement protocol.
+
+PolyStore should view these as potential partners and customers as much as
+competitors. Blobscan-like and Graph-like systems need durable backing storage,
+coverage guarantees, and retrieval economics. PolyStore can provide the archive
+substrate while they own discovery, query semantics, and user-facing analytics.
+
+### DA-native archival paths
+
+Celestia, Avail, EigenDA, Ethereum clients, and similar systems have native or
+ecosystem-specific answers for historical access:
+
+- Celestia docs say historical data may be retrievable from archival nodes and
+  tell rollups not to rely only on free public archival service; they point
+  toward professional archival providers for better guarantees.
+- Avail has discussed archival mode and future pruning, leaving room for
+  dedicated long-term block-data storage.
+- EigenDA includes retrieval nodes in its architecture and separates dispersal,
+  validator custody, and retrieval, but its primary product is DA throughput and
+  attestations, not permanent cross-DA archival.
+- Ethereum's own client ecosystem is moving toward history pruning while trying
+  to preserve old data in explicit archive formats and services.
+
+These paths have ecosystem alignment and can be the first place a buyer looks.
+Their limitation is fragmentation. Each DA ecosystem may provide a different
+archival mode, provider list, API, retention model, and trust assumption. A
+cross-DA archive product can win when buyers operate multiple rollups, multiple
+DA providers, or want one contract and retrieval market for historical data.
 
 ### Centralized APIs and internal archives
 
-Blocknative's historical blob/archive work and similar APIs validate demand,
-but centralized service churn is a risk. Blocknative's 2026 service-winddown
-notice is a useful market signal: depending on one archive API creates
-migration risk even when the product is useful.
+Centralized APIs validate urgency and simplify integration. Blocknative's Blob
+Archive API, provider-hosted historical blob endpoints, rollup-team S3/R2/GCS
+buckets, and internal snapshots are the practical default today.
+
+The weakness is not that they fail to work. The weakness is that they create
+vendor, team, or foundation dependency for data that should remain verifiable
+and recoverable for years. Blocknative's June 19, 2026 service-winddown notice is
+a useful market signal: even useful infrastructure can disappear or force
+migrations.
 
 Most rollup teams can also use S3, R2, GCS, or snapshots. That is the practical
 incumbent. PolyStore needs to beat this path on verifiability, public
@@ -196,10 +332,85 @@ basic object-storage convenience.
 
 ### Permanent storage networks
 
-Filecoin, Arweave, IPFS pinning providers, and similar systems can store bytes,
-but the default product is not DA-aware archival with native mappings from DA
-commitments to verifiable retrieval sessions. They are substitute storage
-substrates, not necessarily complete DA historical-retrieval products.
+Filecoin, Arweave, Walrus, IPFS pinning providers, and WeaveVM-like archival
+integrations can all store bytes and may compete for the same budget.
+
+- Filecoin has mature storage and retrieval-deal concepts, cryptographic
+  storage proofs, and large storage-supply branding.
+- Arweave has the strongest permanent-storage narrative and a one-time payment
+  / endowment model.
+- Walrus is a modern blob-storage network with erasure coding, availability
+  proofs, Sui coordination, and explicit discussion of read-access incentives.
+- WeaveVM's EigenDA integration is a direct example of "temporary DA plus
+  permanent archive" thinking, using a modified EigenDA sidecar proxy to push
+  blobs into WeaveVM/Arweave.
+
+These systems are important substitutes, but most are not DA-aware products out
+of the box. They usually do not provide source-native rollup derivation indexes,
+beacon-compatible fallback APIs, Celestia namespace coverage maps, or paid
+retrieval sessions tied to DA identifiers. PolyStore can use them as comparison
+points while keeping the product narrower: historical DA data, verifiable
+retrieval, and accountable service.
+
+### Comparison Matrix
+
+| Project / path | Category | Strongest buyer promise | Strategic weakness for this wedge | PolyStore response |
+|---|---|---|---|---|
+| EthStorage | Ethereum-native long-term DA / storage L2 | Keep Ethereum blobs retrievable after expiry through an EVM-native storage network and archiver API | Ethereum-first; retrieval settlement and cross-DA archival are not the center of the pitch | Compete on multi-DA coverage, paid retrieval sessions, public retrieval markets, and operational archive dashboards |
+| Base blob-archiver / no-prune beacon nodes | Rollup ops tooling | Beacon-compatible historical blob fallback endpoint | Usually centralized or self-operated; no storage market, repair market, or proof-of-retrieval layer | Offer the same retrieval compatibility but backed by decentralized custody and accountable sessions |
+| Blobscan | Explorer / indexer / public archive | Find, browse, and preserve Ethereum blob history | Discovery-first, not a generalized storage-and-retrieval market | Partner or compete as the verifiable archive backend for explorers |
+| The Graph / Firehose / Substreams | Data indexing and query | Transform and query blob data at scale after expiry | Query/indexing-first; storage durability and paid retrieval are not the only product | Integrate as storage substrate; let Graph-like systems own transformed data products |
+| Celestia archival providers | DA-native archival nodes | Historical namespace data from Celestia ecosystem providers | Ecosystem-specific, provider-specific, and often outside explicit retrieval settlement | Offer customer-owned Celestia namespace archives with paid public retrieval |
+| EigenDA | DA protocol | High-throughput DA attestations and retrieval flow for rollups | Primarily availability-window DA, not long-term archive product | Archive EigenDA blobs/certificates after the native service window and expose retrieval proofs |
+| Filecoin | Decentralized storage market | Large-scale storage with proofs and retrieval deals | Generic storage substrate; not DA-indexed by default | Use DA-specific ingestion, indexing, and retrieval-accounting to avoid generic-storage competition |
+| Arweave / WeaveVM | Permanent storage | Pay once for permanent data availability | Permanent-storage narrative can be expensive or rigid; DA mapping is integration-specific | Offer storage-duration choice, repair economics, and source-native DA lookup |
+| Walrus | Blob storage and availability | Erasure-coded blob storage with proof of availability and Sui coordination | Read incentives and DA-specific archival products are still separate surfaces | Emphasize paid retrieval completion and rollup/DA-specific archive APIs |
+| S3/R2/GCS/internal snapshots | Centralized object storage | Cheap, familiar, operationally simple | Centralized custody, weak public verification, vendor/team dependency | Do not fight on basic storage; win on verifiability, decentralized custody, public reads, and auditability |
+
+### Competitive Diligence Checklist
+
+EthStorage diligence:
+
+- Can a normal OP Stack node use an EthStorage archiver endpoint as a fallback
+  with no client patch, or does the integration require a custom batch inbox and
+  deployment-specific assumptions?
+- Does the archiver API return enough metadata for independent verification, or
+  only the blob content needed by OP Stack derivation?
+- How does a customer see coverage and gaps by block, slot, transaction, rollup,
+  and versioned hash?
+- What is the current fee model for a rollup-sized archive, and how does it
+  change if blob throughput keeps increasing?
+- How permissionless is provider participation in practice today?
+- What happens when a retrieval fails: who is accountable, what evidence exists,
+  and how is repair triggered?
+- Can the same product support Celestia namespace data, EigenDA blobs, Avail
+  blocks, and non-Ethereum DA sources without losing its Ethereum-native
+  advantages?
+
+Rollup-archiver diligence:
+
+- Run Base's `blob-archiver` with file storage and S3-compatible storage.
+- Confirm exactly which Beacon API endpoints it implements.
+- Confirm whether client-side validation is enough for the buyer or whether a
+  verifiable storage/retrieval layer is required.
+- Measure storage cost and operational burden for one high-volume rollup over
+  30, 90, and 365 days.
+
+Explorer/indexer diligence:
+
+- Compare Blobscan, The Graph, Dune-style dashboards, and internal rollup
+  indexers by API surface: raw blob retrieval, structured query, provenance,
+  coverage reporting, and export.
+- Identify which of these systems want to own storage themselves and which would
+  prefer a durable archive backend.
+
+Permanent-storage diligence:
+
+- Price a rollup archive on Filecoin, Arweave, Walrus, and S3/R2 as neutral
+  baselines.
+- Compare retrieval latency and read incentives, not just storage cost.
+- Check whether DA identifiers can be preserved as first-class lookup keys
+  without custom glue.
 
 ## Market Research Plan
 
@@ -363,17 +574,64 @@ generic decentralized-storage positioning.
   are responsible for historical storage.
   https://docs.celestia.org/learn/celestia-101/retrievability/
 - EthStorage Rollup Guide: positions long-term blob retrieval for expired L1
-  blobs as a rollup need.
+  blobs as a rollup need and documents a beacon-like archiver API.
   https://docs.ethstorage.io/rollup-guide
+- EthStorage overview / how-it-works / provider docs: describe EthStorage as a
+  decentralized storage L2 powered by DA, with storage-provider proof and reward
+  flow.
+  https://docs.ethstorage.io/
+  https://docs.ethstorage.io/readme/how-ethstorage-works
+  https://docs.ethstorage.io/storage-provider-guide
+- EthStorage storage contracts: describe L1 fee distribution, storage-proof
+  verification, EIP-4844 blob uploads, and key-value storage.
+  https://github.com/ethstorage/storage-contracts-v1
+- EthStorage Mainnet Alpha post: describes Ethereum-native integration,
+  proof-of-storage, BLOB P2P sync, and provider incentive narrative.
+  https://blog.ethstorage.io/ethstorage-mainnet-alpha-launch-petabyte-scale-decentralized-storage-on-ethereum/
+- Optimism docs, "Using blobs": explains when OP Stack operators need blob
+  archiver fallbacks and names no-prune beacon nodes, dedicated blob archivers,
+  and third-party archiver services as options.
+  https://docs.optimism.io/node-operators/guides/management/blobs
+- Arbitrum docs, "Historical blobs": says node operators need beacon-chain
+  historical blob access or a provider with historical-blob support.
+  https://docs.arbitrum.io/run-arbitrum-node/beacon-nodes-historical-blobs
+- Base `blob-archiver`: open-source beacon blob archiver using file or
+  S3-compatible backends, with a note that beacon-node data is not currently
+  validated by the archiver/API.
+  https://github.com/base/blob-archiver
 - Blobscan docs: describes blob explorer/indexer/storage-manager architecture.
   https://docs.blobscan.com/
 - Blobscan, "The Cost of Archiving Ethereum's Blob Data": frames indefinite
   blob archival as a growing sustainability problem.
   https://paragraph.com/@blobscan/blobscan-the-cost-of-archiving-ethereums-blob-data
+- The Graph, "Saving the Blobs": describes long-term blob storage/retrieval and
+  Firehose/Substreams-based blob indexing.
+  https://thegraph.com/blog/eip-4844-blobs-data/
+- Avail RFP-003 discussion: notes archival mode and future pruning expectations.
+  https://forum.availproject.org/t/discussion-rfp-003-long-term-block-data-storage/619
 - EigenDA overview/spec: separates dispersal, validator custody, retrieval, and
   erasure-coded shard verification.
   https://docs.eigencloud.xyz/eigenda/core-concepts/overview
   https://layr-labs.github.io/eigenda/
+- Filecoin storage/retrieval deal overview: describes storage deals, retrieval
+  deals, proofs, and slashing for failed storage commitments.
+  https://www.filecoin.io/blog/how-storage-and-retrieval-deals-work-on-filecoin
+- Arweave endowment explainer: describes one-time payment and endowment logic
+  for permanent storage incentives.
+  https://www.arweave.com/blog/endowment-with-arweave
+- Walrus docs and paper: describe erasure-coded blob storage, availability
+  proofs, and read-incentive tradeoffs.
+  https://docs.wal.app/
+  https://docs.wal.app/walrus.pdf
+- WeaveVM x EigenDA: describes a proof-of-concept permanent archive layer for
+  EigenDA blobs using a modified sidecar proxy.
+  https://blog.wvm.dev/eigenda-weavevm/
+- Alchemy listing for Blocknative Blob Archive API: describes versioned-hash blob
+  retrieval and returned metadata.
+  https://www.alchemy.com/dapps/blob-archive
+- Blocknative service-winddown notice: says services remain available through
+  June 19, 2026 and then API requests will stop receiving responses.
+  https://www.blocknative.com/
 - Blocknative service winddown notice: useful signal for centralized archive
   API dependency risk.
   https://www.blocknative.com/
