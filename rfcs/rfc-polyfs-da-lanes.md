@@ -223,6 +223,7 @@ message DABatchStorageSegment {
   uint64 mdu_count = 6;
   uint64 deal_generation = 7;
   uint64 deal_root_height = 8;
+  uint64 deal_end_block = 9;
 }
 ```
 
@@ -234,7 +235,10 @@ backing deals while preserving enough information to open deal-scoped
 retrieval/sample sessions for `(lane_id, batch_id, range)` later. Each segment
 also binds the committed PolyFS generation and chain height that made the segment
 valid, so older certified batches remain addressable after a backing deal
-advances to a later root.
+advances to a later root. `deal_end_block` snapshots the backing deal term used
+for retention validation. Certificates MUST NOT advertise retention past the
+minimum backing deal end block for their segments unless an on-chain renewal or
+migration updates the segment's backing term first.
 
 ### 8.3 `AvailabilityCertificate`
 
@@ -291,7 +295,7 @@ Required fields:
   for the batch;
 * `storage_segments`, with each segment binding `(deal_id,
   polyfs_root_or_segment_root, logical_offset, length, first_mdu, mdu_count,
-  deal_generation, deal_root_height)`;
+  deal_generation, deal_root_height, deal_end_block)`;
 * `namespace_or_app_id`
 * `size_bytes`
 * `total_mdus`
@@ -312,6 +316,9 @@ Required checks:
   `witness_mdus`;
 * every segment's `(deal_id, deal_generation, polyfs_root_or_segment_root)` maps
   to a committed or pending-to-be-committed PolyFS root transition;
+* every segment's `deal_end_block` matches the backing deal state and is high
+  enough to satisfy the lane's required retention target, or the batch is marked
+  ineligible for certification until the segment is renewed or migrated;
 * backing deal root/segment state is known or staged for every segment;
 * duplicate batch roots are rejected unless a policy explicitly allows
   idempotent retry; and
@@ -383,6 +390,15 @@ Possible outcomes:
 
 The finalization transaction should record the sample policy, sample result
 root, provider set hash, and certified height.
+
+Required checks:
+
+* `retention_until` is no greater than the minimum `deal_end_block` across the
+  batch's `storage_segments`;
+* `retention_until` satisfies the lane's retention policy; and
+* if the lane retention target extends beyond any backing deal term, the batch
+  MUST remain uncertified until the affected segments are renewed, extended, or
+  migrated to a backing deal whose term covers the advertised retention.
 
 -----
 
@@ -537,13 +553,21 @@ is valid if:
 * the segment's `deal_root_height` proves that the root was committed for the
   backing deal;
 * the requested byte range is covered by the segment list; and
-* the segment is still inside the lane's retention window.
+* the segment is still inside both the lane's retention window and the backing
+  deal term recorded by `deal_end_block`.
 
 This requires providers and gateways to keep DA-retained committed generations
 addressable by `(deal_id, deal_generation/root)` even when the deal's current
 root has moved forward. The current-root retrieval rule remains correct for
 ordinary mutable PolyFS reads; DA lane reads use the certificate and segment
 metadata as the authorization to open a historical-generation session.
+
+Historical-generation sessions MUST also obey the underlying deal/session
+constraints: the backing deal must still be active at session open, and the
+session expiry MUST be no later than both the lane retention deadline and the
+segment's `deal_end_block`. If a lane needs to retain a certified batch beyond
+the original backing deal term, the lane must renew the deal or migrate the
+segment before issuing or maintaining that retention claim.
 
 If an implementation does not support historical-generation sessions, it MUST use
 immutable backing deals or otherwise ensure that every certified segment remains
@@ -577,7 +601,9 @@ The provider-daemon should support:
 * rejecting stale expected roots before accepting large uploads;
 * binding stored artifacts to lane id, batch id, slot id, and root;
 * keeping DA-retained committed generations addressable until their retention
-  windows expire;
+  windows expire or their backing deal terms end;
+* surfacing renewal or migration requirements before a certified segment's
+  backing deal term falls below the advertised retention window;
 * readiness attestation;
 * sample serving;
 * sample proof construction;
