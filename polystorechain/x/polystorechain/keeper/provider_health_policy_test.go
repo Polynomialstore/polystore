@@ -52,6 +52,92 @@ func TestProviderHealthEpochDecayRestoresSoftFaultLifecycle(t *testing.T) {
 	require.Equal(t, types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO, health.Severity)
 }
 
+func TestSetProviderDrainingFalseClearsStoredDrainingHealth(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1)
+
+	provider := makePolicyTestAddr(t, f, 0xA5)
+	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+		Creator:      provider,
+		Capabilities: "General",
+		TotalStorage: 1_000_000_000,
+		Endpoints:    testProviderEndpoints,
+	})
+	require.NoError(t, err)
+
+	record, err := f.keeper.Providers.Get(ctx, provider)
+	require.NoError(t, err)
+	record.Draining = true
+	require.NoError(t, f.keeper.Providers.Set(ctx, provider, record))
+	require.NoError(t, f.keeper.ProviderHealthStates.Set(ctx, provider, types.ProviderHealthState{
+		Provider:           provider,
+		LifecycleStatus:    types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DRAINING,
+		Reason:             "provider_draining",
+		EvidenceClass:      types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL,
+		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_REPAIR,
+		UpdatedHeight:      1,
+		ConsequenceCeiling: "registration state only",
+	}))
+
+	_, err = msgServer.SetProviderDraining(ctx.WithBlockHeight(2), &types.MsgSetProviderDraining{
+		Creator:  provider,
+		Draining: false,
+	})
+	require.NoError(t, err)
+
+	record, err = f.keeper.Providers.Get(ctx, provider)
+	require.NoError(t, err)
+	require.False(t, record.Draining)
+	health, err := f.keeper.ProviderHealthStates.Get(ctx, provider)
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_ACTIVE, health.LifecycleStatus)
+	require.Equal(t, "provider_draining_cleared", health.Reason)
+	require.Equal(t, types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO, health.Severity)
+}
+
+func TestSetProviderDrainingFalseKeepsDelinquentHealth(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1)
+
+	provider := makePolicyTestAddr(t, f, 0xA6)
+	_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+		Creator:      provider,
+		Capabilities: "General",
+		TotalStorage: 1_000_000_000,
+		Endpoints:    testProviderEndpoints,
+	})
+	require.NoError(t, err)
+
+	record, err := f.keeper.Providers.Get(ctx, provider)
+	require.NoError(t, err)
+	record.Draining = true
+	require.NoError(t, f.keeper.Providers.Set(ctx, provider, record))
+	require.NoError(t, f.keeper.ProviderHealthStates.Set(ctx, provider, types.ProviderHealthState{
+		Provider:           provider,
+		LifecycleStatus:    types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT,
+		Reason:             "quota_miss_repair_started",
+		EvidenceClass:      types.EvidenceClass_EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT,
+		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_DELINQUENT,
+		UpdatedHeight:      1,
+		SoftFaultCount:     10,
+		ConsequenceCeiling: "repair and reward exclusion; no soft-fault slash by default",
+	}))
+
+	_, err = msgServer.SetProviderDraining(ctx.WithBlockHeight(2), &types.MsgSetProviderDraining{
+		Creator:  provider,
+		Draining: false,
+	})
+	require.NoError(t, err)
+
+	health, err := f.keeper.ProviderHealthStates.Get(ctx, provider)
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT, health.LifecycleStatus)
+	require.Equal(t, "quota_miss_repair_started", health.Reason)
+	require.Equal(t, uint64(10), health.SoftFaultCount)
+}
+
 func TestProviderJailExpiresAtEpochBoundary(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)

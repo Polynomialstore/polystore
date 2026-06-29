@@ -564,12 +564,17 @@ For trusted-devnet bring-up, you can run multiple logical providers on the hub h
 
 - Recommended target for Phase A: `3` providers (`K=2`, `M=1`).
 - For externally reachable browser flows, register public HTTPS provider endpoints on-chain:
-  - `/dns4/sp1.<domain>/tcp/443/https`
-  - `/dns4/sp2.<domain>/tcp/443/https`
-  - `/dns4/sp3.<domain>/tcp/443/https`
+  - `/dns4/sp1.polynomialstore.com/tcp/443/https`
+  - `/dns4/sp2.polynomialstore.com/tcp/443/https`
+  - `/dns4/sp3.polynomialstore.com/tcp/443/https`
 - Keep `127.0.0.1` endpoint registration only for temporary local-only debugging.
-- Important protocol caveat: provider endpoints are immutable per provider address in the current devnet build.
-  - If you accidentally register `/ip4/127.0.0.1/...` and need public endpoints later, rotate to new provider keys, register the public endpoints, and mark old providers as draining.
+  Public devnet provider registrations must use the `sp1`/`sp2`/`sp3`
+  hostnames so the hub and browser clients can reach provider-daemons from
+  outside the host.
+- Endpoint updates are supported with `polystorechaind tx nilchain update-provider-endpoints`.
+  If a provider was accidentally registered with `/ip4/127.0.0.1/...`, update
+  that same provider address to the matching public hostname before using it for
+  new placements.
 - Keep each provider isolated with its own:
   - `POLYSTORE_HOME` (separate keyring + state)
   - `POLYSTORE_UPLOAD_DIR`
@@ -685,8 +690,9 @@ Important:
 - Provider doesn’t show up on `/polystorechain/polystorechain/v1/providers`:
   - the registration tx likely failed (fund provider key for gas)
 - You registered `/ip4/127.0.0.1/...` and need public endpoint hostnames now:
-  - endpoint updates are immutable for an already registered provider address
-  - rotate to a new provider key, register `/dns4/<public-host>/tcp/443/https`, then set old provider to draining
+  - update the existing provider address with `polystorechaind tx nilchain update-provider-endpoints --endpoint /dns4/spN.polynomialstore.com/tcp/443/https`
+  - verify `/polystorechain/polystorechain/v1/providers` no longer lists loopback SP endpoints
+  - do not mark the provider draining unless it is intentionally leaving placement; use `set-provider-draining` without `--draining` to opt it back in after endpoint repair
 - Router can’t reach provider:
   - endpoint multiaddr not reachable from hub (firewall/NAT)
   - provider tunnel misconfigured (`cloudflared` down, wrong hostname, or wrong local service port)
@@ -701,8 +707,9 @@ Important:
   - ensure unit templates use the shell wrapper in `ops/systemd/*.service` and run `systemctl daemon-reload`
 - nil services fail with `libpolystore_core.so: cannot open shared object file`:
   - ensure `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release` is set in each `/etc/polystore/*.env`
-- `polystorechaind` fails binding gRPC `localhost:9090`:
-  - set a free port in `/var/lib/polystore/polystorechaind/config/app.toml` (`[grpc].address`, e.g. `127.0.0.1:19090`)
+- `polystorechaind` starts but LCD `1317` or EVM JSON-RPC `8545` disappears, or logs show a gRPC bind failure on `localhost:9090`:
+  - set `POLYSTORE_GRPC_ADDRESS=127.0.0.1:9091` in the systemd env file before restarting the service
+  - if not using the systemd templates, set a free `[grpc].address` in `$POLYSTORE_HOME/config/app.toml`; the rootless local stack commonly uses `/var/lib/nilstore/nilchaind/config/app.toml`
 - Multiple providers on one host fail to start (port bind errors):
   - either disable provider libp2p for the soft launch (`POLYSTORE_P2P_ENABLED=0`) or assign unique `POLYSTORE_P2P_LISTEN_ADDRS` per provider
 - Provider logs are noisy with repeated `system liveness` proof failures (for example `no such file or directory` on old shard paths):

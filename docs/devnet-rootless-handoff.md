@@ -16,6 +16,11 @@ These services do not need root. If they run as root, every deploy can block on
 root-owned binaries, root-owned chain state, or unavailable sudo for
 `systemctl restart`.
 
+For local hosts that already run Prometheus on `:9090`, keep the chain gRPC
+address explicit as `POLYSTORE_GRPC_ADDRESS=127.0.0.1:9091` in the user
+systemd chain env. LCD REST and EVM JSON-RPC can start and then disappear when
+the default Cosmos gRPC bind collides with another service.
+
 ## One-Time Handoff
 
 Run this once from a repo checkout:
