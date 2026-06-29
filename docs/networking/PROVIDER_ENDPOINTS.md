@@ -162,6 +162,53 @@ curl -fsS https://sp2.polynomialstore.com/status | jq -r '.provider.address'
 curl -fsS https://sp3.polynomialstore.com/status | jq -r '.provider.address'
 ```
 
+## Recovery After a Stack Refresh
+
+A refreshed local stack can leave two independent kinds of stale chain state:
+
+- endpoint drift: a live provider still advertises `/ip4/127.0.0.1/...` on-chain
+- health drift: a live provider is reachable and collateralized, but still has
+  old soft-fault `provider_delinquent` or `provider_degraded` health from prior
+  missed epochs
+
+Fix endpoint drift in place with `update-provider-endpoints`; do not reset the
+chain or rotate provider keys unless the identity is intentionally changing.
+
+Fix health drift with an authorized provider/operator maintenance top-up after
+the daemon is reachable and the provider has enough collateral headroom. The
+keeper treats this as a check-in and clears recoverable soft/degraded placement
+health, but it does not clear administrative states such as `Draining`, `Jailed`,
+or `Exited`.
+
+```bash
+CHAIN_MODULE="${POLYSTORE_CHAIN_MODULE:-nilchain}" # older local binaries may use polystorechain
+MAINTENANCE_BOND="${POLYSTORE_PROVIDER_MAINTENANCE_BOND:-5stake}"
+
+polystorechaind tx "$CHAIN_MODULE" add-provider-bond "$PROVIDER_ADDRESS" "$MAINTENANCE_BOND" \
+  --from "$PROVIDER_KEY" \
+  --chain-id "$CHAIN_ID" \
+  --node "$NODE_ADDR" \
+  --home "$POLYSTORE_HOME" \
+  --keyring-backend test \
+  --gas auto \
+  --gas-adjustment 1.6 \
+  --gas-prices "$POLYSTORE_GAS_PRICES" \
+  --yes
+```
+
+For the shared `polynomialstore.com` host, verify all public SPs are both
+reachable and eligible before retrying deal creation:
+
+```bash
+for host in sp1.polynomialstore.com sp2.polynomialstore.com sp3.polynomialstore.com; do
+  addr="$(curl -fsS "https://$host/status" | jq -r '.provider.address')"
+  curl -fsS "$POLYSTORE_TESTNET_LCD_BASE/polystorechain/polystorechain/v1/providers/$addr/health" |
+    jq --arg host "$host" '.health | {host: $host, address: .provider, lifecycle: .lifecycle_status, reason}'
+  curl -fsS "$POLYSTORE_TESTNET_LCD_BASE/polystorechain/polystorechain/v1/providers/$addr/collateral" |
+    jq '.collateral | {eligible_for_new_assignment, ineligibility_reason, assignment_headroom}'
+done
+```
+
 ## Type: cloudflare-tunnel (fallback when inbound ports are unavailable)
 
 Goal: expose the provider at `https://sp.example.com` without opening inbound ports.

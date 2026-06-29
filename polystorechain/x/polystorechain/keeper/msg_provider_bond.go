@@ -110,8 +110,8 @@ func (k msgServer) AddProviderBond(goCtx context.Context, msg *types.MsgAddProvi
 	if err := k.Providers.Set(ctx, providerAddr, provider); err != nil {
 		return nil, fmt.Errorf("failed to update provider bond: %w", err)
 	}
-	if err := k.clearResolvedProviderUnderbondedHealth(ctx, provider); err != nil {
-		return nil, fmt.Errorf("failed to clear resolved provider underbonded health: %w", err)
+	if err := k.clearResolvedProviderPlacementHealth(ctx, provider); err != nil {
+		return nil, fmt.Errorf("failed to clear resolved provider placement health: %w", err)
 	}
 
 	ctx.EventManager().EmitEvent(

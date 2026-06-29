@@ -244,7 +244,17 @@ func overlayProviderBondHealth(health types.ProviderHealthState, provider types.
 	return health
 }
 
-func (k Keeper) clearResolvedProviderUnderbondedHealth(ctx sdk.Context, provider types.Provider) error {
+func recoverableProviderPlacementHealth(health types.ProviderHealthState) bool {
+	switch health.LifecycleStatus {
+	case types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DEGRADED,
+		types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT:
+	default:
+		return false
+	}
+	return health.Severity != types.EvidenceSeverity_EVIDENCE_SEVERITY_HARD
+}
+
+func (k Keeper) clearResolvedProviderPlacementHealth(ctx sdk.Context, provider types.Provider) error {
 	providerAddr := strings.TrimSpace(provider.Address)
 	if providerAddr == "" {
 		return nil
@@ -256,8 +266,10 @@ func (k Keeper) clearResolvedProviderUnderbondedHealth(ctx sdk.Context, provider
 		}
 		return err
 	}
-	if health.Reason != providerUnderbondedReason ||
-		health.LifecycleStatus != types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT {
+	if !recoverableProviderPlacementHealth(health) {
+		return nil
+	}
+	if reason := providerLifecyclePlacementIneligibility(providerLifecycleFromRegistration(provider)); reason != "" {
 		return nil
 	}
 	reason, err := k.providerAssignmentCollateralIneligibility(ctx, provider, 0)
@@ -269,10 +281,16 @@ func (k Keeper) clearResolvedProviderUnderbondedHealth(ctx sdk.Context, provider
 	}
 
 	health.LifecycleStatus = types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_ACTIVE
-	health.Reason = "provider_bond_restored"
+	if health.Reason == providerUnderbondedReason {
+		health.Reason = "provider_bond_restored"
+		health.ConsequenceCeiling = "provider bond now satisfies collateral requirements"
+	} else {
+		health.Reason = "provider_operator_recovered"
+		health.ConsequenceCeiling = "authorized provider maintenance check-in restored placement eligibility"
+	}
 	health.EvidenceClass = types.EvidenceClass_EVIDENCE_CLASS_OPERATIONAL
 	health.Severity = types.EvidenceSeverity_EVIDENCE_SEVERITY_INFO
 	health.UpdatedHeight = ctx.BlockHeight()
-	health.ConsequenceCeiling = "provider bond now satisfies collateral requirements"
+	health.SoftFaultCount = 0
 	return k.ProviderHealthStates.Set(ctx, providerAddr, health)
 }
