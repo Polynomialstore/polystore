@@ -8,7 +8,7 @@ set -euo pipefail
 #   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh pair
 #   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh link
 #   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh bootstrap
-#   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
+#   PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/dns4/sp1.polynomialstore.com/tcp/443/https" ./scripts/run_devnet_provider.sh register
 #   PROVIDER_KEY=provider1 PROVIDER_LISTEN=":8091" ./scripts/run_devnet_provider.sh start
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
 #   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh doctor
@@ -33,7 +33,7 @@ Examples:
   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh pair
   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh link
   PROVIDER_KEY=provider1 OPERATOR_ADDRESS=<0x...|nil1...> ./scripts/run_devnet_provider.sh bootstrap
-  PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/ip4/<ip>/tcp/8091/http" ./scripts/run_devnet_provider.sh register
+  PROVIDER_KEY=provider1 PROVIDER_ENDPOINT="/dns4/sp1.polynomialstore.com/tcp/443/https" ./scripts/run_devnet_provider.sh register
   PROVIDER_KEY=provider1 PROVIDER_LISTEN=":8091" ./scripts/run_devnet_provider.sh start
   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh print-config
   PROVIDER_KEY=provider1 ./scripts/run_devnet_provider.sh doctor
@@ -49,6 +49,8 @@ Notes:
   - register defaults to POLYSTORE_PROVIDER_REGISTRATION_BOND=200stake so providers
     satisfy the calibrated devnet minimum bond profile; set it empty to omit --bond.
   - EXPECTED_PROVIDER_ADDRESS (or POLYSTORE_EXPECTED_PROVIDER_ADDRESS) can enforce identity safety.
+  - On polystore-public-testnet, register public /dns4/.../https SP hostnames. Loopback
+    endpoints are rejected unless POLYSTORE_ALLOW_LOCAL_PROVIDER_ENDPOINTS=1 is set.
 USAGE
 }
 
@@ -86,6 +88,7 @@ PROVIDER_CAPABILITIES="${PROVIDER_CAPABILITIES:-General}"
 PROVIDER_TOTAL_STORAGE="${PROVIDER_TOTAL_STORAGE:-1099511627776}" # 1 TiB default
 PROVIDER_REGISTRATION_BOND="${POLYSTORE_PROVIDER_REGISTRATION_BOND-${POLYSTORE_PROVIDER_BOND-200stake}}"
 PROVIDER_ENDPOINTS_RAW="${PROVIDER_ENDPOINTS:-${PROVIDER_ENDPOINT:-}}"
+ALLOW_LOCAL_PROVIDER_ENDPOINTS="${POLYSTORE_ALLOW_LOCAL_PROVIDER_ENDPOINTS:-0}"
 BOOTSTRAP_ALLOW_PARTIAL="${BOOTSTRAP_ALLOW_PARTIAL:-0}"
 EXPECTED_PROVIDER_ADDRESS_RAW="${EXPECTED_PROVIDER_ADDRESS:-${POLYSTORE_EXPECTED_PROVIDER_ADDRESS:-}}"
 
@@ -112,6 +115,47 @@ json_escape() {
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+provider_endpoint_is_loopback() {
+  local endpoint="$1"
+
+  case "$endpoint" in
+    /ip4/127.*/*|/ip4/0.0.0.0/*|/dns4/localhost/*|/dns4/127.*/*|/dns4/0.0.0.0/*|/dns6/localhost/*|/ip6/::1/*|/ip6/0:0:0:0:0:0:0:1/*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+validate_provider_endpoints_for_profile() {
+  local context="$1"
+  local endpoints endpoint
+
+  if [[ "$NETWORK_PROFILE" != *public-testnet* ]]; then
+    return 0
+  fi
+  if [[ "$ALLOW_LOCAL_PROVIDER_ENDPOINTS" == "1" ]]; then
+    return 0
+  fi
+
+  IFS=',' read -r -a endpoints <<<"$PROVIDER_ENDPOINTS_RAW"
+  for endpoint in "${endpoints[@]}"; do
+    endpoint="$(echo "$endpoint" | xargs)"
+    if [[ -z "$endpoint" ]]; then
+      continue
+    fi
+    if provider_endpoint_is_loopback "$endpoint"; then
+      echo "ERROR: refusing loopback provider endpoint on $NETWORK_PROFILE during $context: $endpoint" >&2
+      echo "       Register the public SP hostname multiaddr instead, for example:" >&2
+      echo "       /dns4/sp1.polynomialstore.com/tcp/443/https" >&2
+      echo "       /dns4/sp2.polynomialstore.com/tcp/443/https" >&2
+      echo "       /dns4/sp3.polynomialstore.com/tcp/443/https" >&2
+      echo "       127.0.0.1 is only the local listener or reverse-proxy origin. Set POLYSTORE_ALLOW_LOCAL_PROVIDER_ENDPOINTS=1 only for isolated local devnets." >&2
+      exit 2
+    fi
+  done
 }
 
 amount_is_positive() {
@@ -1181,9 +1225,10 @@ register_provider() {
   assert_expected_provider_address
 
   if [ -z "$PROVIDER_ENDPOINTS_RAW" ]; then
-    echo "ERROR: set PROVIDER_ENDPOINT (or PROVIDER_ENDPOINTS) to a reachable multiaddr, e.g. /ip4/1.2.3.4/tcp/8091/http" >&2
+    echo "ERROR: set PROVIDER_ENDPOINT (or PROVIDER_ENDPOINTS) to a reachable public multiaddr, e.g. /dns4/sp1.polynomialstore.com/tcp/443/https" >&2
     exit 1
   fi
+  validate_provider_endpoints_for_profile "register"
 
   local addr
   addr="$(provider_addr)"
@@ -1421,6 +1466,9 @@ bootstrap_provider() {
   fi
   if [ -z "$PROVIDER_ENDPOINTS_RAW" ]; then
     missing+=("PROVIDER_ENDPOINT")
+  fi
+  if [ -n "$PROVIDER_ENDPOINTS_RAW" ]; then
+    validate_provider_endpoints_for_profile "bootstrap"
   fi
 
   if [ "${#missing[@]}" -gt 0 ] && [ "$BOOTSTRAP_ALLOW_PARTIAL" != "1" ]; then

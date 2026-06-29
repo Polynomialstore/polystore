@@ -35,6 +35,21 @@ Important (current protocol behavior):
   - update the endpoint list with `update-provider-endpoints`
   - only create a new provider key if the chain explicitly rejects endpoint updates or you intentionally want a new identity
 
+Shared `polynomialstore.com` devnet rule:
+
+- The provider daemon may listen on `127.0.0.1:<port>` behind Caddy or
+  Cloudflare Tunnel, but `127.0.0.1` must not be registered on-chain for the
+  shared devnet.
+- Register the public SP hostname multiaddrs:
+  - `/dns4/sp1.polynomialstore.com/tcp/443/https`
+  - `/dns4/sp2.polynomialstore.com/tcp/443/https`
+  - `/dns4/sp3.polynomialstore.com/tcp/443/https`
+- `scripts/run_devnet_provider.sh` rejects loopback endpoints for the default
+  `polystore-public-testnet` profile. Use
+  `POLYSTORE_ALLOW_LOCAL_PROVIDER_ENDPOINTS=1` only for an isolated local
+  devnet where no remote user-gateway, website, or collaborator will resolve
+  the provider endpoint.
+
 ## Helper: Print Endpoint Multiaddrs
 
 From `polystore_gateway/`, you can generate the exact `--endpoint` values:
@@ -126,6 +141,27 @@ polystorechaind tx polystorechain update-provider-endpoints \
   --endpoint "/dns4/sp.example.com/tcp/443/https"
 ```
 
+For the current shared devnet hostnames, set the endpoint explicitly for the
+daemon identity that actually serves each hostname:
+
+```bash
+PROVIDER_KEY=<key-serving-sp1> PROVIDER_ENDPOINT="$POLYSTORE_TESTNET_SP1_ENDPOINT" \
+  ./scripts/run_devnet_provider.sh register
+PROVIDER_KEY=<key-serving-sp2> PROVIDER_ENDPOINT="$POLYSTORE_TESTNET_SP2_ENDPOINT" \
+  ./scripts/run_devnet_provider.sh register
+PROVIDER_KEY=<key-serving-sp3> PROVIDER_ENDPOINT="$POLYSTORE_TESTNET_SP3_ENDPOINT" \
+  ./scripts/run_devnet_provider.sh register
+```
+
+Do not assume `provider1` always maps to `sp1` after a recovery or chain
+refresh. Verify the route before registering:
+
+```bash
+curl -fsS https://sp1.polynomialstore.com/status | jq -r '.provider.address'
+curl -fsS https://sp2.polynomialstore.com/status | jq -r '.provider.address'
+curl -fsS https://sp3.polynomialstore.com/status | jq -r '.provider.address'
+```
+
 ## Type: cloudflare-tunnel (fallback when inbound ports are unavailable)
 
 Goal: expose the provider at `https://sp.example.com` without opening inbound ports.
@@ -194,6 +230,22 @@ polystorechaind tx polystorechain update-provider-endpoints \
   --yes \
   --endpoint "/dns4/sp.example.com/tcp/443/https"
 ```
+
+If a chain refresh already registered loopback endpoints, repair it in place
+with the same provider keys instead of resetting the chain:
+
+```bash
+polystorechaind tx polystorechain update-provider-endpoints \
+  --from <key-serving-sp1-or-sp2-or-sp3> \
+  --chain-id <chain-id> \
+  --yes \
+  --endpoint "/dns4/sp1.polynomialstore.com/tcp/443/https"
+```
+
+Then query the provider list and verify that every non-draining provider used
+by the shared stack advertises the matching `sp1`, `sp2`, or `sp3`
+`/dns4/.../tcp/443/https` endpoint. Extra loopback-only records should be
+drained or excluded from placement rather than left active.
 
 ## Future Work (Not Testnet-Blocking)
 

@@ -16,15 +16,22 @@ Recommended public entry points:
 - Chain ID: `20260211` (`0x1352573`)
 
 Provider public endpoints (striped `2+1` baseline):
-- `https://sp1.polynomialstore.com` → provider `nil1jtqzjx7y9kh3un3a86u774mucsq4q3vshh8sr0`
-- `https://sp2.polynomialstore.com` → provider `nil1w98n98a8gnrwnyz62wfvya9wzvdr92uwz7dssk`
-- `https://sp3.polynomialstore.com` → provider `nil182f6qy5taazj5fa722p2ut4d0v5j2gkap0dprj`
+- `https://sp1.polynomialstore.com` -> provider `nil1d59tk5smpvkjrtvx5kep3uuvfflfg0e7qx36fq`
+- `https://sp2.polynomialstore.com` -> provider `nil15c5dmlaplgkdc3gumc62rwhsg9w0qauhmh28hw`
+- `https://sp3.polynomialstore.com` -> provider `nil1ggw66lserkfrdeax27nnq450yf7269w8p5ut6k`
 
 Provider ingress note:
 - These SP hostnames are expected to resolve directly to the provider host
   through DNS-only records, with Caddy terminating HTTPS and proxying to local
   provider-daemon ports. They should not be Cloudflare-proxied for normal bulk
   provider traffic.
+- The on-chain provider endpoints for the shared stack must be the public
+  `/dns4/sp1.polynomialstore.com/tcp/443/https`,
+  `/dns4/sp2.polynomialstore.com/tcp/443/https`, and
+  `/dns4/sp3.polynomialstore.com/tcp/443/https` multiaddrs. Local loopback
+  listener addresses such as `/ip4/127.0.0.1/tcp/8091/http` are only reverse
+  proxy or tunnel origins and should not be left on active shared-devnet
+  provider records.
 - Runbook: `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`
 
 ## What Collaborators Need From Hub Operator
@@ -120,7 +127,7 @@ Provider operator baseline:
 scripts/devnet_healthcheck.sh provider \
   --provider https://sp1.polynomialstore.com \
   --hub-lcd https://lcd.polynomialstore.com \
-  --provider-addr nil1jtqzjx7y9kh3un3a86u774mucsq4q3vshh8sr0
+  --provider-addr nil1d59tk5smpvkjrtvx5kep3uuvfflfg0e7qx36fq
 ```
 
 ## Reporting Template For Issues
