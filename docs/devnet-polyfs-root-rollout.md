@@ -64,6 +64,18 @@ When set, it must provide exactly one base URL for each resolved
 base must be unique, so rollout healthchecks cannot silently poll one surviving
 endpoint twice while skipping a restarted provider.
 
+For the shared `polynomialstore.com` devnet, each provider service's
+EnvironmentFile must also carry the public on-chain endpoint that matches the
+local listener and ingress mapping:
+
+- provider1 / `8091` -> `/dns4/sp1.polynomialstore.com/tcp/443/https`
+- provider2 / `8092` -> `/dns4/sp2.polynomialstore.com/tcp/443/https`
+- provider3 / `8093` -> `/dns4/sp3.polynomialstore.com/tcp/443/https`
+
+Do not register `/ip4/127.0.0.1/...` or `localhost` as a shared-devnet SP
+endpoint. Those addresses are only valid inside the provider host and will make
+the provider unreachable for hub/client placement.
+
 Provider service management is controlled by `POLYSTORE_PROVIDER_SERVICE_SCOPE`:
 
 - `auto` (default): resolve each default or configured provider service against user and root systemd managers before any stop/start action.

@@ -128,12 +128,22 @@ Minimum required edits in `polystore-gateway-provider.env`:
 - `POLYSTORE_GATEWAY_SP_AUTH` must match the hub router
 - `POLYSTORE_CHAIN_ID`, `POLYSTORE_NODE`, `POLYSTORE_LCD_BASE` must point at the hub
 - `POLYSTORE_HOME` + `POLYSTORE_PROVIDER_KEY` must reference a key that exists locally
+- `POLYSTORE_PROVIDER_ENDPOINTS` must be the public on-chain endpoint. For the
+  shared `polynomialstore.com` devnet, use
+  `/dns4/sp1.polynomialstore.com/tcp/443/https`,
+  `/dns4/sp2.polynomialstore.com/tcp/443/https`, or
+  `/dns4/sp3.polynomialstore.com/tcp/443/https`; do not register
+  `127.0.0.1` or `localhost` endpoints except in an isolated local-only devnet.
 
 ## Notes
 
 - These templates assume you checked the repo out at `/opt/polystore`. Adjust as needed.
 - Unit `ExecStart` commands intentionally use a shell wrapper so EnvironmentFile
   variables (for example `POLYSTORECHAIND_BIN`) are expanded correctly by systemd.
+- `POLYSTORE_GRPC_ADDRESS` defaults to `127.0.0.1:9091` in the chain env
+  template because `localhost:9090` is commonly occupied by host Prometheus.
+  LCD REST and EVM JSON-RPC depend on the chain gRPC server staying bound, so
+  keep this explicit unless the host has a known free replacement.
 - The env templates include `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release`
   so binaries linked against `libpolystore_core.so` start cleanly under systemd.
 - The router↔provider auth token **must match** across the hub router and all providers:
