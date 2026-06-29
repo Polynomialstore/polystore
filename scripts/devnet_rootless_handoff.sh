@@ -247,13 +247,29 @@ stop_root_units() {
     return
   fi
 
-  log "Stopping and disabling root hub units"
+  log "Stopping root hub units before starting user hub units"
   for unit in "${HUB_SERVICES[@]}"; do
     if [[ "$DRY_RUN" -eq 0 ]] && ! root_unit_exists "$unit"; then
       log "Root unit not loaded or masked, skipping: $unit"
       continue
     fi
     run_cmd systemctl stop "$unit"
+  done
+}
+
+disable_and_mask_root_units() {
+  local unit
+
+  if [[ "$DISABLE_ROOT" -ne 1 ]]; then
+    return
+  fi
+
+  log "Disabling root hub units after user hub services are installed"
+  for unit in "${HUB_SERVICES[@]}"; do
+    if [[ "$DRY_RUN" -eq 0 ]] && ! root_unit_exists "$unit"; then
+      log "Root unit not loaded or masked, skipping: $unit"
+      continue
+    fi
     run_cmd systemctl disable "$unit"
     if [[ "$MASK_ROOT" -eq 1 ]]; then
       run_cmd systemctl mask --force "$unit"
@@ -406,9 +422,10 @@ log "State roots: ${STATE_ROOTS[*]}"
 log "Hub services: ${HUB_SERVICES[*]}"
 
 ensure_user_manager
-stop_root_units
 chown_runtime_paths
 install_user_units
 env_files_ready_for_start
+stop_root_units
 enable_and_start_user_units
+disable_and_mask_root_units
 print_followup
