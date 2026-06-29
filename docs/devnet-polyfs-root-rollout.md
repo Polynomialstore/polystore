@@ -2,6 +2,12 @@
 
 Use `scripts/update_devnet_stack.sh` when rolling out proof-format-coupled changes to the local trusted devnet on this machine.
 
+For local machines, prefer the rootless hub layout documented in
+`docs/devnet-rootless-handoff.md`. After that one-time handoff,
+`scripts/update_devnet_stack.sh` can manage `polystorechaind`,
+`polystore-faucet`, and the `user-gateway` legacy router service with
+`systemctl --user`, avoiding sudo/root blockers during routine deploys.
+
 The script rebuilds as the configured run user, then installs:
 
 - `polystore_core/target/release/libpolystore_core.so`
@@ -18,14 +24,14 @@ It restarts services in this order:
 3. Build artifacts as `--run-user`/`POLYSTORE_RUN_USER`; when invoked with `sudo`, this avoids root-owned Cargo/Go outputs in the source checkout.
 4. Preflight all build artifacts before stopping any service.
 5. Preflight the install plan. If a source artifact is already the target path, the later install step skips it instead of failing after services stop.
-6. Preflight hub root service units with non-mutating, non-sudo `systemctl show`, including dry-runs, so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped.
+6. Preflight hub service units with non-mutating `systemctl show`, including dry-runs, so a missing chain, faucet, or legacy router unit cannot abort after provider-daemons are already stopped. Hub services can be resolved from the user or root systemd manager.
 7. If `--restart-tunnels` is supplied, preflight tunnel user service units with non-mutating `systemctl --user show`.
 8. Resolve `provider-daemon` service managers with non-mutating unit checks, including dry-runs. The default `auto` mode resolves the local user-service provider layout; the checked-in root provider template must be selected explicitly with `POLYSTORE_PROVIDER_SERVICE_SCOPE=root`.
 9. Derive default provider health targets from known resolved service names unless `POLYSTORE_PROVIDER_BASES` is set. Unknown custom service names require explicit bases, and duplicate provider service names or duplicate canonical provider health bases fail before any service-stop mutation.
-10. Preflight root service control. Live non-root runs must prove passwordless sudo authorization for the exact hub and root-managed `provider-daemon` `systemctl stop/start` actions before any `provider-daemon` is stopped.
+10. Preflight root service control only for services resolved from the root systemd manager. Live non-root runs must prove passwordless sudo authorization for exact root-managed `systemctl stop/start` actions before any `provider-daemon` is stopped. User-managed hub services do not require sudo.
 11. If `--restart-tunnels` is supplied, stop tunnel user services before taking down the devnet stack.
 12. Stop `provider-daemon` services from their resolved manager: user services such as `polystore-provider1.service` through `polystore-provider4.service`, or root services such as `polystore-gateway-provider.service`.
-13. Stop hub services: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
+13. Stop hub services from their resolved manager: `polystore-gateway-router.service` (legacy service alias for the `user-gateway` persona), `polystore-faucet.service`, then `polystorechaind.service`.
 14. Install artifacts with backups and sha256 evidence.
 15. Start chain first.
 16. Start faucet and the `user-gateway` legacy router service.
@@ -69,6 +75,21 @@ The default `auto` inventory intentionally does not include the checked-in root
 provider template, because a loaded-but-unused root template can collide with
 the four user-provider devnet layout on port `8091`.
 
+Hub service management is controlled by `POLYSTORE_HUB_SERVICE_SCOPE`:
+
+- `auto` (default): resolve `polystorechaind.service`,
+  `polystore-faucet.service`, and `polystore-gateway-router.service` against
+  user and root systemd managers.
+- `user`: require all hub services to exist in the user systemd manager.
+- `root`: require all hub services to exist in the root systemd manager.
+
+If a hub service name exists in both managers, `auto` exits before stopping
+services; set the scope explicitly. On rootless local devnets, run:
+
+```bash
+POLYSTORE_HUB_SERVICE_SCOPE=user scripts/update_devnet_stack.sh
+```
+
 ## State Policy
 
 The PolyFS root migration changes the trust root for new deals from the retired flat `manifest.bin` commitment to the MDU #0 PolyFS root. The rollout script is intentionally a binary/runtime rollout tool; it does not reset chain state and it does not silently migrate old committed deals.
@@ -104,12 +125,13 @@ the stop plan and skipped during install. Without `--skip-build`, the script
 exits before building so it cannot partially overwrite live artifacts while
 services are still running.
 In live non-root mode, the script also verifies passwordless sudo authorization
-for the exact hub and root-managed `provider-daemon` `systemctl stop/start`
-actions before printing the service-stop plan. On this host, dry runs report
-that check without requiring a sudo prompt.
-Dry-runs and live runs both verify that all configured hub root service units
-are loaded with non-mutating, non-sudo `systemctl show`. Live runs also verify
-that `curl` is available before any service-stop mutation.
+for exact root-managed `systemctl stop/start` actions before printing the
+service-stop plan. On rootless hub devnets, this only applies to any
+root-managed `provider-daemon` services that remain. On this host, dry runs
+report that check without requiring a sudo prompt.
+Dry-runs and live runs both verify that all configured hub service units are
+loaded in their resolved systemd manager with non-mutating `systemctl show`.
+Live runs also verify that `curl` is available before any service-stop mutation.
 Final `systemctl is-active` status probes are best-effort evidence after the
 healthchecks have passed; a restricted sudoers policy for status commands should
 not mark an otherwise healthy rollout as failed.
