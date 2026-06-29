@@ -17,7 +17,8 @@ The current `polynomialstore.com` provider hostnames are expected to use:
   address.
 - Caddy listening on public TCP `443` on the provider host.
 - One public Let's Encrypt certificate covering all three SP hostnames.
-- Host-based Caddy reverse proxy:
+- Host-based Caddy reverse proxy to the local provider-daemon listeners, for
+  example:
   - `sp1.polynomialstore.com` -> `127.0.0.1:8091`
   - `sp2.polynomialstore.com` -> `127.0.0.1:8092`
   - `sp3.polynomialstore.com` -> `127.0.0.1:8093`
@@ -25,6 +26,22 @@ The current `polynomialstore.com` provider hostnames are expected to use:
   - `/dns4/sp1.polynomialstore.com/tcp/443/https`
   - `/dns4/sp2.polynomialstore.com/tcp/443/https`
   - `/dns4/sp3.polynomialstore.com/tcp/443/https`
+
+The `127.0.0.1:<port>` values above are private origin addresses only. Do not
+register them in `Provider.endpoints` for the shared devnet. If a recovery or
+chain refresh changes which local daemon serves a hostname, keep the on-chain
+endpoint as the matching `sp1`, `sp2`, or `sp3`
+`/dns4/.../tcp/443/https` hostname and update the reverse proxy or tunnel
+route to point that hostname at the correct daemon.
+
+Before submitting `register-provider` or `update-provider-endpoints`, verify
+the hostname-to-provider identity mapping:
+
+```bash
+curl -fsS https://sp1.polynomialstore.com/status | jq -r '.provider.address'
+curl -fsS https://sp2.polynomialstore.com/status | jq -r '.provider.address'
+curl -fsS https://sp3.polynomialstore.com/status | jq -r '.provider.address'
+```
 
 Do not commit the current provider host public IP address to the repo. Read it
 from Cloudflare DNS, the router/NAT configuration, or operator notes when
@@ -158,6 +175,13 @@ sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl restart caddy
 ```
 
+If this host is temporarily using Cloudflare Tunnel instead of direct DNS-only
+`A` records, the same identity rule applies: the tunnel ingress service may be
+`http://127.0.0.1:<port>`, but the chain endpoint must still be the public
+`/dns4/sp1.polynomialstore.com/tcp/443/https`,
+`/dns4/sp2.polynomialstore.com/tcp/443/https`, or
+`/dns4/sp3.polynomialstore.com/tcp/443/https` multiaddr.
+
 ## DNS Cutover
 
 Before cutover:
@@ -211,6 +235,19 @@ Expected:
 - HTTP status is `200`.
 - TLS verify result is `0`.
 - HTTP version is usually `2`.
+
+Also verify the chain records after any stack refresh:
+
+```bash
+curl -fsS https://lcd.polynomialstore.com/polystorechain/polystorechain/v1/providers \
+  | jq -r '.providers[] | [.address, (.draining // false), (.endpoints | join(","))] | @tsv'
+```
+
+Every non-draining shared-devnet SP should advertise one of the three
+`sp1`, `sp2`, or `sp3` `/dns4/.../tcp/443/https` endpoints. If a
+non-draining record advertises `/ip4/127.0.0.1/...`, update that provider
+with `update-provider-endpoints` from its local key or mark the extra provider
+draining if it is not one of the public three.
 
 ## Validating Cloudflare Slowdown
 
@@ -355,7 +392,8 @@ HTTPS and Tunnel HTTPS use `/dns4/<host>/tcp/443/https`.
 
 - Do not assume `cloudflared-providers.service` carries live SP traffic. In the
   current deployment it is a fallback while DNS-only direct HTTPS is primary.
-- If `spN.polynomialstore.com` resolves to Cloudflare anycast IPs, the record is
+- If `sp1.polynomialstore.com`, `sp2.polynomialstore.com`, or
+  `sp3.polynomialstore.com` resolves to Cloudflare anycast IPs, the record is
   proxied or stale in a resolver cache.
 - If it resolves to the provider host public address but HTTPS fails, inspect
   Caddy first, then provider-daemon health on the local `809N` port.

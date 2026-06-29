@@ -407,6 +407,124 @@ func TestAddProviderBondClearsResolvedUnderbondedHealth(t *testing.T) {
 	require.Empty(t, after.Collateral.IneligibilityReason)
 }
 
+func TestAddProviderBondClearsRecoveredSoftProviderHealth(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(20)
+
+	params := types.DefaultParams()
+	params.MinProviderBond = sdk.NewInt64Coin(sdk.DefaultBondDenom, 150)
+	params.AssignmentCollateralPerSlot = sdk.NewInt64Coin(sdk.DefaultBondDenom, 5)
+	require.NoError(t, f.keeper.Params.Set(ctx, params))
+
+	provider := makePolicyTestAddr(t, f, 0xA1)
+	providerAddr, err := sdk.AccAddressFromBech32(provider)
+	require.NoError(t, err)
+	bank.setAccountBalance(providerAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 155)))
+
+	_, err = msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+		Creator:      provider,
+		Capabilities: "General",
+		TotalStorage: 1_000_000_000,
+		Endpoints:    testProviderEndpoints,
+		Bond:         sdk.NewInt64Coin(sdk.DefaultBondDenom, 150),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, f.keeper.ProviderHealthStates.Set(ctx, provider, types.ProviderHealthState{
+		Provider:           provider,
+		LifecycleStatus:    types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT,
+		Reason:             "provider_delinquent",
+		EvidenceClass:      types.EvidenceClass_EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT,
+		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_DELINQUENT,
+		LastEvidenceCaseId: 99,
+		LastDealId:         7,
+		LastSlot:           1,
+		LastEpochId:        4,
+		UpdatedHeight:      19,
+		SoftFaultCount:     42,
+		HardFaultCount:     1,
+		RepairEventCount:   5,
+		ConsequenceCeiling: "repair and reward exclusion; no soft-fault slash by default",
+	}))
+
+	before, err := queryServer.GetProviderHealth(ctx, &types.QueryGetProviderHealthRequest{Address: provider})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_DELINQUENT, before.Health.LifecycleStatus)
+	require.Equal(t, uint64(42), before.Health.SoftFaultCount)
+
+	_, err = msgServer.AddProviderBond(ctx, &types.MsgAddProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 5),
+	})
+	require.NoError(t, err)
+
+	health, err := queryServer.GetProviderHealth(ctx, &types.QueryGetProviderHealthRequest{Address: provider})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_ACTIVE, health.Health.LifecycleStatus)
+	require.Equal(t, "provider_operator_recovered", health.Health.Reason)
+	require.Equal(t, uint64(0), health.Health.SoftFaultCount)
+	require.Equal(t, uint64(1), health.Health.HardFaultCount)
+	require.Equal(t, uint64(5), health.Health.RepairEventCount)
+
+	collateral, err := queryServer.GetProviderCollateral(ctx, &types.QueryGetProviderCollateralRequest{Address: provider})
+	require.NoError(t, err)
+	require.True(t, collateral.Collateral.EligibleForNewAssignment)
+	require.Empty(t, collateral.Collateral.IneligibilityReason)
+}
+
+func TestAddProviderBondDoesNotClearAdministrativeProviderHealth(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+	queryServer := keeper.NewQueryServerImpl(f.keeper)
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(20)
+
+	provider := makePolicyTestAddr(t, f, 0xA1)
+	providerAddr, err := sdk.AccAddressFromBech32(provider)
+	require.NoError(t, err)
+	bank.setAccountBalance(providerAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 155)))
+
+	_, err = msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+		Creator:      provider,
+		Capabilities: "General",
+		TotalStorage: 1_000_000_000,
+		Endpoints:    testProviderEndpoints,
+		Bond:         sdk.NewInt64Coin(sdk.DefaultBondDenom, 150),
+	})
+	require.NoError(t, err)
+
+	record, err := f.keeper.Providers.Get(ctx, provider)
+	require.NoError(t, err)
+	record.Status = "Jailed"
+	require.NoError(t, f.keeper.Providers.Set(ctx, provider, record))
+	require.NoError(t, f.keeper.ProviderHealthStates.Set(ctx, provider, types.ProviderHealthState{
+		Provider:           provider,
+		LifecycleStatus:    types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED,
+		Reason:             "hard_fault_jailed",
+		EvidenceClass:      types.EvidenceClass_EVIDENCE_CLASS_CHAIN_MEASURABLE_SOFT,
+		Severity:           types.EvidenceSeverity_EVIDENCE_SEVERITY_DELINQUENT,
+		SoftFaultCount:     42,
+		ConsequenceCeiling: "jailed until height 50",
+	}))
+
+	_, err = msgServer.AddProviderBond(ctx, &types.MsgAddProviderBond{
+		Creator:  provider,
+		Provider: provider,
+		Bond:     sdk.NewInt64Coin(sdk.DefaultBondDenom, 5),
+	})
+	require.NoError(t, err)
+
+	health, err := queryServer.GetProviderHealth(ctx, &types.QueryGetProviderHealthRequest{Address: provider})
+	require.NoError(t, err)
+	require.Equal(t, types.ProviderLifecycleStatus_PROVIDER_LIFECYCLE_STATUS_JAILED, health.Health.LifecycleStatus)
+	require.Equal(t, "provider_jailed", health.Health.Reason)
+	require.Equal(t, uint64(42), health.Health.SoftFaultCount)
+}
+
 func TestWithdrawProviderBondRetainsLockAwareAssignmentCollateral(t *testing.T) {
 	bank := newTrackingBankKeeper()
 	f := initFixtureWithBankKeeper(t, bank)
