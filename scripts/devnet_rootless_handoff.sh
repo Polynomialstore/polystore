@@ -239,6 +239,36 @@ root_unit_exists() {
   [[ "$load_state" == "loaded" || "$load_state" == "masked" ]]
 }
 
+mask_root_unit() {
+  local unit="$1"
+  local fragment_path backup_path timestamp
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    run_cmd systemctl mask --force "$unit"
+    return
+  fi
+
+  if run_cmd systemctl mask --force "$unit"; then
+    return
+  fi
+
+  fragment_path="$(systemctl show "$unit" --property=FragmentPath --value 2>/dev/null || true)"
+  if [[ -z "$fragment_path" || "$fragment_path" == "n/a" ]]; then
+    fragment_path="/etc/systemd/system/$unit"
+  fi
+
+  if [[ "$fragment_path" != /etc/systemd/system/* || ! -e "$fragment_path" ]]; then
+    die "systemctl mask failed for $unit and no replaceable /etc/systemd/system unit file was found"
+  fi
+
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  backup_path="${fragment_path}.rootless-backup-${timestamp}"
+  log "Preserving existing root unit before masking: $fragment_path -> $backup_path"
+  run_cmd mv "$fragment_path" "$backup_path"
+  run_cmd systemctl daemon-reload
+  run_cmd systemctl mask --force "$unit"
+}
+
 stop_root_units() {
   local unit
 
@@ -272,7 +302,7 @@ disable_and_mask_root_units() {
     fi
     run_cmd systemctl disable "$unit"
     if [[ "$MASK_ROOT" -eq 1 ]]; then
-      run_cmd systemctl mask --force "$unit"
+      mask_root_unit "$unit"
     fi
   done
 }
