@@ -28,6 +28,9 @@ Environment:
   POLYSTORE_PROVIDER_SERVICE_SCOPE
                                 Provider service manager: auto, user, or root
                                 (default: auto).
+  POLYSTORE_HUB_SERVICE_SCOPE   Hub service manager for polystorechaind,
+                                faucet, and user-gateway: auto, user, or root
+                                (default: auto).
   POLYSTORE_TUNNEL_SERVICES     Space-separated tunnel user services.
                                 Default: cloudflared-hub.service cloudflared-providers.service.
   POLYSTORE_RPC_BASE            Hub Tendermint RPC base URL (default: http://127.0.0.1:26657).
@@ -152,7 +155,8 @@ for provider_service in "${PROVIDER_SERVICES[@]}"; do
   fi
   SEEN_PROVIDER_SERVICES["$provider_service"]=1
 done
-read -r -a ROOT_SERVICES <<<"polystorechaind.service polystore-faucet.service polystore-gateway-router.service"
+read -r -a HUB_SERVICES <<<"polystorechaind.service polystore-faucet.service polystore-gateway-router.service"
+HUB_SERVICE_SCOPE="${POLYSTORE_HUB_SERVICE_SCOPE:-auto}"
 read -r -a TUNNEL_SERVICES <<<"${POLYSTORE_TUNNEL_SERVICES:-cloudflared-hub.service cloudflared-providers.service}"
 RPC_BASE="${POLYSTORE_RPC_BASE:-http://127.0.0.1:26657}"
 LCD_BASE="${POLYSTORE_LCD_BASE:-http://127.0.0.1:1317}"
@@ -177,6 +181,15 @@ case "$PROVIDER_SERVICE_SCOPE" in
     ;;
   *)
     echo "ERROR: POLYSTORE_PROVIDER_SERVICE_SCOPE must be auto, user, or root." >&2
+    exit 2
+    ;;
+esac
+
+case "$HUB_SERVICE_SCOPE" in
+  auto|user|root)
+    ;;
+  *)
+    echo "ERROR: POLYSTORE_HUB_SERVICE_SCOPE must be auto, user, or root." >&2
     exit 2
     ;;
 esac
@@ -569,6 +582,134 @@ provider_systemctl() {
   return "$status"
 }
 
+declare -a HUB_USER_SERVICES=()
+declare -a HUB_ROOT_SERVICES=()
+declare -A HUB_SERVICE_MANAGER=()
+HUB_SERVICE_SCOPES_RESOLVED=0
+
+require_hub_service_loaded() {
+  local scope="$1"
+  local service="$2"
+  local load_state
+
+  if [[ "$scope" == "user" ]]; then
+    load_state="$(user_unit_load_state "$service" || true)"
+  else
+    load_state="$(root_unit_load_state "$service" || true)"
+  fi
+
+  if ! unit_is_loaded "$load_state"; then
+    echo "ERROR: hub service $service is not loaded in the $scope systemd manager." >&2
+    echo "       LoadState=$(describe_load_state "$load_state"); fix the unit before stopping services." >&2
+    exit 1
+  fi
+}
+
+resolve_hub_service_scopes() {
+  local service user_state root_state found_any=0
+
+  if [[ "$HUB_SERVICE_SCOPES_RESOLVED" -eq 1 ]]; then
+    return
+  fi
+
+  HUB_USER_SERVICES=()
+  HUB_ROOT_SERVICES=()
+  HUB_SERVICE_MANAGER=()
+  echo "==> Resolving hub service managers"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    DRY-RUN: validating loaded hub services with non-mutating systemctl show"
+  fi
+
+  case "$HUB_SERVICE_SCOPE" in
+    user)
+      for service in "${HUB_SERVICES[@]}"; do
+        require_hub_service_loaded user "$service"
+        HUB_USER_SERVICES+=("$service")
+        HUB_SERVICE_MANAGER["$service"]="user"
+      done
+      ;;
+    root)
+      for service in "${HUB_SERVICES[@]}"; do
+        require_hub_service_loaded root "$service"
+        HUB_ROOT_SERVICES+=("$service")
+        HUB_SERVICE_MANAGER["$service"]="root"
+      done
+      ;;
+    auto)
+      for service in "${HUB_SERVICES[@]}"; do
+        user_state="$(user_unit_load_state "$service" || true)"
+        root_state="$(root_unit_load_state "$service" || true)"
+
+        if unit_is_loaded "$user_state" && unit_is_loaded "$root_state"; then
+          echo "ERROR: hub service $service exists in both user and root managers." >&2
+          echo "       Set POLYSTORE_HUB_SERVICE_SCOPE=user or root for this rollout." >&2
+          exit 1
+        fi
+
+        if unit_is_loaded "$user_state"; then
+          HUB_USER_SERVICES+=("$service")
+          HUB_SERVICE_MANAGER["$service"]="user"
+          found_any=1
+          continue
+        fi
+
+        if unit_is_loaded "$root_state"; then
+          HUB_ROOT_SERVICES+=("$service")
+          HUB_SERVICE_MANAGER["$service"]="root"
+          found_any=1
+          continue
+        fi
+
+        echo "ERROR: hub service is not loaded in user or root systemd managers: $service" >&2
+        echo "       user LoadState=$(describe_load_state "$user_state"), root LoadState=$(describe_load_state "$root_state")." >&2
+        exit 1
+      done
+
+      if [[ "$found_any" -ne 1 ]]; then
+        echo "ERROR: no hub services were loaded in user or root systemd managers." >&2
+        echo "       Set POLYSTORE_HUB_SERVICE_SCOPE for this host." >&2
+        exit 1
+      fi
+      ;;
+  esac
+
+  if [[ "${#HUB_USER_SERVICES[@]}" -gt 0 ]]; then
+    echo "    user manager: ${HUB_USER_SERVICES[*]}"
+  fi
+  if [[ "${#HUB_ROOT_SERVICES[@]}" -gt 0 ]]; then
+    echo "    root manager: ${HUB_ROOT_SERVICES[*]}"
+  fi
+  HUB_SERVICE_SCOPES_RESOLVED=1
+}
+
+hub_systemctl_each() {
+  local action="$1"
+  shift
+
+  local service manager status=0
+  resolve_hub_service_scopes
+  for service in "$@"; do
+    manager="${HUB_SERVICE_MANAGER[$service]:-}"
+    case "$manager" in
+      user)
+        user_systemctl "$action" "$service" || status=$?
+        ;;
+      root)
+        root_systemctl "$action" "$service" || status=$?
+        ;;
+      "")
+        echo "ERROR: hub service $service was not resolved for this rollout." >&2
+        status=1
+        ;;
+      *)
+        echo "ERROR: unknown hub service manager for $service: $manager" >&2
+        status=1
+        ;;
+    esac
+  done
+  return "$status"
+}
+
 preflight_required_tools() {
   echo "==> Preflighting local command dependencies"
   if ! command -v curl >/dev/null; then
@@ -581,6 +722,13 @@ preflight_required_tools() {
 
 preflight_root_service_control() {
   echo "==> Preflighting root service control before stopping services"
+  resolve_hub_service_scopes
+  resolve_provider_service_scopes
+  if [[ "${#HUB_ROOT_SERVICES[@]}" -eq 0 && "${#PROVIDER_ROOT_SERVICES[@]}" -eq 0 ]]; then
+    echo "    no root-managed hub or provider-daemon services resolved"
+    return
+  fi
+
   if [[ "$IS_ROOT" -eq 1 ]]; then
     echo "    running as root; root systemd control is available"
     return
@@ -591,10 +739,10 @@ preflight_root_service_control() {
     return
   fi
 
-  preflight_root_systemctl_authorized_each stop polystore-gateway-router.service polystore-faucet.service
-  preflight_root_systemctl_authorized_each stop polystorechaind.service
-  preflight_root_systemctl_authorized_each start polystorechaind.service
-  preflight_root_systemctl_authorized_each start polystore-faucet.service polystore-gateway-router.service
+  if [[ "${#HUB_ROOT_SERVICES[@]}" -gt 0 ]]; then
+    preflight_root_systemctl_authorized_each stop "${HUB_ROOT_SERVICES[@]}"
+    preflight_root_systemctl_authorized_each start "${HUB_ROOT_SERVICES[@]}"
+  fi
   if [[ "${#PROVIDER_ROOT_SERVICES[@]}" -gt 0 ]]; then
     preflight_root_systemctl_authorized_each stop "${PROVIDER_ROOT_SERVICES[@]}"
     preflight_root_systemctl_authorized_each start "${PROVIDER_ROOT_SERVICES[@]}"
@@ -634,24 +782,9 @@ preflight_root_systemctl_authorized() {
   exit 1
 }
 
-preflight_root_services_loaded() {
-  local service load_state
-
-  echo "==> Preflighting hub root service units"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "    DRY-RUN: validating loaded root services with non-mutating systemctl show: ${ROOT_SERVICES[*]}"
-  fi
-
-  for service in "${ROOT_SERVICES[@]}"; do
-    load_state="$(root_unit_load_state "$service" || true)"
-    if ! unit_is_loaded "$load_state"; then
-      echo "ERROR: hub root service $service is not loaded in the root systemd manager." >&2
-      echo "       LoadState=$(describe_load_state "$load_state"); fix the unit before stopping services." >&2
-      echo "       Fix POLYSTORE root service inventory before stopping provider-daemon services." >&2
-      exit 1
-    fi
-  done
-  echo "    root services loaded: ${ROOT_SERVICES[*]}"
+preflight_hub_services_loaded() {
+  echo "==> Preflighting hub service units"
+  resolve_hub_service_scopes
 }
 
 preflight_tunnel_services_loaded() {
@@ -937,7 +1070,8 @@ print_source_evidence() {
   fi
   echo "    provider-daemon services: ${PROVIDER_SERVICES[*]}"
   echo "    provider-daemon service scope: $PROVIDER_SERVICE_SCOPE"
-  echo "    root services: ${ROOT_SERVICES[*]}"
+  echo "    hub services: ${HUB_SERVICES[*]}"
+  echo "    hub service scope: $HUB_SERVICE_SCOPE"
   echo "    rpc base: $RPC_BASE"
   echo "    lcd base: $LCD_BASE"
   echo "    evm base: $EVM_BASE"
@@ -956,15 +1090,20 @@ print_source_evidence() {
 }
 
 print_service_status() {
-  echo "==> Root service activity"
-  if ! root_systemctl_each is-active "${ROOT_SERVICES[@]}"; then
-    echo "WARNING: root service activity status probe failed after healthchecks." >&2
+  echo "==> Hub service activity"
+  if ! hub_systemctl_each is-active "${HUB_SERVICES[@]}"; then
+    echo "WARNING: hub service activity status probe failed after healthchecks." >&2
   fi
   if [[ "$DRY_RUN" != "1" ]]; then
-    if [[ "$IS_ROOT" -eq 1 ]]; then
-      systemctl --no-pager --full status "${ROOT_SERVICES[@]}" | sed -n '1,160p' || true
-    else
-      systemctl --no-pager --full status "${ROOT_SERVICES[@]}" | sed -n '1,160p' || true
+    if [[ "${#HUB_USER_SERVICES[@]}" -gt 0 && "$IS_ROOT" -eq 1 ]]; then
+      runuser -u "$RUN_USER" -- env XDG_RUNTIME_DIR="/run/user/$RUN_UID" systemctl --user --no-pager --full status "${HUB_USER_SERVICES[@]}" | sed -n '1,160p' || true
+    elif [[ "${#HUB_USER_SERVICES[@]}" -gt 0 ]]; then
+      env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$RUN_UID}" systemctl --user --no-pager --full status "${HUB_USER_SERVICES[@]}" | sed -n '1,160p' || true
+    fi
+    if [[ "${#HUB_ROOT_SERVICES[@]}" -gt 0 && "$IS_ROOT" -eq 1 ]]; then
+      systemctl --no-pager --full status "${HUB_ROOT_SERVICES[@]}" | sed -n '1,160p' || true
+    elif [[ "${#HUB_ROOT_SERVICES[@]}" -gt 0 ]]; then
+      systemctl --no-pager --full status "${HUB_ROOT_SERVICES[@]}" | sed -n '1,160p' || true
     fi
   fi
 
@@ -1022,7 +1161,7 @@ preflight_required_tools
 build_artifacts
 preflight_artifacts
 preflight_install_plan
-preflight_root_services_loaded
+preflight_hub_services_loaded
 preflight_tunnel_services_loaded
 resolve_provider_service_scopes
 preflight_root_service_control
@@ -1034,8 +1173,8 @@ fi
 
 echo "==> Stop order: provider-daemons -> user-gateway/faucet -> chain"
 provider_systemctl stop
-root_systemctl_each stop polystore-gateway-router.service polystore-faucet.service
-root_systemctl stop polystorechaind.service
+hub_systemctl_each stop polystore-gateway-router.service polystore-faucet.service
+hub_systemctl_each stop polystorechaind.service
 
 echo "==> Installing binaries and runtime inputs"
 install_with_backup "$SOURCE_ROOT/polystore_core/target/release/libpolystore_core.so" "$TARGET_ROOT/polystore_core/target/release/libpolystore_core.so" 755
@@ -1046,9 +1185,9 @@ install_with_backup "$SOURCE_ROOT/polystore_cli/target/release/polystore_cli" "$
 install_with_backup "$SOURCE_ROOT/polystorechain/trusted_setup.txt" "$TARGET_ROOT/polystorechain/trusted_setup.txt" 644
 
 echo "==> Start order: chain -> faucet/user-gateway -> provider-daemons"
-root_systemctl start polystorechaind.service
+hub_systemctl_each start polystorechaind.service
 wait_http "LCD node_info" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" 90
-root_systemctl_each start polystore-faucet.service polystore-gateway-router.service
+hub_systemctl_each start polystore-faucet.service polystore-gateway-router.service
 wait_http "faucet" "$FAUCET_BASE/health" 45
 wait_http "user-gateway (legacy router service)" "$ROUTER_BASE/health" 45
 provider_systemctl start

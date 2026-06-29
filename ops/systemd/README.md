@@ -62,6 +62,25 @@ The stack rollout script covers `provider-daemon` services provider1 through
 provider4 and restarts tunnel services only when `--restart-tunnels` is
 supplied.
 
+### Rootless Local Devnet Handoff
+
+Routine local devnet deploys should not depend on root-owned hub services. For a
+machine that already has `polystorechaind`, `polystore-faucet`, and
+`polystore-gateway-router` installed as root units, run the one-time handoff:
+
+```bash
+sudo -E scripts/devnet_rootless_handoff.sh --run-user "$USER"
+```
+
+This moves the hub to user systemd units, chowns the devnet install/config/state
+paths, and masks the root hub units by default. Afterward, use:
+
+```bash
+POLYSTORE_HUB_SERVICE_SCOPE=user scripts/update_devnet_stack.sh
+```
+
+See `docs/devnet-rootless-handoff.md`.
+
 4) Tail logs:
 
 ```bash
