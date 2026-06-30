@@ -12,7 +12,8 @@ attestations, retrieval economics
 `rfcs/rfc-mode2-onchain-state.md`,
 `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md`,
 `rfcs/rfc-pricing-and-escrow-accounting.md`,
-`rfcs/rfc-polyfs-root-contract.md`
+`rfcs/rfc-polyfs-root-contract.md`,
+`rfcs/rfc-chain-funded-da-deals.md`
 
 -----
 
@@ -34,6 +35,15 @@ closer to an EigenDA-shaped operator/quorum model than to a Celestia-shaped DAS
 chain. PolyStore's differentiation is that a certificate can bind publication
 availability to durable retrieval, repair, payment, and retained PolyFS
 generations.
+
+The canonical deployment model is a **Chain-Funded DA Deal**:
+
+> A chain funds one DA Deal, publishes batches through one or more DA lanes,
+> receives availability certificates, and keeps the data retrievable for as long
+> as the Deal remains funded.
+
+This keeps the public product concrete. Chains buy a standing DA service; DA
+lanes append and certify batches; backing deals retain and serve the data.
 
 This RFC defines three certificate tiers:
 
@@ -100,8 +110,7 @@ already has:
 ### 2.3 PolyStore's DA shape
 
 PolyStore DA should be **attestation-first with retrieval-native hardening**.
-The first competitive claim should not be "cheapest or fastest generic DA." It
-should be:
+The first competitive claim should be:
 
 > PolyStore DA certificates bind publication-time availability to an accountable
 > retrieval and retention substrate.
@@ -110,6 +119,27 @@ That claim is narrower, easier to defend, and more differentiated. It says the
 batch was not merely signed by a quorum. It also says the batch is mapped into a
 PolyFS generation, backed by storage deals, subject to retrieval sessions, and
 eligible for repair or retained access after certification.
+
+### 2.4 Chain-Funded DA Deals
+
+The DA-lanes protocol should be packaged as a chain-funded service.
+
+A Chain-Funded DA Deal gives a chain:
+
+* a treasury-funded policy object;
+* allowed sequencer, batcher, user-gateway, or disperser publishers;
+* one or more DA lanes;
+* one or more backing storage deals;
+* an erasure profile and provider assignment policy;
+* a target certificate tier;
+* retention and retrieval payment policy;
+* repair and provider scale-up policy; and
+* public usage and runway accounting.
+
+This is the route from protocol primitive to marketable product. "Launch a
+chain with a DA Deal" is not just marketing language. It is the policy layer
+that lets a chain autonomously fund publication, certification, retained
+retrieval, repair, and provider elasticity.
 
 -----
 
@@ -124,12 +154,14 @@ eligible for repair or retained access after certification.
    Availability Certificates.
 4. Keep storage deals as the durable storage and economic substrate, not the DA
    publication object itself.
-5. Define a compact certificate verification surface for rollups, bridge
+5. Adopt Chain-Funded DA Deals as the deployment and funding primitive for
+   public chains using PolyStore DA.
+6. Define a compact certificate verification surface for rollups, bridge
    contracts, and external applications.
-6. Reuse existing PolyStore primitives wherever possible.
-7. Make provider accountability, retrieval payment, post-certification repair,
+7. Reuse existing PolyStore primitives wherever possible.
+8. Make provider accountability, retrieval payment, post-certification repair,
    and retained historical generations first-class properties of the design.
-8. Keep the future DAS/light-client path available without depending on that
+9. Keep the future DAS/light-client path available without depending on that
    stronger claim for the first product.
 
 -----
@@ -144,7 +176,7 @@ This RFC does not:
 * specify a final probability bound for every sampling profile;
 * define final slashing economics for all false attestation cases;
 * require a new consensus protocol for PolyStore;
-* require every storage provider to store every byte;
+* require every provider-daemon to store every byte;
 * define an L1 bridge contract in detail; or
 * implement the proposed messages or state machines.
 
@@ -155,6 +187,7 @@ This RFC does not:
 | Term | Meaning |
 |---|---|
 | **Deal** | Existing PolyStore storage/economic object. Deals remain the substrate for provider placement, escrow, retrieval policy, roots, and repair. |
+| **Chain-Funded DA Deal** | Standing service contract that links an external chain or namespace to DA lanes, backing deals, funding accounts, provider policies, retrieval policy, repair, and scale-up. |
 | **PolyFS generation** | Immutable committed content state identified by a PolyFS root and generation. |
 | **DA Lane** | Append-only publication stream backed by one or more deals. |
 | **Batch** | One ordered publication unit in a DA Lane. |
@@ -199,6 +232,18 @@ DA lanes answer:
 
 The lane is the publication abstraction. The deal is the storage and economic
 substrate. The Availability Certificate is the bridge between them.
+
+Chain-Funded DA Deals add the deployment abstraction above both. They answer:
+
+* which external chain or namespace is being served;
+* which treasury funds publication, retrieval, retention, and repair;
+* which publishers can append;
+* which certificate tier is required by default;
+* which public retrieval and sampling policy applies; and
+* when provider-daemon capacity should scale up.
+
+See `rfcs/rfc-chain-funded-da-deals.md` for the policy object and funding
+surface.
 
 -----
 
@@ -298,6 +343,10 @@ specific height.
 -----
 
 ## 9. Proposed Chain Objects
+
+Chain-Funded DA Deal objects live in `rfcs/rfc-chain-funded-da-deals.md`.
+Those objects reference the DA lane, batch, provider-assignment, sample, and
+certificate objects below.
 
 ### 9.1 `DALane`
 
@@ -556,7 +605,8 @@ issued under a specific tier, policy, provider set, and height.
 
 ### 10.1 `MsgCreateDALane`
 
-Creates an append-only lane backed by one or more existing deals.
+Creates an append-only lane backed by one or more existing deals. A lane MAY be
+created directly by its owner or through a Chain-Funded DA Deal policy.
 
 Required checks:
 
@@ -568,6 +618,9 @@ Required checks:
   costs for the requested tiers;
 * quorum policy is a recognized protocol policy; and
 * certificate policy is a recognized protocol policy.
+
+If created through a Chain-Funded DA Deal, the lane's writer, fee, retrieval,
+retention, and certificate policies MUST be compatible with that DA Deal policy.
 
 ### 10.2 `MsgAppendDABatch`
 
@@ -1064,6 +1117,8 @@ only.
 Deliverables:
 
 * formal certificate tier semantics;
+* Chain-Funded DA Deal policy and funding RFC;
+* public-chain sizing and positioning memo;
 * tracker issue with milestones and gates
   (`https://github.com/Polynomialstore/polystore/issues/231`);
 * implementation boundaries for chain, user-gateway, provider-daemon, and
@@ -1074,6 +1129,7 @@ Exit criteria:
 
 * this RFC clearly defines `DA_CERT_FAST`, `DA_CERT_RETRIEVABLE`, and
   `DA_CERT_RETAINED`;
+* Chain-Funded DA Deals are defined as the canonical deployment model;
 * tracker issue exists and is linked from the RFC PR; and
 * no public messaging depends on full DAS claims.
 
@@ -1081,6 +1137,7 @@ Exit criteria:
 
 Deliverables:
 
+* `DADealPolicy` and funding-account linkage for one Chain-Funded DA Deal;
 * `DABatchHeader`;
 * `DAQuorumPolicy`;
 * fixed provider assignment policy;
@@ -1092,6 +1149,7 @@ Deliverables:
 
 Exit criteria:
 
+* a Chain-Funded DA Deal can create or link a lane and pay for publication;
 * a batch moves from append to attested certificate;
 * invalid or missing provider attestations fail certification;
 * certificate verification surface is compact enough for a mock rollup verifier;
@@ -1174,6 +1232,9 @@ Every implementation PR should state which certificate tier it affects.
 
 Minimum test categories:
 
+* DA Deal create/fund/update/query tests;
+* DA Deal low-watermark and pause-watermark funding tests;
+* DA Deal to DA lane linkage authorization tests;
 * append CAS and lane-root tests;
 * provider assignment determinism tests;
 * attestation signature/domain-separator tests;
@@ -1190,10 +1251,13 @@ Performance evidence should be added before production claims:
 * batch size;
 * encoding profile;
 * provider count;
+* DA Deal budget runway by publication, retrieval, retention, and repair class;
+* disperser egress during certification;
+* per-slot provider-daemon ingress;
 * attestation aggregation latency;
 * certification latency by tier;
 * sample count and sample-serving latency;
-* retrieval throughput after certification;
+* retrieval throughput after certification at 1, 10, and 50 concurrent readers;
 * repair time after provider loss; and
 * bridge/verifier cost.
 
@@ -1209,6 +1273,12 @@ Suggested name family:
 * PolyDA, only after the security model is strong enough
 
 Suggested one-liner:
+
+> Launch a chain with a DA Deal: publish batches, receive availability
+> certificates, and keep data retrievable for as long as the chain funds the
+> Deal.
+
+Suggested protocol one-liner:
 
 > PolyStore DA Lanes let applications publish erasure-coded batches, receive an
 > availability certificate, and keep the same data retrievable through paid,
@@ -1248,22 +1318,28 @@ Suggested claim to avoid:
    generations use relative to provisional-generation cleanup?
 10. Which external integration should be first: OP Stack alt-DA, a generic SDK,
     or a source-DA archive bridge?
+11. Should `DADealPolicy` embed full lane policy or reference separately
+    versioned quorum, sample, retrieval, repair, and scale-up policies?
+12. Which provider scale-up triggers should be automatic protocol behavior
+    versus premium service requests from the chain treasury?
 
 -----
 
 ## 24. Recommendation
 
-Adopt PolyFS DA Lanes as an attestation-first DA direction with
-`DA_CERT_RETRIEVABLE` as the flagship target.
+Adopt PolyFS DA Lanes as an attestation-first DA direction with Chain-Funded DA
+Deals as the deployment model and `DA_CERT_RETRIEVABLE` as the flagship
+certificate target.
 
 The recommended sequencing is:
 
 1. Keep historical DA archive/retrieval as the near-term commercial wedge.
-2. Implement `DA_CERT_FAST` as the smallest primary-DA certificate.
-3. Implement `DA_CERT_RETRIEVABLE` before making differentiated DA claims.
-4. Implement `DA_CERT_RETAINED` after retrievable certification and repair hooks
+2. Implement Chain-Funded DA Deal policy, funding, and lane linkage.
+3. Implement `DA_CERT_FAST` as the smallest primary-DA certificate.
+4. Implement `DA_CERT_RETRIEVABLE` before making differentiated DA claims.
+5. Implement `DA_CERT_RETAINED` after retrievable certification and repair hooks
    work in devnet.
-5. Keep sampling-first DAS as a research track rather than the first product
+6. Keep sampling-first DAS as a research track rather than the first product
    claim.
 
 This direction avoids cloning existing DA systems. It focuses PolyStore on the
@@ -1279,7 +1355,10 @@ Local:
 
 * `whitepaper.md`
 * `docs/notes/HISTORICAL_DA_ARCHIVAL_RETRIEVAL_MARKET.md`
+* `docs/polyfs-chain-funded-da-deals.md`
+* `docs/chain-funded-da-deal-policy-fixtures.md`
 * `rfcs/rfc-blob-alignment-and-striping.md`
+* `rfcs/rfc-chain-funded-da-deals.md`
 * `rfcs/rfc-polyfs-generation-cas-and-staged-writes.md`
 * `rfcs/rfc-mandatory-retrieval-sessions-and-batching.md`
 * `rfcs/rfc-challenge-derivation-and-quotas.md`
