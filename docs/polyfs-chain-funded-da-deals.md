@@ -225,12 +225,13 @@ For the default candidate profile:
 K = 8
 N = 12
 r = 1.5
-aggregate provider ingress = B * 1.5
-per-slot provider ingress = B / 8
-disperser egress during certification = B * 1.5 / T
+aggregate encoded bytes = B * r
+per-slot encoded bytes = B / K
+disperser egress rate during certification = (B * r) / T
+per-slot provider ingress rate = (B / K) / T
 ```
 
-| Batch size | Target cert latency | Disperser egress | Per-slot provider ingress |
+| Batch size | Target cert latency | Disperser egress rate | Per-slot provider ingress rate |
 |---:|---:|---:|---:|
 | 8 MiB | 2s | 6.0 MiB/s | 0.5 MiB/s |
 | 64 MiB | 10s | 9.6 MiB/s | 0.8 MiB/s |
