@@ -461,6 +461,60 @@ func BenchmarkConfirmRetrievalSession(b *testing.B) {
 	b.ReportMetric(gasPerOp, "gas/op")
 }
 
+// BenchmarkCompleteRetrievalSession measures the proof-backed completion
+// ordering used by the load driver: open, submit proof, then confirm.
+// Proof construction is prepared once outside the timed loop; the keeper
+// submit and completion settlement remain measured.
+func BenchmarkCompleteRetrievalSession(b *testing.B) {
+	env := setupBenchRetrievalEnv(b)
+	b.StopTimer()
+	proof := env.benchBuildChainedProof(b, 0, 100)
+	b.StartTimer()
+
+	nonce := uint64(1)
+	var totalGas uint64
+	for b.Loop() {
+		gasBefore := benchGasConsumed(env.f.ctx)
+		openRes, err := env.msgServer.OpenRetrievalSession(env.f.ctx, &types.MsgOpenRetrievalSession{
+			Creator:        env.owner,
+			DealId:         env.dealID,
+			Provider:       env.provider,
+			ManifestRoot:   env.deal.ManifestRoot,
+			StartMduIndex:  benchTargetMduIndex,
+			StartBlobIndex: 0,
+			BlobCount:      1,
+			Nonce:          nonce,
+			ExpiresAt:      0,
+		})
+		if err != nil {
+			b.Fatalf("OpenRetrievalSession failed: %v", err)
+		}
+		_, err = env.msgServer.SubmitRetrievalSessionProof(env.f.ctx, &types.MsgSubmitRetrievalSessionProof{
+			Creator:   env.provider,
+			SessionId: openRes.SessionId,
+			Proofs:    []types.ChainedProof{proof},
+		})
+		if err != nil {
+			b.Fatalf("SubmitRetrievalSessionProof failed: %v", err)
+		}
+		_, err = env.msgServer.ConfirmRetrievalSession(env.f.ctx, &types.MsgConfirmRetrievalSession{
+			Creator:   env.owner,
+			SessionId: openRes.SessionId,
+		})
+		if err != nil {
+			b.Fatalf("ConfirmRetrievalSession failed: %v", err)
+		}
+		totalGas += benchGasConsumed(env.f.ctx) - gasBefore
+		nonce++
+	}
+
+	gasPerOp := float64(totalGas) / float64(nonce-1)
+	if gasPerOp <= 0 {
+		b.Fatalf("sanity: zero average gas (%v) over %d completions", gasPerOp, nonce-1)
+	}
+	b.ReportMetric(gasPerOp, "gas/op")
+}
+
 // TestRetrievalSessionBenchCharacterization bounds benchmark correctness:
 // every message type consumes positive gas, and submit-proof gas is
 // monotonically non-decreasing in proof count (gas is deterministic, so this
@@ -486,10 +540,11 @@ func TestRetrievalSessionBenchCharacterization(t *testing.T) {
 	require.Greater(t, openGas, uint64(0), "OpenRetrievalSession must consume gas")
 
 	// Confirm: positive gas (fresh OPEN session).
+	confirmSession := env.openBenchSession(t, 2, 1)
 	gasBefore = benchGasConsumed(env.f.ctx)
 	_, err = env.msgServer.ConfirmRetrievalSession(env.f.ctx, &types.MsgConfirmRetrievalSession{
 		Creator:   env.owner,
-		SessionId: env.openBenchSession(t, 2, 1).SessionId,
+		SessionId: confirmSession.SessionId,
 	})
 	require.NoError(t, err)
 	confirmGas := benchGasConsumed(env.f.ctx) - gasBefore
