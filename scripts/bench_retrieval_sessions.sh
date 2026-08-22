@@ -17,6 +17,9 @@ SESSIONS="${POLYSTORE_BENCH_SESSIONS:-5}"
 TARGET_SESSIONS_PER_SEC="${POLYSTORE_BENCH_RATE:-5}"
 PROOFS_PER_SESSION="${POLYSTORE_BENCH_PROOFS_PER_SESSION:-0}"
 PROOFS_DIR="${POLYSTORE_BENCH_PROOFS_DIR:-}"
+PROOFS_DIR_WAS_SET=0
+[ -n "$PROOFS_DIR" ] && PROOFS_DIR_WAS_SET=1
+PROOF_MANIFEST_ROOT="${POLYSTORE_BENCH_MANIFEST_ROOT:-}"
 OUTPUT="${POLYSTORE_BENCH_OUTPUT:-$ROOT_DIR/bench_results_retrieval_sessions.json}"
 CHAIN_HOME="${POLYSTORE_BENCH_HOME:-$ROOT_DIR/_artifacts/bench_retrieval_sessions_data}"
 CHAIN_ID="${CHAIN_ID:-31337}"
@@ -44,23 +47,21 @@ require_cmd python3
 if [ "$PROOFS_PER_SESSION" -gt 0 ] && [ "$PROOFS_PER_SESSION" -gt 32 ]; then
   fail "POLYSTORE_BENCH_PROOFS_PER_SESSION must be 1..32 for the explicit General:rs=2+1 fixture (or 0 to skip proofs)"
 fi
-if [ "$PROOFS_PER_SESSION" -gt 0 ] && [ -z "$PROOFS_DIR" ]; then
-  fail "POLYSTORE_BENCH_PROOFS_PER_SESSION=$PROOFS_PER_SESSION requires POLYSTORE_BENCH_PROOFS_DIR with <session-index>.json payloads"
+if [ "$PROOFS_PER_SESSION" -gt 0 ]; then
+  DEFAULT_GAS=$((250000 + PROOFS_PER_SESSION * 50000))
+else
+  DEFAULT_GAS=auto
 fi
+GAS_LIMIT="${POLYSTORE_BENCH_GAS:-$DEFAULT_GAS}"
 
 CORE_LIB="$CORE_LIB_DIR/libpolystore_core.so"
-if [ ! -f "$CORE_LIB" ]; then
-  log "libpolystore_core.so missing; building polystore_core"
-  (cd "$CORE_DIR" && cargo build --release) || fail "cargo build --release failed; build $CORE_LIB manually and rerun"
-fi
-[ -f "$CORE_LIB" ] || fail "missing $CORE_LIB after cargo build --release; run (cd $CORE_DIR && cargo build --release)"
+log "building polystore_core"
+(cd "$CORE_DIR" && cargo build --release) || fail "cargo build --release failed"
 export LD_LIBRARY_PATH="$CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export CGO_LDFLAGS="-L$CORE_LIB_DIR -lpolystore_core${CGO_LDFLAGS:+ $CGO_LDFLAGS}"
 
-if [ ! -x "$BIN" ]; then
-  log "building polystorechaind"
-  (cd "$CHAIN_DIR" && go build -o "$BIN" ./cmd/polystorechaind) || fail "chain build failed; run (cd $CHAIN_DIR && go build -o $BIN ./cmd/polystorechaind)"
-fi
+log "building polystorechaind"
+(cd "$CHAIN_DIR" && go build -o "$BIN" ./cmd/polystorechaind) || fail "chain build failed"
 
 NODE_PID=""
 cleanup() {
@@ -78,13 +79,55 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$CHAIN_HOME"
+
+prepare_proof_fixtures() {
+  [ "$PROOFS_PER_SESSION" -gt 0 ] || return 0
+  if [ "$PROOFS_DIR_WAS_SET" -eq 0 ]; then
+    PROOFS_DIR="$CHAIN_HOME/proof-fixtures"
+    mkdir -p "$PROOFS_DIR"
+    log "generating deterministic proof fixtures in $PROOFS_DIR"
+    (
+      cd "$CHAIN_DIR"
+      POLYSTORE_BENCH_FIXTURE_DIR="$PROOFS_DIR" \
+      POLYSTORE_BENCH_FIXTURE_SESSIONS="$SESSIONS" \
+      POLYSTORE_BENCH_FIXTURE_COUNT="$PROOFS_PER_SESSION" \
+      POLYSTORE_BENCH_FIXTURE_SERVICE_HINT="General:rs=2+1" \
+        go test ./x/polystorechain/keeper -run '^TestWriteRetrievalSessionProofFixture$' -count=1
+    ) || fail "proof fixture generation failed"
+  else
+    [ -d "$PROOFS_DIR" ] || fail "proof fixture directory does not exist: $PROOFS_DIR"
+  fi
+  if [ -z "$PROOF_MANIFEST_ROOT" ]; then
+    [ -f "$PROOFS_DIR/manifest_root.txt" ] || \
+      fail "proof mode requires $PROOFS_DIR/manifest_root.txt or POLYSTORE_BENCH_MANIFEST_ROOT"
+    PROOF_MANIFEST_ROOT="$(tr -d '[:space:]' < "$PROOFS_DIR/manifest_root.txt")"
+  fi
+  PROOF_MANIFEST_ROOT="$(python3 - "$PROOF_MANIFEST_ROOT" <<'PY'
+import sys
+value = sys.argv[1].strip()
+hex_value = value[2:] if value.lower().startswith("0x") else value
+if len(hex_value) != 64:
+    raise SystemExit("manifest root must contain exactly 32 bytes")
+try:
+    bytes.fromhex(hex_value)
+except ValueError as exc:
+    raise SystemExit(f"manifest root is not hexadecimal: {exc}")
+print("0x" + hex_value.lower())
+PY
+  )" || fail "invalid POLYSTORE_BENCH_MANIFEST_ROOT"
+  for i in $(seq 1 "$SESSIONS"); do
+    [ -f "$PROOFS_DIR/$i.json" ] || fail "missing proof payload $PROOFS_DIR/$i.json"
+  done
+}
+
 mkdir -p "$(dirname "$OUTPUT")"
 
 log "initializing chain home $CHAIN_HOME (chain-id $CHAIN_ID, module $MODULE_CLI)"
 "$BIN" init bench-sessions --chain-id "$CHAIN_ID" --home "$CHAIN_HOME" >/dev/null 2>&1
 KEYRING_ARGS=(--keyring-backend test --home "$CHAIN_HOME")
 TXARGS=(--keyring-backend test --home "$CHAIN_HOME" --chain-id "$CHAIN_ID"
-  --gas-adjustment 1.5 --gas-prices "$GAS_PRICE" --node "$RPC_ADDR" --output json -y)
+  --gas "$GAS_LIMIT" --gas-adjustment 1.5 --gas-prices "$GAS_PRICE" --node "$RPC_ADDR" --output json -y)
+prepare_proof_fixtures
 
 add_key() {
   set +o pipefail
@@ -199,15 +242,14 @@ PY
 }
 
 sample_block() {
-  python3 - "$OUTPUT" "$LCD/status" <<'PY'
-import json, sys, time, urllib.request
-try:
-    body = json.load(urllib.request.urlopen(sys.argv[2], timeout=5))
-    height = int(body["result"]["sync_info"]["latest_block_height"])
-except Exception:
-    height = 0
+  local height
+  height=$(curl -sf "$LCD/status" | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["result"]["sync_info"]["latest_block_height"]))') \
+    || fail "block height sample failed at $LCD/status"
+  [[ "$height" =~ ^[1-9][0-9]*$ ]] || fail "invalid block height sample: $height"
+  python3 - "$OUTPUT" "$height" <<'PY'
+import json, sys, time
 doc = json.load(open(sys.argv[1]))
-doc["blocks"].append({"height": height, "unix_ns": time.time_ns()})
+doc["blocks"].append({"height": int(sys.argv[2]), "unix_ns": time.time_ns()})
 json.dump(doc, open(sys.argv[1], "w"), indent=1)
 PY
 }
@@ -251,12 +293,13 @@ send_tx() { # send_tx <kind> <index> <from> <module-cli-args...>
   [ "$rc" -eq 0 ] && [ -n "$txjson" ] && [ "$code" -eq 0 ]
 }
 
-python3 - "$OUTPUT" "$SESSIONS" "$TARGET_SESSIONS_PER_SEC" "$PROOFS_PER_SESSION" "$CHAIN_ID" "$RPC_ADDR" "$MODULE_CLI" <<'PY'
+python3 - "$OUTPUT" "$SESSIONS" "$TARGET_SESSIONS_PER_SEC" "$PROOFS_PER_SESSION" "$CHAIN_ID" "$RPC_ADDR" "$MODULE_CLI" "$GAS_LIMIT" <<'PY'
 import json, sys, time
 json.dump({"config": {
   "sessions": int(sys.argv[2]), "target_sessions_per_sec": int(sys.argv[3]),
   "proofs_per_session": int(sys.argv[4]), "chain_id": sys.argv[5],
-  "rpc": sys.argv[6], "module_cli": sys.argv[7], "serial_driver": True,
+  "rpc": sys.argv[6], "module_cli": sys.argv[7], "gas_limit": sys.argv[8],
+  "serial_driver": True,
   "saturation": False,
   "driver_note": "single-client paced path; sessions/block ceiling comes from gas/time arithmetic and in-process benchmarks, not arbitrary parallel saturation",
   "started_unix_ns": time.time_ns()}, "blocks": [], "txs": []},
@@ -290,7 +333,11 @@ done
 
 log "deal $DEAL_ID assigned $ASSIGNED_COUNT providers"
 
-MANIFEST_HEX="0x$(python3 -c 'print("ab" * 32)')"
+if [ "$PROOFS_PER_SESSION" -gt 0 ]; then
+  MANIFEST_HEX="$PROOF_MANIFEST_ROOT"
+else
+  MANIFEST_HEX="0x$(python3 -c 'print("ab" * 32)')"
+fi
 send_tx update-deal-content 0 "$USER_NAME" update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_HEX" \
   --size 131072 --total-mdus 3 --witness-mdus 1 || fail "update-deal-content setup transaction failed"
 BLOB_COUNT=1

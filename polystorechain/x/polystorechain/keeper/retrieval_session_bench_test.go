@@ -21,18 +21,21 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 
 	"cosmossdk.io/math"
-	sdk "github.com/cosmos/cosmos-sdk/types"
+	storetypes "cosmossdk.io/store/types"
 	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	"github.com/cosmos/cosmos-sdk/testutil"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	storetypes "cosmossdk.io/store/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2s"
 
@@ -102,10 +105,15 @@ func setupBenchRetrievalEnv(tb testing.TB) *benchRetrievalEnv {
 	copy(privOwnerBz, []byte("bench_owner_______"))
 	owner, _ := f.addressCodec.BytesToString(privOwnerBz)
 
+	serviceHint := os.Getenv("POLYSTORE_BENCH_FIXTURE_SERVICE_HINT")
+	if serviceHint == "" {
+		serviceHint = "General"
+	}
+
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             owner,
 		DurationBlocks:      100,
-		ServiceHint:         "General",
+		ServiceHint:         serviceHint,
 		InitialEscrowAmount: math.NewInt(100000000),
 		MaxMonthlySpend:     math.NewInt(10000000),
 	})
@@ -321,7 +329,6 @@ func buildBenchSubmitPlan(
 	}
 	return plan
 }
-
 
 func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 	for _, count := range []int{1, 8, 64} {
@@ -742,4 +749,52 @@ func benchBlobBytesForLeaf(tb testing.TB, mduBytes []byte, shards [][]byte, k ui
 	blob := make([]byte, types.BLOB_SIZE)
 	copy(blob, shard[off:end])
 	return blob
+}
+
+// TestWriteRetrievalSessionProofFixture emits a chain-compatible proof payload
+// for the shell load driver when POLYSTORE_BENCH_FIXTURE_DIR is set. The
+// generated manifest root and proofs come from the same deterministic fixture
+// used by the in-process benchmarks.
+func TestWriteRetrievalSessionProofFixture(t *testing.T) {
+	fixtureDir := os.Getenv("POLYSTORE_BENCH_FIXTURE_DIR")
+	if fixtureDir == "" {
+		t.Skip("POLYSTORE_BENCH_FIXTURE_DIR is not set")
+	}
+
+	sessions := 1
+	if raw := os.Getenv("POLYSTORE_BENCH_FIXTURE_SESSIONS"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		require.NoError(t, err)
+		sessions = parsed
+	}
+	proofCount := 1
+	if raw := os.Getenv("POLYSTORE_BENCH_FIXTURE_COUNT"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		require.NoError(t, err)
+		proofCount = parsed
+	}
+	require.Greater(t, sessions, 0)
+	require.Greater(t, proofCount, 0)
+	require.LessOrEqual(t, proofCount, 32)
+	require.NoError(t, os.MkdirAll(fixtureDir, 0o755))
+
+	env := setupBenchRetrievalEnv(t)
+	payload := struct {
+		SessionID []byte               `json:"session_id"`
+		Proofs    []types.ChainedProof `json:"proofs"`
+	}{
+		SessionID: make([]byte, 32),
+		Proofs:    make([]types.ChainedProof, 0, proofCount),
+	}
+	for i := range proofCount {
+		payload.Proofs = append(payload.Proofs, env.benchBuildChainedProof(t, uint64(i), uint64(i)))
+	}
+	encoded, err := json.MarshalIndent(payload, "", "  ")
+	require.NoError(t, err)
+	for i := range sessions {
+		path := filepath.Join(fixtureDir, fmt.Sprintf("%d.json", i+1))
+		require.NoError(t, os.WriteFile(path, encoded, 0o600))
+	}
+	manifestRoot := "0x" + hex.EncodeToString(env.deal.ManifestRoot) + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "manifest_root.txt"), []byte(manifestRoot), 0o600))
 }
