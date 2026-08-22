@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # bench_retrieval_sessions.sh — deterministic single-node retrieval-session
 # throughput/load driver (issue #245).
+# Measurement boundary: START_NS/END_NS covers the paced load loop, while each
+# transaction latency starts before CLI submission and ends after wait_for_tx
+# confirms the committed transaction is queryable.
+
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -223,12 +227,13 @@ send_tx() { # send_tx <kind> <index> <from> <module-cli-args...>
   before=$(curl -sf "$LCD/status" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["sync_info"]["latest_block_height"])' 2>/dev/null || echo 0)
   started=$(date +%s%N)
   out=$("$BIN" tx "$MODULE_CLI" "$@" --from "$from" "${TXARGS[@]}" 2>&1) && rc=0 || rc=$?
-  finished=$(date +%s%N)
   hash=$(parse_json_record <<<"$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("txhash", ""))' 2>/dev/null || true)
   LAST_TXHASH="$hash"
   txjson=""
   if [ -n "$hash" ]; then txjson=$(wait_for_tx "$hash" || true); fi
   LAST_TXJSON="$txjson"
+  finished=$(date +%s%N)
+
   after=$(curl -sf "$LCD/status" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["sync_info"]["latest_block_height"])' 2>/dev/null || echo 0)
   code=1
   error="$out"
@@ -267,6 +272,15 @@ DEAL_ID=$(python3 -c 'import json,sys; d=json.load(sys.stdin); xs=d.get("deals",
 ASSIGNED_COUNT=$(python3 -c 'import json,sys; d=json.load(sys.stdin); xs=d.get("deals",[]); print(len(xs[-1].get("providers",[])) if xs else 0)' <<<"$DEALS_JSON")
 [ "$ASSIGNED_COUNT" -ge 3 ] || fail "Mode 2 deal has $ASSIGNED_COUNT eligible providers; expected at least 3"
 PROVIDER_ADDR=$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["deals"][-1]["providers"][0])' <<<"$DEALS_JSON")
+PROVIDER_NAME=""
+for i in "${!PROVIDER_ADDRS[@]}"; do
+  if [ "${PROVIDER_ADDRS[$i]}" = "$PROVIDER_ADDR" ]; then
+    PROVIDER_NAME="${PROVIDER_NAMES[$i]}"
+    break
+  fi
+done
+[ -n "$PROVIDER_NAME" ] || fail "assigned provider $PROVIDER_ADDR has no matching key"
+
 log "deal $DEAL_ID assigned $ASSIGNED_COUNT providers"
 
 MANIFEST_HEX="0x$(python3 -c 'print("ab" * 32)')"
@@ -308,8 +322,9 @@ obj = json.load(open(sys.argv[1]))
 if obj.get("session_id") != sys.argv[2]:
     raise SystemExit("proof payload session_id does not match exact open tx session_id")
 PY
-      send_tx submit-proof "$i" "${PROVIDER_NAMES[0]}" submit-retrieval-proof "$PROOF_FILE" \
+      send_tx submit-proof "$i" "$PROVIDER_NAME" submit-retrieval-proof "$PROOF_FILE" \
         || log "session $i proof transaction failed (recorded)"
+
     fi
     send_tx confirm-session "$i" "$USER_NAME" confirm-retrieval-session --session-id "$SESSION_ID" \
       || log "session $i confirm transaction failed (recorded)"
@@ -329,13 +344,26 @@ import json, sys
 doc = json.load(open(sys.argv[1]))
 wall = (int(sys.argv[3]) - int(sys.argv[2])) / 1e9
 txs = doc["txs"]
-ok = sum(1 for t in txs if t.get("code") == 0 and not t.get("error"))
-failed = sum(1 for t in txs if not t.get("skipped") and (t.get("code") not in (0, None) or t.get("error")))
-skipped = sum(1 for t in txs if t.get("skipped"))
-sent = sum(1 for t in txs if not t.get("skipped"))
-summary = {"total_records": len(txs), "ok": ok, "failed": failed, "skipped": skipped,
-  "txs_sent": sent, "wall_seconds": round(wall, 3),
-  "txs_per_sec": round(sent / wall, 3) if wall > 0 else None}
+load_kinds = {"open-session", "submit-proof", "confirm-session"}
+load_txs = [t for t in txs if t.get("kind") in load_kinds]
+total_ok = sum(1 for t in txs if t.get("code") == 0 and not t.get("error"))
+total_failed = sum(1 for t in txs if not t.get("skipped") and (t.get("code") not in (0, None) or t.get("error")))
+total_skipped = sum(1 for t in txs if t.get("skipped"))
+total_sent = sum(1 for t in txs if not t.get("skipped"))
+load_ok = sum(1 for t in load_txs if t.get("code") == 0 and not t.get("error"))
+load_failed = sum(1 for t in load_txs if not t.get("skipped") and (t.get("code") not in (0, None) or t.get("error")))
+load_skipped = sum(1 for t in load_txs if t.get("skipped"))
+load_sent = sum(1 for t in load_txs if not t.get("skipped"))
+load_rate = round(load_sent / wall, 3) if wall > 0 else None
+summary = {
+  "total_records": len(txs), "total_ok": total_ok, "total_failed": total_failed,
+  "total_skipped": total_skipped, "total_txs_sent": total_sent,
+  "load_records": len(load_txs), "load_ok": load_ok, "load_failed": load_failed,
+  "load_skipped": load_skipped, "load_txs_sent": load_sent,
+  "load_txs_per_sec": load_rate, "wall_seconds": round(wall, 3),
+  # Keep the historical key as an alias for the load-only rate.
+  "txs_per_sec": load_rate,
+}
 if doc["blocks"]:
     heights = [b["height"] for b in doc["blocks"]]
     summary.update({"block_height_start": min(heights), "block_height_end": max(heights),

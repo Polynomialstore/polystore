@@ -374,17 +374,21 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 			b.ReportMetric(gasPerProof*float64(count), "gas/op")
 		})
 
-		// FFI-isolation probe: measures ONLY the cumulative crypto_ffi verify
-		// cost of `count` chained proofs, using the same two exported FFI
-		// entry points keeper.verifyPolyFSChainedProof calls. No state access,
-		// no gas metering — this bounds the FFI share of the full submit op.
+		// FFI-wrapper isolation probe: measures ONLY the cumulative crypto_ffi
+		// verification cost of `count` chained proofs. The timed loop calls the
+		// same two exported FFI entry points keeper.verifyPolyFSChainedProof
+		// uses, with all Merkle paths flattened before timing; it excludes
+		// keeper/state access and gas metering.
 		b.Run(fmt.Sprintf("ffi-verify-only-%d", count), func(b *testing.B) {
 			env := setupBenchRetrievalEnv(b)
 			proofs := make([]types.ChainedProof, count)
+			rootTableMerklePaths := make([][]byte, count)
+			merklePaths := make([][]byte, count)
 			for i := range count {
 				proofs[i] = env.benchBuildChainedProof(b, uint64(i), uint64(i)+100)
+				rootTableMerklePaths[i] = benchFlattenPath(proofs[i].RootTableDuMerklePath)
+				merklePaths[i] = benchFlattenPath(proofs[i].MerklePath)
 			}
-			rootTableMerkle := benchFlattenPath(proofs[0].RootTableDuMerklePath)
 
 			b.ReportMetric(float64(count), "proofs/op")
 			for b.Loop() {
@@ -395,7 +399,7 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 						p.MduIndex,
 						p.MduRootFr,
 						p.RootTableDuCommitment,
-						rootTableMerkle,
+						rootTableMerklePaths[j],
 						p.ManifestOpening,
 					)
 					if err != nil || !ok {
@@ -404,7 +408,7 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 					ok, err = crypto_ffi.VerifyMduProof(
 						p.MduRootFr,
 						p.BlobCommitment,
-						benchFlattenPath(p.MerklePath),
+						merklePaths[j],
 						p.BlobIndex,
 						env.leafCount,
 						p.ZValue,
