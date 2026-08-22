@@ -328,50 +328,65 @@ if len(raw) >= 32:
 print("")' <<<"$LAST_TXJSON")
     [ -n "$SESSION_ID" ] || fail "open tx $LAST_TXHASH has no open_retrieval_session session_id"
     if [ "$PROOFS_PER_SESSION" -eq 0 ]; then
+      proof_ok=0
       record_skip submit-proof "$i" "POLYSTORE_BENCH_PROOFS_PER_SESSION=0 (proof stage skipped)"
     else
       PROOF_FILE="$PROOFS_DIR/$i.json"
       [ -f "$PROOF_FILE" ] || fail "missing proof payload $PROOF_FILE"
-      python3 - "$PROOF_FILE" "$SESSION_ID" "$PROOFS_PER_SESSION" <<'PY'
+      # Never mutate a caller-owned fixture; inject this run's session ID into
+      # a per-session copy because owner/provider addresses are regenerated.
+      RUNTIME_PROOF_FILE="$CHAIN_HOME/proof-$i.json"
+      cp "$PROOF_FILE" "$RUNTIME_PROOF_FILE"
+      python3 - "$RUNTIME_PROOF_FILE" "$SESSION_ID" "$PROOFS_PER_SESSION" <<'PY'
 import base64, binascii, json, sys
-
-obj = json.load(open(sys.argv[1]))
-payload_id = str(obj.get("session_id", "")).strip()
-try:
-    payload_bytes = base64.b64decode(payload_id, validate=True)
-    if base64.b64encode(payload_bytes).decode("ascii") != payload_id:
-        raise ValueError("non-canonical base64")
-except (ValueError, binascii.Error):
-    hex_id = payload_id[2:] if payload_id.lower().startswith("0x") else payload_id
+def decode_session_id(value, label):
+    text = str(value).strip()
     try:
-        payload_bytes = bytes.fromhex(hex_id)
+        decoded = base64.b64decode(text, validate=True)
+        if base64.b64encode(decoded).decode("ascii") == text and len(decoded) == 32:
+            return decoded
+    except (ValueError, binascii.Error):
+        pass
+    hex_id = text[2:] if text.lower().startswith("0x") else text
+    try:
+        decoded = bytes.fromhex(hex_id)
     except ValueError as exc:
-        raise SystemExit(f"proof payload session_id is not strict base64 or hex: {exc}")
-runtime_id = sys.argv[2].strip()
-if runtime_id.lower().startswith("0x"):
-    runtime_id = runtime_id[2:]
-try:
-    runtime_bytes = bytes.fromhex(runtime_id)
-except ValueError as exc:
-    raise SystemExit(f"open tx session_id is not hex: {exc}")
-if len(payload_bytes) != 32 or len(runtime_bytes) != 32:
-    raise SystemExit("proof and open session_id values must both be exactly 32 bytes")
-if payload_bytes != runtime_bytes:
-    raise SystemExit("proof payload session_id does not match exact open tx session_id")
+        raise SystemExit(f"{label} is not strict base64 or hex: {exc}")
+    if len(decoded) != 32:
+        raise SystemExit(f"{label} must be exactly 32 bytes")
+    return decoded
+
+proof_path = sys.argv[1]
+obj = json.load(open(proof_path))
+if "session_id" in obj:
+    decode_session_id(obj["session_id"], "proof payload session_id")
+runtime_bytes = decode_session_id(sys.argv[2], "open tx session_id")
 proofs = obj.get("proofs")
 if not isinstance(proofs, list) or len(proofs) != int(sys.argv[3]):
     raise SystemExit(f"proof payload must contain exactly {sys.argv[3]} proofs")
+obj["session_id"] = base64.b64encode(runtime_bytes).decode("ascii")
+with open(proof_path, "w") as stream:
+    json.dump(obj, stream, indent=1)
 PY
-      send_tx submit-proof "$i" "$PROVIDER_NAME" submit-retrieval-proof "$PROOF_FILE" \
-        || log "session $i proof transaction failed (recorded)"
-
+      if send_tx submit-proof "$i" "$PROVIDER_NAME" submit-retrieval-proof "$RUNTIME_PROOF_FILE"; then
+        proof_ok=1
+      else
+        proof_ok=0
+        log "session $i proof transaction failed (recorded)"
+      fi
     fi
-    send_tx confirm-session "$i" "$USER_NAME" confirm-retrieval-session --session-id "$SESSION_ID" \
-      || log "session $i confirm transaction failed (recorded)"
+
+    if [ "$PROOFS_PER_SESSION" -eq 0 ] || [ "$proof_ok" -eq 1 ]; then
+      send_tx confirm-session "$i" "$USER_NAME" confirm-retrieval-session --session-id "$SESSION_ID" \
+        || log "session $i confirm transaction failed (recorded)"
+    else
+      record_skip confirm-session "$i" "proof transaction failed; confirmation skipped"
+    fi
   else
     log "session $i open transaction failed (recorded)"
   fi
 done
+sample_block
 END_NS=$(date +%s%N)
 
 python3 - "$OUTPUT" "$START_NS" "$END_NS" <<'PY'
@@ -393,11 +408,19 @@ load_rate = round(load_sent / wall, 3) if wall > 0 else None
 session_indices = range(1, int(doc["config"]["sessions"]) + 1)
 successful = {(t.get("index"), t.get("kind"))
               for t in load_txs if t.get("code") == 0 and not t.get("error")}
-sessions_completed = sum(
+sessions_confirmed = sum(
     1 for i in session_indices
     if (i, "open-session") in successful and (i, "confirm-session") in successful
 )
-sessions_per_sec = round(sessions_completed / wall, 3) if wall > 0 else None
+proofs_enabled = int(doc["config"]["proofs_per_session"]) > 0
+sessions_completed = sum(
+    1 for i in session_indices
+    if (i, "open-session") in successful
+    and (i, "submit-proof") in successful
+    and (i, "confirm-session") in successful
+) if proofs_enabled else 0
+confirmed_rate = round(sessions_confirmed / wall, 3) if wall > 0 else None
+completed_rate = round(sessions_completed / wall, 3) if proofs_enabled and wall > 0 else None
 summary = {
   "total_records": len(txs), "total_ok": total_ok, "total_failed": total_failed,
   "total_skipped": total_skipped, "total_txs_sent": total_sent,
@@ -405,7 +428,11 @@ summary = {
   "load_skipped": load_skipped, "load_txs_sent": load_sent,
   "load_txs_per_sec": load_rate, "txs_per_sec": load_rate,
   "sessions_attempted": int(doc["config"]["sessions"]),
-  "sessions_completed": sessions_completed, "sessions_per_sec": sessions_per_sec,
+  "sessions_confirmed": sessions_confirmed,
+  "sessions_confirmed_per_sec": confirmed_rate,
+  "sessions_completed": sessions_completed,
+  "sessions_per_sec": completed_rate,
+  "completion_basis": "open+proof+confirm" if proofs_enabled else "not measured (proof stage skipped)",
   "target_sessions_per_sec": int(doc["config"]["target_sessions_per_sec"]),
   "serial_driver": True, "saturation": False,
   "wall_seconds": round(wall, 3),
