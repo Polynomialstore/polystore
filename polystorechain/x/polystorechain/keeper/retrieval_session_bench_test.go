@@ -515,6 +515,51 @@ func BenchmarkCompleteRetrievalSession(b *testing.B) {
 	b.ReportMetric(gasPerOp, "gas/op")
 }
 
+func BenchmarkCancelRetrievalSession(b *testing.B) {
+	env := setupBenchRetrievalEnv(b)
+	cancelCtx := sdk.UnwrapSDKContext(env.f.ctx).WithBlockHeight(10)
+	sessions := make([][]byte, 0, b.N)
+	idx := 0
+	var totalGas uint64
+	for b.Loop() {
+		if idx == len(sessions) {
+			b.StopTimer()
+			openRes, err := env.msgServer.OpenRetrievalSession(env.f.ctx, &types.MsgOpenRetrievalSession{
+				Creator:        env.owner,
+				DealId:         env.dealID,
+				Provider:       env.provider,
+				ManifestRoot:   env.deal.ManifestRoot,
+				StartMduIndex:  benchTargetMduIndex,
+				StartBlobIndex: 0,
+				BlobCount:      1,
+				Nonce:          uint64(idx) + 1,
+				ExpiresAt:      1,
+			})
+			require.NoError(b, err)
+			sessions = append(sessions, openRes.SessionId)
+			b.StartTimer()
+		}
+		session := sessions[idx]
+		idx++
+
+		gasBefore := benchGasConsumed(cancelCtx)
+		_, err := env.msgServer.CancelRetrievalSession(cancelCtx, &types.MsgCancelRetrievalSession{
+			Creator:   env.owner,
+			SessionId: session,
+		})
+		totalGas += benchGasConsumed(cancelCtx) - gasBefore
+		if err != nil {
+			b.Fatalf("CancelRetrievalSession failed: %v", err)
+		}
+	}
+
+	gasPerOp := float64(totalGas) / float64(idx)
+	if gasPerOp <= 0 {
+		b.Fatalf("sanity: zero average gas (%v) over %d cancellations", gasPerOp, idx)
+	}
+	b.ReportMetric(gasPerOp, "gas/op")
+}
+
 // TestRetrievalSessionBenchCharacterization bounds benchmark correctness:
 // every message type consumes positive gas, and submit-proof gas is
 // monotonically non-decreasing in proof count (gas is deterministic, so this
