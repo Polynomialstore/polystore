@@ -1,0 +1,151 @@
+{
+  "schema": "polystore.retrieval-session-capacity.v1",
+  "commit": "ac0fa173bcaec631d4217d439fb0a3a1f37ba54e",
+  "measured_at": "2026-08-22",
+  "host": {
+    "os": "Ubuntu 22.04 / Linux 6.8.0-136-generic",
+    "cpu": "11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz",
+    "logical_cpus": 12,
+    "physical_cores": 6,
+    "memory_gib": 31
+  },
+  "chain": {
+    "chain_id": "31337",
+    "node_count": 1,
+    "module_cli": "nilchain",
+    "timeout_commit_configured": "1s",
+    "observed_block_seconds_mean": 1.0653,
+    "observed_block_seconds_range": [1.0475, 1.1054],
+    "consensus_block_max_gas": -1,
+    "consensus_block_gas_is_unlimited": true,
+    "proof_profile": "General:rs=2+1",
+    "proofs_per_session": 1
+  },
+  "serial_sustained_repeats": [
+    {
+      "artifact": "sustained_40_p1.json",
+      "sessions": 40,
+      "completed": 40,
+      "failed": 0,
+      "wall_seconds": 248.712,
+      "blocks": 225,
+      "sessions_per_block": 0.177778,
+      "sessions_per_second": 0.161,
+      "sessions_per_hour": 579.6,
+      "tx_p50_ms": 2056.0,
+      "tx_p95_ms": 2552.8
+    },
+    {
+      "artifact": "repeat_40_p1_run2.json",
+      "sessions": 40,
+      "completed": 40,
+      "failed": 0,
+      "wall_seconds": 261.351,
+      "blocks": 247,
+      "sessions_per_block": 0.161943,
+      "sessions_per_second": 0.153,
+      "sessions_per_hour": 550.8,
+      "tx_p50_ms": 2063.0,
+      "tx_p95_ms": 2905.3
+    },
+    {
+      "artifact": "repeat_40_p1_run3.json",
+      "sessions": 40,
+      "completed": 40,
+      "failed": 0,
+      "wall_seconds": 271.995,
+      "blocks": 259,
+      "sessions_per_block": 0.154440,
+      "sessions_per_second": 0.147,
+      "sessions_per_hour": 529.2,
+      "tx_p50_ms": 2068.0,
+      "tx_p95_ms": 2901.2
+    }
+  ],
+  "serial_repeat_summary": {
+    "sessions_per_block_mean": 0.164720,
+    "sessions_per_block_stdev": 0.011914,
+    "sessions_per_block_min": 0.154440,
+    "sessions_per_block_max": 0.177778,
+    "sessions_per_second_mean": 0.153667,
+    "sessions_per_second_stdev": 0.007024,
+    "sessions_per_second_min": 0.147,
+    "sessions_per_second_max": 0.161,
+    "sessions_per_hour_mean": 553.2,
+    "sessions_per_hour_min": 529.2,
+    "sessions_per_hour_max": 579.6,
+    "all_transactions_failed": false,
+    "driver_is_serial_and_non_saturating": true
+  },
+  "five_minute_serial_run": {
+    "artifact": "sustained_50_p1.json",
+    "wall_seconds": 342.53,
+    "sessions": 50,
+    "completed": 50,
+    "failed": 0,
+    "blocks": 327,
+    "sessions_per_block": 0.152905,
+    "sessions_per_second": 0.146,
+    "sessions_per_hour": 525.6,
+    "tx_p50_ms": 2149.0,
+    "tx_p95_ms": 2961.5
+  },
+  "in_process_limits": {
+    "complete_session_gas_op_repeats": [123810, 123828, 123824],
+    "complete_session_gas_op_mean": 123821,
+    "complete_session_wall_ms_repeats": [24.502, 26.156, 23.039],
+    "complete_session_wall_ms_median": 24.502,
+    "ffi_verify_one_proof_wall_ms_repeats": [19.872, 20.519, 18.196],
+    "ffi_verify_one_proof_wall_ms_median": 19.872,
+    "submit_characterization_gas_by_proof_count": {
+      "1": 39387,
+      "8": 130468,
+      "64": 1044134
+    },
+    "open_gas_op_steady_state": 74608,
+    "confirm_gas_op": 10986,
+    "cancel_gas_op_mean": 119040
+  },
+  "derived_capacity": {
+    "gas_bound_default": null,
+    "gas_bound_reason": "consensus block max_gas is -1 (unlimited)",
+    "wall_bound_sessions_per_block_repeats": [45.11, 40.45, 45.59],
+    "wall_bound_sessions_per_block_mean": 43.72,
+    "wall_bound_basis": "observed block interval divided by complete-session handler wall time",
+    "period_at_serial_observed_mean": {
+      "sessions_per_hour": 553.2,
+      "sessions_per_day": 13276.8
+    },
+    "period_at_wall_bound_estimate": {
+      "sessions_per_hour": 4117.0,
+      "sessions_per_day": 98808.0
+    }
+  },
+  "limiter_classification": {
+    "primary_for_derived_chain_bound": "proof-verification CPU / KZG FFI wall time",
+    "evidence": [
+      "block gas is unlimited in the measured genesis",
+      "one complete proof-backed session consumes about 24.5 ms in the keeper benchmark",
+      "one-proof FFI verification consumes about 19.9 ms, approximately 81% of complete-session handler time",
+      "the wall-derived bound is about 43.7 sessions per block at the observed 1.065 s block interval"
+    ],
+    "observed_serial_path_limiter": "single-client transaction commit cadence, not saturated chain capacity",
+    "secondary_observations": [
+      "serial load transactions have approximately 2.06-2.15 s median latency",
+      "all four proof-enabled serial runs completed with zero failed transactions",
+      "state-I/O and mempool contention were not isolated by a separate profile"
+    ]
+  },
+  "accepted_gaps": [
+    "single-node only",
+    "the merged harness intentionally reports serial_saturation=false and does not claim parallel-validator throughput",
+    "the serial sessions/block values are an observed service path; the derived wall bound is the capacity estimate",
+    "no optimization claim is made"
+  ],
+  "reproduction": {
+    "sustained_command": "POLYSTORE_BENCH_SESSIONS=50 POLYSTORE_BENCH_RATE=1 POLYSTORE_BENCH_PROOFS_PER_SESSION=1 POLYSTORE_BENCH_OUTPUT=_artifacts/sustained_50_p1.json POLYSTORE_BENCH_HOME=_artifacts/sustained_50_p1_home bash scripts/bench_retrieval_sessions.sh",
+    "repeat_command": "POLYSTORE_BENCH_SESSIONS=40 POLYSTORE_BENCH_RATE=1 POLYSTORE_BENCH_PROOFS_PER_SESSION=1 ... bash scripts/bench_retrieval_sessions.sh",
+    "microbench_command": "GOFLAGS=-mod=mod LD_LIBRARY_PATH=polystore_core/target/release go test ./x/polystorechain/keeper -run '^$' -bench 'BenchmarkSubmitRetrievalSessionProof/(proofs-1|ffi-verify-only-1)$|BenchmarkCompleteRetrievalSession$' -benchtime=1s -count=3",
+    "characterization_command": "GOFLAGS=-mod=mod LD_LIBRARY_PATH=polystore_core/target/release go test ./x/polystorechain/keeper -run '^TestRetrievalSessionBenchCharacterization$' -count=3 -v"
+  }
+}
