@@ -14,7 +14,7 @@ BIN="$CHAIN_DIR/polystorechaind"
 MODULE_CLI="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-nilchain}"
 
 SESSIONS="${POLYSTORE_BENCH_SESSIONS:-5}"
-RATE="${POLYSTORE_BENCH_RATE:-5}"
+TARGET_SESSIONS_PER_SEC="${POLYSTORE_BENCH_RATE:-5}"
 PROOFS_PER_SESSION="${POLYSTORE_BENCH_PROOFS_PER_SESSION:-0}"
 PROOFS_DIR="${POLYSTORE_BENCH_PROOFS_DIR:-}"
 OUTPUT="${POLYSTORE_BENCH_OUTPUT:-$ROOT_DIR/bench_results_retrieval_sessions.json}"
@@ -39,8 +39,11 @@ require_cmd go
 require_cmd curl
 require_cmd python3
 [[ "$SESSIONS" =~ ^[0-9]+$ && "$SESSIONS" -gt 0 ]] || fail "POLYSTORE_BENCH_SESSIONS must be a positive integer"
-[[ "$RATE" =~ ^[0-9]+$ && "$RATE" -gt 0 ]] || fail "POLYSTORE_BENCH_RATE must be a positive integer"
+[[ "$TARGET_SESSIONS_PER_SEC" =~ ^[0-9]+$ && "$TARGET_SESSIONS_PER_SEC" -gt 0 ]] || fail "POLYSTORE_BENCH_RATE (target_sessions_per_sec) must be a positive integer"
 [[ "$PROOFS_PER_SESSION" =~ ^[0-9]+$ ]] || fail "POLYSTORE_BENCH_PROOFS_PER_SESSION must be a non-negative integer"
+if [ "$PROOFS_PER_SESSION" -gt 0 ] && [ "$PROOFS_PER_SESSION" -gt 32 ]; then
+  fail "POLYSTORE_BENCH_PROOFS_PER_SESSION must be 1..32 for the explicit General:rs=2+1 fixture (or 0 to skip proofs)"
+fi
 if [ "$PROOFS_PER_SESSION" -gt 0 ] && [ -z "$PROOFS_DIR" ]; then
   fail "POLYSTORE_BENCH_PROOFS_PER_SESSION=$PROOFS_PER_SESSION requires POLYSTORE_BENCH_PROOFS_DIR with <session-index>.json payloads"
 fi
@@ -248,11 +251,15 @@ send_tx() { # send_tx <kind> <index> <from> <module-cli-args...>
   [ "$rc" -eq 0 ] && [ -n "$txjson" ] && [ "$code" -eq 0 ]
 }
 
-python3 - "$OUTPUT" "$SESSIONS" "$RATE" "$PROOFS_PER_SESSION" "$CHAIN_ID" "$RPC_ADDR" "$MODULE_CLI" <<'PY'
+python3 - "$OUTPUT" "$SESSIONS" "$TARGET_SESSIONS_PER_SEC" "$PROOFS_PER_SESSION" "$CHAIN_ID" "$RPC_ADDR" "$MODULE_CLI" <<'PY'
 import json, sys, time
-json.dump({"config": {"sessions": int(sys.argv[2]), "rate_tps": int(sys.argv[3]),
-  "proofs_per_session": int(sys.argv[4]), "chain_id": sys.argv[5], "rpc": sys.argv[6],
-  "module_cli": sys.argv[7], "started_unix_ns": time.time_ns()}, "blocks": [], "txs": []},
+json.dump({"config": {
+  "sessions": int(sys.argv[2]), "target_sessions_per_sec": int(sys.argv[3]),
+  "proofs_per_session": int(sys.argv[4]), "chain_id": sys.argv[5],
+  "rpc": sys.argv[6], "module_cli": sys.argv[7], "serial_driver": True,
+  "saturation": False,
+  "driver_note": "single-client paced path; sessions/block ceiling comes from gas/time arithmetic and in-process benchmarks, not arbitrary parallel saturation",
+  "started_unix_ns": time.time_ns()}, "blocks": [], "txs": []},
   open(sys.argv[1], "w"), indent=1)
 PY
 
@@ -286,16 +293,25 @@ log "deal $DEAL_ID assigned $ASSIGNED_COUNT providers"
 MANIFEST_HEX="0x$(python3 -c 'print("ab" * 32)')"
 send_tx update-deal-content 0 "$USER_NAME" update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_HEX" \
   --size 131072 --total-mdus 3 --witness-mdus 1 || fail "update-deal-content setup transaction failed"
+BLOB_COUNT=1
+if [ "$PROOFS_PER_SESSION" -gt 0 ]; then
+  BLOB_COUNT="$PROOFS_PER_SESSION"
+fi
 
-INTERVAL_NS=$((1000000000 / RATE))
+INTERVAL_NS=$((1000000000 / TARGET_SESSIONS_PER_SEC))
 START_NS=$(date +%s%N)
 for i in $(seq 1 "$SESSIONS"); do
+  target=$((START_NS + (i - 1) * INTERVAL_NS))
+  now=$(date +%s%N)
+  if [ "$now" -lt "$target" ]; then
+    sleep "$(( (target - now) / 1000000000 )).$(( ((target - now) % 1000000000) / 1000000 ))"
+  fi
   sample_block
   NONCE="$i"
   if send_tx open-session "$i" "$USER_NAME" open-retrieval-session --deal-id "$DEAL_ID" --provider "$PROVIDER_ADDR" \
-      --manifest-root "$MANIFEST_HEX" --start-mdu-index 2 --start-blob-index 0 --blob-count 1 --nonce "$NONCE"; then
+      --manifest-root "$MANIFEST_HEX" --start-mdu-index 2 --start-blob-index 0 --blob-count "$BLOB_COUNT" --nonce "$NONCE"; then
     # LAST_TXJSON is the exact open transaction; never search sender history.
-    SESSION_ID=$(python3 -c 'import binascii,json,sys
+    SESSION_ID=$(python3 -c 'import json,sys
 d=json.load(sys.stdin)
 events=list(d.get("events",[]))
 for log in d.get("logs",[]):
@@ -316,11 +332,35 @@ print("")' <<<"$LAST_TXJSON")
     else
       PROOF_FILE="$PROOFS_DIR/$i.json"
       [ -f "$PROOF_FILE" ] || fail "missing proof payload $PROOF_FILE"
-      python3 - "$PROOF_FILE" "$SESSION_ID" <<'PY'
-import json, sys
+      python3 - "$PROOF_FILE" "$SESSION_ID" "$PROOFS_PER_SESSION" <<'PY'
+import base64, binascii, json, sys
+
 obj = json.load(open(sys.argv[1]))
-if obj.get("session_id") != sys.argv[2]:
+payload_id = str(obj.get("session_id", "")).strip()
+try:
+    payload_bytes = base64.b64decode(payload_id, validate=True)
+    if base64.b64encode(payload_bytes).decode("ascii") != payload_id:
+        raise ValueError("non-canonical base64")
+except (ValueError, binascii.Error):
+    hex_id = payload_id[2:] if payload_id.lower().startswith("0x") else payload_id
+    try:
+        payload_bytes = bytes.fromhex(hex_id)
+    except ValueError as exc:
+        raise SystemExit(f"proof payload session_id is not strict base64 or hex: {exc}")
+runtime_id = sys.argv[2].strip()
+if runtime_id.lower().startswith("0x"):
+    runtime_id = runtime_id[2:]
+try:
+    runtime_bytes = bytes.fromhex(runtime_id)
+except ValueError as exc:
+    raise SystemExit(f"open tx session_id is not hex: {exc}")
+if len(payload_bytes) != 32 or len(runtime_bytes) != 32:
+    raise SystemExit("proof and open session_id values must both be exactly 32 bytes")
+if payload_bytes != runtime_bytes:
     raise SystemExit("proof payload session_id does not match exact open tx session_id")
+proofs = obj.get("proofs")
+if not isinstance(proofs, list) or len(proofs) != int(sys.argv[3]):
+    raise SystemExit(f"proof payload must contain exactly {sys.argv[3]} proofs")
 PY
       send_tx submit-proof "$i" "$PROVIDER_NAME" submit-retrieval-proof "$PROOF_FILE" \
         || log "session $i proof transaction failed (recorded)"
@@ -330,11 +370,6 @@ PY
       || log "session $i confirm transaction failed (recorded)"
   else
     log "session $i open transaction failed (recorded)"
-  fi
-  now=$(date +%s%N)
-  target=$((START_NS + i * INTERVAL_NS))
-  if [ "$now" -lt "$target" ]; then
-    sleep "$(( (target - now) / 1000000000 )).$(( ((target - now) % 1000000000) / 1000000 ))"
   fi
 done
 END_NS=$(date +%s%N)
@@ -355,14 +390,25 @@ load_failed = sum(1 for t in load_txs if not t.get("skipped") and (t.get("code")
 load_skipped = sum(1 for t in load_txs if t.get("skipped"))
 load_sent = sum(1 for t in load_txs if not t.get("skipped"))
 load_rate = round(load_sent / wall, 3) if wall > 0 else None
+session_indices = range(1, int(doc["config"]["sessions"]) + 1)
+successful = {(t.get("index"), t.get("kind"))
+              for t in load_txs if t.get("code") == 0 and not t.get("error")}
+sessions_completed = sum(
+    1 for i in session_indices
+    if (i, "open-session") in successful and (i, "confirm-session") in successful
+)
+sessions_per_sec = round(sessions_completed / wall, 3) if wall > 0 else None
 summary = {
   "total_records": len(txs), "total_ok": total_ok, "total_failed": total_failed,
   "total_skipped": total_skipped, "total_txs_sent": total_sent,
   "load_records": len(load_txs), "load_ok": load_ok, "load_failed": load_failed,
   "load_skipped": load_skipped, "load_txs_sent": load_sent,
-  "load_txs_per_sec": load_rate, "wall_seconds": round(wall, 3),
-  # Keep the historical key as an alias for the load-only rate.
-  "txs_per_sec": load_rate,
+  "load_txs_per_sec": load_rate, "txs_per_sec": load_rate,
+  "sessions_attempted": int(doc["config"]["sessions"]),
+  "sessions_completed": sessions_completed, "sessions_per_sec": sessions_per_sec,
+  "target_sessions_per_sec": int(doc["config"]["target_sessions_per_sec"]),
+  "serial_driver": True, "saturation": False,
+  "wall_seconds": round(wall, 3),
 }
 if doc["blocks"]:
     heights = [b["height"] for b in doc["blocks"]]

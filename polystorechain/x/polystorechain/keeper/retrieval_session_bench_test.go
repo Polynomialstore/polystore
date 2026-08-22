@@ -322,14 +322,6 @@ func buildBenchSubmitPlan(
 	return plan
 }
 
-func preopenSessions(b *testing.B, env *benchRetrievalEnv, count int) [][]byte {
-	b.Helper()
-	sessions := make([][]byte, b.N)
-	for i := range b.N {
-		sessions[i] = env.openBenchSession(b, uint64(i)+1, uint64(count)).SessionId
-	}
-	return sessions
-}
 
 func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 	for _, count := range []int{1, 8, 64} {
@@ -337,16 +329,19 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 			env := setupBenchRetrievalEnv(b)
 			require.GreaterOrEqual(b, env.leafCount, uint64(count))
 
-			// Untimed: one fresh session plan per measured iteration.
-			plans := make([][]benchSessionPlan, b.N)
-			for i := range b.N {
-				plans[i] = buildBenchSubmitPlan(b, env, uint64(i)*1000+1, count)
-			}
+			// Lazily prepare one fresh session plan per measured iteration. b.Loop
+			// may expand beyond the initial b.N target.
+			plans := make([][]benchSessionPlan, 0, b.N)
 
 			b.ReportMetric(float64(count), "proofs/op")
 			iter := 0
 			var totalGas uint64
 			for b.Loop() {
+				if iter == len(plans) {
+					b.StopTimer()
+					plans = append(plans, buildBenchSubmitPlan(b, env, uint64(iter)*1000+1, count))
+					b.StartTimer()
+				}
 				plan := plans[iter]
 				iter++
 
@@ -427,12 +422,17 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 func BenchmarkConfirmRetrievalSession(b *testing.B) {
 	env := setupBenchRetrievalEnv(b)
 
-	// Untimed: one fresh OPEN session per measured iteration.
-	sessions := preopenSessions(b, env, 1)
-
+	// Lazily preopen one fresh OPEN session per measured iteration. b.Loop may
+	// expand beyond the initial b.N target.
+	sessions := make([][]byte, 0, b.N)
 	idx := 0
 	var totalGas uint64
 	for b.Loop() {
+		if idx == len(sessions) {
+			b.StopTimer()
+			sessions = append(sessions, env.openBenchSession(b, uint64(idx)+1, 1).SessionId)
+			b.StartTimer()
+		}
 		session := sessions[idx]
 		idx++
 
