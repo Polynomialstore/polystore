@@ -117,8 +117,8 @@
       "sessions_per_day": 13276.8
     },
     "period_at_wall_bound_estimate": {
-      "sessions_per_hour": 4117.0,
-      "sessions_per_day": 98808.0
+      "sessions_per_hour": 147745.9,
+      "sessions_per_day": 3545901.4
     }
   },
   "limiter_classification": {
