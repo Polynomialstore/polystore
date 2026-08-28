@@ -369,14 +369,29 @@ var lcdHTTPClient = &http.Client{Timeout: 5 * time.Second}
 var chainModuleCLINameOnce sync.Once
 var chainModuleCLINameValue string
 
-// extractJSONBody attempts to locate the first JSON object in a mixed CLI output.
+// extractJSONBody attempts to locate the first JSON object or array in mixed CLI output.
 func extractJSONBody(b []byte) []byte {
-	start := bytes.IndexByte(b, '{')
-	end := bytes.LastIndexByte(b, '}')
-	if start == -1 || end == -1 || end <= start {
-		return nil
+	for start, c := range b {
+		var close byte
+		switch c {
+		case '{':
+			close = '}'
+		case '[':
+			close = ']'
+		default:
+			continue
+		}
+		for end := len(b) - 1; end > start; end-- {
+			if b[end] != close {
+				continue
+			}
+			candidate := b[start : end+1]
+			if json.Valid(candidate) {
+				return candidate
+			}
+		}
 	}
-	return b[start : end+1]
+	return nil
 }
 
 type PolyStoreCliOutput struct {

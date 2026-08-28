@@ -166,6 +166,7 @@ export POLYSTORE_GAS_PRICES="${POLYSTORE_GAS_PRICES:-${POLYSTORE_TESTNET_GAS_PRI
 export POLYSTORE_TX_SENDER_KEY="${POLYSTORE_TX_SENDER_KEY:-${POLYSTORE_TESTNET_TX_SENDER_KEY:-faucet}}"
 export POLYSTORE_TX_SENDER_MNEMONIC="${POLYSTORE_TX_SENDER_MNEMONIC:-${POLYSTORE_TESTNET_TX_SENDER_MNEMONIC:-}}"
 export POLYSTORE_TX_SUBMIT_MODE="${POLYSTORE_TX_SUBMIT_MODE:-direct}"
+export SERVICE_HINT="${SERVICE_HINT:-General}"
 
 if ! curl -fsS "${GATEWAY_BASE}/health" >/dev/null 2>&1; then
   echo "error: local gateway is not healthy at ${GATEWAY_BASE}. Start Nil Gateway GUI before running this helper." >&2
@@ -182,7 +183,7 @@ umask 077
 wallet_json="$(cd "$ROOT_DIR/polystore-website" && node_modules/.bin/tsx "$ROOT_DIR/polystore-website/scripts/testnet_burner_wallet.ts" generate)"
 PRIVATE_KEY="$(printf '%s' "$wallet_json" | jq -r '.private_key')"
 EVM_ADDRESS="$(printf '%s' "$wallet_json" | jq -r '.address')"
-POLYSTORE_ADDRESS="$(printf '%s' "$wallet_json" | jq -r '.nil_address')"
+POLYSTORE_ADDRESS="$(printf '%s' "$wallet_json" | jq -r '.nil_address // .polystore_address // empty')"
 
 if [[ -z "$PRIVATE_KEY" || -z "$EVM_ADDRESS" || -z "$POLYSTORE_ADDRESS" || "$PRIVATE_KEY" == "null" ]]; then
   echo "error: failed to generate burner wallet" >&2
@@ -257,6 +258,8 @@ if [[ -n "$DEAL_ID" && -n "$POLYFS_PATH" ]]; then
   "$ROOT_DIR/scripts/enterprise_upload_job.sh" "$FILE_PATH" "$DEAL_ID" "$POLYFS_PATH"
 elif [[ -n "$DEAL_ID" ]]; then
   "$ROOT_DIR/scripts/enterprise_upload_job.sh" "$FILE_PATH" "$DEAL_ID"
+elif [[ -n "$POLYFS_PATH" ]]; then
+  "$ROOT_DIR/scripts/enterprise_upload_job.sh" "$FILE_PATH" "" "$POLYFS_PATH"
 else
   "$ROOT_DIR/scripts/enterprise_upload_job.sh" "$FILE_PATH"
 fi
