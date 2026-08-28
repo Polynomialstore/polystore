@@ -82,6 +82,7 @@ PROVIDER_FUNDING_POLL_SECS="${POLYSTORE_PROVIDER_FUNDING_POLL_SECS:-2}"
 POLYSTORECHAIND_BIN="${POLYSTORECHAIND_BIN:-$ROOT_DIR/polystorechain/polystorechaind}"
 POLYSTORE_CLI_BIN="${POLYSTORE_CLI_BIN:-$ROOT_DIR/polystore_cli/target/release/polystore_cli}"
 TRUSTED_SETUP="${POLYSTORE_TRUSTED_SETUP:-$ROOT_DIR/polystorechain/trusted_setup.txt}"
+CHAIN_TX_MODULE="${POLYSTORE_CHAIN_TX_MODULE:-nilchain}"
 
 PROVIDER_LISTEN="${PROVIDER_LISTEN:-${POLYSTORE_LISTEN_ADDR:-:8091}}"
 PROVIDER_CAPABILITIES="${PROVIDER_CAPABILITIES:-General}"
@@ -1250,7 +1251,7 @@ register_provider() {
 
   if provider_registered; then
     echo "==> Updating provider endpoints on-chain..."
-    "$POLYSTORECHAIND_BIN" tx polystorechain update-provider-endpoints \
+    "$POLYSTORECHAIND_BIN" tx "$CHAIN_TX_MODULE" update-provider-endpoints \
       "${endpoint_args[@]}" \
       --from "$PROVIDER_KEY" \
       --chain-id "$CHAIN_ID" \
@@ -1268,7 +1269,7 @@ register_provider() {
       bond_args=(--bond "$PROVIDER_REGISTRATION_BOND")
     fi
     echo "==> Registering provider on-chain..."
-    "$POLYSTORECHAIND_BIN" tx polystorechain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
+    "$POLYSTORECHAIND_BIN" tx "$CHAIN_TX_MODULE" register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
       "${endpoint_args[@]}" \
       "${bond_args[@]}" \
       --from "$PROVIDER_KEY" \
@@ -1332,7 +1333,7 @@ request_provider_link() {
   ensure_provider_account_funded "$addr"
 
   echo "==> Requesting provider link on-chain..."
-  "$POLYSTORECHAIND_BIN" tx polystorechain request-provider-link "$operator" \
+  "$POLYSTORECHAIND_BIN" tx "$CHAIN_TX_MODULE" request-provider-link "$operator" \
     --from "$PROVIDER_KEY" \
     --chain-id "$CHAIN_ID" \
     --node "$NODE_ADDR" \

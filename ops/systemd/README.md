@@ -138,6 +138,24 @@ Minimum required edits in `polystore-gateway-provider.env`:
 ## Notes
 
 - These templates assume you checked the repo out at `/opt/polystore`. Adjust as needed.
+- `ops/grant_devnet_user_ops.sh` grants ownership of `/opt/polystore` and
+  `/var/lib/polystore` by default. If a legacy/local devnet uses another chain
+  state root, run it with `CHAIN_STATE_ROOT=/path/to/state`.
+- `ops/update_devnet_stack_from_main.sh` derives `SOURCE_ROOT` from its own
+  checkout by default. Override `SOURCE_ROOT` only when intentionally deploying
+  artifacts from a different repo path.
+- The update helper reads the router port from
+  `/etc/polystore/polystore-gateway-router.env` when present, otherwise it uses
+  `http://127.0.0.1:8080`. Override with `ROUTER_GATEWAY_URL=...` for custom
+  local deployments.
+- The polynomialstore.com hub currently uses user-level provider units named
+  `polystore-provider1.service` through `polystore-provider3.service`. Fresh
+  hosts may instead use the checked-in system-level provider template; set
+  `PROVIDER_UNITS=...` and `PROVIDER_HEALTH_URLS=...` for that layout, or leave
+  provider units absent to update only the hub services.
+- The sudoers allowlist installed by `ops/grant_devnet_user_ops.sh` covers only
+  `start`, `stop`, `restart`, `is-active`, and `status` for the three root
+  services.
 - Unit `ExecStart` commands intentionally use a shell wrapper so EnvironmentFile
   variables (for example `POLYSTORECHAIND_BIN`) are expanded correctly by systemd.
 - `POLYSTORE_GRPC_ADDRESS` defaults to `127.0.0.1:9091` in the chain env
