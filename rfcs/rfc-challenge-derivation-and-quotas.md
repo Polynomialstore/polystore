@@ -1,11 +1,235 @@
-# RFC: Challenge Derivation & Proof Quota Policy (Unified Liveness v1)
+# RFC: Challenge Derivation & Proof Quota Policy
 
-**Status:** Partially implemented in devnet
+**Status:** Legacy v1 runtime; v2 primitives implemented, activation unavailable
 **Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
 
 ---
+
+## Version 2: canonical challenge primitives (inactive)
+
+The pure Go package `polystorechain/pkg/retrievalchallenge` implements this section's
+serialization, response windows, distinct sampling and off-domain evaluation points.
+It has **no runtime caller or activation switch**. It does not authenticate an
+actor, setup artifact, block hash or snapshot, perform KZG verification, enforce
+payment/coverage accounting, or establish that bytes were delivered. Legacy v1
+runtime behavior remains unchanged. Issues #254–#257 and #260 own integration and
+qualification; this first #255 S0 slice does not complete #255.
+
+This section supersedes the historical v1 assumptions below **for future v2
+activation**. In particular, ordinary retrieval cannot reduce independent storage
+audits, a public proof cannot select its payee, and a proposer-influenced block
+hash is not an unbiased beacon. No absolute anti-grinding or delivery claim is
+supported by the legacy description.
+
+### Canonical bytes and ownership
+
+`LP(x)` means a four-byte unsigned big-endian byte length followed by the bytes of
+`x`. Integers below are unsigned big endian; fixed byte strings have no prefix or
+padding. The exact transcript is the following concatenation, in table order.
+`context_hash = SHA256(transcript)`. JSON, protobuf, EVM ABI encodings and displayed
+bech32/hex strings are **not** hash inputs. Clients must preserve uint64 values
+without conversion through JavaScript `Number`.
+
+| Field | Encoding | Canonical value/source required at integration |
+| --- | --- | --- |
+| domain | LP ASCII | `polystore/challenge-context/v2` |
+| version | U32 | 2 |
+| chain_id | LP UTF-8 | Authenticated chain ID; 1–50 bytes, valid UTF-8, no NUL |
+| setup_digest | 32 bytes | SHA-256 of the exact accepted trusted-setup artifact; expected digest authenticated by the protocol profile |
+| kind | U8 | 1 = paid session; 2 = assigned storage audit |
+| context_id | 32 bytes | Existing session ID for kind 1; all zero for kind 2, whose identity is the bound epoch/assignment tuple |
+| deal_id, generation | U64 each | Frozen deal and content generation |
+| root | 32 bytes | Frozen PolyFS root |
+| assigned, payee | 20 bytes each | Canonical raw account addresses; distinct fields even when equal |
+| layout | U8 | 1 = replica; 2 = StripeReplica |
+| K, M, slot | U32 each | Replica: exactly 1,0,0. Stripe: K divides 64, 1<=K<=64, M>0, K+M<=256, slot<K+M |
+| metadata_mdus, user_mdus | U64 each | Metadata includes MDU 0 and all witness MDUs; metadata>=1 and total<=65537 |
+| start_mdu | U64 | Session start; zero for audit |
+| start_leaf | U32 | Session start in slot-major ordering; zero for audit |
+| blob_count | U64 | Session count; zero for audit |
+| epoch_id, epoch_length, sample_count | U64 each | Audit snapshot values; all zero for session |
+| snapshot_height, anchor_height, first_response_height, deadline_height | U64 each | Validated immutable inclusive response window below |
+| deal_end | U64 | Frozen deal end height |
+
+The root table admits nonzero MDU indices 1..65536; hence the total count includes
+MDU 0 and may reach 65537. This format uses the existing 64 blobs per user MDU.
+`rows=64/K` for Stripe and 64 for replica; `U=user_mdus*rows` is the audit population
+**for this assignment**, excluding metadata and including allocated padding/parity
+where applicable. Bounds must precede arithmetic/allocation. These small fixed
+layout bounds also prevent multiplication/leaf-index overflow.
+
+A v2 session covers an exact positive contiguous range within **one user MDU and
+one assignment**: `metadata_mdus<=start_mdu<metadata_mdus+user_mdus` and
+`slot*rows<=start_leaf<start_leaf+blob_count<=(slot+1)*rows`. This intentionally
+narrows legacy replica sessions that could span MDUs. Use separate sessions for
+separate MDUs; do not reinterpret old sessions. Each opened blob requires a fresh
+opening, including a partially requested blob. `blob_count*131072` is billed
+encoded coverage, not observed transport bytes or logical payload length.
+
+For audits, payee equals assigned and context_id/session fields are zero. Audit
+`sample_count` must be positive, no greater than U and no greater than **4096**.
+4096 is the inactive v2 hard allocation/work ceiling, not the quota policy or a
+claim that an active chain can process that many proofs. A profile may set a lower
+cap (the #260 reference experiment uses min(U,132)); an infeasible desired
+assurance target remains unqualified. No audit context is created for U=0 or a
+zero/disabled quota. The standalone sampler permits U=Q=0 and returns an empty set.
+
+The primitive accepts fixed-size root/setup/address/ID bytes as data. Integration
+must authenticate their values; structurally valid bytes, a context digest and a
+zero default are not evidence of registration, ownership, trust or authorization.
+Do not let a submitted context replace authoritative frozen state.
+
+### Issuance and response windows
+
+All heights must fit positive signed int64 chain heights, except audit snapshot 0
+which denotes committed genesis state. All deadlines below are inclusive.
+
+- Session opened at H: snapshot H, anchor H+1, first response H+2. Require
+  H>=1, H<deal_end and H+2<=expires_at<=deal_end. Preserve existing session
+  expiry semantics (`height>expires_at`); do not silently extend an expiry.
+- Epoch e with frozen length L>=2: start S=1+(e-1)L and end E=eL. Snapshot
+  committed state S-1, anchor S, and accept S+1..min(E,deal_end-1). Overflow,
+  epoch 0 and L<2 are errors. An empty response interval issues no obligation
+  and warrants neither an audit reward nor provider failure.
+
+The session deadline may equal deal_end; the audit deadline is strictly before
+it. These are deliberately different existing lifetime contracts. Later parameter
+or root/assignment changes cannot move an already issued window or reroll its
+challenge. Validation does not fetch a block or declare a seed available.
+
+### Fixed anchor and bounded derivation
+
+The chain must persist/query the exact canonical 32-byte committed hash of
+the predetermined anchor height. A caller cannot choose the seed, substitute a
+later height, or fall back to nil/current-block data. A missing/corrupt/pruned
+anchor is protocol failure, not provider failure. This initial trusted-devnet
+source assumes non-grinding proposers; permissionless sampling/reward security is
+blocked until an authenticated, predetermined future beacon round is integrated
+and qualified. Hashing extra fields or several proposer-controlled blocks does
+not remove bias. Source authentication and unavailable-round behavior remain
+outside these pure primitives and cannot be skipped at activation.
+
+For expected ordinal i and tuple (mdu,leaf), hash:
+
+```text
+LP("polystore/blob-challenge/v2") || context_hash || seed32 ||
+U64BE(i) || U64BE(mdu) || U32BE(leaf) || U32BE(counter)
+```
+
+Interpret SHA-256 as an unsigned big-endian integer. Try counters 0..255, accepting
+only `0<z<Fr` and `z^4096 mod Fr != 1`, with
+`Fr=0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001`.
+Return z as exactly 32 big-endian bytes. Exhaustion is explicit protocol failure;
+there is no biased modular fallback. Do not hash proof bytes, y, transaction hash
+or a prover-selected nonce into the challenge being answered.
+
+The new z is an off-domain polynomial evaluation, not a literal byte challenge.
+Commitments, Merkle paths and root-table openings are immutable structure and may
+be reused. Constant and zero polynomials can yield identical valid opening bytes
+at different z; they remain valid. No global proof-byte uniqueness rule is added.
+KZG verification and once-only state accounting are separate integration steps;
+this helper proves neither delivery, incompressibility, storage exclusivity nor a
+formal proof-of-retrievability extractor.
+
+### Distinct audit positions
+
+Freeze U and Q from the eligible ACTIVE assignment before anchor revelation.
+Ordinary/session/legacy retrieval activity must not subtract from Q. At ordinal i,
+set n=U-i and hash:
+
+```text
+LP("polystore/audit-position/v2") || context_hash || seed32 ||
+U64BE(i) || U32BE(counter)
+```
+
+Interpret the digest as x. Reject `x>=floor(2^256/n)*n`; otherwise take r=x%n.
+For n=1 take r=0 without hashing. Try at most 256 counters per draw. Sparse
+Fisher-Yates uses a request-local map and exactly this tail-swap variant:
+
+```text
+p_i = map.get(r, r)
+map[r] = map.get(n-1, n-1)
+delete map[n-1]
+mdu = metadata_mdus + p_i / rows
+leaf = slot*rows + p_i % rows
+```
+
+The selected position is **p_i**, not ordinal i. Keep i separately in the point
+transcript and eventual coverage key. For replica, slot=0 and rows=64. The map and
+output use O(Q) storage; no U-sized array or retry-until-unique loop is allowed in
+production. Derive Q once per context/request and compare the entire expected
+ordered tuple list before FFI; do not regenerate Q for each proof. No lower-level
+sampling helper authenticates the supplied context hash or seed.
+
+### Integration and migration gates (not implemented by this slice)
+
+The authenticated native/sponsored/EVM open must normalize and persist the effective
+`authorized_proof_provider`, defaulting to assigned, in durable session state
+including COMPLETED. A deputy requires the requester's authority and registration.
+Sponsored opens must preserve the voucher issuer's provider restriction; protocol
+opens must preserve task/repair serving authority. An optional field cannot grant
+arbitrary budget payees or bypass `VoucherAuth.provider`. An unassigned deputy
+needs an issuer-authorized voucher version; no consumed-voucher reuse. A later
+fallback uses a new authorized funded session and the old expiry/refund path.
+
+The remaining #255 integration belongs in the existing seams:
+
+- [session opens, proof admission and settlement](../polystorechain/x/polystorechain/keeper/msg_server.go),
+  [protobuf state](../polystorechain/proto/polystorechain/polystorechain/v1/types.proto)
+  and [messages](../polystorechain/proto/polystorechain/polystorechain/v1/tx.proto):
+  durable normalized authority, generated ABI/bindings, authoritative context query,
+  shared native/EVM validation and once-only settlement. Nothing here installs them.
+- [unified liveness](../polystorechain/x/polystorechain/keeper/unified_liveness.go),
+  [rewards](../polystorechain/x/polystorechain/keeper/base_rewards.go) and
+  [epoch finalization](../polystorechain/x/polystorechain/keeper/slashing.go):
+  frozen eligible assignments, finite admission/retention caps, once-only coverage
+  and no organic credit subtraction or unsubstantiated provider failure attribution.
+  Open-time gas alone cannot bound future epoch work.
+- Coordinated migration: keep historical COMPLETED terminal; unsupported legacy
+  OPEN/USER_CONFIRMED/PROOF_SUBMITTED become expiry-refund-only with original locks
+  and refund sources. Never infer missing payees or relabel old proofs as fresh.
+  Secure continuation uses a new funded session without consumed-voucher reuse.
+- Retain immutable generations for both session and audit references; historical
+  reads cannot change `.active_generation`. Reject mutations if required reference
+  capacity cannot be preserved. No migration or retention mechanism is installed here.
+
+[#255](https://github.com/Polynomialstore/polystore/issues/255) remains open for
+these integrations, bounded gas and actual EVM rollback. Network activation remains
+unavailable until compatible provider-daemon, user-gateway, browser and EVM paths
+verify bytes before normal confirmation and
+[#260](https://github.com/Polynomialstore/polystore/issues/260) qualifies the named
+finite-gas deployment profile. Passing vector tests is not runtime signer binding,
+seed capture, delivery, reward or rollback qualification. Pricing is unchanged.
+
+### Reproducible checks
+
+```sh
+cd polystorechain
+go test -mod=vendor ./pkg/retrievalchallenge -count=1
+go test -mod=vendor ./pkg/retrievalchallenge -race -count=1
+go test -mod=vendor ./pkg/retrievalchallenge -run '^$' -bench . -benchmem
+python3 pkg/retrievalchallenge/testdata/check_vectors.py
+```
+
+The checked-in fixture contains exact transcript bytes, hashes, selected positions,
+MDU/leaf indices and z values, including deal ID above JavaScript's safe integer
+limit. The independent Python oracle uses a full-list shuffle for the small fixture;
+the Go implementation uses the bounded sparse map. The oracle checks the committed
+fixture without regenerating it. Boundary tests cover empty populations, layout and
+window validity, overflow, metadata exclusion, repeated samples, invalid seed
+lengths, nontrivial roots of unity and forced rejection exhaustion. Benchmarks
+characterize only these new Go helpers; there is no FFI/native scratch allocation,
+KZG throughput result, capacity qualification or speedup claim.
+
+---
+
+## Historical v1 reference
+
+The sections below describe legacy policy and implementation history. Their organic
+credit subtraction and anti-grinding claims are not the v2 contract, and must not
+be used to claim secure v2 behavior before the integration gates above pass.
 
 ## 0. Executive Summary
 
