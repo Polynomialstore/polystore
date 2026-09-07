@@ -69,6 +69,10 @@ before any build. The driver removes only its own home on exit; `--keep-home`
 retains that home (including the binary and node log) for inspection. It does not
 permit reuse of an existing home. Recursive cleanup stays bound to the verified directory even if its pathname is
 replaced; the final pathname operation can only remove an empty directory.
+Run under an operator-controlled parent and keep the home and its ancestors
+exclusively owned and unchanged until exit. Replacement protection applies to
+recursive cleanup; builds, chain commands and configuration writes use pathnames
+and require that exclusive ownership.
 
 Run the entrypoint safety checks without compiling or starting a node:
 
