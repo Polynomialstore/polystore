@@ -41,6 +41,11 @@ vectors = {'schema': SCHEMA, 'vectors': {}}
 for name, override in [('session', {}), ('audit', SCHEMA['audit_override'])]:
     values = {field: default for field, kind, default in SCHEMA['fields']}
     values.update(override)
+    for field, kind, _ in SCHEMA['fields']:
+        if kind == 'u64':
+            value = values[field]
+            assert isinstance(value, str) and value.isascii() and value.isdecimal(), 'u64 fixture inputs must be decimal strings'
+            values[field] = int(value)
     wire = encode(values)
     ctx = hashlib.sha256(wire).digest()
     rows = 64 // values['k']

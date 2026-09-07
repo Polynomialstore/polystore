@@ -35,12 +35,12 @@
       [
         "deal_id",
         "u64",
-        9007199254740993
+        "9007199254740993"
       ],
       [
         "generation",
         "u64",
-        7
+        "7"
       ],
       [
         "root",
@@ -80,17 +80,17 @@
       [
         "metadata_mdus",
         "u64",
-        2
+        "2"
       ],
       [
         "user_mdus",
         "u64",
-        133
+        "133"
       ],
       [
         "start_mdu",
         "u64",
-        134
+        "134"
       ],
       [
         "start_leaf",
@@ -100,47 +100,47 @@
       [
         "blob_count",
         "u64",
-        3
+        "3"
       ],
       [
         "epoch_id",
         "u64",
-        0
+        "0"
       ],
       [
         "epoch_length",
         "u64",
-        0
+        "0"
       ],
       [
         "sample_count",
         "u64",
-        0
+        "0"
       ],
       [
         "snapshot_height",
         "u64",
-        100
+        "100"
       ],
       [
         "anchor_height",
         "u64",
-        101
+        "101"
       ],
       [
         "first_response_height",
         "u64",
-        102
+        "102"
       ],
       [
         "deadline_height",
         "u64",
-        150
+        "150"
       ],
       [
         "deal_end",
         "u64",
-        200
+        "200"
       ]
     ],
     "seed_hex": "88898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7",
@@ -150,16 +150,16 @@
       "kind": 2,
       "context_id": "0000000000000000000000000000000000000000000000000000000000000000",
       "payee": "606162636465666768696a6b6c6d6e6f70717273",
-      "start_mdu": 0,
+      "start_mdu": "0",
       "start_leaf": 0,
-      "blob_count": 0,
-      "epoch_id": 2,
-      "epoch_length": 100,
-      "sample_count": 8,
-      "snapshot_height": 100,
-      "anchor_height": 101,
-      "first_response_height": 102,
-      "deadline_height": 199
+      "blob_count": "0",
+      "epoch_id": "2",
+      "epoch_length": "100",
+      "sample_count": "8",
+      "snapshot_height": "100",
+      "anchor_height": "101",
+      "first_response_height": "102",
+      "deadline_height": "199"
     },
     "audit_transcript": "LP(polystore/audit-position/v2) || context_hash32 || seed32 || U64BE(ordinal) || U32BE(counter)",
     "audit_draw": "n=U-i; n=1 means r=0 without hashing; otherwise reject x >= (2**256 // n)*n, take r=x%n; sparse swap map: p=map.get(r,r); map[r]=map.get(n-1,n-1); delete map[n-1]; U=user_mdus*(64/k); mdu=metadata_mdus+p//rows; leaf=slot*rows+p%rows; point ordinal remains i"

@@ -30,7 +30,9 @@ supported by the legacy description.
 padding. The exact transcript is the following concatenation, in table order.
 `context_hash = SHA256(transcript)`. JSON, protobuf, EVM ABI encodings and displayed
 bech32/hex strings are **not** hash inputs. Clients must preserve uint64 values
-without conversion through JavaScript `Number`.
+without conversion through JavaScript `Number`. The golden fixture encodes every
+U64 input as a decimal JSON string; parse those strings with `BigInt` in JavaScript.
+This fixture representation does not change the binary transcript.
 
 | Field | Encoding | Canonical value/source required at integration |
 | --- | --- | --- |
