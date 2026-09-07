@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -101,6 +102,39 @@ class BenchmarkHomeTest(unittest.TestCase):
             self.assertIn("home changed; refusing cleanup", result.stderr)
             self.assertTrue(home.is_symlink())
             self.assertEqual((target / "sentinel").read_text(), "preserve")
+
+    def test_cleanup_race_cannot_delete_replacement_contents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fakebin = root / "bin"
+            fakebin.mkdir()
+            home = root / "home"
+            cargo = fakebin / "cargo"
+            cargo.write_text('#!/bin/sh\nmkdir "$POLYSTORE_BENCH_HOME/owned-child"\nexit 89\n')
+            cargo.chmod(0o755)
+            python = fakebin / "python3"
+            # Replace the home immediately before the recursive deletion starts.
+            python.write_text(f"#!{sys.executable}\n" + '''
+import os, pathlib, re, shutil, sys
+code = sys.stdin.read()
+if len(sys.argv) == 4 and re.fullmatch(r"[0-9]+:[0-9]+", sys.argv[3]):
+    original = shutil.rmtree
+    def replace_then_remove(*args, **kwargs):
+        path = pathlib.Path(os.environ["POLYSTORE_BENCH_HOME"])
+        path.rename(str(path) + ".original")
+        path.mkdir()
+        (path / "operator-data").write_text("preserve")
+        return original(*args, **kwargs)
+    shutil.rmtree = replace_then_remove
+sys.argv = sys.argv[1:]
+exec(compile(code, "<benchmark home>", "exec"))
+''')
+            python.chmod(0o755)
+            env = dict(os.environ, PATH=f"{fakebin}:{os.environ['PATH']}", POLYSTORE_BENCH_HOME=str(home))
+            result = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((home / "operator-data").read_text(), "preserve")
+            self.assertTrue(Path(str(home) + ".original").is_dir())
 
 
 if __name__ == "__main__":

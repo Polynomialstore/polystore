@@ -90,16 +90,34 @@ cleanup() {
   fi
   if [ "$KEEP_HOME" != "1" ]; then
     python3 - "$CHAIN_HOME" "$HOME_ID" <<'PYHOME'
-import os, shutil, stat, sys
+import os, shutil, sys
+path, expected = sys.argv[1:]
 try:
-    s = os.lstat(sys.argv[1])
-except FileNotFoundError:
-    pass
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+except OSError:
+    print("[bench-sessions] home changed; refusing cleanup: " + path, file=sys.stderr)
 else:
-    if stat.S_ISDIR(s.st_mode) and f"{s.st_dev}:{s.st_ino}" == sys.argv[2]:
-        shutil.rmtree(sys.argv[1])
-    else:
-        print("[bench-sessions] home changed; refusing cleanup: " + sys.argv[1], file=sys.stderr)
+    try:
+        s = os.fstat(fd)
+        if f"{s.st_dev}:{s.st_ino}" != expected:
+            print("[bench-sessions] home changed; refusing cleanup: " + path, file=sys.stderr)
+        else:
+            # This short-lived Python process alone changes cwd. Relative
+            # deletion stays bound to the verified inode even if path is renamed.
+            os.fchdir(fd)
+            for entry in os.scandir("."):
+                if entry.is_dir(follow_symlinks=False):
+                    shutil.rmtree(entry.name)
+                else:
+                    os.unlink(entry.name)
+            try:
+                current = os.lstat(path)
+                if (current.st_dev, current.st_ino) == (s.st_dev, s.st_ino):
+                    os.rmdir(path)  # Never recurse through this pathname again.
+            except FileNotFoundError:
+                pass
+    finally:
+        os.close(fd)
 PYHOME
   fi
 }

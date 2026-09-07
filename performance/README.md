@@ -67,7 +67,8 @@ See [`gateway_mode2_benchmark.md`](./gateway_mode2_benchmark.md) for usage detai
 with an existing parent. Existing files, directories and symlinks are rejected
 before any build. The driver removes only its own home on exit; `--keep-home`
 retains that home (including the binary and node log) for inspection. It does not
-permit reuse of an existing home. A replaced home is left untouched.
+permit reuse of an existing home. Recursive cleanup stays bound to the verified directory even if its pathname is
+replaced; the final pathname operation can only remove an empty directory.
 
 Run the entrypoint safety checks without compiling or starting a node:
 
