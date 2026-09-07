@@ -365,8 +365,8 @@ PY
 
 ensure_polystorechaind() {
   banner "Building polystorechaind (via $GO_BIN)"
-  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" build -o "$POLYSTORECHAIND_BIN" ./cmd/polystorechaind)
-  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="${GOFLAGS:-} -mod=mod" "$GO_BIN" install ./cmd/polystorechaind)
+  (cd "$ROOT_DIR/polystorechain" && GO_BIN="$GO_BIN" ../scripts/chain_go.sh build -o "$POLYSTORECHAIND_BIN" ./cmd/polystorechaind)
+  (cd "$ROOT_DIR/polystorechain" && GO_BIN="$GO_BIN" ../scripts/chain_go.sh install ./cmd/polystorechaind)
 }
 
 ensure_polystore_cli() {

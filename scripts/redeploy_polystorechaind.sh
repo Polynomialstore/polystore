@@ -48,7 +48,7 @@ Options:
   -h, --help                Show this help
 
 Environment knobs:
-  POLYSTORECHAIN_BUILD_GOFLAGS    GOFLAGS override for build (default appends -mod=mod)
+  POLYSTORECHAIN_BUILD_GOFLAGS    additional build GOFLAGS (vendor mode is mandatory)
   POLYSTORE_CORE_LIB_DIR          Override path containing libpolystore_core.so / libpolystore_core.dylib
 USAGE
 }
@@ -258,22 +258,18 @@ ensure_polystore_core_runtime() {
 build_polystorechaind() {
   local build_goflags
   build_goflags="${POLYSTORECHAIN_BUILD_GOFLAGS:-${GOFLAGS:-}}"
-  case " $build_goflags " in
-    *" -mod="*) ;;
-    *) build_goflags="${build_goflags} -mod=mod" ;;
-  esac
   build_goflags="$(printf '%s' "$build_goflags" | xargs)"
 
   log "building polystorechaind from $SOURCE_ROOT/polystorechain"
   if [ "$DRY_RUN" -eq 1 ]; then
-    printf '+ (cd %q && GOFLAGS=%q go build -o %q ./cmd/polystorechaind)\n' \
+    printf '+ (cd %q && GOFLAGS=%q ../scripts/chain_go.sh build -o %q ./cmd/polystorechaind)\n' \
       "$SOURCE_ROOT/polystorechain" "$build_goflags" "$SOURCE_ROOT/polystorechain/polystorechaind"
     return 0
   fi
 
   (
     cd "$SOURCE_ROOT/polystorechain"
-    GOFLAGS="$build_goflags" go build -o "$SOURCE_ROOT/polystorechain/polystorechaind" ./cmd/polystorechaind
+    GOFLAGS="$build_goflags" ../scripts/chain_go.sh build -o "$SOURCE_ROOT/polystorechain/polystorechaind" ./cmd/polystorechaind
   )
 }
 

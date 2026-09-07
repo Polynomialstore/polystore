@@ -116,7 +116,7 @@ export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-}:$CORE_DIR/target/release"
 banner "Building polystorechaind"
 pushd "$CHAIN_DIR" >/dev/null
 export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
-go build -o "$BINARY" ./cmd/polystorechaind
+../scripts/chain_go.sh build -o "$BINARY" ./cmd/polystorechaind
 popd >/dev/null
 
 banner "Resetting chain"

@@ -33,7 +33,7 @@ echo ">>> Building polystorechaind..."
     make proto-gen
     # Link against release lib
     export CGO_LDFLAGS="-L$(pwd)/../polystore_core/target/release -lpolystore_core"
-    go build -ldflags "-X main.Version=$VERSION" -o ../dist/bin/polystorechaind ./cmd/polystorechaind
+    ../scripts/chain_go.sh build -ldflags "-X main.Version=$VERSION" -o ../dist/bin/polystorechaind ./cmd/polystorechaind
 )
 
 # 4. Build polystore_cli (Rust)

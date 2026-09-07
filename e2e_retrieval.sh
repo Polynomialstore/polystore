@@ -41,7 +41,7 @@ echo ">>> Building binaries..."
 touch polystore_core/src/lib.rs
 cd polystore_core && cargo build --release --features debug-print && cd ..
 cp polystore_core/target/release/libpolystore_core.dylib . 2>/dev/null || cp polystore_core/target/release/libpolystore_core.so . 2>/dev/null || true
-cd polystorechain && go clean -cache && go build -o ../polystorechaind ./cmd/polystorechaind && cd ..
+cd polystorechain && go clean -cache && ../scripts/chain_go.sh build -o ../polystorechaind ./cmd/polystorechaind && cd ..
 cd polystore_cli && cargo build --release && cd ..
 
 export DYLD_LIBRARY_PATH=$(pwd):$DYLD_LIBRARY_PATH

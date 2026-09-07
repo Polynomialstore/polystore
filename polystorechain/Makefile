@@ -25,30 +25,30 @@ BUILD_FLAGS := -ldflags '$(ldflags)'
 
 test-unit:
 	@echo Running unit tests...
-	@test_output=$$(go test -mod=readonly -v -timeout 30m -short ./... 2>&1) ; \
+	@test_output=$$(../scripts/chain_go.sh test -v -timeout 30m -short ./... 2>&1) ; status=$$? ; \
 	echo "$$test_output" ; \
-	if echo "$$test_output" | grep -q "ERROR:" ; then \
-		echo "Detected 'ERROR:' in test output. Marking test-unit as failed." ; \
+	if [ "$$status" -ne 0 ] || echo "$$test_output" | grep -q "ERROR:" ; then \
+		echo "Unit tests failed. Marking test-unit as failed." ; \
 		exit 1 ; \
 	fi
 
 test-simulation:
 	@echo Running simulation tests...
-	@go test -mod=readonly -v -timeout 30m ./app -Enabled=true -NumBlocks=100 -BlockSize=200 -Commit=true -Period=5
+	@../scripts/chain_go.sh test -v -timeout 30m ./app -Enabled=true -NumBlocks=100 -BlockSize=200 -Commit=true -Period=5
 
 test-race:
 	@echo Running unit tests with race condition reporting...
-	@go test -mod=readonly -v -race -timeout 30m ./...
+	@../scripts/chain_go.sh test -v -race -timeout 30m ./...
 
 test-cover:
 	@echo Running unit tests and creating coverage report...
-	@go test -mod=readonly -v -timeout 30m -coverprofile=$(COVER_FILE) -covermode=atomic ./...
+	@../scripts/chain_go.sh test -v -timeout 30m -coverprofile=$(COVER_FILE) -covermode=atomic ./...
 	@go tool cover -html=$(COVER_FILE) -o $(COVER_HTML_FILE)
 	@rm $(COVER_FILE)
 
 bench:
 	@echo Running unit tests with benchmarking...
-	@go test -mod=readonly -v -timeout 30m -bench=. ./...
+	@../scripts/chain_go.sh test -v -timeout 30m -bench=. ./...
 
 test: govet govulncheck test-unit test-simulation
 
@@ -64,7 +64,7 @@ install:
 	@echo "--> ensure dependencies have not been modified"
 	@go mod verify
 	@echo "--> installing $(APPNAME)d"
-	@go install $(BUILD_FLAGS) -mod=readonly ./cmd/$(APPNAME)d
+	@../scripts/chain_go.sh install $(BUILD_FLAGS) ./cmd/$(APPNAME)d
 
 .PHONY: all install
 
@@ -104,7 +104,7 @@ lint-fix:
 
 govet:
 	@echo Running go vet...
-	@go vet ./...
+	@../scripts/chain_go.sh vet ./...
 
 govulncheck:
 	@echo Running govulncheck...

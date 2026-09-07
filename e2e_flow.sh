@@ -12,7 +12,7 @@ TRUSTED_SETUP="$(pwd)/polystorechain/trusted_setup.txt"
 
 # Ensure binaries are built
 echo ">>> Building binaries..."
-cd polystorechain && go build -o ../polystorechaind ./cmd/polystorechaind && cd ..
+cd polystorechain && ../scripts/chain_go.sh build -o ../polystorechaind ./cmd/polystorechaind && cd ..
 
 # Clean start
 echo ">>> Resetting chain..."

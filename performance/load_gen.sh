@@ -44,7 +44,7 @@ echo ">>> Building binaries..."
     cd ../polystorechain # Change to the polystorechain module directory
     echo "Cleaning Go build cache..."
     go clean -cache -modcache
-    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o "../polystorechaind" ./cmd/polystorechaind # Build to project root
+    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 ../scripts/chain_go.sh build -o "../polystorechaind" ./cmd/polystorechaind # Build to project root
 )
 echo "Binary info for $BINARY:"
 file "$BINARY"

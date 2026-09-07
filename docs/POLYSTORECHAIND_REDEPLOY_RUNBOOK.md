@@ -84,6 +84,6 @@ sudo systemctl restart polystorechaind
 
 ## Notes
 
-- The script defaults to building with `-mod=mod` so local rebuilds do not get stuck on stale vendor state.
+- The script uses `scripts/chain_go.sh` to reconstruct dependencies while retaining the required tracked SDK/EVM corrections and enforcing vendor mode; see `polystorechain/VENDOR_PATCHES.md`.
 - If `libpolystore_core` is missing, the script attempts to build `polystore_core` in the selected source checkout.
 - Default runtime paths are tuned to this environment (`/opt/polystore`, `/etc/polystore/polystorechaind.env`) and can be overridden with flags.

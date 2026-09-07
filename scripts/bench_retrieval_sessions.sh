@@ -133,7 +133,7 @@ export LD_LIBRARY_PATH="$CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export CGO_LDFLAGS="-L$CORE_LIB_DIR -lpolystore_core${CGO_LDFLAGS:+ $CGO_LDFLAGS}"
 
 log "building polystorechaind"
-(cd "$CHAIN_DIR" && GOFLAGS="${GOFLAGS:-} -mod=mod" go build -o "$BIN" ./cmd/polystorechaind) || fail "chain build failed"
+(cd "$CHAIN_DIR" && ../scripts/chain_go.sh build -o "$BIN" ./cmd/polystorechaind) || fail "chain build failed"
 
 prepare_proof_fixtures() {
   [ "$PROOFS_PER_SESSION" -gt 0 ] || return 0
@@ -147,7 +147,7 @@ prepare_proof_fixtures() {
       POLYSTORE_BENCH_FIXTURE_SESSIONS="$SESSIONS" \
       POLYSTORE_BENCH_FIXTURE_COUNT="$PROOFS_PER_SESSION" \
       POLYSTORE_BENCH_FIXTURE_SERVICE_HINT="General:rs=2+1" \
-        GOFLAGS="${GOFLAGS:-} -mod=mod" go test ./x/polystorechain/keeper -run '^TestWriteRetrievalSessionProofFixture$' -count=1
+        ../scripts/chain_go.sh test ./x/polystorechain/keeper -run '^TestWriteRetrievalSessionProofFixture$' -count=1
     ) || fail "proof fixture generation failed"
   else
     [ -d "$PROOFS_DIR" ] || fail "proof fixture directory does not exist: $PROOFS_DIR"
