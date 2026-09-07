@@ -24,8 +24,9 @@ import (
 )
 
 // Build with scripts/chain_go.sh: upstream v0.5.1 lacks these required fixes.
-// Referencing both versions makes accidental -mod=mod builds fail closed.
+// Referencing the required versions makes accidental -mod=mod builds fail closed.
 const nativeGasFixVersion = cmn.PolyStoreNativeGasFixVersion
+const nativeBalanceFixVersion = cmn.PolyStoreNativeBalanceFixVersion
 const nativeJournalFixVersion = statedb.PolyStoreNativeJournalFixVersion
 
 const AddressHex = "0x0000000000000000000000000000000000000900"
