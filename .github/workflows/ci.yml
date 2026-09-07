@@ -26,6 +26,12 @@ jobs:
         if: matrix.service == 'polystore_gateway' || matrix.service == 'polystorechain'
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Check retrieval benchmark home isolation
+        if: matrix.service == 'polystorechain'
+        run: |
+          bash -n scripts/bench_retrieval_sessions.sh
+          python3 scripts/test_bench_retrieval_sessions.py
+
       - name: Build polystore_core
         if: matrix.service == 'polystore_gateway' || matrix.service == 'polystorechain'
         run: |
