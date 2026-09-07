@@ -10,7 +10,10 @@ import (
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
+	storetypes "cosmossdk.io/store/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	cmn "github.com/cosmos/evm/precompiles/common"
+	"github.com/cosmos/evm/x/vm/statedb"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -19,6 +22,11 @@ import (
 	nilkeeper "polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
+
+// Build with scripts/chain_go.sh: upstream v0.5.1 lacks these required fixes.
+// Referencing both versions makes accidental -mod=mod builds fail closed.
+const nativeGasFixVersion = cmn.PolyStoreNativeGasFixVersion
+const nativeJournalFixVersion = statedb.PolyStoreNativeJournalFixVersion
 
 const AddressHex = "0x0000000000000000000000000000000000000900"
 
@@ -280,11 +288,8 @@ const polystoreABIJSON = `[
   {"type":"event","name":"RetrievalSessionConfirmed","inputs":[{"name":"sessionId","type":"bytes32","indexed":true},{"name":"owner","type":"address","indexed":true}]}
 ]`
 
-type sdkContextGetter interface {
-	GetContext() sdk.Context
-}
-
 type Precompile struct {
+	cmn.Precompile
 	keeper *nilkeeper.Keeper
 	abi    abi.ABI
 }
@@ -294,7 +299,14 @@ func New(keeper *nilkeeper.Keeper) (*Precompile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Precompile{keeper: keeper, abi: parsed}, nil
+	return &Precompile{
+		Precompile: cmn.Precompile{
+			KvGasConfig:          storetypes.KVGasConfig(),
+			TransientKVGasConfig: storetypes.TransientGasConfig(),
+			ContractAddress:      Address,
+		},
+		keeper: keeper, abi: parsed,
+	}, nil
 }
 
 func MustNew(keeper *nilkeeper.Keeper) *Precompile {
@@ -308,7 +320,9 @@ func MustNew(keeper *nilkeeper.Keeper) *Precompile {
 func (p *Precompile) Address() common.Address { return Address }
 
 func (p *Precompile) RequiredGas(input []byte) uint64 {
-	// Conservative linear model: calldata + fixed overhead; avoids underpricing heavy FFI verification.
+	// Preserve the existing calldata admission charge. RunNativeAction additionally
+	// meters SDK work against the remaining child gas; proof-specific FFI pricing
+	// is a separate requirement and is not provided by this formula.
 	const base = uint64(200_000)
 	const perByte = uint64(64)
 	return base + perByte*uint64(len(input))
@@ -325,12 +339,14 @@ func (p *Precompile) Run(evm *vm.EVM, contract *vm.Contract, readonly bool) ([]b
 		return nil, errors.New("polystore precompile: missing keeper")
 	}
 
-	stateGetter, ok := evm.StateDB.(sdkContextGetter)
-	if !ok {
-		return nil, errors.New("polystore precompile: statedb does not expose sdk context")
-	}
-	ctx := stateGetter.GetContext()
+	return p.RunNativeAction(evm, contract, func(ctx sdk.Context) ([]byte, error) {
+		return p.runNative(ctx, evm, contract)
+	})
+}
 
+// All selectors share the Cosmos EVM journal, SDK gas meter and balance bridge.
+// A nested EVM revert must undo native writes even when its caller catches it.
+func (p *Precompile) runNative(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract) ([]byte, error) {
 	input := contract.Input
 	if len(input) < 4 {
 		return nil, errors.New("polystore precompile: missing selector")
