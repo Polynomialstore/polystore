@@ -58,3 +58,26 @@ The harness writes:
 - A compact run summary JSON
 
 See [`gateway_mode2_benchmark.md`](./gateway_mode2_benchmark.md) for usage details and field guidance.
+
+## Retrieval-session driver safety (#260 preparation)
+
+`scripts/bench_retrieval_sessions.sh` creates a unique chain home under
+`_artifacts/bench-retrieval-*` and builds its chain binary inside that home.
+`POLYSTORE_BENCH_HOME`, when supplied, must name a **new, nonexistent** directory
+with an existing parent. Existing files, directories and symlinks are rejected
+before any build. The driver removes only its own home on exit; `--keep-home`
+retains that home (including the binary and node log) for inspection. It does not
+permit reuse of an existing home. A replaced home is left untouched.
+
+Run the entrypoint safety checks without compiling or starting a node:
+
+```bash
+python3 scripts/test_bench_retrieval_sessions.py
+bash -n scripts/bench_retrieval_sessions.sh
+```
+
+The existing driver still submits and waits serially. Its output is a preliminary
+latency characterization, not saturation or secure-v2 capacity evidence. #260
+still requires the concurrent load driver, nonconstant fixtures, provenance and
+finite-gas qualification after the #255–#257 security prerequisites. This safety
+change alone does not qualify or activate that protocol.

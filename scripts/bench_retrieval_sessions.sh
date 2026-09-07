@@ -10,7 +10,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHAIN_DIR="$ROOT_DIR/polystorechain"
 CORE_DIR="$ROOT_DIR/polystore_core"
-BIN="$CHAIN_DIR/polystorechaind"
 MODULE_CLI="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-nilchain}"
 
 SESSIONS="${POLYSTORE_BENCH_SESSIONS:-5}"
@@ -21,7 +20,7 @@ PROOFS_DIR_WAS_SET=0
 [ -n "$PROOFS_DIR" ] && PROOFS_DIR_WAS_SET=1
 PROOF_MANIFEST_ROOT="${POLYSTORE_BENCH_MANIFEST_ROOT:-}"
 OUTPUT="${POLYSTORE_BENCH_OUTPUT:-$ROOT_DIR/bench_results_retrieval_sessions.json}"
-CHAIN_HOME="${POLYSTORE_BENCH_HOME:-$ROOT_DIR/_artifacts/bench_retrieval_sessions_data}"
+CHAIN_HOME="${POLYSTORE_BENCH_HOME:-}"
 CHAIN_ID="${CHAIN_ID:-31337}"
 RPC_ADDR="${RPC_ADDR:-tcp://127.0.0.1:26658}"
 P2P_ADDR="${P2P_ADDR:-tcp://127.0.0.1:26659}"
@@ -54,15 +53,30 @@ else
 fi
 GAS_LIMIT="${POLYSTORE_BENCH_GAS:-$DEFAULT_GAS}"
 
-CORE_LIB="$CORE_LIB_DIR/libpolystore_core.so"
-log "building polystore_core"
-(cd "$CORE_DIR" && cargo build --release) || fail "cargo build --release failed"
-export LD_LIBRARY_PATH="$CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export CGO_LDFLAGS="-L$CORE_LIB_DIR -lpolystore_core${CGO_LDFLAGS:+ $CGO_LDFLAGS}"
-
-log "building polystorechaind"
-(cd "$CHAIN_DIR" && GOFLAGS="${GOFLAGS:-} -mod=mod" go build -o "$BIN" ./cmd/polystorechaind) || fail "chain build failed"
-
+# Claim a new directory before building. An existing home is never disposable,
+# even with --keep-home. Resolve the parent, not the final component (symlinks).
+CHAIN_HOME="$(python3 - "$CHAIN_HOME" "$ROOT_DIR/_artifacts" <<'PYHOME'
+import os, pathlib, sys, tempfile
+if sys.argv[1]:
+    requested = pathlib.Path(os.path.abspath(sys.argv[1]))
+    path = requested.parent.resolve(strict=True) / requested.name
+    if os.path.lexists(path):
+        raise SystemExit("POLYSTORE_BENCH_HOME must not already exist: " + str(path))
+    path.mkdir(mode=0o700)
+else:
+    parent = pathlib.Path(sys.argv[2]).resolve()
+    parent.mkdir(parents=True, exist_ok=True)
+    path = pathlib.Path(tempfile.mkdtemp(prefix="bench-retrieval-", dir=parent))
+print(path)
+PYHOME
+)" || fail "cannot create isolated chain home"
+HOME_ID="$(python3 - "$CHAIN_HOME" <<'PYHOME'
+import os, sys
+s = os.lstat(sys.argv[1])
+print(f"{s.st_dev}:{s.st_ino}")
+PYHOME
+)"
+BIN="$CHAIN_HOME/polystorechaind"
 NODE_PID=""
 cleanup() {
   if [ -n "$NODE_PID" ] && kill -0 "$NODE_PID" 2>/dev/null; then
@@ -74,11 +88,34 @@ cleanup() {
     done
     kill -9 "$NODE_PID" 2>/dev/null || true
   fi
-  if [ "$KEEP_HOME" != "1" ] && [ -d "$CHAIN_HOME" ]; then rm -rf "$CHAIN_HOME"; fi
+  if [ "$KEEP_HOME" != "1" ]; then
+    python3 - "$CHAIN_HOME" "$HOME_ID" <<'PYHOME'
+import os, shutil, stat, sys
+try:
+    s = os.lstat(sys.argv[1])
+except FileNotFoundError:
+    pass
+else:
+    if stat.S_ISDIR(s.st_mode) and f"{s.st_dev}:{s.st_ino}" == sys.argv[2]:
+        shutil.rmtree(sys.argv[1])
+    else:
+        print("[bench-sessions] home changed; refusing cleanup: " + sys.argv[1], file=sys.stderr)
+PYHOME
+  fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+log "isolated chain home $CHAIN_HOME (keep=$KEEP_HOME)"
 
-rm -rf "$CHAIN_HOME"
+CORE_LIB="$CORE_LIB_DIR/libpolystore_core.so"
+log "building polystore_core"
+(cd "$CORE_DIR" && cargo build --release) || fail "cargo build --release failed"
+export LD_LIBRARY_PATH="$CORE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export CGO_LDFLAGS="-L$CORE_LIB_DIR -lpolystore_core${CGO_LDFLAGS:+ $CGO_LDFLAGS}"
+
+log "building polystorechaind"
+(cd "$CHAIN_DIR" && GOFLAGS="${GOFLAGS:-} -mod=mod" go build -o "$BIN" ./cmd/polystorechaind) || fail "chain build failed"
 
 prepare_proof_fixtures() {
   [ "$PROOFS_PER_SESSION" -gt 0 ] || return 0
