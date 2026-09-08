@@ -261,7 +261,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             actual = json.loads(outputs[0])
             self.assertEqual(actual["consensus"], genesis["consensus"])
             self.assertEqual(actual["app_state"]["nilchain"]["params"]["epoch_len_blocks"], "100")
-            self.assertEqual(actual["app_state"]["mint"]["minter"]["inflation"], "0.000000000000000000")
+            self.assertEqual(actual["app_state"]["mint"], genesis["app_state"]["mint"])
             self.assertEqual(life.doc["genesis_sha256"], hashlib.sha256(outputs[0]).hexdigest())
 
     def test_all_four_retrieval_reads_are_height_pinned_and_must_agree(self):

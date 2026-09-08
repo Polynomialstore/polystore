@@ -12,6 +12,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import signal
@@ -96,16 +97,15 @@ def smoke_genesis(lifecycle):
                   retrieval_price_per_blob_max={"denom": "stake", "amount": "17"},
                   retrieval_burn_bps="3333")
     mint = genesis["app_state"]["mint"]
-    mint["minter"]["inflation"] = "0.000000000000000000"
-    for field in ("inflation_rate_change", "inflation_min", "inflation_max"):
-        mint["params"][field] = "0.000000000000000000"
+    if mint["params"]["mint_denom"] != "stake":
+        raise ValueError("settlement smoke requires normal stake mint denomination")
     raw = json.dumps(genesis, sort_keys=True, indent=1) + "\n"
     for node in lifecycle.nodes:
         (Path(node["home"]) / "config/genesis.json").write_text(raw)
         lifecycle.cli(node["home"], "genesis", "validate")
     lifecycle.doc.update(genesis_sha256=artifact.sha256(first), frozen_module_params=params,
                          smoke_mint_profile=mint,
-                         economics_scope="zero mint smoke profile; production mint/issuance qualification outstanding")
+                         economics_scope="normal SDK mint independently reconciled; unexpected module issuance rejected")
 
 
 def copy_fixture(source, destination, k):
@@ -229,7 +229,65 @@ def retrieval_snapshot(lifecycle, height, deals, session_ids):
     return dict(bank=bank, retrieval=rows[0])
 
 
-def verify_settlement(before, after, operations, results, transactions, signers):
+def block_issuance(result, height, mint_address):
+    """Reconcile committed bank coinbase events against the SDK mint event."""
+    if producer.uint(result["height"]) != height:
+        raise ValueError("issuance block height mismatch")
+    final = result["finalize_block_events"]
+    txs = result["txs_results"]
+    if not isinstance(final, list) or (txs is not None and not isinstance(txs, list)):
+        raise ValueError("missing committed event lists")
+    successful = [row["events"] for row in (txs or []) if producer.uint(row.get("code", 0)) == 0]
+    minted, bank = [], []
+    for source, events in [("finalize", final)] + [("transaction", events) for events in successful]:
+        if not isinstance(events, list):
+            raise ValueError("missing successful transaction events")
+        for event in events:
+            if event["type"] not in ("mint", "coinbase"):
+                continue
+            pairs = event["attributes"]
+            attrs = {pair["key"]: pair["value"] for pair in pairs}
+            if len(attrs) != len(pairs) or source != "finalize":
+                raise ValueError("duplicate mint attributes or unexpected transaction issuance")
+            if event["type"] == "mint":
+                if not isinstance(attrs["amount"], str) or not re.fullmatch(r"0|[1-9][0-9]*", attrs["amount"]):
+                    raise ValueError("malformed SDK mint amount")
+                minted.append(producer.uint(attrs["amount"], 256))
+            else:
+                if attrs["minter"] != mint_address or not isinstance(attrs["amount"], str) or not re.fullmatch(r"[1-9][0-9]*stake", attrs["amount"]):
+                    raise ValueError("unexpected mint module, denomination or amount")
+                bank.append(producer.uint(attrs["amount"][:-5], 256))
+    if len(minted) != 1 or len(bank) > 1 or sum(bank) != minted[0]:
+        raise ValueError("missing or inconsistent SDK mint/coinbase evidence")
+    return dict(height=height, issued_stake=sum(bank), finalize_block_events=final,
+                successful_transaction_events=successful)
+
+
+def collect_issuance(lifecycle, before, after):
+    """Bounded, cached four-node evidence for the exact snapshot interval."""
+    start, end = (producer.uint(row["bank"]["height"]) for row in (before, after))
+    if end < start or end - start > 4096 or len({node["node_id"] for node in lifecycle.nodes}) != 4 or len(lifecycle.nodes) != 4:
+        raise ValueError("invalid four-validator issuance interval")
+    evidence = lifecycle.doc.setdefault("mint_issuance", dict(blocks={}))
+    if "module_address" not in evidence:
+        accounts = [lifecycle.query(node, "/cosmos/auth/v1beta1/module_accounts/mint", start)["account"] for node in lifecycle.nodes]
+        if any(account != accounts[0] for account in accounts[1:]) or accounts[0]["name"] != "mint":
+            raise ValueError("validators disagree on SDK mint module")
+        producer.account(accounts[0]["base_account"]["address"])
+        evidence["module_address"] = accounts[0]["base_account"]["address"]
+        evidence["validators"] = [node["node_id"] for node in lifecycle.nodes]
+    for height in range(start + 1, end + 1):
+        key = str(height)
+        if key not in evidence["blocks"]:
+            rows = [block_issuance(lifecycle.query(node, f"/block_results?height={height}"), height,
+                                  evidence["module_address"]) for node in lifecycle.nodes]
+            if any(row != rows[0] for row in rows[1:]):
+                raise ValueError("validators disagree on committed issuance events")
+            evidence["blocks"][key] = rows[0]
+    return sum(evidence["blocks"][str(height)]["issued_stake"] for height in range(start + 1, end + 1))
+
+
+def verify_settlement(before, after, operations, results, transactions, signers, *, issued_stake=0):
     if before["retrieval"]["params"] != after["retrieval"]["params"]:
         raise ValueError("retrieval pricing changed across the smoke")
     params = after["retrieval"]["params"]
@@ -270,10 +328,10 @@ def verify_settlement(before, after, operations, results, transactions, signers)
             if delta(before["retrieval"]["activities"][identity].get(field, 0), after["retrieval"]["activities"][identity].get(field, 0)) != expected:
                 raise ValueError("retrieval activity accounting mismatch")
     if (delta(before["retrieval"]["module_stake"], after["retrieval"]["module_stake"]) != -sum(debits.values()) or
-        delta(before["bank"]["supply"]["stake"], after["bank"]["supply"]["stake"]) != -burns):
+        delta(before["bank"]["supply"]["stake"], after["bank"]["supply"]["stake"]) != producer.uint(issued_stake, 256) - burns):
         raise ValueError("module/supply conservation mismatch")
     return dict(completed_sessions=len(operations), proofs=sum(op["proof_expectation"]["session"]["blob_count"] for op in operations),
-                escrow_debits=debits, provider_payouts=payouts, burned_stake=burns,
+                escrow_debits=debits, provider_payouts=payouts, burned_stake=burns, issued_stake=issued_stake,
                 byte_counter_scope="protocol counters; no network-delivered bytes verified")
 
 
@@ -313,6 +371,104 @@ def prepared_cohort(lifecycle, operations, prepare):
     return prepared
 
 
+def assert_unchanged_retrieval(before, after, *, issued_stake=0):
+    """Failed messages and terminal retries cannot change stake liabilities/credit.
+
+    Ante fees and sequences use aatom and may change even for failed execution.
+    Independent committed SDK issuance is the only permitted stake supply change.
+    """
+    def stake(snapshot):
+        return {key: value for key, value in snapshot["bank"]["balances"].items() if key.endswith(":stake")}
+    if (before["retrieval"] != after["retrieval"] or stake(before) != stake(after) or
+            producer.uint(after["bank"]["supply"]["stake"], 256) - producer.uint(before["bank"]["supply"]["stake"], 256) != producer.uint(issued_stake, 256)):
+        raise ValueError("rejected message or terminal retry changed retrieval state/stake")
+
+
+def verify_transaction_nodes(lifecycle, result):
+    """Independently bind all four committed outcomes to the actual signed bytes."""
+    if len(lifecycle.nodes) != 4 or len({node["node_id"] for node in lifecycle.nodes}) != 4:
+        raise ValueError("four distinct validators required")
+    expected = artifact.committed_tx(result, result["txhash"])
+    observed = []
+    for node in lifecycle.nodes:
+        response = lifecycle.query(node, "/tx?hash=0x" + expected["txhash"])
+        raw = base64.b64decode(response["tx"], validate=True)
+        if not raw or len(raw) > 1048576 or hashlib.sha256(raw).hexdigest().upper() != expected["txhash"].upper():
+            raise ValueError("validator returned different committed transaction bytes")
+        row = dict(txhash=response["hash"], height=response["height"], **{
+            key: response["tx_result"].get(key, 0) if key == "code" else response["tx_result"][key]
+            for key in ("code", "gas_wanted", "gas_used")})
+        artifact.committed_tx(row, expected["txhash"])
+        if any(producer.uint(row[key]) != producer.uint(expected[key]) for key in ("height", "code", "gas_wanted", "gas_used")):
+            raise ValueError("validators disagree on committed transaction outcome/gas")
+        observed.append(dict(node_id=node["node_id"], **row))
+    return observed
+
+
+def run_adversarial_phase(lifecycle, deals, prepared, *, completed=False):
+    """Five rejected transactions before proofs; four terminal idempotent retries."""
+    phase = "after-settlement" if completed else "before-proof"
+    directory = lifecycle.home / phase
+    directory.mkdir(mode=0o700)
+    record = dict(transactions=[], qualification=False,
+                  economics_scope="normal SDK mint reconciled; stake liabilities unchanged; aatom ante fees excluded")
+    lifecycle.doc.setdefault("adversarial_phases", {})[phase] = record
+    ids = [op["prepared"]["session_id"] for op in prepared]
+    before = retrieval_snapshot(lifecycle, lifecycle.wait_height(3) - 1, deals, ids)
+    record["before"] = before
+    def payload(op):
+        return json.loads(Path(op["prepared"]["proof_path"]).read_text())
+    def changed_scalar(value):
+        old = producer.b64(value, 32)
+        return base64.b64encode(bytes(32) if any(old) else bytes([1]) + bytes(31)).decode()
+    cases = []
+    for k in (8, 2):
+        op = next(op for op in prepared if op["proof_expectation"]["snapshot"]["k"] == k)
+        payee = op["proof_expectation"]["session"]["authorized_proof_provider"]
+        if completed:
+            cases += [(f"duplicate-proof-k{k}", payee, payload(op), "", None),
+                      (f"duplicate-confirm-k{k}", op["proof_expectation"]["session"]["owner"], None, "", op["prepared"]["session_id"])]
+        else:
+            wrong = payload(op)
+            wrong["proofs"][0]["z_value"] = changed_scalar(wrong["proofs"][0]["z_value"])
+            cases += [(f"wrong-signer-k{k}", lifecycle.signers["control"], payload(op), "authorized proof provider", None),
+                      (f"wrong-z-k{k}", payee, wrong, "exact session challenge tuple and z", None)]
+    if not completed:
+        first, second = [op for op in prepared if op["proof_expectation"]["snapshot"]["k"] == 8][:2]
+        payee = first["proof_expectation"]["session"]["authorized_proof_provider"]
+        if second["proof_expectation"]["session"]["authorized_proof_provider"] != payee:
+            raise ValueError("rollback test requires two distinct sessions with one signer")
+        bad = payload(second)
+        bad["proofs"][0]["y_value"] = changed_scalar(bad["proofs"][0]["y_value"])
+        cases.append(("later-native-failure", payee, dict(sessions=[payload(first), bad]), "invalid retrieval proof", None))
+    for name, signer, body, reason, sid in cases:
+        if body is None:
+            args = ["confirm-retrieval-session", "--session-id", sid]
+        else:
+            path = directory / (name + ".json")
+            with path.open("x") as target:
+                json.dump(body, target)
+            args = ["submit-retrieval-proof", str(path)]
+        # Fixed gas forces actual execution: auto simulation must not replace rejection evidence.
+        job = transaction_job(lifecycle, signer, args, kind=name, gas="20000000")
+        result = artifact.scheduled_transaction(job)
+        row = dict(result, kind=name, signer=signer, submit=job["submit"])
+        record["transactions"].append(row)
+        lifecycle.save()
+        expected = "committed_success" if completed else "committed_failure"
+        if result["outcome"] != expected or (reason and reason not in result.get("error", "")):
+            raise ValueError("unexpected adversarial outcome; no retry: " + name)
+        lifecycle.wait_height(result["height"] + 1)
+        row["validators"] = verify_transaction_nodes(lifecycle, result)
+        after = retrieval_snapshot(lifecycle, result["height"], deals, ids)
+        row["issued_stake_since_phase_start"] = collect_issuance(lifecycle, before, after)
+        assert_unchanged_retrieval(before, after, issued_stake=row["issued_stake_since_phase_start"])
+        row["state_unchanged"] = True
+        record["after"] = after
+        lifecycle.save()
+    return record["after"]
+
+
 def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     lifecycle.home.mkdir(mode=0o700)
     previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
@@ -324,7 +480,7 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     doc.pop("transactions_submitted", None)  # On failure the retained journal is authoritative.
     doc.update(mode="four-validator-fresh-settlement-smoke", workload="two owner escrows; K8/K2 slot zero; 1/2/8 blobs each",
                limits=["Preparation only; no capacity qualification", "No provider transport or delivered-file verification",
-                       "Only slot zero; nonzero stripe slots remain outstanding", "Zero mint smoke economics; production issuance remains outstanding"],
+                       "Only slot zero; nonzero stripe slots remain outstanding", "Normal SDK mint reconciled; unexpected module issuance rejected"],
                setup_transactions=[])
     try:
         require_retrieval_cli(lifecycle)
@@ -385,6 +541,8 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
         doc["workload_journal"] = str(journal)
         lifecycle.save()
         scheduled = prepared_cohort(lifecycle, operations, prepare) if proof_only else operations
+        if proof_only:
+            run_adversarial_phase(lifecycle, deals, scheduled)
         doc["measurement_mode"] = "prepared-proof-only" if proof_only else "lifecycle"
         lifecycle.save()
         capture_workload_metrics(lifecycle, "before_workload", fenced=proof_only)
@@ -429,8 +587,15 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
         height = lifecycle.wait_height(max(row["height"] for row in transactions) + 1) - 1
         ids = [row["session_id"] for row in results.values()]
         after = retrieval_snapshot(lifecycle, height, deals, ids)
-        doc["settlement"] = verify_settlement(before, after, operations, results, transactions, lifecycle.signers)
+        doc["settlement"] = verify_settlement(before, after, operations, results, transactions, lifecycle.signers,
+            issued_stake=collect_issuance(lifecycle, before, after))
         doc["after_workload"] = after
+        if proof_only:
+            after = run_adversarial_phase(lifecycle, deals, scheduled, completed=True)
+            height = after["bank"]["height"]
+            doc["after_adversarial_retries"] = after
+            doc["transactions_submitted"] += sum(len(phase["transactions"]) for phase in doc["adversarial_phases"].values())
+        doc["workload_transaction_validators"] = [verify_transaction_nodes(lifecycle, row) for row in transactions]
         lifecycle.save()
         lifecycle.stop()
         lifecycle.reserve_ports()
@@ -441,7 +606,8 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
             raise ValueError("restart changed the fixed-height settlement state")
         doc["after_restart_original_height"] = restarted
         doc["after_restart_later_height"] = retrieval_snapshot(lifecycle, later, deals, ids)
-        verify_settlement(before, doc["after_restart_later_height"], operations, results, transactions, lifecycle.signers)
+        verify_settlement(before, doc["after_restart_later_height"], operations, results, transactions, lifecycle.signers,
+            issued_stake=collect_issuance(lifecycle, before, doc["after_restart_later_height"]))
         doc["status"] = "settlement_smoke_passed"
     except BaseException as error:
         doc.update(status="failed", error=str(error)[-8192:])
@@ -1115,7 +1281,7 @@ def main():
     parser.add_argument("--audit-profile", choices=("normal", "c6"), default="normal")
     parser.add_argument("--step-seconds", type=int, default=180, help="Each of five offered-rate steps; 4 is a same-path pilot")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per32proof transaction")
-    parser.add_argument("--proof-only", action="store_true", help="Prepare the six smoke sessions before timing proof submission")
+    parser.add_argument("--proof-only", action="store_true", help="Prepare six sessions, verify rejected transactions, time proofs, then verify idempotent settlement retries")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
     proof_only = options.pop("proof_only")
